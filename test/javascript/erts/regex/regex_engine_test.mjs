@@ -593,6 +593,154 @@ describe("RegexEngine", () => {
         captures: [null],
       });
     });
+
+    it("notbol makes ^ fail at the subject start", () => {
+      assert.isNull(match("^a", "ab", {}, {notbol: true}));
+    });
+
+    it("notbol keeps ^ matching after an internal newline", () => {
+      assert.deepEqual(match("^b", "a\nb", {multiline: true}, {notbol: true}), {
+        start: 2,
+        end: 3,
+        captures: [null],
+      });
+    });
+
+    it("notbol doesn't affect \\A", () => {
+      assert.deepEqual(match("\\Aa", "ab", {}, {notbol: true}), {
+        start: 0,
+        end: 1,
+        captures: [null],
+      });
+    });
+
+    it("noteol makes $ fail at the subject end", () => {
+      assert.isNull(match("b$", "ab", {}, {noteol: true}));
+    });
+
+    it("noteol makes $ fail before a final newline", () => {
+      assert.isNull(match("b$", "ab\n", {}, {noteol: true}));
+    });
+
+    it("noteol keeps $ matching before an internal newline", () => {
+      assert.deepEqual(match("a$", "a\nb", {multiline: true}, {noteol: true}), {
+        start: 0,
+        end: 1,
+        captures: [null],
+      });
+    });
+
+    it("noteol makes multiline $ fail at the subject end", () => {
+      assert.isNull(match("b$", "a\nb", {multiline: true}, {noteol: true}));
+    });
+
+    it("noteol makes dollar_endonly $ fail at the subject end", () => {
+      assert.isNull(match("b$", "ab", {dollar_endonly: true}, {noteol: true}));
+    });
+
+    it("noteol doesn't affect \\Z", () => {
+      assert.deepEqual(match("b\\Z", "ab", {}, {noteol: true}), {
+        start: 1,
+        end: 2,
+        captures: [null],
+      });
+    });
+
+    it("notempty backtracks to a non-empty match", () => {
+      assert.deepEqual(match("|a", "a", {}, {notempty: true}), {
+        start: 0,
+        end: 1,
+        captures: [null],
+      });
+    });
+
+    it("notempty rejects empty matches at every position", () => {
+      assert.isNull(match("a*", "b", {}, {notempty: true}));
+    });
+
+    it("notempty scans past rejected empty matches", () => {
+      assert.deepEqual(match("a*", "ba", {}, {notempty: true}), {
+        start: 1,
+        end: 2,
+        captures: [null],
+      });
+    });
+
+    it("notempty rejects an empty match reported after \\K", () => {
+      assert.isNull(match("a\\K", "a", {}, {notempty: true}));
+    });
+
+    it("notempty rejects an empty accepted match", () => {
+      assert.isNull(match("(*ACCEPT)", "a", {}, {notempty: true}));
+    });
+
+    it("notemptyAtStart rejects an empty match at the start position", () => {
+      assert.deepEqual(match("a*", "ba", {}, {notemptyAtStart: true}), {
+        start: 1,
+        end: 2,
+        captures: [null],
+      });
+    });
+
+    it("notemptyAtStart allows an empty match past the start position", () => {
+      assert.deepEqual(
+        match("b*", "ba", {}, {notemptyAtStart: true, startPosition: 1}),
+        {start: 2, end: 2, captures: [null]},
+      );
+    });
+
+    it("firstline rejects a match past the first newline", () => {
+      assert.isNull(match("b", "a\nb", {}, {firstline: true}));
+    });
+
+    it("firstline allows a match before the first newline", () => {
+      assert.deepEqual(match("b", "ab\ncd", {}, {firstline: true}), {
+        start: 1,
+        end: 2,
+        captures: [null],
+      });
+    });
+
+    it("firstline allows a match starting at the first newline", () => {
+      assert.deepEqual(match("\\nb", "a\nb", {}, {firstline: true}), {
+        start: 1,
+        end: 3,
+        captures: [null],
+      });
+    });
+
+    it("firstline allows a match crossing the first newline", () => {
+      assert.deepEqual(match("b\\nc", "ab\ncd", {}, {firstline: true}), {
+        start: 1,
+        end: 4,
+        captures: [null],
+      });
+    });
+
+    it("firstline bounds the attempt start, not the reported start", () => {
+      assert.deepEqual(match("a\\n\\Kb", "a\nb", {}, {firstline: true}), {
+        start: 2,
+        end: 3,
+        captures: [null],
+      });
+    });
+
+    it("firstline rejects an attempt past the first newline on the interpreter", () => {
+      assert.isNull(match("b\\K", "a\nb", {}, {firstline: true}));
+    });
+
+    it("firstline uses the newline convention", () => {
+      assert.isNull(
+        match("b", "a\rb", {newline: "anycrlf"}, {firstline: true}),
+      );
+    });
+
+    it("firstline counts newlines from the start position", () => {
+      assert.deepEqual(
+        match("b", "a\nb", {}, {firstline: true, startPosition: 2}),
+        {start: 2, end: 3, captures: [null]},
+      );
+    });
   });
 
   describe("parseCompileOption()", () => {

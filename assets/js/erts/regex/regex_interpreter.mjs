@@ -18,10 +18,10 @@ const EMULATED_PCRE2_VERSION = {major: 10, minor: 47};
 const LOOKBEHIND_MAX_UNITS = 510;
 
 // Newline conventions with a two-char CR LF sequence.
-const NEWLINE_PAIR_CONVENTIONS = new Set(["any", "anycrlf", "crlf"]);
+export const NEWLINE_PAIR_CONVENTIONS = new Set(["any", "anycrlf", "crlf"]);
 
 // Single chars that alone form a complete newline, per convention.
-const NEWLINE_SINGLES = {
+export const NEWLINE_SINGLES = {
   any: [0x0a, 0x0b, 0x0c, 0x0d, 0x85, 0x2028, 0x2029],
   anycrlf: [0x0a, 0x0d],
   cr: [0x0d],
@@ -80,6 +80,12 @@ export default class RegexInterpreter {
   // or null. captures[n] holds {start, end} of group n, or null when the
   // group didn't participate (index 0 is unused).
   //
+  // opts.maxStartPosition bounds the scan: positions past it are not
+  // attempted. notbol and noteol make the subject boundaries not count as
+  // line boundaries, and notempty/notemptyAtStart reject empty matches
+  // (everywhere or at the start position only) during backtracking, so a
+  // longer match at the same position can still be found.
+  //
   // Matching uses continuation-passing style: each node matcher calls the
   // continuation with the position after itself, and returning false makes
   // the caller backtrack to its next alternative.
@@ -89,6 +95,11 @@ export default class RegexInterpreter {
 
     const effectiveOpts = $.#mergeStartOptions(ast, opts);
     const startPosition = opts.startPosition ?? 0;
+
+    const maxStartPosition = Math.min(
+      subject.length,
+      opts.maxStartPosition ?? Infinity,
+    );
 
     const state = {
       bsrAnycrlf: effectiveOpts.bsr_anycrlf === true,
@@ -104,6 +115,8 @@ export default class RegexInterpreter {
       matchLimitRecursion: effectiveOpts.matchLimitRecursion ?? 10_000_000,
       multiline: effectiveOpts.multiline === true,
       newline: effectiveOpts.newline ?? "lf",
+      notbol: opts.notbol === true,
+      noteol: opts.noteol === true,
       openGroups: [],
       reportedStart: null,
       startOffset: startPosition,
@@ -116,11 +129,16 @@ export default class RegexInterpreter {
 
     let start = startPosition;
 
-    while (start <= subject.length) {
+    while (start <= maxStartPosition) {
       state.captures = [];
       state.marks = [];
       state.openGroups = [];
       state.reportedStart = null;
+
+      // An empty match is one whose reported region has zero length
+      const rejectEmpty =
+        opts.notempty === true ||
+        (opts.notemptyAtStart === true && start === startPosition);
 
       let matched = false;
       let matchEnd = null;
@@ -128,13 +146,22 @@ export default class RegexInterpreter {
 
       try {
         matched = $.#matchNode(ast, state, start, (position) => {
+          if (rejectEmpty && position === (state.reportedStart ?? start)) {
+            return false;
+          }
+
           matchEnd = position;
           return true;
         });
       } catch (signal) {
         if (signal instanceof AcceptSignal) {
-          matched = true;
-          matchEnd = signal.position;
+          if (
+            !rejectEmpty ||
+            signal.position !== (state.reportedStart ?? start)
+          ) {
+            matched = true;
+            matchEnd = signal.position;
+          }
         } else if (signal instanceof CommitSignal) {
           // (*COMMIT) abandons the whole match
           return null;
@@ -484,19 +511,19 @@ export default class RegexInterpreter {
     switch (node.kind) {
       case "lineStart":
         holds =
-          position === 0 ||
+          (position === 0 && !state.notbol) ||
           (state.multiline && $.#afterNewline(state, position));
         break;
 
       case "lineEnd":
         if (state.multiline) {
           holds =
-            position === state.subject.length ||
+            (position === state.subject.length && !state.noteol) ||
             $.#newlineStartsAt(state, position);
         } else if (state.dollarEndonly) {
-          holds = position === state.subject.length;
+          holds = position === state.subject.length && !state.noteol;
         } else {
-          holds = $.#endsBeforeFinalNewline(state, position);
+          holds = !state.noteol && $.#endsBeforeFinalNewline(state, position);
         }
         break;
 

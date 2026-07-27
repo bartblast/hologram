@@ -4,7 +4,10 @@ import Bitstring from "../../bitstring.mjs";
 import ERTS from "../../erts.mjs";
 import Interpreter from "../../interpreter.mjs";
 import RegexAnalyzer from "./regex_analyzer.mjs";
-import RegexInterpreter from "./regex_interpreter.mjs";
+import RegexInterpreter, {
+  NEWLINE_PAIR_CONVENTIONS,
+  NEWLINE_SINGLES,
+} from "./regex_interpreter.mjs";
 import RegexParseError from "./regex_parse_error.mjs";
 import RegexParser, {START_OPTION_VERBS} from "./regex_parser.mjs";
 import RegexTranslator, {NEWLINE_VERBS} from "./regex_translator.mjs";
@@ -310,11 +313,30 @@ export default class RegexEngine {
   // the start position, or only at the start position when anchored.
   // Returns {start, end, captures} with PCRE2 group numbering, or null.
   // Positions are JS string indices.
+  //
+  // Supported scan flags in runOpts: firstline restricts where a match
+  // attempt may start (at or before the first newline that follows the
+  // start position), notbol and noteol make the subject boundaries not
+  // count as line boundaries, and notempty/notemptyAtStart reject empty
+  // matches (everywhere or at the start position only).
   static match(compiled, subject, runOpts = {}) {
     const anchored = runOpts.anchored === true;
     const startPosition = runOpts.startPosition ?? 0;
 
-    if (compiled.strategy === "native") {
+    const maxStartPosition =
+      runOpts.firstline === true
+        ? $.#firstNewlinePosition(compiled.newlineType, subject, startPosition)
+        : Infinity;
+
+    // The scan flags need match-time decisions a JS regexp can't express,
+    // so runs with them take the interpreter route
+    const needsInterpreter =
+      runOpts.notbol === true ||
+      runOpts.noteol === true ||
+      runOpts.notempty === true ||
+      runOpts.notemptyAtStart === true;
+
+    if (compiled.strategy === "native" && !needsInterpreter) {
       const regexp = anchored ? $.#stickyRegexp(compiled) : compiled.regexp;
 
       regexp.lastIndex = startPosition;
@@ -322,6 +344,10 @@ export default class RegexEngine {
       const jsMatch = regexp.exec(subject);
 
       if (jsMatch === null) return null;
+
+      // Without \K on the native route the reported match start is also the
+      // attempt start
+      if (jsMatch.indices[0][0] > maxStartPosition) return null;
 
       const captures = [null];
 
@@ -345,6 +371,11 @@ export default class RegexEngine {
       ...compiled.opts,
       anchored: anchored,
       groupMap: compiled.groupMap,
+      maxStartPosition: maxStartPosition,
+      notbol: runOpts.notbol === true,
+      notempty: runOpts.notempty === true,
+      notemptyAtStart: runOpts.notemptyAtStart === true,
+      noteol: runOpts.noteol === true,
       startPosition: startPosition,
     });
   }
@@ -488,6 +519,26 @@ export default class RegexEngine {
     }
 
     return newlineType;
+  }
+
+  // Returns the position where the first newline sequence at or after the
+  // given position starts, or Infinity when there is none.
+  static #firstNewlinePosition(newlineType, subject, fromPosition) {
+    for (let position = fromPosition; position < subject.length; position++) {
+      const charCode = subject.charCodeAt(position);
+
+      if (
+        NEWLINE_PAIR_CONVENTIONS.has(newlineType) &&
+        charCode === 0x0d &&
+        subject.charCodeAt(position + 1) === 0x0a
+      ) {
+        return position;
+      }
+
+      if (NEWLINE_SINGLES[newlineType].includes(charCode)) return position;
+    }
+
+    return Infinity;
   }
 
   // The y flag makes the match start exactly at lastIndex instead of
