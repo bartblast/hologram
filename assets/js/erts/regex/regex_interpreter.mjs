@@ -5,6 +5,7 @@ import RegexAnalyzer, {walkAst} from "./regex_analyzer.mjs";
 
 import {
   codePointInRanges,
+  isWordCodePoint,
   POSIX_SETS,
   SHORTHAND_SETS,
 } from "./regex_char_sets.mjs";
@@ -414,15 +415,6 @@ export default class RegexInterpreter {
     );
   }
 
-  static #isWordCodePoint(codePoint) {
-    return (
-      (codePoint >= 0x30 && codePoint <= 0x39) ||
-      (codePoint >= 0x41 && codePoint <= 0x5a) ||
-      codePoint === 0x5f ||
-      (codePoint >= 0x61 && codePoint <= 0x7a)
-    );
-  }
-
   static #matchAnchor(node, state, position, continuation) {
     let holds;
 
@@ -453,11 +445,10 @@ export default class RegexInterpreter {
       case "wordBoundary": {
         const beforeIsWord =
           position > 0 &&
-          $.#isWordCodePoint(state.subject.charCodeAt(position - 1));
+          isWordCodePoint(state.subject.charCodeAt(position - 1));
 
         const atCodePoint = $.#subjectCodePointAt(state, position);
-        const atIsWord =
-          atCodePoint !== null && $.#isWordCodePoint(atCodePoint);
+        const atIsWord = atCodePoint !== null && isWordCodePoint(atCodePoint);
 
         holds = (beforeIsWord !== atIsWord) === (node.kind === "wordBoundary");
         break;
