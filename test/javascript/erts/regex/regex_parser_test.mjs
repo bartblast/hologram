@@ -12,7 +12,24 @@ defineGlobalErlangAndElixirModules();
 
 // Factories for common AST nodes, keeping expected trees compact.
 // Assertions about code point values keep raw node objects instead.
+const concat = (...items) => ({type: "concatenation", items: items});
+
+const grp = (number, content, name = null) => ({
+  type: "group",
+  number: number,
+  name: name,
+  content: content,
+});
+
 const lit = (char) => ({type: "literal", codePoint: char.codePointAt(0)});
+
+const quant = (min, max, mode, item) => ({
+  type: "quantifier",
+  min: min,
+  max: max,
+  mode: mode,
+  item: item,
+});
 
 const range = (from, to) => ({
   type: "range",
@@ -24,22 +41,13 @@ describe("RegexParser", () => {
   describe("parse()", () => {
     describe("alpha assertions", () => {
       it("parses (*atomic:...) as atomic group", () => {
-        assert.deepEqual(RegexParser.parse("(*atomic:a+)b"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "atomicGroup",
-              content: {
-                type: "quantifier",
-                min: 1,
-                max: null,
-                mode: "greedy",
-                item: lit("a"),
-              },
-            },
+        assert.deepEqual(
+          RegexParser.parse("(*atomic:a+)b"),
+          concat(
+            {type: "atomicGroup", content: quant(1, null, "greedy", lit("a"))},
             lit("b"),
-          ],
-        });
+          ),
+        );
       });
 
       it("parses (*pla:...) as positive lookahead", () => {
@@ -136,10 +144,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("(*sr:ab)"), {
           type: "scriptRun",
           atomic: false,
-          content: {
-            type: "concatenation",
-            items: [lit("a"), lit("b")],
-          },
+          content: concat(lit("a"), lit("b")),
         });
       });
 
@@ -147,10 +152,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("(*asr:ab)"), {
           type: "scriptRun",
           atomic: true,
-          content: {
-            type: "concatenation",
-            items: [lit("a"), lit("b")],
-          },
+          content: concat(lit("a"), lit("b")),
         });
       });
 
@@ -237,14 +239,13 @@ describe("RegexParser", () => {
       });
 
       it("parses anchors around literals", () => {
-        assert.deepEqual(RegexParser.parse("^a$"), {
-          type: "concatenation",
-          items: [
-            {type: "anchor", kind: "lineStart"},
-            lit("a"),
-            {type: "anchor", kind: "lineEnd"},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("^a$"),
+          concat({type: "anchor", kind: "lineStart"}, lit("a"), {
+            type: "anchor",
+            kind: "lineEnd",
+          }),
+        );
       });
 
       it("raises when quantifier follows ^ anchor", () => {
@@ -282,85 +283,56 @@ describe("RegexParser", () => {
       it("parses branches with multiple characters", () => {
         assert.deepEqual(RegexParser.parse("ab|cd"), {
           type: "alternation",
-          branches: [
-            {
-              type: "concatenation",
-              items: [lit("a"), lit("b")],
-            },
-            {
-              type: "concatenation",
-              items: [lit("c"), lit("d")],
-            },
-          ],
+          branches: [concat(lit("a"), lit("b")), concat(lit("c"), lit("d"))],
         });
       });
 
       it("parses empty leading branch", () => {
         assert.deepEqual(RegexParser.parse("|a"), {
           type: "alternation",
-          branches: [{type: "concatenation", items: []}, lit("a")],
+          branches: [concat(), lit("a")],
         });
       });
 
       it("parses empty trailing branch", () => {
         assert.deepEqual(RegexParser.parse("a|"), {
           type: "alternation",
-          branches: [lit("a"), {type: "concatenation", items: []}],
+          branches: [lit("a"), concat()],
         });
       });
     });
 
     describe("backreferences", () => {
       it("parses single-digit backreference", () => {
-        assert.deepEqual(RegexParser.parse("(a)\\1"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {type: "backreference", number: 1, name: null},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)\\1"),
+          concat(grp(1, lit("a")), {
+            type: "backreference",
+            number: 1,
+            name: null,
+          }),
+        );
       });
 
       it("parses forward reference", () => {
-        assert.deepEqual(RegexParser.parse("\\2(a)(b)"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("\\2(a)(b)"),
+          concat(
             {type: "backreference", number: 2, name: null},
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {
-              type: "group",
-              number: 2,
-              name: null,
-              content: lit("b"),
-            },
-          ],
-        });
+            grp(1, lit("a")),
+            grp(2, lit("b")),
+          ),
+        );
       });
 
       it("parses multi-digit backreference when the group exists", () => {
-        const groups = [..."abcdefghijkl"].map((char, index) => ({
-          type: "group",
-          number: index + 1,
-          name: null,
-          content: lit(char),
-        }));
+        const groups = [..."abcdefghijkl"].map((char, index) =>
+          grp(index + 1, lit(char)),
+        );
 
         assert.deepEqual(
           RegexParser.parse("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)\\12"),
-          {
-            type: "concatenation",
-            items: [...groups, {type: "backreference", number: 12, name: null}],
-          },
+          concat(...groups, {type: "backreference", number: 12, name: null}),
         );
       });
 
@@ -372,26 +344,20 @@ describe("RegexParser", () => {
       });
 
       it("stops octal fallback at non-octal digit", () => {
-        assert.deepEqual(RegexParser.parse("\\19"), {
-          type: "concatenation",
-          items: [{type: "literal", codePoint: 1}, lit("9")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\19"),
+          concat({type: "literal", codePoint: 1}, lit("9")),
+        );
       });
 
       it("binds quantifier to the literal digit after octal fallback", () => {
-        assert.deepEqual(RegexParser.parse("\\19*"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("\\19*"),
+          concat(
             {type: "literal", codePoint: 1},
-            {
-              type: "quantifier",
-              min: 0,
-              max: null,
-              mode: "greedy",
-              item: lit("9"),
-            },
-          ],
-        });
+            quant(0, null, "greedy", lit("9")),
+          ),
+        );
       });
 
       it("parses octal fallback above \\377 in unicode mode", () => {
@@ -402,159 +368,111 @@ describe("RegexParser", () => {
       });
 
       it("parses \\g with plain number", () => {
-        assert.deepEqual(RegexParser.parse("(a)\\g1"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {type: "backreference", number: 1, name: null},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)\\g1"),
+          concat(grp(1, lit("a")), {
+            type: "backreference",
+            number: 1,
+            name: null,
+          }),
+        );
       });
 
       it("parses \\g with braced number", () => {
-        assert.deepEqual(RegexParser.parse("(a)\\g{1}"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {type: "backreference", number: 1, name: null},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)\\g{1}"),
+          concat(grp(1, lit("a")), {
+            type: "backreference",
+            number: 1,
+            name: null,
+          }),
+        );
       });
 
       it("resolves \\g with negative relative number", () => {
-        assert.deepEqual(RegexParser.parse("(a)(b)\\g{-1}"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {
-              type: "group",
-              number: 2,
-              name: null,
-              content: lit("b"),
-            },
-            {type: "backreference", number: 2, name: null},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)(b)\\g{-1}"),
+          concat(grp(1, lit("a")), grp(2, lit("b")), {
+            type: "backreference",
+            number: 2,
+            name: null,
+          }),
+        );
       });
 
       it("resolves \\g with positive relative number", () => {
-        assert.deepEqual(RegexParser.parse("\\g{+1}(a)"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("\\g{+1}(a)"),
+          concat(
             {type: "backreference", number: 1, name: null},
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-          ],
-        });
+            grp(1, lit("a")),
+          ),
+        );
       });
 
       it("parses \\g with braced name", () => {
-        assert.deepEqual(RegexParser.parse("(?<x>a)\\g{x}"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-            {type: "backreference", number: null, name: "x"},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?<x>a)\\g{x}"),
+          concat(grp(1, lit("a"), "x"), {
+            type: "backreference",
+            number: null,
+            name: "x",
+          }),
+        );
       });
 
       it("parses \\k with angle-bracketed name", () => {
-        assert.deepEqual(RegexParser.parse("(?<x>a)\\k<x>"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-            {type: "backreference", number: null, name: "x"},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?<x>a)\\k<x>"),
+          concat(grp(1, lit("a"), "x"), {
+            type: "backreference",
+            number: null,
+            name: "x",
+          }),
+        );
       });
 
       it("parses \\k with quoted name", () => {
-        assert.deepEqual(RegexParser.parse("(?<x>a)\\k'x'"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-            {type: "backreference", number: null, name: "x"},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?<x>a)\\k'x'"),
+          concat(grp(1, lit("a"), "x"), {
+            type: "backreference",
+            number: null,
+            name: "x",
+          }),
+        );
       });
 
       it("parses \\k with braced name", () => {
-        assert.deepEqual(RegexParser.parse("(?<x>a)\\k{x}"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-            {type: "backreference", number: null, name: "x"},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?<x>a)\\k{x}"),
+          concat(grp(1, lit("a"), "x"), {
+            type: "backreference",
+            number: null,
+            name: "x",
+          }),
+        );
       });
 
       it("parses (?P=name) reference", () => {
-        assert.deepEqual(RegexParser.parse("(?P<x>a)(?P=x)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-            {type: "backreference", number: null, name: "x"},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?P<x>a)(?P=x)"),
+          concat(grp(1, lit("a"), "x"), {
+            type: "backreference",
+            number: null,
+            name: "x",
+          }),
+        );
       });
 
       it("parses forward named reference", () => {
-        assert.deepEqual(RegexParser.parse("\\k<x>(?<x>a)"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("\\k<x>(?<x>a)"),
+          concat(
             {type: "backreference", number: null, name: "x"},
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-          ],
-        });
+            grp(1, lit("a"), "x"),
+          ),
+        );
       });
 
       it("raises on single-digit reference to non-existent group", () => {
@@ -644,78 +562,34 @@ describe("RegexParser", () => {
           type: "branchResetGroup",
           content: {
             type: "alternation",
-            branches: [
-              {
-                type: "group",
-                number: 1,
-                name: null,
-                content: lit("a"),
-              },
-              {
-                type: "group",
-                number: 1,
-                name: null,
-                content: lit("b"),
-              },
-            ],
+            branches: [grp(1, lit("a")), grp(1, lit("b"))],
           },
         });
       });
 
       it("continues numbering after the widest branch", () => {
-        assert.deepEqual(RegexParser.parse("(?|(a)(b)|(c))(d)"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?|(a)(b)|(c))(d)"),
+          concat(
             {
               type: "branchResetGroup",
               content: {
                 type: "alternation",
                 branches: [
-                  {
-                    type: "concatenation",
-                    items: [
-                      {
-                        type: "group",
-                        number: 1,
-                        name: null,
-                        content: lit("a"),
-                      },
-                      {
-                        type: "group",
-                        number: 2,
-                        name: null,
-                        content: lit("b"),
-                      },
-                    ],
-                  },
-                  {
-                    type: "group",
-                    number: 1,
-                    name: null,
-                    content: lit("c"),
-                  },
+                  concat(grp(1, lit("a")), grp(2, lit("b"))),
+                  grp(1, lit("c")),
                 ],
               },
             },
-            {
-              type: "group",
-              number: 3,
-              name: null,
-              content: lit("d"),
-            },
-          ],
-        });
+            grp(3, lit("d")),
+          ),
+        );
       });
 
       it("parses single branch", () => {
         assert.deepEqual(RegexParser.parse("(?|(a))"), {
           type: "branchResetGroup",
-          content: {
-            type: "group",
-            number: 1,
-            name: null,
-            content: lit("a"),
-          },
+          content: grp(1, lit("a")),
         });
       });
 
@@ -724,20 +598,7 @@ describe("RegexParser", () => {
           type: "branchResetGroup",
           content: {
             type: "alternation",
-            branches: [
-              {
-                type: "group",
-                number: 1,
-                name: "x",
-                content: lit("a"),
-              },
-              {
-                type: "group",
-                number: 1,
-                name: "x",
-                content: lit("b"),
-              },
-            ],
+            branches: [grp(1, lit("a"), "x"), grp(1, lit("b"), "x")],
           },
         });
       });
@@ -881,17 +742,14 @@ describe("RegexParser", () => {
       });
 
       it("parses quantified class", () => {
-        assert.deepEqual(RegexParser.parse("[ab]*"), {
-          type: "quantifier",
-          min: 0,
-          max: null,
-          mode: "greedy",
-          item: {
+        assert.deepEqual(
+          RegexParser.parse("[ab]*"),
+          quant(0, null, "greedy", {
             type: "class",
             negated: false,
             items: [lit("a"), lit("b")],
-          },
-        });
+          }),
+        );
       });
 
       it("parses POSIX class", () => {
@@ -922,17 +780,17 @@ describe("RegexParser", () => {
       });
 
       it("parses [ without POSIX shape as literal", () => {
-        assert.deepEqual(RegexParser.parse("[[:a]]"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("[[:a]]"),
+          concat(
             {
               type: "class",
               negated: false,
               items: [lit("["), lit(":"), lit("a")],
             },
             lit("]"),
-          ],
-        });
+          ),
+        );
       });
 
       it("parses escaped characters", () => {
@@ -1070,17 +928,13 @@ describe("RegexParser", () => {
       });
 
       it("keeps quoted space literal in extended-more mode", () => {
-        assert.deepEqual(RegexParser.parse("(?xx)[\\Q \\E]"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?xx)[\\Q \\E]"),
+          concat(
             {type: "optionSetting", reset: false, set: "xx", unset: ""},
-            {
-              type: "class",
-              negated: false,
-              items: [lit(" ")],
-            },
-          ],
-        });
+            {type: "class", negated: false, items: [lit(" ")]},
+          ),
+        );
       });
 
       it("raises on unterminated class", () => {
@@ -1186,27 +1040,24 @@ describe("RegexParser", () => {
 
     describe("comments", () => {
       it("skips comment", () => {
-        assert.deepEqual(RegexParser.parse("a(?#c)b"), {
-          type: "concatenation",
-          items: [lit("a"), lit("b")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a(?#c)b"),
+          concat(lit("a"), lit("b")),
+        );
       });
 
       it("skips empty comment", () => {
-        assert.deepEqual(RegexParser.parse("a(?#)b"), {
-          type: "concatenation",
-          items: [lit("a"), lit("b")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a(?#)b"),
+          concat(lit("a"), lit("b")),
+        );
       });
 
       it("binds quantifier through comment to preceding item", () => {
-        assert.deepEqual(RegexParser.parse("a(?#c)*"), {
-          type: "quantifier",
-          min: 0,
-          max: null,
-          mode: "greedy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a(?#c)*"),
+          quant(0, null, "greedy", lit("a")),
+        );
       });
 
       it("raises on unterminated comment", () => {
@@ -1216,225 +1067,139 @@ describe("RegexParser", () => {
 
     describe("concatenation", () => {
       it("parses two characters", () => {
-        assert.deepEqual(RegexParser.parse("ab"), {
-          type: "concatenation",
-          items: [lit("a"), lit("b")],
-        });
+        assert.deepEqual(RegexParser.parse("ab"), concat(lit("a"), lit("b")));
       });
 
       it("parses three characters as a flat list", () => {
-        assert.deepEqual(RegexParser.parse("abc"), {
-          type: "concatenation",
-          items: [lit("a"), lit("b"), lit("c")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("abc"),
+          concat(lit("a"), lit("b"), lit("c")),
+        );
       });
     });
 
     describe("conditionals", () => {
       it("parses numeric condition", () => {
-        assert.deepEqual(RegexParser.parse("(a)(?(1)b|c)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {
-              type: "conditional",
-              condition: {kind: "group", number: 1, name: null},
-              yes: lit("b"),
-              no: lit("c"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)(?(1)b|c)"),
+          concat(grp(1, lit("a")), {
+            type: "conditional",
+            condition: {kind: "group", number: 1, name: null},
+            yes: lit("b"),
+            no: lit("c"),
+          }),
+        );
       });
 
       it("parses condition without no-branch", () => {
-        assert.deepEqual(RegexParser.parse("(a)(?(1)b)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {
-              type: "conditional",
-              condition: {kind: "group", number: 1, name: null},
-              yes: lit("b"),
-              no: null,
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)(?(1)b)"),
+          concat(grp(1, lit("a")), {
+            type: "conditional",
+            condition: {kind: "group", number: 1, name: null},
+            yes: lit("b"),
+            no: null,
+          }),
+        );
       });
 
       it("resolves relative numeric condition", () => {
-        assert.deepEqual(RegexParser.parse("(a)(?(-1)b|c)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {
-              type: "conditional",
-              condition: {kind: "group", number: 1, name: null},
-              yes: lit("b"),
-              no: lit("c"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)(?(-1)b|c)"),
+          concat(grp(1, lit("a")), {
+            type: "conditional",
+            condition: {kind: "group", number: 1, name: null},
+            yes: lit("b"),
+            no: lit("c"),
+          }),
+        );
       });
 
       it("parses angle-bracketed name condition", () => {
-        assert.deepEqual(RegexParser.parse("(?<x>a)(?(<x>)b|c)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-            {
-              type: "conditional",
-              condition: {kind: "group", number: null, name: "x"},
-              yes: lit("b"),
-              no: lit("c"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?<x>a)(?(<x>)b|c)"),
+          concat(grp(1, lit("a"), "x"), {
+            type: "conditional",
+            condition: {kind: "group", number: null, name: "x"},
+            yes: lit("b"),
+            no: lit("c"),
+          }),
+        );
       });
 
       it("parses bare name condition", () => {
-        assert.deepEqual(RegexParser.parse("(?<x>a)(?(x)b|c)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-            {
-              type: "conditional",
-              condition: {kind: "group", number: null, name: "x"},
-              yes: lit("b"),
-              no: lit("c"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?<x>a)(?(x)b|c)"),
+          concat(grp(1, lit("a"), "x"), {
+            type: "conditional",
+            condition: {kind: "group", number: null, name: "x"},
+            yes: lit("b"),
+            no: lit("c"),
+          }),
+        );
       });
 
       it("parses name starting with R as name condition", () => {
-        assert.deepEqual(RegexParser.parse("(?<Rx>a)(?(Rx)b|c)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: "Rx",
-              content: lit("a"),
-            },
-            {
-              type: "conditional",
-              condition: {kind: "group", number: null, name: "Rx"},
-              yes: lit("b"),
-              no: lit("c"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?<Rx>a)(?(Rx)b|c)"),
+          concat(grp(1, lit("a"), "Rx"), {
+            type: "conditional",
+            condition: {kind: "group", number: null, name: "Rx"},
+            yes: lit("b"),
+            no: lit("c"),
+          }),
+        );
       });
 
       it("parses whole-pattern recursion condition", () => {
-        assert.deepEqual(RegexParser.parse("(a)(?(R)b|c)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {
-              type: "conditional",
-              condition: {kind: "recursion", number: null, name: null},
-              yes: lit("b"),
-              no: lit("c"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)(?(R)b|c)"),
+          concat(grp(1, lit("a")), {
+            type: "conditional",
+            condition: {kind: "recursion", number: null, name: null},
+            yes: lit("b"),
+            no: lit("c"),
+          }),
+        );
       });
 
       it("parses numeric recursion condition", () => {
-        assert.deepEqual(RegexParser.parse("(a)(b)(?(R2)c|d)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {
-              type: "group",
-              number: 2,
-              name: null,
-              content: lit("b"),
-            },
-            {
-              type: "conditional",
-              condition: {kind: "recursion", number: 2, name: null},
-              yes: lit("c"),
-              no: lit("d"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)(b)(?(R2)c|d)"),
+          concat(grp(1, lit("a")), grp(2, lit("b")), {
+            type: "conditional",
+            condition: {kind: "recursion", number: 2, name: null},
+            yes: lit("c"),
+            no: lit("d"),
+          }),
+        );
       });
 
       it("parses named recursion condition", () => {
-        assert.deepEqual(RegexParser.parse("(?<x>a)(?(R&x)b|c)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-            {
-              type: "conditional",
-              condition: {kind: "recursion", number: null, name: "x"},
-              yes: lit("b"),
-              no: lit("c"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?<x>a)(?(R&x)b|c)"),
+          concat(grp(1, lit("a"), "x"), {
+            type: "conditional",
+            condition: {kind: "recursion", number: null, name: "x"},
+            yes: lit("b"),
+            no: lit("c"),
+          }),
+        );
       });
 
       it("parses DEFINE condition", () => {
-        assert.deepEqual(RegexParser.parse("(?(DEFINE)(?<x>a))(?&x)"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?(DEFINE)(?<x>a))(?&x)"),
+          concat(
             {
               type: "conditional",
               condition: {kind: "define"},
-              yes: {
-                type: "group",
-                number: 1,
-                name: "x",
-                content: lit("a"),
-              },
+              yes: grp(1, lit("a"), "x"),
               no: null,
             },
             {type: "subroutine", number: null, name: "x"},
-          ],
-        });
+          ),
+        );
       });
 
       it("parses assertion condition", () => {
@@ -1450,14 +1215,8 @@ describe("RegexParser", () => {
               content: lit("a"),
             },
           },
-          yes: {
-            type: "concatenation",
-            items: [lit("a"), lit("b")],
-          },
-          no: {
-            type: "concatenation",
-            items: [lit("c"), lit("d")],
-          },
+          yes: concat(lit("a"), lit("b")),
+          no: concat(lit("c"), lit("d")),
         });
       });
 
@@ -1579,22 +1338,16 @@ describe("RegexParser", () => {
       });
 
       it("parses quantified dot", () => {
-        assert.deepEqual(RegexParser.parse(".*"), {
-          type: "quantifier",
-          min: 0,
-          max: null,
-          mode: "greedy",
-          item: {type: "dot"},
-        });
+        assert.deepEqual(
+          RegexParser.parse(".*"),
+          quant(0, null, "greedy", {type: "dot"}),
+        );
       });
     });
 
     describe("empty pattern", () => {
       it("parses to empty concatenation", () => {
-        assert.deepEqual(RegexParser.parse(""), {
-          type: "concatenation",
-          items: [],
-        });
+        assert.deepEqual(RegexParser.parse(""), concat());
       });
     });
 
@@ -1604,13 +1357,10 @@ describe("RegexParser", () => {
       });
 
       it("parses quantified \\N", () => {
-        assert.deepEqual(RegexParser.parse("\\N*"), {
-          type: "quantifier",
-          min: 0,
-          max: null,
-          mode: "greedy",
-          item: {type: "notNewline"},
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\N*"),
+          quant(0, null, "greedy", {type: "notNewline"}),
+        );
       });
 
       it("parses \\N{U+hhhh} in unicode mode", () => {
@@ -1621,17 +1371,17 @@ describe("RegexParser", () => {
       });
 
       it("parses simple character escapes", () => {
-        assert.deepEqual(RegexParser.parse("\\a\\e\\f\\n\\r\\t"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("\\a\\e\\f\\n\\r\\t"),
+          concat(
             {type: "literal", codePoint: 7},
             {type: "literal", codePoint: 27},
             {type: "literal", codePoint: 12},
             {type: "literal", codePoint: 10},
             {type: "literal", codePoint: 13},
             {type: "literal", codePoint: 9},
-          ],
-        });
+          ),
+        );
       });
 
       it("parses \\x with one hex digit", () => {
@@ -1646,10 +1396,10 @@ describe("RegexParser", () => {
       });
 
       it("stops \\x after two hex digits", () => {
-        assert.deepEqual(RegexParser.parse("\\x411"), {
-          type: "concatenation",
-          items: [lit("A"), lit("1")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\x411"),
+          concat(lit("A"), lit("1")),
+        );
       });
 
       it("parses \\x{hhh...}", () => {
@@ -1685,10 +1435,10 @@ describe("RegexParser", () => {
       });
 
       it("stops \\0 octal after three digits", () => {
-        assert.deepEqual(RegexParser.parse("\\0123"), {
-          type: "concatenation",
-          items: [{type: "literal", codePoint: 10}, lit("3")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\0123"),
+          concat({type: "literal", codePoint: 10}, lit("3")),
+        );
       });
 
       it("parses \\o{ddd...}", () => {
@@ -1748,9 +1498,9 @@ describe("RegexParser", () => {
       });
 
       it("parses all shorthand letters", () => {
-        assert.deepEqual(RegexParser.parse("\\s\\S\\w\\W\\h\\H\\v\\V"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("\\s\\S\\w\\W\\h\\H\\v\\V"),
+          concat(
             {type: "shorthand", letter: "s", negated: false},
             {type: "shorthand", letter: "s", negated: true},
             {type: "shorthand", letter: "w", negated: false},
@@ -1759,18 +1509,19 @@ describe("RegexParser", () => {
             {type: "shorthand", letter: "h", negated: true},
             {type: "shorthand", letter: "v", negated: false},
             {type: "shorthand", letter: "v", negated: true},
-          ],
-        });
+          ),
+        );
       });
 
       it("parses quantified shorthand", () => {
-        assert.deepEqual(RegexParser.parse("\\d+"), {
-          type: "quantifier",
-          min: 1,
-          max: null,
-          mode: "greedy",
-          item: {type: "shorthand", letter: "d", negated: false},
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\d+"),
+          quant(1, null, "greedy", {
+            type: "shorthand",
+            letter: "d",
+            negated: false,
+          }),
+        );
       });
 
       it("parses \\R as newline sequence", () => {
@@ -1778,13 +1529,10 @@ describe("RegexParser", () => {
       });
 
       it("parses quantified \\R", () => {
-        assert.deepEqual(RegexParser.parse("\\R*"), {
-          type: "quantifier",
-          min: 0,
-          max: null,
-          mode: "greedy",
-          item: {type: "newlineSequence"},
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\R*"),
+          quant(0, null, "greedy", {type: "newlineSequence"}),
+        );
       });
 
       it("parses \\X as grapheme cluster", () => {
@@ -1792,13 +1540,10 @@ describe("RegexParser", () => {
       });
 
       it("parses quantified \\X", () => {
-        assert.deepEqual(RegexParser.parse("\\X*"), {
-          type: "quantifier",
-          min: 0,
-          max: null,
-          mode: "greedy",
-          item: {type: "graphemeCluster"},
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\X*"),
+          quant(0, null, "greedy", {type: "graphemeCluster"}),
+        );
       });
 
       it("parses \\C as single byte", () => {
@@ -1806,10 +1551,10 @@ describe("RegexParser", () => {
       });
 
       it("parses \\K as match start reset", () => {
-        assert.deepEqual(RegexParser.parse("a\\Kb"), {
-          type: "concatenation",
-          items: [lit("a"), {type: "matchStartReset"}, lit("b")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a\\Kb"),
+          concat(lit("a"), {type: "matchStartReset"}, lit("b")),
+        );
       });
 
       it("raises on \\ at end of pattern", () => {
@@ -1953,24 +1698,24 @@ describe("RegexParser", () => {
 
     describe("extended mode", () => {
       it("ignores whitespace", () => {
-        assert.deepEqual(RegexParser.parse("a b", {extended: true}), {
-          type: "concatenation",
-          items: [lit("a"), lit("b")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a b", {extended: true}),
+          concat(lit("a"), lit("b")),
+        );
       });
 
       it("skips # comment until end of line", () => {
-        assert.deepEqual(RegexParser.parse("a # c\nb", {extended: true}), {
-          type: "concatenation",
-          items: [lit("a"), lit("b")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a # c\nb", {extended: true}),
+          concat(lit("a"), lit("b")),
+        );
       });
 
       it("keeps escaped space literal", () => {
-        assert.deepEqual(RegexParser.parse("a\\ b", {extended: true}), {
-          type: "concatenation",
-          items: [lit("a"), lit(" "), lit("b")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a\\ b", {extended: true}),
+          concat(lit("a"), lit(" "), lit("b")),
+        );
       });
 
       it("keeps space in class literal", () => {
@@ -1982,324 +1727,178 @@ describe("RegexParser", () => {
       });
 
       it("applies whitespace before quantifier", () => {
-        assert.deepEqual(RegexParser.parse("a {2}", {extended: true}), {
-          type: "quantifier",
-          min: 2,
-          max: 2,
-          mode: "greedy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a {2}", {extended: true}),
+          quant(2, 2, "greedy", lit("a")),
+        );
       });
 
       it("applies whitespace before quantifier mode suffix", () => {
-        assert.deepEqual(RegexParser.parse("a * +", {extended: true}), {
-          type: "quantifier",
-          min: 0,
-          max: null,
-          mode: "possessive",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a * +", {extended: true}),
+          quant(0, null, "possessive", lit("a")),
+        );
       });
 
       it("starts with inline x setting", () => {
-        assert.deepEqual(RegexParser.parse("(?x)a b"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?x)a b"),
+          concat(
             {type: "optionSetting", reset: false, set: "x", unset: ""},
             lit("a"),
             lit("b"),
-          ],
-        });
+          ),
+        );
       });
 
       it("restores mode after scoped x group", () => {
-        assert.deepEqual(RegexParser.parse("(?x:a b)c d"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?x:a b)c d"),
+          concat(
             {
               type: "optionGroup",
               reset: false,
               set: "x",
               unset: "",
-              content: {
-                type: "concatenation",
-                items: [lit("a"), lit("b")],
-              },
+              content: concat(lit("a"), lit("b")),
             },
             lit("c"),
             lit(" "),
             lit("d"),
-          ],
-        });
+          ),
+        );
       });
 
       it("ignores space in class with inline xx setting", () => {
-        assert.deepEqual(RegexParser.parse("(?xx)[a ]"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?xx)[a ]"),
+          concat(
             {type: "optionSetting", reset: false, set: "xx", unset: ""},
-            {
-              type: "class",
-              negated: false,
-              items: [lit("a")],
-            },
-          ],
-        });
+            {type: "class", negated: false, items: [lit("a")]},
+          ),
+        );
       });
 
       it("allows spaces in {} bounds regardless of mode", () => {
-        assert.deepEqual(RegexParser.parse("a{1, 2}"), {
-          type: "quantifier",
-          min: 1,
-          max: 2,
-          mode: "greedy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a{1, 2}"),
+          quant(1, 2, "greedy", lit("a")),
+        );
       });
     });
 
     describe("groups", () => {
       it("parses capturing group", () => {
-        assert.deepEqual(RegexParser.parse("(a)"), {
-          type: "group",
-          number: 1,
-          name: null,
-          content: lit("a"),
-        });
+        assert.deepEqual(RegexParser.parse("(a)"), grp(1, lit("a")));
       });
 
       it("numbers groups by opening parenthesis order", () => {
-        assert.deepEqual(RegexParser.parse("(a)(b)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {
-              type: "group",
-              number: 2,
-              name: null,
-              content: lit("b"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)(b)"),
+          concat(grp(1, lit("a")), grp(2, lit("b"))),
+        );
       });
 
       it("numbers nested groups outside-in", () => {
-        assert.deepEqual(RegexParser.parse("((a))"), {
-          type: "group",
-          number: 1,
-          name: null,
-          content: {
-            type: "group",
-            number: 2,
-            name: null,
-            content: lit("a"),
-          },
-        });
+        assert.deepEqual(RegexParser.parse("((a))"), grp(1, grp(2, lit("a"))));
       });
 
       it("parses alternation inside group", () => {
-        assert.deepEqual(RegexParser.parse("(a|b)"), {
-          type: "group",
-          number: 1,
-          name: null,
-          content: {
-            type: "alternation",
-            branches: [lit("a"), lit("b")],
-          },
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a|b)"),
+          grp(1, {type: "alternation", branches: [lit("a"), lit("b")]}),
+        );
       });
 
       it("parses empty group", () => {
-        assert.deepEqual(RegexParser.parse("()"), {
-          type: "group",
-          number: 1,
-          name: null,
-          content: {type: "concatenation", items: []},
-        });
+        assert.deepEqual(RegexParser.parse("()"), grp(1, concat()));
       });
 
       it("parses quantified group", () => {
-        assert.deepEqual(RegexParser.parse("(ab)*"), {
-          type: "quantifier",
-          min: 0,
-          max: null,
-          mode: "greedy",
-          item: {
-            type: "group",
-            number: 1,
-            name: null,
-            content: {
-              type: "concatenation",
-              items: [lit("a"), lit("b")],
-            },
-          },
-        });
+        assert.deepEqual(
+          RegexParser.parse("(ab)*"),
+          quant(0, null, "greedy", grp(1, concat(lit("a"), lit("b")))),
+        );
       });
 
       it("parses non-capturing group", () => {
         assert.deepEqual(RegexParser.parse("(?:ab)"), {
           type: "nonCapturingGroup",
-          content: {
-            type: "concatenation",
-            items: [lit("a"), lit("b")],
-          },
+          content: concat(lit("a"), lit("b")),
         });
       });
 
       it("skips non-capturing groups in numbering", () => {
-        assert.deepEqual(RegexParser.parse("(?:a)(b)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "nonCapturingGroup",
-              content: lit("a"),
-            },
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("b"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?:a)(b)"),
+          concat(
+            {type: "nonCapturingGroup", content: lit("a")},
+            grp(1, lit("b")),
+          ),
+        );
       });
 
       it("parses atomic group", () => {
         assert.deepEqual(RegexParser.parse("(?>a+)"), {
           type: "atomicGroup",
-          content: {
-            type: "quantifier",
-            min: 1,
-            max: null,
-            mode: "greedy",
-            item: lit("a"),
-          },
+          content: quant(1, null, "greedy", lit("a")),
         });
       });
 
       it("parses named group with angle brackets", () => {
-        assert.deepEqual(RegexParser.parse("(?<x>a)"), {
-          type: "group",
-          number: 1,
-          name: "x",
-          content: lit("a"),
-        });
+        assert.deepEqual(RegexParser.parse("(?<x>a)"), grp(1, lit("a"), "x"));
       });
 
       it("parses named group with quotes", () => {
-        assert.deepEqual(RegexParser.parse("(?'x'a)"), {
-          type: "group",
-          number: 1,
-          name: "x",
-          content: lit("a"),
-        });
+        assert.deepEqual(RegexParser.parse("(?'x'a)"), grp(1, lit("a"), "x"));
       });
 
       it("parses named group with P prefix", () => {
-        assert.deepEqual(RegexParser.parse("(?P<x>a)"), {
-          type: "group",
-          number: 1,
-          name: "x",
-          content: lit("a"),
-        });
+        assert.deepEqual(RegexParser.parse("(?P<x>a)"), grp(1, lit("a"), "x"));
       });
 
       it("parses unicode letters in group name in unicode mode", () => {
-        assert.deepEqual(RegexParser.parse("(?<héé>a)", {unicode: true}), {
-          type: "group",
-          number: 1,
-          name: "héé",
-          content: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?<héé>a)", {unicode: true}),
+          grp(1, lit("a"), "héé"),
+        );
       });
 
       it("parses supplementary letter in group name in unicode mode", () => {
         assert.deepEqual(
           RegexParser.parse("(?<\u{1d400}>a)", {unicode: true}),
-          {
-            type: "group",
-            number: 1,
-            name: "\u{1d400}",
-            content: lit("a"),
-          },
+          grp(1, lit("a"), "𝐀"),
         );
       });
 
       it("parses unicode digit after first char in group name in unicode mode", () => {
-        assert.deepEqual(RegexParser.parse("(?<a١>b)", {unicode: true}), {
-          type: "group",
-          number: 1,
-          name: "a١",
-          content: lit("b"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?<a١>b)", {unicode: true}),
+          grp(1, lit("b"), "a١"),
+        );
       });
 
       it("numbers named and unnamed groups together", () => {
-        assert.deepEqual(RegexParser.parse("(a)(?<x>b)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {
-              type: "group",
-              number: 2,
-              name: "x",
-              content: lit("b"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)(?<x>b)"),
+          concat(grp(1, lit("a")), grp(2, lit("b"), "x")),
+        );
       });
 
       it("allows duplicate names with dupnames option", () => {
         assert.deepEqual(
           RegexParser.parse("(?<x>a)(?<x>b)", {dupnames: true}),
-          {
-            type: "concatenation",
-            items: [
-              {
-                type: "group",
-                number: 1,
-                name: "x",
-                content: lit("a"),
-              },
-              {
-                type: "group",
-                number: 2,
-                name: "x",
-                content: lit("b"),
-              },
-            ],
-          },
+          concat(grp(1, lit("a"), "x"), grp(2, lit("b"), "x")),
         );
       });
 
       it("makes plain groups non-capturing with no_auto_capture option", () => {
         assert.deepEqual(
           RegexParser.parse("(?<x>a)(b)", {no_auto_capture: true}),
-          {
-            type: "concatenation",
-            items: [
-              {
-                type: "group",
-                number: 1,
-                name: "x",
-                content: lit("a"),
-              },
-              {
-                type: "nonCapturingGroup",
-                content: lit("b"),
-              },
-            ],
-          },
+          concat(grp(1, lit("a"), "x"), {
+            type: "nonCapturingGroup",
+            content: lit("b"),
+          }),
         );
       });
 
@@ -2401,23 +2000,23 @@ describe("RegexParser", () => {
 
     describe("inline options", () => {
       it("parses option setting", () => {
-        assert.deepEqual(RegexParser.parse("(?i)a"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?i)a"),
+          concat(
             {type: "optionSetting", reset: false, set: "i", unset: ""},
             lit("a"),
-          ],
-        });
+          ),
+        );
       });
 
       it("parses setting and unsetting multiple options", () => {
-        assert.deepEqual(RegexParser.parse("(?im-sU)a"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?im-sU)a"),
+          concat(
             {type: "optionSetting", reset: false, set: "im", unset: "sU"},
             lit("a"),
-          ],
-        });
+          ),
+        );
       });
 
       it("parses option group", () => {
@@ -2426,10 +2025,7 @@ describe("RegexParser", () => {
           reset: false,
           set: "i",
           unset: "",
-          content: {
-            type: "concatenation",
-            items: [lit("a"), lit("b")],
-          },
+          content: concat(lit("a"), lit("b")),
         });
       });
 
@@ -2444,13 +2040,13 @@ describe("RegexParser", () => {
       });
 
       it("parses reset setting", () => {
-        assert.deepEqual(RegexParser.parse("(?^)a"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?^)a"),
+          concat(
             {type: "optionSetting", reset: true, set: "", unset: ""},
             lit("a"),
-          ],
-        });
+          ),
+        );
       });
 
       it("parses reset with following options", () => {
@@ -2464,47 +2060,34 @@ describe("RegexParser", () => {
       });
 
       it("parses empty unset as no-op", () => {
-        assert.deepEqual(RegexParser.parse("(?-)a"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?-)a"),
+          concat(
             {type: "optionSetting", reset: false, set: "", unset: ""},
             lit("a"),
-          ],
-        });
+          ),
+        );
       });
 
       it("allows duplicate names after inline J setting", () => {
-        assert.deepEqual(RegexParser.parse("(?J)(?<x>a)(?<x>b)"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?J)(?<x>a)(?<x>b)"),
+          concat(
             {type: "optionSetting", reset: false, set: "J", unset: ""},
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-            {
-              type: "group",
-              number: 2,
-              name: "x",
-              content: lit("b"),
-            },
-          ],
-        });
+            grp(1, lit("a"), "x"),
+            grp(2, lit("b"), "x"),
+          ),
+        );
       });
 
       it("makes plain groups non-capturing after inline n setting", () => {
-        assert.deepEqual(RegexParser.parse("(?n)(a)"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?n)(a)"),
+          concat(
             {type: "optionSetting", reset: false, set: "n", unset: ""},
-            {
-              type: "nonCapturingGroup",
-              content: lit("a"),
-            },
-          ],
-        });
+            {type: "nonCapturingGroup", content: lit("a")},
+          ),
+        );
       });
 
       it("restores parse options after enclosing group closes", () => {
@@ -2516,43 +2099,43 @@ describe("RegexParser", () => {
       });
 
       it("parses ASCII option pair", () => {
-        assert.deepEqual(RegexParser.parse("(?aD)b"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?aD)b"),
+          concat(
             {type: "optionSetting", reset: false, set: "aD", unset: ""},
             lit("b"),
-          ],
-        });
+          ),
+        );
       });
 
       it("parses bare ASCII option letter", () => {
-        assert.deepEqual(RegexParser.parse("(?a)b"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?a)b"),
+          concat(
             {type: "optionSetting", reset: false, set: "a", unset: ""},
             lit("b"),
-          ],
-        });
+          ),
+        );
       });
 
       it("parses unset ASCII option letter", () => {
-        assert.deepEqual(RegexParser.parse("(?-a)b"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?-a)b"),
+          concat(
             {type: "optionSetting", reset: false, set: "", unset: "a"},
             lit("b"),
-          ],
-        });
+          ),
+        );
       });
 
       it("parses multiple ASCII option pairs", () => {
-        assert.deepEqual(RegexParser.parse("(?aDaW)b"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(?aDaW)b"),
+          concat(
             {type: "optionSetting", reset: false, set: "aDaW", unset: ""},
             lit("b"),
-          ],
-        });
+          ),
+        );
       });
 
       it("parses ASCII option group", () => {
@@ -2657,29 +2240,21 @@ describe("RegexParser", () => {
           direction: "ahead",
           negated: false,
           atomic: true,
-          content: {
-            type: "group",
-            number: 1,
-            name: null,
-            content: lit("a"),
-          },
+          content: grp(1, lit("a")),
         });
       });
 
       it("parses quantified lookahead", () => {
-        assert.deepEqual(RegexParser.parse("(?=a)*"), {
-          type: "quantifier",
-          min: 0,
-          max: null,
-          mode: "greedy",
-          item: {
+        assert.deepEqual(
+          RegexParser.parse("(?=a)*"),
+          quant(0, null, "greedy", {
             type: "lookaround",
             direction: "ahead",
             negated: false,
             atomic: true,
             content: lit("a"),
-          },
-        });
+          }),
+        );
       });
 
       it("parses bounded variable-length lookbehind", () => {
@@ -2688,13 +2263,7 @@ describe("RegexParser", () => {
           direction: "behind",
           negated: false,
           atomic: true,
-          content: {
-            type: "quantifier",
-            min: 0,
-            max: 255,
-            mode: "greedy",
-            item: lit("a"),
-          },
+          content: quant(0, 255, "greedy", lit("a")),
         });
       });
 
@@ -2704,21 +2273,10 @@ describe("RegexParser", () => {
           direction: "behind",
           negated: false,
           atomic: true,
-          content: {
-            type: "group",
-            number: 1,
-            name: null,
-            content: {
-              type: "alternation",
-              branches: [
-                lit("a"),
-                {
-                  type: "concatenation",
-                  items: [lit("b"), lit("c")],
-                },
-              ],
-            },
-          },
+          content: grp(1, {
+            type: "alternation",
+            branches: [lit("a"), concat(lit("b"), lit("c"))],
+          }),
         });
       });
 
@@ -2728,25 +2286,16 @@ describe("RegexParser", () => {
           direction: "behind",
           negated: false,
           atomic: true,
-          content: {
-            type: "concatenation",
-            items: [
-              {
-                type: "lookaround",
-                direction: "ahead",
-                negated: false,
-                atomic: true,
-                content: {
-                  type: "quantifier",
-                  min: 0,
-                  max: null,
-                  mode: "greedy",
-                  item: lit("a"),
-                },
-              },
-              lit("b"),
-            ],
-          },
+          content: concat(
+            {
+              type: "lookaround",
+              direction: "ahead",
+              negated: false,
+              atomic: true,
+              content: quant(0, null, "greedy", lit("a")),
+            },
+            lit("b"),
+          ),
         });
       });
 
@@ -2793,170 +2342,116 @@ describe("RegexParser", () => {
 
     describe("quantifiers", () => {
       it("parses * as 0 to unbounded", () => {
-        assert.deepEqual(RegexParser.parse("a*"), {
-          type: "quantifier",
-          min: 0,
-          max: null,
-          mode: "greedy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a*"),
+          quant(0, null, "greedy", lit("a")),
+        );
       });
 
       it("parses + as 1 to unbounded", () => {
-        assert.deepEqual(RegexParser.parse("a+"), {
-          type: "quantifier",
-          min: 1,
-          max: null,
-          mode: "greedy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a+"),
+          quant(1, null, "greedy", lit("a")),
+        );
       });
 
       it("parses ? as 0 to 1", () => {
-        assert.deepEqual(RegexParser.parse("a?"), {
-          type: "quantifier",
-          min: 0,
-          max: 1,
-          mode: "greedy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a?"),
+          quant(0, 1, "greedy", lit("a")),
+        );
       });
 
       it("parses {n} as exact count", () => {
-        assert.deepEqual(RegexParser.parse("a{3}"), {
-          type: "quantifier",
-          min: 3,
-          max: 3,
-          mode: "greedy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a{3}"),
+          quant(3, 3, "greedy", lit("a")),
+        );
       });
 
       it("parses {n,} as n to unbounded", () => {
-        assert.deepEqual(RegexParser.parse("a{2,}"), {
-          type: "quantifier",
-          min: 2,
-          max: null,
-          mode: "greedy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a{2,}"),
+          quant(2, null, "greedy", lit("a")),
+        );
       });
 
       it("parses {n,m} as range", () => {
-        assert.deepEqual(RegexParser.parse("a{2,5}"), {
-          type: "quantifier",
-          min: 2,
-          max: 5,
-          mode: "greedy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a{2,5}"),
+          quant(2, 5, "greedy", lit("a")),
+        );
       });
 
       it("parses {,m} as 0 to m", () => {
-        assert.deepEqual(RegexParser.parse("a{,5}"), {
-          type: "quantifier",
-          min: 0,
-          max: 5,
-          mode: "greedy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a{,5}"),
+          quant(0, 5, "greedy", lit("a")),
+        );
       });
 
       it("parses lazy mode", () => {
-        assert.deepEqual(RegexParser.parse("a*?"), {
-          type: "quantifier",
-          min: 0,
-          max: null,
-          mode: "lazy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a*?"),
+          quant(0, null, "lazy", lit("a")),
+        );
       });
 
       it("parses possessive mode", () => {
-        assert.deepEqual(RegexParser.parse("a++"), {
-          type: "quantifier",
-          min: 1,
-          max: null,
-          mode: "possessive",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a++"),
+          quant(1, null, "possessive", lit("a")),
+        );
       });
 
       it("parses lazy mode on {} quantifier", () => {
-        assert.deepEqual(RegexParser.parse("a{2,5}?"), {
-          type: "quantifier",
-          min: 2,
-          max: 5,
-          mode: "lazy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a{2,5}?"),
+          quant(2, 5, "lazy", lit("a")),
+        );
       });
 
       it("parses possessive mode on {} quantifier", () => {
-        assert.deepEqual(RegexParser.parse("a{2,5}+"), {
-          type: "quantifier",
-          min: 2,
-          max: 5,
-          mode: "possessive",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a{2,5}+"),
+          quant(2, 5, "possessive", lit("a")),
+        );
       });
 
       it("binds to the last atom only", () => {
-        assert.deepEqual(RegexParser.parse("ab*"), {
-          type: "concatenation",
-          items: [
-            lit("a"),
-            {
-              type: "quantifier",
-              min: 0,
-              max: null,
-              mode: "greedy",
-              item: lit("b"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("ab*"),
+          concat(lit("a"), quant(0, null, "greedy", lit("b"))),
+        );
       });
 
       it("quantifies astral character", () => {
-        assert.deepEqual(RegexParser.parse("😀*"), {
-          type: "quantifier",
-          min: 0,
-          max: null,
-          mode: "greedy",
-          item: {type: "literal", codePoint: 128512},
-        });
+        assert.deepEqual(
+          RegexParser.parse("😀*"),
+          quant(0, null, "greedy", {type: "literal", codePoint: 128512}),
+        );
       });
 
       it("accepts maximum repetition count", () => {
-        assert.deepEqual(RegexParser.parse("a{65535}"), {
-          type: "quantifier",
-          min: 65535,
-          max: 65535,
-          mode: "greedy",
-          item: lit("a"),
-        });
+        assert.deepEqual(
+          RegexParser.parse("a{65535}"),
+          quant(65535, 65535, "greedy", lit("a")),
+        );
       });
 
       it("parses { without bounds as literal", () => {
-        assert.deepEqual(RegexParser.parse("a{"), {
-          type: "concatenation",
-          items: [lit("a"), lit("{")],
-        });
+        assert.deepEqual(RegexParser.parse("a{"), concat(lit("a"), lit("{")));
       });
 
       it("parses incomplete bounds as literals", () => {
-        assert.deepEqual(RegexParser.parse("a{2,"), {
-          type: "concatenation",
-          items: [lit("a"), lit("{"), lit("2"), lit(",")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a{2,"),
+          concat(lit("a"), lit("{"), lit("2"), lit(",")),
+        );
       });
 
       it("parses unmatched } as literal", () => {
-        assert.deepEqual(RegexParser.parse("a}"), {
-          type: "concatenation",
-          items: [lit("a"), lit("}")],
-        });
+        assert.deepEqual(RegexParser.parse("a}"), concat(lit("a"), lit("}")));
       });
 
       it("raises when quantifier has nothing to repeat", () => {
@@ -2998,40 +2493,31 @@ describe("RegexParser", () => {
 
     describe("quoting", () => {
       it("parses quoted metacharacters as literals", () => {
-        assert.deepEqual(RegexParser.parse("\\Qa*\\E"), {
-          type: "concatenation",
-          items: [lit("a"), lit("*")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\Qa*\\E"),
+          concat(lit("a"), lit("*")),
+        );
       });
 
       it("binds quantifier after \\E to the last quoted char", () => {
-        assert.deepEqual(RegexParser.parse("\\Qab\\E*"), {
-          type: "concatenation",
-          items: [
-            lit("a"),
-            {
-              type: "quantifier",
-              min: 0,
-              max: null,
-              mode: "greedy",
-              item: lit("b"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\Qab\\E*"),
+          concat(lit("a"), quant(0, null, "greedy", lit("b"))),
+        );
       });
 
       it("quotes to the end of pattern without \\E", () => {
-        assert.deepEqual(RegexParser.parse("a\\Qb*"), {
-          type: "concatenation",
-          items: [lit("a"), lit("b"), lit("*")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a\\Qb*"),
+          concat(lit("a"), lit("b"), lit("*")),
+        );
       });
 
       it("ignores \\E without preceding \\Q", () => {
-        assert.deepEqual(RegexParser.parse("a\\Eb"), {
-          type: "concatenation",
-          items: [lit("a"), lit("b")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a\\Eb"),
+          concat(lit("a"), lit("b")),
+        );
       });
 
       it("quotes group metacharacters", () => {
@@ -3043,10 +2529,10 @@ describe("RegexParser", () => {
       });
 
       it("preserves whitespace inside quote in extended mode", () => {
-        assert.deepEqual(RegexParser.parse("\\Qa b\\E", {extended: true}), {
-          type: "concatenation",
-          items: [lit("a"), lit(" "), lit("b")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\Qa b\\E", {extended: true}),
+          concat(lit("a"), lit(" "), lit("b")),
+        );
       });
 
       it("raises when quantifier follows empty quote at pattern start", () => {
@@ -3060,68 +2546,65 @@ describe("RegexParser", () => {
 
     describe("start options", () => {
       it("parses option verb", () => {
-        assert.deepEqual(RegexParser.parse("(*UTF)a"), {
-          type: "concatenation",
-          items: [{type: "startOption", name: "UTF", value: null}, lit("a")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(*UTF)a"),
+          concat({type: "startOption", name: "UTF", value: null}, lit("a")),
+        );
       });
 
       it("parses multiple option verbs", () => {
-        assert.deepEqual(RegexParser.parse("(*UTF)(*UCP)a"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(*UTF)(*UCP)a"),
+          concat(
             {type: "startOption", name: "UTF", value: null},
             {type: "startOption", name: "UCP", value: null},
             lit("a"),
-          ],
-        });
+          ),
+        );
       });
 
       it("parses UTF8 alias", () => {
-        assert.deepEqual(RegexParser.parse("(*UTF8)a"), {
-          type: "concatenation",
-          items: [{type: "startOption", name: "UTF8", value: null}, lit("a")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(*UTF8)a"),
+          concat({type: "startOption", name: "UTF8", value: null}, lit("a")),
+        );
       });
 
       it("parses newline convention verb", () => {
-        assert.deepEqual(RegexParser.parse("(*CR)a"), {
-          type: "concatenation",
-          items: [{type: "startOption", name: "CR", value: null}, lit("a")],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(*CR)a"),
+          concat({type: "startOption", name: "CR", value: null}, lit("a")),
+        );
       });
 
       it("parses limit verb with value", () => {
-        assert.deepEqual(RegexParser.parse("(*LIMIT_MATCH=1000)a"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(*LIMIT_MATCH=1000)a"),
+          concat(
             {type: "startOption", name: "LIMIT_MATCH", value: 1000},
             lit("a"),
-          ],
-        });
+          ),
+        );
       });
 
       it("switches to unicode mode with UTF verb", () => {
-        assert.deepEqual(RegexParser.parse("(*UTF)\\x{100}"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(*UTF)\\x{100}"),
+          concat(
             {type: "startOption", name: "UTF", value: null},
             {type: "literal", codePoint: 256},
-          ],
-        });
+          ),
+        );
       });
 
       it("keeps top-level alternation as one item", () => {
-        assert.deepEqual(RegexParser.parse("(*UTF)a|b"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("(*UTF)a|b"),
+          concat(
             {type: "startOption", name: "UTF", value: null},
-            {
-              type: "alternation",
-              branches: [lit("a"), lit("b")],
-            },
-          ],
-        });
+            {type: "alternation", branches: [lit("a"), lit("b")]},
+          ),
+        );
       });
 
       it("raises on option verb not at pattern start", () => {
@@ -3178,19 +2661,13 @@ describe("RegexParser", () => {
       });
 
       it("parses quantified recursion", () => {
-        assert.deepEqual(RegexParser.parse("a(?R)?"), {
-          type: "concatenation",
-          items: [
+        assert.deepEqual(
+          RegexParser.parse("a(?R)?"),
+          concat(
             lit("a"),
-            {
-              type: "quantifier",
-              min: 0,
-              max: 1,
-              mode: "greedy",
-              item: {type: "subroutine", number: 0, name: null},
-            },
-          ],
-        });
+            quant(0, 1, "greedy", {type: "subroutine", number: 0, name: null}),
+          ),
+        );
       });
 
       it("parses (?0) as whole-pattern recursion", () => {
@@ -3202,138 +2679,78 @@ describe("RegexParser", () => {
       });
 
       it("parses numeric call", () => {
-        assert.deepEqual(RegexParser.parse("(a)(?1)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {type: "subroutine", number: 1, name: null},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)(?1)"),
+          concat(grp(1, lit("a")), {type: "subroutine", number: 1, name: null}),
+        );
       });
 
       it("resolves negative relative call", () => {
-        assert.deepEqual(RegexParser.parse("(a)(?-1)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {type: "subroutine", number: 1, name: null},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)(?-1)"),
+          concat(grp(1, lit("a")), {type: "subroutine", number: 1, name: null}),
+        );
       });
 
       it("resolves positive relative call", () => {
-        assert.deepEqual(RegexParser.parse("(?+1)(a)"), {
-          type: "concatenation",
-          items: [
-            {type: "subroutine", number: 1, name: null},
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?+1)(a)"),
+          concat({type: "subroutine", number: 1, name: null}, grp(1, lit("a"))),
+        );
       });
 
       it("parses (?&name) call", () => {
-        assert.deepEqual(RegexParser.parse("(?<x>a)(?&x)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-            {type: "subroutine", number: null, name: "x"},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?<x>a)(?&x)"),
+          concat(grp(1, lit("a"), "x"), {
+            type: "subroutine",
+            number: null,
+            name: "x",
+          }),
+        );
       });
 
       it("parses (?P>name) call", () => {
-        assert.deepEqual(RegexParser.parse("(?P<x>a)(?P>x)"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-            {type: "subroutine", number: null, name: "x"},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?P<x>a)(?P>x)"),
+          concat(grp(1, lit("a"), "x"), {
+            type: "subroutine",
+            number: null,
+            name: "x",
+          }),
+        );
       });
 
       it("parses \\g with angle-bracketed number", () => {
-        assert.deepEqual(RegexParser.parse("(a)\\g<1>"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {type: "subroutine", number: 1, name: null},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)\\g<1>"),
+          concat(grp(1, lit("a")), {type: "subroutine", number: 1, name: null}),
+        );
       });
 
       it("parses \\g with quoted number", () => {
-        assert.deepEqual(RegexParser.parse("(a)\\g'1'"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-            {type: "subroutine", number: 1, name: null},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(a)\\g'1'"),
+          concat(grp(1, lit("a")), {type: "subroutine", number: 1, name: null}),
+        );
       });
 
       it("parses \\g with angle-bracketed name", () => {
-        assert.deepEqual(RegexParser.parse("(?<x>a)\\g<x>"), {
-          type: "concatenation",
-          items: [
-            {
-              type: "group",
-              number: 1,
-              name: "x",
-              content: lit("a"),
-            },
-            {type: "subroutine", number: null, name: "x"},
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("(?<x>a)\\g<x>"),
+          concat(grp(1, lit("a"), "x"), {
+            type: "subroutine",
+            number: null,
+            name: "x",
+          }),
+        );
       });
 
       it("resolves \\g with relative angle-bracketed number", () => {
-        assert.deepEqual(RegexParser.parse("\\g<+1>(a)"), {
-          type: "concatenation",
-          items: [
-            {type: "subroutine", number: 1, name: null},
-            {
-              type: "group",
-              number: 1,
-              name: null,
-              content: lit("a"),
-            },
-          ],
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\g<+1>(a)"),
+          concat({type: "subroutine", number: 1, name: null}, grp(1, lit("a"))),
+        );
       });
 
       it("raises on (?R without closing parenthesis", () => {
@@ -3455,13 +2872,14 @@ describe("RegexParser", () => {
       });
 
       it("parses quantified property", () => {
-        assert.deepEqual(RegexParser.parse("\\p{L}+"), {
-          type: "quantifier",
-          min: 1,
-          max: null,
-          mode: "greedy",
-          item: {type: "unicodeProperty", name: "L", negated: false},
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\p{L}+"),
+          quant(1, null, "greedy", {
+            type: "unicodeProperty",
+            name: "L",
+            negated: false,
+          }),
+        );
       });
 
       it("parses properties as class members", () => {
@@ -3510,55 +2928,52 @@ describe("RegexParser", () => {
 
     describe("verbs", () => {
       it("parses (*FAIL)", () => {
-        assert.deepEqual(RegexParser.parse("a(*FAIL)"), {
-          type: "concatenation",
-          items: [lit("a"), {type: "verb", verb: "fail", name: null}],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a(*FAIL)"),
+          concat(lit("a"), {type: "verb", verb: "fail", name: null}),
+        );
       });
 
       it("parses (*F) as fail", () => {
-        assert.deepEqual(RegexParser.parse("a(*F)"), {
-          type: "concatenation",
-          items: [lit("a"), {type: "verb", verb: "fail", name: null}],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a(*F)"),
+          concat(lit("a"), {type: "verb", verb: "fail", name: null}),
+        );
       });
 
       it("parses all simple verbs", () => {
         assert.deepEqual(
           RegexParser.parse("a(*ACCEPT)(*COMMIT)(*PRUNE)(*SKIP)(*THEN)"),
-          {
-            type: "concatenation",
-            items: [
-              lit("a"),
-              {type: "verb", verb: "accept", name: null},
-              {type: "verb", verb: "commit", name: null},
-              {type: "verb", verb: "prune", name: null},
-              {type: "verb", verb: "skip", name: null},
-              {type: "verb", verb: "then", name: null},
-            ],
-          },
+          concat(
+            lit("a"),
+            {type: "verb", verb: "accept", name: null},
+            {type: "verb", verb: "commit", name: null},
+            {type: "verb", verb: "prune", name: null},
+            {type: "verb", verb: "skip", name: null},
+            {type: "verb", verb: "then", name: null},
+          ),
         );
       });
 
       it("parses (*MARK:name)", () => {
-        assert.deepEqual(RegexParser.parse("a(*MARK:x)"), {
-          type: "concatenation",
-          items: [lit("a"), {type: "verb", verb: "mark", name: "x"}],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a(*MARK:x)"),
+          concat(lit("a"), {type: "verb", verb: "mark", name: "x"}),
+        );
       });
 
       it("parses (*:name) as mark", () => {
-        assert.deepEqual(RegexParser.parse("a(*:x)"), {
-          type: "concatenation",
-          items: [lit("a"), {type: "verb", verb: "mark", name: "x"}],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a(*:x)"),
+          concat(lit("a"), {type: "verb", verb: "mark", name: "x"}),
+        );
       });
 
       it("parses named (*SKIP:name)", () => {
-        assert.deepEqual(RegexParser.parse("a(*SKIP:x)"), {
-          type: "concatenation",
-          items: [lit("a"), {type: "verb", verb: "skip", name: "x"}],
-        });
+        assert.deepEqual(
+          RegexParser.parse("a(*SKIP:x)"),
+          concat(lit("a"), {type: "verb", verb: "skip", name: "x"}),
+        );
       });
 
       it("raises on unrecognized verb", () => {
