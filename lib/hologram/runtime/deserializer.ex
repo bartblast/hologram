@@ -258,15 +258,14 @@ defmodule Hologram.Runtime.Deserializer do
   end
 
   # A Regex struct's :re_pattern references a compiled pattern that exists
-  # only in the client runtime, so a server-side pattern compiled from the
-  # struct's source and options is swapped in. A source that doesn't compile
-  # can only come from a tampered payload and leaves the struct unchanged.
-  defp maybe_recompile_regex(
-         %{__struct__: Regex, re_pattern: _client_pattern, source: source, opts: opts} = map
-       )
+  # only in the client runtime, so the struct is rebuilt by compiling its
+  # source and options server-side, which also gives it the exact shape the
+  # running Elixir version expects. A source that doesn't compile can only
+  # come from a tampered payload and leaves the struct unchanged.
+  defp maybe_recompile_regex(%{__struct__: Regex, source: source, opts: opts} = map)
        when is_binary(source) and is_list(opts) do
-    case :re.compile(source, opts) do
-      {:ok, re_pattern} -> %{map | re_pattern: re_pattern}
+    case Regex.compile(source, opts) do
+      {:ok, regex} -> regex
       {:error, _reason} -> map
     end
   end

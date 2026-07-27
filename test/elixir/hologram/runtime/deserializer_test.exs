@@ -4,6 +4,26 @@ defmodule Hologram.Runtime.DeserializerTest do
 
   @delimiter delimiter()
 
+  # Builds the serialized entries of a Regex struct, including the
+  # :re_version field on Elixir versions whose Regex struct tracks it.
+  defp regex_struct_entries(client_re_pattern, source_hex, opts_data) do
+    entries = [
+      ["a__struct__", "aElixir.Regex"],
+      ["aopts", %{"t" => "l", "d" => opts_data}],
+      ["are_pattern", client_re_pattern],
+      ["asource", source_hex]
+    ]
+
+    if Map.has_key?(Regex.__struct__(), :re_version) do
+      client_version_hex = "b0" <> Base.encode16("8.44 2020-02-12", case: :lower)
+      client_re_version = %{"t" => "t", "d" => [client_version_hex, "alittle"]}
+
+      entries ++ [["are_version", client_re_version]]
+    else
+      entries
+    end
+  end
+
   describe "version 3" do
     test "top-level data, raw JSON" do
       assert deserialize(~s'[3,"axyz"]') == :xyz
@@ -85,12 +105,7 @@ defmodule Hologram.Runtime.DeserializerTest do
 
       data = %{
         "t" => "m",
-        "d" => [
-          ["a__struct__", "aElixir.Regex"],
-          ["aopts", %{"t" => "l", "d" => ["acaseless"]}],
-          ["are_pattern", client_re_pattern],
-          ["asource", "b06162"]
-        ]
+        "d" => regex_struct_entries(client_re_pattern, "b06162", ["acaseless"])
       }
 
       result = deserialize(3, data)
@@ -103,15 +118,10 @@ defmodule Hologram.Runtime.DeserializerTest do
       client_ref = %{"t" => "r", "n" => "shologram_client", "c" => 0, "i" => [3, 2, 1]}
       client_re_pattern = %{"t" => "t", "d" => ["are_pattern", "i0", "i0", "i0", client_ref]}
 
+      # source is "a{2,1}"
       data = %{
         "t" => "m",
-        "d" => [
-          ["a__struct__", "aElixir.Regex"],
-          ["aopts", %{"t" => "l", "d" => []}],
-          ["are_pattern", client_re_pattern],
-          # "a{2,1}"
-          ["asource", "b0617b322c317d"]
-        ]
+        "d" => regex_struct_entries(client_re_pattern, "b0617b322c317d", [])
       }
 
       result = deserialize(3, data)
@@ -208,12 +218,7 @@ defmodule Hologram.Runtime.DeserializerTest do
 
       data = %{
         "t" => "m",
-        "d" => [
-          ["a__struct__", "aElixir.Regex"],
-          ["aopts", %{"t" => "l", "d" => ["acaseless"]}],
-          ["are_pattern", client_re_pattern],
-          ["asource", "b06162"]
-        ]
+        "d" => regex_struct_entries(client_re_pattern, "b06162", ["acaseless"])
       }
 
       result = deserialize(2, data)
