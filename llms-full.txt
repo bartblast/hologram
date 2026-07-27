@@ -38,8 +38,8 @@ This guide will walk you through the installation process step by step.
 
 #### Prerequisites
 
-- `Elixir` version 1.15 or higher
-- `OTP` version 24 or higher
+- `Elixir` version 1.19 or higher
+- `OTP` version 28.1 or higher
 - A working `Phoenix` application (see Phoenix installation guide: https://hexdocs.pm/phoenix/installation.html#phoenix)
 - `Node.js` version 20 or higher and `npm`, if not already installed, you can get them via `asdf`:
 
