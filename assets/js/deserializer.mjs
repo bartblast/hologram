@@ -122,16 +122,7 @@ export default class Deserializer {
   static #maybeRegisterRegexPattern(map) {
     if (!Type.isStruct(map, "Regex")) return;
 
-    const rePattern = $.#regexStructField(map, "re_pattern");
-
-    if (
-      rePattern === undefined ||
-      !Type.isRecordTuple(rePattern, "re_pattern", 5)
-    ) {
-      return;
-    }
-
-    const ref = rePattern.data[4];
+    const ref = $.#regexStructField(map, "re_pattern").data[4];
 
     if (ERTS.regexPatternRegistry.get(ref) !== null) return;
 
@@ -139,11 +130,6 @@ export default class Deserializer {
     const opts = $.#regexStructField(map, "opts");
 
     const result = Interpreter.moduleProxy("re")["compile/2"](source, opts);
-
-    // The source and options compiled on the sender side, so anything else
-    // is a tampered payload left unregistered
-    if (!Interpreter.isStrictlyEqual(result.data[0], Type.atom("ok"))) return;
-
     const compiledRef = result.data[1].data[4];
 
     ERTS.regexPatternRegistry.put(
