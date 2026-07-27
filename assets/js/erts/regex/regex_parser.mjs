@@ -580,6 +580,27 @@ export default class RegexParser {
     return {type: "literal", codePoint: this.#takeCodePoint()};
   }
 
+  // Parses the digit run of a braced escape and returns its value, with
+  // the position left at the closing brace.
+  #parseBracedDigits(isDigit, radix, unterminatedMessage) {
+    const digitsStart = this.#position;
+
+    while (isDigit(this.#peek())) this.#position++;
+
+    if (this.#peek() !== "}") {
+      throw new RegexParseError(unterminatedMessage, this.#position + 1);
+    }
+
+    if (this.#position === digitsStart) {
+      throw new RegexParseError(
+        "digits missing after \\x or in \\x{} or \\o{} or \\N{U+}",
+        this.#position,
+      );
+    }
+
+    return parseInt(this.#source.slice(digitsStart, this.#position), radix);
+  }
+
   // Parses a (?|...) branch reset group, with the position at the |.
   // Each top-level branch restarts group numbering from the same base, and
   // duplicate names are allowed across branches, matching PCRE2 behavior.
@@ -1648,27 +1669,10 @@ export default class RegexParser {
     if (this.#peek() === "{") {
       this.#position++;
 
-      const digitsStart = this.#position;
-
-      while (this.#isHexDigit(this.#peek())) this.#position++;
-
-      if (this.#peek() !== "}") {
-        throw new RegexParseError(
-          "non-hex character in \\x{} (closing brace missing?)",
-          this.#position + 1,
-        );
-      }
-
-      if (this.#position === digitsStart) {
-        throw new RegexParseError(
-          "digits missing after \\x or in \\x{} or \\o{} or \\N{U+}",
-          this.#position,
-        );
-      }
-
-      const value = parseInt(
-        this.#source.slice(digitsStart, this.#position),
+      const value = this.#parseBracedDigits(
+        (char) => this.#isHexDigit(char),
         16,
+        "non-hex character in \\x{} (closing brace missing?)",
       );
 
       this.#checkCodePointValue(value);
@@ -1754,25 +1758,11 @@ export default class RegexParser {
 
     this.#position += 2;
 
-    const digitsStart = this.#position;
-
-    while (this.#isHexDigit(this.#peek())) this.#position++;
-
-    if (this.#peek() !== "}") {
-      throw new RegexParseError(
-        "non-hex character in \\x{} (closing brace missing?)",
-        this.#position + 1,
-      );
-    }
-
-    if (this.#position === digitsStart) {
-      throw new RegexParseError(
-        "digits missing after \\x or in \\x{} or \\o{} or \\N{U+}",
-        this.#position,
-      );
-    }
-
-    const value = parseInt(this.#source.slice(digitsStart, this.#position), 16);
+    const value = this.#parseBracedDigits(
+      (char) => this.#isHexDigit(char),
+      16,
+      "non-hex character in \\x{} (closing brace missing?)",
+    );
 
     if (this.#unicode) this.#checkCodePointValue(value);
 
@@ -1799,25 +1789,11 @@ export default class RegexParser {
 
     this.#position++;
 
-    const digitsStart = this.#position;
-
-    while (this.#isOctalDigit(this.#peek())) this.#position++;
-
-    if (this.#peek() !== "}") {
-      throw new RegexParseError(
-        "non-octal character in \\o{} (closing brace missing?)",
-        this.#position + 1,
-      );
-    }
-
-    if (this.#position === digitsStart) {
-      throw new RegexParseError(
-        "digits missing after \\x or in \\x{} or \\o{} or \\N{U+}",
-        this.#position,
-      );
-    }
-
-    const value = parseInt(this.#source.slice(digitsStart, this.#position), 8);
+    const value = this.#parseBracedDigits(
+      (char) => this.#isOctalDigit(char),
+      8,
+      "non-octal character in \\o{} (closing brace missing?)",
+    );
 
     this.#checkCodePointValue(value);
     this.#position++;
