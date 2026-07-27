@@ -250,6 +250,37 @@ export default class RegexTranslator {
     return `[${node.negated ? "^" : ""}${members}]`;
   }
 
+  static #translateConcatenation(node, context) {
+    let result = "";
+
+    for (let index = 0; index < node.items.length; index++) {
+      const item = node.items[index];
+
+      // An inline option setting applies to the rest of the enclosing group,
+      // so the remaining items are translated with the updated context, in a
+      // caseless modifier group when the i option changed
+      if (item.type === "optionSetting") {
+        const nextContext = applyOptionSetting(context, item);
+
+        const rest = {
+          type: "concatenation",
+          items: node.items.slice(index + 1),
+        };
+
+        const restSource = $.#translateNode(rest, nextContext);
+
+        return result + $.#wrapCaselessChange(restSource, context, nextContext);
+      }
+
+      result +=
+        item.type === "alternation"
+          ? `(?:${$.#translateNode(item, context)})`
+          : $.#translateNode(item, context);
+    }
+
+    return result;
+  }
+
   static #translateNode(node, context) {
     switch (node.type) {
       case "alternation":
@@ -273,40 +304,8 @@ export default class RegexTranslator {
       case "class":
         return $.#translateClass(node, context);
 
-      case "concatenation": {
-        let result = "";
-        let currentContext = context;
-
-        for (let index = 0; index < node.items.length; index++) {
-          const item = node.items[index];
-
-          // An inline option setting applies to the rest of the enclosing
-          // group, so the remaining items are translated with the updated
-          // context, in a caseless modifier group when the i option changed
-          if (item.type === "optionSetting") {
-            const nextContext = applyOptionSetting(currentContext, item);
-
-            const rest = {
-              type: "concatenation",
-              items: node.items.slice(index + 1),
-            };
-
-            const restSource = $.#translateNode(rest, nextContext);
-
-            return (
-              result +
-              $.#wrapCaselessChange(restSource, currentContext, nextContext)
-            );
-          }
-
-          result +=
-            item.type === "alternation"
-              ? `(?:${$.#translateNode(item, currentContext)})`
-              : $.#translateNode(item, currentContext);
-        }
-
-        return result;
-      }
+      case "concatenation":
+        return $.#translateConcatenation(node, context);
 
       // PCRE2 dot exclusions follow the newline convention, while JS dot has
       // its own line terminator set, so dot is always translated to an
@@ -374,18 +373,8 @@ export default class RegexTranslator {
       case "quantifier":
         return $.#translateQuantifier(node, context);
 
-      case "shorthand": {
-        // \d and \w match their JS counterparts exactly
-        if (node.letter === "d" || node.letter === "w") {
-          const escape = node.negated ? node.letter.toUpperCase() : node.letter;
-
-          return `\\${escape}`;
-        }
-
-        const content = $.#rangesToClassContent(SHORTHAND_SETS[node.letter]);
-
-        return node.negated ? `[^${content}]` : `[${content}]`;
-      }
+      case "shorthand":
+        return $.#translateShorthand(node);
 
       // Start options are compile metadata and match nothing
       case "startOption":
@@ -412,6 +401,19 @@ export default class RegexTranslator {
     const isLazy = (node.mode === "lazy") !== context.ungreedy;
 
     return `${itemSource}${$.#quantifierBounds(node)}${isLazy ? "?" : ""}`;
+  }
+
+  static #translateShorthand(node) {
+    // \d and \w match their JS counterparts exactly
+    if (node.letter === "d" || node.letter === "w") {
+      const escape = node.negated ? node.letter.toUpperCase() : node.letter;
+
+      return `\\${escape}`;
+    }
+
+    const content = $.#rangesToClassContent(SHORTHAND_SETS[node.letter]);
+
+    return node.negated ? `[^${content}]` : `[${content}]`;
   }
 
   // Wraps the source in a caseless modifier group when the i option differs
