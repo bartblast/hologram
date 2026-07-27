@@ -670,17 +670,14 @@ export default class RegexInterpreter {
       case "branchResetGroup":
         return $.#matchNode(node.content, state, position, continuation);
 
-      case "class": {
-        const codePoint = $.#subjectCodePointAt(state, position);
-
-        if (codePoint === null) return false;
-
-        if ($.#classMatches(node, codePoint, state) === node.negated) {
-          return false;
-        }
-
-        return continuation(position + $.#codePointLength(state, codePoint));
-      }
+      case "class":
+        return $.#matchOneCodePoint(
+          state,
+          position,
+          continuation,
+          (codePoint) =>
+            $.#classMatches(node, codePoint, state) !== node.negated,
+        );
 
       case "concatenation":
         return $.#matchSequence(node.items, 0, state, position, continuation);
@@ -704,20 +701,14 @@ export default class RegexInterpreter {
         return matched;
       }
 
-      case "dot": {
-        const codePoint = $.#subjectCodePointAt(state, position);
-
-        if (codePoint === null) return false;
-
-        if (
-          !state.dotall &&
-          NEWLINE_SINGLES[state.newline].includes(codePoint)
-        ) {
-          return false;
-        }
-
-        return continuation(position + $.#codePointLength(state, codePoint));
-      }
+      case "dot":
+        return $.#matchOneCodePoint(
+          state,
+          position,
+          continuation,
+          (codePoint) =>
+            state.dotall || !NEWLINE_SINGLES[state.newline].includes(codePoint),
+        );
 
       // \X matches one extended grapheme cluster, in byte mode too,
       // where a CRLF pair still forms a single cluster
@@ -763,17 +754,13 @@ export default class RegexInterpreter {
         return matched;
       }
 
-      case "literal": {
-        const codePoint = $.#subjectCodePointAt(state, position);
-
-        if (codePoint === null) return false;
-
-        if (!$.#codePointsEqual(node.codePoint, codePoint, state)) {
-          return false;
-        }
-
-        return continuation(position + $.#codePointLength(state, codePoint));
-      }
+      case "literal":
+        return $.#matchOneCodePoint(
+          state,
+          position,
+          continuation,
+          (codePoint) => $.#codePointsEqual(node.codePoint, codePoint, state),
+        );
 
       case "lookaround":
         return $.#matchLookaround(node, state, position, continuation);
@@ -817,15 +804,13 @@ export default class RegexInterpreter {
         return $.#matchNode(node.content, state, position, continuation);
 
       // \N follows the newline convention like dot, but ignores dotall
-      case "notNewline": {
-        const codePoint = $.#subjectCodePointAt(state, position);
-
-        if (codePoint === null) return false;
-
-        if (NEWLINE_SINGLES[state.newline].includes(codePoint)) return false;
-
-        return continuation(position + $.#codePointLength(state, codePoint));
-      }
+      case "notNewline":
+        return $.#matchOneCodePoint(
+          state,
+          position,
+          continuation,
+          (codePoint) => !NEWLINE_SINGLES[state.newline].includes(codePoint),
+        );
 
       case "optionGroup":
         return $.#matchNode(
@@ -838,20 +823,15 @@ export default class RegexInterpreter {
       case "quantifier":
         return $.#matchQuantifier(node, state, position, continuation);
 
-      case "shorthand": {
-        const codePoint = $.#subjectCodePointAt(state, position);
-
-        if (codePoint === null) return false;
-
-        if (
-          codePointInRanges(SHORTHAND_SETS[node.letter], codePoint) ===
-          node.negated
-        ) {
-          return false;
-        }
-
-        return continuation(position + $.#codePointLength(state, codePoint));
-      }
+      case "shorthand":
+        return $.#matchOneCodePoint(
+          state,
+          position,
+          continuation,
+          (codePoint) =>
+            codePointInRanges(SHORTHAND_SETS[node.letter], codePoint) !==
+            node.negated,
+        );
 
       // TODO: in unicode mode \C should consume one UTF-8 byte instead of
       // one UTF-16 code unit
@@ -917,17 +897,14 @@ export default class RegexInterpreter {
       case "verb":
         return $.#matchVerb(node, state, position, continuation);
 
-      case "unicodeProperty": {
-        const codePoint = $.#subjectCodePointAt(state, position);
-
-        if (codePoint === null) return false;
-
-        if ($.#unicodePropertyMatches(node.name, codePoint) === node.negated) {
-          return false;
-        }
-
-        return continuation(position + $.#codePointLength(state, codePoint));
-      }
+      case "unicodeProperty":
+        return $.#matchOneCodePoint(
+          state,
+          position,
+          continuation,
+          (codePoint) =>
+            $.#unicodePropertyMatches(node.name, codePoint) !== node.negated,
+        );
 
       default:
         // TODO: shrink as remaining interpreter features are implemented
@@ -935,6 +912,18 @@ export default class RegexInterpreter {
           `unsupported AST node for interpretation: ${node.type}`,
         );
     }
+  }
+
+  // Consumes one code point when the accepts predicate holds for it, then
+  // continues after it.
+  static #matchOneCodePoint(state, position, continuation, accepts) {
+    const codePoint = $.#subjectCodePointAt(state, position);
+
+    if (codePoint === null) return false;
+
+    if (!accepts(codePoint)) return false;
+
+    return continuation(position + $.#codePointLength(state, codePoint));
   }
 
   static #matchQuantifier(node, state, position, continuation) {
