@@ -12,6 +12,8 @@ export const NEWLINE_SEQUENCE_SINGLES = {
 };
 
 // Single chars that alone form a complete newline, per convention.
+// Declared before NEWLINE_SEQUENCE_SINGLES (out of alphabetical order),
+// which derives from it and cannot reference it earlier.
 export const NEWLINE_SINGLES = {
   any: [0x0a, 0x0b, 0x0c, 0x0d, 0x85, 0x2028, 0x2029],
   anycrlf: [0x0a, 0x0d],
@@ -30,3 +32,19 @@ export const NEWLINE_VERBS = {
   LF: "lf",
   NUL: "nul",
 };
+
+// Returns the length of the newline sequence starting at the position,
+// or 0 when there is none.
+export function newlineLengthAt(newlineType, text, position) {
+  if (
+    NEWLINE_PAIR_CONVENTIONS.has(newlineType) &&
+    text.charCodeAt(position) === 0x0d &&
+    text.charCodeAt(position + 1) === 0x0a
+  ) {
+    return 2;
+  }
+
+  return NEWLINE_SINGLES[newlineType].includes(text.charCodeAt(position))
+    ? 1
+    : 0;
+}

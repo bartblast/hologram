@@ -7,8 +7,8 @@ import RegexAnalyzer from "./regex_analyzer.mjs";
 import RegexInterpreter from "./regex_interpreter.mjs";
 
 import {
+  newlineLengthAt,
   NEWLINE_PAIR_CONVENTIONS,
-  NEWLINE_SINGLES,
   NEWLINE_VERBS,
 } from "./regex_newlines.mjs";
 
@@ -586,17 +586,7 @@ export default class RegexEngine {
   // given position starts, or Infinity when there is none.
   static #firstNewlinePosition(newlineType, subject, fromPosition) {
     for (let position = fromPosition; position < subject.length; position++) {
-      const charCode = subject.charCodeAt(position);
-
-      if (
-        NEWLINE_PAIR_CONVENTIONS.has(newlineType) &&
-        charCode === 0x0d &&
-        subject.charCodeAt(position + 1) === 0x0a
-      ) {
-        return position;
-      }
-
-      if (NEWLINE_SINGLES[newlineType].includes(charCode)) return position;
+      if (newlineLengthAt(newlineType, subject, position) > 0) return position;
     }
 
     return Infinity;
@@ -605,13 +595,13 @@ export default class RegexEngine {
   // Returns how many UTF-16 units the global scan advances over the
   // character at the position.
   static #scanAdvance(compiled, subject, position) {
-    if (
-      NEWLINE_PAIR_CONVENTIONS.has(compiled.newlineType) &&
-      subject.charCodeAt(position) === 0x0d &&
-      subject.charCodeAt(position + 1) === 0x0a
-    ) {
-      return 2;
-    }
+    const newlineLength = newlineLengthAt(
+      compiled.newlineType,
+      subject,
+      position,
+    );
+
+    if (newlineLength === 2) return 2;
 
     if (
       compiled.opts.unicode === true &&

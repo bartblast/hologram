@@ -10,6 +10,7 @@ import {
 } from "./regex_char_sets.mjs";
 
 import {
+  newlineLengthAt,
   NEWLINE_PAIR_CONVENTIONS,
   NEWLINE_SEQUENCE_SINGLES,
   NEWLINE_SINGLES,
@@ -467,7 +468,11 @@ export default class RegexInterpreter {
   static #endsBeforeFinalNewline(state, position) {
     if (position === state.subject.length) return true;
 
-    const newlineLength = $.#newlineLengthAt(state, position);
+    const newlineLength = newlineLengthAt(
+      state.newline,
+      state.subject,
+      position,
+    );
 
     return (
       newlineLength > 0 && position + newlineLength === state.subject.length
@@ -497,7 +502,7 @@ export default class RegexInterpreter {
         if (state.multiline) {
           holds =
             (position === state.subject.length && !state.noteol) ||
-            $.#newlineStartsAt(state, position);
+            newlineLengthAt(state.newline, state.subject, position) > 0;
         } else if (state.dollarEndonly) {
           holds = position === state.subject.length && !state.noteol;
         } else {
@@ -1187,32 +1192,6 @@ export default class RegexInterpreter {
     }
 
     return effectiveOpts;
-  }
-
-  // Returns the length of the newline sequence starting at the position,
-  // or 0 when there is none.
-  static #newlineLengthAt(state, position) {
-    if (
-      NEWLINE_PAIR_CONVENTIONS.has(state.newline) &&
-      state.subject.charCodeAt(position) === 0x0d &&
-      state.subject.charCodeAt(position + 1) === 0x0a
-    ) {
-      return 2;
-    }
-
-    if (
-      NEWLINE_SINGLES[state.newline].includes(
-        state.subject.charCodeAt(position),
-      )
-    ) {
-      return 1;
-    }
-
-    return 0;
-  }
-
-  static #newlineStartsAt(state, position) {
-    return $.#newlineLengthAt(state, position) > 0;
   }
 
   // Returns the state as updated by option settings lexically contained in
