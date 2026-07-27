@@ -36,10 +36,11 @@ export default class Interpreter {
       !Type.isBitstring(term) &&
       !Type.isFloat(term) &&
       !Type.isInteger(term) &&
+      !Type.isList(term) &&
       !Type.isPid(term) &&
       !Type.isTuple(term)
     ) {
-      const message = `Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: ${Interpreter.inspect(
+      const message = `Structural comparison currently supports only atoms, bitstrings, floats, integers, lists, pids and tuples, got: ${Interpreter.inspect(
         term,
       )}`;
 
@@ -265,7 +266,7 @@ export default class Interpreter {
   }
 
   // Implements structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
-  // TODO: support comparing the remaining types: anonymous function, list, map, port, reference
+  // TODO: support comparing the remaining types: anonymous function, map, port, reference
   static compareTerms(term1, term2) {
     Interpreter.assertStructuralComparisonSupportedType(term1);
     Interpreter.assertStructuralComparisonSupportedType(term2);
@@ -289,6 +290,9 @@ export default class Interpreter {
 
       case "bitstring":
         return Bitstring.compare(term1, term2);
+
+      case "list":
+        return Interpreter.#compareLists(term1, term2);
 
       case "pid":
         return Interpreter.#comparePids(term1, term2);
@@ -1314,6 +1318,60 @@ export default class Interpreter {
     };
   }
 
+  // Lists compare element by element. When the shared elements are equal,
+  // the tails decide: a proper list's tail is the empty list, an improper
+  // list's tail is its last stored item, and elements remaining in the
+  // longer list form a nonempty list tail.
+  static #compareLists(list1, list2) {
+    const elementCount1 = list1.isProper
+      ? list1.data.length
+      : list1.data.length - 1;
+
+    const elementCount2 = list2.isProper
+      ? list2.data.length
+      : list2.data.length - 1;
+
+    const sharedCount = Math.min(elementCount1, elementCount2);
+
+    for (let i = 0; i < sharedCount; ++i) {
+      const itemOrder = Interpreter.compareTerms(list1.data[i], list2.data[i]);
+
+      if (itemOrder !== 0) {
+        return itemOrder;
+      }
+    }
+
+    const exhausted1 = elementCount1 === sharedCount;
+    const exhausted2 = elementCount2 === sharedCount;
+
+    if (exhausted1 && exhausted2) {
+      if (list1.isProper && list2.isProper) return 0;
+
+      // Neither tail is a nonempty list here, so this never recurses
+      const tail1 = list1.isProper ? Type.list() : list1.data.at(-1);
+      const tail2 = list2.isProper ? Type.list() : list2.data.at(-1);
+
+      return Interpreter.compareTerms(tail1, tail2);
+    }
+
+    if (exhausted1) {
+      // The empty tail precedes any nonempty list remainder
+      if (list1.isProper) return -1;
+
+      return Interpreter.compareTerms(
+        list1.data.at(-1),
+        Interpreter.#listRemainder(list2, sharedCount),
+      );
+    }
+
+    if (list2.isProper) return 1;
+
+    return Interpreter.compareTerms(
+      Interpreter.#listRemainder(list1, sharedCount),
+      list2.data.at(-1),
+    );
+  }
+
   static #comparePids(pid1, pid2) {
     for (let i = 2; i >= 0; --i) {
       if (pid1.segments[i] === pid2.segments[i]) {
@@ -1687,6 +1745,14 @@ export default class Interpreter {
       term.data.map((elem) => Interpreter.inspect(elem, opts)).join(", ") +
       "}"
     );
+  }
+
+  // Returns the nonempty list formed by the list's items from the given
+  // index on, preserving an improper tail.
+  static #listRemainder(list, fromIndex) {
+    const data = list.data.slice(fromIndex);
+
+    return list.isProper ? Type.list(data) : Type.improperList(data);
   }
 
   // TODO: reenable when debug mode is implemented

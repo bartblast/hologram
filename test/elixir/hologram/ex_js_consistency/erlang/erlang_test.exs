@@ -397,6 +397,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.<(1, 1) == false
     end
 
+    test "list == list" do
+      left = wrap_term([1, 2])
+      right = wrap_term([1, 2])
+
+      assert :erlang.<(left, right) == false
+    end
+
     test "pid == pid" do
       left_pid = pid("0.11.222")
       right_pid = pid("0.11.222")
@@ -448,6 +455,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.<(1, 2) == true
     end
 
+    test "list < list" do
+      left = wrap_term([1, 2])
+      right = wrap_term([1, 3])
+
+      assert :erlang.<(left, right) == true
+    end
+
     test "pid < pid" do
       left_pid = pid("0.11.111")
       right_pid = pid("0.11.112")
@@ -488,6 +502,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "integer > integer" do
       assert :erlang.<(2, 1) == false
+    end
+
+    test "list > list" do
+      left = wrap_term([1, 3])
+      right = wrap_term([1, 2])
+
+      assert :erlang.<(left, right) == false
     end
 
     test "pid > pid" do
@@ -748,6 +769,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=<"(1, 1) == true
     end
 
+    test "list == list" do
+      left = wrap_term([1, 2])
+      right = wrap_term([1, 2])
+
+      assert :erlang."=<"(left, right) == true
+    end
+
     test "pid == pid" do
       left_pid = pid("0.11.222")
       right_pid = pid("0.11.222")
@@ -796,6 +824,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=<"(1, 2) == true
     end
 
+    test "list < list" do
+      left = wrap_term([1, 2])
+      right = wrap_term([1, 3])
+
+      assert :erlang."=<"(left, right) == true
+    end
+
     test "pid < pid" do
       left_pid = pid("0.11.111")
       right_pid = pid("0.11.112")
@@ -836,6 +871,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "integer > integer" do
       assert :erlang."=<"(2, 1) == false
+    end
+
+    test "list > list" do
+      left = wrap_term([1, 3])
+      right = wrap_term([1, 2])
+
+      assert :erlang."=<"(left, right) == false
     end
 
     test "pid > pid" do
@@ -986,6 +1028,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.>(1, 1) == false
     end
 
+    test "list == list" do
+      left = wrap_term([1, 2])
+      right = wrap_term([1, 2])
+
+      assert :erlang.>(left, right) == false
+    end
+
     test "pid == pid" do
       left_pid = pid("0.11.222")
       right_pid = pid("0.11.222")
@@ -1034,6 +1083,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.>(1, 2) == false
     end
 
+    test "list < list" do
+      left = wrap_term([1, 2])
+      right = wrap_term([1, 3])
+
+      assert :erlang.>(left, right) == false
+    end
+
     test "pid < pid" do
       left_pid = pid("0.11.111")
       right_pid = pid("0.11.112")
@@ -1076,6 +1132,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.>(2, 1) == true
     end
 
+    test "list > list" do
+      left = wrap_term([1, 3])
+      right = wrap_term([1, 2])
+
+      assert :erlang.>(left, right) == true
+    end
+
     test "pid > pid" do
       left_pid = pid("0.11.112")
       right_pid = pid("0.11.111")
@@ -1112,6 +1175,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "integer == integer" do
       assert :erlang.>=(1, 1) == true
+    end
+
+    test "list == list" do
+      left = wrap_term([1, 2])
+      right = wrap_term([1, 2])
+
+      assert :erlang.>=(left, right) == true
     end
 
     test "pid == pid" do
@@ -1162,6 +1232,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.>=(1, 2) == false
     end
 
+    test "list < list" do
+      left = wrap_term([1, 2])
+      right = wrap_term([1, 3])
+
+      assert :erlang.>=(left, right) == false
+    end
+
     test "pid < pid" do
       left_pid = pid("0.11.111")
       right_pid = pid("0.11.112")
@@ -1202,6 +1279,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "integer > integer" do
       assert :erlang.>=(2, 1) == true
+    end
+
+    test "list > list" do
+      left = wrap_term([1, 3])
+      right = wrap_term([1, 2])
+
+      assert :erlang.>=(left, right) == true
     end
 
     test "pid > pid" do

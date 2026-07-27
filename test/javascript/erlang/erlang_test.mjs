@@ -48,6 +48,7 @@ const integer16 = Type.integer(16);
 const integer36 = Type.integer(36);
 const integer123 = Type.integer(123);
 const list1 = Type.list([integer1, integer2]);
+const list2 = Type.list([integer1, integer3]);
 
 const mapA1B2 = Type.map([
   [atomA, integer1],
@@ -587,6 +588,10 @@ describe("Erlang", () => {
       assertBoxedFalse(testedFun(integer1, integer1));
     });
 
+    it("list == list", () => {
+      assertBoxedFalse(testedFun(list1, list1));
+    });
+
     it("pid == pid", () => {
       assertBoxedFalse(testedFun(pid1, pid1));
     });
@@ -623,6 +628,10 @@ describe("Erlang", () => {
       assertBoxedTrue(testedFun(integer1, integer2));
     });
 
+    it("list < list", () => {
+      assertBoxedTrue(testedFun(list1, list2));
+    });
+
     it("pid < pid", () => {
       assertBoxedTrue(testedFun(pid1, pid2));
     });
@@ -655,6 +664,10 @@ describe("Erlang", () => {
       assertBoxedFalse(testedFun(integer2, integer1));
     });
 
+    it("list > list", () => {
+      assertBoxedFalse(testedFun(list2, list1));
+    });
+
     it("pid > pid", () => {
       assertBoxedFalse(testedFun(pid2, pid1));
     });
@@ -665,10 +678,10 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the left argument type is not yet supported", () => {
       const expectedMessage =
-        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, lists, pids and tuples, got: %{a: 1, b: 2}";
 
       assert.throw(
-        () => testedFun(list1, integer1),
+        () => testedFun(mapA1B2, integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -676,16 +689,16 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the right argument type is not yet supported", () => {
       const expectedMessage =
-        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, lists, pids and tuples, got: %{a: 1, b: 2}";
 
       assert.throw(
-        () => testedFun(integer1, list1),
+        () => testedFun(integer1, mapA1B2),
         HologramInterpreterError,
         expectedMessage,
       );
     });
 
-    // TODO: reference, function, port, map, list, bitstring
+    // TODO: reference, function, port, map, bitstring
   });
 
   describe("=/=/2", () => {
@@ -915,6 +928,10 @@ describe("Erlang", () => {
       assertBoxedTrue(testedFun(integer1, integer1));
     });
 
+    it("list == list", () => {
+      assertBoxedTrue(testedFun(list1, list1));
+    });
+
     it("pid == pid", () => {
       assertBoxedTrue(testedFun(pid1, pid1));
     });
@@ -951,6 +968,10 @@ describe("Erlang", () => {
       assertBoxedTrue(testedFun(integer1, integer2));
     });
 
+    it("list < list", () => {
+      assertBoxedTrue(testedFun(list1, list2));
+    });
+
     it("pid < pid", () => {
       assertBoxedTrue(testedFun(pid1, pid2));
     });
@@ -983,6 +1004,10 @@ describe("Erlang", () => {
       assertBoxedFalse(testedFun(integer2, integer1));
     });
 
+    it("list > list", () => {
+      assertBoxedFalse(testedFun(list2, list1));
+    });
+
     it("pid > pid", () => {
       assertBoxedFalse(testedFun(pid2, pid1));
     });
@@ -993,10 +1018,10 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the left argument type is not yet supported", () => {
       const expectedMessage =
-        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, lists, pids and tuples, got: %{a: 1, b: 2}";
 
       assert.throw(
-        () => testedFun(list1, integer1),
+        () => testedFun(mapA1B2, integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1004,16 +1029,16 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the right argument type is not yet supported", () => {
       const expectedMessage =
-        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, lists, pids and tuples, got: %{a: 1, b: 2}";
 
       assert.throw(
-        () => testedFun(integer1, list1),
+        () => testedFun(integer1, mapA1B2),
         HologramInterpreterError,
         expectedMessage,
       );
     });
 
-    // TODO: reference, function, port, map, list, bitstring
+    // TODO: reference, function, port, map, bitstring
   });
 
   describe("==/2", () => {
@@ -1141,6 +1166,10 @@ describe("Erlang", () => {
       assertBoxedFalse(testedFun(integer1, integer1));
     });
 
+    it("list == list", () => {
+      assertBoxedFalse(testedFun(list1, list1));
+    });
+
     it("pid == pid", () => {
       assertBoxedFalse(testedFun(pid1, pid1));
     });
@@ -1177,6 +1206,10 @@ describe("Erlang", () => {
       assertBoxedFalse(testedFun(integer1, integer2));
     });
 
+    it("list < list", () => {
+      assertBoxedFalse(testedFun(list1, list2));
+    });
+
     it("pid < pid", () => {
       assertBoxedFalse(testedFun(pid1, pid2));
     });
@@ -1209,6 +1242,10 @@ describe("Erlang", () => {
       assertBoxedTrue(testedFun(integer2, integer1));
     });
 
+    it("list > list", () => {
+      assertBoxedTrue(testedFun(list2, list1));
+    });
+
     it("pid > pid", () => {
       assertBoxedTrue(testedFun(pid2, pid1));
     });
@@ -1219,10 +1256,10 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the left argument type is not yet supported", () => {
       const expectedMessage =
-        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, lists, pids and tuples, got: %{a: 1, b: 2}";
 
       assert.throw(
-        () => testedFun(list1, integer1),
+        () => testedFun(mapA1B2, integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1230,16 +1267,16 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the right argument type is not yet supported", () => {
       const expectedMessage =
-        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, lists, pids and tuples, got: %{a: 1, b: 2}";
 
       assert.throw(
-        () => testedFun(integer1, list1),
+        () => testedFun(integer1, mapA1B2),
         HologramInterpreterError,
         expectedMessage,
       );
     });
 
-    // TODO: reference, function, port, map, list, bitstring
+    // TODO: reference, function, port, map, bitstring
   });
 
   describe(">=/2", () => {
@@ -1263,6 +1300,10 @@ describe("Erlang", () => {
 
     it("integer == integer", () => {
       assertBoxedTrue(testedFun(integer1, integer1));
+    });
+
+    it("list == list", () => {
+      assertBoxedTrue(testedFun(list1, list1));
     });
 
     it("pid == pid", () => {
@@ -1301,6 +1342,10 @@ describe("Erlang", () => {
       assertBoxedFalse(testedFun(integer1, integer2));
     });
 
+    it("list < list", () => {
+      assertBoxedFalse(testedFun(list1, list2));
+    });
+
     it("pid < pid", () => {
       assertBoxedFalse(testedFun(pid1, pid2));
     });
@@ -1333,6 +1378,10 @@ describe("Erlang", () => {
       assertBoxedTrue(testedFun(integer2, integer1));
     });
 
+    it("list > list", () => {
+      assertBoxedTrue(testedFun(list2, list1));
+    });
+
     it("pid > pid", () => {
       assertBoxedTrue(testedFun(pid2, pid1));
     });
@@ -1343,10 +1392,10 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the left argument type is not yet supported", () => {
       const expectedMessage =
-        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, lists, pids and tuples, got: %{a: 1, b: 2}";
 
       assert.throw(
-        () => testedFun(list1, integer1),
+        () => testedFun(mapA1B2, integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1354,16 +1403,16 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the right argument type is not yet supported", () => {
       const expectedMessage =
-        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, lists, pids and tuples, got: %{a: 1, b: 2}";
 
       assert.throw(
-        () => testedFun(integer1, list1),
+        () => testedFun(integer1, mapA1B2),
         HologramInterpreterError,
         expectedMessage,
       );
     });
 
-    // TODO: reference, function, port, map, list, bitstring
+    // TODO: reference, function, port, map, bitstring
   });
 
   describe("abs/1", () => {
