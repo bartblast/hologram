@@ -29,6 +29,20 @@ const assertCompileErrorTuple = (result, message, position) => {
   );
 };
 
+const assertMatchResult = (result, indexPairs) => {
+  assert.deepEqual(
+    result,
+    Type.tuple([
+      Type.atom("match"),
+      Type.list(
+        indexPairs.map(([start, length]) =>
+          Type.tuple([Type.integer(start), Type.integer(length)]),
+        ),
+      ),
+    ]),
+  );
+};
+
 // Asserts an {:ok, {:re_pattern, _, _, _, ref}} result and returns the ref.
 const assertOkResult = (result, captureCount, unicodeFlag, useCrlf) => {
   assert.isTrue(Type.isTuple(result));
@@ -50,6 +64,19 @@ const assertRePattern = (rePattern, captureCount, unicodeFlag, useCrlf) => {
 
   return rePattern.data[4];
 };
+
+// Compiles a pattern and returns the {:re_pattern, ...} tuple.
+const compilePattern = (source, opts = []) => {
+  const result = Erlang_Re["compile/2"](
+    Type.bitstring(source),
+    Type.list(opts),
+  );
+
+  return result.data[1];
+};
+
+const matchTuple = (values) =>
+  Type.tuple([Type.atom("match"), Type.list(values)]);
 
 describe("Erlang_Re", () => {
   describe("compile/1", () => {
@@ -658,13 +685,7 @@ describe("Erlang_Re", () => {
   });
 
   describe("inspect/2", () => {
-    const compile = Erlang_Re["compile/2"];
     const inspect = Erlang_Re["inspect/2"];
-
-    const compilePattern = (source, opts = []) => {
-      const result = compile(Type.bitstring(source), Type.list(opts));
-      return result.data[1];
-    };
 
     it("returns an empty namelist without named groups", () => {
       const compiled = compilePattern("(a)(b)");
@@ -793,29 +814,6 @@ describe("Erlang_Re", () => {
     const run = (subject, pattern, opts = []) =>
       Erlang_Re["run/3"](subject, pattern, Type.list(opts));
 
-    const compilePattern = (source, opts = []) => {
-      const result = Erlang_Re["compile/2"](
-        Type.bitstring(source),
-        Type.list(opts),
-      );
-
-      return result.data[1];
-    };
-
-    const assertMatchResult = (result, indexPairs) => {
-      assert.deepEqual(
-        result,
-        Type.tuple([
-          Type.atom("match"),
-          Type.list(
-            indexPairs.map(([start, length]) =>
-              Type.tuple([Type.integer(start), Type.integer(length)]),
-            ),
-          ),
-        ]),
-      );
-    };
-
     const assertGlobalMatchResult = (result, matchesIndexPairs) => {
       assert.deepEqual(
         result,
@@ -841,9 +839,6 @@ describe("Erlang_Re", () => {
 
     const limitOption = (tag, limit) =>
       Type.tuple([Type.atom(tag), Type.integer(limit)]);
-
-    const matchTuple = (values) =>
-      Type.tuple([Type.atom("match"), Type.list(values)]);
 
     const offsetOption = (offset) =>
       Type.tuple([Type.atom("offset"), Type.integer(offset)]);
