@@ -1,6 +1,7 @@
 "use strict";
 
 import {POSIX_SETS, SHORTHAND_SETS} from "./regex_char_sets.mjs";
+import {NEWLINE_VERBS} from "./regex_newlines.mjs";
 
 // Chars that must be escaped inside a character class.
 const CLASS_METACHARS = new Set([..."\\]^-"]);
@@ -50,16 +51,6 @@ const NEWLINE_VARIANTS = {
     lineEndMultiline: "(?=\\x00|$)",
     lineStartMultiline: "(?:^|(?<=\\x00))",
   },
-};
-
-// Start-of-pattern verbs that select a newline convention.
-export const NEWLINE_VERBS = {
-  ANY: "any",
-  ANYCRLF: "anycrlf",
-  CR: "cr",
-  CRLF: "crlf",
-  LF: "lf",
-  NUL: "nul",
 };
 
 export default class RegexTranslator {

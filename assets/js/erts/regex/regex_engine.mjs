@@ -4,13 +4,17 @@ import Bitstring from "../../bitstring.mjs";
 import ERTS from "../../erts.mjs";
 import Interpreter from "../../interpreter.mjs";
 import RegexAnalyzer from "./regex_analyzer.mjs";
-import RegexInterpreter, {
+import RegexInterpreter from "./regex_interpreter.mjs";
+
+import {
   NEWLINE_PAIR_CONVENTIONS,
   NEWLINE_SINGLES,
-} from "./regex_interpreter.mjs";
+  NEWLINE_VERBS,
+} from "./regex_newlines.mjs";
+
 import RegexParseError from "./regex_parse_error.mjs";
 import RegexParser, {START_OPTION_VERBS} from "./regex_parser.mjs";
-import RegexTranslator, {NEWLINE_VERBS} from "./regex_translator.mjs";
+import RegexTranslator from "./regex_translator.mjs";
 import Type from "../../type.mjs";
 
 // Compile option atoms passed to the engine under the same name.
@@ -27,7 +31,7 @@ const ENGINE_OPT_ATOMS = new Set([
   "ungreedy",
 ]);
 
-const NEWLINE_TYPES = new Set(["any", "anycrlf", "cr", "crlf", "lf", "nul"]);
+const NEWLINE_TYPES = new Set(Object.values(NEWLINE_VERBS));
 
 // Facade over the regex machinery: compiles PCRE2 patterns into matchable
 // entries and matches them against JS strings, hiding the native/interpreted
@@ -497,6 +501,11 @@ export default class RegexEngine {
     }
 
     return text;
+  }
+
+  // Returns true when the newline convention treats CR LF as one newline.
+  static usesCrlf(newlineType) {
+    return NEWLINE_PAIR_CONVENTIONS.has(newlineType);
   }
 
   // Converts a JS string index to a UTF-8 byte offset.

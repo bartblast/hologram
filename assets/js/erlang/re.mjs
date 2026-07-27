@@ -19,8 +19,6 @@ const Erlang_Re = {
 
   // Start compile/2
   "compile/2": (pattern, options) => {
-    const CRLF_NEWLINE_TYPES = new Set(["any", "anycrlf", "crlf"]);
-
     const buildErrorTuple = (message, position) =>
       Type.tuple([
         Type.atom("error"),
@@ -125,7 +123,7 @@ const Erlang_Re = {
     }
 
     const captureCount = result.groupMap.count;
-    const useCrlf = CRLF_NEWLINE_TYPES.has(result.newlineType) ? 1 : 0;
+    const useCrlf = ERTS.regex.usesCrlf(result.newlineType) ? 1 : 0;
     const ref = Erlang["make_ref/0"]();
 
     ERTS.regexPatternRegistry.put(ref, {

@@ -9,6 +9,13 @@ import {
   SHORTHAND_SETS,
 } from "./regex_char_sets.mjs";
 
+import {
+  NEWLINE_PAIR_CONVENTIONS,
+  NEWLINE_SEQUENCE_SINGLES,
+  NEWLINE_SINGLES,
+  NEWLINE_VERBS,
+} from "./regex_newlines.mjs";
+
 // The PCRE2 version emulated by the (?(VERSION condition, matching the
 // version Erlang/OTP ships.
 const EMULATED_PCRE2_VERSION = {major: 10, minor: 47};
@@ -16,35 +23,6 @@ const EMULATED_PCRE2_VERSION = {major: 10, minor: 47};
 // How far a lookbehind scans back for its content start: parsing limits
 // lookbehind branches to 255 chars, each at most 2 UTF-16 units.
 const LOOKBEHIND_MAX_UNITS = 510;
-
-// Newline conventions with a two-char CR LF sequence.
-export const NEWLINE_PAIR_CONVENTIONS = new Set(["any", "anycrlf", "crlf"]);
-
-// Single chars that alone form a complete newline, per convention.
-export const NEWLINE_SINGLES = {
-  any: [0x0a, 0x0b, 0x0c, 0x0d, 0x85, 0x2028, 0x2029],
-  anycrlf: [0x0a, 0x0d],
-  cr: [0x0d],
-  crlf: [],
-  lf: [0x0a],
-  nul: [0x00],
-};
-
-// Single chars matched by \R, by bsr mode.
-const NEWLINE_SEQUENCE_SINGLES = {
-  anycrlf: [0x0a, 0x0d],
-  unicode: [0x0a, 0x0b, 0x0c, 0x0d, 0x85, 0x2028, 0x2029],
-};
-
-// Start-of-pattern verbs that select a newline convention.
-const NEWLINE_VERBS = {
-  ANY: "any",
-  ANYCRLF: "anycrlf",
-  CR: "cr",
-  CRLF: "crlf",
-  LF: "lf",
-  NUL: "nul",
-};
 
 // Cache of Unicode property name → predicate over a code point.
 const propertyMatchers = new Map();
