@@ -277,7 +277,7 @@ const Erlang_Re = {
     };
 
     // Group indices, offsets and match limits are limited to the positive
-    // range of a 32-bit integer
+    // range of a 32-bit integer.
     const MAX_INT32 = 2_147_483_647n;
 
     // Scan flag option atoms mapped to engine run option names.
@@ -292,6 +292,143 @@ const Erlang_Re = {
     // TODO: implement the report_errors run option.
     const RUN_ONLY_ATOMS = new Set(["report_errors"]);
 
+    const isBoundedInteger = (term) =>
+      Type.isInteger(term) && term.value >= 0n && term.value <= MAX_INT32;
+
+    // Parses the :re.run options list. Later occurrences win for the capture,
+    // offset and limit options. optionsValid turns false on the first invalid
+    // option.
+    const parseRunOptions = () => {
+      const acc = {
+        anchored: false,
+        engineOpts: {},
+        firstline: false,
+        unicodeOption: false,
+      };
+
+      const runFlags = {
+        notbol: false,
+        noteol: false,
+        notempty: false,
+        notemptyAtStart: false,
+      };
+
+      let captureOption = null;
+      let compileOnlyOptionUsed = false;
+      let isGlobal = false;
+      let notImplementedOption = null;
+
+      const limitOptions = {
+        matchLimit: undefined,
+        matchLimitRecursion: undefined,
+      };
+
+      let dualOptionUsed = false;
+      let offsetOption = null;
+      let optionsValid = Type.isProperList(options);
+
+      if (optionsValid) {
+        for (const option of options.data) {
+          if (Type.isAtom(option) && option.value === "global") {
+            isGlobal = true;
+            continue;
+          }
+
+          if (
+            Type.isAtom(option) &&
+            Object.hasOwn(RUN_FLAG_KEYS, option.value)
+          ) {
+            runFlags[RUN_FLAG_KEYS[option.value]] = true;
+            continue;
+          }
+
+          const isCapture =
+            Type.isTuple(option) &&
+            (option.data.length === 2 || option.data.length === 3) &&
+            Interpreter.isStrictlyEqual(option.data[0], Type.atom("capture"));
+
+          // The last capture option wins
+          if (isCapture) {
+            captureOption = option;
+            continue;
+          }
+
+          const isOffset =
+            Type.isTuple(option) &&
+            option.data.length === 2 &&
+            Interpreter.isStrictlyEqual(option.data[0], Type.atom("offset"));
+
+          if (isOffset) {
+            if (!isBoundedInteger(option.data[1])) {
+              optionsValid = false;
+              break;
+            }
+
+            // The last offset option wins
+            offsetOption = Number(option.data[1].value);
+            continue;
+          }
+
+          const isLimit =
+            Type.isTuple(option) &&
+            option.data.length === 2 &&
+            Type.isAtom(option.data[0]) &&
+            Object.hasOwn(LIMIT_TUPLE_KEYS, option.data[0].value);
+
+          if (isLimit) {
+            if (!isBoundedInteger(option.data[1])) {
+              optionsValid = false;
+              break;
+            }
+
+            // The last limit option of each kind wins
+            limitOptions[LIMIT_TUPLE_KEYS[option.data[0].value]] = Number(
+              option.data[1].value,
+            );
+
+            continue;
+          }
+
+          const isRunOnly =
+            Type.isAtom(option) && RUN_ONLY_ATOMS.has(option.value);
+
+          if (isRunOnly) {
+            notImplementedOption ??= option;
+            continue;
+          }
+
+          switch (ERTS.regex.parseCompileOption(option, acc)) {
+            case "compile":
+              compileOnlyOptionUsed = true;
+              break;
+
+            case "dual":
+              dualOptionUsed = true;
+              break;
+
+            case "invalid":
+              optionsValid = false;
+              break;
+          }
+
+          if (!optionsValid) break;
+        }
+      }
+
+      return {
+        acc,
+        captureOption,
+        compileOnlyOptionUsed,
+        dualOptionUsed,
+        isGlobal,
+        limitOptions,
+        notImplementedOption,
+        offsetOption,
+        optionsValid,
+        runFlags,
+      };
+    };
+
     const raiseArgumentError = () => {
       Interpreter.raiseArgumentError("argument error");
     };
@@ -304,121 +441,18 @@ const Erlang_Re = {
 
     // --- Options ---
 
-    const acc = {
-      anchored: false,
-      engineOpts: {},
-      firstline: false,
-      unicodeOption: false,
-    };
-
-    const runFlags = {
-      notbol: false,
-      noteol: false,
-      notempty: false,
-      notemptyAtStart: false,
-    };
-
-    let captureOption = null;
-    let compileOnlyOptionUsed = false;
-    let isGlobal = false;
-    let notImplementedOption = null;
-
-    const limitOptions = {
-      matchLimit: undefined,
-      matchLimitRecursion: undefined,
-    };
-
-    let dualOptionUsed = false;
-    let offsetOption = null;
-    let optionsValid = Type.isProperList(options);
-
-    const isBoundedInteger = (term) =>
-      Type.isInteger(term) && term.value >= 0n && term.value <= MAX_INT32;
-
-    if (optionsValid) {
-      for (const option of options.data) {
-        if (Type.isAtom(option) && option.value === "global") {
-          isGlobal = true;
-          continue;
-        }
-
-        if (Type.isAtom(option) && Object.hasOwn(RUN_FLAG_KEYS, option.value)) {
-          runFlags[RUN_FLAG_KEYS[option.value]] = true;
-          continue;
-        }
-
-        const isCapture =
-          Type.isTuple(option) &&
-          (option.data.length === 2 || option.data.length === 3) &&
-          Interpreter.isStrictlyEqual(option.data[0], Type.atom("capture"));
-
-        // The last capture option wins
-        if (isCapture) {
-          captureOption = option;
-          continue;
-        }
-
-        const isOffset =
-          Type.isTuple(option) &&
-          option.data.length === 2 &&
-          Interpreter.isStrictlyEqual(option.data[0], Type.atom("offset"));
-
-        if (isOffset) {
-          if (!isBoundedInteger(option.data[1])) {
-            optionsValid = false;
-            break;
-          }
-
-          // The last offset option wins
-          offsetOption = Number(option.data[1].value);
-          continue;
-        }
-
-        const isLimit =
-          Type.isTuple(option) &&
-          option.data.length === 2 &&
-          Type.isAtom(option.data[0]) &&
-          Object.hasOwn(LIMIT_TUPLE_KEYS, option.data[0].value);
-
-        if (isLimit) {
-          if (!isBoundedInteger(option.data[1])) {
-            optionsValid = false;
-            break;
-          }
-
-          // The last limit option of each kind wins
-          limitOptions[LIMIT_TUPLE_KEYS[option.data[0].value]] = Number(
-            option.data[1].value,
-          );
-
-          continue;
-        }
-
-        const isRunOnly =
-          Type.isAtom(option) && RUN_ONLY_ATOMS.has(option.value);
-
-        if (isRunOnly) {
-          notImplementedOption ??= option;
-          continue;
-        }
-
-        switch (ERTS.regex.parseCompileOption(option, acc)) {
-          case "compile":
-            compileOnlyOptionUsed = true;
-            break;
-
-          case "dual":
-            dualOptionUsed = true;
-            break;
-
-          case "invalid":
-            optionsValid = false;
-            break;
-        }
-
-        if (!optionsValid) break;
-      }
-    }
+    const {
+      acc,
+      captureOption,
+      compileOnlyOptionUsed,
+      dualOptionUsed,
+      isGlobal,
+      limitOptions,
+      notImplementedOption,
+      offsetOption,
+      optionsValid,
+      runFlags,
+    } = parseRunOptions();
 
     // --- Pattern (validation phase) ---
 
