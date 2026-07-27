@@ -2643,6 +2643,17 @@ describe("Erlang_Re", () => {
       assertRunError(
         () =>
           run(Type.bitstring("a"), Type.bitstring("a"), [
+            limitOption("match_limit", 2_147_483_648n),
+          ]),
+        3,
+        "invalid options",
+      );
+    });
+
+    it("raises ArgumentError on match limit recursion above the 32-bit range", () => {
+      assertRunError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
             limitOption("match_limit_recursion", 2_147_483_648n),
           ]),
         3,

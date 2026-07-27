@@ -1434,6 +1434,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
     test "raises ArgumentError on match limit above the 32-bit range" do
       assert_error ArgumentError,
                    build_argument_error_msg(3, "invalid options"),
+                   fn -> :re.run("a", "a", [{:match_limit, 2_147_483_648}]) end
+    end
+
+    test "raises ArgumentError on match limit recursion above the 32-bit range" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
                    fn -> :re.run("a", "a", [{:match_limit_recursion, 2_147_483_648}]) end
     end
 
