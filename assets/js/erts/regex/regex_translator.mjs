@@ -202,12 +202,14 @@ export default class RegexTranslator {
   // Emulates atomic matching with a capturing lookahead plus a
   // backreference: JS lookaheads are atomic, and the backreference locks in
   // the captured text. The synthetic group is numbered before the content
-  // is translated, because its parenthesis opens first.
+  // is translated, because its parenthesis opens first. The group wrapped
+  // around the backreference keeps a following literal digit from being
+  // absorbed into its number.
   static #translateAtomic(innerNode, context, bounds = "") {
     const jsNumber = ++context.state.jsGroupCount;
     const source = $.#translateNode(innerNode, context);
 
-    return `(?=(${source}${bounds}))\\${jsNumber}`;
+    return `(?=(${source}${bounds}))(?:\\${jsNumber})`;
   }
 
   static #translateClass(node, context) {
@@ -296,9 +298,11 @@ export default class RegexTranslator {
 
       case "backreference":
         // Native routing guarantees backreferences point to already emitted
-        // groups, so the renumbering is always known here
+        // groups, so the renumbering is always known here. The group wrapped
+        // around a numeric backreference keeps a following literal digit
+        // from being absorbed into the number.
         return node.number !== null
-          ? `\\${context.state.groupMapping.get(node.number)}`
+          ? `(?:\\${context.state.groupMapping.get(node.number)})`
           : `\\k<${node.name}>`;
 
       case "class":

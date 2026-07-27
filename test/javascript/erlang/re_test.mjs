@@ -1106,6 +1106,48 @@ describe("Erlang_Re", () => {
       ]);
     });
 
+    it("matches a literal digit after an atomic group", () => {
+      const result = run(Type.bitstring("a1"), Type.bitstring("(?>a)1"), []);
+
+      assertMatchResult(result, [[0, 2]]);
+    });
+
+    it("matches a literal digit after an atomic group when interpreted", () => {
+      const result = run(
+        Type.bitstring("a1"),
+        Type.bitstring("(*LIMIT_MATCH=1000)(?>a)1"),
+        [],
+      );
+
+      assertMatchResult(result, [[0, 2]]);
+    });
+
+    it("matches a literal digit after a numeric backreference", () => {
+      const result = run(
+        Type.bitstring("aa1"),
+        Type.bitstring("(a)\\g{1}1"),
+        [],
+      );
+
+      assertMatchResult(result, [
+        [0, 3],
+        [0, 1],
+      ]);
+    });
+
+    it("matches a literal digit after a numeric backreference when interpreted", () => {
+      const result = run(
+        Type.bitstring("aa1"),
+        Type.bitstring("(*LIMIT_MATCH=1000)(a)\\g{1}1"),
+        [],
+      );
+
+      assertMatchResult(result, [
+        [0, 3],
+        [0, 1],
+      ]);
+    });
+
     it("defaults the capture type to index", () => {
       const result = run(Type.bitstring("abbc"), Type.bitstring("a(b+)"), [
         captureOption(Type.atom("all")),

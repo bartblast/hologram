@@ -549,6 +549,22 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
                {:match, [{0, 4}, {0, 1}]}
     end
 
+    test "matches a literal digit after an atomic group" do
+      assert :re.run("a1", "(?>a)1", []) == {:match, [{0, 2}]}
+    end
+
+    test "matches a literal digit after an atomic group when interpreted" do
+      assert :re.run("a1", "(*LIMIT_MATCH=1000)(?>a)1", []) == {:match, [{0, 2}]}
+    end
+
+    test "matches a literal digit after a numeric backreference" do
+      assert :re.run("aa1", "(a)\\g{1}1", []) == {:match, [{0, 3}, {0, 1}]}
+    end
+
+    test "matches a literal digit after a numeric backreference when interpreted" do
+      assert :re.run("aa1", "(*LIMIT_MATCH=1000)(a)\\g{1}1", []) == {:match, [{0, 3}, {0, 1}]}
+    end
+
     test "defaults the capture type to index" do
       assert :re.run("abbc", "a(b+)", [{:capture, :all}]) == {:match, [{0, 3}, {1, 2}]}
     end

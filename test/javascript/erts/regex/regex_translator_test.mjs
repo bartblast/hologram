@@ -65,28 +65,28 @@ describe("RegexTranslator", () => {
     describe("atomic groups and possessive quantifiers", () => {
       it("emulates atomic group with capturing lookahead", () => {
         assert.deepEqual(translate("(?>a+)b"), {
-          source: "(?=(a+))\\1b",
+          source: "(?=(a+))(?:\\1)b",
           flags: "",
         });
       });
 
       it("emulates possessive star", () => {
         assert.deepEqual(translate("a*+b"), {
-          source: "(?=(a*))\\1b",
+          source: "(?=(a*))(?:\\1)b",
           flags: "",
         });
       });
 
       it("emulates possessive bounded quantifier", () => {
         assert.deepEqual(translate("a{2,5}+"), {
-          source: "(?=(a{2,5}))\\1",
+          source: "(?=(a{2,5}))(?:\\1)",
           flags: "",
         });
       });
 
       it("renumbers groups after synthetic group", () => {
         assert.deepEqual(translateFull("(a)(?>b)(c)\\2"), {
-          source: "(a)(?=(b))\\2(c)\\3",
+          source: "(a)(?=(b))(?:\\2)(c)(?:\\3)",
           flags: "",
           groupMapping: new Map([
             [1, 1],
@@ -97,7 +97,7 @@ describe("RegexTranslator", () => {
 
       it("numbers groups nested inside atomic group after the synthetic one", () => {
         assert.deepEqual(translateFull("(?>(a))"), {
-          source: "(?=((a)))\\1",
+          source: "(?=((a)))(?:\\1)",
           flags: "",
           groupMapping: new Map([[1, 2]]),
         });
@@ -105,7 +105,7 @@ describe("RegexTranslator", () => {
 
       it("keeps named groups and references intact", () => {
         assert.deepEqual(translate("(?<x>a)(?>b)\\k<x>"), {
-          source: "(?<x>a)(?=(b))\\2\\k<x>",
+          source: "(?<x>a)(?=(b))(?:\\2)\\k<x>",
           flags: "",
         });
       });
@@ -255,7 +255,17 @@ describe("RegexTranslator", () => {
       });
 
       it("translates numeric backreference", () => {
-        assert.deepEqual(translate("(a)\\1"), {source: "(a)\\1", flags: ""});
+        assert.deepEqual(translate("(a)\\1"), {
+          source: "(a)(?:\\1)",
+          flags: "",
+        });
+      });
+
+      it("isolates a numeric backreference from a following digit", () => {
+        assert.deepEqual(translate("(a)\\g{1}1"), {
+          source: "(a)(?:\\1)1",
+          flags: "",
+        });
       });
 
       it("translates named backreference", () => {
