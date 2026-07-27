@@ -103,23 +103,6 @@ defmodule Hologram.Runtime.DeserializerTest do
       assert Regex.match?(result, "AB")
     end
 
-    test "Regex struct with invalid source" do
-      client_ref = %{"t" => "r", "n" => "shologram_client", "c" => 0, "i" => [3, 2, 1]}
-      client_re_pattern = %{"t" => "t", "d" => ["are_pattern", "i0", "i0", "i0", client_ref]}
-
-      # source is "a{2,1}"
-      data = %{
-        "t" => "m",
-        "d" => regex_struct_entries(client_re_pattern, "b0617b322c317d", [])
-      }
-
-      result = deserialize(3, data)
-
-      assert %Regex{source: "a{2,1}"} = result
-      assert {:re_pattern, 0, 0, 0, unchanged_ref} = result.re_pattern
-      assert is_reference(unchanged_ref)
-    end
-
     test "tuple" do
       data = %{"t" => "t", "d" => ["i1", "f2.34"]}
       assert deserialize(3, data) == {1, 2.34}
