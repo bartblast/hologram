@@ -92,7 +92,6 @@ export default class RegexInterpreter {
       callStack: [],
       captures: [],
       caseless: effectiveOpts.caseless === true,
-      depth: 0,
       dollarEndonly: effectiveOpts.dollar_endonly === true,
       dotall: effectiveOpts.dotall === true,
       groupNames: groupMap.names,
@@ -104,9 +103,10 @@ export default class RegexInterpreter {
       notbol: opts.notbol === true,
       noteol: opts.noteol === true,
       openGroups: [],
-      reportedStart: null,
+      // Mutable scalars boxed to stay shared by reference when option
+      // settings copy the state, like the capture and mark containers
+      shared: {depth: 0, graphemeSegments: null, reportedStart: null, steps: 0},
       startOffset: startPosition,
-      steps: 0,
       subject: subject,
       subroutines: $.#buildSubroutineTable(ast),
       ungreedy: effectiveOpts.ungreedy === true,
@@ -119,7 +119,7 @@ export default class RegexInterpreter {
       state.captures = [];
       state.marks = [];
       state.openGroups = [];
-      state.reportedStart = null;
+      state.shared.reportedStart = null;
 
       // An empty match is one whose reported region has zero length
       const rejectEmpty =
@@ -132,7 +132,10 @@ export default class RegexInterpreter {
 
       try {
         matched = $.#matchNode(ast, state, start, (position) => {
-          if (rejectEmpty && position === (state.reportedStart ?? start)) {
+          if (
+            rejectEmpty &&
+            position === (state.shared.reportedStart ?? start)
+          ) {
             return false;
           }
 
@@ -143,7 +146,7 @@ export default class RegexInterpreter {
         if (signal instanceof AcceptSignal) {
           if (
             !rejectEmpty ||
-            signal.position !== (state.reportedStart ?? start)
+            signal.position !== (state.shared.reportedStart ?? start)
           ) {
             matched = true;
             matchEnd = signal.position;
@@ -177,7 +180,7 @@ export default class RegexInterpreter {
         }
 
         return {
-          start: state.reportedStart ?? start,
+          start: state.shared.reportedStart ?? start,
           end: matchEnd,
           captures: captures,
         };
@@ -579,16 +582,17 @@ export default class RegexInterpreter {
   }
 
   static #matchNode(node, state, position, continuation) {
-    if (++state.steps > state.matchLimit) throw new LimitSignal();
+    if (++state.shared.steps > state.matchLimit) throw new LimitSignal();
 
-    if (state.depth >= state.matchLimitRecursion) throw new LimitSignal();
+    if (state.shared.depth >= state.matchLimitRecursion)
+      throw new LimitSignal();
 
-    state.depth++;
+    state.shared.depth++;
 
     try {
       return $.#matchNodeDispatch(node, state, position, continuation);
     } finally {
-      state.depth--;
+      state.shared.depth--;
     }
   }
 
@@ -693,13 +697,13 @@ export default class RegexInterpreter {
       case "graphemeCluster": {
         if (position >= state.subject.length) return false;
 
-        if (state.graphemeSegments === undefined) {
-          state.graphemeSegments = ERTS.graphemeSegmenter.segment(
+        if (state.shared.graphemeSegments === null) {
+          state.shared.graphemeSegments = ERTS.graphemeSegmenter.segment(
             state.subject,
           );
         }
 
-        const segment = state.graphemeSegments.containing(position);
+        const segment = state.shared.graphemeSegments.containing(position);
 
         return continuation(segment.index + segment.segment.length);
       }
@@ -745,13 +749,13 @@ export default class RegexInterpreter {
 
       // \K resets the reported match start to the current position
       case "matchStartReset": {
-        const savedReportedStart = state.reportedStart;
+        const savedReportedStart = state.shared.reportedStart;
 
-        state.reportedStart = position;
+        state.shared.reportedStart = position;
 
         if (continuation(position)) return true;
 
-        state.reportedStart = savedReportedStart;
+        state.shared.reportedStart = savedReportedStart;
 
         return false;
       }

@@ -565,6 +565,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert :re.run("aa1", "(*LIMIT_MATCH=1000)(a)\\g{1}1", []) == {:match, [{0, 3}, {0, 1}]}
     end
 
+    test "keeps \\K applied from inside an option scope" do
+      assert :re.run("ab", "(?i)a\\Kb", []) == {:match, [{1, 1}]}
+    end
+
     test "defaults the capture type to index" do
       assert :re.run("abbc", "a(b+)", [{:capture, :all}]) == {:match, [{0, 3}, {1, 2}]}
     end

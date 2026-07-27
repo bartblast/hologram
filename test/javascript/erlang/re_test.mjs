@@ -1148,6 +1148,12 @@ describe("Erlang_Re", () => {
       ]);
     });
 
+    it("keeps \\K applied from inside an option scope", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("(?i)a\\Kb"), []);
+
+      assertMatchResult(result, [[1, 1]]);
+    });
+
     it("defaults the capture type to index", () => {
       const result = run(Type.bitstring("abbc"), Type.bitstring("a(b+)"), [
         captureOption(Type.atom("all")),

@@ -505,6 +505,10 @@ describe("RegexInterpreter", () => {
       it("discards \\K from an abandoned branch", () => {
         assert.deepEqual(match("a\\Kx|ab", "ab"), {start: 0, end: 2});
       });
+
+      it("keeps \\K applied from inside an option scope", () => {
+        assert.deepEqual(match("(?i)a\\Kb", "ab"), {start: 1, end: 2});
+      });
     });
 
     describe("match limits", () => {
@@ -514,6 +518,10 @@ describe("RegexInterpreter", () => {
 
       it("reports no match when match_limit is exceeded", () => {
         assert.isNull(match("a+b", "aaab", {matchLimit: 3}));
+      });
+
+      it("counts steps inside option scopes toward match_limit", () => {
+        assert.isNull(match("(?:(?i)ab)+$", "ab".repeat(30), {matchLimit: 50}));
       });
 
       it("reports no match when match_limit_recursion is exceeded", () => {
