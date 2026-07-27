@@ -16,6 +16,13 @@ defmodule HologramFeatureTests.RegularExpressionsTest do
     |> assert_text(css("#result"), inspect(["bb"]))
   end
 
+  feature "initial state regex", %{session: session} do
+    session
+    |> visit(RegularExpressionsPage)
+    |> click(css("button[id='initial state regex']"))
+    |> assert_text(css("#result"), inspect(["iij"]))
+  end
+
   feature "match operator", %{session: session} do
     session
     |> visit(RegularExpressionsPage)

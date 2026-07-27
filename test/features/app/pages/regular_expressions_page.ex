@@ -10,7 +10,9 @@ defmodule HologramFeatureTests.RegularExpressionsPage do
   layout HologramFeatureTests.Components.DefaultLayout
 
   def init(_params, component, _server) do
-    put_state(component, :result, nil)
+    component
+    |> put_state(:initial_regex, ~r/i+j/)
+    |> put_state(:result, nil)
   end
 
   def template do
@@ -18,6 +20,7 @@ defmodule HologramFeatureTests.RegularExpressionsPage do
     <p>
       <button id="client-sent regex" $click="client-sent regex"> client-sent regex </button>
       <button id="dynamic compilation" $click="dynamic compilation"> dynamic compilation </button>
+      <button id="initial state regex" $click="initial state regex"> initial state regex </button>
       <button id="match operator" $click="match operator"> match operator </button>
       <button id="named captures" $click="named captures"> named captures </button>
       <button id="regex match?" $click="regex match?"> regex match? </button>
@@ -45,6 +48,10 @@ defmodule HologramFeatureTests.RegularExpressionsPage do
   def action(:"dynamic compilation", _params, component) do
     regex = Regex.compile!(wrap_term("b") <> "+")
     put_state(component, :result, Regex.run(regex, "abbc"))
+  end
+
+  def action(:"initial state regex", _params, component) do
+    put_state(component, :result, Regex.run(component.state.initial_regex, "xiijy"))
   end
 
   def action(:"match operator", _params, component) do
