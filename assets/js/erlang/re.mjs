@@ -504,6 +504,52 @@ const Erlang_Re = {
       );
     };
 
+    // Resolves the offset option to a JS string start position. The offset
+    // is a byte offset into the subject. An offset inside a character
+    // raises, and an offset beyond the subject raises in a non-global run
+    // while a global run returns null, which reports no match found.
+    const resolveStartPosition = () => {
+      let offsetBeyondSubject = false;
+      let startPosition = 0;
+
+      if (offsetOption !== null) {
+        if (entry.unicode) {
+          startPosition = ERTS.regex.byteOffsetToUtf16Index(
+            subjectText,
+            offsetOption,
+          );
+
+          if (
+            ERTS.regex.utf16IndexToByteOffset(subjectText, startPosition) !==
+            offsetOption
+          ) {
+            const subjectByteLength = ERTS.regex.utf16IndexToByteOffset(
+              subjectText,
+              subjectText.length,
+            );
+
+            if (offsetOption > subjectByteLength) {
+              offsetBeyondSubject = true;
+            } else {
+              raiseArgumentError();
+            }
+          }
+        } else {
+          // In byte mode JS string indices are byte offsets already
+          offsetBeyondSubject = offsetOption > subjectText.length;
+          startPosition = offsetOption;
+        }
+
+        if (offsetBeyondSubject) {
+          if (isGlobal) return null;
+
+          raiseArgumentError();
+        }
+      }
+
+      return startPosition;
+    };
+
     // --- Options ---
 
     const {
@@ -686,46 +732,9 @@ const Erlang_Re = {
 
     // --- Start position ---
 
-    // The offset is a byte offset into the subject
-    let offsetBeyondSubject = false;
-    let startPosition = 0;
+    const startPosition = resolveStartPosition();
 
-    if (offsetOption !== null) {
-      if (entry.unicode) {
-        startPosition = ERTS.regex.byteOffsetToUtf16Index(
-          subjectText,
-          offsetOption,
-        );
-
-        if (
-          ERTS.regex.utf16IndexToByteOffset(subjectText, startPosition) !==
-          offsetOption
-        ) {
-          const subjectByteLength = ERTS.regex.utf16IndexToByteOffset(
-            subjectText,
-            subjectText.length,
-          );
-
-          // An offset inside a character raises even in a global run
-          if (offsetOption > subjectByteLength) {
-            offsetBeyondSubject = true;
-          } else {
-            raiseArgumentError();
-          }
-        }
-      } else {
-        // In byte mode JS string indices are byte offsets already
-        offsetBeyondSubject = offsetOption > subjectText.length;
-        startPosition = offsetOption;
-      }
-
-      // A global run treats an offset beyond the subject as no match found
-      if (offsetBeyondSubject) {
-        if (isGlobal) return Type.atom("nomatch");
-
-        raiseArgumentError();
-      }
-    }
+    if (startPosition === null) return Type.atom("nomatch");
 
     // --- Match ---
 
