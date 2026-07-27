@@ -417,6 +417,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       end
     end
 
+    describe "run/2" do
+      test "matches with default options" do
+        assert :re.run("abbc", "b+") == {:match, [{1, 2}]}
+      end
+
+      test "returns nomatch without a match" do
+        assert :re.run("x", "b+") == :nomatch
+      end
+    end
+
     describe "run/3" do
       test "matches with a raw binary pattern" do
         assert :re.run("abbc", "b+", []) == {:match, [{1, 2}]}
@@ -855,6 +865,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
         assert :re.run("aba", compiled, [:global]) == {:match, [[{0, 1}], [{2, 1}]]}
       end
 
+      test "an exceeded match limit reports nomatch" do
+        assert :re.run("a", "a", [{:match_limit, 0}]) == :nomatch
+      end
+
+      test "matches within the match limit" do
+        assert :re.run("a", "a", [{:match_limit, 100}]) == {:match, [{0, 1}]}
+      end
+
+      test "the match limit stops runaway backtracking" do
+        assert :re.run("aaaaaaaaaax", "(a+)+b", [{:match_limit, 1}]) == :nomatch
+      end
+
+      test "an exceeded recursion limit reports nomatch" do
+        assert :re.run("a", "a", [{:match_limit_recursion, 0}]) == :nomatch
+      end
+
+      test "matches within the recursion limit" do
+        assert :re.run("a", "a", [{:match_limit_recursion, 100}]) == {:match, [{0, 1}]}
+      end
+
+      test "match limit works with a compiled pattern" do
+        {:ok, compiled} = :re.compile("(a+)+b")
+
+        assert :re.run("aaaaaaaaaax", compiled, [{:match_limit, 1}]) == :nomatch
+      end
+
+      test "uses the last match limit option" do
+        assert :re.run("a", "a", [{:match_limit, 0}, {:match_limit, 100}]) == {:match, [{0, 1}]}
+      end
+
       test "raises ArgumentError on non-iodata subject" do
         assert_error ArgumentError,
                      build_argument_error_msg(1, "not an iodata term"),
@@ -1291,6 +1331,54 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
         assert_error ArgumentError, "argument error", fn ->
           :re.run("ab", "a", [:global, {:offset, 5}, {:capture, :bogus}])
         end
+      end
+
+      test "raises ArgumentError on negative match limit" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("a", "a", [{:match_limit, -1}]) end
+      end
+
+      test "raises ArgumentError on non-integer match limit" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("a", "a", [{:match_limit, :x}]) end
+      end
+
+      test "raises ArgumentError on match limit above the 32-bit range" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("a", "a", [{:match_limit_recursion, 2_147_483_648}]) end
+      end
+
+      test "raises ArgumentError on match limit tuple with extra elements" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("a", "a", [{:match_limit, 1, 2}]) end
+      end
+
+      test "raises plain ArgumentError on newline option with a compiled pattern" do
+        {:ok, compiled} = :re.compile("a.b")
+
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a\rb", compiled, [{:newline, :cr}])
+        end
+      end
+
+      test "raises plain ArgumentError on bsr option with a compiled pattern" do
+        {:ok, compiled} = :re.compile("a\\Rb")
+
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a\vb", compiled, [:bsr_anycrlf])
+        end
+      end
+
+      test "raises ArgumentError on invalid newline type with a compiled pattern" do
+        {:ok, compiled} = :re.compile("a")
+
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("a", compiled, [{:newline, :bogus}]) end
       end
     end
   end

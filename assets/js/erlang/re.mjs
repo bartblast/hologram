@@ -269,6 +269,12 @@ const Erlang_Re = {
   // End inspect/2
   // Deps: []
 
+  // Start run/2
+  "run/2": (subject, pattern) =>
+    Erlang_Re["run/3"](subject, pattern, Type.list()),
+  // End run/2
+  // Deps: [:re.run/3]
+
   // Start run/3
   "run/3": (subject, pattern, options) => {
     const CAPTURE_KIND_ATOMS = new Set([
@@ -281,8 +287,14 @@ const Erlang_Re = {
 
     const CAPTURE_TYPE_ATOMS = new Set(["binary", "index", "list"]);
 
-    // Group indices and offsets are limited to the positive range of a
-    // 32-bit integer
+    // Limit tuple option tags mapped to engine run option names.
+    const LIMIT_TUPLE_KEYS = {
+      match_limit: "matchLimit",
+      match_limit_recursion: "matchLimitRecursion",
+    };
+
+    // Group indices, offsets and match limits are limited to the positive
+    // range of a 32-bit integer
     const MAX_INT32 = 2_147_483_647n;
 
     // Scan flag option atoms mapped to engine run option names.
@@ -296,13 +308,6 @@ const Erlang_Re = {
     // Run-only option atoms not yet supported.
     // TODO: implement the report_errors run option.
     const RUN_ONLY_ATOMS = new Set(["report_errors"]);
-
-    // Run-only tuple option tags not yet supported.
-    // TODO: implement the match_limit and match_limit_recursion run options.
-    const RUN_ONLY_TUPLE_TAGS = new Set([
-      "match_limit",
-      "match_limit_recursion",
-    ]);
 
     const raiseArgumentError = () => {
       Interpreter.raiseArgumentError("argument error");
@@ -334,9 +339,18 @@ const Erlang_Re = {
     let compileOnlyOptionUsed = false;
     let isGlobal = false;
     let notImplementedOption = null;
+
+    const limitOptions = {
+      matchLimit: undefined,
+      matchLimitRecursion: undefined,
+    };
+
+    let dualOptionUsed = false;
     let offsetOption = null;
     let optionsValid = Type.isProperList(options);
-    let recompileOption = null;
+
+    const isBoundedInteger = (term) =>
+      Type.isInteger(term) && term.value >= 0n && term.value <= MAX_INT32;
 
     if (optionsValid) {
       for (const option of options.data) {
@@ -367,28 +381,38 @@ const Erlang_Re = {
           Interpreter.isStrictlyEqual(option.data[0], Type.atom("offset"));
 
         if (isOffset) {
-          const value = option.data[1];
-
-          if (
-            !Type.isInteger(value) ||
-            value.value < 0n ||
-            value.value > MAX_INT32
-          ) {
+          if (!isBoundedInteger(option.data[1])) {
             optionsValid = false;
             break;
           }
 
           // The last offset option wins
-          offsetOption = Number(value.value);
+          offsetOption = Number(option.data[1].value);
+          continue;
+        }
+
+        const isLimit =
+          Type.isTuple(option) &&
+          option.data.length === 2 &&
+          Type.isAtom(option.data[0]) &&
+          Object.hasOwn(LIMIT_TUPLE_KEYS, option.data[0].value);
+
+        if (isLimit) {
+          if (!isBoundedInteger(option.data[1])) {
+            optionsValid = false;
+            break;
+          }
+
+          // The last limit option of each kind wins
+          limitOptions[LIMIT_TUPLE_KEYS[option.data[0].value]] = Number(
+            option.data[1].value,
+          );
+
           continue;
         }
 
         const isRunOnly =
-          (Type.isAtom(option) && RUN_ONLY_ATOMS.has(option.value)) ||
-          (Type.isTuple(option) &&
-            (option.data.length === 2 || option.data.length === 3) &&
-            Type.isAtom(option.data[0]) &&
-            RUN_ONLY_TUPLE_TAGS.has(option.data[0].value));
+          Type.isAtom(option) && RUN_ONLY_ATOMS.has(option.value);
 
         if (isRunOnly) {
           notImplementedOption ??= option;
@@ -401,7 +425,7 @@ const Erlang_Re = {
             break;
 
           case "dual":
-            recompileOption = option;
+            dualOptionUsed = true;
             break;
 
           case "invalid":
@@ -513,10 +537,11 @@ const Erlang_Re = {
 
     if (patternRaisesArgumentError) raiseArgumentError();
 
-    // Compile options don't apply to an already compiled pattern
+    // Compile options, including the dual newline and bsr options, don't
+    // apply to an already compiled pattern
     if (
       registryEntry !== null &&
-      (compileOnlyOptionUsed || acc.unicodeOption)
+      (compileOnlyOptionUsed || dualOptionUsed || acc.unicodeOption)
     ) {
       raiseArgumentError();
     }
@@ -627,12 +652,6 @@ const Erlang_Re = {
       raiseNotImplemented(notImplementedOption);
     }
 
-    // TODO: implement re-routing of newline and bsr run options through the
-    // stored AST of an already compiled pattern.
-    if (registryEntry !== null && recompileOption !== null) {
-      raiseNotImplemented(recompileOption);
-    }
-
     // --- Subject resolution ---
 
     if (subjectText === null) {
@@ -692,6 +711,8 @@ const Erlang_Re = {
     const engineRunOpts = {
       anchored: entry.anchored || acc.anchored,
       firstline: entry.firstline,
+      matchLimit: limitOptions.matchLimit,
+      matchLimitRecursion: limitOptions.matchLimitRecursion,
       notbol: runFlags.notbol,
       noteol: runFlags.noteol,
       notempty: runFlags.notempty,

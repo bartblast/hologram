@@ -195,6 +195,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:re, :compile, 2}, {:erlang, :iolist_to_binary, 1}},
     {{:re, :compile, 2}, {:erlang, :make_ref, 0}},
     {{:re, :import, 1}, {:re, :compile, 2}},
+    {{:re, :run, 2}, {:re, :run, 3}},
     {{:re, :run, 3}, {:erlang, :iolist_to_binary, 1}},
     {{:sets, :_validate_opts, 1}, {:lists, :keyfind, 3}},
     {{:sets, :add_element, 2}, {:maps, :put, 3}},

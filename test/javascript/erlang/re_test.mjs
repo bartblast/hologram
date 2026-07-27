@@ -760,6 +760,32 @@ describe("Erlang_Re", () => {
     });
   });
 
+  describe("run/2", () => {
+    it("matches with default options", () => {
+      const result = Erlang_Re["run/2"](
+        Type.bitstring("abbc"),
+        Type.bitstring("b+"),
+      );
+
+      assert.deepEqual(
+        result,
+        Type.tuple([
+          Type.atom("match"),
+          Type.list([Type.tuple([Type.integer(1), Type.integer(2)])]),
+        ]),
+      );
+    });
+
+    it("returns nomatch without a match", () => {
+      const result = Erlang_Re["run/2"](
+        Type.bitstring("x"),
+        Type.bitstring("b+"),
+      );
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+  });
+
   describe("run/3", () => {
     const run = (subject, pattern, opts = []) =>
       Erlang_Re["run/3"](subject, pattern, Type.list(opts));
@@ -809,6 +835,9 @@ describe("Erlang_Re", () => {
       type === undefined
         ? Type.tuple([Type.atom("capture"), valueSpec])
         : Type.tuple([Type.atom("capture"), valueSpec, Type.atom(type)]);
+
+    const limitOption = (tag, limit) =>
+      Type.tuple([Type.atom(tag), Type.integer(limit)]);
 
     const matchTuple = (values) =>
       Type.tuple([Type.atom("match"), Type.list(values)]);
@@ -1723,6 +1752,67 @@ describe("Erlang_Re", () => {
       assertGlobalMatchResult(result, [[[0, 1]], [[2, 1]]]);
     });
 
+    it("an exceeded match limit reports nomatch", () => {
+      const result = run(Type.bitstring("a"), Type.bitstring("a"), [
+        limitOption("match_limit", 0),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("matches within the match limit", () => {
+      const result = run(Type.bitstring("a"), Type.bitstring("a"), [
+        limitOption("match_limit", 100),
+      ]);
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
+    it("the match limit stops runaway backtracking", () => {
+      const result = run(
+        Type.bitstring("aaaaaaaaaax"),
+        Type.bitstring("(a+)+b"),
+        [limitOption("match_limit", 1)],
+      );
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("an exceeded recursion limit reports nomatch", () => {
+      const result = run(Type.bitstring("a"), Type.bitstring("a"), [
+        limitOption("match_limit_recursion", 0),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("matches within the recursion limit", () => {
+      const result = run(Type.bitstring("a"), Type.bitstring("a"), [
+        limitOption("match_limit_recursion", 100),
+      ]);
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
+    it("match limit works with a compiled pattern", () => {
+      const result = run(
+        Type.bitstring("aaaaaaaaaax"),
+        compilePattern("(a+)+b"),
+        [limitOption("match_limit", 1)],
+      );
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("uses the last match limit option", () => {
+      const result = run(Type.bitstring("a"), Type.bitstring("a"), [
+        limitOption("match_limit", 0),
+        limitOption("match_limit", 100),
+      ]);
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
     it("raises ArgumentError on non-iodata subject", () => {
       assertBoxedError(
         () => run(Type.atom("abc"), Type.bitstring("a")),
@@ -2392,6 +2482,87 @@ describe("Erlang_Re", () => {
           ]),
         "ArgumentError",
         "argument error",
+      );
+    });
+
+    it("raises ArgumentError on negative match limit", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            limitOption("match_limit", -1),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("raises ArgumentError on non-integer match limit", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            Type.tuple([Type.atom("match_limit"), Type.atom("x")]),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("raises ArgumentError on match limit above the 32-bit range", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            limitOption("match_limit_recursion", 2_147_483_648n),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("raises ArgumentError on match limit tuple with extra elements", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            Type.tuple([
+              Type.atom("match_limit"),
+              Type.integer(1),
+              Type.integer(2),
+            ]),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("raises plain ArgumentError on newline option with a compiled pattern", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a\rb"), compilePattern("a.b"), [
+            Type.tuple([Type.atom("newline"), Type.atom("cr")]),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on bsr option with a compiled pattern", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a\vb"), compilePattern("a\\Rb"), [
+            Type.atom("bsr_anycrlf"),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError on invalid newline type with a compiled pattern", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), compilePattern("a"), [
+            Type.tuple([Type.atom("newline"), Type.atom("bogus")]),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
       );
     });
   });
