@@ -1,6 +1,6 @@
 "use strict";
 
-import {sinon} from "./support/helpers.mjs";
+import {assert, sinon} from "./support/helpers.mjs";
 
 import Debouncer from "../../assets/js/debouncer.mjs";
 
@@ -13,6 +13,235 @@ describe("Debouncer", () => {
 
   afterEach(() => {
     clock.restore();
+  });
+
+  describe("cancelAll()", () => {
+    it("drops a pending dispatch, so its delay elapsing fires nothing", () => {
+      const element = {};
+      const callback = sinon.spy();
+
+      Debouncer.run(element, "slot", 250, callback);
+      Debouncer.cancelAll();
+      clock.tick(250);
+
+      sinon.assert.notCalled(callback);
+    });
+
+    it("drops pending dispatches across all elements and slots", () => {
+      const elementA = {};
+      const elementB = {};
+      const callbackA = sinon.spy();
+      const callbackB = sinon.spy();
+      const callbackC = sinon.spy();
+
+      Debouncer.run(elementA, "slot-a", 250, callbackA);
+      Debouncer.run(elementA, "slot-b", 250, callbackB);
+      Debouncer.run(elementB, "slot", 250, callbackC);
+      Debouncer.cancelAll();
+      clock.tick(250);
+
+      sinon.assert.notCalled(callbackA);
+      sinon.assert.notCalled(callbackB);
+      sinon.assert.notCalled(callbackC);
+    });
+
+    it("a cancelled slot can be scheduled again", () => {
+      const element = {};
+      const callback = sinon.spy();
+
+      Debouncer.run(element, "slot", 250, callback);
+      Debouncer.cancelAll();
+
+      Debouncer.run(element, "slot", 250, callback);
+      clock.tick(250);
+
+      sinon.assert.calledOnce(callback);
+    });
+  });
+
+  describe("flush()", () => {
+    it("fires the pending callback immediately", () => {
+      const element = {};
+      const callback = sinon.spy();
+
+      Debouncer.run(element, "slot", 250, callback);
+      Debouncer.flush(element);
+
+      sinon.assert.calledOnce(callback);
+    });
+
+    it("does not fire the callback again when the flushed timer's delay elapses", () => {
+      const element = {};
+      const callback = sinon.spy();
+
+      Debouncer.run(element, "slot", 250, callback);
+      Debouncer.flush(element);
+      clock.tick(250);
+
+      sinon.assert.calledOnce(callback);
+    });
+
+    it("fires every pending slot on the element in scheduling order", () => {
+      const element = {};
+      const callbackA = sinon.spy();
+      const callbackB = sinon.spy();
+
+      Debouncer.run(element, "slot-a", 250, callbackA);
+      Debouncer.run(element, "slot-b", 250, callbackB);
+      Debouncer.flush(element);
+
+      sinon.assert.calledOnce(callbackA);
+      sinon.assert.calledOnce(callbackB);
+      sinon.assert.callOrder(callbackA, callbackB);
+    });
+
+    it("leaves pending entries of other elements untouched", () => {
+      const elementA = {};
+      const elementB = {};
+      const callbackA = sinon.spy();
+      const callbackB = sinon.spy();
+
+      Debouncer.run(elementA, "slot", 250, callbackA);
+      Debouncer.run(elementB, "slot", 250, callbackB);
+      Debouncer.flush(elementA);
+
+      sinon.assert.calledOnce(callbackA);
+      sinon.assert.notCalled(callbackB);
+
+      // The untouched element's timer still fires on its own schedule.
+      clock.tick(250);
+      sinon.assert.calledOnce(callbackB);
+    });
+
+    it("is a no-op for an element with nothing pending", () => {
+      const element = {};
+      const callback = sinon.spy();
+
+      Debouncer.flush(element);
+
+      sinon.assert.notCalled(callback);
+    });
+
+    it("a flushed slot can be scheduled again", () => {
+      const element = {};
+      const callback = sinon.spy();
+
+      Debouncer.run(element, "slot", 250, callback);
+      Debouncer.flush(element);
+      sinon.assert.calledOnce(callback);
+
+      Debouncer.run(element, "slot", 250, callback);
+      clock.tick(250);
+      sinon.assert.calledTwice(callback);
+    });
+
+    it("a throwing callback stops neither the delivery nor the disarming of later slots", () => {
+      const element = {};
+      const throwingCallback = sinon.stub().throws(new Error("action failed"));
+      const laterCallback = sinon.spy();
+
+      Debouncer.run(element, "slot-a", 250, throwingCallback);
+      Debouncer.run(element, "slot-b", 250, laterCallback);
+
+      // The later slot still fires during the flush, and the first error is rethrown at the end.
+      assert.throws(() => Debouncer.flush(element), "action failed");
+      sinon.assert.calledOnce(laterCallback);
+
+      // The later slot's timer was disarmed, so nothing fires again on the original schedule.
+      clock.tick(250);
+      sinon.assert.calledOnce(laterCallback);
+    });
+  });
+
+  describe("flushWithin()", () => {
+    // Minimal stand-in for a DOM container: contains() covers itself and the given descendants.
+    const buildContainer = (...descendants) => ({
+      nodeType: 1,
+      contains(node) {
+        return node === this || descendants.includes(node);
+      },
+    });
+
+    const buildElement = () => ({nodeType: 1});
+
+    it("fires pending entries on the container's descendants in scheduling order", () => {
+      const elementA = buildElement();
+      const elementB = buildElement();
+      const container = buildContainer(elementA, elementB);
+      const callbackA = sinon.spy();
+      const callbackB = sinon.spy();
+
+      Debouncer.run(elementA, "slot", 250, callbackA);
+      Debouncer.run(elementB, "slot", 250, callbackB);
+      Debouncer.flushWithin(container);
+
+      sinon.assert.calledOnce(callbackA);
+      sinon.assert.calledOnce(callbackB);
+      sinon.assert.callOrder(callbackA, callbackB);
+    });
+
+    it("fires pending entries keyed on the container itself", () => {
+      const container = buildContainer();
+      const callback = sinon.spy();
+
+      Debouncer.run(container, "slot", 250, callback);
+      Debouncer.flushWithin(container);
+
+      sinon.assert.calledOnce(callback);
+    });
+
+    it("leaves elements outside the container untouched", () => {
+      const inside = buildElement();
+      const outside = buildElement();
+      const container = buildContainer(inside);
+      const insideCallback = sinon.spy();
+      const outsideCallback = sinon.spy();
+
+      Debouncer.run(inside, "slot", 250, insideCallback);
+      Debouncer.run(outside, "slot", 250, outsideCallback);
+      Debouncer.flushWithin(container);
+
+      sinon.assert.calledOnce(insideCallback);
+      sinon.assert.notCalled(outsideCallback);
+
+      // The untouched element's timer still fires on its own schedule.
+      clock.tick(250);
+      sinon.assert.calledOnce(outsideCallback);
+    });
+
+    it("skips entries keyed on non-node targets", () => {
+      const windowTarget = {};
+      const container = buildContainer(windowTarget);
+      const callback = sinon.spy();
+
+      Debouncer.run(windowTarget, "slot", 250, callback);
+      Debouncer.flushWithin(container);
+
+      sinon.assert.notCalled(callback);
+
+      // The skipped entry's timer still fires on its own schedule.
+      clock.tick(250);
+      sinon.assert.calledOnce(callback);
+    });
+
+    it("a throwing callback in one element stops neither the delivery nor the disarming of other elements", () => {
+      const elementA = buildElement();
+      const elementB = buildElement();
+      const container = buildContainer(elementA, elementB);
+      const throwingCallback = sinon.stub().throws(new Error("action failed"));
+      const laterCallback = sinon.spy();
+
+      Debouncer.run(elementA, "slot", 250, throwingCallback);
+      Debouncer.run(elementB, "slot", 250, laterCallback);
+
+      // The other element still flushes, and the first error is rethrown at the end.
+      assert.throws(() => Debouncer.flushWithin(container), "action failed");
+      sinon.assert.calledOnce(laterCallback);
+
+      // The other element's timer was disarmed, so nothing fires again on the original schedule.
+      clock.tick(250);
+      sinon.assert.calledOnce(laterCallback);
+    });
   });
 
   describe("run()", () => {

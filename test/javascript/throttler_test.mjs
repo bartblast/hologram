@@ -15,6 +15,51 @@ describe("Throttler", () => {
     clock.restore();
   });
 
+  describe("cancelAll()", () => {
+    it("drops a held trailing dispatch, so the window closing fires nothing", () => {
+      const element = {};
+      const leading = sinon.spy();
+      const trailing = sinon.spy();
+
+      Throttler.run(element, "slot", 100, leading);
+      Throttler.run(element, "slot", 100, trailing);
+      Throttler.cancelAll();
+      clock.tick(100);
+
+      sinon.assert.calledOnce(leading);
+      sinon.assert.notCalled(trailing);
+    });
+
+    it("drops state across all elements and slots", () => {
+      const elementA = {};
+      const elementB = {};
+      const trailingA = sinon.spy();
+      const trailingB = sinon.spy();
+
+      Throttler.run(elementA, "slot-a", 100, sinon.spy());
+      Throttler.run(elementA, "slot-a", 100, trailingA);
+      Throttler.run(elementB, "slot-b", 100, sinon.spy());
+      Throttler.run(elementB, "slot-b", 100, trailingB);
+      Throttler.cancelAll();
+      clock.tick(100);
+
+      sinon.assert.notCalled(trailingA);
+      sinon.assert.notCalled(trailingB);
+    });
+
+    it("a cancelled slot starts fresh with a leading edge", () => {
+      const element = {};
+      const callback = sinon.spy();
+
+      Throttler.run(element, "slot", 100, sinon.spy());
+      Throttler.cancelAll();
+
+      Throttler.run(element, "slot", 100, callback);
+
+      sinon.assert.calledOnce(callback);
+    });
+  });
+
   describe("run()", () => {
     it("dispatches the first call immediately on the leading edge", () => {
       const callback = sinon.spy();
