@@ -1059,8 +1059,7 @@ export default class RegexParser {
     if (word === "R" && this.#peek() === "&") {
       this.#position++;
 
-      const {name, nameStart} = this.#parseSubpatternName(")");
-      this.#validateNamedReference(name, nameStart);
+      const name = this.#parseValidatedName(")");
 
       return {kind: "recursion", number: null, name: name};
     }
@@ -1394,8 +1393,7 @@ export default class RegexParser {
         return {type: "backreference", number: number, name: null};
       }
 
-      const {name, nameStart} = this.#parseSubpatternName("}");
-      this.#validateNamedReference(name, nameStart);
+      const name = this.#parseValidatedName("}");
 
       return {type: "backreference", number: null, name: name};
     }
@@ -1436,8 +1434,7 @@ export default class RegexParser {
         return {type: "subroutine", number: number, name: null};
       }
 
-      const {name, nameStart} = this.#parseSubpatternName(terminator);
-      this.#validateNamedReference(name, nameStart);
+      const name = this.#parseValidatedName(terminator);
 
       return {type: "subroutine", number: null, name: name};
     }
@@ -1576,8 +1573,7 @@ export default class RegexParser {
       if (nextChar === "=") {
         this.#position += 2;
 
-        const {name, nameStart} = this.#parseSubpatternName(")");
-        this.#validateNamedReference(name, nameStart);
+        const name = this.#parseValidatedName(")");
 
         return {type: "backreference", number: null, name: name};
       }
@@ -1585,8 +1581,7 @@ export default class RegexParser {
       if (nextChar === ">") {
         this.#position += 2;
 
-        const {name, nameStart} = this.#parseSubpatternName(")");
-        this.#validateNamedReference(name, nameStart);
+        const name = this.#parseValidatedName(")");
 
         return {type: "subroutine", number: null, name: name};
       }
@@ -1645,8 +1640,7 @@ export default class RegexParser {
     if (char === "&") {
       this.#position++;
 
-      const {name, nameStart} = this.#parseSubpatternName(")");
-      this.#validateNamedReference(name, nameStart);
+      const name = this.#parseValidatedName(")");
 
       return {type: "subroutine", number: null, name: name};
     }
@@ -1718,8 +1712,7 @@ export default class RegexParser {
 
     this.#position++;
 
-    const {name, nameStart} = this.#parseSubpatternName(terminator);
-    this.#validateNamedReference(name, nameStart);
+    const name = this.#parseValidatedName(terminator);
 
     return {type: "backreference", number: null, name: name};
   }
@@ -2065,6 +2058,15 @@ export default class RegexParser {
     }
 
     return {type: "unicodeProperty", name: name, negated: negated};
+  }
+
+  // Parses a subpattern name followed by the given terminator and validates
+  // that it references an existing group.
+  #parseValidatedName(terminator) {
+    const {name, nameStart} = this.#parseSubpatternName(terminator);
+    this.#validateNamedReference(name, nameStart);
+
+    return name;
   }
 
   // Parses a (*VERB) or (*VERB:name) backtracking control verb,
