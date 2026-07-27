@@ -6,6 +6,7 @@ import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
+import Debouncer from "./debouncer.mjs";
 import Deserializer from "./deserializer.mjs";
 import ERTS from "./erts.mjs";
 import EventListenerRegistry from "./event_listener_registry.mjs";
@@ -23,6 +24,7 @@ import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
 import Serializer from "./serializer.mjs";
 import Sse from "./sse.mjs";
+import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 import Vdom from "./vdom.mjs";
@@ -871,6 +873,21 @@ export default class Hologram {
       }
     });
 
+    // Losing focus definitively ends any burst of events from an element, so its pending
+    // debounced dispatches fire now instead of waiting out the rest of their windows.
+    document.addEventListener("focusout", (event) =>
+      Debouncer.flush(event.target),
+    );
+
+    // Submit is a commit point: everything entered into the form is logically before it, so the
+    // form's pending debounced dispatches run first. Capture phase guarantees the flush precedes
+    // the form's own bound handler reading the event payload and dispatching.
+    document.addEventListener(
+      "submit",
+      (event) => Debouncer.flushWithin(event.target),
+      true,
+    );
+
     // Check if there's already a history state (e.g., when navigating back from external page)
     if (history.state) {
       $.#historyId = history.state;
@@ -954,6 +971,14 @@ export default class Hologram {
   }
 
   static #mountPage(isPageModuleRegistered = false) {
+    // Every page-entry path funnels through here (client-side navigation, back/forward
+    // restoration, initial mount), so this is where dispatches still pending from the previous
+    // page are dropped - the context they were meant for no longer exists. Cancel, not flush: a
+    // dispatch must never execute on a page the user has left. On the initial mount both
+    // cancellations are no-ops.
+    Debouncer.cancelAll();
+    Throttler.cancelAll();
+
     let mountData = null;
 
     if ($.#shouldLoadMountData) {
