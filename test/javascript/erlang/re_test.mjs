@@ -1579,6 +1579,50 @@ describe("Erlang_Re", () => {
       assertMatchResult(result, [[1, 1]]);
     });
 
+    it("multiline $ matches between CR and LF under the anycrlf convention", () => {
+      const result = run(Type.bitstring("a\r\nb"), Type.bitstring("\\r$"), [
+        Type.atom("multiline"),
+        Type.tuple([Type.atom("newline"), Type.atom("anycrlf")]),
+      ]);
+
+      assertMatchResult(result, [[1, 1]]);
+    });
+
+    it("multiline $ matches between CR and LF under the anycrlf convention when interpreted", () => {
+      const result = run(
+        Type.bitstring("a\r\nb"),
+        Type.bitstring("(*LIMIT_MATCH=1000)\\r$"),
+        [
+          Type.atom("multiline"),
+          Type.tuple([Type.atom("newline"), Type.atom("anycrlf")]),
+        ],
+      );
+
+      assertMatchResult(result, [[1, 1]]);
+    });
+
+    it("multiline $ does not match between CR and LF under the crlf convention", () => {
+      const result = run(Type.bitstring("a\r\nb"), Type.bitstring("\\r$"), [
+        Type.atom("multiline"),
+        Type.tuple([Type.atom("newline"), Type.atom("crlf")]),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("multiline $ does not match between CR and LF under the crlf convention when interpreted", () => {
+      const result = run(
+        Type.bitstring("a\r\nb"),
+        Type.bitstring("(*LIMIT_MATCH=1000)\\r$"),
+        [
+          Type.atom("multiline"),
+          Type.tuple([Type.atom("newline"), Type.atom("crlf")]),
+        ],
+      );
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
     it("notempty backtracks to a non-empty match", () => {
       const result = run(Type.bitstring("a"), Type.bitstring("|a"), [
         Type.atom("notempty"),

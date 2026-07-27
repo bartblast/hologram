@@ -768,6 +768,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert :re.run("ab", "b\\z", [:noteol]) == {:match, [{1, 1}]}
     end
 
+    test "multiline $ matches between CR and LF under the anycrlf convention" do
+      assert :re.run("a\r\nb", "\\r$", [:multiline, {:newline, :anycrlf}]) == {:match, [{1, 1}]}
+    end
+
+    test "multiline $ matches between CR and LF under the anycrlf convention when interpreted" do
+      assert :re.run("a\r\nb", "(*LIMIT_MATCH=1000)\\r$", [:multiline, {:newline, :anycrlf}]) ==
+               {:match, [{1, 1}]}
+    end
+
+    test "multiline $ does not match between CR and LF under the crlf convention" do
+      assert :re.run("a\r\nb", "\\r$", [:multiline, {:newline, :crlf}]) == :nomatch
+    end
+
+    test "multiline $ does not match between CR and LF under the crlf convention when interpreted" do
+      assert :re.run("a\r\nb", "(*LIMIT_MATCH=1000)\\r$", [:multiline, {:newline, :crlf}]) ==
+               :nomatch
+    end
+
     test "notempty backtracks to a non-empty match" do
       assert :re.run("a", "|a", [:notempty]) == {:match, [{0, 1}]}
     end

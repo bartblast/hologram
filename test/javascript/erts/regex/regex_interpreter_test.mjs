@@ -562,6 +562,19 @@ describe("RegexInterpreter", () => {
         );
       });
 
+      it("matches multiline $ between CR and LF under anycrlf", () => {
+        assert.deepEqual(
+          match("\\r$", "a\r\nb", {multiline: true, newline: "anycrlf"}),
+          {start: 1, end: 2},
+        );
+      });
+
+      it("does not match multiline $ between CR and LF under crlf", () => {
+        assert.isNull(
+          match("\\r$", "a\r\nb", {multiline: true, newline: "crlf"}),
+        );
+      });
+
       it("matches \\Z before a final CRLF pair", () => {
         assert.deepEqual(match("a\\Z", "a\r\n", {newline: "crlf"}), {
           start: 0,
