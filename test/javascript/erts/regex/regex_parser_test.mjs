@@ -2587,6 +2587,16 @@ describe("RegexParser", () => {
         );
       });
 
+      it("parses obsolete LIMIT_RECURSION limit verb", () => {
+        assert.deepEqual(
+          RegexParser.parse("(*LIMIT_RECURSION=1000)a"),
+          concat(
+            {type: "startOption", name: "LIMIT_RECURSION", value: 1000},
+            lit("a"),
+          ),
+        );
+      });
+
       it("switches to unicode mode with UTF verb", () => {
         assert.deepEqual(
           RegexParser.parse("(*UTF)\\x{100}"),

@@ -569,6 +569,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert :re.run("ab", "(?i)a\\Kb", []) == {:match, [{1, 1}]}
     end
 
+    test "accepts the obsolete LIMIT_RECURSION limit verb" do
+      assert :re.run("ab", "(*LIMIT_RECURSION=1000)a+b", []) == {:match, [{0, 2}]}
+    end
+
     test "defaults the capture type to index" do
       assert :re.run("abbc", "a(b+)", [{:capture, :all}]) == {:match, [{0, 3}, {1, 2}]}
     end

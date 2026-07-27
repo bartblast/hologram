@@ -1154,6 +1154,16 @@ describe("Erlang_Re", () => {
       assertMatchResult(result, [[1, 1]]);
     });
 
+    it("accepts the obsolete LIMIT_RECURSION limit verb", () => {
+      const result = run(
+        Type.bitstring("ab"),
+        Type.bitstring("(*LIMIT_RECURSION=1000)a+b"),
+        [],
+      );
+
+      assertMatchResult(result, [[0, 2]]);
+    });
+
     it("defaults the capture type to index", () => {
       const result = run(Type.bitstring("abbc"), Type.bitstring("a(b+)"), [
         captureOption(Type.atom("all")),

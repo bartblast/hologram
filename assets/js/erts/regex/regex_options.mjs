@@ -41,8 +41,9 @@ export function mergeStartOptions(ast, opts) {
       effectiveOpts.bsr_anycrlf = true;
     } else if (item.name === "BSR_UNICODE") {
       effectiveOpts.bsr_anycrlf = false;
-    } else if (item.name === "LIMIT_DEPTH") {
-      // Limit verbs cap the limits, they can't raise them
+    } else if (item.name === "LIMIT_DEPTH" || item.name === "LIMIT_RECURSION") {
+      // Limit verbs cap the limits, they can't raise them.
+      // LIMIT_RECURSION is the obsolete PCRE2 synonym of LIMIT_DEPTH.
       effectiveOpts.matchLimitRecursion = Math.min(
         effectiveOpts.matchLimitRecursion ?? Infinity,
         item.value,

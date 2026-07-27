@@ -532,6 +532,10 @@ describe("RegexInterpreter", () => {
         assert.isNull(match("(*LIMIT_MATCH=3)a+b", "aaab"));
       });
 
+      it("caps the recursion limit with the obsolete LIMIT_RECURSION verb", () => {
+        assert.isNull(match("(*LIMIT_RECURSION=2)a+b", "aaab"));
+      });
+
       it("reports no match on runaway recursion", () => {
         assert.isNull(match("(?R)", "a"));
       });
