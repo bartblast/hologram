@@ -295,6 +295,71 @@ const Erlang_Re = {
     const isBoundedInteger = (term) =>
       Type.isInteger(term) && term.value >= 0n && term.value <= MAX_INT32;
 
+    // Validates the capture option and returns the capture kind, targets
+    // and type.
+    const parseCaptureSpec = () => {
+      let captureKind = "all";
+      let captureTargets = null;
+      let captureType = "index";
+
+      if (captureOption !== null) {
+        if (captureOption.data.length === 3) {
+          const typeTerm = captureOption.data[2];
+
+          if (
+            !Type.isAtom(typeTerm) ||
+            !CAPTURE_TYPE_ATOMS.has(typeTerm.value)
+          ) {
+            raiseArgumentError();
+          }
+
+          captureType = typeTerm.value;
+        }
+
+        const valueSpec = captureOption.data[1];
+
+        if (Type.isAtom(valueSpec) && CAPTURE_KIND_ATOMS.has(valueSpec.value)) {
+          captureKind = valueSpec.value;
+        } else if (Type.isProperList(valueSpec)) {
+          captureKind = "explicit";
+
+          captureTargets = valueSpec.data.map((element) => {
+            if (Type.isInteger(element)) {
+              if (element.value < 0n || element.value > MAX_INT32) {
+                raiseArgumentError();
+              }
+
+              return {number: Number(element.value)};
+            }
+
+            if (Type.isAtom(element)) return {name: element.value};
+
+            if (Type.isBitstring(element)) {
+              if (!Type.isBinary(element)) raiseArgumentError();
+
+              Bitstring.maybeSetBytesFromText(element);
+
+              // An invalid UTF-8 name can't match any group name, which makes
+              // it an unset capture rather than an error
+              const decoded = ERTS.regex.decodeUtf8(element.bytes);
+
+              return {name: decoded.error ? null : decoded.text};
+            }
+
+            if (Type.isList(element)) {
+              return {name: ERTS.regex.charDataToText(element)};
+            }
+
+            raiseArgumentError();
+          });
+        } else {
+          raiseArgumentError();
+        }
+      }
+
+      return {captureKind, captureTargets, captureType};
+    };
+
     // Parses the :re.run options list. Later occurrences win for the capture,
     // offset and limit options. optionsValid turns false on the first invalid
     // option.
@@ -600,61 +665,7 @@ const Erlang_Re = {
 
     // The spec content is validated before matching, so an invalid spec
     // raises even when the subject wouldn't match
-    let captureKind = "all";
-    let captureTargets = null;
-    let captureType = "index";
-
-    if (captureOption !== null) {
-      if (captureOption.data.length === 3) {
-        const typeTerm = captureOption.data[2];
-
-        if (!Type.isAtom(typeTerm) || !CAPTURE_TYPE_ATOMS.has(typeTerm.value)) {
-          raiseArgumentError();
-        }
-
-        captureType = typeTerm.value;
-      }
-
-      const valueSpec = captureOption.data[1];
-
-      if (Type.isAtom(valueSpec) && CAPTURE_KIND_ATOMS.has(valueSpec.value)) {
-        captureKind = valueSpec.value;
-      } else if (Type.isProperList(valueSpec)) {
-        captureKind = "explicit";
-
-        captureTargets = valueSpec.data.map((element) => {
-          if (Type.isInteger(element)) {
-            if (element.value < 0n || element.value > MAX_INT32) {
-              raiseArgumentError();
-            }
-
-            return {number: Number(element.value)};
-          }
-
-          if (Type.isAtom(element)) return {name: element.value};
-
-          if (Type.isBitstring(element)) {
-            if (!Type.isBinary(element)) raiseArgumentError();
-
-            Bitstring.maybeSetBytesFromText(element);
-
-            // An invalid UTF-8 name can't match any group name, which makes
-            // it an unset capture rather than an error
-            const decoded = ERTS.regex.decodeUtf8(element.bytes);
-
-            return {name: decoded.error ? null : decoded.text};
-          }
-
-          if (Type.isList(element)) {
-            return {name: ERTS.regex.charDataToText(element)};
-          }
-
-          raiseArgumentError();
-        });
-      } else {
-        raiseArgumentError();
-      }
-    }
+    const {captureKind, captureTargets, captureType} = parseCaptureSpec();
 
     // --- Options not yet supported ---
 
