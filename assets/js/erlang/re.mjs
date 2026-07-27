@@ -550,6 +550,150 @@ const Erlang_Re = {
       return startPosition;
     };
 
+    // Shapes match results into the :re.run return term, applying the
+    // capture spec.
+    const shapeMatchResults = (matchResults) => {
+      const groupMap = entry.compiled.groupMap;
+
+      // The none spec, an empty capture list and all_names without named
+      // groups yield a bare :match
+      if (
+        captureKind === "none" ||
+        (captureKind === "explicit" && captureTargets.length === 0) ||
+        (captureKind === "all_names" && groupMap.names.size === 0)
+      ) {
+        return Type.atom("match");
+      }
+
+      // PCRE2 stores the name table sorted by the byte order of the names
+      const sortedNames =
+        captureKind === "all_names"
+          ? [...groupMap.names.keys()].sort(ERTS.regex.compareByUtf8Bytes)
+          : null;
+
+      // In byte mode JS string indices are byte offsets already
+      const toByteOffset = entry.unicode
+        ? (index) => ERTS.regex.utf16IndexToByteOffset(subjectText, index)
+        : (index) => index;
+
+      const buildValue = (capture) => {
+        switch (captureType) {
+          case "binary": {
+            if (capture === null) return Type.bitstring("");
+
+            const slice = subjectText.slice(capture.start, capture.end);
+
+            return entry.unicode
+              ? Type.bitstring(slice)
+              : Bitstring.fromBytes(
+                  [...slice].map((char) => char.charCodeAt(0)),
+                );
+          }
+
+          case "index": {
+            if (capture === null) {
+              return Type.tuple([Type.integer(-1), Type.integer(0)]);
+            }
+
+            const start = toByteOffset(capture.start);
+            const length = toByteOffset(capture.end) - start;
+
+            return Type.tuple([Type.integer(start), Type.integer(length)]);
+          }
+
+          case "list": {
+            if (capture === null) return Type.list();
+
+            const slice = subjectText.slice(capture.start, capture.end);
+
+            return Type.list(
+              [...slice].map((char) => Type.integer(char.codePointAt(0))),
+            );
+          }
+        }
+      };
+
+      // Returns the boxed capture list of a single match result
+      const shapeMatch = (matchResult) => {
+        // Returns {start, end} in JS string indices, or null when the group
+        // is unset or doesn't exist
+        const captureForNumber = (number) => {
+          if (number === 0) {
+            return {start: matchResult.start, end: matchResult.end};
+          }
+
+          if (number > groupMap.count) return null;
+
+          return matchResult.captures[number];
+        };
+
+        // With dupnames a name maps to multiple group numbers, of which the
+        // first set one wins
+        const captureForName = (name) => {
+          const numbers = groupMap.names.get(name);
+
+          if (numbers === undefined) return null;
+
+          for (const number of numbers) {
+            const capture = captureForNumber(number);
+            if (capture !== null) return capture;
+          }
+
+          return null;
+        };
+
+        const captureForTarget = (target) =>
+          "number" in target
+            ? captureForNumber(target.number)
+            : captureForName(target.name);
+
+        let captures;
+
+        switch (captureKind) {
+          case "all":
+          case "all_but_first":
+            captures = [];
+
+            for (
+              let number = captureKind === "all" ? 0 : 1;
+              number <= groupMap.count;
+              number++
+            ) {
+              captures.push(captureForNumber(number));
+            }
+
+            // Trailing unset groups are not reported
+            while (
+              captures.length > 0 &&
+              captures[captures.length - 1] === null
+            ) {
+              captures.pop();
+            }
+            break;
+
+          case "all_names":
+            captures = sortedNames.map(captureForName);
+            break;
+
+          case "explicit":
+            captures = captureTargets.map(captureForTarget);
+            break;
+
+          case "first":
+            captures = [captureForNumber(0)];
+            break;
+        }
+
+        return Type.list(captures.map(buildValue));
+      };
+
+      const captured = isGlobal
+        ? Type.list(matchResults.map(shapeMatch))
+        : shapeMatch(matchResults[0]);
+
+      return Type.tuple([Type.atom("match"), captured]);
+    };
+
     // --- Options ---
 
     const {
@@ -772,143 +916,7 @@ const Erlang_Re = {
 
     // --- Captures ---
 
-    const groupMap = entry.compiled.groupMap;
-
-    // The none spec, an empty capture list and all_names without named
-    // groups yield a bare :match
-    if (
-      captureKind === "none" ||
-      (captureKind === "explicit" && captureTargets.length === 0) ||
-      (captureKind === "all_names" && groupMap.names.size === 0)
-    ) {
-      return Type.atom("match");
-    }
-
-    // PCRE2 stores the name table sorted by the byte order of the names
-    const sortedNames =
-      captureKind === "all_names"
-        ? [...groupMap.names.keys()].sort(ERTS.regex.compareByUtf8Bytes)
-        : null;
-
-    // In byte mode JS string indices are byte offsets already
-    const toByteOffset = entry.unicode
-      ? (index) => ERTS.regex.utf16IndexToByteOffset(subjectText, index)
-      : (index) => index;
-
-    const buildValue = (capture) => {
-      switch (captureType) {
-        case "binary": {
-          if (capture === null) return Type.bitstring("");
-
-          const slice = subjectText.slice(capture.start, capture.end);
-
-          return entry.unicode
-            ? Type.bitstring(slice)
-            : Bitstring.fromBytes([...slice].map((char) => char.charCodeAt(0)));
-        }
-
-        case "index": {
-          if (capture === null) {
-            return Type.tuple([Type.integer(-1), Type.integer(0)]);
-          }
-
-          const start = toByteOffset(capture.start);
-          const length = toByteOffset(capture.end) - start;
-
-          return Type.tuple([Type.integer(start), Type.integer(length)]);
-        }
-
-        case "list": {
-          if (capture === null) return Type.list();
-
-          const slice = subjectText.slice(capture.start, capture.end);
-
-          return Type.list(
-            [...slice].map((char) => Type.integer(char.codePointAt(0))),
-          );
-        }
-      }
-    };
-
-    // Returns the boxed capture list of a single match result
-    const shapeMatch = (matchResult) => {
-      // Returns {start, end} in JS string indices, or null when the group
-      // is unset or doesn't exist
-      const captureForNumber = (number) => {
-        if (number === 0) {
-          return {start: matchResult.start, end: matchResult.end};
-        }
-
-        if (number > groupMap.count) return null;
-
-        return matchResult.captures[number];
-      };
-
-      // With dupnames a name maps to multiple group numbers, of which the
-      // first set one wins
-      const captureForName = (name) => {
-        const numbers = groupMap.names.get(name);
-
-        if (numbers === undefined) return null;
-
-        for (const number of numbers) {
-          const capture = captureForNumber(number);
-          if (capture !== null) return capture;
-        }
-
-        return null;
-      };
-
-      const captureForTarget = (target) =>
-        "number" in target
-          ? captureForNumber(target.number)
-          : captureForName(target.name);
-
-      let captures;
-
-      switch (captureKind) {
-        case "all":
-        case "all_but_first":
-          captures = [];
-
-          for (
-            let number = captureKind === "all" ? 0 : 1;
-            number <= groupMap.count;
-            number++
-          ) {
-            captures.push(captureForNumber(number));
-          }
-
-          // Trailing unset groups are not reported
-          while (
-            captures.length > 0 &&
-            captures[captures.length - 1] === null
-          ) {
-            captures.pop();
-          }
-          break;
-
-        case "all_names":
-          captures = sortedNames.map(captureForName);
-          break;
-
-        case "explicit":
-          captures = captureTargets.map(captureForTarget);
-          break;
-
-        case "first":
-          captures = [captureForNumber(0)];
-          break;
-      }
-
-      return Type.list(captures.map(buildValue));
-    };
-
-    const captured = isGlobal
-      ? Type.list(matchResults.map(shapeMatch))
-      : shapeMatch(matchResults[0]);
-
-    return Type.tuple([Type.atom("match"), captured]);
+    return shapeMatchResults(matchResults);
   },
   // End run/3
   // Deps: [:erlang.iolist_to_binary/1]
