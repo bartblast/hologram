@@ -165,7 +165,9 @@ const Erlang_Re = {
 
       if (binary.bytes.length < magic.length) return false;
 
-      return magic.every((byte, index) => binary.bytes[index] === byte);
+      return [...magic].every(
+        (char, index) => binary.bytes[index] === char.charCodeAt(0),
+      );
     };
 
     if (!Type.isRecordTuple(exportedPattern, "re_exported_pattern", 5)) {
@@ -179,15 +181,9 @@ const Erlang_Re = {
     // instead, so blob validation is limited to the serialization magic
     // bytes ("re-PCRE2" and "S2RP") and the header size.
     if (
-      !hasMagicPrefix(
-        header,
-        [..."re-PCRE2"].map((c) => c.charCodeAt(0)),
-      ) ||
+      !hasMagicPrefix(header, "re-PCRE2") ||
       header.bytes.length < 14 ||
-      !hasMagicPrefix(
-        code,
-        [..."S2RP"].map((c) => c.charCodeAt(0)),
-      )
+      !hasMagicPrefix(code, "S2RP")
     ) {
       raiseNotExported();
     }
@@ -270,6 +266,9 @@ const Erlang_Re = {
 
     const CAPTURE_TYPE_ATOMS = new Set(["binary", "index", "list"]);
 
+    const INVALID_PATTERN_BULLET =
+      "neither an iodata term nor a compiled regular expression";
+
     // Limit tuple option tags mapped to engine run option names.
     const LIMIT_TUPLE_KEYS = {
       match_limit: "matchLimit",
@@ -291,6 +290,16 @@ const Erlang_Re = {
     // Run-only option atoms not yet supported.
     // TODO: implement the report_errors run option.
     const RUN_ONLY_ATOMS = new Set(["report_errors"]);
+
+    const buildParseErrorBullet = (message, position) =>
+      `could not parse regular expression\n${message} on character ${position}`;
+
+    const buildPatternEntry = (compiled) => ({
+      anchored: acc.anchored,
+      compiled: compiled,
+      firstline: acc.firstline,
+      unicode: compiled.opts.unicode === true,
+    });
 
     const isBoundedInteger = (term) =>
       Type.isInteger(term) && term.value >= 0n && term.value <= MAX_INT32;
@@ -718,19 +727,13 @@ const Erlang_Re = {
     let patternRaisesArgumentError = false;
 
     if (registryEntry !== null) {
-      entry = {
-        anchored: registryEntry.anchored,
-        compiled: registryEntry.compiled,
-        firstline: registryEntry.firstline,
-        unicode: registryEntry.unicode,
-      };
+      entry = registryEntry;
     } else if (acc.unicodeOption) {
       // In unicode mode only the pattern term shape is validated here.
       // The pattern resolves later, as char data conversion failures raise
       // plain ArgumentError instead of contributing a bullet.
       if (!Type.isBinary(pattern) && !Type.isList(pattern)) {
-        patternBullet =
-          "neither an iodata term nor a compiled regular expression";
+        patternBullet = INVALID_PATTERN_BULLET;
       }
     } else {
       // In byte mode the pattern resolves during validation
@@ -739,8 +742,7 @@ const Erlang_Re = {
       try {
         patternBinary = Erlang["iolist_to_binary/1"](pattern);
       } catch {
-        patternBullet =
-          "neither an iodata term nor a compiled regular expression";
+        patternBullet = INVALID_PATTERN_BULLET;
       }
 
       if (patternBinary !== null) {
@@ -757,15 +759,13 @@ const Erlang_Re = {
           ) {
             patternRaisesArgumentError = true;
           } else {
-            patternBullet = `could not parse regular expression\n${result.error.message} on character ${result.error.position}`;
+            patternBullet = buildParseErrorBullet(
+              result.error.message,
+              result.error.position,
+            );
           }
         } else {
-          entry = {
-            anchored: acc.anchored,
-            compiled: result,
-            firstline: acc.firstline,
-            unicode: result.opts.unicode === true,
-          };
+          entry = buildPatternEntry(result);
         }
       }
     }
@@ -838,17 +838,12 @@ const Erlang_Re = {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
             2,
-            `could not parse regular expression\n${result.error.message} on character ${position}`,
+            buildParseErrorBullet(result.error.message, position),
           ),
         );
       }
 
-      entry = {
-        anchored: acc.anchored,
-        compiled: result,
-        firstline: acc.firstline,
-        unicode: true,
-      };
+      entry = buildPatternEntry(result);
     }
 
     // --- Capture spec (validation phase) ---
