@@ -521,21 +521,18 @@ export default class RegexParser {
   #parseAlphaAssertion(word, wordStart) {
     this.#position++;
 
-    const content = this.#parseAlternation();
-
-    this.#requireGroupClose();
-
     const assertion = ALPHA_ASSERTIONS[word];
 
     if (assertion.type === "lookaround") {
-      this.#checkLookaroundContent(content);
-
-      if (assertion.direction === "behind") {
-        this.#checkLookbehindLength(content, wordStart);
-      }
+      return this.#parseLookaround(
+        assertion.direction,
+        assertion.negated,
+        assertion.atomic,
+        wordStart,
+      );
     }
 
-    return {...assertion, content: content};
+    return {...assertion, content: this.#parseDelimitedContent()};
   }
 
   #parseAlternation() {
@@ -641,9 +638,7 @@ export default class RegexParser {
   #parseCapturingGroup(name) {
     // Groups are numbered by opening parenthesis order
     const number = ++this.#groupCount;
-    const content = this.#parseAlternation();
-
-    this.#requireGroupClose();
+    const content = this.#parseDelimitedContent();
 
     return {type: "group", number: number, name: name, content: content};
   }
@@ -1090,9 +1085,7 @@ export default class RegexParser {
     this.#position++;
 
     const condition = this.#parseCondition(conditionOpenPosition);
-    const content = this.#parseAlternation();
-
-    this.#requireGroupClose();
+    const content = this.#parseDelimitedContent();
 
     const branches =
       content.type === "alternation" ? content.branches : [content];
@@ -1138,6 +1131,15 @@ export default class RegexParser {
       codePoint >= 97 && codePoint <= 122 ? codePoint - 32 : codePoint;
 
     return upperCased ^ 0x40;
+  }
+
+  // Parses an alternation and consumes the required closing parenthesis.
+  #parseDelimitedContent() {
+    const content = this.#parseAlternation();
+
+    this.#requireGroupClose();
+
+    return content;
   }
 
   // Parses a \ddd escape starting with a non-zero digit, with the position at
@@ -1386,8 +1388,7 @@ export default class RegexParser {
     if (this.#peek() === "?") {
       node = this.#parseGroupExtension();
     } else if (this.#noAutoCapture) {
-      const content = this.#parseAlternation();
-      this.#requireGroupClose();
+      const content = this.#parseDelimitedContent();
 
       node = {type: "nonCapturingGroup", content: content};
     } else {
@@ -1413,49 +1414,29 @@ export default class RegexParser {
 
     if (char === ":") {
       this.#position++;
-      const content = this.#parseAlternation();
-      this.#requireGroupClose();
+
+      const content = this.#parseDelimitedContent();
 
       return {type: "nonCapturingGroup", content: content};
     }
 
     if (char === ">") {
       this.#position++;
-      const content = this.#parseAlternation();
-      this.#requireGroupClose();
+
+      const content = this.#parseDelimitedContent();
 
       return {type: "atomicGroup", content: content};
     }
 
     if (char === "=" || char === "!") {
       this.#position++;
-      const content = this.#parseAlternation();
-      this.#requireGroupClose();
-      this.#checkLookaroundContent(content);
-
-      return {
-        type: "lookaround",
-        direction: "ahead",
-        negated: char === "!",
-        atomic: true,
-        content: content,
-      };
+      return this.#parseLookaround("ahead", char === "!", true, null);
     }
 
     // (?* is a non-atomic positive lookahead
     if (char === "*") {
       this.#position++;
-      const content = this.#parseAlternation();
-      this.#requireGroupClose();
-      this.#checkLookaroundContent(content);
-
-      return {
-        type: "lookaround",
-        direction: "ahead",
-        negated: false,
-        atomic: false,
-        content: content,
-      };
+      return this.#parseLookaround("ahead", false, false, null);
     }
 
     if (char === "<") {
@@ -1466,18 +1447,13 @@ export default class RegexParser {
         const lookbehindStart = this.#position - 2;
 
         this.#position += 2;
-        const content = this.#parseAlternation();
-        this.#requireGroupClose();
-        this.#checkLookaroundContent(content);
-        this.#checkLookbehindLength(content, lookbehindStart);
 
-        return {
-          type: "lookaround",
-          direction: "behind",
-          negated: nextChar === "!",
-          atomic: nextChar !== "*",
-          content: content,
-        };
+        return this.#parseLookaround(
+          "behind",
+          nextChar === "!",
+          nextChar !== "*",
+          lookbehindStart,
+        );
       }
 
       this.#position++;
@@ -1645,6 +1621,26 @@ export default class RegexParser {
   }
 
   // Parses a named capturing group, with the position at the name start.
+  // Parses lookaround content up to the closing parenthesis and builds the
+  // node, validating the content and the lookbehind length rule.
+  #parseLookaround(direction, negated, atomic, start) {
+    const content = this.#parseDelimitedContent();
+
+    this.#checkLookaroundContent(content);
+
+    if (direction === "behind") {
+      this.#checkLookbehindLength(content, start);
+    }
+
+    return {
+      type: "lookaround",
+      direction: direction,
+      negated: negated,
+      atomic: atomic,
+      content: content,
+    };
+  }
+
   #parseNamedGroup(terminator) {
     const {name} = this.#parseSubpatternName(terminator);
 
@@ -1776,8 +1772,7 @@ export default class RegexParser {
       this.#position++;
       this.#applyOptionLetters(reset, set, unset);
 
-      const content = this.#parseAlternation();
-      this.#requireGroupClose();
+      const content = this.#parseDelimitedContent();
 
       return {
         type: "optionGroup",
