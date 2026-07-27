@@ -3,37 +3,54 @@
 import ERTS from "../../erts.mjs";
 import RegexParseError from "./regex_parse_error.mjs";
 
-// Alpha assertion names accepted in the (*name:...) form.
-const ALPHA_ASSERTIONS = new Set([
-  "asr",
-  "atomic",
-  "atomic_script_run",
-  "napla",
-  "naplb",
-  "negative_lookahead",
-  "negative_lookbehind",
-  "nla",
-  "nlb",
-  "pla",
-  "plb",
-  "positive_lookahead",
-  "positive_lookbehind",
-  "script_run",
-  "sr",
-]);
-
-// Lookaround alpha assertion names and the lookarounds they map to.
-const ALPHA_LOOKAROUNDS = {
-  napla: {direction: "ahead", negated: false, atomic: false},
-  naplb: {direction: "behind", negated: false, atomic: false},
-  negative_lookahead: {direction: "ahead", negated: true, atomic: true},
-  negative_lookbehind: {direction: "behind", negated: true, atomic: true},
-  nla: {direction: "ahead", negated: true, atomic: true},
-  nlb: {direction: "behind", negated: true, atomic: true},
-  pla: {direction: "ahead", negated: false, atomic: true},
-  plb: {direction: "behind", negated: false, atomic: true},
-  positive_lookahead: {direction: "ahead", negated: false, atomic: true},
-  positive_lookbehind: {direction: "behind", negated: false, atomic: true},
+// Alpha assertion names accepted in the (*name:...) form, each mapped to
+// the AST node it produces (minus the content).
+const ALPHA_ASSERTIONS = {
+  asr: {type: "scriptRun", atomic: true},
+  atomic: {type: "atomicGroup"},
+  atomic_script_run: {type: "scriptRun", atomic: true},
+  napla: {
+    type: "lookaround",
+    direction: "ahead",
+    negated: false,
+    atomic: false,
+  },
+  naplb: {
+    type: "lookaround",
+    direction: "behind",
+    negated: false,
+    atomic: false,
+  },
+  negative_lookahead: {
+    type: "lookaround",
+    direction: "ahead",
+    negated: true,
+    atomic: true,
+  },
+  negative_lookbehind: {
+    type: "lookaround",
+    direction: "behind",
+    negated: true,
+    atomic: true,
+  },
+  nla: {type: "lookaround", direction: "ahead", negated: true, atomic: true},
+  nlb: {type: "lookaround", direction: "behind", negated: true, atomic: true},
+  pla: {type: "lookaround", direction: "ahead", negated: false, atomic: true},
+  plb: {type: "lookaround", direction: "behind", negated: false, atomic: true},
+  positive_lookahead: {
+    type: "lookaround",
+    direction: "ahead",
+    negated: false,
+    atomic: true,
+  },
+  positive_lookbehind: {
+    type: "lookaround",
+    direction: "behind",
+    negated: false,
+    atomic: true,
+  },
+  script_run: {type: "scriptRun", atomic: false},
+  sr: {type: "scriptRun", atomic: false},
 };
 
 // Simple single-character escapes valid in all contexts.
@@ -508,36 +525,17 @@ export default class RegexParser {
 
     this.#requireGroupClose();
 
-    switch (word) {
-      case "atomic":
-        return {type: "atomicGroup", content: content};
+    const assertion = ALPHA_ASSERTIONS[word];
 
-      case "asr":
-      case "atomic_script_run":
-        return {type: "scriptRun", atomic: true, content: content};
+    if (assertion.type === "lookaround") {
+      this.#checkLookaroundContent(content);
 
-      case "script_run":
-      case "sr":
-        return {type: "scriptRun", atomic: false, content: content};
-
-      default: {
-        const {direction, negated, atomic} = ALPHA_LOOKAROUNDS[word];
-
-        this.#checkLookaroundContent(content);
-
-        if (direction === "behind") {
-          this.#checkLookbehindLength(content, wordStart);
-        }
-
-        return {
-          type: "lookaround",
-          direction: direction,
-          negated: negated,
-          atomic: atomic,
-          content: content,
-        };
+      if (assertion.direction === "behind") {
+        this.#checkLookbehindLength(content, wordStart);
       }
     }
+
+    return {...assertion, content: content};
   }
 
   #parseAlternation() {
@@ -2022,7 +2020,7 @@ export default class RegexParser {
     const kind = word === "" ? "mark" : VERB_KINDS[word];
 
     if (kind === undefined) {
-      if (ALPHA_ASSERTIONS.has(word) && this.#peek() === ":") {
+      if (Object.hasOwn(ALPHA_ASSERTIONS, word) && this.#peek() === ":") {
         return this.#parseAlphaAssertion(word, wordStart);
       }
 
