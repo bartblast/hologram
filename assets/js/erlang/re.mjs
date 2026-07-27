@@ -169,14 +169,7 @@ const Erlang_Re = {
       return magic.every((byte, index) => binary.bytes[index] === byte);
     };
 
-    if (
-      !Type.isTuple(exportedPattern) ||
-      exportedPattern.data.length !== 5 ||
-      !Interpreter.isStrictlyEqual(
-        exportedPattern.data[0],
-        Type.atom("re_exported_pattern"),
-      )
-    ) {
+    if (!Type.isRecordTuple(exportedPattern, "re_exported_pattern", 5)) {
       raiseNotExported();
     }
 
@@ -230,14 +223,7 @@ const Erlang_Re = {
   // Start inspect/2
   "inspect/2": (compiledPattern, item) => {
     const registryEntry =
-      Type.isTuple(compiledPattern) &&
-      compiledPattern.data.length === 5 &&
-      Interpreter.isStrictlyEqual(
-        compiledPattern.data[0],
-        Type.atom("re_pattern"),
-      )
-        ? ERTS.regexPatternRegistry.get(compiledPattern.data[4])
-        : null;
+      ERTS.regexPatternRegistry.lookupByTerm(compiledPattern);
 
     if (registryEntry === null) {
       Interpreter.raiseArgumentError(
@@ -437,12 +423,7 @@ const Erlang_Re = {
 
     // --- Pattern (validation phase) ---
 
-    const registryEntry =
-      Type.isTuple(pattern) &&
-      pattern.data.length === 5 &&
-      Interpreter.isStrictlyEqual(pattern.data[0], Type.atom("re_pattern"))
-        ? ERTS.regexPatternRegistry.get(pattern.data[4])
-        : null;
+    const registryEntry = ERTS.regexPatternRegistry.lookupByTerm(pattern);
 
     let entry = null;
     let patternBullet = null;

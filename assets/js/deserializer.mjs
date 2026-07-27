@@ -120,18 +120,16 @@ export default class Deserializer {
   // the same ref. Registration is skipped when the ref is already known,
   // which makes round-tripped client structs a no-op.
   static #maybeRegisterRegexPattern(map) {
-    const structModule = $.#regexStructField(map, "__struct__");
-
-    if (
-      structModule?.type !== "atom" ||
-      structModule.value !== "Elixir.Regex"
-    ) {
-      return;
-    }
+    if (!Type.isStruct(map, "Regex")) return;
 
     const rePattern = $.#regexStructField(map, "re_pattern");
 
-    if (rePattern?.type !== "tuple" || rePattern.data.length !== 5) return;
+    if (
+      rePattern === undefined ||
+      !Type.isRecordTuple(rePattern, "re_pattern", 5)
+    ) {
+      return;
+    }
 
     const ref = rePattern.data[4];
 

@@ -46,6 +46,52 @@ describe("RegexPatternRegistry", () => {
     });
   });
 
+  describe("lookupByTerm()", () => {
+    const rePatternTuple = (ref) =>
+      Type.tuple([
+        Type.atom("re_pattern"),
+        Type.integer(0),
+        Type.integer(0),
+        Type.integer(0),
+        ref,
+      ]);
+
+    it("returns the entry of a registered compiled pattern tuple", () => {
+      RegexPatternRegistry.put(ref1, "pattern_dummy");
+
+      assert.equal(
+        RegexPatternRegistry.lookupByTerm(rePatternTuple(ref1)),
+        "pattern_dummy",
+      );
+    });
+
+    it("returns null for a compiled pattern tuple with unknown ref", () => {
+      assert.isNull(RegexPatternRegistry.lookupByTerm(rePatternTuple(ref1)));
+    });
+
+    it("returns null for a tuple with another tag", () => {
+      const term = Type.tuple([
+        Type.atom("other_tag"),
+        Type.integer(0),
+        Type.integer(0),
+        Type.integer(0),
+        ref1,
+      ]);
+
+      assert.isNull(RegexPatternRegistry.lookupByTerm(term));
+    });
+
+    it("returns null for a tuple with another arity", () => {
+      const term = Type.tuple([Type.atom("re_pattern"), ref1]);
+
+      assert.isNull(RegexPatternRegistry.lookupByTerm(term));
+    });
+
+    it("returns null for a non-tuple term", () => {
+      assert.isNull(RegexPatternRegistry.lookupByTerm(Type.atom("abc")));
+    });
+  });
+
   describe("put()", () => {
     it("stores multiple patterns with different references", () => {
       RegexPatternRegistry.put(ref1, "pattern_dummy_1");
