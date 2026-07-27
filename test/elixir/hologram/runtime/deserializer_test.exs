@@ -79,6 +79,48 @@ defmodule Hologram.Runtime.DeserializerTest do
       assert deserialize(3, data) == ref("0.1.2.3")
     end
 
+    test "Regex struct" do
+      client_ref = %{"t" => "r", "n" => "shologram_client", "c" => 0, "i" => [3, 2, 1]}
+      client_re_pattern = %{"t" => "t", "d" => ["are_pattern", "i0", "i0", "i0", client_ref]}
+
+      data = %{
+        "t" => "m",
+        "d" => [
+          ["a__struct__", "aElixir.Regex"],
+          ["aopts", %{"t" => "l", "d" => ["acaseless"]}],
+          ["are_pattern", client_re_pattern],
+          ["asource", "b06162"]
+        ]
+      }
+
+      result = deserialize(3, data)
+
+      assert %Regex{source: "ab", opts: [:caseless]} = result
+      assert Regex.match?(result, "AB")
+    end
+
+    test "Regex struct with invalid source" do
+      client_ref = %{"t" => "r", "n" => "shologram_client", "c" => 0, "i" => [3, 2, 1]}
+      client_re_pattern = %{"t" => "t", "d" => ["are_pattern", "i0", "i0", "i0", client_ref]}
+
+      data = %{
+        "t" => "m",
+        "d" => [
+          ["a__struct__", "aElixir.Regex"],
+          ["aopts", %{"t" => "l", "d" => []}],
+          ["are_pattern", client_re_pattern],
+          # "a{2,1}"
+          ["asource", "b0617b322c317d"]
+        ]
+      }
+
+      result = deserialize(3, data)
+
+      assert %Regex{source: "a{2,1}"} = result
+      assert {:re_pattern, 0, 0, 0, unchanged_ref} = result.re_pattern
+      assert is_reference(unchanged_ref)
+    end
+
     test "tuple" do
       data = %{"t" => "t", "d" => ["i1", "f2.34"]}
       assert deserialize(3, data) == {1, 2.34}
@@ -158,6 +200,26 @@ defmodule Hologram.Runtime.DeserializerTest do
     test "reference" do
       data = "rmy_node@my_host#{@delimiter}0,1,2,3#{@delimiter}server"
       assert deserialize(2, data) == ref("0.1.2.3")
+    end
+
+    test "Regex struct" do
+      client_ref = "rmy_node@my_host#{@delimiter}0,1,2,3#{@delimiter}server"
+      client_re_pattern = %{"t" => "t", "d" => ["are_pattern", "i0", "i0", "i0", client_ref]}
+
+      data = %{
+        "t" => "m",
+        "d" => [
+          ["a__struct__", "aElixir.Regex"],
+          ["aopts", %{"t" => "l", "d" => ["acaseless"]}],
+          ["are_pattern", client_re_pattern],
+          ["asource", "b06162"]
+        ]
+      }
+
+      result = deserialize(2, data)
+
+      assert %Regex{source: "ab", opts: [:caseless]} = result
+      assert Regex.match?(result, "AB")
     end
 
     test "tuple" do
