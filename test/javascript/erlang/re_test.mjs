@@ -832,6 +832,18 @@ describe("Erlang_Re", () => {
       );
     };
 
+    // Asserts an ArgumentError with the plain "argument error" message.
+    const assertPlainRunError = (callable) =>
+      assertBoxedError(callable, "ArgumentError", "argument error");
+
+    // Asserts an ArgumentError with a positional argument message.
+    const assertRunError = (callable, index, message) =>
+      assertBoxedError(
+        callable,
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(index, message),
+      );
+
     const captureOption = (valueSpec, type) =>
       type === undefined
         ? Type.tuple([Type.atom("capture"), valueSpec])
@@ -1904,59 +1916,50 @@ describe("Erlang_Re", () => {
     });
 
     it("raises ArgumentError on non-iodata subject", () => {
-      assertBoxedError(
+      assertRunError(
         () => run(Type.atom("abc"), Type.bitstring("a")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        1,
+        "not an iodata term",
       );
     });
 
     it("raises ArgumentError on non-binary bitstring subject", () => {
-      assertBoxedError(
+      assertRunError(
         () => run(Type.bitstring([1]), Type.bitstring("a")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        1,
+        "not an iodata term",
       );
     });
 
     it("raises ArgumentError on subject code point above 255 in byte mode", () => {
-      assertBoxedError(
+      assertRunError(
         () => run(Type.list([Type.integer(256)]), Type.bitstring("a")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        1,
+        "not an iodata term",
       );
     });
 
     it("raises ArgumentError on non-iodata pattern", () => {
-      assertBoxedError(
+      assertRunError(
         () => run(Type.bitstring("x"), Type.atom("foo")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "neither an iodata term nor a compiled regular expression",
-        ),
+        2,
+        "neither an iodata term nor a compiled regular expression",
       );
     });
 
     it("raises ArgumentError on non-binary bitstring pattern", () => {
-      assertBoxedError(
+      assertRunError(
         () => run(Type.bitstring("x"), Type.bitstring([1])),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "neither an iodata term nor a compiled regular expression",
-        ),
+        2,
+        "neither an iodata term nor a compiled regular expression",
       );
     });
 
     it("raises ArgumentError on pattern code point above 255 in byte mode", () => {
-      assertBoxedError(
+      assertRunError(
         () => run(Type.bitstring("x"), Type.list([Type.integer(256)])),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "neither an iodata term nor a compiled regular expression",
-        ),
+        2,
+        "neither an iodata term nor a compiled regular expression",
       );
     });
 
@@ -1969,50 +1972,38 @@ describe("Erlang_Re", () => {
         Erlang["make_ref/0"](),
       ]);
 
-      assertBoxedError(
+      assertRunError(
         () => run(Type.bitstring("x"), rePattern),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "neither an iodata term nor a compiled regular expression",
-        ),
+        2,
+        "neither an iodata term nor a compiled regular expression",
       );
     });
 
     it("raises ArgumentError on non-chardata pattern with the unicode option", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("x"), Type.atom("foo"), [Type.atom("unicode")]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "neither an iodata term nor a compiled regular expression",
-        ),
+        2,
+        "neither an iodata term nor a compiled regular expression",
       );
     });
 
     it("raises ArgumentError on invalid raw pattern", () => {
-      assertBoxedError(
+      assertRunError(
         () => run(Type.bitstring("abc"), Type.bitstring("a{2,1}")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "could not parse regular expression\nnumbers out of order in {} quantifier on character 5",
-        ),
+        2,
+        "could not parse regular expression\nnumbers out of order in {} quantifier on character 5",
       );
     });
 
     it("raises ArgumentError with byte error position in unicode mode", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("x"), Type.bitstring("é("), [
             Type.atom("unicode"),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "could not parse regular expression\nmissing closing parenthesis on character 3",
-        ),
+        2,
+        "could not parse regular expression\nmissing closing parenthesis on character 3",
       );
     });
 
@@ -2022,34 +2013,31 @@ describe("Erlang_Re", () => {
         Bitstring.fromBytes([255]),
       ]);
 
-      assertBoxedError(
+      assertRunError(
         () => run(Type.bitstring("x"), pattern),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "could not parse regular expression\nUTF-8 error: illegal byte (0xfe or 0xff) on character 6",
-        ),
+        2,
+        "could not parse regular expression\nUTF-8 error: illegal byte (0xfe or 0xff) on character 6",
       );
     });
 
     it("raises ArgumentError on invalid option", () => {
-      assertBoxedError(
+      assertRunError(
         () => run(Type.bitstring("x"), Type.bitstring("a"), [Type.atom("bad")]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
     it("raises ArgumentError on non-list options", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           Erlang_Re["run/3"](
             Type.bitstring("x"),
             Type.bitstring("a"),
             Type.atom("bad"),
           ),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
@@ -2059,11 +2047,11 @@ describe("Erlang_Re", () => {
         Type.atom("bad"),
       ]);
 
-      assertBoxedError(
+      assertRunError(
         () =>
           Erlang_Re["run/3"](Type.bitstring("x"), Type.bitstring("a"), options),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
@@ -2134,130 +2122,96 @@ describe("Erlang_Re", () => {
     });
 
     it("subject error wins over compile option error with a compiled pattern", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.atom("abc"), compilePattern("b"), [Type.atom("caseless")]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        1,
+        "not an iodata term",
       );
     });
 
     it("options error wins over unicode conversion errors", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("x"), Bitstring.fromBytes([255]), [
             Type.atom("unicode"),
             Type.atom("bad"),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
     it("raises plain ArgumentError on compile option with a compiled pattern", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("x"), compilePattern("b"), [
-            Type.atom("caseless"),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("x"), compilePattern("b"), [Type.atom("caseless")]),
       );
     });
 
     it("raises plain ArgumentError on unicode option with a compiled pattern", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("x"), compilePattern("b"), [Type.atom("unicode")]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("x"), compilePattern("b"), [Type.atom("unicode")]),
       );
     });
 
     it("raises plain ArgumentError on invalid UTF-8 pattern with the unicode option", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("x"), Bitstring.fromBytes([255]), [
-            Type.atom("unicode"),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("x"), Bitstring.fromBytes([255]), [
+          Type.atom("unicode"),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on invalid pattern char data with the unicode option", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("x"), Type.list([Type.atom("bad")]), [
-            Type.atom("unicode"),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("x"), Type.list([Type.atom("bad")]), [
+          Type.atom("unicode"),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on surrogate pattern code point with the unicode option", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("x"), Type.list([Type.integer(0xd800)]), [
-            Type.atom("unicode"),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("x"), Type.list([Type.integer(0xd800)]), [
+          Type.atom("unicode"),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on never_utf and unicode option clash", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("x"), Type.bitstring("a"), [
-            Type.atom("unicode"),
-            Type.atom("never_utf"),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("x"), Type.bitstring("a"), [
+          Type.atom("unicode"),
+          Type.atom("never_utf"),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on UTF pattern verb with never_utf option", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("x"), Type.bitstring("(*UTF)a"), [
-            Type.atom("never_utf"),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("x"), Type.bitstring("(*UTF)a"), [
+          Type.atom("never_utf"),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on bad subject with parse error and unicode option", () => {
-      assertBoxedError(
-        () =>
-          run(Type.atom("abc"), Type.bitstring("a{2,1}"), [
-            Type.atom("unicode"),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.atom("abc"), Type.bitstring("a{2,1}"), [Type.atom("unicode")]),
       );
     });
 
     it("raises plain ArgumentError on non-chardata subject with the unicode option", () => {
-      assertBoxedError(
-        () =>
-          run(Type.atom("abc"), Type.bitstring("a"), [Type.atom("unicode")]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.atom("abc"), Type.bitstring("a"), [Type.atom("unicode")]),
       );
     });
 
     it("raises plain ArgumentError on surrogate subject code point with the unicode option", () => {
-      assertBoxedError(
-        () =>
-          run(Type.list([Type.integer(0xd800)]), Type.bitstring("a"), [
-            Type.atom("unicode"),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.list([Type.integer(0xd800)]), Type.bitstring("a"), [
+          Type.atom("unicode"),
+        ]),
       );
     });
 
@@ -2266,184 +2220,131 @@ describe("Erlang_Re", () => {
 
       const subject = Bitstring.fromBytes([255, 97, 98]);
 
-      assertBoxedError(
-        () => run(subject, compiled),
-        "ArgumentError",
-        "argument error",
-      );
+      assertPlainRunError(() => run(subject, compiled));
     });
 
     it("raises plain ArgumentError on non-iodata subject with a unicode compiled pattern", () => {
       const compiled = compilePattern("é", [Type.atom("unicode")]);
 
-      assertBoxedError(
-        () => run(Type.atom("abc"), compiled),
-        "ArgumentError",
-        "argument error",
-      );
+      assertPlainRunError(() => run(Type.atom("abc"), compiled));
     });
 
     it("raises plain ArgumentError on invalid UTF-8 subject with a UTF verb pattern", () => {
-      assertBoxedError(
-        () => run(Bitstring.fromBytes([255]), Type.bitstring("(*UTF)é")),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Bitstring.fromBytes([255]), Type.bitstring("(*UTF)é")),
       );
     });
 
     it("raises plain ArgumentError on invalid capture spec atom", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a"), Type.bitstring("a"), [
-            captureOption(Type.atom("bogus")),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a"), Type.bitstring("a"), [
+          captureOption(Type.atom("bogus")),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on non-list capture spec", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a"), Type.bitstring("a"), [
-            captureOption(Type.integer(1)),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a"), Type.bitstring("a"), [
+          captureOption(Type.integer(1)),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on improper capture spec list", () => {
       const valueSpec = Type.improperList([Type.integer(0), Type.integer(1)]);
 
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a"), Type.bitstring("a"), [
-            captureOption(valueSpec),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a"), Type.bitstring("a"), [
+          captureOption(valueSpec),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on invalid capture type", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a"), Type.bitstring("a"), [
-            captureOption(Type.atom("all"), "bogus"),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a"), Type.bitstring("a"), [
+          captureOption(Type.atom("all"), "bogus"),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on non-atom capture type", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a"), Type.bitstring("a"), [
-            Type.tuple([
-              Type.atom("capture"),
-              Type.atom("all"),
-              Type.integer(5),
-            ]),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a"), Type.bitstring("a"), [
+          Type.tuple([Type.atom("capture"), Type.atom("all"), Type.integer(5)]),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on invalid capture type with the none spec", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a"), Type.bitstring("a"), [
-            captureOption(Type.atom("none"), "bogus"),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a"), Type.bitstring("a"), [
+          captureOption(Type.atom("none"), "bogus"),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on negative group index", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a"), Type.bitstring("a"), [
-            captureOption(Type.list([Type.integer(-1)])),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a"), Type.bitstring("a"), [
+          captureOption(Type.list([Type.integer(-1)])),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on group index above the 32-bit range", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a"), Type.bitstring("a"), [
-            captureOption(Type.list([Type.integer(2_147_483_648n)])),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a"), Type.bitstring("a"), [
+          captureOption(Type.list([Type.integer(2_147_483_648n)])),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on float capture spec element", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a"), Type.bitstring("a"), [
-            captureOption(Type.list([Type.float(1.5)])),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a"), Type.bitstring("a"), [
+          captureOption(Type.list([Type.float(1.5)])),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on non-binary bitstring capture spec element", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a"), Type.bitstring("a"), [
-            captureOption(Type.list([Type.bitstring([1])])),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a"), Type.bitstring("a"), [
+          captureOption(Type.list([Type.bitstring([1])])),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on invalid code point in a name", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a"), Type.bitstring("a"), [
-            captureOption(Type.list([Type.list([Type.integer(99_999_999)])])),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a"), Type.bitstring("a"), [
+          captureOption(Type.list([Type.list([Type.integer(99_999_999)])])),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on improper name charlist", () => {
       const name = Type.improperList([Type.integer(102), Type.integer(111)]);
 
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a"), Type.bitstring("a"), [
-            captureOption(Type.list([name])),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a"), Type.bitstring("a"), [
+          captureOption(Type.list([name])),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on invalid capture spec without a match", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("z"), Type.bitstring("a"), [
-            captureOption(Type.atom("bogus")),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("z"), Type.bitstring("a"), [
+          captureOption(Type.atom("bogus")),
+        ]),
       );
     });
 
     it("raises ArgumentError on capture option with extra elements", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("a"), Type.bitstring("a"), [
             Type.tuple([
@@ -2453,182 +2354,162 @@ describe("Erlang_Re", () => {
               Type.atom("extra"),
             ]),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
     it("subject error wins over capture spec error", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.atom("x"), Type.bitstring("a"), [
             captureOption(Type.atom("bogus")),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        1,
+        "not an iodata term",
       );
     });
 
     it("unicode pattern error wins over capture spec error", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("x"), Type.bitstring("("), [
             Type.atom("unicode"),
             captureOption(Type.atom("bogus")),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "could not parse regular expression\nmissing closing parenthesis on character 1",
-        ),
+        2,
+        "could not parse regular expression\nmissing closing parenthesis on character 1",
       );
     });
 
     it("raises ArgumentError on negative offset", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("ab"), Type.bitstring("a"), [offsetOption(-1)]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
     it("raises ArgumentError on non-integer offset", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("ab"), Type.bitstring("a"), [
             Type.tuple([Type.atom("offset"), Type.atom("x")]),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
     it("raises ArgumentError on offset above the 32-bit range", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("ab"), Type.bitstring("a"), [
             offsetOption(2_147_483_648n),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
     it("raises ArgumentError on offset tuple with extra elements", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("ab"), Type.bitstring("a"), [
             Type.tuple([Type.atom("offset"), Type.integer(1), Type.integer(2)]),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
     it("raises plain ArgumentError on offset beyond the subject", () => {
-      assertBoxedError(
-        () => run(Type.bitstring("ab"), Type.bitstring("a"), [offsetOption(3)]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("ab"), Type.bitstring("a"), [offsetOption(3)]),
       );
     });
 
     it("raises plain ArgumentError on maximum offset beyond the subject", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("ab"), Type.bitstring("a"), [
-            offsetOption(2_147_483_647),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("ab"), Type.bitstring("a"), [
+          offsetOption(2_147_483_647),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on offset inside a character", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("éb"), Type.bitstring("b"), [
-            Type.atom("unicode"),
-            offsetOption(1),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("éb"), Type.bitstring("b"), [
+          Type.atom("unicode"),
+          offsetOption(1),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on firstline with a compiled pattern", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a\nb"), compilePattern("b"), [
-            Type.atom("firstline"),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a\nb"), compilePattern("b"), [
+          Type.atom("firstline"),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on offset inside a character with global", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("éb"), Type.bitstring("b"), [
-            Type.atom("global"),
-            Type.atom("unicode"),
-            offsetOption(1),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("éb"), Type.bitstring("b"), [
+          Type.atom("global"),
+          Type.atom("unicode"),
+          offsetOption(1),
+        ]),
       );
     });
 
     it("capture spec error wins over global nomatch", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("ab"), Type.bitstring("a"), [
-            Type.atom("global"),
-            offsetOption(5),
-            captureOption(Type.atom("bogus")),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("ab"), Type.bitstring("a"), [
+          Type.atom("global"),
+          offsetOption(5),
+          captureOption(Type.atom("bogus")),
+        ]),
       );
     });
 
     it("raises ArgumentError on negative match limit", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("a"), Type.bitstring("a"), [
             limitOption("match_limit", -1),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
     it("raises ArgumentError on non-integer match limit", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("a"), Type.bitstring("a"), [
             Type.tuple([Type.atom("match_limit"), Type.atom("x")]),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
     it("raises ArgumentError on match limit above the 32-bit range", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("a"), Type.bitstring("a"), [
             limitOption("match_limit_recursion", 2_147_483_648n),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
     it("raises ArgumentError on match limit tuple with extra elements", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("a"), Type.bitstring("a"), [
             Type.tuple([
@@ -2637,41 +2518,35 @@ describe("Erlang_Re", () => {
               Type.integer(2),
             ]),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
 
     it("raises plain ArgumentError on newline option with a compiled pattern", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a\rb"), compilePattern("a.b"), [
-            Type.tuple([Type.atom("newline"), Type.atom("cr")]),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a\rb"), compilePattern("a.b"), [
+          Type.tuple([Type.atom("newline"), Type.atom("cr")]),
+        ]),
       );
     });
 
     it("raises plain ArgumentError on bsr option with a compiled pattern", () => {
-      assertBoxedError(
-        () =>
-          run(Type.bitstring("a\vb"), compilePattern("a\\Rb"), [
-            Type.atom("bsr_anycrlf"),
-          ]),
-        "ArgumentError",
-        "argument error",
+      assertPlainRunError(() =>
+        run(Type.bitstring("a\vb"), compilePattern("a\\Rb"), [
+          Type.atom("bsr_anycrlf"),
+        ]),
       );
     });
 
     it("raises ArgumentError on invalid newline type with a compiled pattern", () => {
-      assertBoxedError(
+      assertRunError(
         () =>
           run(Type.bitstring("a"), compilePattern("a"), [
             Type.tuple([Type.atom("newline"), Type.atom("bogus")]),
           ]),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        3,
+        "invalid options",
       );
     });
   });
