@@ -5983,6 +5983,30 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "system_info/1" do
+    test "returns the endian" do
+      assert :erlang.system_info(:endian) == :little
+    end
+
+    # Note: JS test is named "returns the emulated OTP release"
+    # The client port hardcodes the newest emulated OTP release, so this test
+    # fails when the server runtime gets ahead of it - bump the release in the
+    # :erlang.system_info/1 port together with this assertion.
+    test "returns the OTP release" do
+      result = :erlang.system_info(:otp_release)
+
+      assert is_list(result)
+      assert Enum.all?(result, &(&1 in ?0..?9))
+      assert List.to_integer(result) <= 29
+    end
+
+    test "raises ArgumentError on non-atom item" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid system info item"),
+                   {:erlang, :system_info, [123]}
+    end
+  end
+
   # Simplified tests since JS port delegates to :os.system_time/0
   describe "system_time/0" do
     # Note: JS test is named "delegates to :os.system_time/0"

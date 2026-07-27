@@ -10519,6 +10519,30 @@ describe("Erlang", () => {
     });
   });
 
+  describe("system_info/1", () => {
+    const system_info = Erlang["system_info/1"];
+
+    it("returns the endian", () => {
+      const result = system_info(Type.atom("endian"));
+
+      assert.deepEqual(result, Type.atom("little"));
+    });
+
+    it("returns the emulated OTP release", () => {
+      const result = system_info(Type.atom("otp_release"));
+
+      assert.deepEqual(result, Type.charlist("29"));
+    });
+
+    it("raises ArgumentError on non-atom item", () => {
+      assertBoxedError(
+        () => system_info(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid system info item"),
+      );
+    });
+  });
+
   // Simplified tests since JS port delegates to :os.system_time/0
   describe("system_time/0", () => {
     const system_time = Erlang["system_time/0"];
