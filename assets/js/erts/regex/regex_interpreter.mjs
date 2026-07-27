@@ -409,6 +409,17 @@ export default class RegexInterpreter {
     );
   }
 
+  // Returns true for verb signals that a lookaround or subroutine boundary
+  // confines: the attempt inside the boundary just fails.
+  static #isConfinableVerbSignal(signal) {
+    return (
+      signal instanceof CommitSignal ||
+      signal instanceof PruneSignal ||
+      signal instanceof SkipSignal ||
+      signal instanceof ThenSignal
+    );
+  }
+
   static #matchAnchor(node, state, position, continuation) {
     let holds;
 
@@ -549,14 +560,7 @@ export default class RegexInterpreter {
         if (signal instanceof AcceptSignal)
           return {accepted: true, found: true};
 
-        if (
-          signal instanceof CommitSignal ||
-          signal instanceof PruneSignal ||
-          signal instanceof SkipSignal ||
-          signal instanceof ThenSignal
-        ) {
-          return {found: false};
-        }
+        if ($.#isConfinableVerbSignal(signal)) return {found: false};
 
         throw signal;
       }
@@ -868,12 +872,7 @@ export default class RegexInterpreter {
           // successfully at its position, the other verbs make it fail
           if (signal instanceof AcceptSignal) {
             matched = callContinuation(signal.position);
-          } else if (
-            signal instanceof CommitSignal ||
-            signal instanceof PruneSignal ||
-            signal instanceof SkipSignal ||
-            signal instanceof ThenSignal
-          ) {
+          } else if ($.#isConfinableVerbSignal(signal)) {
             matched = false;
           } else {
             throw signal;
