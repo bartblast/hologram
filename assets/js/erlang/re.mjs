@@ -57,12 +57,11 @@ const Erlang_Re = {
         patternIsIodata = false;
       }
 
-      const patternBullet = patternIsIodata
-        ? ""
-        : "  * 1st argument: not an iodata term\n";
-
       Interpreter.raiseArgumentError(
-        `errors were found at the given arguments:\n\n${patternBullet}  * 2nd argument: invalid options\n`,
+        Interpreter.buildMultiArgumentErrorMsg([
+          [1, patternIsIodata ? null : "not an iodata term"],
+          [2, "invalid options"],
+        ]),
       );
     }
 
@@ -503,14 +502,12 @@ const Erlang_Re = {
     // --- Combined validation errors ---
 
     if (subjectBullet !== null || patternBullet !== null || !optionsValid) {
-      const bullets = [
-        subjectBullet === null ? "" : `  * 1st argument: ${subjectBullet}\n`,
-        patternBullet === null ? "" : `  * 2nd argument: ${patternBullet}\n`,
-        optionsValid ? "" : "  * 3rd argument: invalid options\n",
-      ].join("");
-
       Interpreter.raiseArgumentError(
-        `errors were found at the given arguments:\n\n${bullets}`,
+        Interpreter.buildMultiArgumentErrorMsg([
+          [1, subjectBullet],
+          [2, patternBullet],
+          [3, optionsValid ? null : "invalid options"],
+        ]),
       );
     }
 

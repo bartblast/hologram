@@ -48,11 +48,8 @@ export default class Interpreter {
     }
   }
 
-  // Keep this message in sync with build_argument_error_msg in Hologram.Commons.TestUtils.
   static buildArgumentErrorMsg(argumentIndex, message) {
-    const ordinal = Utils.ordinal(argumentIndex);
-
-    return `errors were found at the given arguments:\n\n  * ${ordinal} argument: ${message}\n`;
+    return $.buildMultiArgumentErrorMsg([[argumentIndex, message]]);
   }
 
   // Keep this message in sync with build_bad_function_error_msg in Hologram.Commons.TestUtils.
@@ -125,6 +122,21 @@ export default class Interpreter {
       Interpreter.inspect(right) +
       "\n"
     );
+  }
+
+  // Builds the message for errors at multiple arguments from [index, message]
+  // entries. Entries with a nullish message are skipped.
+  // Keep this message in sync with build_multi_argument_error_msg in Hologram.Commons.TestUtils.
+  static buildMultiArgumentErrorMsg(entries) {
+    const bullets = entries
+      .filter(([_index, message]) => message != null)
+      .map(
+        ([index, message]) =>
+          `  * ${Utils.ordinal(index)} argument: ${message}\n`,
+      )
+      .join("");
+
+    return `errors were found at the given arguments:\n\n${bullets}`;
   }
 
   // Hologram-specific, no server-side equivalent.

@@ -501,7 +501,10 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compileWithOpts(Type.atom("abc"), [Type.atom("bad")]),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 1st argument: not an iodata term\n  * 2nd argument: invalid options\n",
+        Interpreter.buildMultiArgumentErrorMsg([
+          [1, "not an iodata term"],
+          [2, "invalid options"],
+        ]),
       );
     });
   });
@@ -1981,7 +1984,10 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => run(Type.atom("a"), Type.atom("b")),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 1st argument: not an iodata term\n  * 2nd argument: neither an iodata term nor a compiled regular expression\n",
+        Interpreter.buildMultiArgumentErrorMsg([
+          [1, "not an iodata term"],
+          [2, "neither an iodata term nor a compiled regular expression"],
+        ]),
       );
     });
 
@@ -1992,7 +1998,13 @@ describe("Erlang_Re", () => {
             Type.atom("bad"),
           ]),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 2nd argument: could not parse regular expression\nnumbers out of order in {} quantifier on character 5\n  * 3rd argument: invalid options\n",
+        Interpreter.buildMultiArgumentErrorMsg([
+          [
+            2,
+            "could not parse regular expression\nnumbers out of order in {} quantifier on character 5",
+          ],
+          [3, "invalid options"],
+        ]),
       );
     });
 
@@ -2000,7 +2012,10 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => run(Type.atom("a"), Type.bitstring("ok"), [Type.atom("bad")]),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 1st argument: not an iodata term\n  * 3rd argument: invalid options\n",
+        Interpreter.buildMultiArgumentErrorMsg([
+          [1, "not an iodata term"],
+          [3, "invalid options"],
+        ]),
       );
     });
 
@@ -2008,7 +2023,11 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => run(Type.atom("a"), Type.atom("b"), [Type.atom("bad")]),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 1st argument: not an iodata term\n  * 2nd argument: neither an iodata term nor a compiled regular expression\n  * 3rd argument: invalid options\n",
+        Interpreter.buildMultiArgumentErrorMsg([
+          [1, "not an iodata term"],
+          [2, "neither an iodata term nor a compiled regular expression"],
+          [3, "invalid options"],
+        ]),
       );
     });
 
@@ -2020,7 +2039,10 @@ describe("Erlang_Re", () => {
             Type.atom("bad"),
           ]),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 2nd argument: neither an iodata term nor a compiled regular expression\n  * 3rd argument: invalid options\n",
+        Interpreter.buildMultiArgumentErrorMsg([
+          [2, "neither an iodata term nor a compiled regular expression"],
+          [3, "invalid options"],
+        ]),
       );
     });
 

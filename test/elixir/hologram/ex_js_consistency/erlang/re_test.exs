@@ -269,12 +269,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
     end
 
     test "raises ArgumentError with both bullets on non-iodata pattern and invalid options" do
-      expected_msg = """
-      errors were found at the given arguments:
-
-        * 1st argument: not an iodata term
-        * 2nd argument: invalid options
-      """
+      expected_msg =
+        build_multi_argument_error_msg([
+          {1, "not an iodata term"},
+          {2, "invalid options"}
+        ])
 
       assert_error ArgumentError, expected_msg, fn -> :re.compile(:abc, [:bad]) end
     end
@@ -999,58 +998,53 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
     end
 
     test "combines subject and pattern errors" do
-      expected_msg = """
-      errors were found at the given arguments:
-
-        * 1st argument: not an iodata term
-        * 2nd argument: neither an iodata term nor a compiled regular expression
-      """
+      expected_msg =
+        build_multi_argument_error_msg([
+          {1, "not an iodata term"},
+          {2, "neither an iodata term nor a compiled regular expression"}
+        ])
 
       assert_error ArgumentError, expected_msg, fn -> :re.run(:a, :b, []) end
     end
 
     test "combines pattern and options errors" do
-      expected_msg = """
-      errors were found at the given arguments:
-
-        * 2nd argument: could not parse regular expression
-      numbers out of order in {} quantifier on character 5
-        * 3rd argument: invalid options
-      """
+      expected_msg =
+        build_multi_argument_error_msg([
+          {2,
+           "could not parse regular expression\nnumbers out of order in {} quantifier on character 5"},
+          {3, "invalid options"}
+        ])
 
       assert_error ArgumentError, expected_msg, fn -> :re.run("x", "a{2,1}", [:bad]) end
     end
 
     test "combines subject and options errors" do
-      expected_msg = """
-      errors were found at the given arguments:
-
-        * 1st argument: not an iodata term
-        * 3rd argument: invalid options
-      """
+      expected_msg =
+        build_multi_argument_error_msg([
+          {1, "not an iodata term"},
+          {3, "invalid options"}
+        ])
 
       assert_error ArgumentError, expected_msg, fn -> :re.run(:a, "ok", [:bad]) end
     end
 
     test "combines subject, pattern and options errors" do
-      expected_msg = """
-      errors were found at the given arguments:
-
-        * 1st argument: not an iodata term
-        * 2nd argument: neither an iodata term nor a compiled regular expression
-        * 3rd argument: invalid options
-      """
+      expected_msg =
+        build_multi_argument_error_msg([
+          {1, "not an iodata term"},
+          {2, "neither an iodata term nor a compiled regular expression"},
+          {3, "invalid options"}
+        ])
 
       assert_error ArgumentError, expected_msg, fn -> :re.run(:a, :b, [:bad]) end
     end
 
     test "combines pattern shape and options errors with the unicode option" do
-      expected_msg = """
-      errors were found at the given arguments:
-
-        * 2nd argument: neither an iodata term nor a compiled regular expression
-        * 3rd argument: invalid options
-      """
+      expected_msg =
+        build_multi_argument_error_msg([
+          {2, "neither an iodata term nor a compiled regular expression"},
+          {3, "invalid options"}
+        ])
 
       assert_error ArgumentError, expected_msg, fn ->
         :re.run("x", :foo, [:unicode, :bad])

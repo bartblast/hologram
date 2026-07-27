@@ -137,6 +137,20 @@ defmodule Hologram.Commons.TestUtilsTest do
     assert result == expected
   end
 
+  test "build_multi_argument_error_msg/1" do
+    result = build_multi_argument_error_msg([{1, "my blame 1"}, {2, "my blame 2"}])
+
+    expected =
+      normalize_newlines("""
+      errors were found at the given arguments:
+
+        * 1st argument: my blame 1
+        * 2nd argument: my blame 2
+      """)
+
+    assert result == expected
+  end
+
   describe "build_undefined_function_error_msg/3" do
     # no similar functions / module is available
     test "basic case" do

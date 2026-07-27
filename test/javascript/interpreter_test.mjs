@@ -997,6 +997,32 @@ describe("Interpreter", () => {
     assert.equal(result, expected);
   });
 
+  describe("buildMultiArgumentErrorMsg()", () => {
+    it("builds a bullet per entry", () => {
+      const result = Interpreter.buildMultiArgumentErrorMsg([
+        [1, "my message 1"],
+        [2, "my message 2"],
+      ]);
+
+      const expected =
+        "errors were found at the given arguments:\n\n  * 1st argument: my message 1\n  * 2nd argument: my message 2\n";
+
+      assert.equal(result, expected);
+    });
+
+    it("skips entries with a nullish message", () => {
+      const result = Interpreter.buildMultiArgumentErrorMsg([
+        [1, null],
+        [2, "my message"],
+      ]);
+
+      const expected =
+        "errors were found at the given arguments:\n\n  * 2nd argument: my message\n";
+
+      assert.equal(result, expected);
+    });
+  });
+
   it("buildTooBigOutputErrorMsg()", () => {
     const result = Interpreter.buildTooBigOutputErrorMsg(
       "{MyModule, :my_fun, 3}",
