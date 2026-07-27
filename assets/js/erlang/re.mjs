@@ -294,8 +294,8 @@ const Erlang_Re = {
     };
 
     // Run-only option atoms not yet supported.
-    // TODO: implement the global and report_errors run options.
-    const RUN_ONLY_ATOMS = new Set(["global", "report_errors"]);
+    // TODO: implement the report_errors run option.
+    const RUN_ONLY_ATOMS = new Set(["report_errors"]);
 
     // Run-only tuple option tags not yet supported.
     // TODO: implement the match_limit and match_limit_recursion run options.
@@ -332,6 +332,7 @@ const Erlang_Re = {
 
     let captureOption = null;
     let compileOnlyOptionUsed = false;
+    let isGlobal = false;
     let notImplementedOption = null;
     let offsetOption = null;
     let optionsValid = Type.isProperList(options);
@@ -339,6 +340,11 @@ const Erlang_Re = {
 
     if (optionsValid) {
       for (const option of options.data) {
+        if (Type.isAtom(option) && option.value === "global") {
+          isGlobal = true;
+          continue;
+        }
+
         if (Type.isAtom(option) && Object.hasOwn(RUN_FLAG_KEYS, option.value)) {
           runFlags[RUN_FLAG_KEYS[option.value]] = true;
           continue;
@@ -641,6 +647,7 @@ const Erlang_Re = {
     // --- Start position ---
 
     // The offset is a byte offset into the subject
+    let offsetBeyondSubject = false;
     let startPosition = 0;
 
     if (offsetOption !== null) {
@@ -650,24 +657,39 @@ const Erlang_Re = {
           offsetOption,
         );
 
-        // The offset must land on a character boundary within the subject
         if (
           ERTS.regex.utf16IndexToByteOffset(subjectText, startPosition) !==
           offsetOption
         ) {
-          raiseArgumentError();
+          const subjectByteLength = ERTS.regex.utf16IndexToByteOffset(
+            subjectText,
+            subjectText.length,
+          );
+
+          // An offset inside a character raises even in a global run
+          if (offsetOption > subjectByteLength) {
+            offsetBeyondSubject = true;
+          } else {
+            raiseArgumentError();
+          }
         }
       } else {
         // In byte mode JS string indices are byte offsets already
-        if (offsetOption > subjectText.length) raiseArgumentError();
-
+        offsetBeyondSubject = offsetOption > subjectText.length;
         startPosition = offsetOption;
+      }
+
+      // A global run treats an offset beyond the subject as no match found
+      if (offsetBeyondSubject) {
+        if (isGlobal) return Type.atom("nomatch");
+
+        raiseArgumentError();
       }
     }
 
     // --- Match ---
 
-    const matchResult = ERTS.regex.match(entry.compiled, subjectText, {
+    const engineRunOpts = {
       anchored: entry.anchored || acc.anchored,
       firstline: entry.firstline,
       notbol: runFlags.notbol,
@@ -675,50 +697,52 @@ const Erlang_Re = {
       notempty: runFlags.notempty,
       notemptyAtStart: runFlags.notemptyAtStart,
       startPosition: startPosition,
-    });
+    };
 
-    if (matchResult === null) return Type.atom("nomatch");
+    let matchResults;
+
+    if (isGlobal) {
+      matchResults = ERTS.regex.matchGlobal(
+        entry.compiled,
+        subjectText,
+        engineRunOpts,
+      );
+    } else {
+      const matchResult = ERTS.regex.match(
+        entry.compiled,
+        subjectText,
+        engineRunOpts,
+      );
+
+      matchResults = matchResult === null ? [] : [matchResult];
+    }
+
+    if (matchResults.length === 0) return Type.atom("nomatch");
 
     // --- Captures ---
 
     const groupMap = entry.compiled.groupMap;
 
+    // The none spec, an empty capture list and all_names without named
+    // groups yield a bare :match
+    if (
+      captureKind === "none" ||
+      (captureKind === "explicit" && captureTargets.length === 0) ||
+      (captureKind === "all_names" && groupMap.names.size === 0)
+    ) {
+      return Type.atom("match");
+    }
+
+    // PCRE2 stores the name table sorted by the byte order of the names
+    const sortedNames =
+      captureKind === "all_names"
+        ? [...groupMap.names.keys()].sort(ERTS.regex.compareByUtf8Bytes)
+        : null;
+
     // In byte mode JS string indices are byte offsets already
     const toByteOffset = entry.unicode
       ? (index) => ERTS.regex.utf16IndexToByteOffset(subjectText, index)
       : (index) => index;
-
-    // Returns {start, end} in JS string indices, or null when the group is
-    // unset or doesn't exist
-    const captureForNumber = (number) => {
-      if (number === 0) {
-        return {start: matchResult.start, end: matchResult.end};
-      }
-
-      if (number > groupMap.count) return null;
-
-      return matchResult.captures[number];
-    };
-
-    // With dupnames a name maps to multiple group numbers, of which the
-    // first set one wins
-    const captureForName = (name) => {
-      const numbers = groupMap.names.get(name);
-
-      if (numbers === undefined) return null;
-
-      for (const number of numbers) {
-        const capture = captureForNumber(number);
-        if (capture !== null) return capture;
-      }
-
-      return null;
-    };
-
-    const captureForTarget = (target) =>
-      "number" in target
-        ? captureForNumber(target.number)
-        : captureForName(target.name);
 
     const buildValue = (capture) => {
       switch (captureType) {
@@ -755,53 +779,85 @@ const Erlang_Re = {
       }
     };
 
-    const buildMatchTuple = (captures) =>
-      Type.tuple([Type.atom("match"), Type.list(captures.map(buildValue))]);
-
-    switch (captureKind) {
-      case "all":
-      case "all_but_first": {
-        const captures = [];
-
-        for (
-          let number = captureKind === "all" ? 0 : 1;
-          number <= groupMap.count;
-          number++
-        ) {
-          captures.push(captureForNumber(number));
+    // Returns the boxed capture list of a single match result
+    const shapeMatch = (matchResult) => {
+      // Returns {start, end} in JS string indices, or null when the group
+      // is unset or doesn't exist
+      const captureForNumber = (number) => {
+        if (number === 0) {
+          return {start: matchResult.start, end: matchResult.end};
         }
 
-        // Trailing unset groups are not reported
-        while (captures.length > 0 && captures[captures.length - 1] === null) {
-          captures.pop();
+        if (number > groupMap.count) return null;
+
+        return matchResult.captures[number];
+      };
+
+      // With dupnames a name maps to multiple group numbers, of which the
+      // first set one wins
+      const captureForName = (name) => {
+        const numbers = groupMap.names.get(name);
+
+        if (numbers === undefined) return null;
+
+        for (const number of numbers) {
+          const capture = captureForNumber(number);
+          if (capture !== null) return capture;
         }
 
-        return buildMatchTuple(captures);
+        return null;
+      };
+
+      const captureForTarget = (target) =>
+        "number" in target
+          ? captureForNumber(target.number)
+          : captureForName(target.name);
+
+      let captures;
+
+      switch (captureKind) {
+        case "all":
+        case "all_but_first":
+          captures = [];
+
+          for (
+            let number = captureKind === "all" ? 0 : 1;
+            number <= groupMap.count;
+            number++
+          ) {
+            captures.push(captureForNumber(number));
+          }
+
+          // Trailing unset groups are not reported
+          while (
+            captures.length > 0 &&
+            captures[captures.length - 1] === null
+          ) {
+            captures.pop();
+          }
+          break;
+
+        case "all_names":
+          captures = sortedNames.map(captureForName);
+          break;
+
+        case "explicit":
+          captures = captureTargets.map(captureForTarget);
+          break;
+
+        case "first":
+          captures = [captureForNumber(0)];
+          break;
       }
 
-      case "all_names": {
-        // PCRE2 stores the name table sorted by the byte order of the names
-        const names = [...groupMap.names.keys()].sort(
-          ERTS.regex.compareByUtf8Bytes,
-        );
+      return Type.list(captures.map(buildValue));
+    };
 
-        if (names.length === 0) return Type.atom("match");
+    const captured = isGlobal
+      ? Type.list(matchResults.map(shapeMatch))
+      : shapeMatch(matchResults[0]);
 
-        return buildMatchTuple(names.map(captureForName));
-      }
-
-      case "explicit": {
-        if (captureTargets.length === 0) return Type.atom("match");
-
-        return buildMatchTuple(captureTargets.map(captureForTarget));
-      }
-
-      case "first":
-        return buildMatchTuple([captureForNumber(0)]);
-
-      case "none":
-        return Type.atom("match");
-    }
+    return Type.tuple([Type.atom("match"), captured]);
   },
   // End run/3
   // Deps: [:erlang.iolist_to_binary/1]

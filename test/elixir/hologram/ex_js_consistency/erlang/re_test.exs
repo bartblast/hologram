@@ -775,6 +775,86 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
         assert :re.run("a\nb", compiled, []) == :nomatch
       end
 
+      test "global collects successive matches" do
+        assert :re.run("abab", "a", [:global]) == {:match, [[{0, 1}], [{2, 1}]]}
+      end
+
+      test "global collects captures per match" do
+        assert :re.run("abab", "a(b)", [:global]) ==
+                 {:match, [[{0, 2}, {1, 1}], [{2, 2}, {3, 1}]]}
+      end
+
+      test "global truncates trailing unset groups per match" do
+        assert :re.run("aba", "a(b)?", [:global]) == {:match, [[{0, 2}, {1, 1}], [{2, 1}]]}
+      end
+
+      test "global advances past an empty match" do
+        assert :re.run("ab", "a*", [:global]) == {:match, [[{0, 1}], [{1, 0}], [{2, 0}]]}
+      end
+
+      test "global reports a successful anchored retry after an empty match" do
+        assert :re.run("a", "|a", [:global]) == {:match, [[{0, 0}], [{0, 1}], [{1, 0}]]}
+      end
+
+      test "global matches once on an empty subject" do
+        assert :re.run("", "", [:global]) == {:match, [[{0, 0}]]}
+      end
+
+      test "global continues at the previous match end" do
+        assert :re.run("abab", "a\\Kb", [:global]) == {:match, [[{1, 1}], [{3, 1}]]}
+      end
+
+      test "global advances over a CRLF pair as one newline" do
+        assert :re.run("\r\n", "", [:global, {:newline, :crlf}]) == {:match, [[{0, 0}], [{2, 0}]]}
+      end
+
+      test "global advances over a whole character in unicode mode" do
+        assert :re.run("😀", "x*", [:global, :unicode]) == {:match, [[{0, 0}], [{4, 0}]]}
+      end
+
+      test "global starts at the offset" do
+        assert :re.run("abab", "a", [:global, {:offset, 1}]) == {:match, [[{2, 1}]]}
+      end
+
+      test "global returns nomatch on offset beyond the subject" do
+        assert :re.run("ab", "a", [:global, {:offset, 5}]) == :nomatch
+      end
+
+      test "global returns nomatch on unicode offset beyond the subject" do
+        assert :re.run("éb", "b", [:global, :unicode, {:offset, 9}]) == :nomatch
+      end
+
+      test "global anchored continues while matches are adjacent" do
+        assert :re.run("aab", "a", [:anchored, :global]) == {:match, [[{0, 1}], [{1, 1}]]}
+      end
+
+      test "global anchored stops at the first failed position" do
+        assert :re.run("aba", "a", [:anchored, :global]) == {:match, [[{0, 1}]]}
+      end
+
+      test "global applies scan flags to every attempt" do
+        assert :re.run("ab", "a*", [:global, :notempty]) == {:match, [[{0, 1}]]}
+      end
+
+      test "global returns nomatch without a match" do
+        assert :re.run("ab", "x", [:global]) == :nomatch
+      end
+
+      test "global shapes binary captures per match" do
+        assert :re.run("abab", "a(b)", [:global, {:capture, :all_but_first, :binary}]) ==
+                 {:match, [["b"], ["b"]]}
+      end
+
+      test "global returns bare match with the none spec" do
+        assert :re.run("aa", "a", [:global, {:capture, :none}]) == :match
+      end
+
+      test "global works with a compiled pattern" do
+        {:ok, compiled} = :re.compile("a")
+
+        assert :re.run("aba", compiled, [:global]) == {:match, [[{0, 1}], [{2, 1}]]}
+      end
+
       test "raises ArgumentError on non-iodata subject" do
         assert_error ArgumentError,
                      build_argument_error_msg(1, "not an iodata term"),
@@ -1198,6 +1278,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
 
         assert_error ArgumentError, "argument error", fn ->
           :re.run("a\nb", compiled, [:firstline])
+        end
+      end
+
+      test "raises plain ArgumentError on offset inside a character with global" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("éb", "b", [:global, :unicode, {:offset, 1}])
+        end
+      end
+
+      test "capture spec error wins over global nomatch" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("ab", "a", [:global, {:offset, 5}, {:capture, :bogus}])
         end
       end
     end

@@ -787,6 +787,24 @@ describe("Erlang_Re", () => {
       );
     };
 
+    const assertGlobalMatchResult = (result, matchesIndexPairs) => {
+      assert.deepEqual(
+        result,
+        Type.tuple([
+          Type.atom("match"),
+          Type.list(
+            matchesIndexPairs.map((indexPairs) =>
+              Type.list(
+                indexPairs.map(([start, length]) =>
+                  Type.tuple([Type.integer(start), Type.integer(length)]),
+                ),
+              ),
+            ),
+          ),
+        ]),
+      );
+    };
+
     const captureOption = (valueSpec, type) =>
       type === undefined
         ? Type.tuple([Type.atom("capture"), valueSpec])
@@ -1521,6 +1539,190 @@ describe("Erlang_Re", () => {
       assert.deepEqual(result, Type.atom("nomatch"));
     });
 
+    it("global collects successive matches", () => {
+      const result = run(Type.bitstring("abab"), Type.bitstring("a"), [
+        Type.atom("global"),
+      ]);
+
+      assertGlobalMatchResult(result, [[[0, 1]], [[2, 1]]]);
+    });
+
+    it("global collects captures per match", () => {
+      const result = run(Type.bitstring("abab"), Type.bitstring("a(b)"), [
+        Type.atom("global"),
+      ]);
+
+      assertGlobalMatchResult(result, [
+        [
+          [0, 2],
+          [1, 1],
+        ],
+        [
+          [2, 2],
+          [3, 1],
+        ],
+      ]);
+    });
+
+    it("global truncates trailing unset groups per match", () => {
+      const result = run(Type.bitstring("aba"), Type.bitstring("a(b)?"), [
+        Type.atom("global"),
+      ]);
+
+      assertGlobalMatchResult(result, [
+        [
+          [0, 2],
+          [1, 1],
+        ],
+        [[2, 1]],
+      ]);
+    });
+
+    it("global advances past an empty match", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("a*"), [
+        Type.atom("global"),
+      ]);
+
+      assertGlobalMatchResult(result, [[[0, 1]], [[1, 0]], [[2, 0]]]);
+    });
+
+    it("global reports a successful anchored retry after an empty match", () => {
+      const result = run(Type.bitstring("a"), Type.bitstring("|a"), [
+        Type.atom("global"),
+      ]);
+
+      assertGlobalMatchResult(result, [[[0, 0]], [[0, 1]], [[1, 0]]]);
+    });
+
+    it("global matches once on an empty subject", () => {
+      const result = run(Type.bitstring(""), Type.bitstring(""), [
+        Type.atom("global"),
+      ]);
+
+      assertGlobalMatchResult(result, [[[0, 0]]]);
+    });
+
+    it("global continues at the previous match end", () => {
+      const result = run(Type.bitstring("abab"), Type.bitstring("a\\Kb"), [
+        Type.atom("global"),
+      ]);
+
+      assertGlobalMatchResult(result, [[[1, 1]], [[3, 1]]]);
+    });
+
+    it("global advances over a CRLF pair as one newline", () => {
+      const result = run(Type.bitstring("\r\n"), Type.bitstring(""), [
+        Type.atom("global"),
+        Type.tuple([Type.atom("newline"), Type.atom("crlf")]),
+      ]);
+
+      assertGlobalMatchResult(result, [[[0, 0]], [[2, 0]]]);
+    });
+
+    it("global advances over a whole character in unicode mode", () => {
+      const result = run(Type.bitstring("😀"), Type.bitstring("x*"), [
+        Type.atom("global"),
+        Type.atom("unicode"),
+      ]);
+
+      assertGlobalMatchResult(result, [[[0, 0]], [[4, 0]]]);
+    });
+
+    it("global starts at the offset", () => {
+      const result = run(Type.bitstring("abab"), Type.bitstring("a"), [
+        Type.atom("global"),
+        offsetOption(1),
+      ]);
+
+      assertGlobalMatchResult(result, [[[2, 1]]]);
+    });
+
+    it("global returns nomatch on offset beyond the subject", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("a"), [
+        Type.atom("global"),
+        offsetOption(5),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("global returns nomatch on unicode offset beyond the subject", () => {
+      const result = run(Type.bitstring("éb"), Type.bitstring("b"), [
+        Type.atom("global"),
+        Type.atom("unicode"),
+        offsetOption(9),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("global anchored continues while matches are adjacent", () => {
+      const result = run(Type.bitstring("aab"), Type.bitstring("a"), [
+        Type.atom("anchored"),
+        Type.atom("global"),
+      ]);
+
+      assertGlobalMatchResult(result, [[[0, 1]], [[1, 1]]]);
+    });
+
+    it("global anchored stops at the first failed position", () => {
+      const result = run(Type.bitstring("aba"), Type.bitstring("a"), [
+        Type.atom("anchored"),
+        Type.atom("global"),
+      ]);
+
+      assertGlobalMatchResult(result, [[[0, 1]]]);
+    });
+
+    it("global applies scan flags to every attempt", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("a*"), [
+        Type.atom("global"),
+        Type.atom("notempty"),
+      ]);
+
+      assertGlobalMatchResult(result, [[[0, 1]]]);
+    });
+
+    it("global returns nomatch without a match", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("x"), [
+        Type.atom("global"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("global shapes binary captures per match", () => {
+      const result = run(Type.bitstring("abab"), Type.bitstring("a(b)"), [
+        Type.atom("global"),
+        captureOption(Type.atom("all_but_first"), "binary"),
+      ]);
+
+      assert.deepEqual(
+        result,
+        matchTuple([
+          Type.list([Bitstring.fromBytes([98])]),
+          Type.list([Bitstring.fromBytes([98])]),
+        ]),
+      );
+    });
+
+    it("global returns bare match with the none spec", () => {
+      const result = run(Type.bitstring("aa"), Type.bitstring("a"), [
+        Type.atom("global"),
+        captureOption(Type.atom("none")),
+      ]);
+
+      assert.deepEqual(result, Type.atom("match"));
+    });
+
+    it("global works with a compiled pattern", () => {
+      const result = run(Type.bitstring("aba"), compilePattern("a"), [
+        Type.atom("global"),
+      ]);
+
+      assertGlobalMatchResult(result, [[[0, 1]], [[2, 1]]]);
+    });
+
     it("raises ArgumentError on non-iodata subject", () => {
       assertBoxedError(
         () => run(Type.atom("abc"), Type.bitstring("a")),
@@ -2161,6 +2363,32 @@ describe("Erlang_Re", () => {
         () =>
           run(Type.bitstring("a\nb"), compilePattern("b"), [
             Type.atom("firstline"),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on offset inside a character with global", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("éb"), Type.bitstring("b"), [
+            Type.atom("global"),
+            Type.atom("unicode"),
+            offsetOption(1),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("capture spec error wins over global nomatch", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("ab"), Type.bitstring("a"), [
+            Type.atom("global"),
+            offsetOption(5),
+            captureOption(Type.atom("bogus")),
           ]),
         "ArgumentError",
         "argument error",
