@@ -787,6 +787,14 @@ describe("Erlang_Re", () => {
       );
     };
 
+    const captureOption = (valueSpec, type) =>
+      type === undefined
+        ? Type.tuple([Type.atom("capture"), valueSpec])
+        : Type.tuple([Type.atom("capture"), valueSpec, Type.atom(type)]);
+
+    const matchTuple = (values) =>
+      Type.tuple([Type.atom("match"), Type.list(values)]);
+
     it("matches with a raw binary pattern", () => {
       const result = run(Type.bitstring("abbc"), Type.bitstring("b+"));
 
@@ -944,6 +952,329 @@ describe("Erlang_Re", () => {
       const result = run(subject, Type.bitstring("b"), [Type.atom("unicode")]);
 
       assertMatchResult(result, [[2, 1]]);
+    });
+
+    it("defaults the capture type to index", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("a(b+)"), [
+        captureOption(Type.atom("all")),
+      ]);
+
+      assertMatchResult(result, [
+        [0, 3],
+        [1, 2],
+      ]);
+    });
+
+    it("captures all with the binary type", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("a(b+)"), [
+        captureOption(Type.atom("all"), "binary"),
+      ]);
+
+      assert.deepEqual(
+        result,
+        matchTuple([
+          Bitstring.fromBytes([97, 98, 98]),
+          Bitstring.fromBytes([98, 98]),
+        ]),
+      );
+    });
+
+    it("captures all with the list type", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("a(b+)"), [
+        captureOption(Type.atom("all"), "list"),
+      ]);
+
+      assert.deepEqual(
+        result,
+        matchTuple([Type.charlist("abb"), Type.charlist("bb")]),
+      );
+    });
+
+    it("returns UTF-8 binaries with the binary type in unicode mode", () => {
+      const result = run(Type.bitstring("aéb"), Type.bitstring("(éb)"), [
+        Type.atom("unicode"),
+        captureOption(Type.atom("all"), "binary"),
+      ]);
+
+      assert.deepEqual(
+        result,
+        matchTuple([Type.bitstring("éb"), Type.bitstring("éb")]),
+      );
+    });
+
+    it("returns raw bytes with the binary type in byte mode", () => {
+      const result = run(
+        Bitstring.fromBytes([97, 233]),
+        Bitstring.fromBytes([233]),
+        [captureOption(Type.atom("all"), "binary")],
+      );
+
+      assert.deepEqual(result, matchTuple([Bitstring.fromBytes([233])]));
+    });
+
+    it("returns code points with the list type in unicode mode", () => {
+      const result = run(Type.bitstring("a😀"), Type.bitstring("(😀)"), [
+        Type.atom("unicode"),
+        captureOption(Type.atom("all"), "list"),
+      ]);
+
+      assert.deepEqual(
+        result,
+        matchTuple([
+          Type.list([Type.integer(128_512)]),
+          Type.list([Type.integer(128_512)]),
+        ]),
+      );
+    });
+
+    it("returns bytes with the list type in byte mode", () => {
+      const result = run(
+        Bitstring.fromBytes([97, 233]),
+        Bitstring.fromBytes([233]),
+        [captureOption(Type.atom("all"), "list")],
+      );
+
+      assert.deepEqual(result, matchTuple([Type.list([Type.integer(233)])]));
+    });
+
+    it("captures only the full match with the first spec", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("a(b+)"), [
+        captureOption(Type.atom("first")),
+      ]);
+
+      assertMatchResult(result, [[0, 3]]);
+    });
+
+    it("captures the full match binary with the first spec", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("a(b+)"), [
+        captureOption(Type.atom("first"), "binary"),
+      ]);
+
+      assert.deepEqual(result, matchTuple([Bitstring.fromBytes([97, 98, 98])]));
+    });
+
+    it("returns bare match with the none spec", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("a(b+)"), [
+        captureOption(Type.atom("none")),
+      ]);
+
+      assert.deepEqual(result, Type.atom("match"));
+    });
+
+    it("returns bare match with the none spec and a type", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("a(b+)"), [
+        captureOption(Type.atom("none"), "binary"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("match"));
+    });
+
+    it("captures only groups with the all_but_first spec", () => {
+      const result = run(Type.bitstring("abc"), Type.bitstring("a(b)(c)"), [
+        captureOption(Type.atom("all_but_first")),
+      ]);
+
+      assertMatchResult(result, [
+        [1, 1],
+        [2, 1],
+      ]);
+    });
+
+    it("returns empty list with the all_but_first spec and no groups", () => {
+      const result = run(Type.bitstring("abc"), Type.bitstring("b"), [
+        captureOption(Type.atom("all_but_first")),
+      ]);
+
+      assert.deepEqual(result, matchTuple([]));
+    });
+
+    it("truncates trailing unset groups with the all_but_first spec", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("(a)(b)?(c)?"), [
+        captureOption(Type.atom("all_but_first")),
+      ]);
+
+      assertMatchResult(result, [
+        [0, 1],
+        [1, 1],
+      ]);
+    });
+
+    it("sorts names by byte order with the all_names spec", () => {
+      const result = run(
+        Type.bitstring("xy"),
+        Type.bitstring("(?<b>x)(?<a>y)"),
+        [captureOption(Type.atom("all_names"))],
+      );
+
+      assertMatchResult(result, [
+        [1, 1],
+        [0, 1],
+      ]);
+    });
+
+    it("keeps trailing unset names with the all_names spec", () => {
+      const result = run(
+        Type.bitstring("x"),
+        Type.bitstring("(?<a>x)(?<b>z)?"),
+        [captureOption(Type.atom("all_names"))],
+      );
+
+      assertMatchResult(result, [
+        [0, 1],
+        [-1, 0],
+      ]);
+    });
+
+    it("returns bare match with the all_names spec and no named groups", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("a(b)"), [
+        captureOption(Type.atom("all_names")),
+      ]);
+
+      assert.deepEqual(result, Type.atom("match"));
+    });
+
+    it("collapses duplicate names to the first set group with the all_names spec", () => {
+      const result = run(
+        Type.bitstring("b"),
+        Type.bitstring("(?<n>a)?(?<n>b)?"),
+        [Type.atom("dupnames"), captureOption(Type.atom("all_names"))],
+      );
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
+    it("captures listed group indices in the given order", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("(a)(b)"), [
+        captureOption(Type.list([Type.integer(2), Type.integer(0)])),
+      ]);
+
+      assertMatchResult(result, [
+        [1, 1],
+        [0, 2],
+      ]);
+    });
+
+    it("treats an out-of-range group index as unset", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("(a)"), [
+        captureOption(Type.list([Type.integer(5)])),
+      ]);
+
+      assertMatchResult(result, [[-1, 0]]);
+    });
+
+    it("treats the maximum group index as unset", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("(a)"), [
+        captureOption(Type.list([Type.integer(2_147_483_647)])),
+      ]);
+
+      assertMatchResult(result, [[-1, 0]]);
+    });
+
+    it("resolves an atom group name", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("(?<foo>b+)"), [
+        captureOption(Type.list([Type.atom("foo")])),
+      ]);
+
+      assertMatchResult(result, [[1, 2]]);
+    });
+
+    it("resolves a binary group name", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("(?<foo>b+)"), [
+        captureOption(Type.list([Type.bitstring("foo")])),
+      ]);
+
+      assertMatchResult(result, [[1, 2]]);
+    });
+
+    it("resolves a charlist group name", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("(?<foo>b+)"), [
+        captureOption(Type.list([Type.charlist("foo")])),
+      ]);
+
+      assertMatchResult(result, [[1, 2]]);
+    });
+
+    it("resolves a nested chardata group name", () => {
+      const name = Type.list([
+        Type.bitstring("f"),
+        Type.list([Type.integer(111), Type.bitstring("o")]),
+      ]);
+
+      const result = run(Type.bitstring("abbc"), Type.bitstring("(?<foo>b+)"), [
+        captureOption(Type.list([name])),
+      ]);
+
+      assertMatchResult(result, [[1, 2]]);
+    });
+
+    it("treats an unknown group name as unset", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("(?<foo>b+)"), [
+        captureOption(Type.list([Type.atom("bar")]), "binary"),
+      ]);
+
+      assert.deepEqual(result, matchTuple([Type.bitstring("")]));
+    });
+
+    it("treats an invalid UTF-8 binary name as unset", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("(?<foo>b+)"), [
+        captureOption(Type.list([Bitstring.fromBytes([255])]), "binary"),
+      ]);
+
+      assert.deepEqual(result, matchTuple([Type.bitstring("")]));
+    });
+
+    it("resolves a duplicate name to the first set group", () => {
+      const result = run(
+        Type.bitstring("b"),
+        Type.bitstring("(?<n>a)?(?<n>b)?"),
+        [Type.atom("dupnames"), captureOption(Type.list([Type.atom("n")]))],
+      );
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
+    it("returns bare match with an empty capture list", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("a(b+)"), [
+        captureOption(Type.list()),
+      ]);
+
+      assert.deepEqual(result, Type.atom("match"));
+    });
+
+    it("keeps trailing unset groups with a capture list", () => {
+      const result = run(Type.bitstring("a"), Type.bitstring("(a)(b)?"), [
+        captureOption(Type.list([Type.integer(1), Type.integer(2)])),
+      ]);
+
+      assertMatchResult(result, [
+        [0, 1],
+        [-1, 0],
+      ]);
+    });
+
+    it("returns nomatch with a capture spec", () => {
+      const result = run(Type.bitstring("z"), Type.bitstring("a"), [
+        captureOption(Type.atom("first"), "binary"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("uses the last capture option", () => {
+      const result = run(Type.bitstring("a"), Type.bitstring("a"), [
+        captureOption(Type.atom("none")),
+        captureOption(Type.atom("first")),
+      ]);
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
+    it("applies the capture spec to a compiled pattern", () => {
+      const result = run(Type.bitstring("abbc"), compilePattern("a(b+)"), [
+        captureOption(Type.atom("all_but_first"), "binary"),
+      ]);
+
+      assert.deepEqual(result, matchTuple([Bitstring.fromBytes([98, 98])]));
     });
 
     it("raises ArgumentError on non-iodata subject", () => {
@@ -1312,6 +1643,199 @@ describe("Erlang_Re", () => {
         () => run(Bitstring.fromBytes([255]), Type.bitstring("(*UTF)é")),
         "ArgumentError",
         "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on invalid capture spec atom", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            captureOption(Type.atom("bogus")),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on non-list capture spec", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            captureOption(Type.integer(1)),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on improper capture spec list", () => {
+      const valueSpec = Type.improperList([Type.integer(0), Type.integer(1)]);
+
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            captureOption(valueSpec),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on invalid capture type", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            captureOption(Type.atom("all"), "bogus"),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on non-atom capture type", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            Type.tuple([
+              Type.atom("capture"),
+              Type.atom("all"),
+              Type.integer(5),
+            ]),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on invalid capture type with the none spec", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            captureOption(Type.atom("none"), "bogus"),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on negative group index", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            captureOption(Type.list([Type.integer(-1)])),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on group index above the 32-bit range", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            captureOption(Type.list([Type.integer(2_147_483_648n)])),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on float capture spec element", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            captureOption(Type.list([Type.float(1.5)])),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on non-binary bitstring capture spec element", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            captureOption(Type.list([Type.bitstring([1])])),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on invalid code point in a name", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            captureOption(Type.list([Type.list([Type.integer(99_999_999)])])),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on improper name charlist", () => {
+      const name = Type.improperList([Type.integer(102), Type.integer(111)]);
+
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            captureOption(Type.list([name])),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on invalid capture spec without a match", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("z"), Type.bitstring("a"), [
+            captureOption(Type.atom("bogus")),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError on capture option with extra elements", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a"), Type.bitstring("a"), [
+            Type.tuple([
+              Type.atom("capture"),
+              Type.atom("all"),
+              Type.atom("index"),
+              Type.atom("extra"),
+            ]),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("subject error wins over capture spec error", () => {
+      assertBoxedError(
+        () =>
+          run(Type.atom("x"), Type.bitstring("a"), [
+            captureOption(Type.atom("bogus")),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+      );
+    });
+
+    it("unicode pattern error wins over capture spec error", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), Type.bitstring("("), [
+            Type.atom("unicode"),
+            captureOption(Type.atom("bogus")),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "could not parse regular expression\nmissing closing parenthesis on character 1",
+        ),
       );
     });
   });

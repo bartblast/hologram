@@ -271,6 +271,19 @@ const Erlang_Re = {
 
   // Start run/3
   "run/3": (subject, pattern, options) => {
+    const CAPTURE_KIND_ATOMS = new Set([
+      "all",
+      "all_but_first",
+      "all_names",
+      "first",
+      "none",
+    ]);
+
+    const CAPTURE_TYPE_ATOMS = new Set(["binary", "index", "list"]);
+
+    // Group indices are limited to the positive range of a 32-bit integer
+    const MAX_CAPTURE_INDEX = 2_147_483_647n;
+
     // Run-only option atoms not yet supported.
     // TODO: implement the global, notbol, noteol, notempty, notempty_atstart
     // and report_errors run options.
@@ -284,10 +297,9 @@ const Erlang_Re = {
     ]);
 
     // Run-only tuple option tags not yet supported.
-    // TODO: implement the capture, offset, match_limit and
-    // match_limit_recursion run options.
+    // TODO: implement the match_limit, match_limit_recursion and offset
+    // run options.
     const RUN_ONLY_TUPLE_TAGS = new Set([
-      "capture",
       "match_limit",
       "match_limit_recursion",
       "offset",
@@ -312,6 +324,7 @@ const Erlang_Re = {
       unicodeOption: false,
     };
 
+    let captureOption = null;
     let compileOnlyOptionUsed = false;
     let notImplementedOption = null;
     let optionsValid = Type.isProperList(options);
@@ -319,6 +332,17 @@ const Erlang_Re = {
 
     if (optionsValid) {
       for (const option of options.data) {
+        const isCapture =
+          Type.isTuple(option) &&
+          (option.data.length === 2 || option.data.length === 3) &&
+          Interpreter.isStrictlyEqual(option.data[0], Type.atom("capture"));
+
+        // The last capture option wins
+        if (isCapture) {
+          captureOption = option;
+          continue;
+        }
+
         const isRunOnly =
           (Type.isAtom(option) && RUN_ONLY_ATOMS.has(option.value)) ||
           (Type.isTuple(option) &&
@@ -497,6 +521,66 @@ const Erlang_Re = {
       };
     }
 
+    // --- Capture spec (validation phase) ---
+
+    // The spec content is validated before matching, so an invalid spec
+    // raises even when the subject wouldn't match
+    let captureKind = "all";
+    let captureTargets = null;
+    let captureType = "index";
+
+    if (captureOption !== null) {
+      if (captureOption.data.length === 3) {
+        const typeTerm = captureOption.data[2];
+
+        if (!Type.isAtom(typeTerm) || !CAPTURE_TYPE_ATOMS.has(typeTerm.value)) {
+          raiseArgumentError();
+        }
+
+        captureType = typeTerm.value;
+      }
+
+      const valueSpec = captureOption.data[1];
+
+      if (Type.isAtom(valueSpec) && CAPTURE_KIND_ATOMS.has(valueSpec.value)) {
+        captureKind = valueSpec.value;
+      } else if (Type.isProperList(valueSpec)) {
+        captureKind = "explicit";
+
+        captureTargets = valueSpec.data.map((element) => {
+          if (Type.isInteger(element)) {
+            if (element.value < 0n || element.value > MAX_CAPTURE_INDEX) {
+              raiseArgumentError();
+            }
+
+            return {number: Number(element.value)};
+          }
+
+          if (Type.isAtom(element)) return {name: element.value};
+
+          if (Type.isBitstring(element)) {
+            if (!Type.isBinary(element)) raiseArgumentError();
+
+            Bitstring.maybeSetBytesFromText(element);
+
+            // An invalid UTF-8 name can't match any group name, which makes
+            // it an unset capture rather than an error
+            const decoded = ERTS.regex.decodeUtf8(element.bytes);
+
+            return {name: decoded.error ? null : decoded.text};
+          }
+
+          if (Type.isList(element)) {
+            return {name: ERTS.regex.charDataToText(element)};
+          }
+
+          raiseArgumentError();
+        });
+      } else {
+        raiseArgumentError();
+      }
+    }
+
     // --- Options not yet supported ---
 
     if (notImplementedOption !== null) {
@@ -534,50 +618,129 @@ const Erlang_Re = {
 
     if (matchResult === null) return Type.atom("nomatch");
 
-    // --- Captures (index type) ---
+    // --- Captures ---
+
+    const groupMap = entry.compiled.groupMap;
 
     // In byte mode JS string indices are byte offsets already
     const toByteOffset = entry.unicode
       ? (index) => ERTS.regex.utf16IndexToByteOffset(subjectText, index)
       : (index) => index;
 
-    const groupTuples = [];
-
-    for (let number = 1; number <= entry.compiled.groupMap.count; number++) {
-      const capture = matchResult.captures[number];
-
-      if (capture === null) {
-        groupTuples.push(Type.tuple([Type.integer(-1), Type.integer(0)]));
-      } else {
-        const start = toByteOffset(capture.start);
-        const end = toByteOffset(capture.end);
-
-        groupTuples.push(
-          Type.tuple([Type.integer(start), Type.integer(end - start)]),
-        );
+    // Returns {start, end} in JS string indices, or null when the group is
+    // unset or doesn't exist
+    const captureForNumber = (number) => {
+      if (number === 0) {
+        return {start: matchResult.start, end: matchResult.end};
       }
+
+      if (number > groupMap.count) return null;
+
+      return matchResult.captures[number];
+    };
+
+    // With dupnames a name maps to multiple group numbers, of which the
+    // first set one wins
+    const captureForName = (name) => {
+      const numbers = groupMap.names.get(name);
+
+      if (numbers === undefined) return null;
+
+      for (const number of numbers) {
+        const capture = captureForNumber(number);
+        if (capture !== null) return capture;
+      }
+
+      return null;
+    };
+
+    const captureForTarget = (target) =>
+      "number" in target
+        ? captureForNumber(target.number)
+        : captureForName(target.name);
+
+    const buildValue = (capture) => {
+      switch (captureType) {
+        case "binary": {
+          if (capture === null) return Type.bitstring("");
+
+          const slice = subjectText.slice(capture.start, capture.end);
+
+          return entry.unicode
+            ? Type.bitstring(slice)
+            : Bitstring.fromBytes([...slice].map((char) => char.charCodeAt(0)));
+        }
+
+        case "index": {
+          if (capture === null) {
+            return Type.tuple([Type.integer(-1), Type.integer(0)]);
+          }
+
+          const start = toByteOffset(capture.start);
+          const length = toByteOffset(capture.end) - start;
+
+          return Type.tuple([Type.integer(start), Type.integer(length)]);
+        }
+
+        case "list": {
+          if (capture === null) return Type.list();
+
+          const slice = subjectText.slice(capture.start, capture.end);
+
+          return Type.list(
+            [...slice].map((char) => Type.integer(char.codePointAt(0))),
+          );
+        }
+      }
+    };
+
+    const buildMatchTuple = (captures) =>
+      Type.tuple([Type.atom("match"), Type.list(captures.map(buildValue))]);
+
+    switch (captureKind) {
+      case "all":
+      case "all_but_first": {
+        const captures = [];
+
+        for (
+          let number = captureKind === "all" ? 0 : 1;
+          number <= groupMap.count;
+          number++
+        ) {
+          captures.push(captureForNumber(number));
+        }
+
+        // Trailing unset groups are not reported
+        while (captures.length > 0 && captures[captures.length - 1] === null) {
+          captures.pop();
+        }
+
+        return buildMatchTuple(captures);
+      }
+
+      case "all_names": {
+        // PCRE2 stores the name table sorted by the byte order of the names
+        const names = [...groupMap.names.keys()].sort(
+          ERTS.regex.compareByUtf8Bytes,
+        );
+
+        if (names.length === 0) return Type.atom("match");
+
+        return buildMatchTuple(names.map(captureForName));
+      }
+
+      case "explicit": {
+        if (captureTargets.length === 0) return Type.atom("match");
+
+        return buildMatchTuple(captureTargets.map(captureForTarget));
+      }
+
+      case "first":
+        return buildMatchTuple([captureForNumber(0)]);
+
+      case "none":
+        return Type.atom("match");
     }
-
-    // Trailing unset groups are not reported
-    while (
-      groupTuples.length > 0 &&
-      groupTuples[groupTuples.length - 1].data[0].value === -1n
-    ) {
-      groupTuples.pop();
-    }
-
-    const matchStart = toByteOffset(matchResult.start);
-    const matchEnd = toByteOffset(matchResult.end);
-
-    const capturedTuples = [
-      Type.tuple([
-        Type.integer(matchStart),
-        Type.integer(matchEnd - matchStart),
-      ]),
-      ...groupTuples,
-    ];
-
-    return Type.tuple([Type.atom("match"), Type.list(capturedTuples)]);
   },
   // End run/3
   // Deps: [:erlang.iolist_to_binary/1]

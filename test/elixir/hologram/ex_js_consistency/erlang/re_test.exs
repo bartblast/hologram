@@ -510,6 +510,151 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
         assert :re.run([233, ?b], "b", [:unicode]) == {:match, [{2, 1}]}
       end
 
+      test "defaults the capture type to index" do
+        assert :re.run("abbc", "a(b+)", [{:capture, :all}]) == {:match, [{0, 3}, {1, 2}]}
+      end
+
+      test "captures all with the binary type" do
+        assert :re.run("abbc", "a(b+)", [{:capture, :all, :binary}]) == {:match, ["abb", "bb"]}
+      end
+
+      test "captures all with the list type" do
+        assert :re.run("abbc", "a(b+)", [{:capture, :all, :list}]) ==
+                 {:match, [~c"abb", ~c"bb"]}
+      end
+
+      test "returns UTF-8 binaries with the binary type in unicode mode" do
+        assert :re.run("aéb", "(éb)", [:unicode, {:capture, :all, :binary}]) ==
+                 {:match, ["éb", "éb"]}
+      end
+
+      test "returns raw bytes with the binary type in byte mode" do
+        assert :re.run(<<97, 233>>, <<233>>, [{:capture, :all, :binary}]) == {:match, [<<233>>]}
+      end
+
+      test "returns code points with the list type in unicode mode" do
+        assert :re.run("a😀", "(😀)", [:unicode, {:capture, :all, :list}]) ==
+                 {:match, [[128_512], [128_512]]}
+      end
+
+      test "returns bytes with the list type in byte mode" do
+        assert :re.run(<<97, 233>>, <<233>>, [{:capture, :all, :list}]) == {:match, [[233]]}
+      end
+
+      test "captures only the full match with the first spec" do
+        assert :re.run("abbc", "a(b+)", [{:capture, :first}]) == {:match, [{0, 3}]}
+      end
+
+      test "captures the full match binary with the first spec" do
+        assert :re.run("abbc", "a(b+)", [{:capture, :first, :binary}]) == {:match, ["abb"]}
+      end
+
+      test "returns bare match with the none spec" do
+        assert :re.run("abbc", "a(b+)", [{:capture, :none}]) == :match
+      end
+
+      test "returns bare match with the none spec and a type" do
+        assert :re.run("abbc", "a(b+)", [{:capture, :none, :binary}]) == :match
+      end
+
+      test "captures only groups with the all_but_first spec" do
+        assert :re.run("abc", "a(b)(c)", [{:capture, :all_but_first}]) ==
+                 {:match, [{1, 1}, {2, 1}]}
+      end
+
+      test "returns empty list with the all_but_first spec and no groups" do
+        assert :re.run("abc", "b", [{:capture, :all_but_first}]) == {:match, []}
+      end
+
+      test "truncates trailing unset groups with the all_but_first spec" do
+        assert :re.run("ab", "(a)(b)?(c)?", [{:capture, :all_but_first}]) ==
+                 {:match, [{0, 1}, {1, 1}]}
+      end
+
+      test "sorts names by byte order with the all_names spec" do
+        assert :re.run("xy", "(?<b>x)(?<a>y)", [{:capture, :all_names}]) ==
+                 {:match, [{1, 1}, {0, 1}]}
+      end
+
+      test "keeps trailing unset names with the all_names spec" do
+        assert :re.run("x", "(?<a>x)(?<b>z)?", [{:capture, :all_names}]) ==
+                 {:match, [{0, 1}, {-1, 0}]}
+      end
+
+      test "returns bare match with the all_names spec and no named groups" do
+        assert :re.run("ab", "a(b)", [{:capture, :all_names}]) == :match
+      end
+
+      test "collapses duplicate names to the first set group with the all_names spec" do
+        assert :re.run("b", "(?<n>a)?(?<n>b)?", [:dupnames, {:capture, :all_names}]) ==
+                 {:match, [{0, 1}]}
+      end
+
+      test "captures listed group indices in the given order" do
+        assert :re.run("ab", "(a)(b)", [{:capture, [2, 0]}]) == {:match, [{1, 1}, {0, 2}]}
+      end
+
+      test "treats an out-of-range group index as unset" do
+        assert :re.run("ab", "(a)", [{:capture, [5]}]) == {:match, [{-1, 0}]}
+      end
+
+      test "treats the maximum group index as unset" do
+        assert :re.run("ab", "(a)", [{:capture, [2_147_483_647]}]) == {:match, [{-1, 0}]}
+      end
+
+      test "resolves an atom group name" do
+        assert :re.run("abbc", "(?<foo>b+)", [{:capture, [:foo]}]) == {:match, [{1, 2}]}
+      end
+
+      test "resolves a binary group name" do
+        assert :re.run("abbc", "(?<foo>b+)", [{:capture, ["foo"]}]) == {:match, [{1, 2}]}
+      end
+
+      test "resolves a charlist group name" do
+        assert :re.run("abbc", "(?<foo>b+)", [{:capture, [~c"foo"]}]) == {:match, [{1, 2}]}
+      end
+
+      test "resolves a nested chardata group name" do
+        assert :re.run("abbc", "(?<foo>b+)", [{:capture, [["f", [111, "o"]]]}]) ==
+                 {:match, [{1, 2}]}
+      end
+
+      test "treats an unknown group name as unset" do
+        assert :re.run("abbc", "(?<foo>b+)", [{:capture, [:bar], :binary}]) == {:match, [""]}
+      end
+
+      test "treats an invalid UTF-8 binary name as unset" do
+        assert :re.run("abbc", "(?<foo>b+)", [{:capture, [<<255>>], :binary}]) == {:match, [""]}
+      end
+
+      test "resolves a duplicate name to the first set group" do
+        assert :re.run("b", "(?<n>a)?(?<n>b)?", [:dupnames, {:capture, [:n]}]) ==
+                 {:match, [{0, 1}]}
+      end
+
+      test "returns bare match with an empty capture list" do
+        assert :re.run("abbc", "a(b+)", [{:capture, []}]) == :match
+      end
+
+      test "keeps trailing unset groups with a capture list" do
+        assert :re.run("a", "(a)(b)?", [{:capture, [1, 2]}]) == {:match, [{0, 1}, {-1, 0}]}
+      end
+
+      test "returns nomatch with a capture spec" do
+        assert :re.run("z", "a", [{:capture, :first, :binary}]) == :nomatch
+      end
+
+      test "uses the last capture option" do
+        assert :re.run("a", "a", [{:capture, :none}, {:capture, :first}]) == {:match, [{0, 1}]}
+      end
+
+      test "applies the capture spec to a compiled pattern" do
+        {:ok, compiled} = :re.compile("a(b+)")
+
+        assert :re.run("abbc", compiled, [{:capture, :all_but_first, :binary}]) ==
+                 {:match, ["bb"]}
+      end
+
       test "raises ArgumentError on non-iodata subject" do
         assert_error ArgumentError,
                      build_argument_error_msg(1, "not an iodata term"),
@@ -781,6 +926,108 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       test "raises plain ArgumentError on invalid UTF-8 subject with a UTF verb pattern" do
         assert_error ArgumentError, "argument error", fn ->
           :re.run(<<255>>, "(*UTF)é", [])
+        end
+      end
+
+      test "raises plain ArgumentError on invalid capture spec atom" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a", "a", [{:capture, :bogus}])
+        end
+      end
+
+      test "raises plain ArgumentError on non-list capture spec" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a", "a", [{:capture, 1}])
+        end
+      end
+
+      test "raises plain ArgumentError on improper capture spec list" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a", "a", [{:capture, [0 | 1]}])
+        end
+      end
+
+      test "raises plain ArgumentError on invalid capture type" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a", "a", [{:capture, :all, :bogus}])
+        end
+      end
+
+      test "raises plain ArgumentError on non-atom capture type" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a", "a", [{:capture, :all, 5}])
+        end
+      end
+
+      test "raises plain ArgumentError on invalid capture type with the none spec" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a", "a", [{:capture, :none, :bogus}])
+        end
+      end
+
+      test "raises plain ArgumentError on negative group index" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a", "a", [{:capture, [-1]}])
+        end
+      end
+
+      test "raises plain ArgumentError on group index above the 32-bit range" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a", "a", [{:capture, [2_147_483_648]}])
+        end
+      end
+
+      test "raises plain ArgumentError on float capture spec element" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a", "a", [{:capture, [1.5]}])
+        end
+      end
+
+      test "raises plain ArgumentError on non-binary bitstring capture spec element" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a", "a", [{:capture, [<<1::1>>]}])
+        end
+      end
+
+      test "raises plain ArgumentError on invalid code point in a name" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a", "a", [{:capture, [[99_999_999]]}])
+        end
+      end
+
+      test "raises plain ArgumentError on improper name charlist" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a", "a", [{:capture, [[102 | 111]]}])
+        end
+      end
+
+      test "raises plain ArgumentError on invalid capture spec without a match" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("z", "a", [{:capture, :bogus}])
+        end
+      end
+
+      test "raises ArgumentError on capture option with extra elements" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("a", "a", [{:capture, :all, :index, :extra}]) end
+      end
+
+      test "subject error wins over capture spec error" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not an iodata term"),
+                     fn -> :re.run(:x, "a", [{:capture, :bogus}]) end
+      end
+
+      test "unicode pattern error wins over capture spec error" do
+        expected_msg =
+          build_argument_error_msg(
+            2,
+            "could not parse regular expression\nmissing closing parenthesis on character 1"
+          )
+
+        assert_error ArgumentError, expected_msg, fn ->
+          :re.run("x", "(", [:unicode, {:capture, :bogus}])
         end
       end
     end
