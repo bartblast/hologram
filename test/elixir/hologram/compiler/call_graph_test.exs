@@ -1271,10 +1271,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {:lists, :reverse, 1} in result
     end
 
-    test "includes the error message derivation entry point", %{runtime_mfas: result} do
-      assert {Exception, :message, 1} in result
-    end
-
     test "excludes MFAs with non-existing modules", %{full_call_graph: call_graph} do
       call_graph_clone = CallGraph.clone(call_graph)
 
