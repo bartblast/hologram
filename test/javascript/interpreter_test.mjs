@@ -3557,6 +3557,44 @@ describe("Interpreter", () => {
       const result = globalThis.Erlang_Aaa_Bbb["my_fun_a/2"](Type.integer(1));
       assert.deepStrictEqual(result, Type.atom("expr_a"));
     });
+
+    describe("frame tracking", () => {
+      beforeEach(() => {
+        CallStack.reset();
+        globalThis.Hologram.config = {stacktraces: true};
+      });
+
+      afterEach(() => {
+        globalThis.Hologram.config = {stacktraces: false};
+      });
+
+      it("pushes the function's frame for the duration of the call", () => {
+        let framesDuringCall;
+
+        Interpreter.defineErlangFunction("aaa_bbb", "my_fun_b", 2, () => {
+          framesDuringCall = CallStack.snapshot();
+          return Type.atom("ok");
+        });
+
+        globalThis.Erlang_Aaa_Bbb["my_fun_b/2"](
+          Type.integer(1),
+          Type.integer(2),
+        );
+
+        assert.deepStrictEqual(framesDuringCall, [
+          {
+            module: "aaa_bbb",
+            function: "my_fun_b",
+            arityOrArgs: 2,
+            file: null,
+            line: null,
+            errorInfo: null,
+          },
+        ]);
+
+        assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
+    });
   });
 
   describe("defineManuallyPortedFunction()", () => {
@@ -3621,6 +3659,46 @@ describe("Interpreter", () => {
         globalThis.Elixir_MyModuleExName.__exports__,
         new Set([]),
       );
+    });
+
+    describe("frame tracking", () => {
+      beforeEach(() => {
+        CallStack.reset();
+        globalThis.Hologram.config = {stacktraces: true};
+      });
+
+      afterEach(() => {
+        globalThis.Hologram.config = {stacktraces: false};
+      });
+
+      it("pushes the function's frame for the duration of the call", () => {
+        let framesDuringCall;
+
+        Interpreter.defineManuallyPortedFunction(
+          "MyModuleExName",
+          "my_defined_fun/3",
+          "public",
+          () => {
+            framesDuringCall = CallStack.snapshot();
+            return "my_defined_fun/3 result";
+          },
+        );
+
+        globalThis.Elixir_MyModuleExName["my_defined_fun/3"]();
+
+        assert.deepStrictEqual(framesDuringCall, [
+          {
+            module: "MyModuleExName",
+            function: "my_defined_fun",
+            arityOrArgs: 3,
+            file: null,
+            line: null,
+            errorInfo: null,
+          },
+        ]);
+
+        assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
     });
   });
 

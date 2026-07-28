@@ -469,7 +469,14 @@ export default class Interpreter {
 
     Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName, "erlang");
 
-    globalThis[moduleJsName][functionArityStr] = jsFunction;
+    globalThis[moduleJsName][functionArityStr] =
+      Interpreter.#buildFrameTrackingWrapper(
+        moduleExName,
+        functionName,
+        arity,
+        jsFunction,
+      );
+
     globalThis[moduleJsName].__exports__.add(functionArityStr);
   }
 
@@ -481,9 +488,21 @@ export default class Interpreter {
   ) {
     const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
 
+    // The arity separator is the last slash - operator function names such as
+    // "..//" contain slashes of their own.
+    const separatorIndex = functionArityStr.lastIndexOf("/");
+    const functionName = functionArityStr.slice(0, separatorIndex);
+    const arity = Number(functionArityStr.slice(separatorIndex + 1));
+
     Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName);
 
-    globalThis[moduleJsName][functionArityStr] = fun;
+    globalThis[moduleJsName][functionArityStr] =
+      Interpreter.#buildFrameTrackingWrapper(
+        moduleExName,
+        functionName,
+        arity,
+        fun,
+      );
 
     if (visibility === "public") {
       globalThis[moduleJsName].__exports__.add(functionArityStr);
@@ -1286,38 +1305,24 @@ export default class Interpreter {
   }
 
   static #buildElixirFunction(moduleExName, functionName, arity, clauses) {
-    return function () {
-      let startTime;
+    return Interpreter.#buildFrameTrackingWrapper(
+      moduleExName,
+      functionName,
+      arity,
+      function () {
+        let startTime;
 
-      if (globalThis.Hologram.isProfilingEnabled) {
-        startTime = performance.now();
-      }
+        if (globalThis.Hologram.isProfilingEnabled) {
+          startTime = performance.now();
+        }
 
-      const mfa = `${moduleExName}.${functionName}/${arity}`;
+        const mfa = `${moduleExName}.${functionName}/${arity}`;
 
-      // TODO: remove on release
-      // Interpreter.#logFunctionCall(mfa, arguments);
+        // TODO: remove on release
+        // Interpreter.#logFunctionCall(mfa, arguments);
 
-      const args = Type.list([...arguments]);
+        const args = Type.list([...arguments]);
 
-      // Frame tracking is flag-gated: with client stacktraces off, the only
-      // frame an error carries is the raising one, attached at the raise site.
-      // The config object is set before any dispatch can run - by the runtime
-      // bundle bootstrap in the browser and by the test helpers in tests.
-      let popsFrameOnExit = globalThis.Hologram.config.stacktraces;
-
-      if (popsFrameOnExit) {
-        CallStack.push({
-          module: moduleExName,
-          function: functionName,
-          arityOrArgs: arity,
-          file: null,
-          line: null,
-          errorInfo: null,
-        });
-      }
-
-      try {
         for (const clause of clauses) {
           const context = Interpreter.buildContext({module: moduleExName});
           const pattern = Type.list(clause.params(context));
@@ -1338,15 +1343,6 @@ export default class Interpreter {
                 );
               }
 
-              // An async body is still executing when it returns its promise,
-              // so the frame pops when the promise settles instead of on
-              // return - otherwise every frame below an await would be gone by
-              // the time an error is raised there.
-              if (popsFrameOnExit && result instanceof Promise) {
-                popsFrameOnExit = false;
-                return result.finally(() => CallStack.pop());
-              }
-
               return result;
             }
           }
@@ -1355,6 +1351,45 @@ export default class Interpreter {
         Interpreter.raiseFunctionClauseError(
           Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
         );
+      },
+    );
+  }
+
+  // Wraps a function so each invocation pushes its frame onto the shadow call
+  // stack and pops it when the invocation exits, on every exit path - return,
+  // raise, or async settlement.
+  static #buildFrameTrackingWrapper(module, functionName, arityOrArgs, fn) {
+    return function () {
+      // Frame tracking is flag-gated: with client stacktraces off, the only
+      // frame an error carries is the raising one, attached at the raise site.
+      // The config object is set before any dispatch can run - by the runtime
+      // bundle bootstrap in the browser and by the test helpers in tests.
+      let popsFrameOnExit = globalThis.Hologram.config.stacktraces;
+
+      if (popsFrameOnExit) {
+        CallStack.push({
+          module,
+          function: functionName,
+          arityOrArgs,
+          file: null,
+          line: null,
+          errorInfo: null,
+        });
+      }
+
+      try {
+        const result = fn(...arguments);
+
+        // An async function is still executing when it returns its promise,
+        // so the frame pops when the promise settles instead of on return -
+        // otherwise every frame below an await would be gone by the time an
+        // error is raised there.
+        if (popsFrameOnExit && result instanceof Promise) {
+          popsFrameOnExit = false;
+          return result.finally(() => CallStack.pop());
+        }
+
+        return result;
       } finally {
         if (popsFrameOnExit) {
           CallStack.pop();
