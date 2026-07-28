@@ -10366,7 +10366,7 @@ describe("Erlang", () => {
       assert.deepStrictEqual(error.value, reason);
     });
 
-    it("normalizes a bare :error reason into a boxed exception struct", () => {
+    it("normalizes a bare :error reason into an exception struct", () => {
       const reason = Type.atom("badarg");
 
       let caught;
@@ -10383,11 +10383,215 @@ describe("Erlang", () => {
       assert.isTrue(Type.isStruct(caught.struct));
     });
 
+    it("preserves the given stacktrace", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.atom("my_mod"),
+          Type.atom("my_fun"),
+          Type.integer(2),
+          Type.list([
+            Type.tuple([Type.atom("file"), Type.charlist("my_file.ex")]),
+            Type.tuple([Type.atom("line"), Type.integer(7)]),
+          ]),
+        ]),
+      ]);
+
+      let caught;
+
+      try {
+        raise(Type.atom("error"), Type.atom("my_reason"), stacktrace);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.equal(caught.stacktrace, stacktrace);
+    });
+
+    it("preserves a stacktrace entry with args in place of arity", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.atom("my_mod"),
+          Type.atom("my_fun"),
+          Type.list([Type.integer(1), Type.integer(2)]),
+          Type.list(),
+        ]),
+      ]);
+
+      let caught;
+
+      try {
+        raise(Type.atom("error"), Type.atom("my_reason"), stacktrace);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.equal(caught.stacktrace, stacktrace);
+    });
+
+    it("preserves a fun stacktrace entry", () => {
+      const fun = Type.anonymousFunction(0, [], contextFixture());
+
+      const stacktrace = Type.list([
+        Type.tuple([fun, Type.integer(0), Type.list()]),
+      ]);
+
+      let caught;
+
+      try {
+        raise(Type.atom("error"), Type.atom("my_reason"), stacktrace);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.equal(caught.stacktrace, stacktrace);
+    });
+
+    it("preserves an empty stacktrace", () => {
+      const stacktrace = Type.list();
+
+      let caught;
+
+      try {
+        raise(Type.atom("error"), Type.atom("my_reason"), stacktrace);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.equal(caught.stacktrace, stacktrace);
+    });
+
     it("returns :badarg when the kind is not a valid exception class", () => {
       const result = raise(
         Type.atom("not_a_kind"),
         Type.atom("my_reason"),
         Type.list(),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when the stacktrace is not a list", () => {
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        Type.atom("not_a_list"),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when the stacktrace is an improper list", () => {
+      const stacktrace = Type.improperList([
+        Type.tuple([
+          Type.atom("my_mod"),
+          Type.atom("my_fun"),
+          Type.integer(0),
+          Type.list(),
+        ]),
+        Type.atom("tail"),
+      ]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when a stacktrace entry is not a tuple", () => {
+      const stacktrace = Type.list([Type.atom("not_a_tuple")]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when a stacktrace entry's module is not an atom", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.integer(123),
+          Type.atom("my_fun"),
+          Type.integer(0),
+          Type.list(),
+        ]),
+      ]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when a stacktrace entry's function is not an atom", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.atom("my_mod"),
+          Type.integer(123),
+          Type.integer(0),
+          Type.list(),
+        ]),
+      ]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when a stacktrace entry's location is not a list", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.atom("my_mod"),
+          Type.atom("my_fun"),
+          Type.integer(0),
+          Type.atom("bad_location"),
+        ]),
+      ]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when a stacktrace entry has an invalid size", () => {
+      const stacktrace = Type.list([
+        Type.tuple([Type.atom("my_mod"), Type.atom("my_fun")]),
+      ]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when a 3-element stacktrace entry's first element is not a fun", () => {
+      const stacktrace = Type.list([
+        Type.tuple([Type.atom("my_mod"), Type.integer(0), Type.list()]),
+      ]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
       );
 
       assert.deepStrictEqual(result, Type.atom("badarg"));

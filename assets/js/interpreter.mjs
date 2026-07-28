@@ -1379,7 +1379,11 @@ export default class Interpreter {
   // clause body's nested closures, while function dispatch builds fresh
   // contexts, so it never leaks into called functions.
   static #bindStacktrace(error, context) {
-    context.stacktrace = Type.list(error.stacktrace.map(CallStack.boxFrame));
+    // A trace given to :erlang.raise/3 is stored on the error as an already
+    // boxed list, while a captured trace is an array of frame objects.
+    context.stacktrace = Type.isList(error.stacktrace)
+      ? error.stacktrace
+      : Type.list(error.stacktrace.map(CallStack.boxFrame));
   }
 
   static #buildElixirFunction(

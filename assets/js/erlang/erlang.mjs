@@ -3036,9 +3036,8 @@ const Erlang = {
   // End pid_to_list/1
   // Deps: []
 
-  // TODO: support stacktraces; the stacktrace argument is currently accepted and ignored.
   // Start raise/3
-  "raise/3": (kind, reason, _stacktrace) => {
+  "raise/3": (kind, reason, stacktrace) => {
     if (
       !Type.isAtom(kind) ||
       !["error", "exit", "throw"].includes(kind.value)
@@ -3046,7 +3045,46 @@ const Erlang = {
       return Type.atom("badarg");
     }
 
-    throw new HologramBoxedError(reason, kind);
+    // A stacktrace entry is either {module, function, arity_or_args, location}
+    // with atom module and function, or {fun, arity_or_args, location}. Only
+    // these shapes are validated - the arity_or_args slot and the location's
+    // content are accepted as given, mirroring the BEAM.
+    const isValidEntry = (entry) => {
+      if (!Type.isTuple(entry)) {
+        return false;
+      }
+
+      const elems = entry.data;
+
+      if (elems.length === 4) {
+        return (
+          Type.isAtom(elems[0]) &&
+          Type.isAtom(elems[1]) &&
+          Type.isList(elems[3])
+        );
+      }
+
+      if (elems.length === 3) {
+        return Type.isAnonymousFunction(elems[0]) && Type.isList(elems[2]);
+      }
+
+      return false;
+    };
+
+    if (
+      !Type.isProperList(stacktrace) ||
+      !stacktrace.data.every(isValidEntry)
+    ) {
+      return Type.atom("badarg");
+    }
+
+    const error = new HologramBoxedError(reason, kind);
+
+    // The given boxed trace replaces the construction-time snapshot verbatim,
+    // matching the BEAM - this is what makes reraise preserve traces.
+    error.stacktrace = stacktrace;
+
+    throw error;
   },
   // End raise/3
   // Deps: []

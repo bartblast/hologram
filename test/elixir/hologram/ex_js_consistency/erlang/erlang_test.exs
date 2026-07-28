@@ -5946,7 +5946,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert result == reason
     end
 
-    test "normalizes a bare :error reason into an exception struct for rescue" do
+    test "normalizes a bare :error reason into an exception struct" do
       result =
         try do
           :erlang.raise(:error, :badarg, [])
@@ -5957,8 +5957,123 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert result == %ArgumentError{}
     end
 
+    test "preserves the given stacktrace" do
+      stacktrace = [{:my_mod, :my_fun, 2, [file: ~c"my_file.ex", line: 7]}]
+
+      result =
+        try do
+          :erlang.raise(:error, :my_reason, stacktrace)
+        rescue
+          _error -> __STACKTRACE__
+        end
+
+      assert result == stacktrace
+    end
+
+    test "preserves a stacktrace entry with args in place of arity" do
+      stacktrace = [{:my_mod, :my_fun, [1, 2], []}]
+
+      result =
+        try do
+          :erlang.raise(:error, :my_reason, stacktrace)
+        rescue
+          _error -> __STACKTRACE__
+        end
+
+      assert result == stacktrace
+    end
+
+    test "preserves a fun stacktrace entry" do
+      fun = fn -> :ok end
+      stacktrace = [{fun, 0, []}]
+
+      result =
+        try do
+          :erlang.raise(:error, :my_reason, stacktrace)
+        rescue
+          _error -> __STACKTRACE__
+        end
+
+      assert result == stacktrace
+    end
+
+    test "preserves an empty stacktrace" do
+      stacktrace = []
+
+      result =
+        try do
+          :erlang.raise(:error, :my_reason, stacktrace)
+        rescue
+          _error -> __STACKTRACE__
+        end
+
+      assert result == stacktrace
+    end
+
     test "returns :badarg when the kind is not a valid exception class" do
       result = apply(:erlang, :raise, wrap_term([:not_a_kind, :my_reason, []]))
+
+      assert result == :badarg
+    end
+
+    test "returns :badarg when the stacktrace is not a list" do
+      result = apply(:erlang, :raise, wrap_term([:error, :my_reason, :not_a_list]))
+
+      assert result == :badarg
+    end
+
+    test "returns :badarg when the stacktrace is an improper list" do
+      stacktrace = [{:my_mod, :my_fun, 0, []} | :tail]
+
+      result = apply(:erlang, :raise, wrap_term([:error, :my_reason, stacktrace]))
+
+      assert result == :badarg
+    end
+
+    test "returns :badarg when a stacktrace entry is not a tuple" do
+      stacktrace = [:not_a_tuple]
+
+      result = apply(:erlang, :raise, wrap_term([:error, :my_reason, stacktrace]))
+
+      assert result == :badarg
+    end
+
+    test "returns :badarg when a stacktrace entry's module is not an atom" do
+      stacktrace = [{123, :my_fun, 0, []}]
+
+      result = apply(:erlang, :raise, wrap_term([:error, :my_reason, stacktrace]))
+
+      assert result == :badarg
+    end
+
+    test "returns :badarg when a stacktrace entry's function is not an atom" do
+      stacktrace = [{:my_mod, 123, 0, []}]
+
+      result = apply(:erlang, :raise, wrap_term([:error, :my_reason, stacktrace]))
+
+      assert result == :badarg
+    end
+
+    test "returns :badarg when a stacktrace entry's location is not a list" do
+      stacktrace = [{:my_mod, :my_fun, 0, :bad_location}]
+
+      result = apply(:erlang, :raise, wrap_term([:error, :my_reason, stacktrace]))
+
+      assert result == :badarg
+    end
+
+    test "returns :badarg when a stacktrace entry has an invalid size" do
+      stacktrace = [{:my_mod, :my_fun}]
+
+      result = apply(:erlang, :raise, wrap_term([:error, :my_reason, stacktrace]))
+
+      assert result == :badarg
+    end
+
+    test "returns :badarg when a 3-element stacktrace entry's first element is not a fun" do
+      stacktrace = [{:my_mod, 0, []}]
+
+      result = apply(:erlang, :raise, wrap_term([:error, :my_reason, stacktrace]))
 
       assert result == :badarg
     end

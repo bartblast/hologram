@@ -125,7 +125,7 @@ describe("Serializer", () => {
               );
 
               const expected =
-                '[3,{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring(param)"],"context":{"module":"aElixir.MyModule","vars":{},"stacktrace":null},"uniq":1}]';
+                '[3,{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring(param)"],"context":{"module":"aElixir.MyModule","stacktrace":null,"vars":{}},"uniq":1}]';
 
               assert.equal(serialize(term, "client"), expected);
             });
@@ -163,7 +163,7 @@ describe("Serializer", () => {
               };
 
               const expected =
-                '[3,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring(param)"],"context":{"module":"aElixir.MyModule","vars":{},"stacktrace":null},"uniq":1}}]';
+                '[3,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring(param)"],"context":{"module":"aElixir.MyModule","stacktrace":null,"vars":{}},"uniq":1}}]';
 
               assert.equal(serialize(term, "client"), expected);
             });
@@ -203,7 +203,7 @@ describe("Serializer", () => {
               );
 
               const expected =
-                '[3,{"type":"sanonymous_function","arity":4,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"u(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"u(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"aElixir.MyModule","vars":{"x":"i10","y":"i20"},"stacktrace":null},"uniq":1}]';
+                '[3,{"type":"sanonymous_function","arity":4,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"u(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"u(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"aElixir.MyModule","stacktrace":null,"vars":{"x":"i10","y":"i20"}},"uniq":1}]';
 
               assert.equal(serialize(term, "client"), expected);
             });
@@ -245,7 +245,7 @@ describe("Serializer", () => {
               };
 
               const expected =
-                '[3,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"u(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"u(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"aElixir.MyModule","vars":{"x":"i10","y":"i20"},"stacktrace":null},"uniq":1}}]';
+                '[3,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"u(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"u(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"aElixir.MyModule","stacktrace":null,"vars":{"x":"i10","y":"i20"}},"uniq":1}}]';
 
               assert.equal(serialize(term, "client"), expected);
             });
