@@ -1689,30 +1689,80 @@ const Erlang = {
   // End element/2
   // Deps: []
 
-  // TODO: review this function after error reporting is implemented (and implement Elixir & JS consistency tests).
   // Start error/1
   "error/1": (reason) => {
-    Erlang["error/2"](reason, Type.atom("none"));
+    Erlang["error/3"](reason, Type.atom("none"), Type.list());
   },
   // End error/1
-  // Deps: [:erlang.error/2]
+  // Deps: [:erlang.error/3]
 
-  // TODO: review this function after error reporting is implemented (and implement Elixir & JS consistency tests).
-  // TODO: maybe use args param
   // Start error/2
-  "error/2": (reason, _args) => {
-    throw new HologramBoxedError(reason);
+  "error/2": (reason, args) => {
+    Erlang["error/3"](reason, args, Type.list());
   },
   // End error/2
-  // Deps: []
+  // Deps: [:erlang.error/3]
 
-  // TODO: the third argument carries error_info options used for richer error reporting on BEAM; it is currently accepted and ignored.
   // Start error/3
-  "error/3": (reason, args, _options) => {
-    Erlang["error/2"](reason, args);
+  "error/3": (reason, args, options) => {
+    // Options that are not a list and options other than {:error_info, map}
+    // are ignored, mirroring the BEAM.
+    let errorInfo = null;
+
+    if (Type.isList(options)) {
+      for (const option of options.data) {
+        if (
+          Type.isTuple(option) &&
+          option.data.length === 2 &&
+          Type.isAtom(option.data[0]) &&
+          option.data[0].value === "error_info"
+        ) {
+          errorInfo = option.data[1];
+        }
+      }
+    }
+
+    const error = new HologramBoxedError(reason);
+
+    // The constructor snapshot still contains the dispatch frames of
+    // :erlang.error itself - the BEAM never shows erlang:error in a trace.
+    const frames = error.stacktrace;
+
+    let callerIndex = 0;
+
+    while (
+      callerIndex < frames.length &&
+      frames[callerIndex].module === "erlang" &&
+      frames[callerIndex].function === "error"
+    ) {
+      ++callerIndex;
+    }
+
+    const callerFrame = frames[callerIndex] ?? null;
+
+    // The raising frame is attached unconditionally - message derivation
+    // reads args and error_info from it in every environment. It is a copy,
+    // because the caller's live frame must not be mutated: the caller may
+    // rescue this error and keep executing.
+    const raisingFrame = {
+      module: callerFrame?.module ?? null,
+      function: callerFrame?.function ?? null,
+      // A list (proper or improper) replaces the caller's arity, any other
+      // term (including :none) keeps it, mirroring the BEAM.
+      arityOrArgs: Type.isList(args)
+        ? args
+        : (callerFrame?.arityOrArgs ?? null),
+      file: callerFrame?.file ?? null,
+      line: callerFrame?.line ?? null,
+      errorInfo,
+    };
+
+    error.stacktrace = [raisingFrame, ...frames.slice(callerIndex + 1)];
+
+    throw error;
   },
   // End error/3
-  // Deps: [:erlang.error/2]
+  // Deps: []
 
   // Start exit/1
   "exit/1": (reason) => {

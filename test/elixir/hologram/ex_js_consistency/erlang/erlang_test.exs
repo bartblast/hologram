@@ -3629,7 +3629,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert result == reason
     end
 
-    test "normalizes a bare reason into an exception struct for rescue" do
+    test "normalizes a bare reason into an exception struct" do
       result =
         try do
           :erlang.error(:badarg)
@@ -3639,20 +3639,199 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
       assert result == %ArgumentError{}
     end
+
+    test "keeps the caller's arity on the raising frame" do
+      caller = fn -> :erlang.error(:my_reason) end
+
+      top_frame =
+        try do
+          caller.()
+        rescue
+          _error -> hd(__STACKTRACE__)
+        end
+
+      assert {module, _function, 0, [file: _file, line: _line]} = top_frame
+      assert module == __MODULE__
+    end
   end
 
-  describe "error/3" do
-    # TODO: args and error_info affect the BEAM stacktrace and error reporting,
-    # which the client does not model yet. Assert their effect once it does.
+  describe "error/2" do
     test "raises the given reason" do
       reason = %RuntimeError{message: "my message"}
 
       result =
         reason
-        |> :erlang.error([1, 2], error_info: %{})
+        |> :erlang.error([1, 2])
         |> catch_error()
 
       assert result == reason
+    end
+
+    test "replaces the caller's arity with the given args on the raising frame" do
+      caller = fn -> :erlang.error(:my_reason, [1, 2]) end
+
+      top_frame =
+        try do
+          caller.()
+        rescue
+          _error -> hd(__STACKTRACE__)
+        end
+
+      assert {module, _function, [1, 2], [file: _file, line: _line]} = top_frame
+      assert module == __MODULE__
+    end
+  end
+
+  describe "error/3" do
+    test "raises the given reason" do
+      reason = %RuntimeError{message: "my message"}
+
+      result =
+        reason
+        |> :erlang.error([1, 2], [])
+        |> catch_error()
+
+      assert result == reason
+    end
+
+    test "copies the caller frame into the raising frame" do
+      caller = fn -> :erlang.error(:my_reason, :none, []) end
+
+      top_frame =
+        try do
+          caller.()
+        rescue
+          _error -> hd(__STACKTRACE__)
+        end
+
+      assert {module, _function, 0, [file: _file, line: _line]} = top_frame
+      assert module == __MODULE__
+    end
+
+    test "replaces the caller's arity with args given as a proper list" do
+      caller = fn -> :erlang.error(:my_reason, [1, 2], []) end
+
+      top_frame =
+        try do
+          caller.()
+        rescue
+          _error -> hd(__STACKTRACE__)
+        end
+
+      assert {_module, _function, [1, 2], [file: _file, line: _line]} = top_frame
+    end
+
+    test "replaces the caller's arity with args given as an improper list" do
+      caller = fn -> :erlang.error(:my_reason, [1 | 2], []) end
+
+      top_frame =
+        try do
+          caller.()
+        rescue
+          _error -> hd(__STACKTRACE__)
+        end
+
+      assert {_module, _function, [1 | 2], [file: _file, line: _line]} = top_frame
+    end
+
+    test "keeps the caller's arity when args is not a list" do
+      caller = fn -> :erlang.error(:my_reason, :my_args, []) end
+
+      top_frame =
+        try do
+          caller.()
+        rescue
+          _error -> hd(__STACKTRACE__)
+        end
+
+      assert {_module, _function, 0, [file: _file, line: _line]} = top_frame
+    end
+
+    test "attaches error_info from options to the raising frame" do
+      caller = fn ->
+        :erlang.error(:my_reason, :none, error_info: %{module: :my_format_module})
+      end
+
+      top_frame =
+        try do
+          caller.()
+        rescue
+          _error -> hd(__STACKTRACE__)
+        end
+
+      assert {_module, _function, 0, [file: _file, line: _line, error_info: error_info]} =
+               top_frame
+
+      assert error_info == %{module: :my_format_module}
+    end
+
+    test "ignores options other than error_info" do
+      caller = fn -> :erlang.error(:my_reason, :none, [:my_option]) end
+
+      top_frame =
+        try do
+          caller.()
+        rescue
+          _error -> hd(__STACKTRACE__)
+        end
+
+      assert {_module, _function, 0, [file: _file, line: _line]} = top_frame
+    end
+
+    test "ignores options that are not a list" do
+      caller = fn -> :erlang.error(:my_reason, :none, :my_options) end
+
+      top_frame =
+        try do
+          caller.()
+        rescue
+          _error -> hd(__STACKTRACE__)
+        end
+
+      assert {_module, _function, 0, [file: _file, line: _line]} = top_frame
+    end
+
+    test "excludes :erlang.error dispatch frames from the trace" do
+      caller = fn -> :erlang.error(:my_reason, :none, []) end
+
+      stacktrace =
+        try do
+          caller.()
+        rescue
+          _error -> __STACKTRACE__
+        end
+
+      refute Enum.any?(stacktrace, fn frame ->
+               match?({:erlang, :error, _arity_or_args, _location}, frame)
+             end)
+    end
+
+    test "keeps the frames below the caller in the trace" do
+      caller = fn -> :erlang.error(:my_reason, :none, []) end
+
+      # The inner call must not be in tail position - the BEAM drops
+      # tail-calling frames from the trace.
+      outer_caller = fn ->
+        caller.()
+        :ok
+      end
+
+      stacktrace =
+        try do
+          outer_caller.()
+        rescue
+          _error -> __STACKTRACE__
+        end
+
+      assert [
+               {module_1, function_1, _arity_or_args_1, _location_1},
+               {module_2, function_2, _arity_or_args_2, _location_2} | _rest
+             ] =
+               stacktrace
+
+      assert module_1 == __MODULE__
+      assert module_2 == __MODULE__
+      assert function_1 != function_2
     end
   end
 

@@ -14,6 +14,7 @@ import {
 import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
+import CallStack from "../../../assets/js/erts/call_stack.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Erlang_Os from "../../../assets/js/erlang/os.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
@@ -59,6 +60,20 @@ const pid1 = Type.pid("my_node@my_host", [0, 11, 111]);
 const pid2 = Type.pid("my_node@my_host", [0, 11, 112]);
 const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
 const tuple3 = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
+
+// Returns a fresh caller frame for :erlang.error/1,2,3 raising-frame tests -
+// fresh, because the tested code copies and augments frames and the tests
+// assert the original is left untouched.
+function buildCallerFrame() {
+  return {
+    module: "MyModule",
+    function: "my_fun",
+    arityOrArgs: 2,
+    file: "lib/my_module.ex",
+    line: 11,
+    errorInfo: null,
+  };
+}
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/erlang_test.exs
@@ -5621,13 +5636,17 @@ describe("Erlang", () => {
   describe("error/1", () => {
     const error = Erlang["error/1"];
 
-    it("raises the given reason", () => {
-      const reason = Type.errorStruct("MyError", "my message");
-
-      assertBoxedError(() => error(reason), "MyError", "my message");
+    beforeEach(() => {
+      CallStack.reset();
     });
 
-    it("normalizes a bare reason into a boxed exception struct", () => {
+    it("raises the given reason", () => {
+      const reason = Type.errorStruct("RuntimeError", "my message");
+
+      assertBoxedError(() => error(reason), "RuntimeError", "my message");
+    });
+
+    it("normalizes a bare reason into an exception struct", () => {
       const reason = Type.atom("badarg");
 
       let caught;
@@ -5642,31 +5661,269 @@ describe("Erlang", () => {
       assert.deepStrictEqual(caught.value, reason);
       assert.isTrue(Type.isStruct(caught.struct));
     });
+
+    it("keeps the caller's arity on the raising frame", () => {
+      CallStack.push(buildCallerFrame());
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [buildCallerFrame()]);
+    });
   });
 
-  it("error/2", () => {
+  describe("error/2", () => {
     const error = Erlang["error/2"];
-    const reason = Type.errorStruct("MyError", "my message");
-    const args = Type.list([Type.integer(1, Type.integer(2))]);
 
-    assertBoxedError(() => error(reason, args), "MyError", "my message");
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    it("raises the given reason", () => {
+      const reason = Type.errorStruct("RuntimeError", "my message");
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedError(() => error(reason, args), "RuntimeError", "my message");
+    });
+
+    it("replaces the caller's arity with the given args on the raising frame", () => {
+      CallStack.push(buildCallerFrame());
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), args);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {...buildCallerFrame(), arityOrArgs: args},
+      ]);
+    });
   });
 
   describe("error/3", () => {
     const error = Erlang["error/3"];
 
-    // TODO: args and error_info affect the BEAM stacktrace and error reporting,
-    // which the client does not model yet. Assert their effect once it does.
+    const emptyOptions = Type.list();
+    const noArgs = Type.atom("none");
+
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
     it("raises the given reason", () => {
-      const reason = Type.errorStruct("MyError", "my message");
+      const reason = Type.errorStruct("RuntimeError", "my message");
       const args = Type.list([Type.integer(1), Type.integer(2)]);
-      const options = Type.list();
 
       assertBoxedError(
-        () => error(reason, args, options),
-        "MyError",
+        () => error(reason, args, emptyOptions),
+        "RuntimeError",
         "my message",
       );
+    });
+
+    it("copies the caller frame into the raising frame", () => {
+      const callerFrame = buildCallerFrame();
+      CallStack.push(callerFrame);
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [buildCallerFrame()]);
+      assert.notStrictEqual(caught.stacktrace[0], callerFrame);
+    });
+
+    it("replaces the caller's arity with args given as a proper list", () => {
+      const callerFrame = buildCallerFrame();
+      CallStack.push(callerFrame);
+
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), args, emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {...buildCallerFrame(), arityOrArgs: args},
+      ]);
+
+      // The caller's live frame is not mutated.
+      assert.equal(callerFrame.arityOrArgs, 2);
+    });
+
+    it("replaces the caller's arity with args given as an improper list", () => {
+      CallStack.push(buildCallerFrame());
+      const args = Type.improperList([Type.integer(1), Type.integer(2)]);
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), args, emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {...buildCallerFrame(), arityOrArgs: args},
+      ]);
+    });
+
+    it("keeps the caller's arity when args is not a list", () => {
+      CallStack.push(buildCallerFrame());
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), Type.atom("my_args"), emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [buildCallerFrame()]);
+    });
+
+    it("attaches error_info from options to the raising frame", () => {
+      CallStack.push(buildCallerFrame());
+
+      const errorInfo = Type.map([
+        [Type.atom("module"), Type.atom("my_format_module")],
+      ]);
+
+      const options = Type.list([
+        Type.tuple([Type.atom("error_info"), errorInfo]),
+      ]);
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {...buildCallerFrame(), errorInfo},
+      ]);
+    });
+
+    it("ignores options other than error_info", () => {
+      CallStack.push(buildCallerFrame());
+      const options = Type.list([Type.atom("my_option")]);
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [buildCallerFrame()]);
+    });
+
+    it("ignores options that are not a list", () => {
+      CallStack.push(buildCallerFrame());
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, Type.atom("my_options"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [buildCallerFrame()]);
+    });
+
+    it("excludes :erlang.error dispatch frames from the trace", () => {
+      CallStack.push(buildCallerFrame());
+
+      CallStack.push({
+        module: "erlang",
+        function: "error",
+        arityOrArgs: 3,
+        file: null,
+        line: null,
+        errorInfo: null,
+      });
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [buildCallerFrame()]);
+    });
+
+    it("keeps the frames below the caller in the trace", () => {
+      const outerFrame = {
+        module: "MyOuterModule",
+        function: "my_outer_fun",
+        arityOrArgs: 0,
+        file: "lib/my_outer_module.ex",
+        line: 21,
+        errorInfo: null,
+      };
+
+      CallStack.push(outerFrame);
+      CallStack.push(buildCallerFrame());
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        buildCallerFrame(),
+        outerFrame,
+      ]);
+    });
+
+    // Client-only test with no Elixir consistency twin - a server stacktrace
+    // is never empty, while the client call stack is empty whenever frame
+    // tracking is disabled.
+    it("attaches an all-null raising frame when the call stack is empty", () => {
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: null,
+          function: null,
+          arityOrArgs: null,
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 
