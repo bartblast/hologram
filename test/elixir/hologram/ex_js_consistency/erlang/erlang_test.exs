@@ -3647,7 +3647,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         try do
           caller.()
         rescue
-          _error -> hd(__STACKTRACE__)
+          _error -> hd(wrap_term(__STACKTRACE__))
         end
 
       assert {module, _function, 0, [file: _file, line: _line]} = top_frame
@@ -3674,7 +3674,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         try do
           caller.()
         rescue
-          _error -> hd(__STACKTRACE__)
+          _error -> hd(wrap_term(__STACKTRACE__))
         end
 
       assert {module, _function, [1, 2], [file: _file, line: _line]} = top_frame
@@ -3701,7 +3701,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         try do
           caller.()
         rescue
-          _error -> hd(__STACKTRACE__)
+          _error -> hd(wrap_term(__STACKTRACE__))
         end
 
       assert {module, _function, 0, [file: _file, line: _line]} = top_frame
@@ -3715,33 +3715,33 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         try do
           caller.()
         rescue
-          _error -> hd(__STACKTRACE__)
+          _error -> hd(wrap_term(__STACKTRACE__))
         end
 
       assert {_module, _function, [1, 2], [file: _file, line: _line]} = top_frame
     end
 
     test "replaces the caller's arity with args given as an improper list" do
-      caller = fn -> :erlang.error(:my_reason, [1 | 2], []) end
+      caller = fn -> :erlang.error(:my_reason, wrap_term([1 | 2]), []) end
 
       top_frame =
         try do
           caller.()
         rescue
-          _error -> hd(__STACKTRACE__)
+          _error -> hd(wrap_term(__STACKTRACE__))
         end
 
       assert {_module, _function, [1 | 2], [file: _file, line: _line]} = top_frame
     end
 
     test "keeps the caller's arity when args is not a list" do
-      caller = fn -> :erlang.error(:my_reason, :my_args, []) end
+      caller = fn -> :erlang.error(:my_reason, wrap_term(:my_args), []) end
 
       top_frame =
         try do
           caller.()
         rescue
-          _error -> hd(__STACKTRACE__)
+          _error -> hd(wrap_term(__STACKTRACE__))
         end
 
       assert {_module, _function, 0, [file: _file, line: _line]} = top_frame
@@ -3756,7 +3756,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         try do
           caller.()
         rescue
-          _error -> hd(__STACKTRACE__)
+          _error -> hd(wrap_term(__STACKTRACE__))
         end
 
       assert {_module, _function, 0, [file: _file, line: _line, error_info: error_info]} =
@@ -3766,26 +3766,26 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "ignores options other than error_info" do
-      caller = fn -> :erlang.error(:my_reason, :none, [:my_option]) end
+      caller = fn -> :erlang.error(:my_reason, :none, wrap_term([:my_option])) end
 
       top_frame =
         try do
           caller.()
         rescue
-          _error -> hd(__STACKTRACE__)
+          _error -> hd(wrap_term(__STACKTRACE__))
         end
 
       assert {_module, _function, 0, [file: _file, line: _line]} = top_frame
     end
 
     test "ignores options that are not a list" do
-      caller = fn -> :erlang.error(:my_reason, :none, :my_options) end
+      caller = fn -> :erlang.error(:my_reason, :none, wrap_term(:my_options)) end
 
       top_frame =
         try do
           caller.()
         rescue
-          _error -> hd(__STACKTRACE__)
+          _error -> hd(wrap_term(__STACKTRACE__))
         end
 
       assert {_module, _function, 0, [file: _file, line: _line]} = top_frame
