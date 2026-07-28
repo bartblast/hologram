@@ -191,6 +191,12 @@ defmodule Hologram.Compiler.CallGraph do
     {{:os, :system_time, 1}, {:erlang, :_validate_time_unit, 2}},
     {{:os, :system_time, 1}, {:erlang, :convert_time_unit, 3}},
     {{:os, :system_time, 1}, {:os, :system_time, 0}},
+    {{:re, :compile, 1}, {:re, :compile, 2}},
+    {{:re, :compile, 2}, {:erlang, :iolist_to_binary, 1}},
+    {{:re, :compile, 2}, {:erlang, :make_ref, 0}},
+    {{:re, :import, 1}, {:re, :compile, 2}},
+    {{:re, :run, 2}, {:re, :run, 3}},
+    {{:re, :run, 3}, {:erlang, :iolist_to_binary, 1}},
     {{:sets, :_validate_opts, 1}, {:lists, :keyfind, 3}},
     {{:sets, :add_element, 2}, {:maps, :put, 3}},
     {{:sets, :del_element, 2}, {:maps, :remove, 2}},
@@ -362,6 +368,12 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :get, 3},
       {:maps, :is_key, 2}
     ]
+  ]
+
+  # MFAs called by the JavaScript that Encoder emits for encoded terms.
+  @mfas_used_by_encoded_terms [
+    # Encoded Regex terms rebuild their compiled patterns on evaluation.
+    {:re, :import, 1}
   ]
 
   @doc """
@@ -760,8 +772,8 @@ defmodule Hologram.Compiler.CallGraph do
   @spec list_runtime_entry_mfas :: [mfa]
   def list_runtime_entry_mfas do
     @mfas_used_by_client_runtime
-    |> Enum.reduce(@mfas_used_by_all_pages_and_components, fn {_key, mfas}, acc ->
-      mfas ++ acc
+    |> Enum.reduce(@mfas_used_by_all_pages_and_components ++ @mfas_used_by_encoded_terms, fn
+      {_key, mfas}, acc -> mfas ++ acc
     end)
     |> Enum.uniq()
     |> Enum.sort()

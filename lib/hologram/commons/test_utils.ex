@@ -10,17 +10,12 @@ defmodule Hologram.Commons.TestUtils do
   defdelegate port(str), to: IEx.Helpers
   defdelegate ref(str), to: IEx.Helpers
 
-  # Keep this message in sync with Interpreter.buildArgumentErrorMsg in assets/js/interpreter.mjs.
   @doc """
   Builds an error message for ArgumentError.
   """
   @spec build_argument_error_msg(integer(), String.t()) :: String.t()
   def build_argument_error_msg(arg_idx, blame) do
-    StringUtils.normalize_newlines("""
-    errors were found at the given arguments:
-
-      * #{IntegerUtils.ordinal(arg_idx)} argument: #{blame}
-    """)
+    build_multi_argument_error_msg([{arg_idx, blame}])
   end
 
   # Keep this message in sync with Interpreter.buildBadFunctionErrorMsg in assets/js/interpreter.mjs.
@@ -136,6 +131,24 @@ defmodule Hologram.Commons.TestUtils do
 
   defp build_module_not_available_error(module_name, fun, arity) do
     "function #{module_name}.#{fun}/#{arity} is undefined (module #{module_name} is not available)"
+  end
+
+  # Keep this message in sync with Interpreter.buildMultiArgumentErrorMsg in assets/js/interpreter.mjs.
+  @doc """
+  Builds an error message for ArgumentError with a bullet per erroneous argument.
+  """
+  @spec build_multi_argument_error_msg(list({integer(), String.t()})) :: String.t()
+  def build_multi_argument_error_msg(entries) do
+    bullets =
+      Enum.map_join(entries, fn {arg_idx, blame} ->
+        "  * #{IntegerUtils.ordinal(arg_idx)} argument: #{blame}\n"
+      end)
+
+    StringUtils.normalize_newlines("""
+    errors were found at the given arguments:
+
+    #{bullets}\
+    """)
   end
 
   # Keep this message in sync with Interpreter.buildTryClauseErrorMsg in assets/js/interpreter.mjs.

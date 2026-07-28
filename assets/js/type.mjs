@@ -382,6 +382,17 @@ export default class Type {
     return Type.isStruct(term, "Range");
   }
 
+  // Returns true when the term is a tuple of the given arity with the given
+  // atom as its first element (the shape of an Erlang record).
+  static isRecordTuple(term, tag, arity) {
+    return (
+      Type.isTuple(term) &&
+      term.data.length === arity &&
+      term.data[0]?.type === "atom" &&
+      term.data[0].value === tag
+    );
+  }
+
   static isReference(term) {
     return term.type === "reference";
   }

@@ -7,6 +7,7 @@ import {
 } from "./support/helpers.mjs";
 
 import Deserializer from "../../assets/js/deserializer.mjs";
+import Erlang_Re from "../../assets/js/erlang/re.mjs";
 import ERTS from "../../assets/js/erts.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
@@ -381,6 +382,132 @@ describe("Deserializer", () => {
 
         it("nested", () => {
           testNestedDeserialization(term);
+        });
+      });
+
+      describe("Regex struct", () => {
+        const buildRef = (seed) =>
+          Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [seed, 2, 3]);
+
+        const buildRegexStruct = (rePattern, source, opts) =>
+          Type.map([
+            [Type.atom("__struct__"), Type.atom("Elixir.Regex")],
+            [Type.atom("opts"), opts],
+            [Type.atom("re_pattern"), rePattern],
+            [Type.atom("source"), Type.bitstring(source)],
+          ]);
+
+        const buildRePattern = (ref) =>
+          Type.tuple([
+            Type.atom("re_pattern"),
+            Type.integer(1),
+            Type.integer(0),
+            Type.integer(0),
+            ref,
+          ]);
+
+        it("deserializes to the sent struct", () => {
+          const ref = buildRef(101);
+
+          const term = buildRegexStruct(
+            buildRePattern(ref),
+            "a(b+)",
+            Type.list(),
+          );
+
+          const deserialized = deserialize(serialize(term));
+
+          assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
+        });
+
+        it("registers the pattern under the incoming ref", () => {
+          const ref = buildRef(102);
+
+          const term = buildRegexStruct(
+            buildRePattern(ref),
+            "a(b+)",
+            Type.list(),
+          );
+
+          deserialize(serialize(term));
+
+          const registryEntry = ERTS.regexPatternRegistry.get(ref);
+
+          assert.isNotNull(registryEntry);
+          assert.equal(registryEntry.captureCount, 1);
+        });
+
+        it("the registered pattern is runnable", () => {
+          const ref = buildRef(103);
+
+          const term = buildRegexStruct(
+            buildRePattern(ref),
+            "a(b+)",
+            Type.list(),
+          );
+
+          deserialize(serialize(term));
+
+          const result = Erlang_Re["run/3"](
+            Type.bitstring("abbc"),
+            buildRePattern(ref),
+            Type.list(),
+          );
+
+          assert.deepEqual(
+            result,
+            Type.tuple([
+              Type.atom("match"),
+              Type.list([
+                Type.tuple([Type.integer(0), Type.integer(3)]),
+                Type.tuple([Type.integer(1), Type.integer(2)]),
+              ]),
+            ]),
+          );
+        });
+
+        it("applies the compile options", () => {
+          const ref = buildRef(104);
+
+          const term = buildRegexStruct(
+            buildRePattern(ref),
+            "ab",
+            Type.list([Type.atom("caseless")]),
+          );
+
+          deserialize(serialize(term));
+
+          const result = Erlang_Re["run/3"](
+            Type.bitstring("AB"),
+            buildRePattern(ref),
+            Type.list(),
+          );
+
+          assert.deepEqual(
+            result,
+            Type.tuple([
+              Type.atom("match"),
+              Type.list([Type.tuple([Type.integer(0), Type.integer(2)])]),
+            ]),
+          );
+        });
+
+        it("skips registration for an already known ref", () => {
+          const ref = buildRef(105);
+
+          const existingEntry = {marker: "existing entry"};
+
+          ERTS.regexPatternRegistry.put(ref, existingEntry);
+
+          const term = buildRegexStruct(
+            buildRePattern(ref),
+            "a(b+)",
+            Type.list(),
+          );
+
+          deserialize(serialize(term));
+
+          assert.strictEqual(ERTS.regexPatternRegistry.get(ref), existingEntry);
         });
       });
 

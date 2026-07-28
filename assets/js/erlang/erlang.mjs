@@ -3147,6 +3147,32 @@ const Erlang = {
   // End split_binary/2
   // Deps: [:erlang.byte_size/1]
 
+  // Start system_info/1
+  // TODO: support the remaining system info items.
+  "system_info/1": (item) => {
+    if (Type.isAtom(item)) {
+      switch (item.value) {
+        // Byte order of JS typed arrays on all supported platforms
+        case "endian":
+          return Type.atom("little");
+
+        // The newest Erlang/OTP release the client runtime emulates
+        case "otp_release":
+          return Type.charlist("29");
+      }
+
+      throw new HologramInterpreterError(
+        `the ${Interpreter.inspect(item)} system info item is not yet implemented in Hologram`,
+      );
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "invalid system info item"),
+    );
+  },
+  // End system_info/1
+  // Deps: []
+
   // Start system_time/0
   // See: docs/erlang_time_functions_porting_strategy.md
   "system_time/0": () => {
