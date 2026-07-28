@@ -39,20 +39,32 @@ export default class HologramBoxedError extends Error {
       // value carries the raw reason; struct carries its normalized exception
       // form. Normalizing here means rescue always matches against a real
       // exception struct, even when the reason is a bare term like :badarg.
-      const struct = Interpreter.normalizeError(value);
-
       Object.defineProperty(this, "struct", {
-        value: struct,
+        value: null,
         writable: true,
         configurable: true,
       });
 
-      const boxedType = Interpreter.getErrorType(this);
-      const boxedMessage = Interpreter.resolveErrorMessage(struct);
-
-      this.message = `(${boxedType}) ${boxedMessage}`;
+      this.rederive(Type.list());
     } else {
       this.message = `(${kind.value}) ${Interpreter.inspect(value)}`;
     }
+  }
+
+  // Re-derives the normalized struct and display message using the given
+  // boxed stacktrace. Message derivation may depend on the raising frame's
+  // args and error_info, which :erlang.error/3 attaches only after
+  // construction.
+  rederive(boxedStacktrace) {
+    if (this.kind.value !== "error") {
+      return;
+    }
+
+    this.struct = Interpreter.normalizeError(this.value, boxedStacktrace);
+
+    const boxedType = Interpreter.getErrorType(this);
+    const boxedMessage = Interpreter.resolveErrorMessage(this.struct);
+
+    this.message = `(${boxedType}) ${boxedMessage}`;
   }
 }

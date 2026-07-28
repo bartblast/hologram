@@ -10,6 +10,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   alias Hologram.Commons.SystemUtils
   alias Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1
   alias Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2
+  alias Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module3
 
   # :erlang.andalso/2 and :erlang.orelse/2 are short-circuit operators rather than
   # exported functions, so calling them by MFA trips the Elixir 1.20 undefined-function
@@ -3832,6 +3833,23 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert module_1 == __MODULE__
       assert module_2 == __MODULE__
       assert function_1 != function_2
+    end
+
+    test "derives the message from error_info at normalize time" do
+      expected_message = """
+      errors were found at the given arguments:
+
+        * 2nd argument: not a map
+      """
+
+      result =
+        try do
+          :erlang.error(:badarg, [:a, :b], error_info: %{module: Module3})
+        rescue
+          error -> error
+        end
+
+      assert result == %ArgumentError{message: expected_message}
     end
   end
 

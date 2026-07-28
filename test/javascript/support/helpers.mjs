@@ -221,16 +221,67 @@ function defineElixirExceptionModule() {
       return Type.bitstring(Interpreter.inspect(struct));
     },
 
-    // Mirrors Exception.normalize(:error, reason): an exception struct passes
-    // through unchanged, :badarg becomes an ArgumentError, and any other bare
-    // reason is wrapped in an ErlangError struct.
-    "normalize/2": (_kind, reason) => {
+    // Mirrors Exception.normalize(:error, reason, stacktrace): an exception
+    // struct passes through unchanged, bare reasons become their exception
+    // structs via the ErlangError.normalize clauses (only the ones exercised
+    // by tests are mirrored), and any other bare reason is wrapped in an
+    // ErlangError struct.
+    "normalize/3": (_kind, reason, stacktrace) => {
       if (Type.isStruct(reason)) {
         return reason;
       }
 
       if (Type.isAtom(reason) && reason.value === "badarg") {
-        return Type.errorStruct("ArgumentError", "argument error");
+        const message = deriveErrorInfoMessage(reason, stacktrace);
+
+        return Type.errorStruct("ArgumentError", message ?? "argument error");
+      }
+
+      const isTaggedTuple = (tag) =>
+        Type.isTuple(reason) &&
+        reason.data.length === 2 &&
+        Type.isAtom(reason.data[0]) &&
+        reason.data[0].value === tag;
+
+      if (isTaggedTuple("badmap")) {
+        return Type.struct("BadMapError", [
+          [Type.atom("__exception__"), Type.boolean(true)],
+          [Type.atom("term"), reason.data[1]],
+        ]);
+      }
+
+      if (isTaggedTuple("badkey")) {
+        // Mirrors the term recovery from the known stacktrace frame shapes -
+        // only the :maps ones are mirrored.
+        let term = Type.nil();
+
+        if (Type.isList(stacktrace) && stacktrace.data.length > 0) {
+          const topFrame = stacktrace.data[0];
+
+          if (
+            Type.isTuple(topFrame) &&
+            topFrame.data.length === 4 &&
+            Type.isAtom(topFrame.data[0]) &&
+            topFrame.data[0].value === "maps" &&
+            Type.isList(topFrame.data[2])
+          ) {
+            const funName = topFrame.data[1].value;
+            const args = topFrame.data[2].data;
+
+            if (funName === "get" && args.length === 2) {
+              term = args[1];
+            } else if (funName === "update" && args.length === 3) {
+              term = args[2];
+            }
+          }
+        }
+
+        return Type.struct("KeyError", [
+          [Type.atom("__exception__"), Type.boolean(true)],
+          [Type.atom("key"), reason.data[1]],
+          [Type.atom("message"), Type.nil()],
+          [Type.atom("term"), term],
+        ]);
       }
 
       return Type.struct("ErlangError", [
@@ -472,6 +523,68 @@ export function defineRuntimeGlobals() {
     "Elixir_WithClauseError",
     defineElixirTermErrorModule("no with clause matching:"),
   );
+}
+
+// Mirrors ErlangError.error_info/3: reads error_info from the top stacktrace
+// frame, dispatches to the format module's format_error/2, and renders the
+// positional fragments into the multi-argument error message. Returns null
+// when no message can be derived (no error_info, no format module, or no
+// positional fragments).
+function deriveErrorInfoMessage(reason, stacktrace) {
+  if (!Type.isList(stacktrace) || stacktrace.data.length === 0) {
+    return null;
+  }
+
+  const topFrame = stacktrace.data[0];
+
+  if (!Type.isTuple(topFrame) || topFrame.data.length !== 4) {
+    return null;
+  }
+
+  const [frameModule, _frameFun, argsOrArity, opts] = topFrame.data;
+
+  if (!Type.isList(opts)) {
+    return null;
+  }
+
+  const errorInfoEntry = opts.data.find(
+    (opt) =>
+      Type.isTuple(opt) &&
+      opt.data.length === 2 &&
+      Type.isAtom(opt.data[0]) &&
+      opt.data[0].value === "error_info",
+  );
+
+  if (errorInfoEntry === undefined || !Type.isMap(errorInfoEntry.data[1])) {
+    return null;
+  }
+
+  const errorInfoMap = errorInfoEntry.data[1];
+  const errorModule = errorInfoMap.data["atom(module)"]?.[1] ?? frameModule;
+  const errorModuleProxy = Interpreter.moduleProxy(errorModule);
+
+  if (!errorModuleProxy || !("format_error/2" in errorModuleProxy)) {
+    return null;
+  }
+
+  const fragments = errorModuleProxy["format_error/2"](reason, stacktrace);
+
+  const arity = Type.isInteger(argsOrArity)
+    ? Number(argsOrArity.value)
+    : argsOrArity.data.length;
+
+  const entries = Object.values(fragments.data)
+    .filter(
+      ([key, _value]) => Type.isInteger(key) && Number(key.value) <= arity,
+    )
+    .map(([key, value]) => [Number(key.value), Bitstring.toText(value)])
+    .sort(([n1, _msg1], [n2, _msg2]) => n1 - n2);
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return Interpreter.buildMultiArgumentErrorMsg(entries);
 }
 
 export function encodedSubscriptionReceiptKey(channel, cid) {

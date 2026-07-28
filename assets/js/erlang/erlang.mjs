@@ -1759,6 +1759,10 @@ const Erlang = {
 
     error.stacktrace = [raisingFrame, ...frames.slice(callerIndex + 1)];
 
+    // Message derivation may read args and error_info from the raising
+    // frame, so the struct and message re-derive against the fixed trace.
+    error.rederive(Type.list(error.stacktrace.map(ERTS.callStack.boxFrame)));
+
     throw error;
   },
   // End error/3

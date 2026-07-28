@@ -833,7 +833,7 @@ defmodule Hologram.CompilerTest do
               return value;
             }
 
-            Interpreter.raiseKeyError(Interpreter.buildKeyErrorMsg(key, map));
+            Interpreter.raiseKeyError(key, map);
           }\
         """)
 

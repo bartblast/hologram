@@ -924,11 +924,17 @@ export default class Interpreter {
   }
 
   // Turns an :error reason into its exception struct, mirroring Elixir's
-  // Exception.normalize/2: a struct passes through unchanged, while a bare term
-  // (e.g. :badarg) becomes an ArgumentError/ErlangError/... struct.
-  // Deps: [Exception.normalize/2]
-  static normalizeError(reason) {
-    return Elixir_Exception["normalize/2"](Type.atom("error"), reason);
+  // Exception.normalize/3: a struct passes through unchanged, while a bare
+  // term (e.g. :badarg) becomes an ArgumentError/ErlangError/... struct. The
+  // boxed stacktrace feeds error_info-based message derivation, which reads
+  // the raising frame's args and error_info.
+  // Deps: [Exception.normalize/3]
+  static normalizeError(reason, stacktrace = Type.list()) {
+    return Elixir_Exception["normalize/3"](
+      Type.atom("error"),
+      reason,
+      stacktrace,
+    );
   }
 
   static raiseArgumentError(message) {
@@ -2132,7 +2138,7 @@ export default class Interpreter {
     // rescue only catches :error-kind failures. By this point error.struct is
     // always a normalized exception struct - a bare reason like :badarg or a
     // non-exception struct has already become an ArgumentError/ErlangError/...
-    // via Exception.normalize/2 - so its __struct__ alone decides matching.
+    // via Exception.normalize/3 - so its __struct__ alone decides matching.
     if (error.kind.value !== "error") {
       return false;
     }

@@ -12,6 +12,7 @@ import {
 } from "../support/helpers.mjs";
 
 import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
+import {defineModule3Fixture as defineErlangModule3Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_3.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import CallStack from "../../../assets/js/erts/call_stack.mjs";
@@ -25,6 +26,7 @@ import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
 defineErlangModule1Fixture();
+defineErlangModule3Fixture();
 
 const atomA = Type.atom("a");
 const atomAbc = Type.atom("abc");
@@ -5900,6 +5902,37 @@ describe("Erlang", () => {
         buildCallerFrame(),
         outerFrame,
       ]);
+    });
+
+    it("derives the message from error_info at normalize time", () => {
+      const args = Type.list([Type.atom("a"), Type.atom("b")]);
+
+      const errorInfoMap = Type.map([
+        [
+          Type.atom("module"),
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module3"),
+        ],
+      ]);
+
+      const options = Type.list([
+        Type.tuple([Type.atom("error_info"), errorInfoMap]),
+      ]);
+
+      let caught;
+
+      try {
+        error(Type.atom("badarg"), args, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(
+        caught.struct,
+        Type.errorStruct(
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 2nd argument: not a map\n",
+        ),
+      );
     });
 
     // Client-only test with no Elixir consistency twin - a server stacktrace
