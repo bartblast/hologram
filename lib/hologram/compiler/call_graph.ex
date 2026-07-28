@@ -592,6 +592,28 @@ defmodule Hologram.Compiler.CallGraph do
     |> build(args, from_vertex)
   end
 
+  # An :erlang.error/3 raise site with an error_info option makes the runtime
+  # call the named format module when deriving the error message, as specified
+  # by EEP-54 (Erlang Enhancement Proposal 54, "Provide more information about
+  # errors"). That call never appears in the code - it's resolved from the
+  # error_info map at runtime. Mirror the resolution here, honoring its
+  # defaults (the raising module and :format_error), so the formatter reaches
+  # the bundle.
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :error,
+          args: [_reason, _args, options] = args
+        },
+        from_vertex
+      ) do
+    call_graph
+    |> add_edge(from_vertex, {:erlang, :error, 3})
+    |> maybe_add_error_info_formatter_edge(options, from_vertex)
+    |> build(args, from_vertex)
+  end
+
   def build(
         call_graph,
         %IR.RemoteFunctionCall{
@@ -1354,6 +1376,41 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
+  defp maybe_add_error_info_formatter_edge(
+         call_graph,
+         %IR.ListType{data: options},
+         from_vertex
+       ) do
+    error_info_pairs =
+      Enum.find_value(options, fn
+        %IR.TupleType{
+          data: [%IR.AtomType{value: :error_info}, %IR.MapType{data: pairs}]
+        } ->
+          pairs
+
+        _option ->
+          nil
+      end)
+
+    default_module =
+      case from_vertex do
+        {module, _function, _arity} -> module
+        module when is_atom(module) -> module
+      end
+
+    with pairs when not is_nil(pairs) <- error_info_pairs,
+         {:ok, format_module} <- resolve_error_info_key(pairs, :module, default_module),
+         {:ok, format_function} <- resolve_error_info_key(pairs, :function, :format_error) do
+      add_edge(call_graph, from_vertex, {format_module, format_function, 2})
+    else
+      _fallback -> call_graph
+    end
+  end
+
+  defp maybe_add_error_info_formatter_edge(call_graph, _options, _from_vertex) do
+    call_graph
+  end
+
   defp maybe_add_protocol_call_graph_edges(call_graph, module) do
     if Reflection.protocol?(module) do
       add_protocol_call_graph_edges(call_graph, module)
@@ -1489,6 +1546,19 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp remove_module_vertices(call_graph, module) do
     remove_vertices(call_graph, module_vertices(call_graph, module))
+  end
+
+  # Resolves an error_info map key to an atom: an absent key resolves to the
+  # default, a literal atom value resolves to itself, and anything dynamic
+  # (or a nil default) makes the resolution fail.
+  defp resolve_error_info_key(pairs, key, default) do
+    found = Enum.find(pairs, fn {k, _v} -> match?(%IR.AtomType{value: ^key}, k) end)
+
+    case found do
+      nil when not is_nil(default) -> {:ok, default}
+      {_key_ir, %IR.AtomType{value: value}} -> {:ok, value}
+      _fallback -> :error
+    end
   end
 
   # Runs the protocol-aware fixpoint from the given entry vertices and returns the

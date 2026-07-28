@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Context
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Realtime
@@ -39,6 +40,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module35
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module36
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module37
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module38
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
@@ -783,6 +785,231 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert sorted_edges(call_graph) == [
                {{Module1, :my_fun_1, 4}, Calendar.ISO}
+             ]
+    end
+
+    test "remote function call using :erlang.error/3, error_info with module key", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.AtomType{value: :badarg},
+          %IR.ListType{data: [%IR.AtomType{value: :a}]},
+          %IR.ListType{
+            data: [
+              %IR.TupleType{
+                data: [
+                  %IR.AtomType{value: :error_info},
+                  %IR.MapType{
+                    data: [{%IR.AtomType{value: :module}, %IR.AtomType{value: Module2}}]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module2,
+               {Module1, :my_fun_1, 4},
+               {Module2, :format_error, 2},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, Module2},
+               {{Module1, :my_fun_1, 4}, {Module2, :format_error, 2}},
+               {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
+             ]
+    end
+
+    test "remote function call using :erlang.error/3, error_info with module and function keys",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.AtomType{value: :badarg},
+          %IR.ListType{data: [%IR.AtomType{value: :a}]},
+          %IR.ListType{
+            data: [
+              %IR.TupleType{
+                data: [
+                  %IR.AtomType{value: :error_info},
+                  %IR.MapType{
+                    data: [
+                      {%IR.AtomType{value: :module}, %IR.AtomType{value: Module2}},
+                      {%IR.AtomType{value: :function}, %IR.AtomType{value: :my_format_error}}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module2,
+               {Module1, :my_fun_1, 4},
+               {Module2, :my_format_error, 2},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, Module2},
+               {{Module1, :my_fun_1, 4}, {Module2, :my_format_error, 2}},
+               {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
+             ]
+    end
+
+    test "remote function call using :erlang.error/3, error_info without module key defaults to the enclosing module",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.AtomType{value: :badarg},
+          %IR.ListType{data: [%IR.AtomType{value: :a}]},
+          %IR.ListType{
+            data: [
+              %IR.TupleType{
+                data: [
+                  %IR.AtomType{value: :error_info},
+                  %IR.MapType{data: []}
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Module1, :format_error, 2},
+               {Module1, :my_fun_1, 4},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, {Module1, :format_error, 2}},
+               {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
+             ]
+    end
+
+    test "remote function call using :erlang.error/3, error_info with a dynamic module value", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.AtomType{value: :badarg},
+          %IR.ListType{data: [%IR.AtomType{value: :a}]},
+          %IR.ListType{
+            data: [
+              %IR.TupleType{
+                data: [
+                  %IR.AtomType{value: :error_info},
+                  %IR.MapType{
+                    data: [{%IR.AtomType{value: :module}, %IR.Variable{name: :module}}]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Module1, :my_fun_1, 4},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
+             ]
+    end
+
+    test "remote function call using :erlang.error/3, options without error_info", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.AtomType{value: :badarg},
+          %IR.ListType{data: [%IR.AtomType{value: :a}]},
+          %IR.ListType{
+            data: [
+              %IR.TupleType{
+                data: [%IR.AtomType{value: :other_option}, %IR.AtomType{value: :abc}]
+              }
+            ]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Module1, :my_fun_1, 4},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
+             ]
+    end
+
+    test "remote function call using :erlang.error/3, dynamic options", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.AtomType{value: :badarg},
+          %IR.ListType{data: [%IR.AtomType{value: :a}]},
+          %IR.Variable{name: :options}
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Module1, :my_fun_1, 4},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
              ]
     end
 
@@ -2196,15 +2423,48 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert :vertex_5 in result
   end
 
-  # Consistency tests verifying that the Elixir stdlib IR patterns
+  # Consistency tests verifying that the Elixir IR patterns
   # assumed by the call graph still hold. If these fail after an
   # Elixir upgrade, the corresponding call graph code needs updating.
-  describe "Elixir stdlib IR pattern assumptions" do
+  describe "Elixir IR pattern assumptions" do
     defp find_fun_defs(ir_plt, module, name, arity) do
       %IR.ModuleDefinition{body: %IR.Block{expressions: expressions}} =
         PLT.get!(ir_plt, module)
 
       Enum.filter(expressions, &match?(%IR.FunctionDefinition{name: ^name, arity: ^arity}, &1))
+    end
+
+    # EEP-54 formatter resolution assumption: a raise site passing a literal
+    # error_info option compiles to a keyword list of tuples whose error_info
+    # value is a map with literal atom keys and values.
+    test ":erlang.error/3 with a literal error_info option compiles to the IR shape the formatter resolution matches" do
+      code =
+        ~s/:erlang.error(:badarg, [:a], error_info: %{module: MyFormatter, function: :my_format_error})/
+
+      assert IR.for_code(code, %Context{}) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: :erlang},
+               function: :error,
+               args: [
+                 %IR.AtomType{value: :badarg},
+                 %IR.ListType{data: [%IR.AtomType{value: :a}]},
+                 %IR.ListType{
+                   data: [
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :error_info},
+                         %IR.MapType{
+                           data: [
+                             {%IR.AtomType{value: :module}, %IR.AtomType{value: MyFormatter}},
+                             {%IR.AtomType{value: :function},
+                              %IR.AtomType{value: :my_format_error}}
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               ]
+             }
     end
 
     # Dynamic dispatch assumption: Date.day_of_era/1 extracts calendar from the struct
@@ -4600,6 +4860,84 @@ defmodule Hologram.Compiler.CallGraphTest do
                  line: 2
                }
              }
+    end
+
+    # Kernel.raise with a compile-time-known exception module expands to
+    # :erlang.error/1, without any error_info option, so no formatter edge
+    # is derived from such raise sites.
+    #
+    # Original source:
+    #   raise ArgumentError, "my message"
+    test "raise with a known exception module expands to :erlang.error/1 without error_info",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Module38, :my_fun_1, 0)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :error,
+                       args: [
+                         %IR.RemoteFunctionCall{
+                           module: %IR.AtomType{value: ArgumentError},
+                           function: :exception,
+                           args: [%IR.StringType{value: "my message"}]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Kernel.raise with a message expands to :erlang.error/3 whose error_info
+    # option names Exception as the format module, so the EEP-54 resolution
+    # derives an Exception.format_error/2 formatter edge from such raise sites.
+    #
+    # Original source:
+    #   raise "my message"
+    test "raise with a message expands to :erlang.error/3 with the Exception formatter error_info",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Module38, :my_fun_2, 0)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :error,
+                       args: [
+                         %IR.RemoteFunctionCall{
+                           module: %IR.AtomType{value: RuntimeError},
+                           function: :exception,
+                           args: [%IR.StringType{value: "my message"}]
+                         },
+                         %IR.AtomType{value: :none},
+                         %IR.ListType{
+                           data: [
+                             %IR.TupleType{
+                               data: [
+                                 %IR.AtomType{value: :error_info},
+                                 %IR.MapType{
+                                   data: [
+                                     {%IR.AtomType{value: :module},
+                                      %IR.AtomType{value: Exception}}
+                                   ]
+                                 }
+                               ]
+                             }
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
     end
 
     # Original source:
