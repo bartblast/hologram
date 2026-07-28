@@ -488,6 +488,34 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "relative_source_path/1" do
+    test "project module" do
+      assert relative_source_path(Hologram.Reflection) == "lib/hologram/reflection.ex"
+    end
+
+    test "dep module" do
+      assert relative_source_path(BeamFile) == "lib/beam_file.ex"
+    end
+
+    test "Elixir standard library module" do
+      assert relative_source_path(Enum) == "lib/enum.ex"
+    end
+
+    test "module with an unrecognized source root" do
+      code = "defmodule Hologram.Test.Fixtures.Reflection.ForeignSourceModule do end"
+
+      [{module, _bytecode}] =
+        Code.compile_string(code, "/foreign/build/machine/lib/foreign_source.ex")
+
+      on_exit(fn ->
+        :code.purge(module)
+        :code.delete(module)
+      end)
+
+      assert relative_source_path(module) == "foreign_source.ex"
+    end
+  end
+
   test "root_dir/0" do
     assert root_dir() == File.cwd!()
   end
