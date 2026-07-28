@@ -999,12 +999,18 @@ export default class Interpreter {
     Interpreter.raiseError("FunctionClauseError", message);
   }
 
-  static raiseKeyError(message) {
-    Interpreter.raiseError("KeyError", message);
+  static raiseKeyError(key, term) {
+    Interpreter.#raiseFieldBearingError("KeyError", [
+      [Type.atom("key"), key],
+      [Type.atom("message"), Type.nil()],
+      [Type.atom("term"), term],
+    ]);
   }
 
-  static raiseMatchError(message) {
-    Interpreter.raiseError("MatchError", message);
+  static raiseMatchError(term) {
+    Interpreter.#raiseFieldBearingError("MatchError", [
+      [Type.atom("term"), term],
+    ]);
   }
 
   static raiseTryClauseError(term) {
@@ -1698,7 +1704,7 @@ export default class Interpreter {
 
   static #handleMatchFail(right, raiseMatchError) {
     if (raiseMatchError) {
-      $.raiseMatchError($.buildMatchErrorMsg(right));
+      $.raiseMatchError(right);
     }
 
     return false;

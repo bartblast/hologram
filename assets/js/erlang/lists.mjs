@@ -650,7 +650,7 @@ const Erlang_Lists = {
       ]);
 
       if (!Type.isTuple(result) || result.data.length !== 2) {
-        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(result));
+        Interpreter.raiseMatchError(result);
       }
 
       mappedElements.push(result.data[0]);

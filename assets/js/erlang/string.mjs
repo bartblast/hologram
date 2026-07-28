@@ -26,11 +26,11 @@ const Erlang_String = {
     try {
       stringBinary = Erlang_Unicode["characters_to_binary/1"](string);
     } catch {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+      Interpreter.raiseMatchError(string);
     }
 
     if (Type.isTuple(stringBinary)) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+      Interpreter.raiseMatchError(string);
     }
 
     const patternBinary =
@@ -335,7 +335,7 @@ const Erlang_String = {
     try {
       stringBinary = Erlang_Unicode["characters_to_binary/1"](string);
     } catch {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+      Interpreter.raiseMatchError(string);
     }
 
     // Convert pattern to binary - let ArgumentError propagate naturally
@@ -403,11 +403,11 @@ const Erlang_String = {
     try {
       subjectBinary = Erlang_Unicode["characters_to_binary/1"](subject);
     } catch {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(subject));
+      Interpreter.raiseMatchError(subject);
     }
 
     if (Type.isTuple(subjectBinary)) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(subject));
+      Interpreter.raiseMatchError(subject);
     }
 
     const patternBinary = Erlang_Unicode["characters_to_binary/1"](pattern);

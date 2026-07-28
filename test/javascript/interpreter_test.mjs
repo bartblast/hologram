@@ -9154,14 +9154,55 @@ describe("Interpreter", () => {
   });
 
   it("raiseKeyError()", () => {
-    assertBoxedError(() => Interpreter.raiseKeyError("abc"), "KeyError", "abc");
+    const key = Type.atom("a");
+    const map = Type.map([[Type.atom("b"), Type.integer(2)]]);
+
+    let caught;
+
+    try {
+      Interpreter.raiseKeyError(key, map);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("KeyError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("key"), key],
+        [Type.atom("message"), Type.nil()],
+        [Type.atom("term"), map],
+      ]),
+    );
+
+    assert.equal(
+      caught.message,
+      "(KeyError) key :a not found in:\n\n    %{b: 2}\n",
+    );
   });
 
   it("raiseMatchError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseMatchError("my_message"),
-      "MatchError",
-      "my_message",
+    const term = Type.atom("abc");
+
+    let caught;
+
+    try {
+      Interpreter.raiseMatchError(term);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("MatchError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("term"), term],
+      ]),
+    );
+
+    assert.equal(
+      caught.message,
+      "(MatchError) no match of right hand side value:\n\n    :abc\n",
     );
   });
 

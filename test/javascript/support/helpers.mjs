@@ -423,6 +423,42 @@ export function defineRuntimeGlobals() {
   );
 
   defineGlobalModule("Elixir_Kernel", Elixir_Kernel);
+
+  defineGlobalModule("Elixir_KeyError", {
+    // Mirrors KeyError.message/1: an eager message passes through, otherwise
+    // the text derives from the key and term fields.
+    "message/1": (struct) => {
+      const message = struct.data["atom(message)"][1];
+
+      if (!Type.isNil(message)) {
+        return message;
+      }
+
+      const key = Interpreter.inspect(struct.data["atom(key)"][1]);
+      const term = struct.data["atom(term)"][1];
+
+      if (Type.isNil(term)) {
+        return Type.bitstring(`key ${key} not found`);
+      }
+
+      const opts = Type.keywordList([
+        [
+          Type.atom("custom_options"),
+          Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
+        ],
+      ]);
+
+      return Type.bitstring(
+        `key ${key} not found in:\n\n    ${Interpreter.inspect(term, opts)}\n`,
+      );
+    },
+  });
+
+  defineGlobalModule(
+    "Elixir_MatchError",
+    defineElixirTermErrorModule("no match of right hand side value:"),
+  );
+
   defineGlobalModule("Elixir_String_Chars", defineElixirStringCharsModule());
 
   defineGlobalModule(
