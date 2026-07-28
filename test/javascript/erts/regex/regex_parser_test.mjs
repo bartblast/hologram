@@ -2299,6 +2299,58 @@ describe("RegexParser", () => {
         });
       });
 
+      it("parses a long fixed-length lookbehind", () => {
+        assert.deepEqual(RegexParser.parse("(?<=a{300})"), {
+          type: "lookaround",
+          direction: "behind",
+          negated: false,
+          atomic: true,
+          content: quant(300, 300, "greedy", lit("a")),
+        });
+      });
+
+      it("parses a backreference to a fixed-length group in a lookbehind", () => {
+        assert.deepEqual(
+          RegexParser.parse("(a{5})(?<=\\1)"),
+          concat(grp(1, quant(5, 5, "greedy", lit("a"))), {
+            type: "lookaround",
+            direction: "behind",
+            negated: false,
+            atomic: true,
+            content: {type: "backreference", number: 1, name: null},
+          }),
+        );
+      });
+
+      it("parses a forward reference in a lookbehind", () => {
+        assert.deepEqual(
+          RegexParser.parse("(?<=\\1)(a)"),
+          concat(
+            {
+              type: "lookaround",
+              direction: "behind",
+              negated: false,
+              atomic: true,
+              content: {type: "backreference", number: 1, name: null},
+            },
+            grp(1, lit("a")),
+          ),
+        );
+      });
+
+      it("parses a subroutine call to a fixed-length group in a lookbehind", () => {
+        assert.deepEqual(
+          RegexParser.parse("(a{5})(?<=(?1))"),
+          concat(grp(1, quant(5, 5, "greedy", lit("a"))), {
+            type: "lookaround",
+            direction: "behind",
+            negated: false,
+            atomic: true,
+            content: {type: "subroutine", number: 1, name: null},
+          }),
+        );
+      });
+
       it("raises on unbounded lookbehind", () => {
         assertRegexParseError(
           "(?<=a*)b",
@@ -2331,11 +2383,123 @@ describe("RegexParser", () => {
         );
       });
 
+      it("raises on a fixed branch over 255 chars beside a variable branch", () => {
+        assertRegexParseError(
+          "(?<=a{300}|a{1,2})",
+          "branch too long in variable-length lookbehind assertion",
+          0,
+        );
+      });
+
+      it("raises on a fixed-length lookbehind over 65535 chars", () => {
+        assertRegexParseError(
+          "(?<=a{65535}b)",
+          "lookbehind assertion is too long",
+          0,
+        );
+      });
+
+      it("raises on a backreference to a variable-length group in a lookbehind", () => {
+        assertRegexParseError(
+          "(a+)(?<=\\1)",
+          "length of lookbehind assertion is not limited",
+          4,
+        );
+      });
+
+      it("raises on a forward reference to a variable-length group in a lookbehind", () => {
+        assertRegexParseError(
+          "(?<=\\1)(a+)",
+          "length of lookbehind assertion is not limited",
+          0,
+        );
+      });
+
+      it("raises on a backreference in a lookbehind when the pattern uses branch reset", () => {
+        assertRegexParseError(
+          "(?|(a)|(b))(?<=\\1)",
+          "length of lookbehind assertion is not limited",
+          11,
+        );
+      });
+
+      it("raises on a backreference to a duplicated name in a lookbehind", () => {
+        assertRegexParseError(
+          "(?J)(?<g>a)(?<g>b)(?<=\\k<g>)",
+          "length of lookbehind assertion is not limited",
+          18,
+        );
+      });
+
+      it("raises on a subroutine call to a variable-length group in a lookbehind", () => {
+        assertRegexParseError(
+          "(a+)(?<=(?1))",
+          "length of lookbehind assertion is not limited",
+          4,
+        );
+      });
+
+      it("raises on a recursive subroutine call in a lookbehind", () => {
+        assertRegexParseError(
+          "(a(?1)?)(?<=(?1))",
+          "length of lookbehind assertion is not limited",
+          8,
+        );
+      });
+
+      it("raises on whole-pattern recursion in a lookbehind", () => {
+        assertRegexParseError(
+          "(?<=(?R))x",
+          "length of lookbehind assertion is not limited",
+          0,
+        );
+      });
+
+      it("raises on an unbounded option group in a lookbehind", () => {
+        assertRegexParseError(
+          "(?<=(?i:a+))",
+          "length of lookbehind assertion is not limited",
+          0,
+        );
+      });
+
+      it("raises on an unbounded conditional branch in a lookbehind", () => {
+        assertRegexParseError(
+          "(a)(?<=(?(1)x+|y))",
+          "length of lookbehind assertion is not limited",
+          3,
+        );
+      });
+
+      it("raises on a missing reference inside a lookbehind", () => {
+        assertRegexParseError(
+          "(?<=\\1)",
+          "reference to non-existent subpattern",
+          6,
+        );
+      });
+
+      it("reports a lookbehind error before a missing reference", () => {
+        assertRegexParseError(
+          "(?2)(?<=a+)",
+          "length of lookbehind assertion is not limited",
+          4,
+        );
+      });
+
       it("raises on \\K inside lookaround", () => {
         assertRegexParseError(
           "(?=a\\K)",
           "\\K is not allowed in lookarounds (but see PCRE2_EXTRA_ALLOW_LOOKAROUND_BSK)",
           7,
+        );
+      });
+
+      it("reports the \\K error at the end of the pattern", () => {
+        assertRegexParseError(
+          "(?=a\\K)xyz",
+          "\\K is not allowed in lookarounds (but see PCRE2_EXTRA_ALLOW_LOOKAROUND_BSK)",
+          10,
         );
       });
     });

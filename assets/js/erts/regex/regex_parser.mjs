@@ -241,12 +241,18 @@ export function* scanStartOptions(source) {
 
 export default class RegexParser {
   #allGroupNames = null;
+  #deferredReferenceErrors = [];
   #dupnames;
   #extended;
   #extendedMore = false;
+  #groupContents = new Map();
   #groupCount = 0;
   #groupNames = new Set();
+  #hasBranchReset = false;
   #inClassQuote = false;
+  #kViolationPosition = null;
+  #lookbehinds = [];
+  #namedGroupContents = new Map();
   #neverUtf;
   #noAutoCapture;
   #position = 0;
@@ -266,7 +272,10 @@ export default class RegexParser {
     parser.#allGroupNames = prescanner.#groupNames;
     parser.#totalGroups = prescanner.#groupCount;
 
-    return parser.#parsePattern();
+    const ast = parser.#parsePattern();
+    parser.#reportDeferredErrors();
+
+    return ast;
   }
 
   constructor(source, opts = {}) {
@@ -320,60 +329,152 @@ export default class RegexParser {
     };
   }
 
-  // Returns the maximum number of characters a node can match,
-  // or null when the length is unbounded.
-  #calculateMaxBranchLength(node) {
+  // Returns the {min, max} number of characters a node can match,
+  // with a null max when the length is unbounded.
+  #calculateBranchLengthRange(node, activeGroups) {
     switch (node.type) {
       case "alternation": {
+        let min = null;
         let max = 0;
 
         for (const branch of node.branches) {
-          const branchMax = this.#calculateMaxBranchLength(branch);
-          if (branchMax === null) return null;
-          if (branchMax > max) max = branchMax;
+          const range = this.#calculateBranchLengthRange(branch, activeGroups);
+
+          if (min === null || range.min < min) min = range.min;
+
+          if (max !== null) {
+            max = range.max === null ? null : Math.max(max, range.max);
+          }
         }
 
-        return max;
+        return {min: min, max: max};
       }
 
       case "anchor":
       case "lookaround":
-        return 0;
+      case "matchStartReset":
+      case "optionSetting":
+      case "verb":
+        return {min: 0, max: 0};
 
       case "atomicGroup":
+      case "branchResetGroup":
       case "group":
       case "nonCapturingGroup":
-        return this.#calculateMaxBranchLength(node.content);
+      case "optionGroup":
+      case "scriptRun":
+        return this.#calculateBranchLengthRange(node.content, activeGroups);
+
+      case "backreference":
+      case "subroutine":
+        return this.#calculateReferencedGroupRange(node, activeGroups);
 
       case "concatenation": {
-        let sum = 0;
+        let min = 0;
+        let max = 0;
 
         for (const item of node.items) {
-          const itemMax = this.#calculateMaxBranchLength(item);
-          if (itemMax === null) return null;
-          sum += itemMax;
+          const range = this.#calculateBranchLengthRange(item, activeGroups);
+
+          min += range.min;
+
+          if (max !== null) {
+            max = range.max === null ? null : max + range.max;
+          }
         }
 
-        return sum;
+        return {min: min, max: max};
+      }
+
+      case "conditional": {
+        // A DEFINE group is never executed
+        if (node.condition.kind === "define") return {min: 0, max: 0};
+
+        const yes = this.#calculateBranchLengthRange(node.yes, activeGroups);
+
+        if (node.no === null) return yes;
+
+        const no = this.#calculateBranchLengthRange(node.no, activeGroups);
+
+        return {
+          min: Math.min(yes.min, no.min),
+          max:
+            yes.max === null || no.max === null
+              ? null
+              : Math.max(yes.max, no.max),
+        };
       }
 
       case "graphemeCluster":
-        return null;
+        return {min: 1, max: null};
 
       case "newlineSequence":
-        return 2;
+        return {min: 1, max: 2};
 
       case "quantifier": {
-        if (node.max === null) return null;
+        const item = this.#calculateBranchLengthRange(node.item, activeGroups);
+        const min = item.min * node.min;
 
-        const itemMax = this.#calculateMaxBranchLength(node.item);
+        if (item.max === 0 || node.max === 0) return {min: min, max: 0};
+        if (item.max === null || node.max === null)
+          return {min: min, max: null};
 
-        return itemMax === null ? null : itemMax * node.max;
+        return {min: min, max: item.max * node.max};
       }
 
       default:
-        return 1;
+        return {min: 1, max: 1};
     }
+  }
+
+  // Resolves the length range of the group a backreference or subroutine
+  // call refers to. PCRE2 treats backreferences as unbounded when the
+  // pattern uses (?| or the referenced name is duplicated, resolves calls
+  // through a duplicated number or name to its first group, and treats
+  // whole-pattern and cyclic calls as unbounded.
+  #calculateReferencedGroupRange(node, activeGroups) {
+    const unbounded = {min: 0, max: null};
+
+    if (node.type === "backreference") {
+      if (this.#hasBranchReset) return unbounded;
+    } else if (node.number === 0) {
+      return unbounded;
+    }
+
+    let content;
+
+    if (node.number !== null) {
+      content = this.#groupContents.get(node.number);
+    } else {
+      const contents = this.#namedGroupContents.get(node.name);
+
+      if (node.type === "backreference" && contents?.length > 1) {
+        return unbounded;
+      }
+
+      content = contents?.[0];
+    }
+
+    if (content === undefined) {
+      const reference = this.#deferredReferenceErrors.find(
+        (error) => error.number === node.number && error.name === node.name,
+      );
+
+      throw new RegexParseError(
+        "reference to non-existent subpattern",
+        reference.position,
+      );
+    }
+
+    if (activeGroups.has(content)) return unbounded;
+
+    activeGroups.add(content);
+
+    const range = this.#calculateBranchLengthRange(content, activeGroups);
+
+    activeGroups.delete(content);
+
+    return range;
   }
 
   // Validates a code point produced by a \x{}, \o{} or \N{U+} escape,
@@ -396,39 +497,33 @@ export default class RegexParser {
     }
   }
 
-  // Enforces the PCRE2 rule that \K is not allowed in lookarounds,
-  // raising at the position after the lookaround's closing parenthesis.
-  #checkLookaroundContent(content) {
-    if (this.#containsMatchStartReset(content)) {
-      throw new RegexParseError(
-        "\\K is not allowed in lookarounds (but see PCRE2_EXTRA_ALLOW_LOOKAROUND_BSK)",
-        this.#position,
-      );
-    }
-  }
-
-  // Enforces PCRE2 lookbehind length limits, raising at the position
-  // of the lookbehind's opening parenthesis.
+  // Enforces PCRE2 lookbehind length limits, raising at the position of the
+  // lookbehind's opening parenthesis. A lookbehind with a variable-length
+  // branch caps every branch at 255 chars, an all-fixed one at 65535.
   #checkLookbehindLength(content, position) {
     const branches =
       content.type === "alternation" ? content.branches : [content];
 
-    for (const branch of branches) {
-      const maxLength = this.#calculateMaxBranchLength(branch);
+    const ranges = branches.map((branch) =>
+      this.#calculateBranchLengthRange(branch, new Set()),
+    );
 
-      if (maxLength === null) {
-        throw new RegexParseError(
-          "length of lookbehind assertion is not limited",
-          position,
-        );
-      }
+    if (ranges.some((range) => range.max === null)) {
+      throw new RegexParseError(
+        "length of lookbehind assertion is not limited",
+        position,
+      );
+    }
 
-      if (maxLength > 255) {
+    if (ranges.some((range) => range.min !== range.max)) {
+      if (ranges.some((range) => range.max > 255)) {
         throw new RegexParseError(
           "branch too long in variable-length lookbehind assertion",
           position,
         );
       }
+    } else if (ranges.some((range) => range.max > 65535)) {
+      throw new RegexParseError("lookbehind assertion is too long", position);
     }
   }
 
@@ -603,6 +698,8 @@ export default class RegexParser {
   #parseBranchReset() {
     this.#position++;
 
+    this.#hasBranchReset = true;
+
     const baseGroupCount = this.#groupCount;
     const outerNames = this.#groupNames;
     const collectedNames = new Set(outerNames);
@@ -640,6 +737,22 @@ export default class RegexParser {
     // Groups are numbered by opening parenthesis order
     const number = ++this.#groupCount;
     const content = this.#parseDelimitedContent();
+
+    // Lookbehind length checks resolve references through a duplicated
+    // number to the first group that received it
+    if (!this.#groupContents.has(number)) {
+      this.#groupContents.set(number, content);
+    }
+
+    if (name !== null) {
+      const contents = this.#namedGroupContents.get(name);
+
+      if (contents === undefined) {
+        this.#namedGroupContents.set(name, [content]);
+      } else {
+        contents.push(content);
+      }
+    }
 
     return {type: "group", number: number, name: name, content: content};
   }
@@ -1165,10 +1278,13 @@ export default class RegexParser {
 
     // A single-digit escape is always a backreference
     if (digits.length === 1) {
-      throw new RegexParseError(
-        "reference to non-existent subpattern",
-        this.#position,
-      );
+      this.#deferredReferenceErrors.push({
+        number: number,
+        name: null,
+        position: this.#position,
+      });
+
+      return {type: "backreference", number: number, name: null};
     }
 
     // Octal fallback: re-read as an octal escape plus literal digits
@@ -1177,10 +1293,13 @@ export default class RegexParser {
       return {type: "literal", codePoint: this.#parseOctalEscape()};
     }
 
-    throw new RegexParseError(
-      "reference to non-existent subpattern",
-      this.#position,
-    );
+    this.#deferredReferenceErrors.push({
+      number: number,
+      name: null,
+      position: this.#position,
+    });
+
+    return {type: "backreference", number: number, name: null};
   }
 
   #parseEscape() {
@@ -1621,16 +1740,21 @@ export default class RegexParser {
     return {type: "backreference", number: null, name: name};
   }
 
-  // Parses a named capturing group, with the position at the name start.
   // Parses lookaround content up to the closing parenthesis and builds the
-  // node, validating the content and the lookbehind length rule.
+  // node, recording deferred \K and lookbehind length checks, which PCRE2
+  // runs only after the whole pattern has been parsed.
   #parseLookaround(direction, negated, atomic, start) {
     const content = this.#parseDelimitedContent();
 
-    this.#checkLookaroundContent(content);
+    if (
+      this.#kViolationPosition === null &&
+      this.#containsMatchStartReset(content)
+    ) {
+      this.#kViolationPosition = this.#position;
+    }
 
     if (direction === "behind") {
-      this.#checkLookbehindLength(content, start);
+      this.#lookbehinds.push({content: content, position: start});
     }
 
     return {
@@ -1642,6 +1766,7 @@ export default class RegexParser {
     };
   }
 
+  // Parses a named capturing group, with the position at the name start.
   #parseNamedGroup(terminator) {
     const {name} = this.#parseSubpatternName(terminator);
 
@@ -2157,6 +2282,35 @@ export default class RegexParser {
     }
   }
 
+  // Raises the checks PCRE2 runs only after the whole pattern has been
+  // parsed: lookbehind length checks first, then the \K-in-lookaround and
+  // missing-reference errors in source order. PCRE2 reports the \K error
+  // at the end of the pattern.
+  #reportDeferredErrors() {
+    for (const lookbehind of this.#lookbehinds) {
+      this.#checkLookbehindLength(lookbehind.content, lookbehind.position);
+    }
+
+    const reference = this.#deferredReferenceErrors[0];
+
+    if (
+      this.#kViolationPosition !== null &&
+      (reference === undefined || this.#kViolationPosition < reference.position)
+    ) {
+      throw new RegexParseError(
+        "\\K is not allowed in lookarounds (but see PCRE2_EXTRA_ALLOW_LOOKAROUND_BSK)",
+        this.#source.length,
+      );
+    }
+
+    if (reference !== undefined) {
+      throw new RegexParseError(
+        "reference to non-existent subpattern",
+        reference.position,
+      );
+    }
+  }
+
   // Consumes the closing parenthesis of a condition, raising when absent.
   #requireConditionClose() {
     if (this.#peek() !== ")") {
@@ -2469,25 +2623,29 @@ export default class RegexParser {
     return {min: bounds.min, max: bounds.max, mode: mode};
   }
 
-  // Validates a named reference, raising at the name start position.
+  // Validates a named reference, recording a deferred error pinned to the
+  // name start position when the name doesn't exist.
   // Skipped in the lenient prescan pass, when names aren't yet collected.
   #validateNamedReference(name, nameStart) {
     if (this.#allGroupNames !== null && !this.#allGroupNames.has(name)) {
-      throw new RegexParseError(
-        "reference to non-existent subpattern",
-        nameStart,
-      );
+      this.#deferredReferenceErrors.push({
+        number: null,
+        name: name,
+        position: nameStart,
+      });
     }
   }
 
-  // Validates a numeric reference, raising at the given position.
+  // Validates a numeric reference, recording a deferred error pinned to the
+  // given position when the group doesn't exist.
   // Skipped in the lenient prescan pass, when the group count isn't known yet.
   #validateNumericReference(number, errorPosition) {
     if (this.#totalGroups !== null && number > this.#totalGroups) {
-      throw new RegexParseError(
-        "reference to non-existent subpattern",
-        errorPosition,
-      );
+      this.#deferredReferenceErrors.push({
+        number: number,
+        name: null,
+        position: errorPosition,
+      });
     }
   }
 }

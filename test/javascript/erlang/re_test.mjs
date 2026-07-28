@@ -375,6 +375,146 @@ describe("Erlang_Re", () => {
       );
     });
 
+    it("compiles a forward reference in a lookbehind", () => {
+      const result = compileWithOpts(Type.bitstring("(?<=\\1)(a)"), []);
+
+      assertOkResult(result, 1, 0, 0);
+    });
+
+    it("compiles a backreference to a bounded variable-length group in a lookbehind", () => {
+      const result = compileWithOpts(Type.bitstring("(a{2,255})(?<=\\1)"), []);
+
+      assertOkResult(result, 1, 0, 0);
+    });
+
+    it("compiles a DEFINE group in a lookbehind as zero-width", () => {
+      const result = compileWithOpts(
+        Type.bitstring("(?<=(?(DEFINE)a+)bb)"),
+        [],
+      );
+
+      assertOkResult(result, 0, 0, 0);
+    });
+
+    it("returns a lookbehind error tuple on a backreference to a variable-length group", () => {
+      const result = compileWithOpts(Type.bitstring("(a+)(?<=\\1)"), []);
+
+      assertCompileErrorTuple(
+        result,
+        "length of lookbehind assertion is not limited",
+        4,
+      );
+    });
+
+    it("returns a lookbehind error tuple on a subroutine call to a variable-length group", () => {
+      const result = compileWithOpts(Type.bitstring("(a+)(?<=(?1))"), []);
+
+      assertCompileErrorTuple(
+        result,
+        "length of lookbehind assertion is not limited",
+        4,
+      );
+    });
+
+    it("returns a lookbehind error tuple on whole-pattern recursion", () => {
+      const result = compileWithOpts(Type.bitstring("(?<=(?R))x"), []);
+
+      assertCompileErrorTuple(
+        result,
+        "length of lookbehind assertion is not limited",
+        0,
+      );
+    });
+
+    it("returns a lookbehind error tuple on a recursive subroutine call", () => {
+      const result = compileWithOpts(Type.bitstring("(a(?1)?)(?<=(?1))"), []);
+
+      assertCompileErrorTuple(
+        result,
+        "length of lookbehind assertion is not limited",
+        8,
+      );
+    });
+
+    it("returns a lookbehind error tuple on a backreference under branch reset", () => {
+      const result = compileWithOpts(Type.bitstring("(?|(a)|(b))(?<=\\1)"), []);
+
+      assertCompileErrorTuple(
+        result,
+        "length of lookbehind assertion is not limited",
+        11,
+      );
+    });
+
+    it("returns a lookbehind error tuple on a backreference to a duplicated name", () => {
+      const result = compileWithOpts(
+        Type.bitstring("(?J)(?<g>a)(?<g>b)(?<=\\k<g>)"),
+        [],
+      );
+
+      assertCompileErrorTuple(
+        result,
+        "length of lookbehind assertion is not limited",
+        18,
+      );
+    });
+
+    it("returns a branch too long error tuple on a variable-length branch over 255 chars", () => {
+      const result = compileWithOpts(Type.bitstring("(a{2,256})(?<=\\1)"), []);
+
+      assertCompileErrorTuple(
+        result,
+        "branch too long in variable-length lookbehind assertion",
+        10,
+      );
+    });
+
+    it("returns a branch too long error tuple on a fixed branch beside a variable branch", () => {
+      const result = compileWithOpts(Type.bitstring("(?<=a{300}|a{1,2})"), []);
+
+      assertCompileErrorTuple(
+        result,
+        "branch too long in variable-length lookbehind assertion",
+        0,
+      );
+    });
+
+    it("returns a too long error tuple on a fixed-length lookbehind over 65535 chars", () => {
+      const result = compileWithOpts(Type.bitstring("(?<=a{65535}b)"), []);
+
+      assertCompileErrorTuple(result, "lookbehind assertion is too long", 0);
+    });
+
+    it("reports a lookbehind error before a missing reference", () => {
+      const result = compileWithOpts(Type.bitstring("(?2)(?<=a+)"), []);
+
+      assertCompileErrorTuple(
+        result,
+        "length of lookbehind assertion is not limited",
+        4,
+      );
+    });
+
+    it("returns a reference error tuple on a missing reference inside a lookbehind", () => {
+      const result = compileWithOpts(Type.bitstring("(?<=\\1)"), []);
+
+      assertCompileErrorTuple(
+        result,
+        "reference to non-existent subpattern",
+        6,
+      );
+    });
+
+    it("reports the \\K error at the end of the pattern", () => {
+      const result = compileWithOpts(Type.bitstring("(?=a\\K)xyz"), []);
+
+      assertCompileErrorTuple(
+        result,
+        "\\K is not allowed in lookarounds (but see PCRE2_EXTRA_ALLOW_LOOKAROUND_BSK)",
+        10,
+      );
+    });
+
     it("raises ArgumentError on non-iodata pattern", () => {
       assertBoxedError(
         () => compileWithOpts(Type.atom("abc"), []),
@@ -1202,6 +1342,78 @@ describe("Erlang_Re", () => {
       );
 
       assertMatchResult(result, [[0, 2]]);
+    });
+
+    it("matches with a backreference to a fixed-length group in a lookbehind", () => {
+      const result = run(
+        Type.bitstring("aax"),
+        Type.bitstring("(a{2})x(?<=\\1x)"),
+        [],
+      );
+
+      assertMatchResult(result, [
+        [0, 3],
+        [0, 2],
+      ]);
+    });
+
+    it("matches with a backreference to a fixed-length group in a lookbehind when interpreted", () => {
+      const result = run(
+        Type.bitstring("aax"),
+        Type.bitstring("(*LIMIT_MATCH=1000)(a{2})x(?<=\\1x)"),
+        [],
+      );
+
+      assertMatchResult(result, [
+        [0, 3],
+        [0, 2],
+      ]);
+    });
+
+    it("matches with a subroutine call to a fixed-length group in a lookbehind", () => {
+      const result = run(
+        Type.bitstring("aaxaa"),
+        Type.bitstring("(a{2})x(?<=(?1)x)"),
+        [],
+      );
+
+      assertMatchResult(result, [
+        [0, 3],
+        [0, 2],
+      ]);
+    });
+
+    it("matches with a subroutine call to a fixed-length group in a lookbehind when interpreted", () => {
+      const result = run(
+        Type.bitstring("aaxaa"),
+        Type.bitstring("(*LIMIT_MATCH=1000)(a{2})x(?<=(?1)x)"),
+        [],
+      );
+
+      assertMatchResult(result, [
+        [0, 3],
+        [0, 2],
+      ]);
+    });
+
+    it("matches with a long fixed-length lookbehind", () => {
+      const result = run(
+        Type.bitstring("x".repeat(300) + "y"),
+        Type.bitstring("(?<=x{300})y"),
+        [],
+      );
+
+      assertMatchResult(result, [[300, 1]]);
+    });
+
+    it("matches with a long fixed-length lookbehind when interpreted", () => {
+      const result = run(
+        Type.bitstring("x".repeat(300) + "y"),
+        Type.bitstring("(*LIMIT_MATCH=10000000)(?<=x{300})y"),
+        [],
+      );
+
+      assertMatchResult(result, [[300, 1]]);
     });
 
     it("defaults the capture type to index", () => {

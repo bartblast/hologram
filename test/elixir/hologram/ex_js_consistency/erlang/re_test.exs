@@ -172,6 +172,80 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
                {:error, {~c"using UTF is disabled by the application", 0}}
     end
 
+    test "compiles a forward reference in a lookbehind" do
+      assert_ok_result(:re.compile("(?<=\\1)(a)", []), 1, 0, 0)
+    end
+
+    test "compiles a backreference to a bounded variable-length group in a lookbehind" do
+      assert_ok_result(:re.compile("(a{2,255})(?<=\\1)", []), 1, 0, 0)
+    end
+
+    test "compiles a DEFINE group in a lookbehind as zero-width" do
+      assert_ok_result(:re.compile("(?<=(?(DEFINE)a+)bb)", []), 0, 0, 0)
+    end
+
+    test "returns a lookbehind error tuple on a backreference to a variable-length group" do
+      assert :re.compile("(a+)(?<=\\1)", []) ==
+               {:error, {~c"length of lookbehind assertion is not limited", 4}}
+    end
+
+    test "returns a lookbehind error tuple on a subroutine call to a variable-length group" do
+      assert :re.compile("(a+)(?<=(?1))", []) ==
+               {:error, {~c"length of lookbehind assertion is not limited", 4}}
+    end
+
+    test "returns a lookbehind error tuple on whole-pattern recursion" do
+      assert :re.compile("(?<=(?R))x", []) ==
+               {:error, {~c"length of lookbehind assertion is not limited", 0}}
+    end
+
+    test "returns a lookbehind error tuple on a recursive subroutine call" do
+      assert :re.compile("(a(?1)?)(?<=(?1))", []) ==
+               {:error, {~c"length of lookbehind assertion is not limited", 8}}
+    end
+
+    test "returns a lookbehind error tuple on a backreference under branch reset" do
+      assert :re.compile("(?|(a)|(b))(?<=\\1)", []) ==
+               {:error, {~c"length of lookbehind assertion is not limited", 11}}
+    end
+
+    test "returns a lookbehind error tuple on a backreference to a duplicated name" do
+      assert :re.compile("(?J)(?<g>a)(?<g>b)(?<=\\k<g>)", []) ==
+               {:error, {~c"length of lookbehind assertion is not limited", 18}}
+    end
+
+    test "returns a branch too long error tuple on a variable-length branch over 255 chars" do
+      assert :re.compile("(a{2,256})(?<=\\1)", []) ==
+               {:error, {~c"branch too long in variable-length lookbehind assertion", 10}}
+    end
+
+    test "returns a branch too long error tuple on a fixed branch beside a variable branch" do
+      assert :re.compile("(?<=a{300}|a{1,2})", []) ==
+               {:error, {~c"branch too long in variable-length lookbehind assertion", 0}}
+    end
+
+    test "returns a too long error tuple on a fixed-length lookbehind over 65535 chars" do
+      assert :re.compile("(?<=a{65535}b)", []) ==
+               {:error, {~c"lookbehind assertion is too long", 0}}
+    end
+
+    test "reports a lookbehind error before a missing reference" do
+      assert :re.compile("(?2)(?<=a+)", []) ==
+               {:error, {~c"length of lookbehind assertion is not limited", 4}}
+    end
+
+    test "returns a reference error tuple on a missing reference inside a lookbehind" do
+      assert :re.compile("(?<=\\1)", []) ==
+               {:error, {~c"reference to non-existent subpattern", 6}}
+    end
+
+    test "reports the \\K error at the end of the pattern" do
+      assert :re.compile("(?=a\\K)xyz", []) ==
+               {:error,
+                {~c"\\K is not allowed in lookarounds (but see PCRE2_EXTRA_ALLOW_LOOKAROUND_BSK)",
+                 10}}
+    end
+
     test "raises ArgumentError on non-iodata pattern" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not an iodata term"),
@@ -591,6 +665,37 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
 
     test "accepts the obsolete LIMIT_RECURSION limit verb" do
       assert :re.run("ab", "(*LIMIT_RECURSION=1000)a+b", []) == {:match, [{0, 2}]}
+    end
+
+    test "matches with a backreference to a fixed-length group in a lookbehind" do
+      assert :re.run("aax", "(a{2})x(?<=\\1x)", []) == {:match, [{0, 3}, {0, 2}]}
+    end
+
+    test "matches with a backreference to a fixed-length group in a lookbehind when interpreted" do
+      assert :re.run("aax", "(*LIMIT_MATCH=1000)(a{2})x(?<=\\1x)", []) ==
+               {:match, [{0, 3}, {0, 2}]}
+    end
+
+    test "matches with a subroutine call to a fixed-length group in a lookbehind" do
+      assert :re.run("aaxaa", "(a{2})x(?<=(?1)x)", []) == {:match, [{0, 3}, {0, 2}]}
+    end
+
+    test "matches with a subroutine call to a fixed-length group in a lookbehind when interpreted" do
+      assert :re.run("aaxaa", "(*LIMIT_MATCH=1000)(a{2})x(?<=(?1)x)", []) ==
+               {:match, [{0, 3}, {0, 2}]}
+    end
+
+    test "matches with a long fixed-length lookbehind" do
+      subject = String.duplicate("x", 300) <> "y"
+
+      assert :re.run(subject, "(?<=x{300})y", []) == {:match, [{300, 1}]}
+    end
+
+    test "matches with a long fixed-length lookbehind when interpreted" do
+      subject = String.duplicate("x", 300) <> "y"
+
+      assert :re.run(subject, "(*LIMIT_MATCH=10000000)(?<=x{300})y", []) ==
+               {:match, [{300, 1}]}
     end
 
     test "defaults the capture type to index" do
