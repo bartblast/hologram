@@ -10,7 +10,16 @@ import GlobalRegistry from "../../assets/js/global_registry.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("GlobalRegistry", () => {
-  beforeEach(() => delete globalThis[GlobalRegistry.rootKey]);
+  let originalHologram;
+
+  beforeEach(() => {
+    originalHologram = globalThis[GlobalRegistry.rootKey];
+    delete globalThis[GlobalRegistry.rootKey];
+  });
+
+  afterEach(() => {
+    globalThis[GlobalRegistry.rootKey] = originalHologram;
+  });
 
   describe("append()", () => {
     it("key is not set", () => {

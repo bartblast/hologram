@@ -14,6 +14,7 @@ import {defineModule1Fixture as defineInterpreterModule1Fixture} from "./support
 import {defineModule1Fixture as defineMatchOperatorModule1Fixture} from "./support/fixtures/ex_js_consistency/match_operator/module_1.mjs";
 
 import Bitstring from "../../assets/js/bitstring.mjs";
+import CallStack from "../../assets/js/erts/call_stack.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
@@ -3356,6 +3357,148 @@ describe("Interpreter", () => {
         "ArgumentError",
         "my message",
       );
+    });
+
+    describe("frame tracking", () => {
+      const myFunGFrame = {
+        module: "Aaa.Bbb",
+        function: "my_fun_g",
+        arityOrArgs: 0,
+        file: null,
+        line: null,
+        errorInfo: null,
+      };
+
+      beforeEach(() => {
+        CallStack.reset();
+        globalThis.Hologram.config = {stacktraces: true};
+      });
+
+      afterEach(() => {
+        globalThis.Hologram.config = {stacktraces: false};
+      });
+
+      it("pushes the function's frame for the duration of the call", () => {
+        let framesDuringCall;
+
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 0, "public", [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => {
+              framesDuringCall = CallStack.snapshot();
+              return Type.atom("ok");
+            },
+          },
+        ]);
+
+        globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
+
+        assert.deepStrictEqual(framesDuringCall, [myFunGFrame]);
+      });
+
+      it("pops the frame when the function returns", () => {
+        globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(1));
+
+        assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
+
+      it("pops the frame when the function raises", () => {
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 0, "public", [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => Interpreter.raiseArgumentError("my message"),
+          },
+        ]);
+
+        assertBoxedError(
+          () => globalThis.Elixir_Aaa_Bbb["my_fun_g/0"](),
+          "ArgumentError",
+          "my message",
+        );
+
+        assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
+
+      it("pops the frame when no clause matches", () => {
+        assertBoxedError(
+          () => globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(3)),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_a/1", [
+            Type.integer(3),
+          ]),
+        );
+
+        assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
+
+      it("an error raised in the body captures the frame on its stacktrace", () => {
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 0, "public", [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => Interpreter.raiseArgumentError("my message"),
+          },
+        ]);
+
+        let error;
+
+        try {
+          globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
+        } catch (thrownError) {
+          error = thrownError;
+        }
+
+        assert.instanceOf(error, HologramBoxedError);
+        assert.deepStrictEqual(error.stacktrace, [myFunGFrame]);
+      });
+
+      it("keeps the frame until an async body settles", async () => {
+        let framesAfterAwait;
+
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 0, "public", [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: async (_context) => {
+              await Promise.resolve();
+              framesAfterAwait = CallStack.snapshot();
+              return Type.atom("ok");
+            },
+          },
+        ]);
+
+        const resultPromise = globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
+
+        assert.deepStrictEqual(CallStack.snapshot(), [myFunGFrame]);
+
+        await resultPromise;
+
+        assert.deepStrictEqual(framesAfterAwait, [myFunGFrame]);
+        assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
+
+      it("doesn't track frames when client stacktraces are disabled", () => {
+        globalThis.Hologram.config = {stacktraces: false};
+
+        let framesDuringCall;
+
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 0, "public", [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => {
+              framesDuringCall = CallStack.snapshot();
+              return Type.atom("ok");
+            },
+          },
+        ]);
+
+        globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
+
+        assert.deepStrictEqual(framesDuringCall, []);
+      });
     });
 
     it("raises UndefinedFunctionError when undefined Elixir/Erlang function is being called", () => {

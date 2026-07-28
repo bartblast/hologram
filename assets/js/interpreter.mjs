@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import CallStack from "./erts/call_stack.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import NodeTable from "./erts/node_table.mjs";
@@ -1299,34 +1300,66 @@ export default class Interpreter {
 
       const args = Type.list([...arguments]);
 
-      for (const clause of clauses) {
-        const context = Interpreter.buildContext({module: moduleExName});
-        const pattern = Type.list(clause.params(context));
+      // Frame tracking is flag-gated: with client stacktraces off, the only
+      // frame an error carries is the raising one, attached at the raise site.
+      // The config object is set before any dispatch can run - by the runtime
+      // bundle bootstrap in the browser and by the test helpers in tests.
+      let popsFrameOnExit = globalThis.Hologram.config.stacktraces;
 
-        if (Interpreter.isMatched(pattern, args, context)) {
-          Interpreter.updateVarsToMatchedValues(context);
-
-          if (Interpreter.#evaluateGuards(clause.guards, context)) {
-            const result = clause.body(context);
-
-            // TODO: remove on release
-            // Interpreter.#logFunctionResult(mfa, result);
-
-            if (globalThis.Hologram.isProfilingEnabled) {
-              console.log(
-                `Hologram: function ${mfa} executed in`,
-                PerformanceTimer.diff(startTime),
-              );
-            }
-
-            return result;
-          }
-        }
+      if (popsFrameOnExit) {
+        CallStack.push({
+          module: moduleExName,
+          function: functionName,
+          arityOrArgs: arity,
+          file: null,
+          line: null,
+          errorInfo: null,
+        });
       }
 
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
-      );
+      try {
+        for (const clause of clauses) {
+          const context = Interpreter.buildContext({module: moduleExName});
+          const pattern = Type.list(clause.params(context));
+
+          if (Interpreter.isMatched(pattern, args, context)) {
+            Interpreter.updateVarsToMatchedValues(context);
+
+            if (Interpreter.#evaluateGuards(clause.guards, context)) {
+              const result = clause.body(context);
+
+              // TODO: remove on release
+              // Interpreter.#logFunctionResult(mfa, result);
+
+              if (globalThis.Hologram.isProfilingEnabled) {
+                console.log(
+                  `Hologram: function ${mfa} executed in`,
+                  PerformanceTimer.diff(startTime),
+                );
+              }
+
+              // An async body is still executing when it returns its promise,
+              // so the frame pops when the promise settles instead of on
+              // return - otherwise every frame below an await would be gone by
+              // the time an error is raised there.
+              if (popsFrameOnExit && result instanceof Promise) {
+                popsFrameOnExit = false;
+                return result.finally(() => CallStack.pop());
+              }
+
+              return result;
+            }
+          }
+        }
+
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
+        );
+      } finally {
+        if (popsFrameOnExit) {
+          CallStack.pop();
+        }
+      }
     };
   }
 

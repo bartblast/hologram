@@ -312,6 +312,11 @@ function defineElixirStringCharsModule() {
 export function defineGlobalErlangAndElixirModules() {
   globalThis.Hologram ??= {};
 
+  // In the browser the runtime bundle bootstrap sets the config object before
+  // any dispatch can run - mirror that invariant here. Frame tracking defaults
+  // to off, matching how the suite ran before the shadow call stack existed.
+  globalThis.Hologram.config ??= {stacktraces: false};
+
   defineGlobalModule("Erlang", Erlang);
   defineGlobalModule("Erlang_Binary", Erlang_Binary);
   defineGlobalModule("Erlang_Code", Erlang_Code);

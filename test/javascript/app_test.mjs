@@ -11,12 +11,15 @@ defineGlobalErlangAndElixirModules();
 
 describe("App", () => {
   describe("maybeLoadInstanceId()", () => {
+    let originalHologram;
+
     beforeEach(() => {
+      originalHologram = globalThis.Hologram;
       globalThis.Hologram = {};
     });
 
     afterEach(() => {
-      delete globalThis.Hologram;
+      globalThis.Hologram = originalHologram;
       App.instanceId = null;
     });
 

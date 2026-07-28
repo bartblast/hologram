@@ -541,7 +541,10 @@ describe("Client", () => {
   });
 
   describe("sendCommand()", () => {
-    let fetchStub, hologramScheduleActionStub, originalInstanceId;
+    let fetchStub,
+      hologramScheduleActionStub,
+      originalHologram,
+      originalInstanceId;
 
     const module = Type.alias("MyComponent");
     const name = Type.atom("my_command");
@@ -566,6 +569,7 @@ describe("Client", () => {
 
       hologramScheduleActionStub = sinon.stub(Hologram, "scheduleAction");
 
+      originalHologram = globalThis.Hologram;
       globalThis.Hologram = {csrfToken: "test-csrf-token-123"};
 
       originalInstanceId = App.instanceId;
@@ -574,7 +578,7 @@ describe("Client", () => {
 
     afterEach(() => {
       sinon.restore();
-      delete globalThis.Hologram;
+      globalThis.Hologram = originalHologram;
       App.instanceId = originalInstanceId;
     });
 
