@@ -73,7 +73,13 @@ defmodule Hologram.Compiler.Encoder do
     clause_context = %{context | async?: async?}
     clauses_js = encode_as_array(clauses, clause_context)
 
-    ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
+    if Hologram.client_stacktraces?() do
+      metadata_js = encode_module_metadata(context.module)
+
+      ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js}, #{metadata_js});/
+    else
+      ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
+    end
   end
 
   @doc """
@@ -310,7 +316,11 @@ defmodule Hologram.Compiler.Encoder do
 
     body = encode_closure(clause.body, context)
 
-    "{params: #{params_closure}, guards: #{guards}, body: #{body}}"
+    if Hologram.client_stacktraces?() && clause.line do
+      "{params: #{params_closure}, guards: #{guards}, body: #{body}, line: #{clause.line}}"
+    else
+      "{params: #{params_closure}, guards: #{guards}, body: #{body}}"
+    end
   end
 
   def encode_ir(%IR.IntegerType{value: value}, _context) do
@@ -754,6 +764,31 @@ defmodule Hologram.Compiler.Encoder do
     encoded_segments = encode_as_array(segments, context, integer_encoder)
 
     "Type.#{type}(#{encoded_node}, #{encoded_segments})"
+  end
+
+  # Module-level frame metadata: the module's source file (relative to its
+  # source root) and the app that owns it with its version, so client frames
+  # render the same "(app vsn) file:line" prefix as server frames.
+  # Nil values are omitted rather than encoded as null.
+  defp encode_module_metadata(module) do
+    entries =
+      if Code.ensure_loaded?(module) do
+        app = Application.get_application(module)
+        vsn = app && Application.spec(app, :vsn)
+
+        [app: app, file: Reflection.relative_source_path(module), vsn: vsn]
+      else
+        []
+      end
+
+    fields =
+      entries
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+      |> Enum.map_join(", ", fn {key, value} ->
+        "#{key}: #{encode_as_string(value, true)}"
+      end)
+
+    "{#{fields}}"
   end
 
   defp encode_named_function_call(%IR.AtomType{value: :erlang}, :andalso, [left, right], context) do
