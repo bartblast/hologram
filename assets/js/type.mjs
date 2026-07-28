@@ -308,27 +308,6 @@ export default class Type {
     return term.type === "integer";
   }
 
-  static isIterator(term) {
-    if (Type.isTuple(term) && term.data.length === 3) {
-      return true;
-    }
-
-    if (
-      Type.isImproperList(term) &&
-      term.data.length === 2 &&
-      Type.isInteger(term.data[0]) &&
-      Type.isMap(term.data[1])
-    ) {
-      return true;
-    }
-
-    if (Interpreter.isEqual(term, Type.atom("none"))) {
-      return true;
-    }
-
-    return false;
-  }
-
   static isKeywordList(term) {
     if (!Type.isList(term)) {
       return false;

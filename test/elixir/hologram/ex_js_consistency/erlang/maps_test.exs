@@ -258,6 +258,32 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "is_iterator_valid/1" do
+    test "returns true for a path iterator" do
+      assert :maps.is_iterator_valid([0 | %{a: 1}]) == true
+    end
+
+    test "returns true for the :none atom" do
+      assert :maps.is_iterator_valid(:none) == true
+    end
+
+    test "returns true for a key-value tuple chain ending in a valid iterator" do
+      assert :maps.is_iterator_valid({:a, 1, {:b, 2, [0 | %{}]}}) == true
+    end
+
+    test "returns false for a key-value tuple chain ending in an invalid term" do
+      assert :maps.is_iterator_valid({1, 2, 3}) == false
+    end
+
+    test "returns false for a term that is not an iterator" do
+      assert :maps.is_iterator_valid(:abc) == false
+    end
+
+    test "returns false for an improper list that is not a path iterator" do
+      assert :maps.is_iterator_valid([1 | 2]) == false
+    end
+  end
+
   describe "is_key/2" do
     test "returns true if the given map has the given key" do
       assert :maps.is_key(:b, %{a: 1, b: 2}) == true
@@ -508,9 +534,19 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       assert :maps.next(iter) == iter
     end
 
+    test "returns a key-value tuple without validating its tail" do
+      assert :maps.next(wrap_term({1, 2, 3})) == {1, 2, 3}
+    end
+
     test "not an iterator" do
       assert_error ArgumentError, build_argument_error_msg(1, "not a valid iterator"), fn ->
         :maps.next(123)
+      end
+    end
+
+    test "raises ArgumentError for an improper list that is not a path iterator" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a valid iterator"), fn ->
+        :maps.next(wrap_term([1 | 2]))
       end
     end
   end

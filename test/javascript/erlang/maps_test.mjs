@@ -660,6 +660,57 @@ describe("Erlang_Maps", () => {
     });
   });
 
+  describe("is_iterator_valid/1", () => {
+    const is_iterator_valid = Erlang_Maps["is_iterator_valid/1"];
+
+    it("returns true for a path iterator", () => {
+      const iterator = Type.improperList([
+        Type.integer(0),
+        Type.map([[Type.atom("a"), Type.integer(1)]]),
+      ]);
+
+      assertBoxedTrue(is_iterator_valid(iterator));
+    });
+
+    it("returns true for the :none atom", () => {
+      assertBoxedTrue(is_iterator_valid(Type.atom("none")));
+    });
+
+    it("returns true for a key-value tuple chain ending in a valid iterator", () => {
+      const iterator = Type.tuple([
+        Type.atom("a"),
+        Type.integer(1),
+        Type.tuple([
+          Type.atom("b"),
+          Type.integer(2),
+          Type.improperList([Type.integer(0), Type.map()]),
+        ]),
+      ]);
+
+      assertBoxedTrue(is_iterator_valid(iterator));
+    });
+
+    it("returns false for a key-value tuple chain ending in an invalid term", () => {
+      const iterator = Type.tuple([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assertBoxedFalse(is_iterator_valid(iterator));
+    });
+
+    it("returns false for a term that is not an iterator", () => {
+      assertBoxedFalse(is_iterator_valid(Type.atom("abc")));
+    });
+
+    it("returns false for an improper list that is not a path iterator", () => {
+      const term = Type.improperList([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedFalse(is_iterator_valid(term));
+    });
+  });
+
   describe("is_key/2", () => {
     const is_key = Erlang_Maps["is_key/2"];
 
@@ -1125,9 +1176,29 @@ describe("Erlang_Maps", () => {
       assert.deepStrictEqual(result, iter);
     });
 
+    it("returns a key-value tuple without validating its tail", () => {
+      const tuple = Type.tuple([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(next(tuple), tuple);
+    });
+
     it("not an iterator", () => {
       assertBoxedError(
         () => next(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a valid iterator"),
+      );
+    });
+
+    it("raises ArgumentError for an improper list that is not a path iterator", () => {
+      const term = Type.improperList([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedError(
+        () => next(term),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a valid iterator"),
       );

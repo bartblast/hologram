@@ -171,6 +171,32 @@ const Erlang_Maps = {
   // End intersect_with/3
   // Deps: []
 
+  // Doc-hidden OTP internal (-doc false), exported for :erl_stdlib_errors.
+  // Covers the iterator shapes the client can produce: the :none atom,
+  // {key, value, iterator} tuples (validated recursively, unlike the shallow
+  // shape check next/1 uses), and the [path | map] improper list form.
+  // Start is_iterator_valid/1
+  "is_iterator_valid/1": (iterator) => {
+    let current = iterator;
+
+    while (Type.isTuple(current) && current.data.length === 3) {
+      current = current.data[2];
+    }
+
+    if (Type.isAtom(current) && current.value === "none") {
+      return Type.boolean(true);
+    }
+
+    return Type.boolean(
+      Type.isImproperList(current) &&
+        current.data.length === 2 &&
+        Type.isInteger(current.data[0]) &&
+        Type.isMap(current.data[1]),
+    );
+  },
+  // End is_iterator_valid/1
+  // Deps: []
+
   // Start is_key/2
   "is_key/2": (key, map) => {
     if (!Type.isMap(map)) {
@@ -283,7 +309,18 @@ const Erlang_Maps = {
 
   // Start next/1
   "next/1": (iterator) => {
-    if (!Type.isIterator(iterator)) {
+    // Accepts what maps:next/1 accepts, without validating tuple tails: any
+    // {key, value, iterator} tuple, a [path | map] improper list, or :none -
+    // unlike the recursive is_iterator_valid/1.
+    const isIteratorShaped =
+      (Type.isTuple(iterator) && iterator.data.length === 3) ||
+      (Type.isImproperList(iterator) &&
+        iterator.data.length === 2 &&
+        Type.isInteger(iterator.data[0]) &&
+        Type.isMap(iterator.data[1])) ||
+      (Type.isAtom(iterator) && iterator.value === "none");
+
+    if (!isIteratorShaped) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "not a valid iterator"),
       );
