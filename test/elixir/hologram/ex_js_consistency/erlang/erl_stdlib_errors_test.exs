@@ -33,6 +33,186 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
       assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{}
     end
 
+    test "maps find: not a map" do
+      stacktrace = [{:maps, :find, [:a, :b], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not a map"}
+    end
+
+    test "maps fold: bad fun and bad collection" do
+      stacktrace = [{:maps, :fold, [:a, :b, :c], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a fun that takes three arguments",
+               3 => "not a map or an iterator"
+             }
+    end
+
+    test "maps fold: valid fun and iterator skip their fragments" do
+      fun = fn acc, _key, _value -> acc end
+      stacktrace = [{:maps, :fold, [fun, :b, [0 | %{a: 1}]], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{}
+    end
+
+    test "maps fold: iterator validity is checked recursively" do
+      fun = fn acc, _key, _value -> acc end
+      stacktrace = [{:maps, :fold, [fun, :b, {1, 2, 3}], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               3 => "not a map or an iterator"
+             }
+    end
+
+    test "maps from_keys: improper list" do
+      stacktrace = [{:maps, :from_keys, [[1 | 2], :a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a proper list"}
+    end
+
+    test "maps from_list: not a list" do
+      stacktrace = [{:maps, :from_list, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a list"}
+    end
+
+    test "maps get/2: key not present in map" do
+      stacktrace = [{:maps, :get, [:a, %{b: 2}], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badkey, stacktrace) == %{1 => "not present in map"}
+    end
+
+    test "maps get/2: not a map" do
+      stacktrace = [{:maps, :get, [:a, :b], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not a map"}
+    end
+
+    test "maps get/3: not a map" do
+      stacktrace = [{:maps, :get, [:a, :b, :c], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not a map"}
+    end
+
+    test "maps intersect: both arguments not maps" do
+      stacktrace = [{:maps, :intersect, [:a, :b], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a map",
+               2 => "not a map"
+             }
+    end
+
+    test "maps intersect_with: bad fun and bad maps" do
+      stacktrace = [{:maps, :intersect_with, [:a, :b, :c], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a fun that takes three arguments",
+               2 => "not a map",
+               3 => "not a map"
+             }
+    end
+
+    test "maps is_key: not a map" do
+      stacktrace = [{:maps, :is_key, [:a, :b], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not a map"}
+    end
+
+    test "maps iterator: not a map" do
+      stacktrace = [{:maps, :iterator, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a map"}
+    end
+
+    test "maps keys: not a map" do
+      stacktrace = [{:maps, :keys, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a map"}
+    end
+
+    test "maps map: bad fun and bad collection" do
+      stacktrace = [{:maps, :map, [:a, :b], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a fun that takes two arguments",
+               2 => "not a map or an iterator"
+             }
+    end
+
+    test "maps merge: both arguments not maps" do
+      stacktrace = [{:maps, :merge, [:a, :b], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a map",
+               2 => "not a map"
+             }
+    end
+
+    test "maps merge_with: bad fun and bad maps" do
+      stacktrace = [{:maps, :merge_with, [:a, :b, :c], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a fun that takes three arguments",
+               2 => "not a map",
+               3 => "not a map"
+             }
+    end
+
+    test "maps next: bad iterator" do
+      stacktrace = [{:maps, :next, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a valid iterator"
+             }
+    end
+
+    test "maps put: not a map" do
+      stacktrace = [{:maps, :put, [:a, :b, :c], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{3 => "not a map"}
+    end
+
+    test "maps remove: not a map" do
+      stacktrace = [{:maps, :remove, [:a, :b], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not a map"}
+    end
+
+    test "maps take: not a map" do
+      stacktrace = [{:maps, :take, [:a, :b], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not a map"}
+    end
+
+    test "maps to_list: not a map or iterator" do
+      stacktrace = [{:maps, :to_list, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a map or an iterator"
+             }
+    end
+
+    test "maps update: key not present in map" do
+      stacktrace = [{:maps, :update, [:a, 1, %{b: 2}], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badkey, stacktrace) == %{
+               1 => "not present in map"
+             }
+    end
+
+    test "maps update: not a map" do
+      stacktrace = [{:maps, :update, [:a, 1, :b], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{3 => "not a map"}
+    end
+
+    test "maps values: not a map" do
+      stacktrace = [{:maps, :values, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a map"}
+    end
+
     test "raises FunctionClauseError when the stacktrace is empty" do
       stacktrace = []
 
@@ -52,6 +232,17 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
                    build_function_clause_error_msg(":erl_stdlib_errors.format_error/2", [
                      :badarg,
                      stacktrace
+                   ]),
+                   {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
+    end
+
+    test "raises FunctionClauseError when a maps clause needs args but the frame carries an arity" do
+      stacktrace = [{:maps, :get, 2, @error_info}]
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":erl_stdlib_errors.format_maps_error/2", [
+                     :get,
+                     2
                    ]),
                    {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
     end

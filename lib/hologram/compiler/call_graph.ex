@@ -52,7 +52,9 @@ defmodule Hologram.Compiler.CallGraph do
     Tuple
   ]
 
-  # These edges can't be discovered from static IR analysis.
+  # Edges for dynamic dispatch: the caller reads the callee module from data
+  # (e.g. a struct's calendar field), so static IR analysis can't see the
+  # target. Each edge points at the known implementation.
   @dynamic_dispatch_edges [
     {{Date, :day_of_era, 1}, {Calendar.ISO, :day_of_era, 3}},
     {{Date, :day_of_week, 2}, {Calendar.ISO, :day_of_week, 4}},
@@ -74,7 +76,6 @@ defmodule Hologram.Compiler.CallGraph do
      {Calendar.ISO, :naive_datetime_from_iso_days, 1}},
     {{DateTime, :to_iso_days, 1}, {Calendar.ISO, :naive_datetime_to_iso_days, 7}},
     {{DateTime, :to_string, 1}, {Calendar.ISO, :datetime_to_string, 11}},
-    {{ErlangError, :normalize, 2}, {:erl_stdlib_errors, :format_error, 2}},
     {{Inspect.Date, :inspect, 2}, {Calendar.ISO, :date_to_string, 3}},
     {{Inspect.DateTime, :inspect, 2}, {Calendar.ISO, :datetime_to_string, 11}},
     {{Inspect.NaiveDateTime, :inspect, 2}, {Calendar.ISO, :naive_datetime_to_string, 7}},
@@ -98,6 +99,20 @@ defmodule Hologram.Compiler.CallGraph do
     {{Time, :shift, 2}, {Calendar.ISO, :shift_time, 5}},
     {{Time, :to_day_fraction, 1}, {Calendar.ISO, :time_to_day_fraction, 4}},
     {{Time, :to_string, 1}, {Calendar.ISO, :time_to_string, 4}}
+  ]
+
+  # Each group names the client-runtime mechanism that needs its edges.
+  # They can't be discovered from static IR analysis, because the target
+  # module is read from data planted by manually ported JavaScript code -
+  # e.g. the error_info entry that maps.mjs raise sites put on the raising
+  # stacktrace frame, which ErlangError.normalize/2 applies at format time.
+  # Deps annotations can't carry these either: the raise sites reference the
+  # format module only as data, and the format function name is implicit
+  # (the :format_error default), so the MFA is not visible in the JS code.
+  @edges_used_by_client_runtime [
+    error_message_derivation: [
+      {{ErlangError, :normalize, 2}, {:erl_stdlib_errors, :format_error, 2}}
+    ]
   ]
 
   # TODO: Determine automatically based on deps annotations next to function implementations
@@ -124,6 +139,15 @@ defmodule Hologram.Compiler.CallGraph do
     {{:elixir_aliases, :safe_concat, 1}, {:elixir_aliases, :concat, 1}},
     {{:elixir_locals, :yank, 2}, {:maps, :remove, 2}},
     {{:elixir_utils, :jaro_similarity, 2}, {:unicode_util, :cp, 1}},
+    {{:erl_stdlib_errors, :_format_error_map, 3}, {:erl_stdlib_errors, :_expand_error, 1}},
+    {{:erl_stdlib_errors, :_format_maps_error, 2}, {:erl_stdlib_errors, :_must_be_fun, 2}},
+    {{:erl_stdlib_errors, :_format_maps_error, 2}, {:erl_stdlib_errors, :_must_be_list, 1}},
+    {{:erl_stdlib_errors, :_format_maps_error, 2}, {:erl_stdlib_errors, :_must_be_map, 1}},
+    {{:erl_stdlib_errors, :_format_maps_error, 2},
+     {:erl_stdlib_errors, :_must_be_map_or_iter, 1}},
+    {{:erl_stdlib_errors, :_must_be_map_or_iter, 1}, {:maps, :is_iterator_valid, 1}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_error_map, 3}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_maps_error, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
     {{:erlang, :>=, 2}, {:erlang, :==, 2}},
@@ -401,15 +425,20 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Adds call graph edges that can't be discovered from static IR analysis:
-  Erlang functions depending on other Erlang functions, and dynamic dispatch
-  patterns in Elixir stdlib (e.g. behaviour callbacks called via variable with known default).
+  Erlang functions depending on other Erlang functions, dynamic dispatch
+  where the callee module is read from data (e.g. a struct's calendar field),
+  and edges needed by client-runtime mechanisms (e.g. error message derivation).
   """
   @spec add_non_discoverable_edges(t) :: t
   def add_non_discoverable_edges(%{pid: pid} = call_graph) do
+    client_runtime_edges =
+      Enum.flat_map(@edges_used_by_client_runtime, fn {_mechanism, edges} -> edges end)
+
     Agent.cast(pid, fn graph ->
       graph
-      |> Digraph.add_edges(@erlang_mfa_edges)
+      |> Digraph.add_edges(client_runtime_edges)
       |> Digraph.add_edges(@dynamic_dispatch_edges)
+      |> Digraph.add_edges(@erlang_mfa_edges)
     end)
 
     call_graph
