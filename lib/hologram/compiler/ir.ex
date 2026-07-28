@@ -215,9 +215,16 @@ defmodule Hologram.Compiler.IR do
   defmodule FunctionClause do
     @moduledoc false
 
-    defstruct [:params, :guards, :body]
+    # line is the clause head's line in the module's source file, or nil when
+    # the AST metadata carries none.
+    defstruct [:params, :guards, :body, :line]
 
-    @type t :: %__MODULE__{params: list(IR.t()), guards: list(IR.t()), body: IR.Block.t()}
+    @type t :: %__MODULE__{
+            params: list(IR.t()),
+            guards: list(IR.t()),
+            body: IR.Block.t(),
+            line: integer | nil
+          }
   end
 
   defmodule FunctionDefinition do
