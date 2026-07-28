@@ -2411,10 +2411,6 @@ export default class RegexParser {
     }
   }
 
-  // Scans a {n}, {n,}, {n,m} or {,m} bounds spec. Spaces and tabs around the
-  // numbers are allowed, matching PCRE2 behavior.
-  // Returns null (without consuming) when the braces don't form a valid spec,
-  // in which case { is a literal, matching PCRE2 behavior.
   // Reads the code point at the position and advances past it.
   #takeCodePoint() {
     const codePoint = this.#source.codePointAt(this.#position);
@@ -2423,6 +2419,10 @@ export default class RegexParser {
     return codePoint;
   }
 
+  // Scans a {n}, {n,}, {n,m} or {,m} bounds spec. Spaces and tabs around the
+  // numbers are allowed, matching PCRE2 behavior.
+  // Returns null (without consuming) when the braces don't form a valid spec,
+  // in which case { is a literal, matching PCRE2 behavior.
   #tryParseBraceBounds() {
     const source = this.#source;
     let scanPosition = this.#position + 1;
