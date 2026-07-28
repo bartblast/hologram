@@ -27,6 +27,26 @@ describe("CallStack", () => {
     CallStack.reset();
   });
 
+  describe("peek()", () => {
+    it("returns the innermost frame", () => {
+      CallStack.push(myModuleFrame);
+      CallStack.push(enumFrame);
+
+      assert.equal(CallStack.peek(), enumFrame);
+    });
+
+    it("doesn't remove the returned frame", () => {
+      CallStack.push(myModuleFrame);
+      CallStack.peek();
+
+      assert.deepStrictEqual(CallStack.snapshot(), [myModuleFrame]);
+    });
+
+    it("returns undefined when the stack is empty", () => {
+      assert.isUndefined(CallStack.peek());
+    });
+  });
+
   describe("pop()", () => {
     it("removes the innermost frame", () => {
       CallStack.push(myModuleFrame);

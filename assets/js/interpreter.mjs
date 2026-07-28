@@ -193,8 +193,14 @@ export default class Interpreter {
     let popsFrameOnExit =
       globalThis.Hologram.config.stacktraces && fun.capturedModule === null;
 
+    let frame = null;
+
     if (popsFrameOnExit) {
-      CallStack.push({
+      const definingModuleProxy = fun.context.module
+        ? Interpreter.moduleProxy(fun.context.module)
+        : null;
+
+      frame = {
         module: fun.context.module
           ? Interpreter.moduleExName(fun.context.module)
           : null,
@@ -203,10 +209,12 @@ export default class Interpreter {
         // "anonymous fn/N in Module.parent/arity".
         function: null,
         arityOrArgs: fun.arity,
-        file: null,
+        file: definingModuleProxy?.__metadata__?.file ?? null,
         line: null,
         errorInfo: null,
-      });
+      };
+
+      CallStack.push(frame);
     }
 
     try {
@@ -220,6 +228,12 @@ export default class Interpreter {
           Interpreter.updateVarsToMatchedValues(contextClone);
 
           if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
+            // The frame is pushed before clause dispatch, so which line it
+            // points at is known only now, once a clause has matched.
+            if (frame) {
+              frame.line = clause.line ?? null;
+            }
+
             const result = clause.body(contextClone);
 
             // An async body is still executing when it returns its promise,
@@ -485,10 +499,13 @@ export default class Interpreter {
     arity,
     visibility,
     clauses,
+    metadata = {},
   ) {
     const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
 
     Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName);
+
+    globalThis[moduleJsName].__metadata__ = metadata;
 
     globalThis[moduleJsName][`${functionName}/${arity}`] =
       Interpreter.#buildElixirFunction(
@@ -496,6 +513,7 @@ export default class Interpreter {
         functionName,
         arity,
         clauses,
+        metadata.file ?? null,
       );
 
     if (visibility === "public") {
@@ -514,6 +532,7 @@ export default class Interpreter {
         moduleExName,
         functionName,
         arity,
+        null,
         jsFunction,
       );
 
@@ -541,6 +560,7 @@ export default class Interpreter {
         moduleExName,
         functionName,
         arity,
+        null,
         fun,
       );
 
@@ -863,6 +883,7 @@ export default class Interpreter {
       moduleProxy.__exports__ = new Set();
       moduleProxy.__jsBindings__ = new Map();
       moduleProxy.__jsName__ = moduleJsName;
+      moduleProxy.__metadata__ = {};
     }
   }
 
@@ -1344,11 +1365,18 @@ export default class Interpreter {
     );
   }
 
-  static #buildElixirFunction(moduleExName, functionName, arity, clauses) {
+  static #buildElixirFunction(
+    moduleExName,
+    functionName,
+    arity,
+    clauses,
+    file,
+  ) {
     return Interpreter.#buildFrameTrackingWrapper(
       moduleExName,
       functionName,
       arity,
+      file,
       function () {
         let startTime;
 
@@ -1371,6 +1399,12 @@ export default class Interpreter {
             Interpreter.updateVarsToMatchedValues(context);
 
             if (Interpreter.#evaluateGuards(clause.guards, context)) {
+              // The frame is pushed before clause dispatch, so which line it
+              // points at is known only now, once a clause has matched.
+              if (globalThis.Hologram.config.stacktraces) {
+                CallStack.peek().line = clause.line ?? null;
+              }
+
               const result = clause.body(context);
 
               // TODO: remove on release
@@ -1398,7 +1432,13 @@ export default class Interpreter {
   // Wraps a function so each invocation pushes its frame onto the shadow call
   // stack and pops it when the invocation exits, on every exit path - return,
   // raise, or async settlement.
-  static #buildFrameTrackingWrapper(module, functionName, arityOrArgs, fn) {
+  static #buildFrameTrackingWrapper(
+    module,
+    functionName,
+    arityOrArgs,
+    file,
+    fn,
+  ) {
     return function () {
       // Frame tracking is flag-gated: with client stacktraces off, the only
       // frame an error carries is the raising one, attached at the raise site.
@@ -1411,7 +1451,7 @@ export default class Interpreter {
           module,
           function: functionName,
           arityOrArgs,
-          file: null,
+          file,
           line: null,
           errorInfo: null,
         });

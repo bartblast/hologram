@@ -13,6 +13,11 @@
 export default class CallStack {
   static #frames = [];
 
+  // Returns the innermost frame without removing it, or undefined when the stack is empty.
+  static peek() {
+    return $.#frames.at(-1);
+  }
+
   // Removes the innermost frame and returns it, or undefined when the stack is empty.
   static pop() {
     return $.#frames.pop();
@@ -29,8 +34,9 @@ export default class CallStack {
   }
 
   // Returns the current frames, innermost first, matching Erlang stacktrace order. The array is a
-  // copy, so later pushes and pops leave it untouched. Frames are never mutated after being pushed,
-  // so they are shared by reference rather than cloned.
+  // copy, so later pushes and pops leave it untouched. Frames are shared by reference rather than
+  // cloned - once a function's body starts executing its frame is no longer mutated (the dispatch
+  // fills in the line between push and body execution, when a clause matches).
   static snapshot() {
     return $.#frames.slice().reverse();
   }

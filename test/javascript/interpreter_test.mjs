@@ -1149,6 +1149,59 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(CallStack.snapshot(), []);
     });
 
+    it("the frame carries the file from the defining module's metadata", () => {
+      let framesDuringCall;
+
+      Interpreter.defineElixirFunction("Iii.Jjj", "my_fun", 0, "public", [], {
+        app: "my_app",
+        file: "lib/iii/jjj.ex",
+        vsn: "1.0.0",
+      });
+
+      const fun = Type.anonymousFunction(
+        1,
+        okClauses(() => (framesDuringCall = CallStack.snapshot())),
+        contextFixture({module: "Iii.Jjj"}),
+      );
+
+      Interpreter.callAnonymousFunction(fun, [Type.integer(1)]);
+
+      assert.equal(framesDuringCall[0].file, "lib/iii/jjj.ex");
+
+      // cleanup
+      delete globalThis.Elixir_Iii_Jjj;
+    });
+
+    it("the frame carries the matched clause's line", () => {
+      let framesDuringCall;
+
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.atom("a")],
+            guards: [],
+            body: (_context) => Type.atom("expr_a"),
+            line: 3,
+          },
+          {
+            params: (_context) => [Type.atom("b")],
+            guards: [],
+            body: (_context) => {
+              framesDuringCall = CallStack.snapshot();
+              return Type.atom("expr_b");
+            },
+            line: 5,
+          },
+        ],
+        context,
+      );
+
+      Interpreter.callAnonymousFunction(fun, [Type.atom("b")]);
+
+      assert.equal(framesDuringCall[0].line, 5);
+    });
+
     it("doesn't push a frame for a capture of a named function", () => {
       let framesDuringCall;
 
@@ -3588,6 +3641,58 @@ describe("Interpreter", () => {
         assert.deepStrictEqual(CallStack.snapshot(), []);
       });
 
+      it("the frame carries the file from the module metadata", () => {
+        let framesDuringCall;
+
+        Interpreter.defineElixirFunction(
+          "Aaa.Bbb",
+          "my_fun_g",
+          0,
+          "public",
+          [
+            {
+              params: (_context) => [],
+              guards: [],
+              body: (_context) => {
+                framesDuringCall = CallStack.snapshot();
+                return Type.atom("ok");
+              },
+            },
+          ],
+          {app: "my_app", file: "lib/aaa/bbb.ex", vsn: "1.0.0"},
+        );
+
+        globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
+
+        assert.equal(framesDuringCall[0].file, "lib/aaa/bbb.ex");
+      });
+
+      it("the frame carries the matched clause's line", () => {
+        let framesDuringCall;
+
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 1, "public", [
+          {
+            params: (_context) => [Type.atom("a")],
+            guards: [],
+            body: (_context) => Type.atom("expr_a"),
+            line: 3,
+          },
+          {
+            params: (_context) => [Type.atom("b")],
+            guards: [],
+            body: (_context) => {
+              framesDuringCall = CallStack.snapshot();
+              return Type.atom("expr_b");
+            },
+            line: 5,
+          },
+        ]);
+
+        globalThis.Elixir_Aaa_Bbb["my_fun_g/1"](Type.atom("b"));
+
+        assert.equal(framesDuringCall[0].line, 5);
+      });
+
       it("doesn't track frames when client stacktraces are disabled", () => {
         globalThis.Hologram.config = {stacktraces: false};
 
@@ -3607,6 +3712,35 @@ describe("Interpreter", () => {
         globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
 
         assert.deepStrictEqual(framesDuringCall, []);
+      });
+    });
+
+    describe("module metadata", () => {
+      it("stores the metadata on the module proxy", () => {
+        const metadata = {app: "my_app", file: "lib/aaa/bbb.ex", vsn: "1.0.0"};
+
+        Interpreter.defineElixirFunction(
+          "Aaa.Bbb",
+          "my_fun_g",
+          0,
+          "public",
+          [],
+          metadata,
+        );
+
+        assert.equal(globalThis.Elixir_Aaa_Bbb.__metadata__, metadata);
+      });
+
+      it("defaults the metadata to an empty object when not provided", () => {
+        Interpreter.defineElixirFunction(
+          "Aaa.Bbb",
+          "my_fun_g",
+          0,
+          "public",
+          [],
+        );
+
+        assert.deepStrictEqual(globalThis.Elixir_Aaa_Bbb.__metadata__, {});
       });
     });
 
@@ -8592,6 +8726,11 @@ describe("Interpreter", () => {
           "Elixir_MyModuleExName",
         );
 
+        assert.deepStrictEqual(
+          globalThis.Elixir_MyModuleExName.__metadata__,
+          {},
+        );
+
         globalThis.Elixir_MyModuleExName["my_defined_fun/3"] = () =>
           "my_defined_fun/3 result";
 
@@ -8666,6 +8805,8 @@ describe("Interpreter", () => {
           globalThis.Erlang_My_Module.__jsName__,
           "Erlang_My_Module",
         );
+
+        assert.deepStrictEqual(globalThis.Erlang_My_Module.__metadata__, {});
 
         globalThis.Erlang_My_Module["my_defined_fun/3"] = () =>
           "my_defined_fun/3 result";
