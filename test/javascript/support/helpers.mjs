@@ -252,7 +252,7 @@ function defineElixirExceptionModule() {
 
       if (isTaggedTuple("badkey")) {
         // Mirrors the term recovery from the known stacktrace frame shapes -
-        // only the :maps ones are mirrored.
+        // only the :maps and :erlang.map_get ones are mirrored.
         let term = Type.nil();
 
         if (Type.isList(stacktrace) && stacktrace.data.length > 0) {
@@ -262,16 +262,30 @@ function defineElixirExceptionModule() {
             Type.isTuple(topFrame) &&
             topFrame.data.length === 4 &&
             Type.isAtom(topFrame.data[0]) &&
-            topFrame.data[0].value === "maps" &&
             Type.isList(topFrame.data[2])
           ) {
+            const moduleName = topFrame.data[0].value;
             const funName = topFrame.data[1].value;
             const args = topFrame.data[2].data;
 
-            if (funName === "get" && args.length === 2) {
+            if (
+              moduleName === "maps" &&
+              funName === "get" &&
+              args.length === 2
+            ) {
               term = args[1];
-            } else if (funName === "update" && args.length === 3) {
+            } else if (
+              moduleName === "maps" &&
+              funName === "update" &&
+              args.length === 3
+            ) {
               term = args[2];
+            } else if (
+              moduleName === "erlang" &&
+              funName === "map_get" &&
+              args.length === 2
+            ) {
+              term = args[1];
             }
           }
         }

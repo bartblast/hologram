@@ -988,9 +988,8 @@ export default class Interpreter {
   // in place of the port function's own dispatch frame - the BEAM shows the
   // BIF frame, not both - which also lets it carry a different identity
   // (e.g. :maps.get/2 reporting as :erlang.map_get/2).
-  // To keep raise sites small, the reason is given unboxed - a string for an
-  // atom reason or a [tag, term] array for a tagged tuple reason - and args
-  // is a plain array of boxed terms.
+  // To keep raise sites small, the reason is given unboxed and args is a
+  // plain array of boxed terms.
   static raiseBifError(
     reason,
     module,
@@ -998,11 +997,6 @@ export default class Interpreter {
     args,
     formatModule = "erl_stdlib_errors",
   ) {
-    const boxedReason =
-      typeof reason === "string"
-        ? Type.atom(reason)
-        : Type.tuple([Type.atom(reason[0]), ...reason.slice(1)]);
-
     const errorInfo = Type.map([
       [Type.atom("module"), Type.atom(formatModule)],
     ]);
@@ -1016,7 +1010,7 @@ export default class Interpreter {
       errorInfo,
     };
 
-    const error = new HologramBoxedError(boxedReason);
+    const error = new HologramBoxedError(Interpreter.#boxErrorReason(reason));
 
     error.stacktrace = [raisingFrame, ...error.stacktrace.slice(1)];
     error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
@@ -1046,9 +1040,10 @@ export default class Interpreter {
 
   // Raises the reason attributed to the caller: the port function's own
   // dispatch frame is dropped from the trace, mirroring the BIFs that the
-  // BEAM reports without a frame of their own (e.g. maps:merge/2).
+  // BEAM reports without a frame of their own (e.g. maps:get/3).
+  // The reason is given unboxed, as in raiseBifError.
   static raiseFramelessError(reason) {
-    const error = new HologramBoxedError(reason);
+    const error = new HologramBoxedError(Interpreter.#boxErrorReason(reason));
 
     error.stacktrace = error.stacktrace.slice(1);
     error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
@@ -1058,14 +1053,6 @@ export default class Interpreter {
 
   static raiseFunctionClauseError(message) {
     Interpreter.raiseError("FunctionClauseError", message);
-  }
-
-  static raiseKeyError(key, term) {
-    Interpreter.#raiseFieldBearingError("KeyError", [
-      [Type.atom("key"), key],
-      [Type.atom("message"), Type.nil()],
-      [Type.atom("term"), term],
-    ]);
   }
 
   static raiseMatchError(term) {
@@ -1452,6 +1439,14 @@ export default class Interpreter {
     context.stacktrace = Type.isList(error.stacktrace)
       ? error.stacktrace
       : Type.list(error.stacktrace.map(CallStack.boxFrame));
+  }
+
+  // Boxes the unboxed reason shorthand the raise helpers accept: a string for
+  // an atom reason or a [tag, term] array for a tagged tuple reason.
+  static #boxErrorReason(reason) {
+    return typeof reason === "string"
+      ? Type.atom(reason)
+      : Type.tuple([Type.atom(reason[0]), ...reason.slice(1)]);
   }
 
   static #buildElixirFunction(

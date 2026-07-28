@@ -827,13 +827,29 @@ defmodule Hologram.CompilerTest do
       expected =
         normalize_newlines("""
         (key, map) => {
-            const value = Erlang_Maps["get/3"](key, map, null);
-
-            if (value !== null) {
-              return value;
+            if (!Type.isMap(map)) {
+              Interpreter.raiseBifError(
+                ["badmap", map],
+                "erlang",
+                "map_get",
+                [key, map],
+                "erl_erts_errors",
+              );
             }
 
-            Interpreter.raiseKeyError(key, map);
+            const encodedKey = Type.encodeMapKey(key);
+
+            if (map.data[encodedKey]) {
+              return map.data[encodedKey][1];
+            }
+
+            Interpreter.raiseBifError(
+              ["badkey", key],
+              "erlang",
+              "map_get",
+              [key, map],
+              "erl_erts_errors",
+            );
           }\
         """)
 

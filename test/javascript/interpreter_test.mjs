@@ -9270,8 +9270,8 @@ describe("Interpreter", () => {
 
       const ownFrame = {
         module: "maps",
-        function: "merge",
-        arityOrArgs: 2,
+        function: "get",
+        arityOrArgs: 3,
         file: null,
         line: null,
         errorInfo: null,
@@ -9280,12 +9280,10 @@ describe("Interpreter", () => {
       CallStack.push(callerFrame);
       CallStack.push(ownFrame);
 
-      const reason = Type.tuple([Type.atom("badmap"), Type.atom("b")]);
-
       let caught;
 
       try {
-        Interpreter.raiseFramelessError(reason);
+        Interpreter.raiseFramelessError(["badmap", Type.atom("b")]);
       } catch (e) {
         caught = e;
       }
@@ -9299,12 +9297,10 @@ describe("Interpreter", () => {
     });
 
     it("raises with an empty trace when frame tracking is disabled", () => {
-      const reason = Type.tuple([Type.atom("badmap"), Type.atom("b")]);
-
       let caught;
 
       try {
-        Interpreter.raiseFramelessError(reason);
+        Interpreter.raiseFramelessError(["badmap", Type.atom("b")]);
       } catch (e) {
         caught = e;
       }
@@ -9323,34 +9319,6 @@ describe("Interpreter", () => {
       () => Interpreter.raiseFunctionClauseError("my_message"),
       "FunctionClauseError",
       "my_message",
-    );
-  });
-
-  it("raiseKeyError()", () => {
-    const key = Type.atom("a");
-    const map = Type.map([[Type.atom("b"), Type.integer(2)]]);
-
-    let caught;
-
-    try {
-      Interpreter.raiseKeyError(key, map);
-    } catch (e) {
-      caught = e;
-    }
-
-    assert.deepStrictEqual(
-      caught.value,
-      Type.struct("KeyError", [
-        [Type.atom("__exception__"), Type.boolean(true)],
-        [Type.atom("key"), key],
-        [Type.atom("message"), Type.nil()],
-        [Type.atom("term"), map],
-      ]),
-    );
-
-    assert.equal(
-      caught.message,
-      "(KeyError) key :a not found in:\n\n    %{b: 2}\n",
     );
   });
 

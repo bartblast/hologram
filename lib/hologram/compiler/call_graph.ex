@@ -209,7 +209,6 @@ defmodule Hologram.Compiler.CallGraph do
     {{:lists, :seq, 2}, {:lists, :seq, 3}},
     {{:lists, :keymember, 3}, {:lists, :keyfind, 3}},
     {{:lists, :keysort, 2}, {:erlang, :element, 2}},
-    {{:maps, :get, 2}, {:maps, :get, 3}},
     {{:maps, :take, 2}, {:maps, :get, 3}},
     {{:maps, :take, 2}, {:maps, :remove, 2}},
     {{:maps, :update, 3}, {:maps, :is_key, 2}},

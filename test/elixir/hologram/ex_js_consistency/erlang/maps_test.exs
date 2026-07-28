@@ -194,6 +194,30 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     test "raises KeyError if the map doesn't contain the given key" do
       assert_error KeyError, build_key_error_msg(:a, %{}), {:maps, :get, [:a, %{}]}
     end
+
+    test "error frame carries args and error_info" do
+      top_frame =
+        try do
+          :maps.get(:a, :b)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:erlang, :map_get, [:a, :b], [error_info: %{module: :erl_erts_errors}]}
+    end
+
+    test "error frame carries args and error_info for a missing key" do
+      top_frame =
+        try do
+          :maps.get(:a, %{b: 2})
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:erlang, :map_get, [:a, %{b: 2}], [error_info: %{module: :erl_erts_errors}]}
+    end
   end
 
   describe "get/3" do
@@ -209,6 +233,17 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "returns the default value if the map doesn't contain the given key" do
       assert :maps.get(:a, %{}, :default_value) == :default_value
+    end
+
+    test "the error is attributed to the caller" do
+      top_frame =
+        try do
+          :maps.get(:a, :b, :default_value)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert elem(top_frame, 0) == __MODULE__
     end
   end
 
@@ -406,6 +441,18 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     test "raises BadMapError if the second argument is not a map" do
       assert_error BadMapError, build_bad_map_error_msg(:abc), {:maps, :is_key, [:x, :abc]}
     end
+
+    test "error frame carries args and error_info" do
+      top_frame =
+        try do
+          :maps.is_key(:a, :b)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:erlang, :is_map_key, [:a, :b], [error_info: %{module: :erl_erts_errors}]}
+    end
   end
 
   describe "iterator/1" do
@@ -562,6 +609,17 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       assert_error BadMapError, build_bad_map_error_msg(123), fn ->
         :maps.merge(%{a: 1}, 123)
       end
+    end
+
+    test "error frame carries args and error_info" do
+      top_frame =
+        try do
+          :maps.merge(wrap_term(:a), :b)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:maps, :merge, [:a, :b], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 

@@ -34,6 +34,17 @@ const mapA1B2 = freeze(
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/maps_test.exs
 // Always update both together.
 
+function ertsErrorFrame(functionName, args) {
+  return {
+    module: "erlang",
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo: Type.map([[Type.atom("module"), Type.atom("erl_erts_errors")]]),
+  };
+}
+
 function mapsErrorFrame(functionName, args) {
   return {
     module: "maps",
@@ -374,6 +385,36 @@ describe("Erlang_Maps", () => {
         Interpreter.buildKeyErrorMsg(key, map),
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        get(atomA, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("map_get", Type.list([atomA, atomB])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a missing key", () => {
+      const mapB2 = Type.map([[Type.atom("b"), Type.integer(2)]]);
+
+      let caught;
+
+      try {
+        get(atomA, mapB2);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("map_get", Type.list([atomA, mapB2])),
+      ]);
+    });
   });
 
   describe("get/3", () => {
@@ -405,6 +446,18 @@ describe("Erlang_Maps", () => {
     it("returns the default value if the map doesn't contain the given key", () => {
       const result = get(Type.atom("a"), Type.map(), defaultValue);
       assert.deepStrictEqual(result, defaultValue);
+    });
+
+    it("the error is attributed to the caller", () => {
+      let caught;
+
+      try {
+        get(atomA, atomB, defaultValue);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, []);
     });
   });
 
@@ -861,6 +914,20 @@ describe("Erlang_Maps", () => {
         Interpreter.buildBadMapErrorMsg(atomAbc),
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        is_key(atomA, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("is_map_key", Type.list([atomA, atomB])),
+      ]);
+    });
   });
 
   describe("iterator/1", () => {
@@ -1131,6 +1198,20 @@ describe("Erlang_Maps", () => {
         "BadMapError",
         Interpreter.buildBadMapErrorMsg(Type.integer(123)),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        merge(atomA, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("merge", Type.list([atomA, atomB])),
+      ]);
     });
   });
 

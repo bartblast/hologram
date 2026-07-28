@@ -74,23 +74,41 @@ const Erlang_Maps = {
   // End from_list/1
   // Deps: []
 
+  // The BEAM implements this function with the map_get BIF, so its errors
+  // report the :erlang.map_get/2 identity with erts error_info.
   // Start get/2
   "get/2": (key, map) => {
-    const value = Erlang_Maps["get/3"](key, map, null);
-
-    if (value !== null) {
-      return value;
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBifError(
+        ["badmap", map],
+        "erlang",
+        "map_get",
+        [key, map],
+        "erl_erts_errors",
+      );
     }
 
-    Interpreter.raiseKeyError(key, map);
+    const encodedKey = Type.encodeMapKey(key);
+
+    if (map.data[encodedKey]) {
+      return map.data[encodedKey][1];
+    }
+
+    Interpreter.raiseBifError(
+      ["badkey", key],
+      "erlang",
+      "map_get",
+      [key, map],
+      "erl_erts_errors",
+    );
   },
   // End get/2
-  // Deps: [:maps.get/3]
+  // Deps: []
 
   // Start get/3
   "get/3": (key, map, defaultValue) => {
     if (!Type.isMap(map)) {
-      Interpreter.raiseBadMapError(map);
+      Interpreter.raiseFramelessError(["badmap", map]);
     }
 
     const encodedKey = Type.encodeMapKey(key);
@@ -205,10 +223,18 @@ const Erlang_Maps = {
   // End is_iterator_valid/1
   // Deps: []
 
+  // The BEAM implements this function with the is_map_key BIF, so its errors
+  // report the :erlang.is_map_key/2 identity with erts error_info.
   // Start is_key/2
   "is_key/2": (key, map) => {
     if (!Type.isMap(map)) {
-      Interpreter.raiseBadMapError(map);
+      Interpreter.raiseBifError(
+        ["badmap", map],
+        "erlang",
+        "is_map_key",
+        [key, map],
+        "erl_erts_errors",
+      );
     }
 
     return Type.boolean(Type.encodeMapKey(key) in map.data);
@@ -265,11 +291,17 @@ const Erlang_Maps = {
   // Start merge/2
   "merge/2": (map1, map2) => {
     if (!Type.isMap(map1)) {
-      Interpreter.raiseBadMapError(map1);
+      Interpreter.raiseBifError(["badmap", map1], "maps", "merge", [
+        map1,
+        map2,
+      ]);
     }
 
     if (!Type.isMap(map2)) {
-      Interpreter.raiseBadMapError(map2);
+      Interpreter.raiseBifError(["badmap", map2], "maps", "merge", [
+        map1,
+        map2,
+      ]);
     }
 
     return {type: "map", data: {...map1.data, ...map2.data}};
