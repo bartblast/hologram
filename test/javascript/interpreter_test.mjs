@@ -1073,6 +1073,115 @@ describe("Interpreter", () => {
     });
   });
 
+  // Only frame tracking is unit-tested here - clause dispatch behavior is
+  // covered by feature and consistency tests, because its unit tests would
+  // need updating each time Hologram.Compiler.Encoder's implementation
+  // changes.
+  describe("callAnonymousFunction() frame tracking", () => {
+    const context = contextFixture({module: "Aaa.Bbb"});
+
+    const okClauses = (onCall) => [
+      {
+        params: (_context) => [Type.variablePattern("x")],
+        guards: [],
+        body: (_context) => {
+          onCall();
+          return Type.atom("ok");
+        },
+      },
+    ];
+
+    beforeEach(() => {
+      CallStack.reset();
+      globalThis.Hologram.config = {stacktraces: true};
+    });
+
+    afterEach(() => {
+      globalThis.Hologram.config = {stacktraces: false};
+    });
+
+    it("pushes the fun's frame for the duration of the call", () => {
+      let framesDuringCall;
+
+      const fun = Type.anonymousFunction(
+        1,
+        okClauses(() => (framesDuringCall = CallStack.snapshot())),
+        context,
+      );
+
+      Interpreter.callAnonymousFunction(fun, [Type.integer(1)]);
+
+      assert.deepStrictEqual(framesDuringCall, [
+        {
+          module: "Aaa.Bbb",
+          function: null,
+          arityOrArgs: 1,
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+
+      assert.deepStrictEqual(CallStack.snapshot(), []);
+    });
+
+    it("pops the frame when no clause matches", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.integer(1)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+          },
+        ],
+        context,
+      );
+
+      assertBoxedError(
+        () => Interpreter.callAnonymousFunction(fun, [Type.integer(2)]),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg("anonymous fn/1", [
+          Type.integer(2),
+        ]),
+      );
+
+      assert.deepStrictEqual(CallStack.snapshot(), []);
+    });
+
+    it("doesn't push a frame for a capture of a named function", () => {
+      let framesDuringCall;
+
+      const capture = Type.functionCapture(
+        "Ccc.Ddd",
+        "my_fun",
+        1,
+        okClauses(() => (framesDuringCall = CallStack.snapshot())),
+        context,
+      );
+
+      Interpreter.callAnonymousFunction(capture, [Type.integer(1)]);
+
+      assert.deepStrictEqual(framesDuringCall, []);
+    });
+
+    it("doesn't track frames when client stacktraces are disabled", () => {
+      globalThis.Hologram.config = {stacktraces: false};
+
+      let framesDuringCall;
+
+      const fun = Type.anonymousFunction(
+        1,
+        okClauses(() => (framesDuringCall = CallStack.snapshot())),
+        context,
+      );
+
+      Interpreter.callAnonymousFunction(fun, [Type.integer(1)]);
+
+      assert.deepStrictEqual(framesDuringCall, []);
+    });
+  });
+
   it("cloneContext()", () => {
     const context = {
       module: Type.atom("MyModule1"),

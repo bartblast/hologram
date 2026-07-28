@@ -174,7 +174,8 @@ export default class Interpreter {
     return "no with clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
   }
 
-  // callAnonymousFunction() has no unit tests in interpreter_test.mjs, only:
+  // Apart from the frame tracking unit tests, callAnonymousFunction() has no
+  // unit tests in interpreter_test.mjs, only:
   // * feature tests in test/features/test/function_calls/anonymous_function_test.exs,
   // * feature tests in test/features/test/function_calls/function_capture_test.exs,
   // * consistency tests in test/elixir/hologram/ex_js_consistency/interpreter_test.exs (call anonymous function section).
@@ -186,27 +187,66 @@ export default class Interpreter {
       Interpreter.raiseBadArityError(fun.arity, argsArray);
     }
 
-    const args = Type.list(argsArray);
+    // A capture of a named function pushes no frame of its own - the call
+    // delegates to the named function, whose own dispatch wrapper pushes the
+    // frame, matching the BEAM where such a capture IS the named function.
+    let popsFrameOnExit =
+      globalThis.Hologram.config.stacktraces && fun.capturedModule === null;
 
-    for (const clause of fun.clauses) {
-      const contextClone = Interpreter.cloneContext(fun.context);
-      const pattern = Type.list(clause.params(contextClone));
-
-      if (Interpreter.isMatched(pattern, args, contextClone)) {
-        Interpreter.updateVarsToMatchedValues(contextClone);
-
-        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
-          return clause.body(contextClone);
-        }
-      }
+    if (popsFrameOnExit) {
+      CallStack.push({
+        module: fun.context.module
+          ? Interpreter.moduleExName(fun.context.module)
+          : null,
+        // TODO: take the BEAM-generated fun name ("-parent/arity-fun-N-")
+        // from compile-time metadata, so the frame renders as
+        // "anonymous fn/N in Module.parent/arity".
+        function: null,
+        arityOrArgs: fun.arity,
+        file: null,
+        line: null,
+        errorInfo: null,
+      });
     }
 
-    Interpreter.raiseFunctionClauseError(
-      Interpreter.buildFunctionClauseErrorMsg(
-        `anonymous fn/${fun.arity}`,
-        argsArray,
-      ),
-    );
+    try {
+      const args = Type.list(argsArray);
+
+      for (const clause of fun.clauses) {
+        const contextClone = Interpreter.cloneContext(fun.context);
+        const pattern = Type.list(clause.params(contextClone));
+
+        if (Interpreter.isMatched(pattern, args, contextClone)) {
+          Interpreter.updateVarsToMatchedValues(contextClone);
+
+          if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
+            const result = clause.body(contextClone);
+
+            // An async body is still executing when it returns its promise,
+            // so the frame pops when the promise settles instead of on
+            // return - otherwise every frame below an await would be gone by
+            // the time an error is raised there.
+            if (popsFrameOnExit && result instanceof Promise) {
+              popsFrameOnExit = false;
+              return result.finally(() => CallStack.pop());
+            }
+
+            return result;
+          }
+        }
+      }
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          `anonymous fn/${fun.arity}`,
+          argsArray,
+        ),
+      );
+    } finally {
+      if (popsFrameOnExit) {
+        CallStack.pop();
+      }
+    }
   }
 
   // callNamedFunction() has no unit tests in interpreter_test.mjs, only:
