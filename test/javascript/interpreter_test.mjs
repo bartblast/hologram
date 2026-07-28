@@ -9123,8 +9123,8 @@ describe("Interpreter", () => {
       CallStack.push(callerFrame);
       CallStack.push(ownFrame);
 
-      const args = Type.list([Type.atom("a"), Type.atom("b")]);
-      const reason = Type.tuple([Type.atom("badmap"), Type.atom("b")]);
+      const args = [Type.atom("a"), Type.atom("b")];
+      const reason = ["badmap", Type.atom("b")];
 
       let caught;
 
@@ -9144,7 +9144,7 @@ describe("Interpreter", () => {
         {
           module: "erlang",
           function: "map_get",
-          arityOrArgs: args,
+          arityOrArgs: Type.list(args),
           file: null,
           line: null,
           errorInfo: Type.map([
@@ -9161,19 +9161,13 @@ describe("Interpreter", () => {
     });
 
     it("the raising frame stands alone when frame tracking is disabled", () => {
-      const args = Type.list([Type.atom("a"), Type.atom("b")]);
-      const reason = Type.tuple([Type.atom("badmap"), Type.atom("b")]);
+      const args = [Type.atom("a"), Type.atom("b")];
+      const reason = ["badmap", Type.atom("b")];
 
       let caught;
 
       try {
-        Interpreter.raiseBifError(
-          reason,
-          "maps",
-          "find",
-          args,
-          "erl_stdlib_errors",
-        );
+        Interpreter.raiseBifError(reason, "maps", "find", args);
       } catch (e) {
         caught = e;
       }
@@ -9182,7 +9176,7 @@ describe("Interpreter", () => {
         {
           module: "maps",
           function: "find",
-          arityOrArgs: args,
+          arityOrArgs: Type.list(args),
           file: null,
           line: null,
           errorInfo: Type.map([
@@ -9193,18 +9187,12 @@ describe("Interpreter", () => {
     });
 
     it("derives the message against the raising frame", () => {
-      const args = Type.list([Type.atom("a")]);
+      const args = [Type.atom("a")];
 
       let caught;
 
       try {
-        Interpreter.raiseBifError(
-          Type.atom("badarg"),
-          "maps",
-          "from_list",
-          args,
-          "erl_stdlib_errors",
-        );
+        Interpreter.raiseBifError("badarg", "maps", "from_list", args);
       } catch (e) {
         caught = e;
       }

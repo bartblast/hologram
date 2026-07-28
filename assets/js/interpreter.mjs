@@ -988,7 +988,21 @@ export default class Interpreter {
   // in place of the port function's own dispatch frame - the BEAM shows the
   // BIF frame, not both - which also lets it carry a different identity
   // (e.g. :maps.get/2 reporting as :erlang.map_get/2).
-  static raiseBifError(reason, module, functionName, args, formatModule) {
+  // To keep raise sites small, the reason is given unboxed - a string for an
+  // atom reason or a [tag, term] array for a tagged tuple reason - and args
+  // is a plain array of boxed terms.
+  static raiseBifError(
+    reason,
+    module,
+    functionName,
+    args,
+    formatModule = "erl_stdlib_errors",
+  ) {
+    const boxedReason =
+      typeof reason === "string"
+        ? Type.atom(reason)
+        : Type.tuple([Type.atom(reason[0]), ...reason.slice(1)]);
+
     const errorInfo = Type.map([
       [Type.atom("module"), Type.atom(formatModule)],
     ]);
@@ -996,13 +1010,13 @@ export default class Interpreter {
     const raisingFrame = {
       module,
       function: functionName,
-      arityOrArgs: args,
+      arityOrArgs: Type.list(args),
       file: null,
       line: null,
       errorInfo,
     };
 
-    const error = new HologramBoxedError(reason);
+    const error = new HologramBoxedError(boxedReason);
 
     error.stacktrace = [raisingFrame, ...error.stacktrace.slice(1)];
     error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
