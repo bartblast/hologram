@@ -1,5 +1,7 @@
 "use strict";
 
+import Type from "../type.mjs";
+
 // Shadow call stack of Elixir-level frames. Native JS stacks cannot yield Elixir-shaped frames -
 // function names are minified, line numbers point into generated code, and frames are truncated
 // across awaits - so the interpreter maintains its own stack, pushing a frame when it dispatches a
@@ -12,6 +14,56 @@
 // moves to web workers, this becomes per-process state.
 export default class CallStack {
   static #frames = [];
+
+  // Converts a frame to the boxed Erlang stacktrace entry tuple
+  // {module, function, arity_or_args, location}. The location is a keyword list with :file,
+  // :line and :error_info entries - each present only when the frame carries the datum, in that
+  // order, matching the BEAM. Transpiled Elixir exception machinery consumes the result unmodified.
+  static boxFrame(frame) {
+    let moduleTerm;
+
+    if (frame.module === null) {
+      moduleTerm = Type.nil();
+    } else if (/^[A-Z]/.test(frame.module)) {
+      moduleTerm = Type.alias(frame.module);
+    } else {
+      moduleTerm = Type.atom(frame.module);
+    }
+
+    const functionTerm =
+      frame.function === null ? Type.nil() : Type.atom(frame.function);
+
+    let arityOrArgsTerm;
+
+    if (frame.arityOrArgs === null) {
+      arityOrArgsTerm = Type.nil();
+    } else if (typeof frame.arityOrArgs === "number") {
+      arityOrArgsTerm = Type.integer(frame.arityOrArgs);
+    } else {
+      arityOrArgsTerm = frame.arityOrArgs;
+    }
+
+    const location = [];
+
+    if (frame.file !== null) {
+      location.push(Type.tuple([Type.atom("file"), Type.charlist(frame.file)]));
+    }
+
+    if (frame.line !== null) {
+      location.push(Type.tuple([Type.atom("line"), Type.integer(frame.line)]));
+    }
+
+    if (frame.errorInfo !== null) {
+      location.push(Type.tuple([Type.atom("error_info"), frame.errorInfo]));
+    }
+
+    return Type.tuple([
+      moduleTerm,
+      functionTerm,
+      arityOrArgsTerm,
+      Type.list(location),
+    ]);
+  }
 
   // Returns the innermost frame without removing it, or undefined when the stack is empty.
   static peek() {
