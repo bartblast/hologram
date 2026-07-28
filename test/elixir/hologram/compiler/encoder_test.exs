@@ -1628,7 +1628,7 @@ defmodule Hologram.Compiler.EncoderTest do
         return Type.atom("expr_2");
         }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: (context) => {
         return context.vars.z;
-        }}], {});\
+        }}]);\
         """)
 
       assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, context) == expected
@@ -1644,7 +1644,7 @@ defmodule Hologram.Compiler.EncoderTest do
         return Type.atom("expr_2");
         }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: async (context) => {
         return context.vars.z;
-        }}], {});\
+        }}]);\
         """)
 
       assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, context) == expected
@@ -1663,13 +1663,22 @@ defmodule Hologram.Compiler.EncoderTest do
              )
     end
 
+    test "omits module metadata for a module that can't be loaded", %{clauses: clauses} do
+      context = %Context{module: Aaa.Bbb}
+
+      result = encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, context)
+
+      assert String.ends_with?(result, "}}]);")
+    end
+
     test "omits module metadata when client stacktraces are disabled", %{clauses: clauses} do
       Application.put_env(:hologram, :client_stacktraces, false)
       on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
 
-      context = %Context{module: Aaa.Bbb}
+      context = %Context{module: Hologram.Reflection}
 
-      result = encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, context)
+      result =
+        encode_elixir_function("Hologram.Reflection", :fun_2, 1, :private, clauses, context)
 
       assert String.ends_with?(result, "}}]);")
     end
@@ -2264,23 +2273,23 @@ defmodule Hologram.Compiler.EncoderTest do
         normalize_newlines("""
         Interpreter.defineElixirFunction("Aaa.Bbb", "fun_1", 1, "public", [{params: (context) => [Type.variablePattern("c")], guards: [(context) => Erlang["is_integer/1"](context.vars.c)], body: (context) => {
         return context.vars.c;
-        }}], {});
+        }}]);
 
         Interpreter.defineElixirFunction("Aaa.Bbb", "fun_1", 2, "public", [{params: (context) => [Type.integer(9n), Type.integer(8n)], guards: [], body: (context) => {
         return Type.atom("expr_1");
         }}, {params: (context) => [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (context) => {
         return Erlang["+/2"](context.vars.a, context.vars.b);
-        }}], {});
+        }}]);
 
         Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
         return Type.atom("expr_2");
         }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: (context) => {
         return context.vars.z;
-        }}], {});
+        }}]);
 
         Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 2, "private", [{params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (context) => {
         return Erlang["*/2"](context.vars.x, context.vars.y);
-        }}], {});\
+        }}]);\
         """)
 
       assert encode_ir(ir) == expected

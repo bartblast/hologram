@@ -73,13 +73,22 @@ defmodule Hologram.Compiler.Encoder do
     clause_context = %{context | async?: async?}
     clauses_js = encode_as_array(clauses, clause_context)
 
-    if Hologram.client_stacktraces?() do
-      metadata_js = encode_module_metadata(context.module)
+    metadata_js =
+      if Hologram.client_stacktraces?() do
+        encode_module_metadata(context.module)
+      else
+        "{}"
+      end
 
-      ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js}, #{metadata_js});/
-    else
-      ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
-    end
+    # Empty metadata is omitted - the runtime defaults it to an empty object.
+    metadata_arg_js =
+      if metadata_js == "{}" do
+        ""
+      else
+        ", #{metadata_js}"
+      end
+
+    ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js}#{metadata_arg_js});/
   end
 
   @doc """
