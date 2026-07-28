@@ -1,5 +1,6 @@
 "use strict";
 
+import CallStack from "../erts/call_stack.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -9,10 +10,11 @@ export default class HologramBoxedError extends Error {
 
     this.name = "HologramBoxedError";
 
-    // kind, value and struct are internal carriers read by the try/rescue/catch
-    // machinery. They are defined as non-enumerable because extra enumerable
-    // own-properties on a thrown Error blank out the message that the browser's
-    // uncaught-error reporting surfaces (and that Wallaby/chromedriver capture).
+    // kind, value, stacktrace and struct are internal carriers read by the
+    // try/rescue/catch machinery. They are defined as non-enumerable because
+    // extra enumerable own-properties on a thrown Error blank out the message
+    // that the browser's uncaught-error reporting surfaces (and that
+    // Wallaby/chromedriver capture).
     Object.defineProperty(this, "kind", {
       value: kind,
       writable: true,
@@ -20,6 +22,15 @@ export default class HologramBoxedError extends Error {
     });
     Object.defineProperty(this, "value", {
       value: value,
+      writable: true,
+      configurable: true,
+    });
+
+    // Snapshotted at construction time, while the raising frame is still on
+    // the call stack - the finally-popping in the dispatch wrappers unwinds
+    // the stack as this error propagates.
+    Object.defineProperty(this, "stacktrace", {
+      value: CallStack.snapshot(),
       writable: true,
       configurable: true,
     });

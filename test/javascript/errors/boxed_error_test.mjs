@@ -5,12 +5,26 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
+import CallStack from "../../../assets/js/erts/call_stack.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
+const myModuleFrame = {
+  module: "MyModule",
+  function: "my_fun",
+  arityOrArgs: 1,
+  file: "lib/my_module.ex",
+  line: 11,
+  errorInfo: null,
+};
+
 describe("HologramBoxedError", () => {
+  beforeEach(() => {
+    CallStack.reset();
+  });
+
   describe("error kind (default)", () => {
     it("defaults the kind to :error", () => {
       const struct = Type.errorStruct("MyType", "my message");
@@ -36,6 +50,16 @@ describe("HologramBoxedError", () => {
       assert.isTrue(Type.isStruct(error.struct));
     });
 
+    it("captures a call stack snapshot at construction time", () => {
+      const struct = Type.errorStruct("MyType", "my message");
+
+      CallStack.push(myModuleFrame);
+      const error = new HologramBoxedError(struct);
+      CallStack.pop();
+
+      assert.deepStrictEqual(error.stacktrace, [myModuleFrame]);
+    });
+
     it("renders the message from the exception type and message", () => {
       const struct = Type.errorStruct("MyType", "my message");
       const error = new HologramBoxedError(struct);
@@ -46,7 +70,7 @@ describe("HologramBoxedError", () => {
     // Extra enumerable own-properties on a thrown Error blank out the message that
     // the browser's uncaught-error reporting surfaces, so the internal carriers
     // must stay non-enumerable.
-    it("defines kind, value and struct as non-enumerable", () => {
+    it("defines kind, value, stacktrace and struct as non-enumerable", () => {
       const struct = Type.errorStruct("MyType", "my message");
       const error = new HologramBoxedError(struct);
 
@@ -57,6 +81,11 @@ describe("HologramBoxedError", () => {
 
       assert.equal(
         Object.getOwnPropertyDescriptor(error, "value").enumerable,
+        false,
+      );
+
+      assert.equal(
+        Object.getOwnPropertyDescriptor(error, "stacktrace").enumerable,
         false,
       );
 
@@ -85,6 +114,17 @@ describe("HologramBoxedError", () => {
 
       assert.deepStrictEqual(error.kind, Type.atom("throw"));
       assert.deepStrictEqual(error.value, value);
+    });
+
+    it("captures a call stack snapshot at construction time", () => {
+      CallStack.push(myModuleFrame);
+      const error = new HologramBoxedError(
+        Type.integer(42),
+        Type.atom("throw"),
+      );
+      CallStack.pop();
+
+      assert.deepStrictEqual(error.stacktrace, [myModuleFrame]);
     });
 
     it("renders the message from the inspected value", () => {
