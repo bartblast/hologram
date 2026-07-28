@@ -11,7 +11,7 @@ const Erlang_Maps = {
   // Start find/2
   "find/2": (key, map) => {
     if (!Type.isMap(map)) {
-      Interpreter.raiseBadMapError(map);
+      Interpreter.raiseBifError(["badmap", map], "maps", "find", [key, map]);
     }
 
     const encodedKey = Type.encodeMapKey(key);
@@ -28,16 +28,19 @@ const Erlang_Maps = {
   // Start fold/3
   "fold/3": (fun, initialAcc, map) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 3) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
-      );
+      Interpreter.raiseBifError("badarg", "maps", "fold", [
+        fun,
+        initialAcc,
+        map,
+      ]);
     }
 
     if (!Type.isMap(map)) {
-      Interpreter.raiseBadMapError(map);
+      Interpreter.raiseBifError(["badmap", map], "maps", "fold", [
+        fun,
+        initialAcc,
+        map,
+      ]);
     }
 
     return Object.values(map.data).reduce(
@@ -51,16 +54,8 @@ const Erlang_Maps = {
 
   // Start from_keys/2
   "from_keys/2": (keys, value) => {
-    if (!Type.isList(keys)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
-      );
-    }
-
     if (!Type.isProperList(keys)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
-      );
+      Interpreter.raiseBifError("badarg", "maps", "from_keys", [keys, value]);
     }
 
     return Type.map(keys.data.map((key) => [key, value]));
@@ -70,10 +65,8 @@ const Erlang_Maps = {
 
   // Start from_list/1
   "from_list/1": (list) => {
-    if (!Type.isList(list)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
-      );
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseBifError("badarg", "maps", "from_list", [list]);
     }
 
     return Type.map(list.data.map((tuple) => tuple.data));
@@ -114,10 +107,17 @@ const Erlang_Maps = {
   // Start intersect/2
   "intersect/2": (map1, map2) => {
     if (!Type.isMap(map1)) {
-      Interpreter.raiseBadMapError(map1);
+      Interpreter.raiseBifError(["badmap", map1], "maps", "intersect", [
+        map1,
+        map2,
+      ]);
     }
+
     if (!Type.isMap(map2)) {
-      Interpreter.raiseBadMapError(map2);
+      Interpreter.raiseBifError(["badmap", map2], "maps", "intersect", [
+        map1,
+        map2,
+      ]);
     }
 
     const result = Type.map();
@@ -136,19 +136,27 @@ const Erlang_Maps = {
   // Start intersect_with/3
   "intersect_with/3": (fun, map1, map2) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 3) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
-      );
+      Interpreter.raiseBifError("badarg", "maps", "intersect_with", [
+        fun,
+        map1,
+        map2,
+      ]);
     }
 
     if (!Type.isMap(map1)) {
-      Interpreter.raiseBadMapError(map1);
+      Interpreter.raiseBifError(["badmap", map1], "maps", "intersect_with", [
+        fun,
+        map1,
+        map2,
+      ]);
     }
+
     if (!Type.isMap(map2)) {
-      Interpreter.raiseBadMapError(map2);
+      Interpreter.raiseBifError(["badmap", map2], "maps", "intersect_with", [
+        fun,
+        map1,
+        map2,
+      ]);
     }
 
     const result = Type.map();
@@ -211,7 +219,7 @@ const Erlang_Maps = {
   // Start iterator/1
   "iterator/1": (map) => {
     if (!Type.isMap(map)) {
-      Interpreter.raiseBadMapError(map);
+      Interpreter.raiseBifError(["badmap", map], "maps", "iterator", [map]);
     }
 
     return Type.improperList([Type.integer(0), map]);
@@ -222,7 +230,7 @@ const Erlang_Maps = {
   // Start keys/1
   "keys/1": (map) => {
     if (!Type.isMap(map)) {
-      Interpreter.raiseBadMapError(map);
+      Interpreter.raiseBifError(["badmap", map], "maps", "keys", [map]);
     }
 
     return Type.list(Object.values(map.data).map(([key, _value]) => key));
@@ -234,16 +242,14 @@ const Erlang_Maps = {
   // Start map/2
   "map/2": (fun, mapOrIterator) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes two arguments",
-        ),
-      );
+      Interpreter.raiseBifError("badarg", "maps", "map", [fun, mapOrIterator]);
     }
 
     if (!Type.isMap(mapOrIterator)) {
-      Interpreter.raiseBadMapError(mapOrIterator);
+      Interpreter.raiseBifError(["badmap", mapOrIterator], "maps", "map", [
+        fun,
+        mapOrIterator,
+      ]);
     }
 
     return Type.map(
@@ -274,20 +280,27 @@ const Erlang_Maps = {
   // Start merge_with/3
   "merge_with/3": (combiner, map1, map2) => {
     if (!Type.isAnonymousFunction(combiner) || combiner.arity !== 3) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
-      );
+      Interpreter.raiseBifError("badarg", "maps", "merge_with", [
+        combiner,
+        map1,
+        map2,
+      ]);
     }
 
     if (!Type.isMap(map1)) {
-      Interpreter.raiseBadMapError(map1);
+      Interpreter.raiseBifError(["badmap", map1], "maps", "merge_with", [
+        combiner,
+        map1,
+        map2,
+      ]);
     }
 
     if (!Type.isMap(map2)) {
-      Interpreter.raiseBadMapError(map2);
+      Interpreter.raiseBifError(["badmap", map2], "maps", "merge_with", [
+        combiner,
+        map1,
+        map2,
+      ]);
     }
 
     const result = Type.cloneMap(map1);
@@ -321,9 +334,7 @@ const Erlang_Maps = {
       (Type.isAtom(iterator) && iterator.value === "none");
 
     if (!isIteratorShaped) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a valid iterator"),
-      );
+      Interpreter.raiseBifError("badarg", "maps", "next", [iterator]);
     }
 
     if (Type.isTuple(iterator)) {
@@ -347,7 +358,11 @@ const Erlang_Maps = {
   // Start put/3
   "put/3": (key, value, map) => {
     if (!Type.isMap(map)) {
-      Interpreter.raiseBadMapError(map);
+      Interpreter.raiseBifError(["badmap", map], "maps", "put", [
+        key,
+        value,
+        map,
+      ]);
     }
 
     const newMap = Type.cloneMap(map);
@@ -361,7 +376,7 @@ const Erlang_Maps = {
   // Start remove/2
   "remove/2": (key, map) => {
     if (!Type.isMap(map)) {
-      Interpreter.raiseBadMapError(map);
+      Interpreter.raiseBifError(["badmap", map], "maps", "remove", [key, map]);
     }
 
     const newMap = Type.cloneMap(map);
@@ -374,6 +389,10 @@ const Erlang_Maps = {
 
   // Start take/2
   "take/2": (key, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBifError(["badmap", map], "maps", "take", [key, map]);
+    }
+
     const value = Erlang_Maps["get/3"](key, map, null);
 
     if (value === null) {
@@ -391,7 +410,9 @@ const Erlang_Maps = {
   // Start to_list/1
   "to_list/1": (mapOrIterator) => {
     if (!Type.isMap(mapOrIterator)) {
-      Interpreter.raiseBadMapError(mapOrIterator);
+      Interpreter.raiseBifError(["badmap", mapOrIterator], "maps", "to_list", [
+        mapOrIterator,
+      ]);
     }
 
     return Type.list(
@@ -404,11 +425,19 @@ const Erlang_Maps = {
   // Start update/3
   "update/3": (key, value, map) => {
     if (!Type.isMap(map)) {
-      Interpreter.raiseBadMapError(map);
+      Interpreter.raiseBifError(["badmap", map], "maps", "update", [
+        key,
+        value,
+        map,
+      ]);
     }
 
     if (Type.isFalse(Erlang_Maps["is_key/2"](key, map))) {
-      Interpreter.raiseKeyError(key, map);
+      Interpreter.raiseBifError(["badkey", key], "maps", "update", [
+        key,
+        value,
+        map,
+      ]);
     }
 
     return Erlang_Maps["put/3"](key, value, map);
@@ -419,7 +448,7 @@ const Erlang_Maps = {
   // Start values/1
   "values/1": (map) => {
     if (!Type.isMap(map)) {
-      Interpreter.raiseBadMapError(map);
+      Interpreter.raiseBifError(["badmap", map], "maps", "values", [map]);
     }
 
     return Type.list(Object.values(map.data).map(([_key, value]) => value));
