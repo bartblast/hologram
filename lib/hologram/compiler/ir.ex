@@ -46,6 +46,7 @@ defmodule Hologram.Compiler.IR do
           | IR.PortType.t()
           | IR.ReferenceType.t()
           | IR.RemoteFunctionCall.t()
+          | IR.Stacktrace.t()
           | IR.StringType.t()
           | IR.Try.t()
           | IR.TryCatchClause.t()
@@ -350,6 +351,14 @@ defmodule Hologram.Compiler.IR do
     defstruct [:module, :function, :args]
 
     @type t :: %__MODULE__{module: IR.t(), function: atom, args: list(IR.t())}
+  end
+
+  defmodule Stacktrace do
+    @moduledoc false
+
+    defstruct []
+
+    @type t :: %__MODULE__{}
   end
 
   defmodule StringType do

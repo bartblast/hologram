@@ -224,14 +224,14 @@ defmodule Hologram.Compiler.TransformerTest do
     test "AST from source code" do
       ast = ast("__STACKTRACE__")
 
-      assert transform(ast, %Context{}) == %IR.ListType{data: []}
+      assert transform(ast, %Context{}) == %IR.Stacktrace{}
     end
 
     test "AST from BEAM file" do
       assert %IR.Try{
                rescue_clauses: [
                  %IR.TryRescueClause{
-                   body: %IR.Block{expressions: [%IR.ListType{data: []}]}
+                   body: %IR.Block{expressions: [%IR.Stacktrace{}]}
                  }
                ]
              } = transform_module_and_fetch_expr(Module181)

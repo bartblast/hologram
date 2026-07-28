@@ -455,20 +455,11 @@ defmodule Hologram.Compiler.Transformer do
     transform_remote_function_call(module, function, args, context)
   end
 
-  # __STACKTRACE__ is a special form available inside rescue/catch clauses. The
-  # client does not support stacktraces yet, so for now it transforms to an empty
-  # list (a valid, empty stacktrace). This is what currently lets reraise/2 and
-  # reraise/3 work on the client: they expand to
-  # :erlang.raise(:error, exception, __STACKTRACE__), and :erlang.raise/3 ignores
-  # the stacktrace argument.
-  #
-  # TODO: support real client-side stacktraces. This requires maintaining a call
-  # stack in the interpreter (pushing a frame on each function call), capturing it
-  # when a HologramBoxedError is raised, and binding __STACKTRACE__ to that
-  # captured trace within rescue/catch clause scopes - instead of transforming it
-  # to an empty list literal here.
+  # __STACKTRACE__ is a special form available inside rescue/catch clauses.
+  # In rescue/catch clause scope it evaluates to the stacktrace captured on
+  # the error being handled.
   def transform({:__STACKTRACE__, _meta, _module}, _context) do
-    %IR.ListType{data: []}
+    %IR.Stacktrace{}
   end
 
   def transform({name, meta, module}, _context) when is_atom(name) and not is_list(module) do
