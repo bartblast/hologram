@@ -291,7 +291,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :ok}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -306,7 +307,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :ok}]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -323,7 +325,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -339,7 +342,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      guards: [],
                      body: %IR.Block{
                        expressions: [%IR.Variable{name: :x, version: 0}]
-                     }
+                     },
+                     line: 4
                    }
                  ]
                }
@@ -361,7 +365,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [
                        %IR.TupleType{data: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]}
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -386,7 +391,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -412,7 +418,8 @@ defmodule Hologram.Compiler.TransformerTest do
                        %IR.AtomType{value: :expr_1},
                        %IR.AtomType{value: :expr_2}
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -430,7 +437,8 @@ defmodule Hologram.Compiler.TransformerTest do
                        %IR.AtomType{value: :expr_1},
                        %IR.AtomType{value: :expr_2}
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -453,14 +461,16 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :ok}]
-                   }
+                   },
+                   line: 2
                  },
                  %IR.FunctionClause{
                    params: [%IR.IntegerType{value: 2}],
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :error}]
-                   }
+                   },
+                   line: 3
                  }
                ]
              }
@@ -475,14 +485,16 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :ok}]
-                   }
+                   },
+                   line: 5
                  },
                  %IR.FunctionClause{
                    params: [%IR.IntegerType{value: 2}],
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :error}]
-                   }
+                   },
+                   line: 6
                  }
                ]
              }
@@ -506,7 +518,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -529,7 +542,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x, version: 0}]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -560,7 +574,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -591,7 +606,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x, version: 0}]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -629,7 +645,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -668,7 +685,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x, version: 0}]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -693,7 +711,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -716,7 +735,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x, version: 0}]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -749,7 +769,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -782,7 +803,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  ],
                  body: %IR.Block{
                    expressions: [%IR.Variable{name: :x, version: 0}]
-                 }
+                 },
+                 line: 4
                }
              ]
            }
@@ -1510,7 +1532,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          args: []
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1533,7 +1556,8 @@ defmodule Hologram.Compiler.TransformerTest do
                            args: []
                          }
                        ]
-                     }
+                     },
+                     line: 4
                    }
                  ]
                }
@@ -1559,7 +1583,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1586,7 +1611,8 @@ defmodule Hologram.Compiler.TransformerTest do
                            ]
                          }
                        ]
-                     }
+                     },
+                     line: 4
                    }
                  ]
                }
@@ -1616,7 +1642,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1645,7 +1672,8 @@ defmodule Hologram.Compiler.TransformerTest do
                            ]
                          }
                        ]
-                     }
+                     },
+                     line: 4
                    }
                  ]
                }
@@ -1678,7 +1706,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1707,7 +1736,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -1738,7 +1768,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1767,7 +1798,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -1800,7 +1832,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1829,7 +1862,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -1862,7 +1896,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1891,7 +1926,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -1929,7 +1965,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1975,7 +2012,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -2014,7 +2052,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -2061,7 +2100,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 6
                  }
                ]
              }
@@ -2099,7 +2139,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -2147,7 +2188,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -3998,7 +4040,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    expressions: [
                      %IR.Variable{name: :x}
                    ]
-                 }
+                 },
+                 line: 1
                }
              }
     end
@@ -4023,7 +4066,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    expressions: [
                      %IR.Variable{name: :x, version: 0}
                    ]
-                 }
+                 },
+                 line: 3
                }
              }
     end
@@ -4058,7 +4102,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    expressions: [
                      %IR.Variable{name: :x}
                    ]
-                 }
+                 },
+                 line: 1
                }
              }
     end
@@ -4088,7 +4133,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    expressions: [
                      %IR.Variable{name: :x, version: 0}
                    ]
-                 }
+                 },
+                 line: 3
                }
              }
     end
@@ -4127,7 +4173,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    expressions: [
                      %IR.Variable{name: :x}
                    ]
-                 }
+                 },
+                 line: 1
                }
              }
     end
@@ -4162,7 +4209,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    expressions: [
                      %IR.Variable{name: :x, version: 0}
                    ]
-                 }
+                 },
+                 line: 3
                }
              }
     end

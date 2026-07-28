@@ -255,21 +255,21 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform(
-        {marker, _meta_1, [{:when, _meta_2, [{name, _meta_3, params}, guards]}, [do: body]]},
+        {marker, meta_1, [{:when, _meta_2, [{name, _meta_3, params}, guards]}, [do: body]]},
         context
       )
       when marker in [:def, :defp] do
-    transform_function_definition(marker, name, params, guards, body, context)
+    transform_function_definition(marker, name, params, guards, body, meta_1, context)
   end
 
-  def transform({marker, _meta_1, [{name, _meta_2, params}, [do: body]]}, context)
+  def transform({marker, meta_1, [{name, _meta_2, params}, [do: body]]}, context)
       when marker in [:def, :defp] and (is_list(params) or is_nil(params)) do
-    transform_function_definition(marker, name, List.wrap(params), nil, body, context)
+    transform_function_definition(marker, name, List.wrap(params), nil, body, meta_1, context)
   end
 
-  def transform({marker, _meta_1, [{name, _meta_2, module}, [do: body]]}, context)
+  def transform({marker, meta_1, [{name, _meta_2, module}, [do: body]]}, context)
       when marker in [:def, :defp] and is_atom(module) do
-    transform_function_definition(marker, name, [], nil, body, context)
+    transform_function_definition(marker, name, [], nil, body, meta_1, context)
   end
 
   def transform(value, _context) when is_integer(value) do
@@ -622,7 +622,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_anonymous_function_clause(
-         {:->, _meta_1, [[{:when, _meta_2, params_and_guards}], body]},
+         {:->, meta_1, [[{:when, _meta_2, params_and_guards}], body]},
          context
        ) do
     {guards, params} = List.pop_at(params_and_guards, -1)
@@ -630,15 +630,17 @@ defmodule Hologram.Compiler.Transformer do
     %IR.FunctionClause{
       params: transform_list(params, %{context | pattern?: true}),
       guards: transform_guards(guards, context),
-      body: transform(body, context)
+      body: transform(body, context),
+      line: meta_1[:line]
     }
   end
 
-  defp transform_anonymous_function_clause({:->, _meta, [params, body]}, context) do
+  defp transform_anonymous_function_clause({:->, meta, [params, body]}, context) do
     %IR.FunctionClause{
       params: transform_list(params, %{context | pattern?: true}),
       guards: [],
-      body: transform(body, context)
+      body: transform(body, context),
+      line: meta[:line]
     }
   end
 
@@ -807,7 +809,7 @@ defmodule Hologram.Compiler.Transformer do
     transform(ast, context)
   end
 
-  defp transform_function_definition(marker, name, params, guards, body, context) do
+  defp transform_function_definition(marker, name, params, guards, body, meta, context) do
     visibility =
       if marker == :def do
         :public
@@ -831,7 +833,8 @@ defmodule Hologram.Compiler.Transformer do
       clause: %IR.FunctionClause{
         params: params_ir,
         guards: guards_ir,
-        body: transform(body, context)
+        body: transform(body, context),
+        line: meta[:line]
       }
     }
   end

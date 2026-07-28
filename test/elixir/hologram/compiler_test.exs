@@ -1212,7 +1212,8 @@ defmodule Hologram.CompilerTest do
                      guards: [],
                      body: %IR.Block{
                        expressions: [%IR.IntegerType{value: 3}]
-                     }
+                     },
+                     line: 11
                    }
                  },
                  %IR.FunctionDefinition{
@@ -1227,7 +1228,10 @@ defmodule Hologram.CompilerTest do
                      guards: [],
                      body: %IR.Block{
                        expressions: [%IR.IntegerType{value: 4}]
-                     }
+                     },
+                     # The AST reconstructed from BEAM debug info carries the
+                     # first clause's line on every clause of a function.
+                     line: 11
                    }
                  },
                  %IR.FunctionDefinition{
@@ -1239,7 +1243,8 @@ defmodule Hologram.CompilerTest do
                      guards: [],
                      body: %IR.Block{
                        expressions: [%IR.Variable{name: :x, version: 0}]
-                     }
+                     },
+                     line: 19
                    }
                  }
                ]

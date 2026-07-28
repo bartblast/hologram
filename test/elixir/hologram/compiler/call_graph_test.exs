@@ -2435,6 +2435,10 @@ defmodule Hologram.Compiler.CallGraphTest do
          %{ir_plt: ir_plt} do
       assert [fun_def] = find_fun_defs(ir_plt, Date, :new, 3)
 
+      # The clause line points into Elixir's own source, so its value depends on
+      # the Elixir version - neutralize it before the exact comparison.
+      fun_def = %{fun_def | clause: %{fun_def.clause | line: nil}}
+
       assert fun_def == %IR.FunctionDefinition{
                name: :new,
                arity: 3,
@@ -4239,7 +4243,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                      guards: [],
                      body: %IR.Block{
                        expressions: [%IR.AtomType{value: Protocol1.Integer}]
-                     }
+                     },
+                     line: 2
                    }
                  }
 
@@ -4255,7 +4260,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: Integer}]
-                 }
+                 },
+                 line: 2
                }
              }
 
@@ -4268,7 +4274,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: Protocol1}]
-                 }
+                 },
+                 line: 2
                }
              }
     end
@@ -4298,7 +4305,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: Protocol1}]
-                 }
+                 },
+                 line: 2
                }
              }
 
@@ -4322,7 +4330,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                        ]
                      }
                    ]
-                 }
+                 },
+                 line: 2
                }
              }
 
@@ -4335,7 +4344,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: true}]
-                 }
+                 },
+                 line: 2
                }
              }
 
@@ -4360,7 +4370,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                        ]
                      }
                    ]
-                 }
+                 },
+                 line: 2
                }
              }
     end
@@ -4407,7 +4418,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                        args: [%IR.Variable{name: :x, version: -1}]
                      }
                    ]
-                 }
+                 },
+                 line: 2
                }
              }
 
@@ -4428,7 +4440,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                    expressions: [
                      %IR.AtomType{value: Protocol1.Integer}
                    ]
-                 }
+                 },
+                 line: 2
                }
              }
 
@@ -4441,7 +4454,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: nil}]
-                 }
+                 },
+                 line: 2
                }
              }
     end
@@ -4582,7 +4596,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                        ]
                      }
                    ]
-                 }
+                 },
+                 line: 2
                }
              }
     end
@@ -4612,7 +4627,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                    expressions: [
                      %IR.AtomType{value: Module.safe_concat(Protocol1, Struct1)}
                    ]
-                 }
+                 },
+                 line: 2
                }
              }
 
@@ -4625,7 +4641,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: nil}]
-                 }
+                 },
+                 line: 2
                }
              }
     end

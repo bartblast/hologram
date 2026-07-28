@@ -109,7 +109,8 @@ defmodule Hologram.Compiler.IRTest do
                     ]
                   }
                 ]
-              }
+              },
+              line: 3
             }
           },
           %IR.FunctionDefinition{
@@ -142,12 +143,14 @@ defmodule Hologram.Compiler.IRTest do
                               ]
                             }
                           ]
-                        }
+                        },
+                        line: 7
                       }
                     ]
                   }
                 ]
-              }
+              },
+              line: 7
             }
           }
         ]
