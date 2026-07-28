@@ -4,7 +4,7 @@ import {
   assert,
   assertBoxedError,
   assertBoxedStrictEqual,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
@@ -12,7 +12,7 @@ import Erlang_Elixir_Utils from "../../../assets/js/erlang/elixir_utils.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/elixir_utils_test.exs

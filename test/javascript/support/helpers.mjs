@@ -309,7 +309,12 @@ function defineElixirStringCharsModule() {
   };
 }
 
-export function defineGlobalErlangAndElixirModules() {
+function defineGlobalModule(moduleJsName, moduleObj) {
+  globalThis[moduleJsName] = moduleObj;
+  moduleObj.__exports__ = new Set(Object.keys(moduleObj));
+}
+
+export function defineRuntimeGlobals() {
   globalThis.Hologram ??= {};
 
   // In the browser the runtime bundle bootstrap sets the config object before
@@ -346,11 +351,6 @@ export function defineGlobalErlangAndElixirModules() {
 
   defineGlobalModule("Elixir_Kernel", Elixir_Kernel);
   defineGlobalModule("Elixir_String_Chars", defineElixirStringCharsModule());
-}
-
-function defineGlobalModule(moduleJsName, moduleObj) {
-  globalThis[moduleJsName] = moduleObj;
-  moduleObj.__exports__ = new Set(Object.keys(moduleObj));
 }
 
 export function encodedSubscriptionReceiptKey(channel, cid) {

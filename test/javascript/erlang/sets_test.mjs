@@ -6,7 +6,7 @@ import {
   assertBoxedFalse,
   assertBoxedTrue,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   freeze,
 } from "../support/helpers.mjs";
 
@@ -17,7 +17,7 @@ import HologramInterpreterError from "../../../assets/js/errors/interpreter_erro
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const atomAbc = freeze(Type.atom("abc"));
 const emptyList = freeze(Type.list());

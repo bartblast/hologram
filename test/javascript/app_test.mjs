@@ -1,13 +1,10 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import App from "../../assets/js/app.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("App", () => {
   describe("maybeLoadInstanceId()", () => {

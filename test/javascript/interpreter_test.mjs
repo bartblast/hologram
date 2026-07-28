@@ -6,7 +6,7 @@ import {
   assertBoxedErrorAsync,
   assertBoxedStrictEqual,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   sinon,
 } from "./support/helpers.mjs";
 
@@ -22,7 +22,7 @@ import Interpreter from "../../assets/js/interpreter.mjs";
 import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 defineInterpreterModule1Fixture();
 defineMatchOperatorModule1Fixture();
 

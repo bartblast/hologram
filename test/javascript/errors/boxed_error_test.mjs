@@ -1,15 +1,12 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../support/helpers.mjs";
 
 import CallStack from "../../../assets/js/erts/call_stack.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const myModuleFrame = {
   module: "MyModule",

@@ -1,13 +1,10 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import Utils from "../../assets/js/utils.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("Utils", () => {
   describe("capitalize()", () => {

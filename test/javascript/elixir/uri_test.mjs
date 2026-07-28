@@ -3,14 +3,14 @@ import {
   assertBoxedError,
   assertBoxedStrictEqual,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Elixir_URI from "../../../assets/js/elixir/uri.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/elixir/uri_test.exs

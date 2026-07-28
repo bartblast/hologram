@@ -1,16 +1,12 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-  sinon,
-} from "../support/helpers.mjs";
+import {assert, defineRuntimeGlobals, sinon} from "../support/helpers.mjs";
 
 import MouseEvent from "../../../assets/js/events/mouse_event.mjs";
 import PointerEvent from "../../../assets/js/events/pointer_event.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("PointerEvent", () => {
   describe("buildOperationParam()", () => {

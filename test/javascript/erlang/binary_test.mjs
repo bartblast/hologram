@@ -4,8 +4,8 @@ import {
   assert,
   assertBoxedError,
   assertBoxedStrictEqual,
-  defineGlobalErlangAndElixirModules,
   contextFixture,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
@@ -14,7 +14,7 @@ import ERTS from "../../../assets/js/erts.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const atomAbc = Type.atom("abc");
 

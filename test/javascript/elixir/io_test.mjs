@@ -1,7 +1,7 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   sinon,
 } from "../support/helpers.mjs";
 
@@ -10,7 +10,7 @@ import HologramInterpreterError from "../../../assets/js/errors/interpreter_erro
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/elixir/io_test.exs

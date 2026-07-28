@@ -3,7 +3,7 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   freeze,
 } from "../support/helpers.mjs";
 
@@ -11,7 +11,7 @@ import Erlang_Elixir_Locals from "../../../assets/js/erlang/elixir_locals.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const atomA = freeze(Type.atom("a"));
 const atomB = freeze(Type.atom("b"));

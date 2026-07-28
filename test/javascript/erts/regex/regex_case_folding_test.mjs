@@ -1,13 +1,10 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "../../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../../support/helpers.mjs";
 
 import {caseVariants} from "../../../../assets/js/erts/regex/regex_case_folding.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("caseVariants()", () => {
   it("returns the uppercase partner of a lowercase letter", () => {

@@ -3,14 +3,14 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "../../../support/helpers.mjs";
 
 import AssetPathRegistry from "../../../../../assets/js/asset_path_registry.mjs";
 import Elixir_Hologram_Router_Helpers from "../../../../../assets/js/elixir/hologram/router/helpers.mjs";
 import Type from "../../../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const assetManifest = {
   "static-path-1": "/asset-path-1",

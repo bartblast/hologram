@@ -2,14 +2,14 @@
 
 import {
   assert,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   registerWebApis,
   vnode,
 } from "./support/helpers.mjs";
 
 import Vdom from "../../assets/js/vdom.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 registerWebApis();
 
 describe("Vdom", () => {

@@ -1,15 +1,12 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../support/helpers.mjs";
 
 import ApplicationEnv from "../../../assets/js/erts/application_env.mjs";
 import Elixir_Application from "../../../assets/js/elixir/application.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/elixir/application_test.exs

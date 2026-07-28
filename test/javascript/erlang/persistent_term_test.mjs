@@ -1,15 +1,12 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../support/helpers.mjs";
 
 import Erlang_Persistent_Term from "../../../assets/js/erlang/persistent_term.mjs";
 import MemoryStorage from "../../../assets/js/memory_storage.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/persistent_term_test.exs

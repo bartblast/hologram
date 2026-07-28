@@ -3,14 +3,14 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "../../support/helpers.mjs";
 
 import Bitstring from "../../../../assets/js/bitstring.mjs";
 import RegexEngine from "../../../../assets/js/erts/regex/regex_engine.mjs";
 import Type from "../../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const match = (source, subject, opts = {}, runOpts = {}) =>
   RegexEngine.match(RegexEngine.compile(source, opts), subject, runOpts);

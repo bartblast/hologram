@@ -1,17 +1,13 @@
 "use strict";
 
-import {
-  assert,
-  assertBoxedError,
-  defineGlobalErlangAndElixirModules,
-} from "./helpers.mjs";
+import {assert, assertBoxedError, defineRuntimeGlobals} from "./helpers.mjs";
 
 import Type from "../../../assets/js/type.mjs";
 
 import {defineModule1Fixture} from "./fixtures/router/helpers/module_1.mjs";
 import {defineModule2Fixture} from "./fixtures/router/helpers/module_2.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 defineModule1Fixture();
 defineModule2Fixture();

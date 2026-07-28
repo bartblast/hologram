@@ -1,13 +1,10 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "../../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../../support/helpers.mjs";
 
 import {codePointInRanges} from "../../../../assets/js/erts/regex/regex_char_sets.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const ranges = [
   [0x09, 0x0d],

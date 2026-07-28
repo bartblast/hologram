@@ -2,14 +2,14 @@
 
 import {
   assert,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   JSDOM,
   registerWebApis,
 } from "./support/helpers.mjs";
 
 import LiveReload from "../../assets/js/live_reload.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 registerWebApis();
 
 describe("LiveReload", () => {

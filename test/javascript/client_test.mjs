@@ -3,7 +3,7 @@
 import {
   assert,
   componentRegistryEntryFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   encodedSubscriptionReceiptKey,
   registerWebApis,
   sinon,
@@ -20,7 +20,7 @@ import HttpTransport from "../../assets/js/http_transport.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 registerWebApis();
 
 describe("Client", () => {

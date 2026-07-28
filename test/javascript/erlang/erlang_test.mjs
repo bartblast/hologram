@@ -8,7 +8,7 @@ import {
   assertBoxedStrictEqual,
   assertBoxedTrue,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
@@ -22,7 +22,7 @@ import HologramInterpreterError from "../../../assets/js/errors/interpreter_erro
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 defineErlangModule1Fixture();
 
 const atomA = Type.atom("a");

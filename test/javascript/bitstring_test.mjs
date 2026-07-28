@@ -3,14 +3,14 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "./support/helpers.mjs";
 
 import Bitstring from "../../assets/js/bitstring.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("Bitstring", () => {
   describe("calculateBitCount()", () => {

@@ -3,7 +3,7 @@
 import {
   assert,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "./support/helpers.mjs";
 
 import ERTS from "../../assets/js/erts.mjs";
@@ -11,7 +11,7 @@ import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("Serializer", () => {
   describe("serialize()", () => {

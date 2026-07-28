@@ -6,7 +6,7 @@ import {
   assertBoxedFalse,
   assertBoxedTrue,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   freeze,
 } from "../support/helpers.mjs";
 
@@ -14,7 +14,7 @@ import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const atomA = freeze(Type.atom("a"));
 const atomAbc = freeze(Type.atom("abc"));

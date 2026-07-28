@@ -3,7 +3,7 @@
 import {
   assert,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "./support/helpers.mjs";
 
 import ERTS from "../../assets/js/erts.mjs";
@@ -11,7 +11,7 @@ import HologramInterpreterError from "../../assets/js/errors/interpreter_error.m
 import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("Type", () => {
   describe("actionStruct()", () => {

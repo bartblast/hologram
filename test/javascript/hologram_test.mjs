@@ -2,7 +2,7 @@
 
 import {
   assert,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   registerWebApis,
   sinon,
   UUID_REGEX,
@@ -21,7 +21,7 @@ import Vdom from "../../assets/js/vdom.mjs";
 
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 registerWebApis();
 defineModule7Fixture();
 

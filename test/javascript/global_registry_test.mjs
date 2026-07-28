@@ -1,13 +1,10 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("GlobalRegistry", () => {
   let originalHologram;

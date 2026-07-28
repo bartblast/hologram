@@ -3,18 +3,18 @@
 import {
   assert,
   assertBoxedError,
-  assertBoxedStrictEqual,
   assertBoxedFalse,
+  assertBoxedStrictEqual,
   assertBoxedTrue,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const atomA = Type.atom("a");
 const atomAbc = Type.atom("abc");

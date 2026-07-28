@@ -2,7 +2,7 @@
 
 import {
   assert,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   registerWebApis,
   sinon,
 } from "./support/helpers.mjs";
@@ -13,7 +13,7 @@ import LiveReload from "../../assets/js/live_reload.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 registerWebApis();
 
 describe("Connection", () => {

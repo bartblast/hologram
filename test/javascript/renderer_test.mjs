@@ -7,7 +7,7 @@ import {
   assertBoxedError,
   componentRegistryEntryFixture,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   initComponentRegistryEntry,
   sinon,
   vnode,
@@ -84,7 +84,7 @@ import Once from "../../assets/js/once.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 defineLayoutFixture();
 defineModule1Fixture();
