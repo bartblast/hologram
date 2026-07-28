@@ -885,28 +885,59 @@ describe("Interpreter", () => {
   describe("buildContext()", () => {
     it("module undefined, vars undefined", () => {
       const result = Interpreter.buildContext();
-      const expected = {module: null, vars: {}};
+      const expected = {module: null, stacktrace: null, vars: {}};
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("module defined, string", () => {
       const result = Interpreter.buildContext({module: "MyModule"});
-      const expected = {module: Type.atom("Elixir.MyModule"), vars: {}};
+
+      const expected = {
+        module: Type.atom("Elixir.MyModule"),
+        stacktrace: null,
+        vars: {},
+      };
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("module defined, boxed alias", () => {
       const result = Interpreter.buildContext({module: Type.alias("MyModule")});
-      const expected = {module: Type.atom("Elixir.MyModule"), vars: {}};
+
+      const expected = {
+        module: Type.atom("Elixir.MyModule"),
+        stacktrace: null,
+        vars: {},
+      };
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("module defined, null", () => {
       const result = Interpreter.buildContext({module: null});
-      const expected = {module: null, vars: {}};
+      const expected = {module: null, stacktrace: null, vars: {}};
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("stacktrace defined", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.alias("MyModule"),
+          Type.atom("my_fun"),
+          Type.integer(2),
+          Type.list(),
+        ]),
+      ]);
+
+      const result = Interpreter.buildContext({stacktrace});
+
+      const expected = {
+        module: null,
+        stacktrace,
+        vars: {},
+      };
 
       assert.deepStrictEqual(result, expected);
     });
@@ -918,6 +949,7 @@ describe("Interpreter", () => {
 
       const expected = {
         module: null,
+        stacktrace: null,
         vars: {a: Type.integer(1), b: Type.integer(2)},
       };
 
@@ -1238,6 +1270,7 @@ describe("Interpreter", () => {
   it("cloneContext()", () => {
     const context = {
       module: Type.atom("MyModule1"),
+      stacktrace: null,
       vars: {
         a: Type.integer(1),
         b: Type.integer(2),
@@ -1248,6 +1281,7 @@ describe("Interpreter", () => {
 
     assert.deepStrictEqual(clone, {
       module: Type.atom("MyModule1"),
+      stacktrace: null,
       vars: {
         a: Type.integer(1),
         b: Type.integer(2),
@@ -1259,6 +1293,7 @@ describe("Interpreter", () => {
 
     assert.deepStrictEqual(context, {
       module: Type.atom("MyModule1"),
+      stacktrace: null,
       vars: {
         a: Type.integer(1),
         b: Type.integer(2),
@@ -1267,6 +1302,7 @@ describe("Interpreter", () => {
 
     assert.deepStrictEqual(clone, {
       module: Type.atom("MyModule2"),
+      stacktrace: null,
       vars: {
         a: Type.integer(1),
         b: Type.integer(20),
@@ -9256,6 +9292,116 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, Type.integer(3));
       assert.deepStrictEqual(context.vars.a, Type.integer(1));
+    });
+
+    it("binds the captured boxed stacktrace in rescue clause scope", () => {
+      const error = new HologramBoxedError(
+        Type.errorStruct("RuntimeError", "boom"),
+      );
+
+      error.stacktrace = [
+        {
+          module: "MyModule",
+          function: "my_fun",
+          arityOrArgs: 2,
+          file: "lib/my_module.ex",
+          line: 11,
+          errorInfo: null,
+        },
+      ];
+
+      const body = (_context) => {
+        throw error;
+      };
+
+      const rescueClauses = [
+        {
+          variable: null,
+          modules: [],
+          body: (context) => context.stacktrace,
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([
+            Type.alias("MyModule"),
+            Type.atom("my_fun"),
+            Type.integer(2),
+            Type.list([
+              Type.tuple([
+                Type.atom("file"),
+                Type.charlist("lib/my_module.ex"),
+              ]),
+              Type.tuple([Type.atom("line"), Type.integer(11)]),
+            ]),
+          ]),
+        ]),
+      );
+
+      // The binding is clause-scoped and doesn't leak into the outer context.
+      assert.isNull(context.stacktrace);
+    });
+
+    it("binds the captured boxed stacktrace in catch clause scope", () => {
+      const error = new HologramBoxedError(
+        Type.atom("my_value"),
+        Type.atom("throw"),
+      );
+
+      error.stacktrace = [
+        {
+          module: "MyModule",
+          function: "my_fun",
+          arityOrArgs: 2,
+          file: "lib/my_module.ex",
+          line: 11,
+          errorInfo: null,
+        },
+      ];
+
+      const body = (_context) => {
+        throw error;
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.variablePattern("kind"),
+          value: Type.variablePattern("value"),
+          guards: [],
+          body: (context) => context.stacktrace,
+        },
+      ];
+
+      const result = Interpreter.try(body, [], catchClauses, [], null, context);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([
+            Type.alias("MyModule"),
+            Type.atom("my_fun"),
+            Type.integer(2),
+            Type.list([
+              Type.tuple([
+                Type.atom("file"),
+                Type.charlist("lib/my_module.ex"),
+              ]),
+              Type.tuple([Type.atom("line"), Type.integer(11)]),
+            ]),
+          ]),
+        ]),
+      );
     });
 
     it("runs the after block on success without changing the return value", () => {

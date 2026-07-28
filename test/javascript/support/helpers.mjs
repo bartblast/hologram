@@ -164,7 +164,7 @@ export function componentRegistryEntryFixture(data = {}) {
 }
 
 export function contextFixture(data = {}) {
-  let {module, vars} = data;
+  let {module, stacktrace, vars} = data;
 
   if (typeof module === "undefined") {
     module = "MyModule";
@@ -174,7 +174,11 @@ export function contextFixture(data = {}) {
     vars = {};
   }
 
-  return Interpreter.buildContext({module: module, vars: vars});
+  return Interpreter.buildContext({
+    module: module,
+    stacktrace: stacktrace,
+    vars: vars,
+  });
 }
 
 function defineElixirEnumModule() {

@@ -69,11 +69,15 @@ export default class Interpreter {
   }
 
   static buildContext(data = {}) {
-    const {module, vars} = data;
-    const context = {module: null, vars: {}};
+    const {module, stacktrace, vars} = data;
+    const context = {module: null, stacktrace: null, vars: {}};
 
     if (module) {
       context.module = Type.isAlias(module) ? module : Type.alias(module);
+    }
+
+    if (stacktrace) {
+      context.stacktrace = stacktrace;
     }
 
     if (vars) {
@@ -329,7 +333,11 @@ export default class Interpreter {
   static cloneContext(context) {
     // Use {...obj} instead of Object.assign({}, obj) for shallow copying,
     // see benchmarks here: https://thecodebarbarian.com/object-assign-vs-object-spread.html
-    return {module: context.module, vars: {...context.vars}};
+    return {
+      module: context.module,
+      stacktrace: context.stacktrace,
+      vars: {...context.vars},
+    };
   }
 
   // Implements structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
@@ -1365,6 +1373,15 @@ export default class Interpreter {
     );
   }
 
+  // Binds the boxed form of the stacktrace captured on the error to the
+  // stacktrace field of the clause's context - __STACKTRACE__ in rescue/catch
+  // clause scope reads it. The field propagates through cloneContext into the
+  // clause body's nested closures, while function dispatch builds fresh
+  // contexts, so it never leaks into called functions.
+  static #bindStacktrace(error, context) {
+    context.stacktrace = Type.list(error.stacktrace.map(CallStack.boxFrame));
+  }
+
   static #buildElixirFunction(
     moduleExName,
     functionName,
@@ -2031,7 +2048,10 @@ export default class Interpreter {
     ) {
       Interpreter.updateVarsToMatchedValues(context);
 
-      return Interpreter.#evaluateGuards(clause.guards, context);
+      if (Interpreter.#evaluateGuards(clause.guards, context)) {
+        Interpreter.#bindStacktrace(error, context);
+        return true;
+      }
     }
 
     return false;
@@ -2128,6 +2148,8 @@ export default class Interpreter {
       Interpreter.isMatched(clause.variable, error.struct, context);
       Interpreter.updateVarsToMatchedValues(context);
     }
+
+    Interpreter.#bindStacktrace(error, context);
 
     return true;
   }
