@@ -964,18 +964,21 @@ export default class Interpreter {
   }
 
   static raiseBadFunctionError(term) {
-    $.raiseError("BadFunctionError", $.buildBadFunctionErrorMsg(term));
+    Interpreter.#raiseFieldBearingError("BadFunctionError", [
+      [Type.atom("term"), term],
+    ]);
   }
 
-  static raiseBadMapError(arg) {
-    Interpreter.raiseError("BadMapError", Interpreter.buildBadMapErrorMsg(arg));
+  static raiseBadMapError(term) {
+    Interpreter.#raiseFieldBearingError("BadMapError", [
+      [Type.atom("term"), term],
+    ]);
   }
 
-  static raiseCaseClauseError(arg) {
-    Interpreter.raiseError(
-      "CaseClauseError",
-      Interpreter.buildCaseClauseErrorMsg(arg),
-    );
+  static raiseCaseClauseError(term) {
+    Interpreter.#raiseFieldBearingError("CaseClauseError", [
+      [Type.atom("term"), term],
+    ]);
   }
 
   static raiseCompileError(message) {
@@ -1004,22 +1007,20 @@ export default class Interpreter {
     Interpreter.raiseError("MatchError", message);
   }
 
-  static raiseTryClauseError(arg) {
-    Interpreter.raiseError(
-      "TryClauseError",
-      Interpreter.buildTryClauseErrorMsg(arg),
-    );
+  static raiseTryClauseError(term) {
+    Interpreter.#raiseFieldBearingError("TryClauseError", [
+      [Type.atom("term"), term],
+    ]);
   }
 
   static raiseUndefinedFunctionError(message) {
     Interpreter.raiseError("UndefinedFunctionError", message);
   }
 
-  static raiseWithClauseError(arg) {
-    Interpreter.raiseError(
-      "WithClauseError",
-      Interpreter.buildWithClauseErrorMsg(arg),
-    );
+  static raiseWithClauseError(term) {
+    Interpreter.#raiseFieldBearingError("WithClauseError", [
+      [Type.atom("term"), term],
+    ]);
   }
 
   static registerJsBindings(bindingsMap) {
@@ -2173,10 +2174,20 @@ export default class Interpreter {
   }
 
   static #raiseCondClauseError() {
-    Interpreter.raiseError(
-      "CondClauseError",
-      "no cond clause evaluated to a truthy value",
-    );
+    Interpreter.#raiseFieldBearingError("CondClauseError", []);
+  }
+
+  // Raises an exception struct carrying semantic fields and no :message -
+  // the message text derives at format time through the exception module's
+  // transpiled message/1 callback, the same code the server runs.
+  // Deps: [:erlang.error/1]
+  static #raiseFieldBearingError(aliasStr, fields) {
+    const struct = Type.struct(aliasStr, [
+      [Type.atom("__exception__"), Type.boolean(true)],
+      ...fields,
+    ]);
+
+    Erlang["error/1"](struct);
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update #asyncWalkComprehension().

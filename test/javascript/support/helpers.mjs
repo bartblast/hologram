@@ -121,12 +121,12 @@ function assertCapturedBoxedError(
   const receivedErrorMessage = Interpreter.resolveErrorMessage(error.struct);
   const typeMatches = receivedErrorType === expectedErrorType;
 
+  // The derived message text is compared, not the struct shape - errors
+  // raised as field-bearing structs and errors raised with an eager :message
+  // both pass when they produce the expected text.
   const messageMatches = isRegex
     ? expectedErrorMessage.test(receivedErrorMessage)
-    : Interpreter.isStrictlyEqual(
-        error.struct,
-        Type.errorStruct(expectedErrorType, expectedErrorMessage),
-      );
+    : receivedErrorMessage === expectedErrorMessage;
 
   if (!typeMatches || !messageMatches) {
     assert.fail(
@@ -336,6 +336,22 @@ function defineElixirStringCharsModule() {
   };
 }
 
+// Returns a stub of a term-bearing exception module (CaseClauseError,
+// BadMapError, ...) whose message/1 mirrors the server's derivation: the
+// label followed by the inspected term field padded onto its own indented
+// line.
+function defineElixirTermErrorModule(messageLabel) {
+  return {
+    "message/1": (struct) => {
+      const term = struct.data["atom(term)"][1];
+
+      return Type.bitstring(
+        `${messageLabel}\n\n    ${Interpreter.inspect(term)}\n`,
+      );
+    },
+  };
+}
+
 function defineGlobalModule(moduleJsName, moduleObj) {
   globalThis[moduleJsName] = moduleObj;
   moduleObj.__exports__ = new Set(Object.keys(moduleObj));
@@ -367,7 +383,37 @@ export function defineRuntimeGlobals() {
   defineGlobalModule("Erlang_Sets", Erlang_Sets);
   defineGlobalModule("Erlang_Unicode", Erlang_Unicode);
   defineGlobalModule("Erlang_Uri_String", Erlang_Uri_String);
+
+  defineGlobalModule("Elixir_BadFunctionError", {
+    // Mirrors BadFunctionError.message/1 (single-line, unlike the other
+    // term-bearing exceptions).
+    "message/1": (struct) => {
+      const term = struct.data["atom(term)"][1];
+
+      return Type.bitstring(
+        `expected a function, got: ${Interpreter.inspect(term)}`,
+      );
+    },
+  });
+
+  defineGlobalModule(
+    "Elixir_BadMapError",
+    defineElixirTermErrorModule("expected a map, got:"),
+  );
+
+  defineGlobalModule(
+    "Elixir_CaseClauseError",
+    defineElixirTermErrorModule("no case clause matching:"),
+  );
+
   defineGlobalModule("Elixir_Code", Elixir_Code);
+
+  defineGlobalModule("Elixir_CondClauseError", {
+    // Mirrors CondClauseError.message/1 (fixed text, no fields).
+    "message/1": (_struct) =>
+      Type.bitstring("no cond clause evaluated to a truthy value"),
+  });
+
   defineGlobalModule("Elixir_Enum", defineElixirEnumModule());
   defineGlobalModule("Elixir_Exception", defineElixirExceptionModule());
 
@@ -378,6 +424,16 @@ export function defineRuntimeGlobals() {
 
   defineGlobalModule("Elixir_Kernel", Elixir_Kernel);
   defineGlobalModule("Elixir_String_Chars", defineElixirStringCharsModule());
+
+  defineGlobalModule(
+    "Elixir_TryClauseError",
+    defineElixirTermErrorModule("no try clause matching:"),
+  );
+
+  defineGlobalModule(
+    "Elixir_WithClauseError",
+    defineElixirTermErrorModule("no with clause matching:"),
+  );
 }
 
 export function encodedSubscriptionReceiptKey(channel, cid) {

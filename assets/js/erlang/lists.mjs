@@ -979,10 +979,7 @@ const Erlang_Lists = {
     // Only validate that the first argument is an anonymous function (type check)
     // Let arity validation happen naturally when the function is called
     if (!Type.isAnonymousFunction(fun)) {
-      Interpreter.raiseError(
-        "BadFunctionError",
-        `expected a function, got: ${Interpreter.inspect(fun)}`,
-      );
+      Interpreter.raiseBadFunctionError(fun);
     }
 
     if (!Type.isList(list)) {

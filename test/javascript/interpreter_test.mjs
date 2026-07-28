@@ -9049,26 +9049,75 @@ describe("Interpreter", () => {
   it("raiseBadFunctionError()", () => {
     const term = Type.atom("abc");
 
-    assertBoxedError(
-      () => Interpreter.raiseBadFunctionError(term),
-      "BadFunctionError",
-      Interpreter.buildBadFunctionErrorMsg(term),
+    let caught;
+
+    try {
+      Interpreter.raiseBadFunctionError(term);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("BadFunctionError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("term"), term],
+      ]),
+    );
+
+    assert.equal(
+      caught.message,
+      "(BadFunctionError) expected a function, got: :abc",
     );
   });
 
   it("raiseBadMapError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseBadMapError(Type.atom("abc")),
-      "BadMapError",
-      Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+    const term = Type.atom("abc");
+
+    let caught;
+
+    try {
+      Interpreter.raiseBadMapError(term);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("BadMapError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("term"), term],
+      ]),
+    );
+
+    assert.equal(
+      caught.message,
+      "(BadMapError) expected a map, got:\n\n    :abc\n",
     );
   });
 
   it("raiseCaseClauseError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseCaseClauseError(Type.atom("abc")),
-      "CaseClauseError",
-      Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
+    const term = Type.atom("abc");
+
+    let caught;
+
+    try {
+      Interpreter.raiseCaseClauseError(term);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("CaseClauseError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("term"), term],
+      ]),
+    );
+
+    assert.equal(
+      caught.message,
+      "(CaseClauseError) no case clause matching:\n\n    :abc\n",
     );
   });
 
@@ -9117,10 +9166,27 @@ describe("Interpreter", () => {
   });
 
   it("raiseTryClauseError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseTryClauseError(Type.atom("abc")),
-      "TryClauseError",
-      Interpreter.buildTryClauseErrorMsg(Type.atom("abc")),
+    const term = Type.atom("abc");
+
+    let caught;
+
+    try {
+      Interpreter.raiseTryClauseError(term);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("TryClauseError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("term"), term],
+      ]),
+    );
+
+    assert.equal(
+      caught.message,
+      "(TryClauseError) no try clause matching:\n\n    :abc\n",
     );
   });
 
@@ -9133,10 +9199,27 @@ describe("Interpreter", () => {
   });
 
   it("raiseWithClauseError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseWithClauseError(Type.atom("abc")),
-      "WithClauseError",
-      Interpreter.buildWithClauseErrorMsg(Type.atom("abc")),
+    const term = Type.atom("abc");
+
+    let caught;
+
+    try {
+      Interpreter.raiseWithClauseError(term);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("WithClauseError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("term"), term],
+      ]),
+    );
+
+    assert.equal(
+      caught.message,
+      "(WithClauseError) no with clause matching:\n\n    :abc\n",
     );
   });
 
