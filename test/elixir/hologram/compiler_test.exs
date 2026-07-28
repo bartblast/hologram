@@ -424,37 +424,67 @@ defmodule Hologram.CompilerTest do
     assert PLT.get_all(plt) == %{MyPage1 => "my-digest-1", MyPage2 => "my-digest-3"}
   end
 
-  test "build_runtime_js/4", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-    js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
+  describe "build_runtime_js/4" do
+    setup do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
 
-    assert String.contains?(
-             js,
-             ~s/Interpreter.defineElixirFunction("Enum", "into", 2, "public"/
-           )
+      :ok
+    end
 
-    assert String.contains?(
-             js,
-             ~s/Interpreter.defineElixirFunction("Enum", "into_protocol", 2, "private"/
-           )
+    test "renders reachable function defs", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
 
-    assert String.contains?(
-             js,
-             ~s/Interpreter.defineElixirFunction("String.Chars", "to_string", 1, "public"/
-           )
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineElixirFunction("Enum", "into", 2, "public"/
+             )
 
-    assert String.contains?(
-             js,
-             ~s/Interpreter.defineElixirFunction("String.Chars", "impl_for!", 1, "public"/
-           )
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineElixirFunction("Enum", "into_protocol", 2, "private"/
+             )
 
-    refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineElixirFunction("String.Chars", "to_string", 1, "public"/
+             )
 
-    assert String.contains?(js, ~s/Interpreter.defineErlangFunction("erlang", "error", 1/)
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineElixirFunction("String.Chars", "impl_for!", 1, "public"/
+             )
 
-    assert String.contains?(
-             js,
-             ~s/Interpreter.defineNotImplementedErlangFunction("application", "get_application", 1/
-           )
+      refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+
+      assert String.contains?(js, ~s/Interpreter.defineErlangFunction("erlang", "error", 1/)
+
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineNotImplementedErlangFunction("application", "get_application", 1/
+             )
+    end
+
+    test "injects the client config when stacktraces are enabled", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
+
+      assert String.contains?(js, "globalThis.Hologram.config = {stacktraces: true};")
+    end
+
+    test "injects the client config when stacktraces are disabled", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_stacktraces, false)
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
+
+      assert String.contains?(js, "globalThis.Hologram.config = {stacktraces: false};")
+    end
   end
 
   test "bundle/2" do

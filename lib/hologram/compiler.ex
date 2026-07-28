@@ -269,7 +269,9 @@ defmodule Hologram.Compiler do
     import Type from "#{js_dir}/type.mjs";
     import Utils from "#{js_dir}/utils.mjs";
 
-    const startTime = PerformanceTimer.start();#{erlang_function_defs}#{elixir_function_defs}
+    const startTime = PerformanceTimer.start();
+
+    globalThis.Hologram.config = #{render_client_config()};#{erlang_function_defs}#{elixir_function_defs}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
@@ -786,6 +788,10 @@ defmodule Hologram.Compiler do
     else
       ""
     end
+  end
+
+  defp render_client_config do
+    ~s/{stacktraces: #{Hologram.client_stacktraces?()}}/
   end
 
   defp render_elixir_function_defs(mfas, ir_plt, async_mfas) do
