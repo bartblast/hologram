@@ -2,6 +2,33 @@ defmodule Hologram do
   alias Hologram.Reflection
 
   @doc """
+  Returns `true` when client-side stacktraces are enabled, `false` otherwise.
+
+  Controlled by the `:client_stacktraces` application environment key, which
+  defaults to `true` in the `:dev` and `:test` environments and `false`
+  elsewhere:
+
+      config :hologram, client_stacktraces: true
+
+  When enabled, the compiler emits source metadata into the client bundle and
+  the interpreter tracks a call stack, so errors raised on the client carry the
+  same stacktraces as errors raised on the server. Error messages and rescue
+  semantics are unaffected by this setting - they are identical in every
+  environment.
+
+  Enabling it outside of `:dev`/`:test` has trade-offs: argument values appear
+  in stacktrace frames and can leave the device via screenshots, support tickets
+  or pasted console output, and source paths reveal the project's file layout.
+
+  The value is read at compile time, so changing it requires recompiling the
+  bundles.
+  """
+  @spec client_stacktraces?() :: boolean
+  def client_stacktraces? do
+    Application.get_env(:hologram, :client_stacktraces, env() in [:dev, :test])
+  end
+
+  @doc """
   Returns `true` when Hologram's runtime is enabled, `false` otherwise.
 
   Hologram is always enabled outside of the `:dev` and `:test` environments. In

@@ -5,6 +5,32 @@ defmodule HologramTest do
 
   alias Hologram.Test.Fixtures.PhoenixEndpoint
 
+  describe "client_stacktraces?/0" do
+    setup do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      :ok
+    end
+
+    test "defaults to true in dev/test when the config key is not set" do
+      Application.delete_env(:hologram, :client_stacktraces)
+
+      assert client_stacktraces?()
+    end
+
+    test "is true when the config key is set to true" do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      assert client_stacktraces?()
+    end
+
+    test "is false when the config key is set to false" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+
+      refute client_stacktraces?()
+    end
+  end
+
   describe "enabled?/0" do
     setup do
       original = System.get_env("HOLOGRAM_START")
