@@ -2,6 +2,7 @@
 
 import ApplicationEnv from "./erts/application_env.mjs";
 import BinaryPatternRegistry from "./erts/binary_pattern_registry.mjs";
+import CallStack from "./erts/call_stack.mjs";
 import NativeObjectRegistry from "./erts/native_object_registry.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import PromiseRegistry from "./erts/promise_registry.mjs";
@@ -33,6 +34,11 @@ export default class ERTS {
 
   static applicationEnv = ApplicationEnv;
   static binaryPatternRegistry = BinaryPatternRegistry;
+
+  // Shadow call stack backing Elixir stacktraces. Ported Erlang functions reach it through this
+  // facade, since their bodies are extracted per-MFA into the bundle and can't carry imports.
+  static callStack = CallStack;
+
   static ets = {};
 
   // TODO: add scoped lifecycle / GC for native object registry.
