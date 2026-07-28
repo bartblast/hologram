@@ -454,11 +454,11 @@ defmodule Hologram.Compiler.Encoder do
     encode_named_function_call(module, function, args, context)
   end
 
-  # TODO: encode the binding of the captured trace provided by the interpreter
-  # in rescue/catch clause scope; until then __STACKTRACE__ encodes as an
-  # empty list, preserving the previous behavior.
+  # __STACKTRACE__ - the interpreter binds the boxed trace captured on the
+  # handled error to the context's stacktrace field in rescue/catch clause
+  # scope.
   def encode_ir(%IR.Stacktrace{}, _context) do
-    "Type.list()"
+    "context.stacktrace"
   end
 
   def encode_ir(%IR.StringType{value: value}, _context) do

@@ -2599,13 +2599,11 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "stacktrace" do
-    # TODO: assert the binding of the captured trace once the interpreter
-    # provides it in rescue/catch clause scope.
-    test "encodes as an empty list" do
+    test "encodes as the context's stacktrace field" do
       # __STACKTRACE__
       ir = %IR.Stacktrace{}
 
-      assert encode_ir(ir) == "Type.list()"
+      assert encode_ir(ir) == "context.stacktrace"
     end
   end
 
