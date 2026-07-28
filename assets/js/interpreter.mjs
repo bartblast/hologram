@@ -981,6 +981,35 @@ export default class Interpreter {
     ]);
   }
 
+  // Raises the reason attributed the way OTP BIFs report it: the raising
+  // frame carries the given identity, the boxed args, and an error_info
+  // entry naming the format module. The identity is supplied statically at
+  // the raise site, so the frame is present in every environment. It stands
+  // in place of the port function's own dispatch frame - the BEAM shows the
+  // BIF frame, not both - which also lets it carry a different identity
+  // (e.g. :maps.get/2 reporting as :erlang.map_get/2).
+  static raiseBifError(reason, module, functionName, args, formatModule) {
+    const errorInfo = Type.map([
+      [Type.atom("module"), Type.atom(formatModule)],
+    ]);
+
+    const raisingFrame = {
+      module,
+      function: functionName,
+      arityOrArgs: args,
+      file: null,
+      line: null,
+      errorInfo,
+    };
+
+    const error = new HologramBoxedError(reason);
+
+    error.stacktrace = [raisingFrame, ...error.stacktrace.slice(1)];
+    error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
+
+    throw error;
+  }
+
   static raiseCaseClauseError(term) {
     Interpreter.#raiseFieldBearingError("CaseClauseError", [
       [Type.atom("term"), term],
@@ -999,6 +1028,18 @@ export default class Interpreter {
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
     Erlang["error/1"](errorStruct);
+  }
+
+  // Raises the reason attributed to the caller: the port function's own
+  // dispatch frame is dropped from the trace, mirroring the BIFs that the
+  // BEAM reports without a frame of their own (e.g. maps:merge/2).
+  static raiseFramelessError(reason) {
+    const error = new HologramBoxedError(reason);
+
+    error.stacktrace = error.stacktrace.slice(1);
+    error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
+
+    throw error;
   }
 
   static raiseFunctionClauseError(message) {

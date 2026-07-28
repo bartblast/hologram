@@ -9096,6 +9096,126 @@ describe("Interpreter", () => {
     );
   });
 
+  describe("raiseBifError()", () => {
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    it("replaces the function's own frame with the raising frame", () => {
+      const callerFrame = {
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      };
+
+      const ownFrame = {
+        module: "maps",
+        function: "get",
+        arityOrArgs: 2,
+        file: null,
+        line: null,
+        errorInfo: null,
+      };
+
+      CallStack.push(callerFrame);
+      CallStack.push(ownFrame);
+
+      const args = Type.list([Type.atom("a"), Type.atom("b")]);
+      const reason = Type.tuple([Type.atom("badmap"), Type.atom("b")]);
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError(
+          reason,
+          "erlang",
+          "map_get",
+          args,
+          "erl_erts_errors",
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "erlang",
+          function: "map_get",
+          arityOrArgs: args,
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_erts_errors")],
+          ]),
+        },
+        callerFrame,
+      ]);
+
+      assert.equal(
+        caught.message,
+        "(BadMapError) expected a map, got:\n\n    :b\n",
+      );
+    });
+
+    it("the raising frame stands alone when frame tracking is disabled", () => {
+      const args = Type.list([Type.atom("a"), Type.atom("b")]);
+      const reason = Type.tuple([Type.atom("badmap"), Type.atom("b")]);
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError(
+          reason,
+          "maps",
+          "find",
+          args,
+          "erl_stdlib_errors",
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "maps",
+          function: "find",
+          arityOrArgs: args,
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
+        },
+      ]);
+    });
+
+    it("derives the message against the raising frame", () => {
+      const args = Type.list([Type.atom("a")]);
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError(
+          Type.atom("badarg"),
+          "maps",
+          "from_list",
+          args,
+          "erl_stdlib_errors",
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.equal(
+        caught.message,
+        "(ArgumentError) errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
+      );
+    });
+  });
+
   it("raiseCaseClauseError()", () => {
     const term = Type.atom("abc");
 
@@ -9143,6 +9263,71 @@ describe("Interpreter", () => {
       "Aaa.Bbb",
       "abc",
     );
+  });
+
+  describe("raiseFramelessError()", () => {
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    it("drops the function's own frame and attributes the error to the caller", () => {
+      const callerFrame = {
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      };
+
+      const ownFrame = {
+        module: "maps",
+        function: "merge",
+        arityOrArgs: 2,
+        file: null,
+        line: null,
+        errorInfo: null,
+      };
+
+      CallStack.push(callerFrame);
+      CallStack.push(ownFrame);
+
+      const reason = Type.tuple([Type.atom("badmap"), Type.atom("b")]);
+
+      let caught;
+
+      try {
+        Interpreter.raiseFramelessError(reason);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [callerFrame]);
+
+      assert.equal(
+        caught.message,
+        "(BadMapError) expected a map, got:\n\n    :b\n",
+      );
+    });
+
+    it("raises with an empty trace when frame tracking is disabled", () => {
+      const reason = Type.tuple([Type.atom("badmap"), Type.atom("b")]);
+
+      let caught;
+
+      try {
+        Interpreter.raiseFramelessError(reason);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, []);
+
+      assert.equal(
+        caught.message,
+        "(BadMapError) expected a map, got:\n\n    :b\n",
+      );
+    });
   });
 
   it("raiseFunctionClauseError()", () => {
