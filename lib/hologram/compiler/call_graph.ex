@@ -332,8 +332,6 @@ defmodule Hologram.Compiler.CallGraph do
     interpreter_class: [
       {Enum, :into, 2},
       {Enum, :to_list, 1},
-      # TODO: not called from interpreter.mjs yet - the call site arrives when
-      # error messages are derived via the transpiled Exception.message/1.
       {Exception, :message, 1},
       {Exception, :normalize, 2},
       {:erlang, :error, 1},

@@ -9212,15 +9212,25 @@ describe("Interpreter", () => {
       assert.equal(result, "my message");
     });
 
-    it("returns the inspected struct when the struct has no message field", () => {
-      const struct = Type.struct("MyError", [
+    it("derives the message through the exception module's message/1 callback", () => {
+      globalThis.Elixir_MyDerivedError = {
+        "message/1": (struct) => {
+          const reason = struct.data["atom(reason)"][1];
+          return Type.bitstring(`derived: ${Interpreter.inspect(reason)}`);
+        },
+      };
+
+      const struct = Type.struct("MyDerivedError", [
         [Type.atom("__exception__"), Type.boolean(true)],
         [Type.atom("reason"), Type.atom("some_reason")],
       ]);
 
       const result = Interpreter.resolveErrorMessage(struct);
 
-      assert.equal(result, Interpreter.inspect(struct));
+      assert.equal(result, "derived: :some_reason");
+
+      // cleanup
+      delete globalThis.Elixir_MyDerivedError;
     });
   });
 

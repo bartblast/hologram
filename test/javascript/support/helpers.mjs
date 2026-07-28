@@ -197,6 +197,29 @@ function defineElixirEnumModule() {
 
 function defineElixirExceptionModule() {
   return {
+    // Mirrors Exception.message/1, which delegates to the exception module's
+    // message/1 callback. When a test defines the exception module as a
+    // global, it is dispatched to. Otherwise the default defexception
+    // callback (return the :message field) is mirrored directly, with the
+    // inspected struct as a fallback for exceptions without a message field
+    // whose modules are not defined.
+    "message/1": (struct) => {
+      const structModule = struct.data["atom(__struct__)"][1];
+      const moduleProxy = Interpreter.moduleProxy(structModule);
+
+      if (moduleProxy && "message/1" in moduleProxy) {
+        return moduleProxy["message/1"](struct);
+      }
+
+      const messageEntry = struct.data["atom(message)"];
+
+      if (messageEntry !== undefined) {
+        return messageEntry[1];
+      }
+
+      return Type.bitstring(Interpreter.inspect(struct));
+    },
+
     // Mirrors Exception.normalize(:error, reason): an exception struct passes
     // through unchanged, :badarg becomes an ArgumentError, and any other bare
     // reason is wrapped in an ErlangError struct.

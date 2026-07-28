@@ -619,9 +619,12 @@ export default class Interpreter {
     return Interpreter.evaluateJavaScriptCode(`return (${expr});`);
   }
 
+  // Renders the exception struct's module the way the server renders it in
+  // an error banner: inspect(exception.__struct__).
   static getErrorType(jsError) {
-    // TODO: use transpiled Elixir code
-    return jsError.struct.data["atom(__struct__)"][1].value.substring(7);
+    const structModule = jsError.struct.data["atom(__struct__)"][1];
+
+    return Interpreter.inspect(structModule);
   }
 
   // See type ordering spec: https://hexdocs.pm/elixir/main/Kernel.html#module-term-ordering
@@ -1032,15 +1035,12 @@ export default class Interpreter {
     }
   }
 
-  // TODO: consider when porting Elixir error handling
+  // Derives the error message through the transpiled Exception.message/1 -
+  // the same code the server runs - so exceptions with derived messages
+  // (message/1 callbacks) produce identical text on both sides.
+  // Deps: [Exception.message/1]
   static resolveErrorMessage(struct) {
-    const messageEntry = struct.data["atom(message)"];
-
-    if (messageEntry !== undefined) {
-      return Bitstring.toText(messageEntry[1]);
-    }
-
-    return $.inspect(struct);
+    return Bitstring.toText(Elixir_Exception["message/1"](struct));
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update asyncTry().
