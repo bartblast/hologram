@@ -9,6 +9,7 @@ import {
 
 import Erlang_Binary from "../../../assets/js/erlang/binary.mjs";
 import Erlang_Erl_Stdlib_Errors from "../../../assets/js/erlang/erl_stdlib_errors.mjs";
+import Erlang_Re from "../../../assets/js/erlang/re.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
@@ -71,6 +72,17 @@ function mathStacktrace(functionName, argsOrArity) {
       Type.atom(functionName),
       argsOrArity,
       errorInfo,
+    ]),
+  ]);
+}
+
+function reStacktrace(functionName, argsOrArity, location = errorInfo) {
+  return Type.list([
+    Type.tuple([
+      Type.atom("re"),
+      Type.atom(functionName),
+      argsOrArity,
+      location,
     ]),
   ]);
 }
@@ -1227,6 +1239,362 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       );
     });
 
+    it("re compile/1: not an iodata term", () => {
+      const stacktrace = reStacktrace("compile", Type.list([Type.atom("abc")]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not an iodata term")]]),
+      );
+    });
+
+    it("re compile/2: parse-error pattern", () => {
+      const stacktrace = reStacktrace(
+        "compile",
+        Type.list([Type.bitstring("a("), Type.list()]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring(
+              "could not parse regular expression\nmissing closing parenthesis on character 2",
+            ),
+          ],
+        ]),
+      );
+    });
+
+    it("re compile/2: valid pattern with badopt cause", () => {
+      const stacktrace = reStacktrace(
+        "compile",
+        Type.list([Type.bitstring("abc"), Type.list([Type.atom("bad")])]),
+        badoptErrorInfo,
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("invalid options")]]),
+      );
+    });
+
+    it("re compile/2: parse-error pattern with badopt cause", () => {
+      const stacktrace = reStacktrace(
+        "compile",
+        Type.list([Type.bitstring("a("), Type.list([Type.atom("bad")])]),
+        badoptErrorInfo,
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring(
+              "could not parse regular expression\nmissing closing parenthesis on character 2",
+            ),
+          ],
+          [Type.integer(2), Type.bitstring("invalid options")],
+        ]),
+      );
+    });
+
+    it("re compile/2: non-iodata pattern with badopt cause", () => {
+      const stacktrace = reStacktrace(
+        "compile",
+        Type.list([Type.atom("abc"), Type.list([Type.atom("bad")])]),
+        badoptErrorInfo,
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not an iodata term")],
+          [Type.integer(2), Type.bitstring("invalid options")],
+        ]),
+      );
+    });
+
+    it("re import: not an exported regular expression", () => {
+      const stacktrace = reStacktrace("import", Type.list([Type.atom("abc")]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not an exported regular expression"),
+          ],
+        ]),
+      );
+    });
+
+    it("re inspect: not a compiled regular expression", () => {
+      const stacktrace = reStacktrace(
+        "inspect",
+        Type.list([Type.atom("abc"), Type.atom("namelist")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not a compiled regular expression"),
+          ],
+        ]),
+      );
+    });
+
+    it("re inspect: bad item", () => {
+      const compiledPattern = Erlang_Re["compile/1"](Type.bitstring("a"))
+        .data[1];
+
+      const stacktrace = reStacktrace(
+        "inspect",
+        Type.list([compiledPattern, Type.atom("bad_item")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("not a valid item")]]),
+      );
+    });
+
+    it("re inspect: non-atom item with a non-compiled first argument", () => {
+      const stacktrace = reStacktrace(
+        "inspect",
+        Type.list([Type.atom("abc"), Type.bitstring("namelist")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not a compiled regular expression"),
+          ],
+          [Type.integer(2), Type.bitstring("not a valid item")],
+        ]),
+      );
+    });
+
+    it("re run/2: bad subject and pattern", () => {
+      const stacktrace = reStacktrace(
+        "run",
+        Type.list([Type.atom("abc"), Type.atom("bad")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not an iodata term")],
+          [
+            Type.integer(2),
+            Type.bitstring(
+              "neither an iodata term nor a compiled regular expression",
+            ),
+          ],
+        ]),
+      );
+    });
+
+    it("re run/2: parse-error pattern", () => {
+      const stacktrace = reStacktrace(
+        "run",
+        Type.list([Type.bitstring("abc"), Type.bitstring("a(")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(2),
+            Type.bitstring(
+              "could not parse regular expression\nmissing closing parenthesis on character 2",
+            ),
+          ],
+        ]),
+      );
+    });
+
+    it("re run/2: compiled pattern is valid", () => {
+      const compiledPattern = Erlang_Re["compile/1"](Type.bitstring("a"))
+        .data[1];
+
+      const stacktrace = reStacktrace(
+        "run",
+        Type.list([Type.bitstring("abc"), compiledPattern]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("re run/2: fake compiled pattern tuple", () => {
+      const fakePattern = Type.tuple([
+        Type.atom("re_pattern"),
+        Type.integer(0),
+        Type.integer(0),
+        Type.integer(0),
+        Type.atom("fake"),
+      ]);
+
+      const stacktrace = reStacktrace(
+        "run",
+        Type.list([Type.bitstring("abc"), fakePattern]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(2),
+            Type.bitstring(
+              "neither an iodata term nor a compiled regular expression",
+            ),
+          ],
+        ]),
+      );
+    });
+
+    it("re run/2: improper iolist subject with binary tail is valid", () => {
+      const subject = Type.improperList([
+        Type.integer(97),
+        Type.bitstring("b"),
+      ]);
+
+      const stacktrace = reStacktrace(
+        "run",
+        Type.list([subject, Type.bitstring("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("re run/2: improper iolist subject with non-binary tail", () => {
+      const subject = Type.improperList([Type.integer(97), Type.integer(98)]);
+
+      const stacktrace = reStacktrace(
+        "run",
+        Type.list([subject, Type.bitstring("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not an iodata term")]]),
+      );
+    });
+
+    it("re run/2: iolist subject with out-of-range integer", () => {
+      const subject = Type.list([Type.integer(256)]);
+
+      const stacktrace = reStacktrace(
+        "run",
+        Type.list([subject, Type.bitstring("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not an iodata term")]]),
+      );
+    });
+
+    it("re run/3: valid arguments with badopt cause", () => {
+      const stacktrace = reStacktrace(
+        "run",
+        Type.list([
+          Type.bitstring("abc"),
+          Type.bitstring("a"),
+          Type.list([Type.atom("bad")]),
+        ]),
+        badoptErrorInfo,
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(3), Type.bitstring("invalid options")]]),
+      );
+    });
+
+    it("re run/3: bad subject and pattern with badopt cause", () => {
+      const stacktrace = reStacktrace(
+        "run",
+        Type.list([
+          Type.atom("abc"),
+          Type.atom("bad"),
+          Type.list([Type.atom("x")]),
+        ]),
+        badoptErrorInfo,
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not an iodata term")],
+          [
+            Type.integer(2),
+            Type.bitstring(
+              "neither an iodata term nor a compiled regular expression",
+            ),
+          ],
+          [Type.integer(3), Type.bitstring("invalid options")],
+        ]),
+      );
+    });
+
+    it("re run/3: valid arguments produce no fragments", () => {
+      const stacktrace = reStacktrace(
+        "run",
+        Type.list([
+          Type.bitstring("abc"),
+          Type.bitstring("a"),
+          Type.list([Type.atom("caseless")]),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
     it("unicode characters_to_binary/1: bad chardata", () => {
       const stacktrace = unicodeStacktrace(
         "characters_to_binary",
@@ -1623,6 +1991,33 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
         Interpreter.buildFunctionClauseErrorMsg(
           ":erl_stdlib_errors.maybe_domain_error/1",
           [Type.integer(1)],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError for an unknown re function", () => {
+      const fun = Type.atom("version");
+      const args = Type.list();
+
+      assertBoxedError(
+        () => format_error(Type.atom("badarg"), reStacktrace("version", args)),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_stdlib_errors.format_re_error/3",
+          [fun, args, Type.atom("none")],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError when a re clause needs args but the frame carries an arity", () => {
+      const stacktrace = reStacktrace("run", Type.integer(2));
+
+      assertBoxedError(
+        () => format_error(Type.atom("badarg"), stacktrace),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_stdlib_errors.format_re_error/3",
+          [Type.atom("run"), Type.integer(2), Type.atom("none")],
         ),
       );
     });

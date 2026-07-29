@@ -512,6 +512,158 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
       assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a number"}
     end
 
+    test "re compile/1: not an iodata term" do
+      stacktrace = [{:re, :compile, [:abc], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an iodata term"
+             }
+    end
+
+    test "re compile/2: parse-error pattern" do
+      stacktrace = [{:re, :compile, ["a(", []], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 =>
+                 "could not parse regular expression\nmissing closing parenthesis on character 2"
+             }
+    end
+
+    test "re compile/2: valid pattern with badopt cause" do
+      stacktrace = [{:re, :compile, ["abc", [:bad]], @badopt_error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "invalid options"}
+    end
+
+    test "re compile/2: parse-error pattern with badopt cause" do
+      stacktrace = [{:re, :compile, ["a(", [:bad]], @badopt_error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 =>
+                 "could not parse regular expression\nmissing closing parenthesis on character 2",
+               2 => "invalid options"
+             }
+    end
+
+    test "re compile/2: non-iodata pattern with badopt cause" do
+      stacktrace = [{:re, :compile, [:abc, [:bad]], @badopt_error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an iodata term",
+               2 => "invalid options"
+             }
+    end
+
+    test "re import: not an exported regular expression" do
+      stacktrace = [{:re, :import, [:abc], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an exported regular expression"
+             }
+    end
+
+    test "re inspect: not a compiled regular expression" do
+      stacktrace = [{:re, :inspect, [:abc, :namelist], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a compiled regular expression"
+             }
+    end
+
+    test "re inspect: bad item" do
+      {:ok, compiled_pattern} = :re.compile("a")
+      stacktrace = [{:re, :inspect, [compiled_pattern, :bad_item], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not a valid item"}
+    end
+
+    test "re inspect: non-atom item with a non-compiled first argument" do
+      stacktrace = [{:re, :inspect, [:abc, "namelist"], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a compiled regular expression",
+               2 => "not a valid item"
+             }
+    end
+
+    test "re run/2: bad subject and pattern" do
+      stacktrace = [{:re, :run, [:abc, :bad], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an iodata term",
+               2 => "neither an iodata term nor a compiled regular expression"
+             }
+    end
+
+    test "re run/2: parse-error pattern" do
+      stacktrace = [{:re, :run, ["abc", "a("], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               2 =>
+                 "could not parse regular expression\nmissing closing parenthesis on character 2"
+             }
+    end
+
+    test "re run/2: compiled pattern is valid" do
+      {:ok, compiled_pattern} = :re.compile("a")
+      stacktrace = [{:re, :run, ["abc", compiled_pattern], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{}
+    end
+
+    test "re run/2: fake compiled pattern tuple" do
+      fake_pattern = {:re_pattern, 0, 0, 0, :fake}
+      stacktrace = [{:re, :run, ["abc", fake_pattern], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               2 => "neither an iodata term nor a compiled regular expression"
+             }
+    end
+
+    test "re run/2: improper iolist subject with binary tail is valid" do
+      stacktrace = [{:re, :run, [[97 | "b"], "a"], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{}
+    end
+
+    test "re run/2: improper iolist subject with non-binary tail" do
+      stacktrace = [{:re, :run, [[97 | 98], "a"], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an iodata term"
+             }
+    end
+
+    test "re run/2: iolist subject with out-of-range integer" do
+      stacktrace = [{:re, :run, [[256], "a"], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an iodata term"
+             }
+    end
+
+    test "re run/3: valid arguments with badopt cause" do
+      stacktrace = [{:re, :run, ["abc", "a", [:bad]], @badopt_error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{3 => "invalid options"}
+    end
+
+    test "re run/3: bad subject and pattern with badopt cause" do
+      stacktrace = [{:re, :run, [:abc, :bad, [:x]], @badopt_error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an iodata term",
+               2 => "neither an iodata term nor a compiled regular expression",
+               3 => "invalid options"
+             }
+    end
+
+    test "re run/3: valid arguments produce no fragments" do
+      stacktrace = [{:re, :run, ["abc", "a", [:caseless]], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{}
+    end
+
     test "unicode characters_to_binary/1: bad chardata" do
       stacktrace = [{:unicode, :characters_to_binary, [:a], @error_info}]
 
@@ -727,6 +879,30 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
 
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":erl_stdlib_errors.maybe_domain_error/1", [1]),
+                   {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
+    end
+
+    test "raises FunctionClauseError for an unknown re function" do
+      stacktrace = [{:re, :version, [], @error_info}]
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":erl_stdlib_errors.format_re_error/3", [
+                     :version,
+                     [],
+                     :none
+                   ]),
+                   {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
+    end
+
+    test "raises FunctionClauseError when a re clause needs args but the frame carries an arity" do
+      stacktrace = [{:re, :run, 2, @error_info}]
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":erl_stdlib_errors.format_re_error/3", [
+                     :run,
+                     2,
+                     :none
+                   ]),
                    {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
     end
 
