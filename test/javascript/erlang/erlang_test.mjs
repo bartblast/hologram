@@ -81,6 +81,17 @@ function buildCallerFrame() {
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/erlang_test.exs
 // Always update both together.
 
+function ertsErrorFrame(functionName, args) {
+  return {
+    module: "erlang",
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo: Type.map([[Type.atom("module"), Type.atom("erl_erts_errors")]]),
+  };
+}
+
 describe("Erlang", () => {
   describe("*/2", () => {
     const testedFun = Erlang["*/2"];
@@ -1802,6 +1813,19 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["atom_to_binary/1"](Type.integer(1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("atom_to_binary", Type.list([Type.integer(1)])),
+      ]);
+    });
   });
 
   describe("atom_to_binary/2", () => {
@@ -1830,6 +1854,22 @@ describe("Erlang", () => {
         HologramInterpreterError,
         "encodings other than utf8 are not yet implemented in Hologram",
       );
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["atom_to_binary/2"](Type.integer(1), Type.atom("utf8"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "atom_to_binary",
+          Type.list([Type.integer(1), Type.atom("utf8")]),
+        ),
+      ]);
     });
   });
 
@@ -1869,6 +1909,19 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not an atom"),
       );
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["atom_to_list/1"](Type.integer(1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("atom_to_list", Type.list([Type.integer(1)])),
+      ]);
     });
   });
 
@@ -2210,6 +2263,22 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["binary_to_atom/2"](Type.integer(1), Type.atom("utf8"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "binary_to_atom",
+          Type.list([Type.integer(1), Type.atom("utf8")]),
+        ),
+      ]);
     });
   });
 
@@ -2579,6 +2648,19 @@ describe("Erlang", () => {
         ),
       );
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["binary_to_float/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("binary_to_float", Type.list([Type.atom("abc")])),
+      ]);
+    });
   });
 
   describe("binary_to_integer/1", () => {
@@ -2590,6 +2672,19 @@ describe("Erlang", () => {
       const expected = Erlang["binary_to_integer/2"](binary, Type.integer(10));
 
       assert.deepStrictEqual(result, expected);
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["binary_to_integer/1"](Type.bitstring("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("binary_to_integer", Type.list([Type.bitstring("abc")])),
+      ]);
     });
   });
 
@@ -2799,6 +2894,22 @@ describe("Erlang", () => {
         );
       });
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["binary_to_integer/2"](Type.bitstring("abc"), Type.integer(50));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "binary_to_integer",
+          Type.list([Type.bitstring("abc"), Type.integer(50)]),
+        ),
+      ]);
+    });
   });
 
   describe("binary_to_list/1", () => {
@@ -2861,6 +2972,19 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["binary_to_list/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("binary_to_list", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -4606,6 +4730,19 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
       );
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["bit_size/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("bit_size", Type.list([Type.atom("abc")])),
+      ]);
+    });
   });
 
   describe("bnot/1", () => {
@@ -5072,6 +5209,19 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
       );
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["byte_size/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("byte_size", Type.list([Type.atom("abc")])),
+      ]);
+    });
   });
 
   describe("ceil/1", () => {
@@ -5146,6 +5296,19 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["ceil/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("ceil", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -6932,6 +7095,25 @@ describe("Erlang", () => {
         );
       });
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["float_to_binary/2"](
+          Type.float(1.0),
+          Type.list([Type.atom("bad")]),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "float_to_binary",
+          Type.list([Type.float(1.0), Type.list([Type.atom("bad")])]),
+        ),
+      ]);
+    });
   });
 
   // Delegates to float_to_binary/2, only need to test opts passthrough and codepoint conversion
@@ -6950,6 +7132,22 @@ describe("Erlang", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["float_to_list/2"](Type.integer(1), Type.list());
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "float_to_list",
+          Type.list([Type.integer(1), Type.list()]),
+        ),
+      ]);
     });
   });
 
@@ -7025,6 +7223,19 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["floor/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("floor", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -7749,6 +7960,19 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["integer_to_binary/1"](Type.atom("a"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("integer_to_binary", Type.list([Type.atom("a")])),
+      ]);
+    });
   });
 
   describe("integer_to_binary/2", () => {
@@ -7830,6 +8054,22 @@ describe("Erlang", () => {
         ),
       );
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["integer_to_binary/2"](Type.atom("a"), Type.integer(10));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "integer_to_binary",
+          Type.list([Type.atom("a"), Type.integer(10)]),
+        ),
+      ]);
+    });
   });
 
   describe("integer_to_list/1", () => {
@@ -7841,6 +8081,19 @@ describe("Erlang", () => {
       const expected = integer_to_list_2(integer123, integer10);
 
       assert.deepStrictEqual(result, expected);
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["integer_to_list/1"](Type.atom("a"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("integer_to_list", Type.list([Type.atom("a")])),
+      ]);
     });
   });
 
@@ -7933,6 +8186,22 @@ describe("Erlang", () => {
           ),
         );
       });
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["integer_to_list/2"](Type.atom("a"), Type.integer(50));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "integer_to_list",
+          Type.list([Type.atom("a"), Type.integer(50)]),
+        ),
+      ]);
     });
   });
 
@@ -8352,6 +8621,19 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
       );
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_atom/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("list_to_atom", Type.list([Type.atom("abc")])),
+      ]);
+    });
   });
 
   describe("list_to_binary/1", () => {
@@ -8552,6 +8834,19 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
       );
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_binary/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("list_to_binary", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -9132,6 +9427,19 @@ describe("Erlang", () => {
         ),
       );
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_float/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("list_to_float", Type.list([Type.atom("abc")])),
+      ]);
+    });
   });
 
   describe("list_to_integer/1", () => {
@@ -9148,6 +9456,19 @@ describe("Erlang", () => {
       const expected = Erlang["list_to_integer/2"](list, Type.integer(10));
 
       assert.deepStrictEqual(result, expected);
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_integer/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("list_to_integer", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -9526,6 +9847,22 @@ describe("Erlang", () => {
         ),
       );
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_integer/2"](Type.atom("abc"), Type.integer(10));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "list_to_integer",
+          Type.list([Type.atom("abc"), Type.integer(10)]),
+        ),
+      ]);
+    });
   });
 
   describe("list_to_pid/1", () => {
@@ -9613,6 +9950,19 @@ describe("Erlang", () => {
           "not a textual representation of a pid",
         ),
       );
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_pid/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("list_to_pid", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -9831,6 +10181,19 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_tuple/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("list_to_tuple", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -11416,6 +11779,19 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
       );
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["tuple_to_list/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("tuple_to_list", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
