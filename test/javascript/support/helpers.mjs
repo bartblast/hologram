@@ -250,6 +250,13 @@ function defineElixirExceptionModule() {
         Type.isAtom(reason.data[0]) &&
         reason.data[0].value === tag;
 
+      if (isTaggedTuple("badarg")) {
+        return Type.errorStruct(
+          "ArgumentError",
+          `argument error: ${Interpreter.inspect(reason.data[1])}`,
+        );
+      }
+
       if (isTaggedTuple("badmap")) {
         return Type.struct("BadMapError", [
           [Type.atom("__exception__"), Type.boolean(true)],
@@ -489,6 +496,23 @@ export function defineRuntimeGlobals() {
   });
 
   defineGlobalModule("Elixir_Enum", defineElixirEnumModule());
+
+  defineGlobalModule("Elixir_ErlangError", {
+    // Mirrors ErlangError.message/1: an eager message passes through,
+    // otherwise the text derives from the inspected original reason.
+    "message/1": (struct) => {
+      const messageEntry = struct.data["atom(message)"];
+
+      if (messageEntry !== undefined) {
+        return messageEntry[1];
+      }
+
+      const original = struct.data["atom(original)"][1];
+
+      return Type.bitstring(`Erlang error: ${Interpreter.inspect(original)}`);
+    },
+  });
+
   defineGlobalModule("Elixir_Exception", defineElixirExceptionModule());
 
   defineGlobalModule("Elixir_FunctionClauseError", {

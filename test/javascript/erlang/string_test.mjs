@@ -17,6 +17,20 @@ defineRuntimeGlobals();
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/string_test.exs
 // Always update both together.
 
+function errorFrame(module, functionName, args, errorInfo = null) {
+  return {
+    module,
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo,
+  };
+}
+
+const unicodeErrorInfo = () =>
+  Type.map([[Type.atom("module"), Type.atom("erl_stdlib_errors")]]);
+
 describe("Erlang_String", () => {
   describe("find/2", () => {
     const testedFun = Erlang_String["find/2"];
@@ -303,6 +317,50 @@ describe("Erlang_String", () => {
         );
       });
     });
+
+    it("error frame carries args and error_info for an invalid pattern", () => {
+      const string = Type.bitstring("abc");
+      const searchPattern = Type.atom("xyz");
+
+      let caught;
+
+      try {
+        find(string, searchPattern, Type.atom("leading"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "unicode",
+          "characters_to_list",
+          Type.list([searchPattern]),
+          unicodeErrorInfo(),
+        ),
+      ]);
+    });
+
+    it("error frame carries args for an unrecognized direction", () => {
+      const string = Type.bitstring("abc");
+      const searchPattern = Type.bitstring("b");
+      const direction = Type.atom("bad");
+
+      let caught;
+
+      try {
+        find(string, searchPattern, direction);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "string",
+          "find",
+          Type.list([string, searchPattern, direction]),
+        ),
+      ]);
+    });
   });
 
   describe("jaro_similarity/2", () => {
@@ -588,6 +646,23 @@ describe("Erlang_String", () => {
         "argument error",
       );
     });
+
+    it("error frame carries args for a non-list first argument", () => {
+      const list = Type.atom("not_a_list");
+      const separator = Type.charlist(", ");
+
+      let caught;
+
+      try {
+        join(list, separator);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("string", "join", Type.list([list, separator])),
+      ]);
+    });
   });
 
   describe("length/1", () => {
@@ -800,6 +875,22 @@ describe("Erlang_String", () => {
           "argument error: <<255, 255>>",
         );
       });
+    });
+
+    it("error frame carries args for non-chardata input", () => {
+      const string = Type.atom("abc");
+
+      let caught;
+
+      try {
+        length(string);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("unicode_util", "cp", Type.list([string])),
+      ]);
     });
   });
 
@@ -1118,6 +1209,32 @@ describe("Erlang_String", () => {
         );
       });
     });
+
+    it("error frame carries args and error_info for an invalid pattern", () => {
+      const pattern = Type.atom("xyz");
+
+      let caught;
+
+      try {
+        replace(
+          Type.bitstring("abc"),
+          pattern,
+          Type.bitstring("x"),
+          Type.atom("all"),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "unicode",
+          "characters_to_list",
+          Type.list([pattern]),
+          unicodeErrorInfo(),
+        ),
+      ]);
+    });
   });
 
   describe("split/2", () => {
@@ -1311,6 +1428,27 @@ describe("Erlang_String", () => {
         "CaseClauseError",
         Interpreter.buildCaseClauseErrorMsg(Type.atom("invalid")),
       );
+    });
+
+    it("error frame carries args and error_info for an invalid pattern", () => {
+      const pattern = Type.atom("xyz");
+
+      let caught;
+
+      try {
+        split(Type.bitstring("abc"), pattern, Type.atom("all"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "unicode",
+          "characters_to_list",
+          Type.list([pattern]),
+          unicodeErrorInfo(),
+        ),
+      ]);
     });
   });
 
@@ -2121,6 +2259,22 @@ describe("Erlang_String", () => {
           ]),
         );
       });
+    });
+
+    it("error frame carries args for non-chardata input", () => {
+      const subject = Type.atom("abc");
+
+      let caught;
+
+      try {
+        titlecase(subject);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("string", "titlecase", Type.list([subject])),
+      ]);
     });
   });
 

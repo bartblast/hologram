@@ -143,6 +143,40 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
                      :string.find("Hello World", " ", :all)
                    end
     end
+
+    test "error frame carries args and error_info for an invalid pattern" do
+      search_pattern = wrap_term(:xyz)
+
+      top_frame =
+        try do
+          :string.find("abc", search_pattern, :leading)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server converts the pattern in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_list, [:xyz], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
+
+    test "error frame carries args for an unrecognized direction" do
+      direction = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :string.find("abc", "b", direction)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside string.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:string, :find, ["abc", "b", :bad], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   # :string.jaro_similarity/2 was introduced in Erlang/OTP 27.
@@ -265,6 +299,23 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert_error ArgumentError, "argument error", fn ->
         :string.join([~c"hello", ~c"world"], :not_a_list)
       end
+    end
+
+    test "error frame carries args for a non-list first argument" do
+      list = wrap_term(:not_a_list)
+
+      top_frame =
+        try do
+          :string.join(list, ~c", ")
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside string.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:string, :join, [:not_a_list, ~c", "], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -424,6 +475,23 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
         :string.length(<<255, 255>>)
       end
     end
+
+    test "error frame carries args for non-chardata input" do
+      string = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :string.length(string)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server fails matching a clause in Erlang code inside
+      # unicode_util.erl, so its frame location also carries the OTP-internal
+      # file and line, which the client doesn't mirror.
+      assert {:unicode_util, :cp, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "replace/3" do
@@ -544,6 +612,23 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
         :string.replace("Hello World", " ", "_", :invalid)
       end
     end
+
+    test "error frame carries args and error_info for an invalid pattern" do
+      pattern = wrap_term(:xyz)
+
+      top_frame =
+        try do
+          :string.replace("abc", pattern, "x", :all)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server converts the pattern in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_list, [:xyz], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
   end
 
   describe "split/2" do
@@ -663,6 +748,23 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert_error CaseClauseError, build_case_clause_error_msg(:invalid), fn ->
         :string.split("hello world", " ", :invalid)
       end
+    end
+
+    test "error frame carries args and error_info for an invalid pattern" do
+      pattern = wrap_term(:xyz)
+
+      top_frame =
+        try do
+          :string.split("abc", pattern, :all)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server converts the pattern in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_list, [:xyz], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -1051,6 +1153,23 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :string.titlecase([3.14])
       end
+    end
+
+    test "error frame carries args for non-chardata input" do
+      subject = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :string.titlecase(subject)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside string.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:string, :titlecase, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
