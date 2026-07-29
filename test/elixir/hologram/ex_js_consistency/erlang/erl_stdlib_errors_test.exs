@@ -213,6 +213,47 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
       assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a map"}
     end
 
+    test "math ceil: not a number" do
+      stacktrace = [{:math, :ceil, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a number"}
+    end
+
+    test "math log: domain error" do
+      stacktrace = [{:math, :log, [0], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "is outside the domain for this function"
+             }
+    end
+
+    test "math log: not a number" do
+      stacktrace = [{:math, :log, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a number"}
+    end
+
+    test "math pow: both arguments not numbers" do
+      stacktrace = [{:math, :pow, [:a, :b], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a number",
+               2 => "not a number"
+             }
+    end
+
+    test "math pow: valid number skips its fragment" do
+      stacktrace = [{:math, :pow, [7, :a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not a number"}
+    end
+
+    test "math unknown functions fall to the argument-count clauses" do
+      stacktrace = [{:math, :unknown, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a number"}
+    end
+
     test "raises FunctionClauseError when the stacktrace is empty" do
       stacktrace = []
 
@@ -244,6 +285,25 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
                      :get,
                      2
                    ]),
+                   {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
+    end
+
+    test "raises FunctionClauseError when a math clause needs args but the frame carries an arity" do
+      stacktrace = [{:math, :ceil, 1, @error_info}]
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":erl_stdlib_errors.format_math_error/2", [
+                     :ceil,
+                     1
+                   ]),
+                   {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
+    end
+
+    test "raises FunctionClauseError when a math domain-error clause needs args but the frame carries an arity" do
+      stacktrace = [{:math, :log, 1, @error_info}]
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":erl_stdlib_errors.maybe_domain_error/1", [1]),
                    {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
     end
   end
