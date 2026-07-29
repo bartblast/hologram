@@ -105,6 +105,31 @@ describe("Erlang_Re", () => {
         Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      const pattern = Type.atom("abc");
+
+      let caught;
+
+      try {
+        compile(pattern);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "compile",
+          arityOrArgs: Type.list([pattern]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
+        },
+      ]);
+    });
   });
 
   describe("compile/2", () => {
@@ -675,6 +700,20 @@ describe("Erlang_Re", () => {
       );
     });
 
+    it("raises ArgumentError with both bullets on parse-error pattern and invalid options", () => {
+      assertBoxedError(
+        () => compileWithOpts(Type.bitstring("a("), [Type.atom("bad")]),
+        "ArgumentError",
+        Interpreter.buildMultiArgumentErrorMsg([
+          [
+            1,
+            "could not parse regular expression\nmissing closing parenthesis on character 2",
+          ],
+          [2, "invalid options"],
+        ]),
+      );
+    });
+
     it("error frame carries args on a char data failure in unicode mode", () => {
       const pattern = Type.list([Type.integer(0xd800)]);
       const options = Type.list([Type.atom("unicode")]);
@@ -695,6 +734,59 @@ describe("Erlang_Re", () => {
           file: null,
           line: null,
           errorInfo: null,
+        },
+      ]);
+    });
+
+    it("error frame carries args and error_info with badopt cause on invalid options", () => {
+      const pattern = Type.bitstring("abc");
+      const options = Type.list([Type.atom("bad")]);
+
+      let caught;
+
+      try {
+        compile(pattern, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "compile",
+          arityOrArgs: Type.list([pattern, options]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+            [Type.atom("cause"), Type.atom("badopt")],
+          ]),
+        },
+      ]);
+    });
+
+    it("error frame carries args and error_info on a non-iodata pattern", () => {
+      const pattern = Type.atom("abc");
+      const options = Type.list();
+
+      let caught;
+
+      try {
+        compile(pattern, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "compile",
+          arityOrArgs: Type.list([pattern, options]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
         },
       ]);
     });
@@ -846,6 +938,31 @@ describe("Erlang_Re", () => {
         ),
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      const exportedPattern = Type.atom("abc");
+
+      let caught;
+
+      try {
+        importPattern(exportedPattern);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "import",
+          arityOrArgs: Type.list([exportedPattern]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
+        },
+      ]);
+    });
   });
 
   describe("inspect/2", () => {
@@ -946,6 +1063,32 @@ describe("Erlang_Re", () => {
         ),
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      const compiledPattern = compilePattern("ab");
+      const item = Type.atom("foo");
+
+      let caught;
+
+      try {
+        inspect(compiledPattern, item);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "inspect",
+          arityOrArgs: Type.list([compiledPattern, item]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
+        },
+      ]);
+    });
   });
 
   describe("run/2", () => {
@@ -993,6 +1136,58 @@ describe("Erlang_Re", () => {
           file: null,
           line: null,
           errorInfo: null,
+        },
+      ]);
+    });
+
+    it("error frame carries run/2 args and error_info on a non-iodata subject", () => {
+      const subject = Type.atom("abc");
+      const pattern = Type.bitstring("a");
+
+      let caught;
+
+      try {
+        Erlang_Re["run/2"](subject, pattern);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "run",
+          arityOrArgs: Type.list([subject, pattern]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
+        },
+      ]);
+    });
+
+    it("error frame carries run/2 args and error_info on an invalid UTF-8 binary subject with a unicode compiled pattern", () => {
+      const compiledPattern = compilePattern("a", [Type.atom("unicode")]);
+      const subject = Bitstring.fromBytes([255]);
+
+      let caught;
+
+      try {
+        Erlang_Re["run/2"](subject, compiledPattern);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "run",
+          arityOrArgs: Type.list([subject, compiledPattern]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
         },
       ]);
     });
@@ -3044,6 +3239,94 @@ describe("Erlang_Re", () => {
       const subject = Type.bitstring("abc");
       const pattern = Bitstring.fromBytes([255, 97]);
       const options = Type.list([Type.atom("unicode")]);
+
+      let caught;
+
+      try {
+        Erlang_Re["run/3"](subject, pattern, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "run",
+          arityOrArgs: Type.list([subject, pattern, options]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
+        },
+      ]);
+    });
+
+    it("error frame carries args and error_info with badopt cause on invalid options", () => {
+      const subject = Type.bitstring("x");
+      const pattern = Type.bitstring("a");
+      const options = Type.list([Type.atom("bad")]);
+
+      let caught;
+
+      try {
+        Erlang_Re["run/3"](subject, pattern, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "run",
+          arityOrArgs: Type.list([subject, pattern, options]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+            [Type.atom("cause"), Type.atom("badopt")],
+          ]),
+        },
+      ]);
+    });
+
+    it("error frame carries args and error_info on an invalid capture spec", () => {
+      const subject = Type.bitstring("abc");
+      const pattern = Type.bitstring("a");
+
+      const options = Type.list([
+        Type.tuple([Type.atom("capture"), Type.atom("bad_kind")]),
+      ]);
+
+      let caught;
+
+      try {
+        Erlang_Re["run/3"](subject, pattern, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "run",
+          arityOrArgs: Type.list([subject, pattern, options]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
+        },
+      ]);
+    });
+
+    it("error frame carries args and error_info on an offset beyond the subject", () => {
+      const subject = Type.bitstring("abc");
+      const pattern = Type.bitstring("a");
+
+      const options = Type.list([
+        Type.tuple([Type.atom("offset"), Type.integer(10)]),
+      ]);
 
       let caught;
 
