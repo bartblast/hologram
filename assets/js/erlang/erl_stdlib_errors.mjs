@@ -1,6 +1,7 @@
 "use strict";
 
 import Erlang_Maps from "../erlang/maps.mjs";
+import Erlang_Unicode from "../erlang/unicode.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -19,6 +20,8 @@ const Erlang_Erl_Stdlib_Errors = {
   // Start _expand_error/1
   "_expand_error/1": (fragment) => {
     const texts = {
+      bad_char_data: "not valid character data (an iodata term)",
+      bad_encoding: "not a valid encoding",
       bad_iterator: "not a valid iterator",
       domain_error: "is outside the domain for this function",
       not_fun_1: "not a fun that takes one argument",
@@ -224,6 +227,69 @@ const Erlang_Erl_Stdlib_Errors = {
   // End _format_math_error/2
   // Deps: [:erl_stdlib_errors._must_be_number/1]
 
+  // Mirrors OTP's private format_unicode_error/2. The characters_to_list
+  // clause delegates to the characters_to_binary clauses, like OTP's does.
+  // Clauses for functions with no client port (category, is_whitespace,
+  // is_id_start, is_id_continue) are omitted - like any unknown function,
+  // they fall through to the function clause error, which on the server
+  // only unknown functions reach.
+  // Start _format_unicode_error/2
+  "_format_unicode_error/2": (fun, argsOrArity) => {
+    const unicodeCharData = Erlang_Erl_Stdlib_Errors["_unicode_char_data/1"];
+    const unicodeEncoding = Erlang_Erl_Stdlib_Errors["_unicode_encoding/1"];
+
+    const badCharDataFuns = [
+      "characters_to_nfc_binary",
+      "characters_to_nfc_list",
+      "characters_to_nfd_binary",
+      "characters_to_nfd_list",
+      "characters_to_nfkc_binary",
+      "characters_to_nfkc_list",
+      "characters_to_nfkd_binary",
+      "characters_to_nfkd_list",
+    ];
+
+    const args = Type.isList(argsOrArity) ? argsOrArity.data : null;
+
+    if (fun.value === "characters_to_list") {
+      return Erlang_Erl_Stdlib_Errors["_format_unicode_error/2"](
+        Type.atom("characters_to_binary"),
+        argsOrArity,
+      );
+    }
+
+    if (fun.value === "characters_to_binary") {
+      if (args?.length === 1) {
+        return ["bad_char_data"];
+      }
+
+      if (args?.length === 2) {
+        return [unicodeCharData(args[0]), unicodeEncoding(args[1])];
+      }
+
+      if (args?.length === 3) {
+        return [
+          unicodeCharData(args[0]),
+          unicodeEncoding(args[1]),
+          unicodeEncoding(args[2]),
+        ];
+      }
+    }
+
+    if (badCharDataFuns.includes(fun.value) && args?.length === 1) {
+      return ["bad_char_data"];
+    }
+
+    Interpreter.raiseFunctionClauseError(
+      Interpreter.buildFunctionClauseErrorMsg(
+        ":erl_stdlib_errors.format_unicode_error/2",
+        [fun, argsOrArity],
+      ),
+    );
+  },
+  // End _format_unicode_error/2
+  // Deps: [:erl_stdlib_errors._unicode_char_data/1, :erl_stdlib_errors._unicode_encoding/1]
+
   // Mirrors OTP's private must_be_fun/2.
   // Start _must_be_fun/2
   "_must_be_fun/2": (term, arity) =>
@@ -264,6 +330,48 @@ const Erlang_Erl_Stdlib_Errors = {
   // Start _must_be_number/1
   "_must_be_number/1": (term) => (Type.isNumber(term) ? "" : "not_number"),
   // End _must_be_number/1
+  // Deps: []
+
+  // Mirrors OTP's private unicode_char_data/1, which probes the term by
+  // attempting a characters_to_binary conversion and treats an error or
+  // incomplete result (or a raise) as bad chardata. The non-raising
+  // conversion core is used instead of the raising port - this runs inside
+  // message derivation, so a raise here would derive its own message and
+  // recurse.
+  // Start _unicode_char_data/1
+  "_unicode_char_data/1": (chars) => {
+    const result = Erlang_Unicode["_chardata_to_utf8_binary/1"](chars);
+
+    return result === null || Type.isTuple(result) ? "bad_char_data" : "";
+  },
+  // End _unicode_char_data/1
+  // Deps: [:unicode._chardata_to_utf8_binary/1]
+
+  // Mirrors OTP's private unicode_encoding/1, which probes the term by
+  // attempting a conversion with it as the encoding. The client checks
+  // membership in the encoding set that OTP's characters_to_binary/2
+  // accepts instead: latin1, unicode, utf8, utf16, utf32, and the
+  // {utf16 | utf32, big | little} tuples.
+  // Start _unicode_encoding/1
+  "_unicode_encoding/1": (encoding) => {
+    if (
+      Type.isAtom(encoding) &&
+      ["latin1", "unicode", "utf8", "utf16", "utf32"].includes(encoding.value)
+    ) {
+      return "";
+    }
+
+    const isEndiannessTuple =
+      Type.isTuple(encoding) &&
+      encoding.data.length === 2 &&
+      Type.isAtom(encoding.data[0]) &&
+      ["utf16", "utf32"].includes(encoding.data[0].value) &&
+      Type.isAtom(encoding.data[1]) &&
+      ["big", "little"].includes(encoding.data[1].value);
+
+    return isEndiannessTuple ? "" : "bad_encoding";
+  },
+  // End _unicode_encoding/1
   // Deps: []
 
   // TODO: dispatch to the remaining per-module formatters from
@@ -307,6 +415,13 @@ const Erlang_Erl_Stdlib_Errors = {
         );
         break;
 
+      case "unicode":
+        fragments = Erlang_Erl_Stdlib_Errors["_format_unicode_error/2"](
+          frameFun,
+          frameArgsOrArity,
+        );
+        break;
+
       default:
         fragments = [];
     }
@@ -318,7 +433,7 @@ const Erlang_Erl_Stdlib_Errors = {
     );
   },
   // End format_error/2
-  // Deps: [:erl_stdlib_errors._format_error_map/3, :erl_stdlib_errors._format_maps_error/2, :erl_stdlib_errors._format_math_error/2]
+  // Deps: [:erl_stdlib_errors._format_error_map/3, :erl_stdlib_errors._format_maps_error/2, :erl_stdlib_errors._format_math_error/2, :erl_stdlib_errors._format_unicode_error/2]
 };
 
 export default Erlang_Erl_Stdlib_Errors;

@@ -42,6 +42,17 @@ function mathStacktrace(functionName, argsOrArity) {
   ]);
 }
 
+function unicodeStacktrace(functionName, argsOrArity) {
+  return Type.list([
+    Type.tuple([
+      Type.atom("unicode"),
+      Type.atom(functionName),
+      argsOrArity,
+      errorInfo,
+    ]),
+  ]);
+}
+
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/erl_stdlib_errors_test.exs
 // Always update both together.
@@ -577,6 +588,282 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       );
     });
 
+    it("unicode characters_to_binary/1: bad chardata", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_binary",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not valid character data (an iodata term)"),
+          ],
+        ]),
+      );
+    });
+
+    it("unicode characters_to_binary/2: bad chardata and encoding", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_binary",
+        Type.list([Type.atom("a"), Type.atom("foo")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not valid character data (an iodata term)"),
+          ],
+          [Type.integer(2), Type.bitstring("not a valid encoding")],
+        ]),
+      );
+    });
+
+    it("unicode characters_to_binary/3: bad chardata with valid encodings", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_binary",
+        Type.list([Type.atom("a"), Type.atom("utf8"), Type.atom("utf8")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not valid character data (an iodata term)"),
+          ],
+        ]),
+      );
+    });
+
+    it("unicode characters_to_binary/3: bad encodings", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_binary",
+        Type.list([Type.bitstring("abc"), Type.atom("foo"), Type.atom("bar")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(2), Type.bitstring("not a valid encoding")],
+          [Type.integer(3), Type.bitstring("not a valid encoding")],
+        ]),
+      );
+    });
+
+    it("unicode characters_to_binary/3: endianness tuple encodings are valid", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_binary",
+        Type.list([
+          Type.bitstring("abc"),
+          Type.tuple([Type.atom("utf16"), Type.atom("big")]),
+          Type.tuple([Type.atom("utf32"), Type.atom("little")]),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("unicode characters_to_binary/3: latin1 and unicode encodings are valid", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_binary",
+        Type.list([
+          Type.bitstring("abc"),
+          Type.atom("latin1"),
+          Type.atom("unicode"),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("unicode characters_to_list delegates to the characters_to_binary clauses", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_list",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not valid character data (an iodata term)"),
+          ],
+        ]),
+      );
+    });
+
+    it("unicode characters_to_nfc_binary: bad chardata", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_nfc_binary",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not valid character data (an iodata term)"),
+          ],
+        ]),
+      );
+    });
+
+    it("unicode characters_to_nfc_list: bad chardata", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_nfc_list",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not valid character data (an iodata term)"),
+          ],
+        ]),
+      );
+    });
+
+    it("unicode characters_to_nfd_binary: bad chardata", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_nfd_binary",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not valid character data (an iodata term)"),
+          ],
+        ]),
+      );
+    });
+
+    it("unicode characters_to_nfd_list: bad chardata", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_nfd_list",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not valid character data (an iodata term)"),
+          ],
+        ]),
+      );
+    });
+
+    it("unicode characters_to_nfkc_binary: bad chardata", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_nfkc_binary",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not valid character data (an iodata term)"),
+          ],
+        ]),
+      );
+    });
+
+    it("unicode characters_to_nfkc_list: bad chardata", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_nfkc_list",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not valid character data (an iodata term)"),
+          ],
+        ]),
+      );
+    });
+
+    it("unicode characters_to_nfkd_binary: bad chardata", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_nfkd_binary",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not valid character data (an iodata term)"),
+          ],
+        ]),
+      );
+    });
+
+    it("unicode characters_to_nfkd_list: bad chardata", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_nfkd_list",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("not valid character data (an iodata term)"),
+          ],
+        ]),
+      );
+    });
+
     it("raises FunctionClauseError when the stacktrace is empty", () => {
       const stacktrace = Type.list();
 
@@ -642,6 +929,38 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
         Interpreter.buildFunctionClauseErrorMsg(
           ":erl_stdlib_errors.maybe_domain_error/1",
           [Type.integer(1)],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError when a unicode clause needs args but the frame carries an arity", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_nfc_binary",
+        Type.integer(1),
+      );
+
+      assertBoxedError(
+        () => format_error(Type.atom("badarg"), stacktrace),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_stdlib_errors.format_unicode_error/2",
+          [Type.atom("characters_to_nfc_binary"), Type.integer(1)],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError when characters_to_list delegates a frame that carries an arity", () => {
+      const stacktrace = unicodeStacktrace(
+        "characters_to_list",
+        Type.integer(1),
+      );
+
+      assertBoxedError(
+        () => format_error(Type.atom("badarg"), stacktrace),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_stdlib_errors.format_unicode_error/2",
+          [Type.atom("characters_to_binary"), Type.integer(1)],
         ),
       );
     });

@@ -254,6 +254,126 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
       assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a number"}
     end
 
+    test "unicode characters_to_binary/1: bad chardata" do
+      stacktrace = [{:unicode, :characters_to_binary, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not valid character data (an iodata term)"
+             }
+    end
+
+    test "unicode characters_to_binary/2: bad chardata and encoding" do
+      stacktrace = [{:unicode, :characters_to_binary, [:a, :foo], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not valid character data (an iodata term)",
+               2 => "not a valid encoding"
+             }
+    end
+
+    test "unicode characters_to_binary/3: bad chardata with valid encodings" do
+      stacktrace = [{:unicode, :characters_to_binary, [:a, :utf8, :utf8], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not valid character data (an iodata term)"
+             }
+    end
+
+    test "unicode characters_to_binary/3: bad encodings" do
+      stacktrace = [{:unicode, :characters_to_binary, ["abc", :foo, :bar], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               2 => "not a valid encoding",
+               3 => "not a valid encoding"
+             }
+    end
+
+    test "unicode characters_to_binary/3: endianness tuple encodings are valid" do
+      stacktrace = [
+        {:unicode, :characters_to_binary, ["abc", {:utf16, :big}, {:utf32, :little}], @error_info}
+      ]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{}
+    end
+
+    test "unicode characters_to_binary/3: latin1 and unicode encodings are valid" do
+      stacktrace = [{:unicode, :characters_to_binary, ["abc", :latin1, :unicode], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{}
+    end
+
+    test "unicode characters_to_list delegates to the characters_to_binary clauses" do
+      stacktrace = [{:unicode, :characters_to_list, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not valid character data (an iodata term)"
+             }
+    end
+
+    test "unicode characters_to_nfc_binary: bad chardata" do
+      stacktrace = [{:unicode, :characters_to_nfc_binary, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not valid character data (an iodata term)"
+             }
+    end
+
+    test "unicode characters_to_nfc_list: bad chardata" do
+      stacktrace = [{:unicode, :characters_to_nfc_list, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not valid character data (an iodata term)"
+             }
+    end
+
+    test "unicode characters_to_nfd_binary: bad chardata" do
+      stacktrace = [{:unicode, :characters_to_nfd_binary, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not valid character data (an iodata term)"
+             }
+    end
+
+    test "unicode characters_to_nfd_list: bad chardata" do
+      stacktrace = [{:unicode, :characters_to_nfd_list, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not valid character data (an iodata term)"
+             }
+    end
+
+    test "unicode characters_to_nfkc_binary: bad chardata" do
+      stacktrace = [{:unicode, :characters_to_nfkc_binary, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not valid character data (an iodata term)"
+             }
+    end
+
+    test "unicode characters_to_nfkc_list: bad chardata" do
+      stacktrace = [{:unicode, :characters_to_nfkc_list, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not valid character data (an iodata term)"
+             }
+    end
+
+    test "unicode characters_to_nfkd_binary: bad chardata" do
+      stacktrace = [{:unicode, :characters_to_nfkd_binary, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not valid character data (an iodata term)"
+             }
+    end
+
+    test "unicode characters_to_nfkd_list: bad chardata" do
+      stacktrace = [{:unicode, :characters_to_nfkd_list, [:a], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not valid character data (an iodata term)"
+             }
+    end
+
     test "raises FunctionClauseError when the stacktrace is empty" do
       stacktrace = []
 
@@ -304,6 +424,28 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
 
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":erl_stdlib_errors.maybe_domain_error/1", [1]),
+                   {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
+    end
+
+    test "raises FunctionClauseError when a unicode clause needs args but the frame carries an arity" do
+      stacktrace = [{:unicode, :characters_to_nfc_binary, 1, @error_info}]
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":erl_stdlib_errors.format_unicode_error/2", [
+                     :characters_to_nfc_binary,
+                     1
+                   ]),
+                   {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
+    end
+
+    test "raises FunctionClauseError when characters_to_list delegates a frame that carries an arity" do
+      stacktrace = [{:unicode, :characters_to_list, 1, @error_info}]
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":erl_stdlib_errors.format_unicode_error/2", [
+                     :characters_to_binary,
+                     1
+                   ]),
                    {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
     end
   end
