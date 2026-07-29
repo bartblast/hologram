@@ -1065,15 +1065,21 @@ export default class Interpreter {
   }
 
   // Raises a FunctionClauseError attributed the way the BEAM reports a
-  // clause mismatch in an Erlang stdlib function: the raising frame carries
+  // clause mismatch in a ported stdlib function: the raising frame carries
   // the given identity with the args (the BEAM puts the failed call's args
   // in the raising frame), or the bare arity when the server-side args are
   // not representable on the client. The struct carries the same identity
   // as semantic fields, so its transpiled message/1 callback derives the
   // text, including the argument listing. The raising frame stands in place
   // of the port function's own dispatch frame, which also lets it carry a
-  // different identity (e.g. :sets.union/2 reporting :sets.size/1).
+  // different identity (e.g. :sets.union/2 reporting :sets.size/1). A
+  // capitalized module names an Elixir module and becomes an alias, like in
+  // CallStack.boxFrame().
   static raiseFunctionClauseError(module, functionName, arity, args = null) {
+    const moduleTerm = /^[A-Z]/.test(module)
+      ? Type.alias(module)
+      : Type.atom(module);
+
     const struct = Type.struct("FunctionClauseError", [
       [Type.atom("__exception__"), Type.boolean(true)],
       [Type.atom("args"), args === null ? Type.nil() : Type.list(args)],
@@ -1081,7 +1087,7 @@ export default class Interpreter {
       [Type.atom("clauses"), Type.nil()],
       [Type.atom("function"), Type.atom(functionName)],
       [Type.atom("kind"), Type.nil()],
-      [Type.atom("module"), Type.atom(module)],
+      [Type.atom("module"), moduleTerm],
     ]);
 
     const raisingFrame = {

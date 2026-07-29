@@ -274,6 +274,75 @@ describe("Elixir_String", () => {
         );
       });
     });
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        Elixir_String["contains?/2"](Type.atom("abc"), Type.bitstring("a"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "String",
+          function: "contains?",
+          arityOrArgs: Type.list([Type.atom("abc"), Type.bitstring("a")]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
+
+    it("error frame carries args and error_info for a non-bitstring pattern element", () => {
+      let caught;
+
+      try {
+        Elixir_String["contains?/2"](
+          Type.bitstring("abc"),
+          Type.list([Type.integer(1)]),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "erlang",
+          function: "byte_size",
+          arityOrArgs: Type.list([Type.integer(1)]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_erts_errors")],
+          ]),
+        },
+      ]);
+    });
+
+    it("error frame carries args and error_info for an invalid pattern type", () => {
+      let caught;
+
+      try {
+        Elixir_String["contains?/2"](Type.bitstring("abc"), Type.integer(1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "binary",
+          function: "match",
+          arityOrArgs: Type.list([Type.bitstring("abc"), Type.integer(1)]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
+        },
+      ]);
+    });
   });
 
   describe("downcase/1", () => {
@@ -375,6 +444,26 @@ describe("Elixir_String", () => {
         "String.downcase/2 modes other than :default are not yet implemented in Hologram",
       );
     });
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        Elixir_String["downcase/2"](Type.atom("abc"), Type.atom("default"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "String",
+          function: "downcase",
+          arityOrArgs: Type.list([Type.atom("abc"), Type.atom("default")]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
   });
 
   describe("replace/3", () => {
@@ -438,6 +527,7 @@ describe("Elixir_String", () => {
           subject,
           pattern,
           replacement,
+          Type.list(),
         ]),
       );
     });
@@ -473,6 +563,31 @@ describe("Elixir_String", () => {
           "using String.replace/3 replacement argument other than binary is not yet implemented in Hologram",
         );
       });
+    });
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        replace(Type.atom("abc"), Type.bitstring("a"), Type.bitstring("b"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "String",
+          function: "replace",
+          arityOrArgs: Type.list([
+            Type.atom("abc"),
+            Type.bitstring("a"),
+            Type.bitstring("b"),
+            Type.list(),
+          ]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 
@@ -513,6 +628,26 @@ describe("Elixir_String", () => {
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg("String.trim/1", [atom]),
       );
+    });
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        Elixir_String["trim/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "String",
+          function: "trim",
+          arityOrArgs: Type.list([Type.atom("abc")]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 
@@ -614,6 +749,26 @@ describe("Elixir_String", () => {
         HologramInterpreterError,
         "String.upcase/2 modes other than :default are not yet implemented in Hologram",
       );
+    });
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        Elixir_String["upcase/2"](Type.atom("abc"), Type.atom("default"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "String",
+          function: "upcase",
+          arityOrArgs: Type.list([Type.atom("abc"), Type.atom("default")]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 });

@@ -127,6 +127,57 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         String.contains?("hello world", patterns)
       end
     end
+
+    test "error frame carries args" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          String.contains?(arg, "a")
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside string.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {String, :contains?, [:abc, "a"], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args and error_info for a non-bitstring pattern element" do
+      arg = wrap_term([1])
+
+      top_frame =
+        try do
+          String.contains?("abc", arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code that sizes each pattern in the byte_size BIF, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:erlang, :byte_size, [1], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_erts_errors}
+    end
+
+    test "error frame carries args and error_info for an invalid pattern type" do
+      arg = wrap_term(1)
+
+      top_frame =
+        try do
+          String.contains?("abc", arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code that searches with binary:match/2, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:binary, :match, ["abc", 1], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
   end
 
   describe "downcase/1" do
@@ -209,6 +260,23 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         String.downcase("HoLoGrAm", :abc)
       end
     end
+
+    test "error frame carries args" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          String.downcase(arg, :default)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside string.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {String, :downcase, [:abc, :default], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "replace/3" do
@@ -239,6 +307,23 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
                      |> wrap_term()
                      |> String.replace("ab", "xy")
                    end
+    end
+
+    test "error frame carries args" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          String.replace(arg, "a", "b")
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside string.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {String, :replace, [:abc, "a", "b", []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -279,6 +364,23 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         |> wrap_term()
         |> String.trim()
       end
+    end
+
+    test "error frame carries args" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          String.trim(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside string.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {String, :trim, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -361,6 +463,23 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         String.upcase("HoLoGrAm", :abc)
       end
+    end
+
+    test "error frame carries args" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          String.upcase(arg, :default)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside string.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {String, :upcase, [:abc, :default], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 end

@@ -6,14 +6,12 @@ import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
 const Elixir_String = {
-  "contains?/2": function (subject, patternOrPatterns) {
+  "contains?/2": (subject, patternOrPatterns) => {
     if (!Type.isBinary(subject)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(
-          "String.contains?/2",
-          arguments,
-        ),
-      );
+      Interpreter.raiseFunctionClauseError("String", "contains?", 2, [
+        subject,
+        patternOrPatterns,
+      ]);
     }
 
     const subjectText = Bitstring.toText(subject);
@@ -30,16 +28,25 @@ const Elixir_String = {
       for (let i = 0; i < patternCount; i++) {
         const pattern = patternOrPatterns.data[i];
 
+        // The server sizes each pattern element first, so a non-bitstring
+        // fails in the byte_size BIF.
         if (!Type.isBitstring(pattern)) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+          Interpreter.raiseBifError(
+            "badarg",
+            "erlang",
+            "byte_size",
+            [pattern],
+            "erl_erts_errors",
           );
         }
 
+        // The server searches with binary:match/2, so an invalid pattern
+        // reports that identity with the whole pattern list.
         if (!Type.isBinary(pattern)) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-          );
+          Interpreter.raiseBifError("badarg", "binary", "match", [
+            subject,
+            patternOrPatterns,
+          ]);
         }
 
         const patternText = Bitstring.toText(pattern);
@@ -58,9 +65,12 @@ const Elixir_String = {
       );
     }
 
-    Interpreter.raiseArgumentError(
-      Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-    );
+    // The server searches with binary:match/2, so an invalid pattern
+    // reports that identity.
+    Interpreter.raiseBifError("badarg", "binary", "match", [
+      subject,
+      patternOrPatterns,
+    ]);
   },
 
   // Deps: [String.downcase/2]
@@ -80,9 +90,10 @@ const Elixir_String = {
         modeValue !== "greek" &&
         modeValue !== "turkic")
     ) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg("String.downcase/2", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("String", "downcase", 2, [
+        string,
+        mode,
+      ]);
     }
 
     if (modeValue !== "default") {
@@ -96,9 +107,12 @@ const Elixir_String = {
 
   "replace/3": function (subject, pattern, replacement) {
     if (!Type.isBinary(subject)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg("String.replace/4", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("String", "replace", 4, [
+        subject,
+        pattern,
+        replacement,
+        Type.list(),
+      ]);
     }
 
     if (!Type.isBinary(pattern) || Bitstring.isEmpty(pattern)) {
@@ -122,9 +136,7 @@ const Elixir_String = {
 
   "trim/1": function (string) {
     if (!Type.isBinary(string)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg("String.trim/1", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("String", "trim", 1, [string]);
     }
 
     // TODO: handle non-textual binary data (text is null)
@@ -148,9 +160,10 @@ const Elixir_String = {
         modeValue !== "greek" &&
         modeValue !== "turkic")
     ) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg("String.upcase/2", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("String", "upcase", 2, [
+        string,
+        mode,
+      ]);
     }
 
     if (modeValue !== "default") {

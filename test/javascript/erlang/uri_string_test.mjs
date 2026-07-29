@@ -647,5 +647,71 @@ describe("Erlang_Uri_String", () => {
         ),
       );
     });
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        Erlang_Uri_String["parse/1"](Type.integer(1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "uri_string",
+          function: "parse",
+          arityOrArgs: Type.list([Type.integer(1)]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
+
+    it("error frame carries args for an invalid UTF-8 binary", () => {
+      const uriString = Bitstring.fromBytes([255]);
+
+      let caught;
+
+      try {
+        Erlang_Uri_String["parse/1"](uriString);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "uri_string",
+          function: "parse_scheme_start",
+          arityOrArgs: Type.list([uriString, Type.map()]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
+
+    it("error frame carries args and error_info for a non-integer list element", () => {
+      let caught;
+
+      try {
+        Erlang_Uri_String["parse/1"](Type.list([Type.atom("a")]));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "unicode",
+          function: "characters_to_binary",
+          arityOrArgs: Type.list([Type.list([Type.atom("a")])]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
+        },
+      ]);
+    });
   });
 });

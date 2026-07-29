@@ -77,26 +77,28 @@ const Erlang_Uri_String = {
       let text = "";
 
       for (const item of list.data) {
+        // The server converts the list with unicode:characters_to_binary/1,
+        // so its badarg reports that identity.
         if (!Type.isInteger(item)) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(
-              1,
-              "not valid character data (an iodata term)",
-            ),
+          Interpreter.raiseBifError(
+            "badarg",
+            "unicode",
+            "characters_to_binary",
+            [list],
           );
         }
 
         const codepoint = Number(item.value);
 
         if (codepoint < 0 || codepoint > 1114111) {
-          Interpreter.raiseFunctionClauseErrorMsg(
-            Interpreter.buildFunctionClauseErrorMsg(
-              ":uri_string.parse_scheme_start/2",
-              [
-                Type.tuple([Type.atom("error"), Type.bitstring(""), list]),
-                Type.map(),
-              ],
-            ),
+          Interpreter.raiseFunctionClauseError(
+            "uri_string",
+            "parse_scheme_start",
+            2,
+            [
+              Type.tuple([Type.atom("error"), Type.bitstring(""), list]),
+              Type.map(),
+            ],
           );
         }
 
@@ -111,11 +113,11 @@ const Erlang_Uri_String = {
       Bitstring.maybeSetTextFromBytes(binary);
 
       if (binary.text === false) {
-        Interpreter.raiseFunctionClauseErrorMsg(
-          Interpreter.buildFunctionClauseErrorMsg(
-            ":uri_string.parse_scheme_start/2",
-            [binary, Type.map()],
-          ),
+        Interpreter.raiseFunctionClauseError(
+          "uri_string",
+          "parse_scheme_start",
+          2,
+          [binary, Type.map()],
         );
       }
 
@@ -318,11 +320,7 @@ const Erlang_Uri_String = {
       return convertBinaryFieldsToLists(result);
     }
 
-    Interpreter.raiseFunctionClauseErrorMsg(
-      Interpreter.buildFunctionClauseErrorMsg(":uri_string.parse/1", [
-        uriString,
-      ]),
-    );
+    Interpreter.raiseFunctionClauseError("uri_string", "parse", 1, [uriString]);
   },
   // End parse/1
   // Deps: []
