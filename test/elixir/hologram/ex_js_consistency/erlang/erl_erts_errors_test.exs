@@ -414,6 +414,220 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlErtsErrorsTest do
       assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{2 => "not a map"}
     end
 
+    test "erlang abs: not a number" do
+      stacktrace = [{:erlang, :abs, [:a], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not a number"}
+    end
+
+    test "erlang append_element: not a tuple" do
+      stacktrace = [{:erlang, :append_element, [:a, :b], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not a tuple"}
+    end
+
+    test "erlang apply: bad module and args" do
+      stacktrace = [{:erlang, :apply, [1, :f, :bad], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an atom",
+               3 => "not a list"
+             }
+    end
+
+    test "erlang binary_part: bad positions" do
+      stacktrace = [{:erlang, :binary_part, ["abc", :a, :b], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{
+               2 => "not an integer",
+               3 => "not an integer"
+             }
+    end
+
+    test "erlang binary_part: start out of range" do
+      stacktrace = [{:erlang, :binary_part, ["abc", 5, 1], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{2 => "out of range"}
+    end
+
+    test "erlang binary_part: length out of range" do
+      stacktrace = [{:erlang, :binary_part, ["abc", 1, 5], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{3 => "out of range"}
+    end
+
+    test "erlang convert_time_unit: bad time and unit" do
+      stacktrace = [{:erlang, :convert_time_unit, [:a, :second, :bad], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an integer",
+               3 => "invalid time unit"
+             }
+    end
+
+    test "erlang delete_element delegates to the element clause" do
+      stacktrace = [{:erlang, :delete_element, [:a, :b], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an integer",
+               2 => "not a tuple"
+             }
+    end
+
+    test "erlang float: not a number" do
+      stacktrace = [{:erlang, :float, [:a], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not a number"}
+    end
+
+    test "erlang fun_info: not a fun" do
+      stacktrace = [{:erlang, :fun_info, [1], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not a fun"}
+    end
+
+    test "erlang function_exported: bad args" do
+      stacktrace = [{:erlang, :function_exported, [1, 2, :a], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an atom",
+               2 => "not an atom",
+               3 => "not an integer"
+             }
+    end
+
+    test "erlang hd: not a nonempty list" do
+      stacktrace = [{:erlang, :hd, [:a], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not a nonempty list"}
+    end
+
+    test "erlang insert_element delegates to the element clause" do
+      stacktrace = [{:erlang, :insert_element, [:a, :b, :c], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an integer",
+               2 => "not a tuple"
+             }
+    end
+
+    test "erlang iolist_to_binary: not an iodata term" do
+      stacktrace = [{:erlang, :iolist_to_binary, [:a], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not an iodata term"}
+    end
+
+    test "erlang make_fun: bad args" do
+      stacktrace = [{:erlang, :make_fun, [1, 2, -1], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an atom",
+               2 => "not an atom",
+               3 => "out of range"
+             }
+    end
+
+    test "erlang make_tuple/2: bad arity" do
+      stacktrace = [{:erlang, :make_tuple, [:a, :b], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "out of range"}
+    end
+
+    test "erlang monotonic_time: invalid time unit" do
+      stacktrace = [{:erlang, :monotonic_time, [:bad], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "invalid time unit"}
+    end
+
+    test "erlang pid_to_list: not a pid" do
+      stacktrace = [{:erlang, :pid_to_list, [:a], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not a pid"}
+    end
+
+    test "erlang ref_to_list: not a reference" do
+      stacktrace = [{:erlang, :ref_to_list, [:a], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not a reference"}
+    end
+
+    test "erlang round: not a number" do
+      stacktrace = [{:erlang, :round, [:a], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not a number"}
+    end
+
+    test "erlang setelement delegates to the element clause" do
+      stacktrace = [{:erlang, :setelement, [0, {:a}, :x], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "out of range"}
+    end
+
+    test "erlang split_binary: bad args" do
+      stacktrace = [{:erlang, :split_binary, [:a, -1], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a binary",
+               2 => "out of range"
+             }
+    end
+
+    test "erlang split_binary: position out of range" do
+      stacktrace = [{:erlang, :split_binary, ["abc", 5], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{2 => "out of range"}
+    end
+
+    test "erlang system_info: invalid item" do
+      stacktrace = [{:erlang, :system_info, [:bad], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{
+               1 => "invalid system info item"
+             }
+    end
+
+    test "erlang system_time: invalid time unit" do
+      stacktrace = [{:erlang, :system_time, [:bad], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "invalid time unit"}
+    end
+
+    test "erlang time_offset: invalid time unit" do
+      stacktrace = [{:erlang, :time_offset, [:bad], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "invalid time unit"}
+    end
+
+    test "erlang tl: not a nonempty list" do
+      stacktrace = [{:erlang, :tl, [[]], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not a nonempty list"}
+    end
+
+    test "erlang trunc: not a number" do
+      stacktrace = [{:erlang, :trunc, [:a], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not a number"}
+    end
+
+    test "erlang tuple_size: not a tuple" do
+      stacktrace = [{:erlang, :tuple_size, [:a], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not a tuple"}
+    end
+
+    test "erlang unique_integer: not a list" do
+      stacktrace = [{:erlang, :unique_integer, [:bad], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "not a list"}
+    end
+
+    test "erlang unique_integer: invalid modifier" do
+      stacktrace = [{:erlang, :unique_integer, [[:bad]], @error_info}]
+
+      assert :erl_erts_errors.format_error(:badarg, stacktrace) == %{1 => "invalid modifier"}
+    end
+
     test "raises FunctionClauseError when the stacktrace is empty" do
       expected_msg =
         build_function_clause_error_msg(":erl_erts_errors.format_error/2", [:badarg, []])

@@ -38,8 +38,8 @@ MFAs for sorting:
 */
 
 const Erlang = {
-  // Start _validate_time_unit/2
-  "_validate_time_unit/2": (unit, argumentIndex) => {
+  // Start _is_valid_time_unit/1
+  "_is_valid_time_unit/1": (unit) => {
     const validAtomUnits = [
       "nanosecond",
       "nano_seconds",
@@ -53,16 +53,12 @@ const Erlang = {
       "perf_counter",
     ];
 
-    if (
-      !(Type.isAtom(unit) && validAtomUnits.includes(unit.value)) &&
-      !(Type.isInteger(unit) && unit.value > 0n)
-    ) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(argumentIndex, "invalid time unit"),
-      );
-    }
+    return (
+      (Type.isAtom(unit) && validAtomUnits.includes(unit.value)) ||
+      (Type.isInteger(unit) && unit.value > 0n)
+    );
   },
-  // End _validate_time_unit/2
+  // End _is_valid_time_unit/1
   // Deps: []
 
   // Start */2
@@ -118,7 +114,13 @@ const Erlang = {
   // Start ++/2
   "++/2": (left, right) => {
     if (!Type.isProperList(left)) {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "++",
+        [left, right],
+        "erl_erts_errors",
+      );
     }
 
     const data = left.data.concat(Type.isList(right) ? right.data : [right]);
@@ -165,7 +167,13 @@ const Erlang = {
   // Start --/2
   "--/2": (left, right) => {
     if (!Type.isList(left) || !Type.isList(right)) {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "--",
+        [left, right],
+        "erl_erts_errors",
+      );
     }
 
     const result = Utils.shallowCloneArray(left.data);
@@ -275,8 +283,12 @@ const Erlang = {
       return Type.integer(value < 0n ? -value : value);
     }
 
-    Interpreter.raiseArgumentError(
-      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    Interpreter.raiseBifError(
+      "badarg",
+      "erlang",
+      "abs",
+      [number],
+      "erl_erts_errors",
     );
   },
   // End abs/1
@@ -300,8 +312,12 @@ const Erlang = {
   // Start append_element/2
   "append_element/2": (tuple, term) => {
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "append_element",
+        [tuple, term],
+        "erl_erts_errors",
       );
     }
 
@@ -317,7 +333,13 @@ const Erlang = {
     }
 
     if (!Type.isProperList(args)) {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "apply",
+        [fun, args],
+        "erl_erts_errors",
+      );
     }
 
     return Interpreter.callAnonymousFunction(fun, args.data);
@@ -329,27 +351,21 @@ const Erlang = {
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
   // Start apply/3
   "apply/3": (module, fun, args) => {
+    // TODO: raise the bare badarg once client derivation runs Exception
+    // blame - this text is the blamed apply message.
     if (!Type.isAtom(module)) {
       Interpreter.raiseArgumentError(
         `you attempted to apply a function named ${Interpreter.inspect(fun)} on ${Interpreter.inspect(module)}. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module`,
       );
     }
 
-    if (!Type.isAtom(fun)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
-      );
-    }
-
-    if (!Type.isList(args)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not a list"),
-      );
-    }
-
-    if (!Type.isProperList(args)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+    if (!Type.isAtom(fun) || !Type.isProperList(args)) {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "apply",
+        [module, fun, args],
+        "erl_erts_errors",
       );
     }
 
@@ -442,30 +458,32 @@ const Erlang = {
 
   // Start binary_part/3
   "binary_part/3": (subject, start, length) => {
-    if (!Type.isBinary(subject)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "binary_part",
+        [subject, start, length],
+        "erl_erts_errors",
       );
+    };
+
+    if (!Type.isBinary(subject)) {
+      raiseBadarg();
     }
 
     if (!Type.isInteger(start)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isInteger(length)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     const totalBytes = Bitstring.calculateBitCount(subject) / 8;
 
     if (start.value < 0n || start.value > totalBytes) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
+      raiseBadarg();
     }
 
     const isReverse = length.value < 0n;
@@ -476,9 +494,7 @@ const Erlang = {
     const outOfRangeReverse = isReverse && start.value + length.value < 0n;
 
     if (outOfRangeForward || outOfRangeReverse) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
-      );
+      raiseBadarg();
     }
 
     const actualStart = isReverse ? start.value + length.value : start.value;
@@ -1704,14 +1720,19 @@ const Erlang = {
       }
     };
 
-    if (!Type.isInteger(time)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+    if (
+      !Type.isInteger(time) ||
+      !Erlang["_is_valid_time_unit/1"](fromUnit) ||
+      !Erlang["_is_valid_time_unit/1"](toUnit)
+    ) {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "convert_time_unit",
+        [time, fromUnit, toUnit],
+        "erl_erts_errors",
       );
     }
-
-    Erlang["_validate_time_unit/2"](fromUnit, 2);
-    Erlang["_validate_time_unit/2"](toUnit, 3);
 
     const fromUnitValue = resolveTimeUnit(fromUnit);
     const toUnitValue = resolveTimeUnit(toUnit);
@@ -1725,26 +1746,30 @@ const Erlang = {
     return Type.integer(result);
   },
   // End convert_time_unit/3
-  // Deps: [:erlang._validate_time_unit/2]
+  // Deps: [:erlang._is_valid_time_unit/1]
 
   // Start delete_element/2
   "delete_element/2": (index, tuple) => {
-    if (!Type.isInteger(index)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "delete_element",
+        [index, tuple],
+        "erl_erts_errors",
       );
+    };
+
+    if (!Type.isInteger(index)) {
+      raiseBadarg();
     }
 
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
-      );
+      raiseBadarg();
     }
 
     if (index.value > tuple.data.length || index.value < 1) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
-      );
+      raiseBadarg();
     }
 
     const data = tuple.data.toSpliced(Number(index.value) - 1, 1);
@@ -1777,22 +1802,26 @@ const Erlang = {
 
   // Start element/2
   "element/2": (index, tuple) => {
-    if (!Type.isInteger(index)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "element",
+        [index, tuple],
+        "erl_erts_errors",
       );
+    };
+
+    if (!Type.isInteger(index)) {
+      raiseBadarg();
     }
 
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
-      );
+      raiseBadarg();
     }
 
     if (index.value > tuple.data.length || index.value < 1) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
-      );
+      raiseBadarg();
     }
 
     return tuple.data[Number(index.value) - 1];
@@ -1894,8 +1923,12 @@ const Erlang = {
       return number;
     }
 
-    Interpreter.raiseArgumentError(
-      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    Interpreter.raiseBifError(
+      "badarg",
+      "erlang",
+      "float",
+      [number],
+      "erl_erts_errors",
     );
   },
   // End float/1
@@ -2130,8 +2163,12 @@ const Erlang = {
   // Start fun_info/1
   "fun_info/1": (fun) => {
     if (!Type.isAnonymousFunction(fun)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a fun"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "fun_info",
+        [fun],
+        "erl_erts_errors",
       );
     }
 
@@ -2221,8 +2258,12 @@ const Erlang = {
     const info = Erlang["fun_info/1"](fun);
 
     if (!Type.isAtom(item) || !validItems.has(item.value)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "fun_info",
+        [fun, item],
+        "erl_erts_errors",
       );
     }
 
@@ -2241,22 +2282,26 @@ const Erlang = {
 
   // Start function_exported/3
   "function_exported/3": (module, functionName, arity) => {
-    if (!Type.isAtom(module)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "function_exported",
+        [module, functionName, arity],
+        "erl_erts_errors",
       );
+    };
+
+    if (!Type.isAtom(module)) {
+      raiseBadarg();
     }
 
     if (!Type.isAtom(functionName)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isInteger(arity)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     const moduleProxy = Interpreter.moduleProxy(module);
@@ -2275,8 +2320,12 @@ const Erlang = {
   // Start hd/1
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "hd",
+        [list],
+        "erl_erts_errors",
       );
     }
 
@@ -2287,22 +2336,26 @@ const Erlang = {
 
   // Start insert_element/3
   "insert_element/3": (index, tuple, value) => {
-    if (!Type.isInteger(index)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "insert_element",
+        [index, tuple, value],
+        "erl_erts_errors",
       );
+    };
+
+    if (!Type.isInteger(index)) {
+      raiseBadarg();
     }
 
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
-      );
+      raiseBadarg();
     }
 
     if (index.value <= 0n || index.value > tuple.data.length + 1) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
-      );
+      raiseBadarg();
     }
 
     // The tuple index is one-based, so we need to compensate
@@ -2408,14 +2461,22 @@ const Erlang = {
 
   // Start iolist_to_binary/1
   "iolist_to_binary/1": (ioListOrBinary) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "iolist_to_binary",
+        [ioListOrBinary],
+        "erl_erts_errors",
+      );
+    };
+
     if (Type.isBinary(ioListOrBinary)) {
       return ioListOrBinary;
     }
 
     if (!Type.isList(ioListOrBinary)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
-      );
+      raiseBadarg();
     }
 
     // :erlang.list_to_binary/1 raises ArgumentError "not an iolist term" on invalid input.
@@ -2423,9 +2484,7 @@ const Erlang = {
     try {
       return Erlang["list_to_binary/1"](ioListOrBinary);
     } catch {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
-      );
+      raiseBadarg();
     }
   },
   // End iolist_to_binary/1
@@ -2548,8 +2607,12 @@ const Erlang = {
   // Start length/1
   "length/1": (list) => {
     if (!Type.isList(list)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "length",
+        [list],
+        "erl_erts_errors",
       );
     }
 
@@ -2981,32 +3044,34 @@ const Erlang = {
 
   // Start make_fun/3
   "make_fun/3": (module, functionName, arity) => {
-    if (!Type.isAtom(module)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "make_fun",
+        [module, functionName, arity],
+        "erl_erts_errors",
       );
+    };
+
+    if (!Type.isAtom(module)) {
+      raiseBadarg();
     }
 
     if (!Type.isAtom(functionName)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isInteger(arity)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     if (arity.value < 0n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
-      );
+      raiseBadarg();
     }
 
     if (arity.value > 255n) {
-      Interpreter.raiseArgumentError("argument error");
+      raiseBadarg();
     }
 
     const arityValue = Number(arity.value);
@@ -3063,8 +3128,12 @@ const Erlang = {
   "make_tuple/2": (arity, value) => {
     // The Erlang implementation says that the index is out of range even when it is not an integer
     if (!Type.isInteger(arity) || arity.value < 0n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "make_tuple",
+        [arity, value],
+        "erl_erts_errors",
       );
     }
 
@@ -3160,13 +3229,21 @@ const Erlang = {
   "monotonic_time/1": (unit) => {
     // TODO: unit is validated twice - here (for correct arg index in error message)
     // and in convert_time_unit/3. This could be optimized in the future.
-    Erlang["_validate_time_unit/2"](unit, 1);
+    if (!Erlang["_is_valid_time_unit/1"](unit)) {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "monotonic_time",
+        [unit],
+        "erl_erts_errors",
+      );
+    }
     const nativeTime = Erlang["monotonic_time/0"]();
 
     return Erlang["convert_time_unit/3"](nativeTime, Type.atom("native"), unit);
   },
   // End monotonic_time/1
-  // Deps: [:erlang._validate_time_unit/2, :erlang.convert_time_unit/3, :erlang.monotonic_time/0]
+  // Deps: [:erlang._is_valid_time_unit/1, :erlang.convert_time_unit/3, :erlang.monotonic_time/0]
 
   // Start node/0
   "node/0": () => {
@@ -3178,7 +3255,13 @@ const Erlang = {
   // Start not/1
   "not/1": (term) => {
     if (!Type.isBoolean(term)) {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "not",
+        [term],
+        "erl_erts_errors",
+      );
     }
 
     return Type.boolean(term.value == "true" ? false : true);
@@ -3204,8 +3287,12 @@ const Erlang = {
   // Start pid_to_list/1
   "pid_to_list/1": (pid) => {
     if (!Type.isPid(pid)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "pid_to_list",
+        [pid],
+        "erl_erts_errors",
       );
     }
 
@@ -3272,8 +3359,12 @@ const Erlang = {
   // Start ref_to_list/1
   "ref_to_list/1": (reference) => {
     if (!Type.isReference(reference)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "ref_to_list",
+        [reference],
+        "erl_erts_errors",
       );
     }
 
@@ -3312,8 +3403,12 @@ const Erlang = {
   // Start round/1
   "round/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "round",
+        [number],
+        "erl_erts_errors",
       );
     }
 
@@ -3333,22 +3428,26 @@ const Erlang = {
 
   // Start setelement/3
   "setelement/3": (index, tuple, value) => {
-    if (!Type.isInteger(index)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "setelement",
+        [index, tuple, value],
+        "erl_erts_errors",
       );
+    };
+
+    if (!Type.isInteger(index)) {
+      raiseBadarg();
     }
 
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
-      );
+      raiseBadarg();
     }
 
     if (index.value <= 0n || index.value > tuple.data.length) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
-      );
+      raiseBadarg();
     }
 
     const data = [...tuple.data];
@@ -3362,31 +3461,33 @@ const Erlang = {
 
   // Start split_binary/2
   "split_binary/2": (binary, position) => {
-    if (!Type.isBinary(binary)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "split_binary",
+        [binary, position],
+        "erl_erts_errors",
       );
+    };
+
+    if (!Type.isBinary(binary)) {
+      raiseBadarg();
     }
 
     if (!Type.isInteger(position)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     if (position.value < 0n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
+      raiseBadarg();
     }
 
     const pos = Number(position.value);
     const totalBytes = Number(Erlang["byte_size/1"](binary).value);
 
     if (pos > totalBytes) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
+      raiseBadarg();
     }
 
     // If position is 0, first part is empty binary
@@ -3434,8 +3535,12 @@ const Erlang = {
       );
     }
 
-    Interpreter.raiseArgumentError(
-      Interpreter.buildArgumentErrorMsg(1, "invalid system info item"),
+    Interpreter.raiseBifError(
+      "badarg",
+      "erlang",
+      "system_info",
+      [item],
+      "erl_erts_errors",
     );
   },
   // End system_info/1
@@ -3487,19 +3592,31 @@ const Erlang = {
   "time_offset/1": (unit) => {
     // TODO: unit is validated twice - here (for correct arg index in error message)
     // and in convert_time_unit/3. This could be optimized in the future.
-    Erlang["_validate_time_unit/2"](unit, 1);
+    if (!Erlang["_is_valid_time_unit/1"](unit)) {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "time_offset",
+        [unit],
+        "erl_erts_errors",
+      );
+    }
     const nativeTime = Erlang["time_offset/0"]();
 
     return Erlang["convert_time_unit/3"](nativeTime, Type.atom("native"), unit);
   },
   // End time_offset/1
-  // Deps: [:erlang._validate_time_unit/2, :erlang.convert_time_unit/3, :erlang.time_offset/0]
+  // Deps: [:erlang._is_valid_time_unit/1, :erlang.convert_time_unit/3, :erlang.time_offset/0]
 
   // Start tl/1
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "tl",
+        [list],
+        "erl_erts_errors",
       );
     }
 
@@ -3525,8 +3642,12 @@ const Erlang = {
   // Start trunc/1
   "trunc/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "trunc",
+        [number],
+        "erl_erts_errors",
       );
     }
 
@@ -3543,8 +3664,12 @@ const Erlang = {
   // Start tuple_size/1
   "tuple_size/1": (tuple) => {
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "tuple_size",
+        [tuple],
+        "erl_erts_errors",
       );
     }
 
@@ -3580,25 +3705,29 @@ const Erlang = {
   // Start unique_integer/1
   // Simplified: always returns monotonic, positive integers regardless of modifiers.
   "unique_integer/1": (modifierList) => {
-    if (!Type.isList(modifierList)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "unique_integer",
+        [modifierList],
+        "erl_erts_errors",
       );
+    };
+
+    if (!Type.isList(modifierList)) {
+      raiseBadarg();
     }
 
     if (!Type.isProperList(modifierList)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
-      );
+      raiseBadarg();
     }
 
     const validModifiers = ["monotonic", "positive"];
 
     for (const modifier of modifierList.data) {
       if (!Type.isAtom(modifier) || !validModifiers.includes(modifier.value)) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
-        );
+        raiseBadarg();
       }
     }
 
@@ -3610,7 +3739,13 @@ const Erlang = {
   // Start xor/2
   "xor/2": (left, right) => {
     if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "xor",
+        [left, right],
+        "erl_erts_errors",
+      );
     }
 
     return Type.boolean(left.value != right.value);

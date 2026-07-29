@@ -25,6 +25,7 @@ const Erlang_Erl_Erts_Errors = {
 
     const texts = {
       bad_base: "not an integer in the range 2 through 36",
+      bad_time_unit: "invalid time unit",
       bad_encode_option: "not one of the atoms: latin1, utf8, or unicode",
       bad_ext_term: "invalid external representation of a term",
       bad_unicode: "invalid UTF8 encoding",
@@ -32,13 +33,18 @@ const Erlang_Erl_Erts_Errors = {
       not_atom: "not an atom",
       not_binary: "not a binary",
       not_bitstring: "not a bitstring",
+      not_cons: "not a nonempty list",
       not_float: "not a float",
+      not_fun: "not a fun",
       not_integer: "not an integer",
+      not_iodata: "not an iodata term",
       not_iolist: "not an iolist term",
       not_list: "not a list",
       not_map: "not a map",
       not_number: "not a number",
+      not_pid: "not a pid",
       not_proper_list: "not a proper list",
+      not_ref: "not a reference",
       not_string: "not a list of characters",
       not_tuple: "not a tuple",
       range: "out of range",
@@ -91,6 +97,41 @@ const Erlang_Erl_Erts_Errors = {
           !(elem.value >= 0xd800n && elem.value <= 0xdfffn),
       );
 
+    const mustBeAtom = (term) => (Type.isAtom(term) ? "" : "not_atom");
+
+    const mustBeInt = (term) => (Type.isInteger(term) ? "" : "not_integer");
+
+    const mustBeNonNegInt = (term) => {
+      if (!Type.isInteger(term)) {
+        return "not_integer";
+      }
+
+      return term.value >= 0n ? "" : "range";
+    };
+
+    // Mirrors OTP's must_be_time_unit/1, which probes the term with a
+    // convert_time_unit call - the client uses the non-raising validity
+    // check instead.
+    const mustBeTimeUnit = (term) =>
+      Erlang["_is_valid_time_unit/1"](term) ? "" : "bad_time_unit";
+
+    // Mirrors OTP's element clause, shared by the delete_element,
+    // insert_element, and setelement delegations.
+    const elementFragments = (index, tuple) => {
+      let indexError = "";
+
+      if (!Type.isInteger(index)) {
+        indexError = "not_integer";
+      } else if (
+        index.value <= 0n ||
+        (Type.isTuple(tuple) && index.value > BigInt(tuple.data.length))
+      ) {
+        indexError = "range";
+      }
+
+      return [indexError, Type.isTuple(tuple) ? "" : "not_tuple"];
+    };
+
     // Mirrors OTP's do_binary_to_atom/3. The unicode validity probe checks
     // whether the binary decodes as UTF-8.
     const doBinaryToAtom = (bin, encoding, defaultError) => {
@@ -114,6 +155,23 @@ const Erlang_Erl_Erts_Errors = {
     };
 
     switch (fun.value) {
+      case "abs":
+      case "float":
+      case "round":
+      case "trunc":
+        return ["not_number"];
+
+      case "append_element":
+        return ["not_tuple"];
+
+      case "apply": {
+        if (args?.length !== 3) {
+          return [];
+        }
+
+        return [mustBeAtom(args[0]), mustBeAtom(args[1]), mustBeList(args[2])];
+      }
+
       case "atom_to_binary": {
         if (args?.length === 1) {
           return ["not_atom"];
@@ -200,6 +258,32 @@ const Erlang_Erl_Erts_Errors = {
         return [mustBeBinary(args[0]), badBase];
       }
 
+      case "binary_part": {
+        if (args?.length !== 3) {
+          return [];
+        }
+
+        const [bin, pos, len] = args;
+
+        const errors = [
+          mustBeBinary(bin),
+          mustBeNonNegInt(pos),
+          mustBeInt(len),
+        ];
+
+        if (errors.some((error) => error !== "")) {
+          return errors;
+        }
+
+        Bitstring.maybeSetBytesFromText(bin);
+
+        if (pos.value > BigInt(bin.bytes.length)) {
+          return ["", "range"];
+        }
+
+        return ["", "", "range"];
+      }
+
       case "binary_to_list":
         return ["not_binary"];
 
@@ -219,26 +303,69 @@ const Erlang_Erl_Erts_Errors = {
       case "floor":
         return ["not_number"];
 
+      case "convert_time_unit": {
+        if (args?.length !== 3) {
+          return [];
+        }
+
+        return [
+          mustBeInt(args[0]),
+          mustBeTimeUnit(args[1]),
+          mustBeTimeUnit(args[2]),
+        ];
+      }
+
+      case "delete_element":
       case "element": {
         if (args?.length !== 2) {
           return [];
         }
 
-        const [index, tuple] = args;
+        return elementFragments(args[0], args[1]);
+      }
 
-        let indexError = "";
-
-        if (!Type.isInteger(index)) {
-          indexError = "not_integer";
-        } else if (
-          index.value <= 0n ||
-          (Type.isTuple(tuple) && index.value > BigInt(tuple.data.length))
-        ) {
-          indexError = "range";
+      case "fun_info": {
+        if (args?.length === 1) {
+          return ["not_fun"];
         }
 
-        return [indexError, Type.isTuple(tuple) ? "" : "not_tuple"];
+        if (args?.length !== 2) {
+          return [];
+        }
+
+        return Type.isAnonymousFunction(args[0])
+          ? ["", "invalid item"]
+          : ["not_fun"];
       }
+
+      case "function_exported":
+      case "make_fun": {
+        if (args?.length !== 3) {
+          return [];
+        }
+
+        return [
+          mustBeAtom(args[0]),
+          mustBeAtom(args[1]),
+          mustBeNonNegInt(args[2]),
+        ];
+      }
+
+      case "hd":
+      case "tl":
+        return ["not_cons"];
+
+      case "insert_element":
+      case "setelement": {
+        if (args?.length !== 3) {
+          return [];
+        }
+
+        return elementFragments(args[0], args[1]);
+      }
+
+      case "iolist_to_binary":
+        return ["not_iodata"];
 
       case "float_to_binary":
       case "float_to_list": {
@@ -348,6 +475,53 @@ const Erlang_Erl_Erts_Errors = {
       case "list_to_tuple":
         return ["not_list"];
 
+      case "make_tuple": {
+        if (args?.length !== 2) {
+          return [];
+        }
+
+        return ["range"];
+      }
+
+      case "monotonic_time":
+      case "system_time":
+      case "time_offset":
+        return ["bad_time_unit"];
+
+      case "pid_to_list":
+        return ["not_pid"];
+
+      case "ref_to_list":
+        return ["not_ref"];
+
+      case "split_binary": {
+        if (args?.length !== 2) {
+          return [];
+        }
+
+        const [bin, pos] = args;
+        const errors = [mustBeBinary(bin), mustBeNonNegInt(pos)];
+
+        if (errors.some((error) => error !== "")) {
+          return errors;
+        }
+
+        Bitstring.maybeSetBytesFromText(bin);
+
+        return pos.value > BigInt(bin.bytes.length) ? ["", "range"] : [];
+      }
+
+      case "system_info":
+        return ["invalid system info item"];
+
+      case "unique_integer": {
+        if (args?.length !== 1) {
+          return [];
+        }
+
+        return [mustBeList(args[0], "invalid modifier")];
+      }
+
       case "length":
         return ["not_list"];
 
@@ -359,6 +533,7 @@ const Erlang_Erl_Erts_Errors = {
         return Type.isMap(args[1]) ? ["not present in map"] : ["", "not_map"];
       }
 
+      case "tuple_size":
       case "tuple_to_list":
         return ["not_tuple"];
 
@@ -367,7 +542,7 @@ const Erlang_Erl_Erts_Errors = {
     }
   },
   // End _format_erlang_error/3
-  // Deps: []
+  // Deps: [:erlang._is_valid_time_unit/1]
 
   // Mirrors OTP's private format_error_map/3. Fragments map to argument
   // positions in order starting at the given number, and "" entries skip

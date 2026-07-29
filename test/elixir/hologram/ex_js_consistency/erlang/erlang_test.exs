@@ -19,6 +19,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   @moduletag :consistency
 
+  @erts_info [error_info: %{module: :erl_erts_errors}]
+
   describe "*/2" do
     test "float * float" do
       assert :erlang.*(2.0, 3.0) === 6.0
@@ -139,6 +141,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "raises ArgumentError if the first argument is an improper list" do
       assert_error ArgumentError, "argument error", {:erlang, :++, [[1 | 2], []]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.++(arg, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :++, [:abc, []], @erts_info}
+    end
   end
 
   describe "-/1" do
@@ -230,6 +245,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    "argument error",
                    {:erlang, :--, [[1, 2], :abc]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.--(arg, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :--, [:abc, []], @erts_info}
     end
   end
 
@@ -1346,6 +1374,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(1, "not a number"),
                    {:erlang, :abs, [:abc]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.abs(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :abs, [:abc], @erts_info}
+    end
   end
 
   describe "andalso/2" do
@@ -1387,6 +1428,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a tuple"),
                    {:erlang, :append_element, [:abc, 1]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.append_element(arg, :x)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :append_element, [:abc, :x], @erts_info}
     end
   end
 
@@ -1502,6 +1556,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error UndefinedFunctionError, expected_msg, fn ->
         :erlang.apply(Module1, :nonexistent_fun, [1, 2])
       end
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :erlang.apply(:m, :f, arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :apply, [:m, :f, :bad], @erts_info}
     end
   end
 
@@ -1747,6 +1814,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(3, "out of range"),
                    {:erlang, :binary_part, ["goldfish", 4, -5]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:a)
+
+      top_frame =
+        try do
+          :erlang.binary_part("abc", arg, 1)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :binary_part, ["abc", :a, 1], @erts_info}
     end
   end
 
@@ -3618,6 +3698,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(2, "invalid time unit"),
                    {:erlang, :convert_time_unit, [1, "second", :second]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:a)
+
+      top_frame =
+        try do
+          :erlang.convert_time_unit(arg, :second, :second)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :convert_time_unit, [:a, :second, :second], @erts_info}
+    end
   end
 
   describe "delete_element/2" do
@@ -3665,6 +3758,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "out of range"),
                    {:erlang, :delete_element, [-1, {5, 6, 7}]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:a)
+
+      top_frame =
+        try do
+          :erlang.delete_element(arg, :b)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :delete_element, [:a, :b], @erts_info}
     end
   end
 
@@ -3771,6 +3877,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "out of range"),
                    {:erlang, :element, [0, {5, 6, 7}]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:a)
+
+      top_frame =
+        try do
+          :erlang.element(arg, :b)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :element, [:a, :b], @erts_info}
     end
   end
 
@@ -4035,6 +4154,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a number"),
                    {:erlang, :float, [:abc]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.float(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :float, [:abc], @erts_info}
     end
   end
 
@@ -4725,6 +4857,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(1, "not a fun"),
                    {:erlang, :fun_info, [:abc]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.fun_info(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :fun_info, [:abc], @erts_info}
+    end
   end
 
   describe "fun_info/2" do
@@ -4857,6 +5002,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(3, "not an integer"),
                    {:erlang, :function_exported, [:erlang, :abs, 2.0]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(1)
+
+      top_frame =
+        try do
+          :erlang.function_exported(arg, :f, 1)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :function_exported, [1, :f, 1], @erts_info}
+    end
   end
 
   describe "hd/1" do
@@ -4874,6 +5032,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a nonempty list"),
                    {:erlang, :hd, [123]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.hd(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :hd, [:abc], @erts_info}
     end
   end
 
@@ -4924,6 +5095,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "out of range"),
                    {:erlang, :insert_element, [0, {1, 2}, :a]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:a)
+
+      top_frame =
+        try do
+          :erlang.insert_element(arg, :b, :c)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :insert_element, [:a, :b, :c], @erts_info}
     end
   end
 
@@ -5113,6 +5297,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not an iodata term"),
                    {:erlang, :iolist_to_binary, [[<<1::3>>]]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.iolist_to_binary(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :iolist_to_binary, [:abc], @erts_info}
     end
   end
 
@@ -5304,6 +5501,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a list"),
                    {:erlang, :length, [:abc]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.length(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :length, [:abc], @erts_info}
     end
   end
 
@@ -6115,6 +6325,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    "argument error",
                    {:erlang, :make_fun, [Module1, :fun_0, 256]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(1)
+
+      top_frame =
+        try do
+          :erlang.make_fun(arg, :f, -1)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :make_fun, [1, :f, -1], @erts_info}
+    end
   end
 
   describe "make_ref/0" do
@@ -6151,6 +6374,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "out of range"),
                    {:erlang, :make_tuple, [2.0, :a]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:a)
+
+      top_frame =
+        try do
+          :erlang.make_tuple(arg, :x)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :make_tuple, [:a, :x], @erts_info}
     end
   end
 
@@ -6238,6 +6474,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(1, "invalid time unit"),
                    {:erlang, :monotonic_time, [-1]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :erlang.monotonic_time(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :monotonic_time, [:bad], @erts_info}
+    end
   end
 
   # On the server, node/0 returns `nonode@nohost` if the node is not alive,
@@ -6261,6 +6510,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    "argument error",
                    {:erlang, :not, ["abc"]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(1)
+
+      top_frame =
+        try do
+          :erlang.not(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :not, [1], @erts_info}
     end
   end
 
@@ -6303,6 +6565,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a pid"),
                    {:erlang, :pid_to_list, [123]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.pid_to_list(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :pid_to_list, [:abc], @erts_info}
     end
   end
 
@@ -6466,6 +6741,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(1, "not a reference"),
                    {:erlang, :ref_to_list, [:abc]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.ref_to_list(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :ref_to_list, [:abc], @erts_info}
+    end
   end
 
   describe "rem/2" do
@@ -6623,6 +6911,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(1, "not a number"),
                    {:erlang, :round, [:abc]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.round(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :round, [:abc], @erts_info}
+    end
   end
 
   describe "setelement/3" do
@@ -6660,6 +6961,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "out of range"),
                    {:erlang, :setelement, [0, {1, 2}, :a]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(0)
+
+      top_frame =
+        try do
+          :erlang.setelement(arg, {:a}, :x)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :setelement, [0, {:a}, :x], @erts_info}
     end
   end
 
@@ -6731,6 +7045,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(2, "out of range"),
                    {:erlang, :split_binary, ["abc", 4]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:a)
+
+      top_frame =
+        try do
+          :erlang.split_binary(arg, 1)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :split_binary, [:a, 1], @erts_info}
+    end
   end
 
   describe "system_info/1" do
@@ -6754,6 +7081,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "invalid system info item"),
                    {:erlang, :system_info, [123]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(1)
+
+      top_frame =
+        try do
+          :erlang.system_info(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :system_info, [1], @erts_info}
     end
   end
 
@@ -6858,6 +7198,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(1, "invalid time unit"),
                    {:erlang, :time_offset, [-1]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :erlang.time_offset(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :time_offset, [:bad], @erts_info}
+    end
   end
 
   describe "tl/1" do
@@ -6879,6 +7232,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "improper list, 3 items" do
       assert :erlang.tl([1, 2 | 3]) == [2 | 3]
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.tl(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :tl, [:abc], @erts_info}
     end
   end
 
@@ -6924,6 +7290,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(1, "not a number"),
                    {:erlang, :trunc, [:abc]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.trunc(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :trunc, [:abc], @erts_info}
+    end
   end
 
   describe "tuple_size/1" do
@@ -6939,6 +7318,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a tuple"),
                    {:erlang, :tuple_size, [:abc]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.tuple_size(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :tuple_size, [:abc], @erts_info}
     end
   end
 
@@ -7044,6 +7436,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(1, "invalid modifier"),
                    {:erlang, :unique_integer, [[:invalid]]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :erlang.unique_integer(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :unique_integer, [:bad], @erts_info}
+    end
   end
 
   describe "xor/2" do
@@ -7069,6 +7474,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the second argument is not a boolean" do
       assert_error ArgumentError, "argument error", {:erlang, :xor, [true, :abc]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(1)
+
+      top_frame =
+        try do
+          :erlang.xor(arg, true)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :xor, [1, true], @erts_info}
     end
   end
 end

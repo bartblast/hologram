@@ -1,6 +1,7 @@
 "use strict";
 
 import Erlang from "./erlang.mjs";
+import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
 // IMPORTANT!
@@ -20,13 +21,19 @@ const Erlang_Os = {
   // Start system_time/1
   // See: docs/erlang_time_functions_porting_strategy.md
   "system_time/1": (unit) => {
-    Erlang["_validate_time_unit/2"](unit, 1);
+    // TODO: raise through the erlang system_time identity once os.mjs
+    // raise sites migrate to BEAM reasons.
+    if (!Erlang["_is_valid_time_unit/1"](unit)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    }
     const nativeTime = Erlang_Os["system_time/0"]();
 
     return Erlang["convert_time_unit/3"](nativeTime, Type.atom("native"), unit);
   },
   // End system_time/1
-  // Deps: [:erlang._validate_time_unit/2, :erlang.convert_time_unit/3, :os.system_time/0]
+  // Deps: [:erlang._is_valid_time_unit/1, :erlang.convert_time_unit/3, :os.system_time/0]
 
   // Start type/0
   // Hardcoded {:unix, :web} - unlike Erlang, Hologram runtime is sandboxed from the underlying OS.

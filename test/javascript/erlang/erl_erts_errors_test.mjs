@@ -966,6 +966,454 @@ describe("Erlang_Erl_Erts_Errors", () => {
       );
     });
 
+    it("erlang abs: not a number", () => {
+      const stacktrace = erlangStacktrace("abs", Type.list([Type.atom("a")]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a number")]]),
+      );
+    });
+
+    it("erlang append_element: not a tuple", () => {
+      const stacktrace = erlangStacktrace(
+        "append_element",
+        Type.list([Type.atom("a"), Type.atom("b")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a tuple")]]),
+      );
+    });
+
+    it("erlang apply: bad module and args", () => {
+      const stacktrace = erlangStacktrace(
+        "apply",
+        Type.list([Type.integer(1), Type.atom("f"), Type.atom("bad")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not an atom")],
+          [Type.integer(3), Type.bitstring("not a list")],
+        ]),
+      );
+    });
+
+    it("erlang binary_part: bad positions", () => {
+      const stacktrace = erlangStacktrace(
+        "binary_part",
+        Type.list([Type.bitstring("abc"), Type.atom("a"), Type.atom("b")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(2), Type.bitstring("not an integer")],
+          [Type.integer(3), Type.bitstring("not an integer")],
+        ]),
+      );
+    });
+
+    it("erlang binary_part: start out of range", () => {
+      const stacktrace = erlangStacktrace(
+        "binary_part",
+        Type.list([Type.bitstring("abc"), Type.integer(5), Type.integer(1)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("out of range")]]),
+      );
+    });
+
+    it("erlang binary_part: length out of range", () => {
+      const stacktrace = erlangStacktrace(
+        "binary_part",
+        Type.list([Type.bitstring("abc"), Type.integer(1), Type.integer(5)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(3), Type.bitstring("out of range")]]),
+      );
+    });
+
+    it("erlang convert_time_unit: bad time and unit", () => {
+      const stacktrace = erlangStacktrace(
+        "convert_time_unit",
+        Type.list([Type.atom("a"), Type.atom("second"), Type.atom("bad")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not an integer")],
+          [Type.integer(3), Type.bitstring("invalid time unit")],
+        ]),
+      );
+    });
+
+    it("erlang delete_element delegates to the element clause", () => {
+      const stacktrace = erlangStacktrace(
+        "delete_element",
+        Type.list([Type.atom("a"), Type.atom("b")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not an integer")],
+          [Type.integer(2), Type.bitstring("not a tuple")],
+        ]),
+      );
+    });
+
+    it("erlang float: not a number", () => {
+      const stacktrace = erlangStacktrace("float", Type.list([Type.atom("a")]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a number")]]),
+      );
+    });
+
+    it("erlang fun_info: not a fun", () => {
+      const stacktrace = erlangStacktrace(
+        "fun_info",
+        Type.list([Type.integer(1)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a fun")]]),
+      );
+    });
+
+    it("erlang function_exported: bad args", () => {
+      const stacktrace = erlangStacktrace(
+        "function_exported",
+        Type.list([Type.integer(1), Type.integer(2), Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not an atom")],
+          [Type.integer(2), Type.bitstring("not an atom")],
+          [Type.integer(3), Type.bitstring("not an integer")],
+        ]),
+      );
+    });
+
+    it("erlang hd: not a nonempty list", () => {
+      const stacktrace = erlangStacktrace("hd", Type.list([Type.atom("a")]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a nonempty list")]]),
+      );
+    });
+
+    it("erlang insert_element delegates to the element clause", () => {
+      const stacktrace = erlangStacktrace(
+        "insert_element",
+        Type.list([Type.atom("a"), Type.atom("b"), Type.atom("c")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not an integer")],
+          [Type.integer(2), Type.bitstring("not a tuple")],
+        ]),
+      );
+    });
+
+    it("erlang iolist_to_binary: not an iodata term", () => {
+      const stacktrace = erlangStacktrace(
+        "iolist_to_binary",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not an iodata term")]]),
+      );
+    });
+
+    it("erlang make_fun: bad args", () => {
+      const stacktrace = erlangStacktrace(
+        "make_fun",
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(-1)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not an atom")],
+          [Type.integer(2), Type.bitstring("not an atom")],
+          [Type.integer(3), Type.bitstring("out of range")],
+        ]),
+      );
+    });
+
+    it("erlang make_tuple/2: bad arity", () => {
+      const stacktrace = erlangStacktrace(
+        "make_tuple",
+        Type.list([Type.atom("a"), Type.atom("b")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("out of range")]]),
+      );
+    });
+
+    it("erlang monotonic_time: invalid time unit", () => {
+      const stacktrace = erlangStacktrace(
+        "monotonic_time",
+        Type.list([Type.atom("bad")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("invalid time unit")]]),
+      );
+    });
+
+    it("erlang pid_to_list: not a pid", () => {
+      const stacktrace = erlangStacktrace(
+        "pid_to_list",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a pid")]]),
+      );
+    });
+
+    it("erlang ref_to_list: not a reference", () => {
+      const stacktrace = erlangStacktrace(
+        "ref_to_list",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a reference")]]),
+      );
+    });
+
+    it("erlang round: not a number", () => {
+      const stacktrace = erlangStacktrace("round", Type.list([Type.atom("a")]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a number")]]),
+      );
+    });
+
+    it("erlang setelement delegates to the element clause", () => {
+      const stacktrace = erlangStacktrace(
+        "setelement",
+        Type.list([
+          Type.integer(0),
+          Type.tuple([Type.atom("a")]),
+          Type.atom("x"),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("out of range")]]),
+      );
+    });
+
+    it("erlang split_binary: bad args", () => {
+      const stacktrace = erlangStacktrace(
+        "split_binary",
+        Type.list([Type.atom("a"), Type.integer(-1)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not a binary")],
+          [Type.integer(2), Type.bitstring("out of range")],
+        ]),
+      );
+    });
+
+    it("erlang split_binary: position out of range", () => {
+      const stacktrace = erlangStacktrace(
+        "split_binary",
+        Type.list([Type.bitstring("abc"), Type.integer(5)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("out of range")]]),
+      );
+    });
+
+    it("erlang system_info: invalid item", () => {
+      const stacktrace = erlangStacktrace(
+        "system_info",
+        Type.list([Type.atom("bad")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("invalid system info item")],
+        ]),
+      );
+    });
+
+    it("erlang system_time: invalid time unit", () => {
+      const stacktrace = erlangStacktrace(
+        "system_time",
+        Type.list([Type.atom("bad")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("invalid time unit")]]),
+      );
+    });
+
+    it("erlang time_offset: invalid time unit", () => {
+      const stacktrace = erlangStacktrace(
+        "time_offset",
+        Type.list([Type.atom("bad")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("invalid time unit")]]),
+      );
+    });
+
+    it("erlang tl: not a nonempty list", () => {
+      const stacktrace = erlangStacktrace("tl", Type.list([Type.list()]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a nonempty list")]]),
+      );
+    });
+
+    it("erlang trunc: not a number", () => {
+      const stacktrace = erlangStacktrace("trunc", Type.list([Type.atom("a")]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a number")]]),
+      );
+    });
+
+    it("erlang tuple_size: not a tuple", () => {
+      const stacktrace = erlangStacktrace(
+        "tuple_size",
+        Type.list([Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a tuple")]]),
+      );
+    });
+
+    it("erlang unique_integer: not a list", () => {
+      const stacktrace = erlangStacktrace(
+        "unique_integer",
+        Type.list([Type.atom("bad")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a list")]]),
+      );
+    });
+
+    it("erlang unique_integer: invalid modifier", () => {
+      const stacktrace = erlangStacktrace(
+        "unique_integer",
+        Type.list([Type.list([Type.atom("bad")])]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("invalid modifier")]]),
+      );
+    });
+
     it("raises FunctionClauseError when the stacktrace is empty", () => {
       const stacktrace = Type.list();
 
