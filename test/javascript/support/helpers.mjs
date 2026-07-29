@@ -491,6 +491,38 @@ export function defineRuntimeGlobals() {
   defineGlobalModule("Elixir_Enum", defineElixirEnumModule());
   defineGlobalModule("Elixir_Exception", defineElixirExceptionModule());
 
+  defineGlobalModule("Elixir_FunctionClauseError", {
+    // Mirrors FunctionClauseError.message/1: an eager message passes
+    // through, otherwise the header names the formatted MFA and non-nil
+    // args add the listing of the arguments given to the failed call.
+    "message/1": (struct) => {
+      const messageEntry = struct.data["atom(message)"];
+
+      if (messageEntry !== undefined) {
+        return messageEntry[1];
+      }
+
+      const module = struct.data["atom(module)"][1];
+      const functionName = struct.data["atom(function)"][1].value;
+      const arity = struct.data["atom(arity)"][1].value;
+      const args = struct.data["atom(args)"][1];
+
+      const mfa = `${Interpreter.inspect(module)}.${functionName}/${arity}`;
+
+      let argsInfo = "";
+
+      if (!Type.isNil(args)) {
+        argsInfo = args.data.reduce(
+          (acc, arg, idx) =>
+            `${acc}\n    # ${idx + 1}\n    ${Interpreter.inspect(arg)}\n`,
+          `\n\nThe following arguments were given to ${mfa}:\n`,
+        );
+      }
+
+      return Type.bitstring(`no function clause matching in ${mfa}${argsInfo}`);
+    },
+  });
+
   defineGlobalModule(
     "Elixir_Hologram_Router_Helpers",
     defineElixirHologramRouterHelpersModule(),

@@ -9245,6 +9245,31 @@ describe("Interpreter", () => {
         "(ArgumentError) errors were found at the given arguments:\n\n  * 4th argument: invalid options\n",
       );
     });
+
+    it("omits error_info when the format module is null", () => {
+      const args = [Type.atom("a"), Type.list()];
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError("badarg", "erlang", "++", args, null);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "erlang",
+          function: "++",
+          arityOrArgs: Type.list(args),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+
+      assert.equal(caught.message, "(ArgumentError) argument error");
+    });
   });
 
   it("raiseCaseClauseError()", () => {
@@ -9353,6 +9378,114 @@ describe("Interpreter", () => {
       assert.equal(
         caught.message,
         "(BadMapError) expected a map, got:\n\n    :b\n",
+      );
+    });
+  });
+
+  describe("raiseFunctionClauseError()", () => {
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    it("replaces the function's own frame with an args-bearing raising frame", () => {
+      const callerFrame = {
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      };
+
+      const ownFrame = {
+        module: "sets",
+        function: "filter",
+        arityOrArgs: 2,
+        file: null,
+        line: null,
+        errorInfo: null,
+      };
+
+      CallStack.push(callerFrame);
+      CallStack.push(ownFrame);
+
+      const args = [Type.atom("a"), Type.atom("b")];
+
+      let caught;
+
+      try {
+        Interpreter.raiseFunctionClauseError("sets", "filter", 2, args);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "sets",
+          function: "filter",
+          arityOrArgs: Type.list(args),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+        callerFrame,
+      ]);
+
+      assert.deepStrictEqual(
+        caught.value,
+        Type.struct("FunctionClauseError", [
+          [Type.atom("__exception__"), Type.boolean(true)],
+          [Type.atom("args"), Type.list(args)],
+          [Type.atom("arity"), Type.integer(2)],
+          [Type.atom("clauses"), Type.nil()],
+          [Type.atom("function"), Type.atom("filter")],
+          [Type.atom("kind"), Type.nil()],
+          [Type.atom("module"), Type.atom("sets")],
+        ]),
+      );
+
+      assert.equal(
+        caught.message,
+        "(FunctionClauseError) no function clause matching in :sets.filter/2\n\nThe following arguments were given to :sets.filter/2:\n\n    # 1\n    :a\n\n    # 2\n    :b\n",
+      );
+    });
+
+    it("carries the bare arity when args are not given", () => {
+      let caught;
+
+      try {
+        Interpreter.raiseFunctionClauseError("sets", "fold", 3);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "sets",
+          function: "fold",
+          arityOrArgs: 3,
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+
+      assert.deepStrictEqual(
+        caught.value,
+        Type.struct("FunctionClauseError", [
+          [Type.atom("__exception__"), Type.boolean(true)],
+          [Type.atom("args"), Type.nil()],
+          [Type.atom("arity"), Type.integer(3)],
+          [Type.atom("clauses"), Type.nil()],
+          [Type.atom("function"), Type.atom("fold")],
+          [Type.atom("kind"), Type.nil()],
+          [Type.atom("module"), Type.atom("sets")],
+        ]),
+      );
+
+      assert.equal(
+        caught.message,
+        "(FunctionClauseError) no function clause matching in :sets.fold/3",
       );
     });
   });

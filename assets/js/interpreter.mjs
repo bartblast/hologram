@@ -992,6 +992,8 @@ export default class Interpreter {
   // plain array of boxed terms. A non-null cause is an unboxed atom planted
   // as the error_info map's cause entry, refining the formatter's diagnosis
   // the way OTP raise sites do (e.g. :binary.replace/4 planting :badopt).
+  // A null format module omits the error_info entry entirely, for raising
+  // identities whose format module isn't carried by the client runtime.
   static raiseBifError(
     reason,
     module,
@@ -1000,13 +1002,17 @@ export default class Interpreter {
     formatModule = "erl_stdlib_errors",
     cause = null,
   ) {
-    const errorInfoData = [[Type.atom("module"), Type.atom(formatModule)]];
+    let errorInfo = null;
 
-    if (cause !== null) {
-      errorInfoData.push([Type.atom("cause"), Type.atom(cause)]);
+    if (formatModule !== null) {
+      const errorInfoData = [[Type.atom("module"), Type.atom(formatModule)]];
+
+      if (cause !== null) {
+        errorInfoData.push([Type.atom("cause"), Type.atom(cause)]);
+      }
+
+      errorInfo = Type.map(errorInfoData);
     }
-
-    const errorInfo = Type.map(errorInfoData);
 
     const raisingFrame = {
       module,
@@ -1053,6 +1059,43 @@ export default class Interpreter {
     const error = new HologramBoxedError(Interpreter.#boxErrorReason(reason));
 
     error.stacktrace = error.stacktrace.slice(1);
+    error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
+
+    throw error;
+  }
+
+  // Raises a FunctionClauseError attributed the way the BEAM reports a
+  // clause mismatch in an Erlang stdlib function: the raising frame carries
+  // the given identity with the args (the BEAM puts the failed call's args
+  // in the raising frame), or the bare arity when the server-side args are
+  // not representable on the client. The struct carries the same identity
+  // as semantic fields, so its transpiled message/1 callback derives the
+  // text, including the argument listing. The raising frame stands in place
+  // of the port function's own dispatch frame, which also lets it carry a
+  // different identity (e.g. :sets.union/2 reporting :sets.size/1).
+  static raiseFunctionClauseError(module, functionName, arity, args = null) {
+    const struct = Type.struct("FunctionClauseError", [
+      [Type.atom("__exception__"), Type.boolean(true)],
+      [Type.atom("args"), args === null ? Type.nil() : Type.list(args)],
+      [Type.atom("arity"), Type.integer(arity)],
+      [Type.atom("clauses"), Type.nil()],
+      [Type.atom("function"), Type.atom(functionName)],
+      [Type.atom("kind"), Type.nil()],
+      [Type.atom("module"), Type.atom(module)],
+    ]);
+
+    const raisingFrame = {
+      module,
+      function: functionName,
+      arityOrArgs: args === null ? arity : Type.list(args),
+      file: null,
+      line: null,
+      errorInfo: null,
+    };
+
+    const error = new HologramBoxedError(struct);
+
+    error.stacktrace = [raisingFrame, ...error.stacktrace.slice(1)];
     error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
 
     throw error;
