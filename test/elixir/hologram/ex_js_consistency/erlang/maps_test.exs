@@ -100,8 +100,10 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         * 3rd argument: not a map or an iterator
       """
 
+      invalid_fun = wrap_term(fn x -> x end)
+
       assert_error ArgumentError, expected_message, fn ->
-        :maps.fold(wrap_term(fn x -> x end), 0, :b)
+        :maps.fold(invalid_fun, 0, :b)
       end
     end
   end
@@ -132,9 +134,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info" do
+      improper_list = wrap_term([1 | 2])
+
       top_frame =
         try do
-          :maps.from_keys(wrap_term([1 | 2]), :a)
+          :maps.from_keys(improper_list, :a)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -397,8 +401,10 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         * 3rd argument: not a map
       """
 
+      invalid_fun = wrap_term(fn x -> x end)
+
       assert_error ArgumentError, expected_message, fn ->
-        :maps.intersect_with(wrap_term(fn x -> x end), :a, :b)
+        :maps.intersect_with(invalid_fun, :a, :b)
       end
     end
   end
@@ -580,8 +586,10 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         * 2nd argument: not a map or an iterator
       """
 
+      invalid_fun = wrap_term(fn x -> x end)
+
       assert_error ArgumentError, expected_message, fn ->
-        :maps.map(wrap_term(fn x -> x end), :b)
+        :maps.map(invalid_fun, :b)
       end
     end
   end
@@ -612,9 +620,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info" do
+      map1 = wrap_term(:a)
+
       top_frame =
         try do
-          :maps.merge(wrap_term(:a), :b)
+          :maps.merge(map1, :b)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -734,8 +744,10 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         * 3rd argument: not a map
       """
 
+      invalid_fun = wrap_term(fn x -> x end)
+
       assert_error ArgumentError, expected_message, fn ->
-        :maps.merge_with(wrap_term(fn x -> x end), :a, :b)
+        :maps.merge_with(invalid_fun, :a, :b)
       end
     end
   end
@@ -790,7 +802,9 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "returns a key-value tuple without validating its tail" do
-      assert :maps.next(wrap_term({1, 2, 3})) == {1, 2, 3}
+      iter = wrap_term({1, 2, 3})
+
+      assert :maps.next(iter) == {1, 2, 3}
     end
 
     test "not an iterator" do
@@ -800,15 +814,19 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises ArgumentError for an improper list that is not a path iterator" do
+      iter = wrap_term([1 | 2])
+
       assert_error ArgumentError, build_argument_error_msg(1, "not a valid iterator"), fn ->
-        :maps.next(wrap_term([1 | 2]))
+        :maps.next(iter)
       end
     end
 
     test "error frame carries args and error_info" do
+      iter = wrap_term(:a)
+
       top_frame =
         try do
-          :maps.next(wrap_term(:a))
+          :maps.next(iter)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end

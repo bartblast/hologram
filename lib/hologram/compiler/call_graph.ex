@@ -1388,7 +1388,7 @@ defmodule Hologram.Compiler.CallGraph do
         %IR.TupleType{
           data: [%IR.AtomType{value: :error_info}, %IR.MapType{data: pairs}]
         } ->
-          pairs
+          {:ok, pairs}
 
         _option ->
           nil
@@ -1400,7 +1400,7 @@ defmodule Hologram.Compiler.CallGraph do
         module when is_atom(module) -> module
       end
 
-    with pairs when not is_nil(pairs) <- error_info_pairs,
+    with {:ok, pairs} <- error_info_pairs,
          {:ok, format_module} <- resolve_error_info_key(pairs, :module, default_module),
          {:ok, format_function} <- resolve_error_info_key(pairs, :function, :format_error) do
       add_edge(call_graph, from_vertex, {format_module, format_function, 2})
@@ -1557,8 +1557,9 @@ defmodule Hologram.Compiler.CallGraph do
     found = Enum.find(pairs, fn {k, _v} -> match?(%IR.AtomType{value: ^key}, k) end)
 
     case found do
-      nil when not is_nil(default) -> {:ok, default}
       {_key_ir, %IR.AtomType{value: value}} -> {:ok, value}
+      nil when is_nil(default) -> :error
+      nil -> {:ok, default}
       _fallback -> :error
     end
   end
