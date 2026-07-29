@@ -274,6 +274,7 @@ describe("Elixir_String", () => {
         );
       });
     });
+
     it("error frame carries args", () => {
       let caught;
 
@@ -444,6 +445,7 @@ describe("Elixir_String", () => {
         "String.downcase/2 modes other than :default are not yet implemented in Hologram",
       );
     });
+
     it("error frame carries args", () => {
       let caught;
 
@@ -564,6 +566,7 @@ describe("Elixir_String", () => {
         );
       });
     });
+
     it("error frame carries args", () => {
       let caught;
 
@@ -629,6 +632,7 @@ describe("Elixir_String", () => {
         Interpreter.buildFunctionClauseErrorMsg("String.trim/1", [atom]),
       );
     });
+
     it("error frame carries args", () => {
       let caught;
 
@@ -750,6 +754,7 @@ describe("Elixir_String", () => {
         "String.upcase/2 modes other than :default are not yet implemented in Hologram",
       );
     });
+
     it("error frame carries args", () => {
       let caught;
 

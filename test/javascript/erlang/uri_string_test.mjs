@@ -647,6 +647,7 @@ describe("Erlang_Uri_String", () => {
         ),
       );
     });
+
     it("error frame carries args", () => {
       let caught;
 
