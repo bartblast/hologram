@@ -8,6 +8,46 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Lists = {
+  // Mirrors the server's private do_flatten/2, threading the flattened
+  // continuation through the recursion the way the Erlang clauses do: nested
+  // lists are flattened innermost-first from the right, so the rightmost
+  // improper cell fails first, with the continuation built so far as the
+  // second arg.
+  // Start _do_flatten/2
+  "_do_flatten/2": (term, tail) => {
+    if (!Type.isList(term)) {
+      Interpreter.raiseFunctionClauseError("lists", "do_flatten", 2, [
+        term,
+        tail,
+      ]);
+    }
+
+    if (!term.isProper) {
+      Interpreter.raiseFunctionClauseError("lists", "do_flatten", 2, [
+        term.data.at(-1),
+        tail,
+      ]);
+    }
+
+    let result = tail;
+
+    for (let i = term.data.length - 1; i >= 0; i--) {
+      const elem = term.data[i];
+
+      if (Type.isList(elem)) {
+        result = Erlang_Lists["_do_flatten/2"](elem, result);
+      } else {
+        result = result.isProper
+          ? Type.list([elem, ...result.data])
+          : Type.improperList([elem, ...result.data]);
+      }
+    }
+
+    return result;
+  },
+  // End _do_flatten/2
+  // Deps: []
+
   // Start all/2
   "all/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
@@ -79,12 +119,7 @@ const Erlang_Lists = {
   // Start duplicate/2
   "duplicate/2": (n, elem) => {
     if (!Type.isInteger(n) || n.value < 0n) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.duplicate/2", [
-          n,
-          elem,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "duplicate", 2, [n, elem]);
     }
 
     const count = Number(n.value);
@@ -185,49 +220,24 @@ const Erlang_Lists = {
   // Start flatten/1
   "flatten/1": (list) => {
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.flatten/1", [list]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "flatten", 1, [list]);
     }
 
-    if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.flatten/1", [list]),
-      );
-    }
-
-    const data = list.data.reduce((acc, elem) => {
-      if (Type.isList(elem)) {
-        elem = Erlang_Lists["flatten/1"](elem);
-        return acc.concat(elem.data);
-      } else {
-        return acc.concat(elem);
-      }
-    }, []);
-
-    return Type.list(data);
+    return Erlang_Lists["_do_flatten/2"](list, Type.list());
   },
   // End flatten/1
-  // Deps: []
+  // Deps: [:lists._do_flatten/2]
 
   // Start flatten/2
   "flatten/2": (list, tail) => {
-    if (!Type.isList(list) || !Type.isProperList(list) || !Type.isList(tail)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.flatten/2", [
-          list,
-          tail,
-        ]),
-      );
+    if (!Type.isList(list) || !Type.isList(tail)) {
+      Interpreter.raiseFunctionClauseError("lists", "flatten", 2, [list, tail]);
     }
 
-    const flattened = Erlang_Lists["flatten/1"](list);
-    const data = flattened.data.concat(Type.isList(tail) ? tail.data : [tail]);
-
-    return Type.isProperList(tail) ? Type.list(data) : Type.improperList(data);
+    return Erlang_Lists["_do_flatten/2"](list, tail);
   },
   // End flatten/2
-  // Deps: [:lists.flatten/1]
+  // Deps: [:lists._do_flatten/2]
 
   // Start foldl/3
   "foldl/3": (fun, initialAcc, list) => {
@@ -341,35 +351,23 @@ const Erlang_Lists = {
   // Deps: []
 
   // Start keydelete/3
-  "keydelete/3": function (key, index, tuples) {
-    if (!Type.isInteger(index)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.keydelete/3",
-          arguments,
-        ),
-      );
-    }
-
-    if (index.value < 1n) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.keydelete/3",
-          arguments,
-        ),
-      );
+  "keydelete/3": (key, index, tuples) => {
+    if (!Type.isInteger(index) || index.value < 1n) {
+      Interpreter.raiseFunctionClauseError("lists", "keydelete", 3, [
+        key,
+        index,
+        tuples,
+      ]);
     }
 
     if (!Type.isProperList(tuples)) {
       const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
 
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", [
-          key,
-          index,
-          thirdArg,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "keydelete3", 3, [
+        key,
+        index,
+        thirdArg,
+      ]);
     }
 
     let result = tuples.data;
@@ -448,27 +446,25 @@ const Erlang_Lists = {
   // Deps: [:lists.keyfind/3]
 
   // Start keyreplace/4
-  "keyreplace/4": function (key, index, tuples, newTuple) {
+  "keyreplace/4": (key, index, tuples, newTuple) => {
     if (!Type.isInteger(index) || index.value < 1n || !Type.isTuple(newTuple)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.keyreplace/4",
-          arguments,
-        ),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "keyreplace", 4, [
+        key,
+        index,
+        tuples,
+        newTuple,
+      ]);
     }
 
     if (!Type.isProperList(tuples)) {
       const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
 
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace3/4", [
-          key,
-          index,
-          thirdArg,
-          newTuple,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "keyreplace3", 4, [
+        key,
+        index,
+        thirdArg,
+        newTuple,
+      ]);
     }
 
     let resultData = tuples.data;
@@ -498,12 +494,10 @@ const Erlang_Lists = {
   // Start keysort/2
   "keysort/2": (index, tuples) => {
     if (!Type.isInteger(index) || index.value <= 0n) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
-          index,
-          tuples,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "keysort", 2, [
+        index,
+        tuples,
+      ]);
     }
 
     if (!Type.isList(tuples)) {
@@ -514,11 +508,13 @@ const Erlang_Lists = {
       if (tuples.data.length === 2) {
         Interpreter.raiseCaseClauseError(tuples);
       } else if (tuples.data.every((item) => Type.isTuple(item))) {
-        // Client-side error message is intentionally simplified.
-        Interpreter.raiseFunctionClauseErrorMsg(
-          Interpreter.buildFunctionClauseErrorMsg(":lists.keysplit_1/8"),
-        );
+        // The server's keysplit frame args carry the sort's in-progress
+        // state, which the client doesn't mirror, so the frame carries the
+        // bare arity.
+        Interpreter.raiseFunctionClauseError("lists", "keysplit_1", 8);
       } else {
+        // TODO: raise through the erl_erts_errors error_info once the client
+        // carries that format module.
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
         );
@@ -542,24 +538,25 @@ const Erlang_Lists = {
   // Deps: [:erlang.element/2]
 
   // Start keystore/4
-  "keystore/4": function (key, index, tuples, newTuple) {
+  "keystore/4": (key, index, tuples, newTuple) => {
     if (!Type.isInteger(index) || index.value < 1n || !Type.isTuple(newTuple)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keystore/4", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "keystore", 4, [
+        key,
+        index,
+        tuples,
+        newTuple,
+      ]);
     }
 
     if (!Type.isProperList(tuples)) {
       const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
 
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keystore2/4", [
-          key,
-          index,
-          thirdArg,
-          newTuple,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "keystore2", 4, [
+        key,
+        index,
+        thirdArg,
+        newTuple,
+      ]);
     }
 
     for (let i = 0; i < tuples.data.length; i++) {
@@ -586,21 +583,29 @@ const Erlang_Lists = {
   // Deps: []
 
   // Start keytake/3
-  "keytake/3": function (key, index, tuples) {
+  "keytake/3": (key, index, tuples) => {
     if (!Type.isInteger(index) || index.value < 1n) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/3", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "keytake", 3, [
+        key,
+        index,
+        tuples,
+      ]);
     }
 
-    if (!Type.isProperList(tuples)) {
-      // Client-side error message is intentionally simplified.
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/4"),
-      );
+    if (!Type.isList(tuples)) {
+      Interpreter.raiseFunctionClauseError("lists", "keytake", 4, [
+        key,
+        index,
+        tuples,
+        Type.list(),
+      ]);
     }
 
-    for (let i = 0; i < tuples.data.length; i++) {
+    const properLength = tuples.isProper
+      ? tuples.data.length
+      : tuples.data.length - 1;
+
+    for (let i = 0; i < properLength; i++) {
       const tuple = tuples.data[i];
 
       if (
@@ -608,9 +613,33 @@ const Erlang_Lists = {
         tuple.data.length >= index.value &&
         Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
       ) {
-        const rest = [...tuples.data.slice(0, i), ...tuples.data.slice(i + 1)];
-        return Type.tuple([Type.atom("value"), tuple, Type.list(rest)]);
+        const restData = [
+          ...tuples.data.slice(0, i),
+          ...tuples.data.slice(i + 1),
+        ];
+
+        let rest;
+
+        if (tuples.isProper) {
+          rest = Type.list(restData);
+        } else {
+          rest =
+            restData.length === 1 ? restData[0] : Type.improperList(restData);
+        }
+
+        return Type.tuple([Type.atom("value"), tuple, rest]);
       }
+    }
+
+    // The server accumulates the visited tuples in reverse, so an improper
+    // list without a match fails with the tail and that accumulator.
+    if (!tuples.isProper) {
+      Interpreter.raiseFunctionClauseError("lists", "keytake", 4, [
+        key,
+        index,
+        tuples.data.at(-1),
+        Type.list(tuples.data.slice(0, -1).toReversed()),
+      ]);
     }
 
     return Type.boolean(false);
@@ -708,25 +737,28 @@ const Erlang_Lists = {
   // Start max/1
   "max/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.max/1", [list]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "max", 1, [list]);
     }
 
-    // Notice that the error message says :lists.max/2 (not :lists.max/1)
-    // :lists.max/2 is (probably) a private Erlang function that get's called by :lists.max/1
-    if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.max/2", [list]),
-      );
-    }
+    const properLength = list.isProper
+      ? list.data.length
+      : list.data.length - 1;
 
     let max = list.data[0];
 
-    for (let i = 1; i < list.data.length; i++) {
+    for (let i = 1; i < properLength; i++) {
       if (Interpreter.compareTerms(list.data[i], max) > 0) {
         max = list.data[i];
       }
+    }
+
+    // The server threads the running maximum through max/2, so an improper
+    // list fails there with the tail and the maximum found so far.
+    if (!list.isProper) {
+      Interpreter.raiseFunctionClauseError("lists", "max", 2, [
+        list.data.at(-1),
+        max,
+      ]);
     }
 
     return max;
@@ -768,25 +800,28 @@ const Erlang_Lists = {
   // Start min/1
   "min/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.min/1", [list]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "min", 1, [list]);
     }
 
-    // Notice that the error message says :lists.min/2 (not :lists.min/1)
-    // :lists.min/2 is (probably) a private Erlang function that get's called by :lists.min/1
-    if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.min/2", [list]),
-      );
-    }
+    const properLength = list.isProper
+      ? list.data.length
+      : list.data.length - 1;
 
     let min = list.data[0];
 
-    for (let i = 1; i < list.data.length; i++) {
+    for (let i = 1; i < properLength; i++) {
       if (Interpreter.compareTerms(list.data[i], min) < 0) {
         min = list.data[i];
       }
+    }
+
+    // The server threads the running minimum through min/2, so an improper
+    // list fails there with the tail and the minimum found so far.
+    if (!list.isProper) {
+      Interpreter.raiseFunctionClauseError("lists", "min", 2, [
+        list.data.at(-1),
+        min,
+      ]);
     }
 
     return min;
@@ -797,12 +832,10 @@ const Erlang_Lists = {
   // Start prefix/2
   "prefix/2": (list1, list2) => {
     if (!Type.isList(list1) || !Type.isList(list2)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
-          list1,
-          list2,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "prefix", 2, [
+        list1,
+        list2,
+      ]);
     }
 
     const length1 = list1.data.length;
@@ -828,12 +861,10 @@ const Erlang_Lists = {
         (length1 === index + 1 && Type.isImproperList(list1)) ||
         (length2 === index + 1 && Type.isImproperList(list2))
       ) {
-        Interpreter.raiseFunctionClauseErrorMsg(
-          Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
-            tail(list1),
-            tail(list2),
-          ]),
-        );
+        Interpreter.raiseFunctionClauseError("lists", "prefix", 2, [
+          tail(list1),
+          tail(list2),
+        ]);
       } // Next element matches, so the first list could be a prefix of the second list
       else if (
         length1 > index &&
@@ -975,15 +1006,37 @@ const Erlang_Lists = {
   // Start sort/1
   "sort/1": (list) => {
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/1", [list]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "sort", 1, [list]);
     }
 
     if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.split_1/5"),
-      );
+      // Match server behavior for improper lists:
+      // - 1 proper element: the sort/1 clause head fails
+      // - 2 proper elements: the first comparison picks the split function
+      //   that then fails on the tail
+      // - longer: the failure happens deep in the split state, which the
+      //   client doesn't mirror, so the frame carries the bare arity
+      if (list.data.length === 2) {
+        Interpreter.raiseFunctionClauseError("lists", "sort", 1, [list]);
+      }
+
+      if (list.data.length === 3) {
+        const x = list.data[0];
+        const y = list.data[1];
+
+        const splitFun =
+          Interpreter.compareTerms(x, y) <= 0 ? "split_1" : "split_2";
+
+        Interpreter.raiseFunctionClauseError("lists", splitFun, 5, [
+          x,
+          y,
+          list.data.at(-1),
+          Type.list(),
+          Type.list(),
+        ]);
+      }
+
+      Interpreter.raiseFunctionClauseError("lists", "split_1", 5);
     }
 
     return Type.list(list.data.slice().sort(Interpreter.compareTerms));
