@@ -86,6 +86,31 @@ describe("Erlang_Os", () => {
         Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      const unit = Type.atom("invalid");
+
+      let caught;
+
+      try {
+        systemTime(unit);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "os",
+          function: "system_time",
+          arityOrArgs: Type.list([unit]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_kernel_errors")],
+          ]),
+        },
+      ]);
+    });
   });
 
   describe("type/0", () => {

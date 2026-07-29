@@ -21,11 +21,13 @@ const Erlang_Os = {
   // Start system_time/1
   // See: docs/erlang_time_functions_porting_strategy.md
   "system_time/1": (unit) => {
-    // TODO: raise through the erlang system_time identity once os.mjs
-    // raise sites migrate to BEAM reasons.
     if (!Erlang["_is_valid_time_unit/1"](unit)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      Interpreter.raiseBifError(
+        "badarg",
+        "os",
+        "system_time",
+        [unit],
+        "erl_kernel_errors",
       );
     }
     const nativeTime = Erlang_Os["system_time/0"]();
