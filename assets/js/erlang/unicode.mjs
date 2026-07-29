@@ -11,43 +11,19 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Unicode = {
-  // Start characters_to_binary/1
-  "characters_to_binary/1": (input) => {
-    const encoding = Type.atom("utf8");
-    return Erlang_Unicode["characters_to_binary/3"](input, encoding, encoding);
-  },
-  // End characters_to_binary/1
-  // Deps: [:unicode.characters_to_binary/3]
-
-  // Start characters_to_binary/3
-  "characters_to_binary/3": (input, inputEncoding, outputEncoding) => {
-    // TODO: implement inputEncoding and outputEncoding arguments validation
-
-    // TODO: implement other encodings for inputEncoding param
-    if (!Interpreter.isStrictlyEqual(inputEncoding, Type.atom("utf8"))) {
-      throw new HologramInterpreterError(
-        "encodings other than utf8 are not yet implemented in Hologram",
-      );
-    }
-
-    // TODO: implement other encodings for outputEncoding param
-    if (!Interpreter.isStrictlyEqual(outputEncoding, Type.atom("utf8"))) {
-      throw new HologramInterpreterError(
-        "encodings other than utf8 are not yet implemented in Hologram",
-      );
-    }
-
+  // Converts chardata to a UTF-8 binary the way characters_to_binary/3 does
+  // for utf8 encodings, but signals invalid chardata by returning JS null
+  // instead of raising. This lets each public arity raise with its own
+  // identity - the BEAM reports the called function's frame, not the
+  // internal conversion's.
+  // Start _chardata_to_utf8_binary/1
+  "_chardata_to_utf8_binary/1": (input) => {
     if (Type.isBinary(input)) {
       return input;
     }
 
     if (!Type.isList(input)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
+      return null;
     }
 
     const flatInput = Erlang_Lists["flatten/1"](input);
@@ -72,19 +48,66 @@ const Erlang_Unicode = {
           ]);
         }
       } else {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
-        );
+        return null;
       }
     }
 
     return Bitstring.concat(chunks);
   },
-  // End characters_to_binary/3
+  // End _chardata_to_utf8_binary/1
   // Deps: [:lists.flatten/1]
+
+  // Start characters_to_binary/1
+  "characters_to_binary/1": (input) => {
+    const result = Erlang_Unicode["_chardata_to_utf8_binary/1"](input);
+
+    if (result === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    }
+
+    return result;
+  },
+  // End characters_to_binary/1
+  // Deps: [:unicode._chardata_to_utf8_binary/1]
+
+  // Start characters_to_binary/3
+  "characters_to_binary/3": (input, inputEncoding, outputEncoding) => {
+    // TODO: implement inputEncoding and outputEncoding arguments validation
+
+    // TODO: implement other encodings for inputEncoding param
+    if (!Interpreter.isStrictlyEqual(inputEncoding, Type.atom("utf8"))) {
+      throw new HologramInterpreterError(
+        "encodings other than utf8 are not yet implemented in Hologram",
+      );
+    }
+
+    // TODO: implement other encodings for outputEncoding param
+    if (!Interpreter.isStrictlyEqual(outputEncoding, Type.atom("utf8"))) {
+      throw new HologramInterpreterError(
+        "encodings other than utf8 are not yet implemented in Hologram",
+      );
+    }
+
+    const result = Erlang_Unicode["_chardata_to_utf8_binary/1"](input);
+
+    if (result === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    }
+
+    return result;
+  },
+  // End characters_to_binary/3
+  // Deps: [:unicode._chardata_to_utf8_binary/1]
 
   // Start characters_to_list/1
   "characters_to_list/1": (data) => {
@@ -455,15 +478,18 @@ const Erlang_Unicode = {
 
     // Main logic
 
-    const utf8 = Type.atom("utf8");
+    const converted = Erlang_Unicode["_chardata_to_utf8_binary/1"](data);
 
-    const converted = Erlang_Unicode["characters_to_binary/3"](
-      data,
-      utf8,
-      utf8,
-    );
+    if (converted === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    }
 
-    // characters_to_binary/3 returns either a binary (success) or error tuple
+    // The conversion returns either a binary (success) or an error tuple
     if (Type.isTuple(converted)) {
       return handleConversionError(
         converted.data[0],
@@ -485,7 +511,7 @@ const Erlang_Unicode = {
     return Type.bitstring(normalized);
   },
   // End characters_to_nfc_binary/1
-  // Deps: [:unicode.characters_to_binary/3]
+  // Deps: [:unicode._chardata_to_utf8_binary/1]
 
   // Start characters_to_nfc_list/1
   "characters_to_nfc_list/1": (chardata) => {
@@ -743,15 +769,18 @@ const Erlang_Unicode = {
 
     // Main logic
 
-    const utf8 = Type.atom("utf8");
+    const converted = Erlang_Unicode["_chardata_to_utf8_binary/1"](data);
 
-    const converted = Erlang_Unicode["characters_to_binary/3"](
-      data,
-      utf8,
-      utf8,
-    );
+    if (converted === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    }
 
-    // characters_to_binary/3 returns either a binary (success) or error tuple
+    // The conversion returns either a binary (success) or an error tuple
     if (Type.isTuple(converted)) {
       return handleConversionError(
         converted.data[0],
@@ -773,7 +802,7 @@ const Erlang_Unicode = {
     return Type.bitstring(normalized);
   },
   // End characters_to_nfd_binary/1
-  // Deps: [:unicode.characters_to_binary/3]
+  // Deps: [:unicode._chardata_to_utf8_binary/1]
 
   // Start characters_to_nfkc_binary/1
   "characters_to_nfkc_binary/1": (data) => {
@@ -881,15 +910,18 @@ const Erlang_Unicode = {
 
     // Main logic
 
-    const utf8 = Type.atom("utf8");
+    const converted = Erlang_Unicode["_chardata_to_utf8_binary/1"](data);
 
-    const converted = Erlang_Unicode["characters_to_binary/3"](
-      data,
-      utf8,
-      utf8,
-    );
+    if (converted === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    }
 
-    // characters_to_binary/3 returns either a binary (success) or error tuple
+    // The conversion returns either a binary (success) or an error tuple
     if (Type.isTuple(converted)) {
       return handleConversionError(
         converted.data[0],
@@ -911,7 +943,7 @@ const Erlang_Unicode = {
     return Type.bitstring(normalized);
   },
   // End characters_to_nfkc_binary/1
-  // Deps: [:unicode.characters_to_binary/3]
+  // Deps: [:unicode._chardata_to_utf8_binary/1]
 
   // Start characters_to_nfkd_binary/1
   "characters_to_nfkd_binary/1": (data) => {
@@ -1022,15 +1054,18 @@ const Erlang_Unicode = {
 
     // Main logic
 
-    const utf8 = Type.atom("utf8");
+    const converted = Erlang_Unicode["_chardata_to_utf8_binary/1"](data);
 
-    const converted = Erlang_Unicode["characters_to_binary/3"](
-      data,
-      utf8,
-      utf8,
-    );
+    if (converted === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    }
 
-    // characters_to_binary/3 returns either a binary (success) or error tuple
+    // The conversion returns either a binary (success) or an error tuple
     if (Type.isTuple(converted)) {
       return handleConversionError(
         converted.data[0],
@@ -1051,7 +1086,7 @@ const Erlang_Unicode = {
     return Type.bitstring(normalized);
   },
   // End characters_to_nfkd_binary/1
-  // Deps: [:unicode.characters_to_binary/3]
+  // Deps: [:unicode._chardata_to_utf8_binary/1]
 };
 
 export default Erlang_Unicode;
