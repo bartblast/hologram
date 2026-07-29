@@ -351,6 +351,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
 
       assert_error ArgumentError, expected_msg, fn -> :re.compile(:abc, [:bad]) end
     end
+
+    test "error frame carries args on a char data failure in unicode mode" do
+      pattern = wrap_term([0xD800])
+      options = [:unicode]
+
+      top_frame =
+        try do
+          :re.compile(pattern, options)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside re.erl, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:re, :compile, [[0xD800], [:unicode]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "import/1" do
@@ -485,6 +503,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
 
     test "returns nomatch without a match" do
       assert :re.run("x", "b+") == :nomatch
+    end
+
+    test "error frame carries run/3 args on a char data failure with a unicode compiled pattern" do
+      {:ok, compiled_pattern} = :re.compile("a", [:unicode])
+      subject = wrap_term([0xD800])
+
+      top_frame =
+        try do
+          :re.run(subject, compiled_pattern)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside re.erl, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:re, :run, [[0xD800], ^compiled_pattern, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -1576,6 +1612,71 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert_error ArgumentError,
                    build_argument_error_msg(3, "invalid options"),
                    fn -> :re.run("a", compiled, [{:newline, :bogus}]) end
+    end
+
+    test "error frame carries args on a non-chardata subject with the unicode option" do
+      subject = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :re.run(subject, "a", [:unicode])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside re.erl, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:re, :run, [:abc, "a", [:unicode]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args on a surrogate pattern code point with the unicode option" do
+      pattern = wrap_term([0xD800])
+
+      top_frame =
+        try do
+          :re.run("abc", pattern, [:unicode])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside re.erl, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:re, :run, ["abc", [0xD800], [:unicode]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args and error_info on an invalid UTF-8 binary subject with a unicode compiled pattern" do
+      {:ok, compiled_pattern} = :re.compile("a", [:unicode])
+      subject = wrap_term(<<255>>)
+
+      top_frame =
+        try do
+          :re.run(subject, compiled_pattern, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:re, :run, [<<255>>, compiled_pattern, []],
+                [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info on an invalid UTF-8 binary pattern with the unicode option" do
+      pattern = wrap_term(<<255, ?a>>)
+
+      top_frame =
+        try do
+          :re.run("abc", pattern, [:unicode])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:re, :run, ["abc", <<255, ?a>>, [:unicode]],
+                [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 

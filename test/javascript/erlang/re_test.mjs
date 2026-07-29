@@ -674,6 +674,30 @@ describe("Erlang_Re", () => {
         ]),
       );
     });
+
+    it("error frame carries args on a char data failure in unicode mode", () => {
+      const pattern = Type.list([Type.integer(0xd800)]);
+      const options = Type.list([Type.atom("unicode")]);
+
+      let caught;
+
+      try {
+        compile(pattern, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "compile",
+          arityOrArgs: Type.list([pattern, options]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
   });
 
   describe("import/1", () => {
@@ -947,6 +971,30 @@ describe("Erlang_Re", () => {
       );
 
       assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("error frame carries run/3 args on a char data failure with a unicode compiled pattern", () => {
+      const compiledPattern = compilePattern("a", [Type.atom("unicode")]);
+      const subject = Type.list([Type.integer(0xd800)]);
+
+      let caught;
+
+      try {
+        Erlang_Re["run/2"](subject, compiledPattern);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "run",
+          arityOrArgs: Type.list([subject, compiledPattern, Type.list()]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 
@@ -2913,6 +2961,110 @@ describe("Erlang_Re", () => {
         3,
         "invalid options",
       );
+    });
+
+    it("error frame carries args on a non-chardata subject with the unicode option", () => {
+      const subject = Type.atom("abc");
+      const pattern = Type.bitstring("a");
+      const options = Type.list([Type.atom("unicode")]);
+
+      let caught;
+
+      try {
+        Erlang_Re["run/3"](subject, pattern, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "run",
+          arityOrArgs: Type.list([subject, pattern, options]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
+
+    it("error frame carries args on a surrogate pattern code point with the unicode option", () => {
+      const subject = Type.bitstring("abc");
+      const pattern = Type.list([Type.integer(0xd800)]);
+      const options = Type.list([Type.atom("unicode")]);
+
+      let caught;
+
+      try {
+        Erlang_Re["run/3"](subject, pattern, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "run",
+          arityOrArgs: Type.list([subject, pattern, options]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
+
+    it("error frame carries args and error_info on an invalid UTF-8 binary subject with a unicode compiled pattern", () => {
+      const compiledPattern = compilePattern("a", [Type.atom("unicode")]);
+      const subject = Bitstring.fromBytes([255]);
+      const options = Type.list();
+
+      let caught;
+
+      try {
+        Erlang_Re["run/3"](subject, compiledPattern, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "run",
+          arityOrArgs: Type.list([subject, compiledPattern, options]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
+        },
+      ]);
+    });
+
+    it("error frame carries args and error_info on an invalid UTF-8 binary pattern with the unicode option", () => {
+      const subject = Type.bitstring("abc");
+      const pattern = Bitstring.fromBytes([255, 97]);
+      const options = Type.list([Type.atom("unicode")]);
+
+      let caught;
+
+      try {
+        Erlang_Re["run/3"](subject, pattern, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "re",
+          function: "run",
+          arityOrArgs: Type.list([subject, pattern, options]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
+        },
+      ]);
     });
   });
 

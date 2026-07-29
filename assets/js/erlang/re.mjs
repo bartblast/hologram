@@ -85,6 +85,18 @@ const Erlang_Re = {
         patternBytes = pattern.bytes;
       } else {
         patternText = ERTS.regex.charDataToText(pattern);
+
+        // The server raise carries no error_info here - the frame comes
+        // from OTP's ucompile wrapper, not from a BIF.
+        if (patternText === null) {
+          Interpreter.raiseBifError(
+            "badarg",
+            "re",
+            "compile",
+            [pattern, options],
+            null,
+          );
+        }
       }
 
       // The option clash beats UTF-8 validation of a binary pattern
@@ -343,7 +355,11 @@ const Erlang_Re = {
             }
 
             if (Type.isList(element)) {
-              return {name: ERTS.regex.charDataToText(element)};
+              const name = ERTS.regex.charDataToText(element);
+
+              if (name === null) raiseArgumentError();
+
+              return {name};
             }
 
             raiseArgumentError();
@@ -492,6 +508,20 @@ const Erlang_Re = {
 
     const raiseArgumentError = () => {
       Interpreter.raiseArgumentError("argument error");
+    };
+
+    // Char data conversion failures mirror the server's split: a binary
+    // term fails inside the BIF, which raises with stdlib error_info,
+    // while any other term fails inside OTP's urun wrapper, whose frame
+    // carries no error_info.
+    const raiseCharDataError = (term) => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "re",
+        "run",
+        [subject, pattern, options],
+        Type.isBitstring(term) ? "erl_stdlib_errors" : null,
+      );
     };
 
     const raiseNotImplemented = (option) => {
@@ -808,7 +838,11 @@ const Erlang_Re = {
       // The subject char data converts before the pattern compiles
       subjectText = ERTS.regex.charDataToText(subject);
 
+      if (subjectText === null) raiseCharDataError(subject);
+
       const patternText = ERTS.regex.charDataToText(pattern);
+
+      if (patternText === null) raiseCharDataError(pattern);
 
       // The option clash raises instead of returning a compile error tuple
       if (acc.engineOpts.never_utf) raiseArgumentError();
@@ -844,6 +878,8 @@ const Erlang_Re = {
     if (subjectText === null) {
       if (entry.unicode) {
         subjectText = ERTS.regex.charDataToText(subject);
+
+        if (subjectText === null) raiseCharDataError(subject);
       } else {
         Bitstring.maybeSetBytesFromText(subjectBinary);
         subjectText = ERTS.regex.textFromLatin1Bytes(subjectBinary.bytes);
