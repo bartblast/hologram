@@ -38,6 +38,17 @@ const set123 = freeze(
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/sets_test.exs
 // Always update both together.
 
+function errorFrame(module, functionName, args) {
+  return {
+    module,
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo: null,
+  };
+}
+
 describe("Erlang_Sets", () => {
   describe("add_element/2", () => {
     const add_element_2 = Erlang_Sets["add_element/2"];
@@ -97,6 +108,24 @@ describe("Erlang_Sets", () => {
         ]),
       );
     });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        add_element_2(atomAbc, Type.atom("not_a_set"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "sets",
+          "add_element",
+          Type.list([atomAbc, Type.atom("not_a_set")]),
+        ),
+      ]);
+    });
   });
 
   describe("del_element/2", () => {
@@ -143,6 +172,24 @@ describe("Erlang_Sets", () => {
           notASet,
         ]),
       );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        del_element_2(atomAbc, Type.atom("not_a_set"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "sets",
+          "del_element",
+          Type.list([atomAbc, Type.atom("not_a_set")]),
+        ),
+      ]);
     });
   });
 
@@ -306,6 +353,20 @@ describe("Erlang_Sets", () => {
         expectedMsg,
       );
     });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        filter_2(atomAbc, set123);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("sets", "filter", Type.list([atomAbc, set123])),
+      ]);
+    });
   });
 
   describe("fold/3", () => {
@@ -455,6 +516,24 @@ describe("Erlang_Sets", () => {
         expectedMsg,
       );
     });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        fold_3(atomAbc, Type.integer(0), set123);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "sets",
+          "fold",
+          Type.list([atomAbc, Type.integer(0), set123]),
+        ),
+      ]);
+    });
   });
 
   describe("from_list/2", () => {
@@ -522,12 +601,12 @@ describe("Erlang_Sets", () => {
       );
     });
 
-    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the second argument is an a improper list", () => {
       const opts = Type.improperList([integer1, integer2]);
 
       const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
         ":proplists.get_value/3",
+        [Type.atom("version"), integer2, integer2],
       );
 
       assertBoxedError(
@@ -641,6 +720,20 @@ describe("Erlang_Sets", () => {
         Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
       );
     });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        intersection_2(atomAbc, set123);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("sets", "size", Type.list([atomAbc])),
+      ]);
+    });
   });
 
   describe("is_disjoint/2", () => {
@@ -699,6 +792,20 @@ describe("Erlang_Sets", () => {
         Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
       );
     });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        is_disjoint_2(atomAbc, set123);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("sets", "size", Type.list([atomAbc])),
+      ]);
+    });
   });
 
   describe("is_element/2", () => {
@@ -743,6 +850,24 @@ describe("Erlang_Sets", () => {
           notASet,
         ]),
       );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        is_element_2(atomAbc, Type.atom("not_a_set"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "sets",
+          "is_element",
+          Type.list([atomAbc, Type.atom("not_a_set")]),
+        ),
+      ]);
     });
   });
 
@@ -820,6 +945,20 @@ describe("Erlang_Sets", () => {
         expectedMessage,
       );
     });
+
+    it("error frame carries args for a non-set second argument", () => {
+      let caught;
+
+      try {
+        is_subset(set123, atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("sets", "is_element", Type.list([integer1, atomAbc])),
+      ]);
+    });
   });
 
   describe("new/1", () => {
@@ -855,12 +994,12 @@ describe("Erlang_Sets", () => {
       );
     });
 
-    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the first argument is an a improper list", () => {
       const opts = Type.improperList([integer1, integer2]);
 
       const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
         ":proplists.get_value/3",
+        [Type.atom("version"), integer2, integer2],
       );
 
       assertBoxedError(() => new_1(opts), "FunctionClauseError", expectedMsg);
@@ -895,6 +1034,42 @@ describe("Erlang_Sets", () => {
         );
       });
     });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        new_1(Type.atom("invalid"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "proplists",
+          "get_value",
+          Type.list([Type.atom("version"), Type.atom("invalid"), integer2]),
+        ),
+      ]);
+    });
+
+    it("error frame carries the improper tail in args", () => {
+      let caught;
+
+      try {
+        new_1(Type.improperList([integer1, integer2]));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "proplists",
+          "get_value",
+          Type.list([Type.atom("version"), integer2, integer2]),
+        ),
+      ]);
+    });
   });
 
   describe("size/1", () => {
@@ -924,6 +1099,20 @@ describe("Erlang_Sets", () => {
         "FunctionClauseError",
         expectedMessage,
       );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        size(atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("sets", "size", Type.list([atomAbc])),
+      ]);
     });
   });
 
@@ -1003,6 +1192,20 @@ describe("Erlang_Sets", () => {
         ]),
       );
     });
+
+    it("error frame carries args for a non-set second argument", () => {
+      let caught;
+
+      try {
+        subtract_2(set123, atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("sets", "is_element", Type.list([integer1, atomAbc])),
+      ]);
+    });
   });
 
   describe("to_list/1", () => {
@@ -1039,6 +1242,20 @@ describe("Erlang_Sets", () => {
         "FunctionClauseError",
         expectedMessage,
       );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        to_list(atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("sets", "to_list", Type.list([atomAbc])),
+      ]);
     });
   });
 
@@ -1119,6 +1336,20 @@ describe("Erlang_Sets", () => {
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
       );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        union_2(atomAbc, set123);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("sets", "size", Type.list([atomAbc])),
+      ]);
     });
   });
 });
