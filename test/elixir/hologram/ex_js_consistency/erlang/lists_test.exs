@@ -69,6 +69,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.all(fun, [1, 2 | 3])
       end
     end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.all(fun, [1])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :all, [:abc, [1]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the improper tail in args" do
+      fun = wrap_term(fn _elem -> true end)
+
+      top_frame =
+        try do
+          :lists.all(fun, [1, 2 | 3])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :all_1, [^fun, 3], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "any/2" do
@@ -132,6 +166,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.any(fun, [1, 2 | 3])
       end
+    end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.any(fun, [1])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :any, [:abc, [1]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the improper tail in args" do
+      fun = wrap_term(fn _elem -> false end)
+
+      top_frame =
+        try do
+          :lists.any(fun, [1, 2 | 3])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :any_1, [^fun, 3], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -222,6 +290,23 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.filter(fn elem -> 2 * elem end, [2, 3, 4])
       end
     end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.filter(fun, [1])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :filter, [:abc, [1]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "flatmap/2" do
@@ -301,6 +386,57 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error ArgumentError, "argument error", fn ->
         :lists.flatmap(fn x -> x * 10 end, [1, 2, 3])
       end
+    end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.flatmap(fun, [1])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :flatmap, [:abc, [1]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args for a non-list second argument", %{fun: fun} do
+      list = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.flatmap(fun, list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :flatmap_1, [^fun, :abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the improper tail in args", %{fun: fun} do
+      list = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.flatmap(fun, list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :flatmap_1, [^fun, 3], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 

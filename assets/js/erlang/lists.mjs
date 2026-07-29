@@ -11,9 +11,7 @@ const Erlang_Lists = {
   // Start all/2
   "all/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.all/2", [fun, list]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "all", 2, [fun, list]);
     }
 
     if (!Type.isList(list)) {
@@ -33,12 +31,10 @@ const Erlang_Lists = {
     }
 
     if (!list.isProper) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.all_1/2", [
-          fun,
-          list.data.at(-1),
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "all_1", 2, [
+        fun,
+        list.data.at(-1),
+      ]);
     }
 
     return Type.boolean(true);
@@ -49,9 +45,7 @@ const Erlang_Lists = {
   // Start any/2
   "any/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [fun, list]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "any", 2, [fun, list]);
     }
 
     if (!Type.isList(list)) {
@@ -71,12 +65,10 @@ const Erlang_Lists = {
     }
 
     if (!list.isProper) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.any_1/2", [
-          fun,
-          list.data.at(-1),
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "any_1", 2, [
+        fun,
+        list.data.at(-1),
+      ]);
     }
 
     return Type.boolean(false);
@@ -108,26 +100,18 @@ const Erlang_Lists = {
   // Deps: []
 
   // Start filter/2
-  "filter/2": function (fun, list) {
+  "filter/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.filter/2", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "filter", 2, [fun, list]);
     }
 
     if (!Type.isList(list)) {
-      Interpreter.raiseErlangError(
-        Interpreter.buildErlangErrorMsg(
-          `{:bad_generator, ${Interpreter.inspect(list)}}`,
-        ),
-      );
+      Erlang["error/1"](Type.tuple([Type.atom("bad_generator"), list]));
     }
 
     if (!Type.isProperList(list)) {
-      Interpreter.raiseErlangError(
-        Interpreter.buildErlangErrorMsg(
-          `{:bad_generator, ${Interpreter.inspect(list.data.at(-1))}}`,
-        ),
+      Erlang["error/1"](
+        Type.tuple([Type.atom("bad_generator"), list.data.at(-1)]),
       );
     }
 
@@ -136,11 +120,7 @@ const Erlang_Lists = {
         const result = Interpreter.callAnonymousFunction(fun, [elem]);
 
         if (!Type.isBoolean(result)) {
-          Interpreter.raiseErlangError(
-            Interpreter.buildErlangErrorMsg(
-              `{:bad_filter, ${Interpreter.inspect(result)}}`,
-            ),
-          );
+          Erlang["error/1"](Type.tuple([Type.atom("bad_filter"), result]));
         }
 
         return Type.isTrue(result);
@@ -148,48 +128,56 @@ const Erlang_Lists = {
     );
   },
   // End filter/2
-  // Deps: []
+  // Deps: [:erlang.error/1]
 
   // Start flatmap/2
   "flatmap/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap/2", [
-          fun,
-          list,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "flatmap", 2, [fun, list]);
     }
 
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap_1/2", [
-          fun,
-          list,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "flatmap_1", 2, [
+        fun,
+        list,
+      ]);
     }
 
     if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap_1/2", [
-          fun,
-          list.data.at(-1),
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "flatmap_1", 2, [
+        fun,
+        list.data.at(-1),
+      ]);
     }
 
-    const result = list.data.reduce((acc, elem) => {
-      const mapped = Interpreter.callAnonymousFunction(fun, [elem]);
+    const mappedResults = list.data.map((elem) =>
+      Interpreter.callAnonymousFunction(fun, [elem]),
+    );
+
+    // The server concatenates the mapped results back-to-front, so an
+    // invalid mapper result fails in the ++ BIF with the flattened suffix
+    // already accumulated as the second operand.
+    let acc = [];
+
+    for (let i = mappedResults.length - 1; i >= 0; i--) {
+      const mapped = mappedResults[i];
 
       if (!Type.isProperList(mapped)) {
-        Interpreter.raiseArgumentError("argument error");
+        // TODO: plant the erl_erts_errors error_info once the client carries
+        // that format module.
+        Interpreter.raiseBifError(
+          "badarg",
+          "erlang",
+          "++",
+          [mapped, Type.list(acc)],
+          null,
+        );
       }
 
-      return acc.concat(mapped.data);
-    }, []);
+      acc = mapped.data.concat(acc);
+    }
 
-    return Type.list(result);
+    return Type.list(acc);
   },
   // End flatmap/2
   // Deps: []

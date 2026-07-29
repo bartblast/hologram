@@ -338,6 +338,48 @@ describe("Erlang_Lists", () => {
         ]),
       );
     });
+
+    it("error frame carries args", () => {
+      const list = Type.list([integer1]);
+
+      let caught;
+
+      try {
+        all(atomAbc, list);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "all", Type.list([atomAbc, list])),
+      ]);
+    });
+
+    it("error frame carries the improper tail in args", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (_context) => Type.boolean(true),
+          },
+        ],
+        contextFixture(),
+      );
+
+      let caught;
+
+      try {
+        all(fun, improperList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "all_1", Type.list([fun, integer3])),
+      ]);
+    });
   });
 
   describe("any/2", () => {
@@ -580,6 +622,48 @@ describe("Erlang_Lists", () => {
         ]),
       );
     });
+
+    it("error frame carries args", () => {
+      const list = Type.list([integer1]);
+
+      let caught;
+
+      try {
+        any(atomAbc, list);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "any", Type.list([atomAbc, list])),
+      ]);
+    });
+
+    it("error frame carries the improper tail in args", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (_context) => Type.boolean(false),
+          },
+        ],
+        contextFixture(),
+      );
+
+      let caught;
+
+      try {
+        any(fun, improperList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "any_1", Type.list([fun, integer3])),
+      ]);
+    });
   });
 
   describe("duplicate/2", () => {
@@ -736,6 +820,22 @@ describe("Erlang_Lists", () => {
         Interpreter.buildErlangErrorMsg("{:bad_filter, 4}");
 
       assertBoxedError(() => filter(fun, list), "ErlangError", expectedMessage);
+    });
+
+    it("error frame carries args", () => {
+      const list = Type.list([integer1]);
+
+      let caught;
+
+      try {
+        filter(atomAbc, list);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "filter", Type.list([atomAbc, list])),
+      ]);
     });
   });
 
@@ -910,6 +1010,50 @@ describe("Erlang_Lists", () => {
         "ArgumentError",
         "argument error",
       );
+    });
+
+    it("error frame carries args", () => {
+      const list = Type.list([integer1]);
+
+      let caught;
+
+      try {
+        flatmap(atomAbc, list);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "flatmap", Type.list([atomAbc, list])),
+      ]);
+    });
+
+    it("error frame carries args for a non-list second argument", () => {
+      let caught;
+
+      try {
+        flatmap(fun, atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "flatmap_1", Type.list([fun, atomAbc])),
+      ]);
+    });
+
+    it("error frame carries the improper tail in args", () => {
+      let caught;
+
+      try {
+        flatmap(fun, improperList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "flatmap_1", Type.list([fun, integer3])),
+      ]);
     });
   });
 
