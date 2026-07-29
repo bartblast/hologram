@@ -16,6 +16,19 @@ defineRuntimeGlobals();
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/math_test.exs
 // Always update both together.
 
+function mathErrorFrame(functionName, args) {
+  return {
+    module: "math",
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo: Type.map([
+      [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+    ]),
+  };
+}
+
 describe("Erlang_Math", () => {
   describe("ceil/1", () => {
     const testedFun = Erlang_Math["ceil/1"];
@@ -86,6 +99,20 @@ describe("Erlang_Math", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("ceil", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -218,6 +245,34 @@ describe("Erlang_Math", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        exp(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("exp", Type.list([Type.atom("abc")])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for an overflow", () => {
+      let caught;
+
+      try {
+        exp(Type.float(709.783));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("exp", Type.list([Type.float(709.783)])),
+      ]);
+    });
   });
 
   describe("floor/1", () => {
@@ -289,6 +344,20 @@ describe("Erlang_Math", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("floor", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -414,6 +483,34 @@ describe("Erlang_Math", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        log(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("log", Type.list([Type.atom("abc")])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a non-positive number", () => {
+      let caught;
+
+      try {
+        log(Type.integer(0));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("log", Type.list([Type.integer(0)])),
+      ]);
+    });
   });
 
   describe("pow/2", () => {
@@ -512,6 +609,42 @@ describe("Erlang_Math", () => {
         () => testedFun(Type.integer(-7), Type.float(0.5)),
         "ArithmeticError",
         "bad argument in arithmetic expression",
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.atom("abc"), Type.integer(3));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("pow", Type.list([Type.atom("abc"), Type.integer(3)])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a fractional exponent with negative base", () => {
+      let caught;
+
+      try {
+        testedFun(Type.integer(-7), Type.float(0.5));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("pow", Type.list([Type.integer(-7), Type.float(0.5)])),
+      ]);
+    });
+
+    it("lists all invalid arguments in the message", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.atom("def")),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not a number\n  * 2nd argument: not a number\n",
       );
     });
   });

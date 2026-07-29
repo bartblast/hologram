@@ -16,9 +16,7 @@ const Erlang_Math = {
   // Start ceil/1
   "ceil/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
-      );
+      Interpreter.raiseBifError("badarg", "math", "ceil", [number]);
     }
 
     return Type.isInteger(number)
@@ -31,16 +29,14 @@ const Erlang_Math = {
   // Start exp/1
   "exp/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
-      );
+      Interpreter.raiseBifError("badarg", "math", "exp", [number]);
     }
 
     const value = Type.isInteger(number) ? Number(number.value) : number.value;
     const result = Math.exp(value);
 
     if (!Number.isFinite(result)) {
-      Interpreter.raiseArithmeticError();
+      Interpreter.raiseBifError("badarith", "math", "exp", [number]);
     }
 
     return Type.float(result);
@@ -51,9 +47,7 @@ const Erlang_Math = {
   // Start floor/1
   "floor/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
-      );
+      Interpreter.raiseBifError("badarg", "math", "floor", [number]);
     }
     return Type.isInteger(number)
       ? Type.float(Number(number.value))
@@ -65,15 +59,13 @@ const Erlang_Math = {
   // Start log/1
   "log/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
-      );
+      Interpreter.raiseBifError("badarg", "math", "log", [number]);
     }
 
     const value = Type.isInteger(number) ? Number(number.value) : number.value;
 
     if (value <= 0) {
-      Interpreter.raiseArithmeticError();
+      Interpreter.raiseBifError("badarith", "math", "log", [number]);
     }
 
     return Type.float(Math.log(value));
@@ -83,23 +75,15 @@ const Erlang_Math = {
 
   // Start pow/2
   "pow/2": (base, exponent) => {
-    if (!Type.isNumber(base)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
-      );
-    }
-
-    if (!Type.isNumber(exponent)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a number"),
-      );
+    if (!Type.isNumber(base) || !Type.isNumber(exponent)) {
+      Interpreter.raiseBifError("badarg", "math", "pow", [base, exponent]);
     }
 
     const exponentValue = Number(exponent.value);
     const hasFractionalPart = exponentValue % 1 !== 0;
 
     if (base.value < 0 && hasFractionalPart) {
-      Interpreter.raiseArithmeticError();
+      Interpreter.raiseBifError("badarith", "math", "pow", [base, exponent]);
     }
 
     return Type.float(Math.pow(Number(base.value), exponentValue));

@@ -237,6 +237,13 @@ function defineElixirExceptionModule() {
         return Type.errorStruct("ArgumentError", message ?? "argument error");
       }
 
+      if (Type.isAtom(reason) && reason.value === "badarith") {
+        return Type.errorStruct(
+          "ArithmeticError",
+          "bad argument in arithmetic expression",
+        );
+      }
+
       const isTaggedTuple = (tag) =>
         Type.isTuple(reason) &&
         reason.data.length === 2 &&

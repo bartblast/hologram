@@ -55,6 +55,17 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
                    build_argument_error_msg(1, "not a number"),
                    {:math, :ceil, [:abc]}
     end
+
+    test "error frame carries args and error_info" do
+      top_frame =
+        try do
+          :math.ceil(:abc)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:math, :ceil, [:abc], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "exp/1" do
@@ -177,6 +188,28 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
                    build_argument_error_msg(1, "not a number"),
                    {:math, :exp, [:abc]}
     end
+
+    test "error frame carries args and error_info" do
+      top_frame =
+        try do
+          :math.exp(:abc)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:math, :exp, [:abc], [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info for an overflow" do
+      top_frame =
+        try do
+          :math.exp(709.783)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:math, :exp, [709.783], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "floor/1" do
@@ -224,6 +257,17 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a number"),
                    {:math, :floor, [:abc]}
+    end
+
+    test "error frame carries args and error_info" do
+      top_frame =
+        try do
+          :math.floor(:abc)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:math, :floor, [:abc], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
@@ -331,6 +375,28 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
                    build_argument_error_msg(1, "not a number"),
                    {:math, :log, [:abc]}
     end
+
+    test "error frame carries args and error_info" do
+      top_frame =
+        try do
+          :math.log(:abc)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:math, :log, [:abc], [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info for a non-positive number" do
+      top_frame =
+        try do
+          :math.log(0)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:math, :log, [0], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "pow/2" do
@@ -398,6 +464,39 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert_error ArithmeticError,
                    "bad argument in arithmetic expression",
                    {:math, :pow, [-7, 0.5]}
+    end
+
+    test "error frame carries args and error_info" do
+      top_frame =
+        try do
+          :math.pow(:abc, 3)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:math, :pow, [:abc, 3], [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info for a fractional exponent with negative base" do
+      top_frame =
+        try do
+          :math.pow(-7, 0.5)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:math, :pow, [-7, 0.5], [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "lists all invalid arguments in the message" do
+      expected_message = """
+      errors were found at the given arguments:
+
+        * 1st argument: not a number
+        * 2nd argument: not a number
+      """
+
+      assert_error ArgumentError, expected_message, {:math, :pow, [:abc, :def]}
     end
   end
 end
