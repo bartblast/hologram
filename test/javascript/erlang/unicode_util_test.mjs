@@ -825,6 +825,26 @@ describe("Erlang_Unicode_Util", () => {
         );
       });
     });
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        Erlang_Unicode_Util["cp/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "unicode_util",
+          function: "cp",
+          arityOrArgs: Type.list([Type.atom("abc")]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
   });
 
   describe("gc/1", () => {

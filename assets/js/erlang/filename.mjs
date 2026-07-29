@@ -136,12 +136,10 @@ const Erlang_Filename = {
       return Type.list(combined);
     }
 
-    Interpreter.raiseFunctionClauseErrorMsg(
-      Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
-        filename,
-        tail,
-      ]),
-    );
+    Interpreter.raiseFunctionClauseError("filename", "do_flatten", 2, [
+      filename,
+      tail,
+    ]);
   },
   // End _do_flatten/2
   // Deps: [:erlang.atom_to_list/1]
@@ -602,11 +600,7 @@ const Erlang_Filename = {
   "join/1": (components) => {
     // Validate components is a non-empty list
     if (!Type.isList(components) || components.data.length === 0) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [
-          components,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("filename", "join", 1, [components]);
     }
 
     // Validate all components are valid filename_all() types (binary, list, or atom)
@@ -616,11 +610,7 @@ const Erlang_Filename = {
     );
 
     if (hasInvalidComponent) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [
-          components,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("filename", "join", 1, [components]);
     }
 
     // Single component: normalize via join/2 with empty second arg to handle
@@ -651,12 +641,10 @@ const Erlang_Filename = {
       Type.isBinary(value) || Type.isList(value) || Type.isAtom(value);
 
     if (!isValidInput(name1) || !isValidInput(name2)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":filename.join/2", [
-          name1,
-          name2,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("filename", "join", 2, [
+        name1,
+        name2,
+      ]);
     }
 
     // Helper functions

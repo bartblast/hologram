@@ -216,6 +216,26 @@ describe("Erlang_Filename", () => {
         ]),
       );
     });
+    it("error frame carries the flatten args", () => {
+      let caught;
+
+      try {
+        Erlang_Filename["basename/1"](Type.integer(123));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "filename",
+          function: "do_flatten",
+          arityOrArgs: Type.list([Type.integer(123), Type.list()]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
   });
 
   describe("basename/2", () => {
@@ -1565,6 +1585,26 @@ describe("Erlang_Filename", () => {
         Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
       );
     });
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        Erlang_Filename["join/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "filename",
+          function: "join",
+          arityOrArgs: Type.list([Type.atom("abc")]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
   });
 
   describe("join/2", () => {
@@ -1831,6 +1871,26 @@ describe("Erlang_Filename", () => {
           arg2,
         ]),
       );
+    });
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        Erlang_Filename["join/2"](Type.bitstring("a"), Type.integer(1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "filename",
+          function: "join",
+          arityOrArgs: Type.list([Type.bitstring("a"), Type.integer(1)]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 
