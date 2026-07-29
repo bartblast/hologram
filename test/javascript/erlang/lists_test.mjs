@@ -2159,6 +2159,7 @@ describe("Erlang_Lists", () => {
         Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -2250,6 +2251,7 @@ describe("Erlang_Lists", () => {
         Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -3712,6 +3714,7 @@ describe("Erlang_Lists", () => {
         Interpreter.buildArgumentErrorMsg(2, "not a list"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -4280,6 +4283,7 @@ describe("Erlang_Lists", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -4353,6 +4357,7 @@ describe("Erlang_Lists", () => {
         expectedMessage,
       );
     });
+
     it("error frame carries args", () => {
       let caught;
 
@@ -4537,6 +4542,7 @@ describe("Erlang_Lists", () => {
         Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 

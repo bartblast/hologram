@@ -216,6 +216,7 @@ describe("Erlang_Filename", () => {
         ]),
       );
     });
+
     it("error frame carries the flatten args", () => {
       let caught;
 
@@ -1585,6 +1586,7 @@ describe("Erlang_Filename", () => {
         Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
       );
     });
+
     it("error frame carries args", () => {
       let caught;
 
@@ -1872,6 +1874,7 @@ describe("Erlang_Filename", () => {
         ]),
       );
     });
+
     it("error frame carries args", () => {
       let caught;
 

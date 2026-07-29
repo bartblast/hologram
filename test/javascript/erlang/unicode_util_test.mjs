@@ -825,6 +825,7 @@ describe("Erlang_Unicode_Util", () => {
         );
       });
     });
+
     it("error frame carries args", () => {
       let caught;
 

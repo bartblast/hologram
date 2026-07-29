@@ -290,6 +290,7 @@ describe("Erlang", () => {
         "argument error",
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -452,6 +453,7 @@ describe("Erlang", () => {
         "argument error",
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -1517,6 +1519,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -1633,6 +1636,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -1858,6 +1862,7 @@ describe("Erlang", () => {
         ),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -1884,6 +1889,7 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -1926,6 +1932,7 @@ describe("Erlang", () => {
         "encodings other than utf8 are not yet implemented in Hologram",
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -1981,6 +1988,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not an atom"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -2289,6 +2297,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(3, "out of range"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -2355,6 +2364,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -2739,6 +2749,7 @@ describe("Erlang", () => {
         ),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -2764,6 +2775,7 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -2985,6 +2997,7 @@ describe("Erlang", () => {
         );
       });
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -3064,6 +3077,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -4821,6 +4835,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -5300,6 +5315,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -5388,6 +5404,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -5614,6 +5631,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -5756,6 +5774,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -5923,6 +5942,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -6305,6 +6325,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -7248,6 +7269,7 @@ describe("Erlang", () => {
         );
       });
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -7286,6 +7308,7 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -7377,6 +7400,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -7651,6 +7675,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a fun"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -8012,6 +8037,7 @@ describe("Erlang", () => {
         );
       });
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -8064,6 +8090,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -8149,6 +8176,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -8179,6 +8207,7 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -8273,6 +8302,7 @@ describe("Erlang", () => {
         ),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -8301,6 +8331,7 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -8406,6 +8437,7 @@ describe("Erlang", () => {
         );
       });
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -8477,6 +8509,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -8739,6 +8772,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -8866,6 +8900,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -9080,6 +9115,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -9672,6 +9708,7 @@ describe("Erlang", () => {
         ),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -9702,6 +9739,7 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -10092,6 +10130,7 @@ describe("Erlang", () => {
         ),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -10196,6 +10235,7 @@ describe("Erlang", () => {
         ),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -10427,6 +10467,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -10633,6 +10674,7 @@ describe("Erlang", () => {
         "argument error",
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -10692,6 +10734,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -10879,6 +10922,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -10919,6 +10963,7 @@ describe("Erlang", () => {
     it("not boolean", () => {
       assertBoxedError(() => not(atomAbc), "ArgumentError", "argument error");
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -11044,6 +11089,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a pid"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -11337,6 +11383,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a reference"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -11583,6 +11630,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -11650,6 +11698,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -11789,6 +11838,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -11829,6 +11879,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "invalid system info item"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -11980,6 +12031,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -12069,6 +12121,7 @@ describe("Erlang", () => {
         );
       });
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -12153,6 +12206,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -12192,6 +12246,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -12227,6 +12282,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -12338,6 +12394,7 @@ describe("Erlang", () => {
         Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -12387,6 +12444,7 @@ describe("Erlang", () => {
         "argument error",
       );
     });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
