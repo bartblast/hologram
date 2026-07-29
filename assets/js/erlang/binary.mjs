@@ -106,6 +106,47 @@ const Erlang_Binary = {
   // End _boyer_moore_search/4
   // Deps: []
 
+  // Reports whether the term is a valid search pattern: a non-empty binary,
+  // a non-empty list of non-empty binaries, or a compiled pattern whose
+  // registry entry is present. Non-raising on purpose - the error formatter
+  // probes pattern validity while deriving a message, where a raise would
+  // derive its own message and recurse.
+  // Start _is_valid_pattern/1
+  "_is_valid_pattern/1": (pattern) => {
+    if (Type.isCompiledPattern(pattern)) {
+      const patternType = pattern.data[0].value;
+      const compiledData = ERTS.binaryPatternRegistry.get(pattern.data[1]);
+
+      if (!compiledData || compiledData.type !== patternType) {
+        return false;
+      }
+
+      return patternType !== "bm" || Boolean(compiledData.patternBytes);
+    }
+
+    const isNonEmptyBinary = (term) => {
+      if (!Type.isBinary(term)) {
+        return false;
+      }
+
+      Bitstring.maybeSetBytesFromText(term);
+
+      return term.bytes.length > 0;
+    };
+
+    if (Type.isBinary(pattern)) {
+      return isNonEmptyBinary(pattern);
+    }
+
+    return (
+      Type.isList(pattern) &&
+      pattern.data.length > 0 &&
+      pattern.data.every(isNonEmptyBinary)
+    );
+  },
+  // End _is_valid_pattern/1
+  // Deps: []
+
   // Start _parse_search_opts/2
   "_parse_search_opts/2": (opts, argPosition) => {
     const raiseInvalidOptions = () => {

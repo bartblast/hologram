@@ -1,5 +1,7 @@
 "use strict";
 
+import Bitstring from "../bitstring.mjs";
+import Erlang_Binary from "../erlang/binary.mjs";
 import Erlang_Maps from "../erlang/maps.mjs";
 import Erlang_Unicode from "../erlang/unicode.mjs";
 import Interpreter from "../interpreter.mjs";
@@ -20,24 +22,213 @@ const Erlang_Erl_Stdlib_Errors = {
   // Start _expand_error/1
   "_expand_error/1": (fragment) => {
     const texts = {
+      bad_binary_pattern: "not a valid pattern",
       bad_char_data: "not valid character data (an iodata term)",
       bad_encoding: "not a valid encoding",
       bad_iterator: "not a valid iterator",
+      bad_options: "invalid options",
+      bad_replacement: "not a valid replacement",
+      bitstring: "is a bitstring (expected a binary)",
       domain_error: "is outside the domain for this function",
+      empty_binary: "a zero-sized binary is not allowed",
+      not_binary: "not a binary",
       not_fun_1: "not a fun that takes one argument",
       not_fun_2: "not a fun that takes two arguments",
       not_fun_3: "not a fun that takes three arguments",
+      not_integer: "not an integer",
       not_list: "not a list",
       not_map: "not a map",
       not_map_or_iterator: "not a map or an iterator",
       not_number: "not a number",
       not_proper_list: "not a proper list",
+      range: "out of range",
     };
 
     return texts[fragment] ?? fragment;
   },
   // End _expand_error/1
   // Deps: []
+
+  // Mirrors OTP's private format_binary_error/3. The cause is the boxed
+  // atom from the frame's error_info map (:none when absent) - only the
+  // replace/4 clause consults it. The matches clauses delegate to the match
+  // clauses, like OTP's do. Clauses for functions with no client port
+  // (bin_to_list, decode_hex, decode_unsigned, encode_hex, encode_unsigned,
+  // join, list_to_bin, longest_common_prefix, longest_common_suffix, part,
+  // referenced_byte_size, unhex) are omitted - like any unknown function,
+  // they fall through to the function clause error, which on the server
+  // only unknown functions reach.
+  // Start _format_binary_error/3
+  "_format_binary_error/3": (fun, argsOrArity, cause) => {
+    const mustBeBinary = Erlang_Erl_Stdlib_Errors["_must_be_binary/1"];
+    const mustBePattern = Erlang_Erl_Stdlib_Errors["_must_be_pattern/1"];
+    const mustBePosition = Erlang_Erl_Stdlib_Errors["_must_be_position/1"];
+
+    const mustBeNonNegInteger =
+      Erlang_Erl_Stdlib_Errors["_must_be_non_neg_integer/1"];
+
+    const mustBeReplacement =
+      Erlang_Erl_Stdlib_Errors["_must_be_binary_replacement/1"];
+
+    const args = Type.isList(argsOrArity) ? argsOrArity.data : null;
+
+    if (fun.value === "matches") {
+      return Erlang_Erl_Stdlib_Errors["_format_binary_error/3"](
+        Type.atom("match"),
+        argsOrArity,
+        cause,
+      );
+    }
+
+    // Mirrors OTP's clause head [{scope, {Start, Len}}] with integer
+    // Start and Len, which turns a syntactically valid scope option into
+    // the part-not-inside-binary diagnosis.
+    const isSingleScopeOption = (options) => {
+      if (!Type.isList(options) || options.data.length !== 1) {
+        return false;
+      }
+
+      const option = options.data[0];
+
+      if (
+        !Type.isTuple(option) ||
+        option.data.length !== 2 ||
+        !Type.isAtom(option.data[0]) ||
+        option.data[0].value !== "scope"
+      ) {
+        return false;
+      }
+
+      const scope = option.data[1];
+
+      return (
+        Type.isTuple(scope) &&
+        scope.data.length === 2 &&
+        Type.isInteger(scope.data[0]) &&
+        Type.isInteger(scope.data[1])
+      );
+    };
+
+    const isEmptyBinary = (term) => {
+      if (!Type.isBinary(term)) {
+        return false;
+      }
+
+      Bitstring.maybeSetBytesFromText(term);
+
+      return term.bytes.length === 0;
+    };
+
+    switch (fun.value) {
+      case "at":
+        if (args?.length === 2) {
+          return [mustBeBinary(args[0]), mustBePosition(args[1])];
+        }
+        break;
+
+      case "compile_pattern":
+        if (args?.length === 1) {
+          return ["not a valid pattern"];
+        }
+        break;
+
+      case "copy":
+        if (args?.length === 1) {
+          return [mustBeBinary(args[0])];
+        }
+
+        if (args?.length === 2) {
+          return [mustBeBinary(args[0]), mustBeNonNegInteger(args[1])];
+        }
+        break;
+
+      case "first":
+      case "last":
+        if (args?.length === 1) {
+          return [
+            isEmptyBinary(args[0]) ? "empty_binary" : mustBeBinary(args[0]),
+          ];
+        }
+        break;
+
+      case "match":
+        if (args?.length === 2) {
+          return [mustBeBinary(args[0]), mustBePattern(args[1])];
+        }
+
+        if (args?.length === 3) {
+          const errors = [mustBeBinary(args[0]), mustBePattern(args[1])];
+
+          if (errors[0] !== "" || errors[1] !== "") {
+            return errors;
+          }
+
+          return [
+            "",
+            "",
+            isSingleScopeOption(args[2])
+              ? "specified part is not wholly inside binary"
+              : "bad_options",
+          ];
+        }
+        break;
+
+      case "replace":
+        if (args?.length === 3) {
+          return [
+            mustBeBinary(args[0]),
+            mustBePattern(args[1]),
+            mustBeReplacement(args[2]),
+          ];
+        }
+
+        if (args?.length === 4) {
+          const errors = [
+            mustBeBinary(args[0]),
+            mustBePattern(args[1]),
+            mustBeReplacement(args[2]),
+          ];
+
+          if (cause.value === "badopt") {
+            return [...errors, "bad_options"];
+          }
+
+          // Options are syntactically correct, but not semantically
+          // (e.g. referencing outside the subject).
+          if (errors.every((error) => error === "")) {
+            return ["", "", "", "bad_options"];
+          }
+
+          return errors;
+        }
+        break;
+
+      case "split":
+        if (args?.length === 2) {
+          return [mustBeBinary(args[0]), mustBePattern(args[1])];
+        }
+
+        if (args?.length === 3) {
+          const errors = [mustBeBinary(args[0]), mustBePattern(args[1])];
+
+          if (errors[0] !== "" || errors[1] !== "") {
+            return errors;
+          }
+
+          return ["", "", "bad_options"];
+        }
+        break;
+    }
+
+    Interpreter.raiseFunctionClauseError(
+      Interpreter.buildFunctionClauseErrorMsg(
+        ":erl_stdlib_errors.format_binary_error/3",
+        [fun, argsOrArity, cause],
+      ),
+    );
+  },
+  // End _format_binary_error/3
+  // Deps: [:erl_stdlib_errors._must_be_binary/1, :erl_stdlib_errors._must_be_binary_replacement/1, :erl_stdlib_errors._must_be_non_neg_integer/1, :erl_stdlib_errors._must_be_pattern/1, :erl_stdlib_errors._must_be_position/1]
 
   // Mirrors OTP's private format_error_map/3. Fragments map to argument
   // positions in order starting at the given number, "" entries skip their
@@ -290,6 +481,32 @@ const Erlang_Erl_Stdlib_Errors = {
   // End _format_unicode_error/2
   // Deps: [:erl_stdlib_errors._unicode_char_data/1, :erl_stdlib_errors._unicode_encoding/1]
 
+  // Mirrors OTP's private must_be_binary/1.
+  // Start _must_be_binary/1
+  "_must_be_binary/1": (term) => {
+    if (Type.isBinary(term)) {
+      return "";
+    }
+
+    return Type.isBitstring(term) ? "bitstring" : "not_binary";
+  },
+  // End _must_be_binary/1
+  // Deps: []
+
+  // Mirrors OTP's private must_be_binary_replacement/1.
+  // Start _must_be_binary_replacement/1
+  "_must_be_binary_replacement/1": (term) => {
+    if (Type.isBinary(term)) {
+      return "";
+    }
+
+    return Type.isAnonymousFunction(term) && term.arity === 1
+      ? ""
+      : "bad_replacement";
+  },
+  // End _must_be_binary_replacement/1
+  // Deps: []
+
   // Mirrors OTP's private must_be_fun/2.
   // Start _must_be_fun/2
   "_must_be_fun/2": (term, arity) =>
@@ -326,10 +543,46 @@ const Erlang_Erl_Stdlib_Errors = {
   // End _must_be_map_or_iter/1
   // Deps: [:maps.is_iterator_valid/1]
 
+  // Mirrors OTP's private must_be_non_neg_integer/1, which resolves to
+  // must_be_integer/3 with a range of 0 to infinity.
+  // Start _must_be_non_neg_integer/1
+  "_must_be_non_neg_integer/1": (term) => {
+    if (!Type.isInteger(term)) {
+      return "not_integer";
+    }
+
+    return term.value >= 0n ? "" : "range";
+  },
+  // End _must_be_non_neg_integer/1
+  // Deps: []
+
   // Mirrors OTP's private must_be_number/1.
   // Start _must_be_number/1
   "_must_be_number/1": (term) => (Type.isNumber(term) ? "" : "not_number"),
   // End _must_be_number/1
+  // Deps: []
+
+  // Mirrors OTP's private must_be_pattern/1, which probes the term by
+  // attempting a binary:match/2 call with it and treats a badarg raise as
+  // an invalid pattern. The non-raising validity check is used instead of
+  // the raising port - this runs inside message derivation, so a raise here
+  // would derive its own message and recurse.
+  // Start _must_be_pattern/1
+  "_must_be_pattern/1": (term) =>
+    Erlang_Binary["_is_valid_pattern/1"](term) ? "" : "bad_binary_pattern",
+  // End _must_be_pattern/1
+  // Deps: [:binary._is_valid_pattern/1]
+
+  // Mirrors OTP's private must_be_position/1.
+  // Start _must_be_position/1
+  "_must_be_position/1": (term) => {
+    if (!Type.isInteger(term)) {
+      return "not_integer";
+    }
+
+    return term.value >= 0n ? "" : "range";
+  },
+  // End _must_be_position/1
   // Deps: []
 
   // Mirrors OTP's private unicode_char_data/1, which probes the term by
@@ -375,8 +628,8 @@ const Erlang_Erl_Stdlib_Errors = {
   // Deps: []
 
   // TODO: dispatch to the remaining per-module formatters from
-  // :erl_stdlib_errors (format_binary_error, format_lists_error, ...) as
-  // their stdlib ports migrate to bare reasons with error_info.
+  // :erl_stdlib_errors (format_lists_error, ...) as their stdlib ports
+  // migrate to bare reasons with error_info.
   // Start format_error/2
   "format_error/2": (reason, stacktrace) => {
     const isFourTupleTopFrame =
@@ -397,10 +650,43 @@ const Erlang_Erl_Stdlib_Errors = {
     const frameModule = stacktrace.data[0].data[0];
     const frameFun = stacktrace.data[0].data[1];
     const frameArgsOrArity = stacktrace.data[0].data[2];
+    const frameLocation = stacktrace.data[0].data[3];
+
+    // Mirrors OTP's cause lookup: the location's error_info map may carry a
+    // cause entry that refines the formatter's diagnosis, defaulting to
+    // :none.
+    let cause = Type.atom("none");
+
+    if (Type.isList(frameLocation)) {
+      for (const entry of frameLocation.data) {
+        if (
+          Type.isTuple(entry) &&
+          entry.data.length === 2 &&
+          Type.isAtom(entry.data[0]) &&
+          entry.data[0].value === "error_info" &&
+          Type.isMap(entry.data[1])
+        ) {
+          const causeEntry =
+            entry.data[1].data[Type.encodeMapKey(Type.atom("cause"))];
+
+          if (causeEntry !== undefined) {
+            cause = causeEntry[1];
+          }
+        }
+      }
+    }
 
     let fragments;
 
     switch (frameModule.value) {
+      case "binary":
+        fragments = Erlang_Erl_Stdlib_Errors["_format_binary_error/3"](
+          frameFun,
+          frameArgsOrArity,
+          cause,
+        );
+        break;
+
       case "maps":
         fragments = Erlang_Erl_Stdlib_Errors["_format_maps_error/2"](
           frameFun,
@@ -433,7 +719,7 @@ const Erlang_Erl_Stdlib_Errors = {
     );
   },
   // End format_error/2
-  // Deps: [:erl_stdlib_errors._format_error_map/3, :erl_stdlib_errors._format_maps_error/2, :erl_stdlib_errors._format_math_error/2, :erl_stdlib_errors._format_unicode_error/2]
+  // Deps: [:erl_stdlib_errors._format_binary_error/3, :erl_stdlib_errors._format_error_map/3, :erl_stdlib_errors._format_maps_error/2, :erl_stdlib_errors._format_math_error/2, :erl_stdlib_errors._format_unicode_error/2]
 };
 
 export default Erlang_Erl_Stdlib_Errors;

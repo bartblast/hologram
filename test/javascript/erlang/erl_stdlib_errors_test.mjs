@@ -7,6 +7,7 @@ import {
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
+import Erlang_Binary from "../../../assets/js/erlang/binary.mjs";
 import Erlang_Erl_Stdlib_Errors from "../../../assets/js/erlang/erl_stdlib_errors.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -19,6 +20,27 @@ const errorInfo = Type.keywordList([
     Type.map([[Type.atom("module"), Type.atom("erl_stdlib_errors")]]),
   ],
 ]);
+
+const badoptErrorInfo = Type.keywordList([
+  [
+    Type.atom("error_info"),
+    Type.map([
+      [Type.atom("cause"), Type.atom("badopt")],
+      [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+    ]),
+  ],
+]);
+
+function binaryStacktrace(functionName, argsOrArity, location = errorInfo) {
+  return Type.list([
+    Type.tuple([
+      Type.atom("binary"),
+      Type.atom(functionName),
+      argsOrArity,
+      location,
+    ]),
+  ]);
+}
 
 function mapsStacktrace(functionName, argsOrArity) {
   return Type.list([
@@ -110,6 +132,360 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       const result = format_error(Type.atom("badarg"), stacktrace);
 
       assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("binary at: bad position", () => {
+      const stacktrace = binaryStacktrace(
+        "at",
+        Type.list([Type.bitstring("abc"), Type.atom("x")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("not an integer")]]),
+      );
+    });
+
+    it("binary at: negative position", () => {
+      const stacktrace = binaryStacktrace(
+        "at",
+        Type.list([Type.bitstring("abc"), Type.integer(-1)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("out of range")]]),
+      );
+    });
+
+    it("binary at: bitstring subject", () => {
+      const stacktrace = binaryStacktrace(
+        "at",
+        Type.list([Type.bitstring([1]), Type.integer(0)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("is a bitstring (expected a binary)"),
+          ],
+        ]),
+      );
+    });
+
+    it("binary at: valid arguments produce no fragments", () => {
+      const stacktrace = binaryStacktrace(
+        "at",
+        Type.list([Type.bitstring("abc"), Type.integer(10)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("binary compile_pattern: not a valid pattern", () => {
+      const stacktrace = binaryStacktrace(
+        "compile_pattern",
+        Type.list([Type.bitstring("")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a valid pattern")]]),
+      );
+    });
+
+    it("binary copy: bad subject and count", () => {
+      const stacktrace = binaryStacktrace(
+        "copy",
+        Type.list([Type.atom("x"), Type.integer(-1)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not a binary")],
+          [Type.integer(2), Type.bitstring("out of range")],
+        ]),
+      );
+    });
+
+    it("binary first: empty binary", () => {
+      const stacktrace = binaryStacktrace(
+        "first",
+        Type.list([Type.bitstring("")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("a zero-sized binary is not allowed"),
+          ],
+        ]),
+      );
+    });
+
+    it("binary first: not a binary", () => {
+      const stacktrace = binaryStacktrace("first", Type.list([Type.atom("x")]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a binary")]]),
+      );
+    });
+
+    it("binary last: empty binary", () => {
+      const stacktrace = binaryStacktrace(
+        "last",
+        Type.list([Type.bitstring("")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("a zero-sized binary is not allowed"),
+          ],
+        ]),
+      );
+    });
+
+    it("binary match/2: bad subject and pattern", () => {
+      const stacktrace = binaryStacktrace(
+        "match",
+        Type.list([Type.atom("x"), Type.atom("y")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not a binary")],
+          [Type.integer(2), Type.bitstring("not a valid pattern")],
+        ]),
+      );
+    });
+
+    it("binary match/2: empty binary pattern", () => {
+      const stacktrace = binaryStacktrace(
+        "match",
+        Type.list([Type.bitstring("abc"), Type.bitstring("")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("not a valid pattern")]]),
+      );
+    });
+
+    it("binary match/2: compiled pattern is valid", () => {
+      const compiledPattern = Erlang_Binary["compile_pattern/1"](
+        Type.bitstring("b"),
+      );
+
+      const stacktrace = binaryStacktrace(
+        "match",
+        Type.list([Type.bitstring("abc"), compiledPattern]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("binary match/3: scope not wholly inside binary", () => {
+      const scopeOption = Type.tuple([
+        Type.atom("scope"),
+        Type.tuple([Type.integer(0), Type.integer(10)]),
+      ]);
+
+      const stacktrace = binaryStacktrace(
+        "match",
+        Type.list([
+          Type.bitstring("abc"),
+          Type.bitstring("b"),
+          Type.list([scopeOption]),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(3),
+            Type.bitstring("specified part is not wholly inside binary"),
+          ],
+        ]),
+      );
+    });
+
+    it("binary match/3: bad options", () => {
+      const stacktrace = binaryStacktrace(
+        "match",
+        Type.list([
+          Type.bitstring("abc"),
+          Type.bitstring("b"),
+          Type.list([Type.atom("x")]),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(3), Type.bitstring("invalid options")]]),
+      );
+    });
+
+    it("binary matches: delegates to the match clauses", () => {
+      const stacktrace = binaryStacktrace(
+        "matches",
+        Type.list([Type.bitstring("abc"), Type.bitstring("")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("not a valid pattern")]]),
+      );
+    });
+
+    it("binary replace/3: bad replacement", () => {
+      const stacktrace = binaryStacktrace(
+        "replace",
+        Type.list([Type.bitstring("abc"), Type.bitstring("b"), Type.atom("x")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(3), Type.bitstring("not a valid replacement")],
+        ]),
+      );
+    });
+
+    it("binary replace/4: badopt cause adds the options fragment", () => {
+      const stacktrace = binaryStacktrace(
+        "replace",
+        Type.list([
+          Type.bitstring("abc"),
+          Type.bitstring("b"),
+          Type.bitstring("x"),
+          Type.list([Type.atom("y")]),
+        ]),
+        badoptErrorInfo,
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(4), Type.bitstring("invalid options")]]),
+      );
+    });
+
+    it("binary replace/4: bad replacement with badopt cause", () => {
+      const stacktrace = binaryStacktrace(
+        "replace",
+        Type.list([
+          Type.bitstring("abc"),
+          Type.bitstring("b"),
+          Type.atom("x"),
+          Type.list([Type.atom("y")]),
+        ]),
+        badoptErrorInfo,
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(3), Type.bitstring("not a valid replacement")],
+          [Type.integer(4), Type.bitstring("invalid options")],
+        ]),
+      );
+    });
+
+    it("binary replace/4: valid arguments without cause blame the options", () => {
+      const stacktrace = binaryStacktrace(
+        "replace",
+        Type.list([
+          Type.bitstring("abc"),
+          Type.bitstring("b"),
+          Type.bitstring("x"),
+          Type.list([Type.atom("y")]),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(4), Type.bitstring("invalid options")]]),
+      );
+    });
+
+    it("binary split/2: bad pattern", () => {
+      const stacktrace = binaryStacktrace(
+        "split",
+        Type.list([Type.bitstring("abc"), Type.atom("x")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("not a valid pattern")]]),
+      );
+    });
+
+    it("binary split/3: bad options", () => {
+      const stacktrace = binaryStacktrace(
+        "split",
+        Type.list([
+          Type.bitstring("abc"),
+          Type.bitstring("b"),
+          Type.list([Type.atom("x")]),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(3), Type.bitstring("invalid options")]]),
+      );
     });
 
     it("maps find: not a map", () => {
@@ -890,6 +1266,32 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
         Interpreter.buildFunctionClauseErrorMsg(
           ":erl_stdlib_errors.format_error/2",
           [Type.atom("badarg"), stacktrace],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError when a binary clause needs args but the frame carries an arity", () => {
+      const stacktrace = binaryStacktrace("at", Type.integer(2));
+
+      assertBoxedError(
+        () => format_error(Type.atom("badarg"), stacktrace),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_stdlib_errors.format_binary_error/3",
+          [Type.atom("at"), Type.integer(2), Type.atom("none")],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError when matches delegates a frame that carries an arity", () => {
+      const stacktrace = binaryStacktrace("matches", Type.integer(2));
+
+      assertBoxedError(
+        () => format_error(Type.atom("badarg"), stacktrace),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_stdlib_errors.format_binary_error/3",
+          [Type.atom("match"), Type.integer(2), Type.atom("none")],
         ),
       );
     });
