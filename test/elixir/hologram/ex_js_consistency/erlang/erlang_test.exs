@@ -3761,11 +3761,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "error frame carries args and error_info" do
-      arg = wrap_term(:a)
+      index = wrap_term(:a)
+      tuple = wrap_term(:b)
 
       top_frame =
         try do
-          :erlang.delete_element(arg, :b)
+          :erlang.delete_element(index, tuple)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -3880,11 +3881,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "error frame carries args and error_info" do
-      arg = wrap_term(:a)
+      index = wrap_term(:a)
+      tuple = wrap_term(:b)
 
       top_frame =
         try do
-          :erlang.element(arg, :b)
+          :erlang.element(index, tuple)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -5098,11 +5100,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "error frame carries args and error_info" do
-      arg = wrap_term(:a)
+      index = wrap_term(:a)
+      tuple = wrap_term(:b)
 
       top_frame =
         try do
-          :erlang.insert_element(arg, :b, :c)
+          :erlang.insert_element(index, tuple, :c)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
