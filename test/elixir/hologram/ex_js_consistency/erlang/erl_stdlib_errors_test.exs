@@ -9,6 +9,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
 
   @moduletag :consistency
 
+  @badopt_error_info [error_info: %{cause: :badopt, module: :erl_stdlib_errors}]
   @error_info [error_info: %{module: :erl_stdlib_errors}]
 
   describe "format_error/2" do
@@ -31,6 +32,160 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
       ]
 
       assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{}
+    end
+
+    test "binary at: bad position" do
+      stacktrace = [{:binary, :at, ["abc", :x], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not an integer"}
+    end
+
+    test "binary at: negative position" do
+      stacktrace = [{:binary, :at, ["abc", -1], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "out of range"}
+    end
+
+    test "binary at: bitstring subject" do
+      stacktrace = [{:binary, :at, [<<1::1>>, 0], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "is a bitstring (expected a binary)"
+             }
+    end
+
+    test "binary at: valid arguments produce no fragments" do
+      stacktrace = [{:binary, :at, ["abc", 10], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{}
+    end
+
+    test "binary compile_pattern: not a valid pattern" do
+      stacktrace = [{:binary, :compile_pattern, [""], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a valid pattern"
+             }
+    end
+
+    test "binary copy: bad subject and count" do
+      stacktrace = [{:binary, :copy, [:x, -1], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a binary",
+               2 => "out of range"
+             }
+    end
+
+    test "binary first: empty binary" do
+      stacktrace = [{:binary, :first, [""], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "a zero-sized binary is not allowed"
+             }
+    end
+
+    test "binary first: not a binary" do
+      stacktrace = [{:binary, :first, [:x], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a binary"}
+    end
+
+    test "binary last: empty binary" do
+      stacktrace = [{:binary, :last, [""], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "a zero-sized binary is not allowed"
+             }
+    end
+
+    test "binary match/2: bad subject and pattern" do
+      stacktrace = [{:binary, :match, [:x, :y], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not a binary",
+               2 => "not a valid pattern"
+             }
+    end
+
+    test "binary match/2: empty binary pattern" do
+      stacktrace = [{:binary, :match, ["abc", ""], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               2 => "not a valid pattern"
+             }
+    end
+
+    test "binary match/2: compiled pattern is valid" do
+      compiled_pattern = :binary.compile_pattern("b")
+      stacktrace = [{:binary, :match, ["abc", compiled_pattern], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{}
+    end
+
+    test "binary match/3: scope not wholly inside binary" do
+      stacktrace = [{:binary, :match, ["abc", "b", [scope: {0, 10}]], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               3 => "specified part is not wholly inside binary"
+             }
+    end
+
+    test "binary match/3: bad options" do
+      stacktrace = [{:binary, :match, ["abc", "b", [:x]], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{3 => "invalid options"}
+    end
+
+    test "binary matches: delegates to the match clauses" do
+      stacktrace = [{:binary, :matches, ["abc", ""], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               2 => "not a valid pattern"
+             }
+    end
+
+    test "binary replace/3: bad replacement" do
+      stacktrace = [{:binary, :replace, ["abc", "b", :x], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               3 => "not a valid replacement"
+             }
+    end
+
+    test "binary replace/4: badopt cause adds the options fragment" do
+      stacktrace = [{:binary, :replace, ["abc", "b", "x", [:y]], @badopt_error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{4 => "invalid options"}
+    end
+
+    test "binary replace/4: bad replacement with badopt cause" do
+      stacktrace = [{:binary, :replace, ["abc", "b", :x, [:y]], @badopt_error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               3 => "not a valid replacement",
+               4 => "invalid options"
+             }
+    end
+
+    test "binary replace/4: valid arguments without cause blame the options" do
+      stacktrace = [{:binary, :replace, ["abc", "b", "x", [:y]], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{4 => "invalid options"}
+    end
+
+    test "binary split/2: bad pattern" do
+      stacktrace = [{:binary, :split, ["abc", :x], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               2 => "not a valid pattern"
+             }
+    end
+
+    test "binary split/3: bad options" do
+      stacktrace = [{:binary, :split, ["abc", "b", [:x]], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{3 => "invalid options"}
     end
 
     test "maps find: not a map" do
@@ -393,6 +548,30 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
                    build_function_clause_error_msg(":erl_stdlib_errors.format_error/2", [
                      :badarg,
                      stacktrace
+                   ]),
+                   {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
+    end
+
+    test "raises FunctionClauseError when a binary clause needs args but the frame carries an arity" do
+      stacktrace = [{:binary, :at, 2, @error_info}]
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":erl_stdlib_errors.format_binary_error/3", [
+                     :at,
+                     2,
+                     :none
+                   ]),
+                   {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
+    end
+
+    test "raises FunctionClauseError when matches delegates a frame that carries an arity" do
+      stacktrace = [{:binary, :matches, 2, @error_info}]
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":erl_stdlib_errors.format_binary_error/3", [
+                     :match,
+                     2,
+                     :none
                    ]),
                    {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
     end
