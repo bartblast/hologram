@@ -178,6 +178,59 @@ describe("Erlang_Elixir_Aliases", () => {
         ]),
       );
     });
+
+    it("error frame carries the do_concat args for a non-list argument", () => {
+      const segments = Type.atom("abc");
+
+      let caught;
+
+      try {
+        concat(segments);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "elixir_aliases",
+          function: "do_concat",
+          arityOrArgs: Type.list([segments, Type.bitstring("Elixir")]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
+
+    it("error frame carries the do_concat args for an invalid segment", () => {
+      const segments = Type.list([
+        Type.bitstring("Aaa"),
+        Type.bitstring("Bbb"),
+        Type.integer(123),
+      ]);
+
+      let caught;
+
+      try {
+        concat(segments);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "elixir_aliases",
+          function: "do_concat",
+          arityOrArgs: Type.list([
+            Type.list([Type.integer(123)]),
+            Type.bitstring("Elixir.Aaa.Bbb"),
+          ]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
   });
 
   describe("safe_concat/1", () => {

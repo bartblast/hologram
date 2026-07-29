@@ -81,6 +81,42 @@ defmodule Hologram.ExJsConsistency.Erlang.ElixirAliasesTest do
                      :elixir_aliases.concat([123, "Ccc"])
                    end
     end
+
+    test "error frame carries the do_concat args for a non-list argument" do
+      segments = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :elixir_aliases.concat(segments)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside
+      # elixir_aliases.erl, so its frame location also carries the
+      # Elixir-internal file and line, which the client doesn't mirror.
+      assert {:elixir_aliases, :do_concat, [:abc, "Elixir"], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the do_concat args for an invalid segment" do
+      segments = wrap_term(["Aaa", "Bbb", 123])
+
+      top_frame =
+        try do
+          :elixir_aliases.concat(segments)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside
+      # elixir_aliases.erl, so its frame location also carries the
+      # Elixir-internal file and line, which the client doesn't mirror.
+      assert {:elixir_aliases, :do_concat, [[123], "Elixir.Aaa.Bbb"], location} =
+               wrap_term(top_frame)
+
+      assert location[:error_info] == nil
+    end
   end
 
   # Note: there's no atom table limitation in the client-side Hologram runtime,

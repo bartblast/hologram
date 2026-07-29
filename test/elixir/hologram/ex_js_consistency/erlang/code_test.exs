@@ -23,5 +23,22 @@ defmodule Hologram.ExJsConsistency.Erlang.CodeTest do
                    build_function_clause_error_msg(":code.ensure_loaded/1", [1]),
                    fn -> :code.ensure_loaded(1) end
     end
+
+    test "error frame carries args" do
+      module = wrap_term(1)
+
+      top_frame =
+        try do
+          :code.ensure_loaded(module)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside code.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:code, :ensure_loaded, [1], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 end

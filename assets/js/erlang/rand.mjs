@@ -23,9 +23,10 @@ const Erlang_Rand = {
       !Type.isInteger(integer) ||
       Interpreter.compareTerms(integer, Type.integer(0)) < 1
     ) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        "no function clause matching in :rand.uniform_s/2",
-      );
+      // The server's clause mismatch reports :rand.uniform_s/2 with the
+      // seed state as the second argument, which the client cannot mirror,
+      // so the frame carries the bare arity.
+      Interpreter.raiseFunctionClauseError("rand", "uniform_s", 2);
     }
 
     // TODO: support integers outside Number range

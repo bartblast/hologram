@@ -45,5 +45,28 @@ describe("Erlang_Code", () => {
         ]),
       );
     });
+
+    it("error frame carries args", () => {
+      const module = Type.integer(1);
+
+      let caught;
+
+      try {
+        ensure_loaded(module);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "code",
+          function: "ensure_loaded",
+          arityOrArgs: Type.list([module]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
   });
 });
