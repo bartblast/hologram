@@ -610,6 +610,22 @@ describe("Erlang_Binary", () => {
         Type.tuple([Type.integer(6), Type.integer(5)]),
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      const subject = Type.bitstring("abc");
+
+      let caught;
+
+      try {
+        match(subject, Type.atom("bad"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        binaryErrorFrame("match", Type.list([subject, Type.atom("bad")])),
+      ]);
+    });
   });
 
   describe("match/3", () => {
@@ -1138,6 +1154,50 @@ describe("Erlang_Binary", () => {
         );
       });
     });
+
+    it("error frame carries args and error_info", () => {
+      const subject = Type.bitstring("abc");
+      const options = Type.list();
+
+      let caught;
+
+      try {
+        match(subject, Type.atom("bad"), options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        binaryErrorFrame(
+          "match",
+          Type.list([subject, Type.atom("bad"), options]),
+        ),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a scope not wholly inside the binary", () => {
+      const subject = Type.bitstring("abc");
+      const pattern = Type.bitstring("b");
+
+      const options = Type.list([
+        Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(0), Type.integer(10)]),
+        ]),
+      ]);
+
+      let caught;
+
+      try {
+        match(subject, pattern, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        binaryErrorFrame("match", Type.list([subject, pattern, options])),
+      ]);
+    });
   });
 
   describe("matches/2", () => {
@@ -1156,6 +1216,22 @@ describe("Erlang_Binary", () => {
           Type.tuple([Type.integer(14), Type.integer(2)]),
         ]),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      const subject = Type.bitstring("abc");
+
+      let caught;
+
+      try {
+        matches(subject, Type.atom("bad"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        binaryErrorFrame("matches", Type.list([subject, Type.atom("bad")])),
+      ]);
     });
   });
 
@@ -1593,6 +1669,26 @@ describe("Erlang_Binary", () => {
           Interpreter.buildArgumentErrorMsg(3, "invalid options"),
         );
       });
+    });
+
+    it("error frame carries args and error_info", () => {
+      const subject = Type.bitstring("abc");
+      const options = Type.list();
+
+      let caught;
+
+      try {
+        matches(subject, Type.atom("bad"), options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        binaryErrorFrame(
+          "matches",
+          Type.list([subject, Type.atom("bad"), options]),
+        ),
+      ]);
     });
   });
 

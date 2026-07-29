@@ -388,6 +388,20 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       # Verifies default options (no :global) - finds first match only
       assert :binary.match("hello world world", "world") == {6, 5}
     end
+
+    test "error frame carries args and error_info" do
+      pattern = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :binary.match("abc", pattern)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:binary, :match, ["abc", :bad], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "match/3" do
@@ -589,11 +603,54 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    build_argument_error_msg(3, "invalid options"),
                    {:binary, :match, ["test", "es", [scope: {0, :bad}]]}
     end
+
+    test "error frame carries args and error_info" do
+      pattern = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :binary.match("abc", pattern, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:binary, :match, ["abc", :bad, []], [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info for a scope not wholly inside the binary" do
+      options = wrap_term(scope: {0, 10})
+
+      top_frame =
+        try do
+          :binary.match("abc", "b", options)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:binary, :match, ["abc", "b", [scope: {0, 10}]],
+                [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "matches/2" do
     test "delegates to matches/3 with empty options" do
       assert :binary.matches("the rain in spain", "ai") == [{5, 2}, {14, 2}]
+    end
+
+    test "error frame carries args and error_info" do
+      pattern = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :binary.matches("abc", pattern)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:binary, :matches, ["abc", :bad], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
@@ -757,6 +814,20 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert_error ArgumentError,
                    build_argument_error_msg(3, "invalid options"),
                    {:binary, :matches, ["abc", "a", [scope: {:bad, 1}]]}
+    end
+
+    test "error frame carries args and error_info" do
+      pattern = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :binary.matches("abc", pattern, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:binary, :matches, ["abc", :bad, []], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
