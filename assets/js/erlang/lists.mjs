@@ -230,45 +230,71 @@ const Erlang_Lists = {
   // Deps: [:lists.flatten/1]
 
   // Start foldl/3
-  "foldl/3": function (fun, initialAcc, list) {
+  "foldl/3": (fun, initialAcc, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldl/3", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "foldl", 3, [
+        fun,
+        initialAcc,
+        list,
+      ]);
     }
 
     if (!Type.isList(list)) {
       Interpreter.raiseCaseClauseError(list);
     }
 
-    if (!Type.isProperList(list)) {
-      // Client-side error message is intentionally simplified.
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldl_1/3"),
-      );
+    const properLength = list.isProper
+      ? list.data.length
+      : list.data.length - 1;
+
+    let acc = initialAcc;
+
+    for (let i = 0; i < properLength; i++) {
+      acc = Interpreter.callAnonymousFunction(fun, [list.data[i], acc]);
     }
 
-    return list.data.reduce(
-      (acc, elem) => Interpreter.callAnonymousFunction(fun, [elem, acc]),
-      initialAcc,
-    );
+    // The server folds the proper prefix before failing on the tail, so the
+    // frame carries the accumulator built so far.
+    if (!list.isProper) {
+      Interpreter.raiseFunctionClauseError("lists", "foldl_1", 3, [
+        fun,
+        acc,
+        list.data.at(-1),
+      ]);
+    }
+
+    return acc;
   },
   // End foldl/3
   // Deps: []
 
   // Start foldr/3
-  "foldr/3": function (fun, initialAcc, list) {
+  "foldr/3": (fun, initialAcc, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr/3", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "foldr", 3, [
+        fun,
+        initialAcc,
+        list,
+      ]);
     }
 
-    if (!Type.isList(list) || !Type.isProperList(list)) {
-      // Client-side error message is intentionally simplified.
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
-      );
+    // The server recurses to the end of the list before folding, so a bad
+    // list fails with the initial accumulator and the offending term, and no
+    // fun application happens.
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError("lists", "foldr_1", 3, [
+        fun,
+        initialAcc,
+        list,
+      ]);
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError("lists", "foldr_1", 3, [
+        fun,
+        initialAcc,
+        list.data.at(-1),
+      ]);
     }
 
     return list.data.reduceRight(
@@ -282,23 +308,31 @@ const Erlang_Lists = {
   // Start foreach/2
   "foreach/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach/2", [
-          fun,
-          list,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "foreach", 2, [fun, list]);
     }
 
-    if (!Type.isList(list) || !Type.isProperList(list)) {
-      // Client-side error message is intentionally simplified.
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach_1/2"),
-      );
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError("lists", "foreach_1", 2, [
+        fun,
+        list,
+      ]);
     }
 
-    for (let i = 0; i < list.data.length; i++) {
+    const properLength = list.isProper
+      ? list.data.length
+      : list.data.length - 1;
+
+    for (let i = 0; i < properLength; i++) {
       Interpreter.callAnonymousFunction(fun, [list.data[i]]);
+    }
+
+    // The server applies the fun through the proper prefix before failing
+    // on the tail.
+    if (!list.isProper) {
+      Interpreter.raiseFunctionClauseError("lists", "foreach_1", 2, [
+        fun,
+        list.data.at(-1),
+      ]);
     }
 
     return Type.atom("ok");
@@ -585,45 +619,54 @@ const Erlang_Lists = {
   // Deps: []
 
   // Start map/2
-  "map/2": function (fun, list) {
+  "map/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.map/2", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "map", 2, [fun, list]);
     }
 
     if (!Type.isList(list)) {
       Interpreter.raiseCaseClauseError(list);
     }
 
-    if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.map_1/2"),
-      );
+    const properLength = list.isProper
+      ? list.data.length
+      : list.data.length - 1;
+
+    const mapped = [];
+
+    for (let i = 0; i < properLength; i++) {
+      mapped.push(Interpreter.callAnonymousFunction(fun, [list.data[i]]));
     }
 
-    return Type.list(
-      list.data.map((elem) => Interpreter.callAnonymousFunction(fun, [elem])),
-    );
+    // The server maps the proper prefix before failing on the tail.
+    if (!list.isProper) {
+      Interpreter.raiseFunctionClauseError("lists", "map_1", 2, [
+        fun,
+        list.data.at(-1),
+      ]);
+    }
+
+    return Type.list(mapped);
   },
   // End map/2
   // Deps: []
 
   // Start mapfoldl/3
-  "mapfoldl/3": function (fun, initialAcc, list) {
+  "mapfoldl/3": (fun, initialAcc, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl/3", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "mapfoldl", 3, [
+        fun,
+        initialAcc,
+        list,
+      ]);
     }
 
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.mapfoldl_1/3",
-          arguments,
-        ),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "mapfoldl_1", 3, [
+        fun,
+        initialAcc,
+        list,
+      ]);
     }
 
     const isProperList = Type.isProperList(list);
@@ -650,15 +693,11 @@ const Erlang_Lists = {
     }
 
     if (!isProperList) {
-      const improperTail = list.data.at(-1);
-
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl_1/3", [
-          fun,
-          acc,
-          improperTail,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "mapfoldl_1", 3, [
+        fun,
+        acc,
+        list.data.at(-1),
+      ]);
     }
 
     return Type.tuple([Type.list(mappedElements), acc]);
@@ -962,26 +1001,41 @@ const Erlang_Lists = {
     }
 
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [fun, list]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "sort", 2, [fun, list]);
     }
 
     if (!Type.isProperList(list)) {
-      let errorMsg;
-
       // Match server behavior for improper lists:
-      // - For lists with 1 element, raise error in :lists.sort/2
-      // - For lists with 2+ elements, raise error in :lists.fsplit_1/6
-      errorMsg =
-        list.data.length <= 2
-          ? Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [
-              fun,
-              list,
-            ])
-          : Interpreter.buildFunctionClauseErrorMsg(":lists.fsplit_1/6");
+      // - 1 proper element: the sort/2 clause head fails
+      // - 2 proper elements: the first comparison picks the fsplit function
+      //   that then fails on the tail
+      // - longer: the failure happens deep in the split state, which the
+      //   client doesn't mirror, so the frame carries the bare arity
+      if (list.data.length <= 2) {
+        Interpreter.raiseFunctionClauseError("lists", "sort", 2, [fun, list]);
+      }
 
-      Interpreter.raiseFunctionClauseErrorMsg(errorMsg);
+      if (list.data.length === 3) {
+        const x = list.data[0];
+        const y = list.data[1];
+
+        const fsplitFun = Type.isTrue(
+          Interpreter.callAnonymousFunction(fun, [x, y]),
+        )
+          ? "fsplit_1"
+          : "fsplit_2";
+
+        Interpreter.raiseFunctionClauseError("lists", fsplitFun, 6, [
+          y,
+          x,
+          fun,
+          list.data.at(-1),
+          Type.list(),
+          Type.list(),
+        ]);
+      }
+
+      Interpreter.raiseFunctionClauseError("lists", "fsplit_1", 6);
     }
 
     return Type.list(

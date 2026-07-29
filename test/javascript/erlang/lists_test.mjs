@@ -1452,7 +1452,6 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client-side error message is intentionally simplified.
     it("raises FunctionClauseError if the third argument is an improper list", () => {
       const list = Type.improperList([
         Type.integer(1),
@@ -1463,8 +1462,44 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => foldl(fun, acc, list),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldl_1/3"),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldl_1/3", [
+          fun,
+          Type.list([Type.integer(2), Type.integer(1)]),
+          Type.integer(3),
+        ]),
       );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        foldl(atomAbc, acc, emptyList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "foldl", Type.list([atomAbc, acc, emptyList])),
+      ]);
+    });
+
+    it("error frame carries the folded accumulator and the improper tail in args", () => {
+      let caught;
+
+      try {
+        foldl(fun, acc, Type.improperList([integer1, integer2, integer3]));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "lists",
+          "foldl_1",
+          Type.list([fun, Type.list([integer2, integer1]), integer3]),
+        ),
+      ]);
     });
   });
 
@@ -1554,16 +1589,18 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client-side error message is intentionally simplified.
     it("raises FunctionClauseError if the third argument is not a list", () => {
       assertBoxedError(
         () => foldr(fun, acc, Type.atom("abc")),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
+          fun,
+          acc,
+          Type.atom("abc"),
+        ]),
       );
     });
 
-    // Client-side error message is intentionally simplified.
     it("raises FunctionClauseError if the third argument is an improper list", () => {
       const improperList = Type.improperList([
         Type.integer(1),
@@ -1574,8 +1611,40 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => foldr(fun, acc, improperList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
+          fun,
+          acc,
+          Type.integer(3),
+        ]),
       );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        foldr(atomAbc, acc, emptyList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "foldr", Type.list([atomAbc, acc, emptyList])),
+      ]);
+    });
+
+    it("error frame carries the improper tail in args", () => {
+      let caught;
+
+      try {
+        foldr(fun, acc, Type.improperList([integer1, integer2, integer3]));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "foldr_1", Type.list([fun, acc, integer3])),
+      ]);
     });
   });
 
@@ -1667,22 +1736,54 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client-side error message is intentionally simplified.
     it("raises FunctionClauseError if the second argument is not a list", () => {
       assertBoxedError(
         () => foreach(fun, atomAbc),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach_1/2"),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach_1/2", [
+          fun,
+          atomAbc,
+        ]),
       );
     });
 
-    // Client-side error message is intentionally simplified.
     it("raises FunctionClauseError if the second argument is an improper list", () => {
       assertBoxedError(
         () => foreach(fun, improperList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach_1/2"),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach_1/2", [
+          fun,
+          integer3,
+        ]),
       );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        foreach(atomAbc, emptyList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "foreach", Type.list([atomAbc, emptyList])),
+      ]);
+    });
+
+    it("error frame carries the improper tail in args", () => {
+      let caught;
+
+      try {
+        foreach(fun, improperList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "foreach_1", Type.list([fun, integer3])),
+      ]);
     });
   });
 
@@ -2910,7 +3011,6 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the second argument is an improper list", () => {
       assertBoxedError(
         () =>
@@ -2923,8 +3023,39 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.map_1/2"),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.map_1/2", [
+          fun,
+          Type.integer(3),
+        ]),
       );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        map(atomAbc, emptyList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "map", Type.list([atomAbc, emptyList])),
+      ]);
+    });
+
+    it("error frame carries the improper tail in args", () => {
+      let caught;
+
+      try {
+        map(fun, improperList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "map_1", Type.list([fun, integer3])),
+      ]);
     });
   });
 
@@ -3073,6 +3204,34 @@ describe("Erlang_Lists", () => {
         "MatchError",
         Interpreter.buildMatchErrorMsg(integer1),
       );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        mapfoldl(atomAbc, acc, emptyList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "mapfoldl", Type.list([atomAbc, acc, emptyList])),
+      ]);
+    });
+
+    it("error frame carries the folded accumulator and the improper tail in args", () => {
+      let caught;
+
+      try {
+        mapfoldl(fun, acc, Type.improperList([integer1, integer2, integer3]));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "mapfoldl_1", Type.list([fun, integer3, integer3])),
+      ]);
     });
   });
 
@@ -4225,16 +4384,64 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client-side implementation uses simplified error details
     it("raises FunctionClauseError if the second argument is an improper list with at least 3 elements", () => {
-      const expectedMessage =
-        Interpreter.buildFunctionClauseErrorMsg(":lists.fsplit_1/6");
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.fsplit_1/6",
+        [integer2, integer1, fun, integer3, emptyList, emptyList],
+      );
 
       assertBoxedError(
         () => sort(fun, improperList),
         "FunctionClauseError",
         expectedMessage,
       );
+    });
+
+    it("raises FunctionClauseError in fsplit_2 if the first comparison is false", () => {
+      const list = Type.improperList([integer2, integer1, atomX]);
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.fsplit_2/6",
+        [integer1, integer2, fun, atomX, emptyList, emptyList],
+      );
+
+      assertBoxedError(
+        () => sort(fun, list),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        sort(fun, atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "sort", Type.list([fun, atomAbc])),
+      ]);
+    });
+
+    it("error frame carries the split state in args for a two-element improper list", () => {
+      let caught;
+
+      try {
+        sort(fun, improperList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "lists",
+          "fsplit_1",
+          Type.list([integer2, integer1, fun, integer3, emptyList, emptyList]),
+        ),
+      ]);
     });
   });
 
