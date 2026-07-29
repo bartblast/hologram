@@ -272,6 +272,99 @@ const Erlang_Erl_Stdlib_Errors = {
   // End _format_error_map/3
   // Deps: [:erl_stdlib_errors._expand_error/1]
 
+  // Mirrors OTP's private format_lists_error/2. The keymember and keysearch
+  // clauses delegate to the keyfind clause, like OTP's do. The increment
+  // fragments are literal texts, like OTP's binaries. All other lists
+  // functions raise without a lists error_info frame, so - like any unknown
+  // function - they fall through to the function clause error, which on the
+  // server only unknown functions reach.
+  // Start _format_lists_error/2
+  "_format_lists_error/2": (fun, argsOrArity) => {
+    const raiseFunctionClause = () => {
+      Interpreter.raiseFunctionClauseErrorMsg(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_stdlib_errors.format_lists_error/2",
+          [fun, argsOrArity],
+        ),
+      );
+    };
+
+    const mustBeInteger = (term) => (Type.isInteger(term) ? "" : "not_integer");
+    const mustBeList = Erlang_Erl_Stdlib_Errors["_must_be_list/1"];
+
+    const args = Type.isList(argsOrArity) ? argsOrArity.data : null;
+
+    switch (fun.value) {
+      case "keyfind":
+      case "keymember":
+      case "keysearch": {
+        if (args?.length !== 3) {
+          raiseFunctionClause();
+        }
+
+        const pos = args[1];
+
+        let posError = "";
+
+        if (Type.isInteger(pos)) {
+          if (pos.value < 1n) {
+            posError = "range";
+          }
+        } else {
+          posError = "not_integer";
+        }
+
+        return ["", posError, mustBeList(args[2])];
+      }
+
+      case "member": {
+        if (args?.length !== 2) {
+          raiseFunctionClause();
+        }
+
+        return ["", mustBeList(args[1])];
+      }
+
+      case "reverse": {
+        if (args?.length !== 2) {
+          raiseFunctionClause();
+        }
+
+        return [mustBeList(args[0])];
+      }
+
+      case "seq": {
+        if (args?.length !== 3) {
+          raiseFunctionClause();
+        }
+
+        const [first, last, inc] = args;
+
+        const intErrors = [
+          mustBeInteger(first),
+          mustBeInteger(last),
+          mustBeInteger(inc),
+        ];
+
+        if (intErrors.some((error) => error !== "")) {
+          return intErrors;
+        }
+
+        const incError =
+          inc.value <= 0n && first.value - inc.value <= last.value
+            ? "not a positive increment"
+            : "not a negative increment";
+
+        return ["", "", incError];
+      }
+
+      default:
+        raiseFunctionClause();
+    }
+  },
+  // End _format_lists_error/2
+  // Deps: [:erl_stdlib_errors._must_be_list/1]
+
   // Mirrors OTP's private format_maps_error/2 as a spec table, one entry
   // per OTP clause. An array spec lists per-argument fragments: a validator
   // function is applied to the argument at its position, a constant is emitted as
@@ -627,9 +720,6 @@ const Erlang_Erl_Stdlib_Errors = {
   // End _unicode_encoding/1
   // Deps: []
 
-  // TODO: dispatch to the remaining per-module formatters from
-  // :erl_stdlib_errors (format_lists_error, ...) as their stdlib ports
-  // migrate to bare reasons with error_info.
   // Start format_error/2
   "format_error/2": (reason, stacktrace) => {
     const isFourTupleTopFrame =
@@ -687,6 +777,13 @@ const Erlang_Erl_Stdlib_Errors = {
         );
         break;
 
+      case "lists":
+        fragments = Erlang_Erl_Stdlib_Errors["_format_lists_error/2"](
+          frameFun,
+          frameArgsOrArity,
+        );
+        break;
+
       case "maps":
         fragments = Erlang_Erl_Stdlib_Errors["_format_maps_error/2"](
           frameFun,
@@ -719,7 +816,7 @@ const Erlang_Erl_Stdlib_Errors = {
     );
   },
   // End format_error/2
-  // Deps: [:erl_stdlib_errors._format_binary_error/3, :erl_stdlib_errors._format_error_map/3, :erl_stdlib_errors._format_maps_error/2, :erl_stdlib_errors._format_math_error/2, :erl_stdlib_errors._format_unicode_error/2]
+  // Deps: [:erl_stdlib_errors._format_binary_error/3, :erl_stdlib_errors._format_error_map/3, :erl_stdlib_errors._format_lists_error/2, :erl_stdlib_errors._format_maps_error/2, :erl_stdlib_errors._format_math_error/2, :erl_stdlib_errors._format_unicode_error/2]
 };
 
 export default Erlang_Erl_Stdlib_Errors;

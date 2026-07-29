@@ -188,6 +188,109 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
       assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{3 => "invalid options"}
     end
 
+    test "lists keyfind: bad position" do
+      stacktrace = [{:lists, :keyfind, [:k, :bad, [k: 1]], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not an integer"}
+    end
+
+    test "lists keyfind: position out of range" do
+      stacktrace = [{:lists, :keyfind, [:k, 0, [k: 1]], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "out of range"}
+    end
+
+    test "lists keyfind: not a list" do
+      stacktrace = [{:lists, :keyfind, [:k, 1, :bad], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{3 => "not a list"}
+    end
+
+    test "lists keyfind: improper list" do
+      stacktrace = [{:lists, :keyfind, [:k, 1, [{:k, 1} | :tail]], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{3 => "not a proper list"}
+    end
+
+    test "lists keyfind: bad position and bad list" do
+      stacktrace = [{:lists, :keyfind, [:k, 0, :bad], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               2 => "out of range",
+               3 => "not a list"
+             }
+    end
+
+    test "lists keymember delegates to the keyfind clause" do
+      stacktrace = [{:lists, :keymember, [:k, :bad, [k: 1]], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not an integer"}
+    end
+
+    test "lists keysearch delegates to the keyfind clause" do
+      stacktrace = [{:lists, :keysearch, [:k, :bad, [k: 1]], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not an integer"}
+    end
+
+    test "lists member: not a list" do
+      stacktrace = [{:lists, :member, [1, :bad], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not a list"}
+    end
+
+    test "lists member: improper list" do
+      stacktrace = [{:lists, :member, [5, [1 | 2]], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{2 => "not a proper list"}
+    end
+
+    test "lists reverse: not a list" do
+      stacktrace = [{:lists, :reverse, [:bad, []], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a list"}
+    end
+
+    test "lists reverse: improper list" do
+      stacktrace = [{:lists, :reverse, [[1 | 2], []], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{1 => "not a proper list"}
+    end
+
+    test "lists seq: non-integer arguments" do
+      stacktrace = [{:lists, :seq, [:a, :b, :c], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               1 => "not an integer",
+               2 => "not an integer",
+               3 => "not an integer"
+             }
+    end
+
+    test "lists seq: zero increment" do
+      stacktrace = [{:lists, :seq, [1, 10, 0], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               3 => "not a positive increment"
+             }
+    end
+
+    test "lists seq: wrong positive increment" do
+      stacktrace = [{:lists, :seq, [10, 1, 1], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               3 => "not a negative increment"
+             }
+    end
+
+    test "lists seq: wrong negative increment" do
+      stacktrace = [{:lists, :seq, [1, 10, -1], @error_info}]
+
+      assert :erl_stdlib_errors.format_error(:badarg, stacktrace) == %{
+               3 => "not a positive increment"
+             }
+    end
+
     test "maps find: not a map" do
       stacktrace = [{:maps, :find, [:a, :b], @error_info}]
 
@@ -574,6 +677,27 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlStdlibErrorsTest do
                      :none
                    ]),
                    {:erl_stdlib_errors, :format_error, [:badarg, stacktrace]}
+    end
+
+    test "raises FunctionClauseError for an unknown lists function" do
+      expected_msg =
+        build_function_clause_error_msg(":erl_stdlib_errors.format_lists_error/2", [
+          :zip,
+          [[], []]
+        ])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :erl_stdlib_errors.format_error(:badarg, [{:lists, :zip, [[], []], @error_info}])
+      end
+    end
+
+    test "raises FunctionClauseError when a lists clause needs args but the frame carries an arity" do
+      expected_msg =
+        build_function_clause_error_msg(":erl_stdlib_errors.format_lists_error/2", [:keyfind, 3])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :erl_stdlib_errors.format_error(:badarg, [{:lists, :keyfind, 3, @error_info}])
+      end
     end
 
     test "raises FunctionClauseError when a maps clause needs args but the frame carries an arity" do

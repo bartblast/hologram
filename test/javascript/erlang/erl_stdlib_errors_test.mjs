@@ -42,6 +42,17 @@ function binaryStacktrace(functionName, argsOrArity, location = errorInfo) {
   ]);
 }
 
+function listsStacktrace(functionName, argsOrArity) {
+  return Type.list([
+    Type.tuple([
+      Type.atom("lists"),
+      Type.atom(functionName),
+      argsOrArity,
+      errorInfo,
+    ]),
+  ]);
+}
+
 function mapsStacktrace(functionName, argsOrArity) {
   return Type.list([
     Type.tuple([
@@ -485,6 +496,258 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assert.deepStrictEqual(
         result,
         Type.map([[Type.integer(3), Type.bitstring("invalid options")]]),
+      );
+    });
+
+    it("lists keyfind: bad position", () => {
+      const stacktrace = listsStacktrace(
+        "keyfind",
+        Type.list([
+          Type.atom("k"),
+          Type.atom("bad"),
+          Type.list([Type.tuple([Type.atom("k"), Type.integer(1)])]),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("not an integer")]]),
+      );
+    });
+
+    it("lists keyfind: position out of range", () => {
+      const stacktrace = listsStacktrace(
+        "keyfind",
+        Type.list([
+          Type.atom("k"),
+          Type.integer(0),
+          Type.list([Type.tuple([Type.atom("k"), Type.integer(1)])]),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("out of range")]]),
+      );
+    });
+
+    it("lists keyfind: not a list", () => {
+      const stacktrace = listsStacktrace(
+        "keyfind",
+        Type.list([Type.atom("k"), Type.integer(1), Type.atom("bad")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(3), Type.bitstring("not a list")]]),
+      );
+    });
+
+    it("lists keyfind: improper list", () => {
+      const stacktrace = listsStacktrace(
+        "keyfind",
+        Type.list([
+          Type.atom("k"),
+          Type.integer(1),
+          Type.improperList([
+            Type.tuple([Type.atom("k"), Type.integer(1)]),
+            Type.atom("tail"),
+          ]),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(3), Type.bitstring("not a proper list")]]),
+      );
+    });
+
+    it("lists keyfind: bad position and bad list", () => {
+      const stacktrace = listsStacktrace(
+        "keyfind",
+        Type.list([Type.atom("k"), Type.integer(0), Type.atom("bad")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(2), Type.bitstring("out of range")],
+          [Type.integer(3), Type.bitstring("not a list")],
+        ]),
+      );
+    });
+
+    it("lists keymember delegates to the keyfind clause", () => {
+      const stacktrace = listsStacktrace(
+        "keymember",
+        Type.list([
+          Type.atom("k"),
+          Type.atom("bad"),
+          Type.list([Type.tuple([Type.atom("k"), Type.integer(1)])]),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("not an integer")]]),
+      );
+    });
+
+    it("lists keysearch delegates to the keyfind clause", () => {
+      const stacktrace = listsStacktrace(
+        "keysearch",
+        Type.list([
+          Type.atom("k"),
+          Type.atom("bad"),
+          Type.list([Type.tuple([Type.atom("k"), Type.integer(1)])]),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("not an integer")]]),
+      );
+    });
+
+    it("lists member: not a list", () => {
+      const stacktrace = listsStacktrace(
+        "member",
+        Type.list([Type.integer(1), Type.atom("bad")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("not a list")]]),
+      );
+    });
+
+    it("lists member: improper list", () => {
+      const stacktrace = listsStacktrace(
+        "member",
+        Type.list([
+          Type.integer(5),
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("not a proper list")]]),
+      );
+    });
+
+    it("lists reverse: not a list", () => {
+      const stacktrace = listsStacktrace(
+        "reverse",
+        Type.list([Type.atom("bad"), Type.list()]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a list")]]),
+      );
+    });
+
+    it("lists reverse: improper list", () => {
+      const stacktrace = listsStacktrace(
+        "reverse",
+        Type.list([
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+          Type.list(),
+        ]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a proper list")]]),
+      );
+    });
+
+    it("lists seq: non-integer arguments", () => {
+      const stacktrace = listsStacktrace(
+        "seq",
+        Type.list([Type.atom("a"), Type.atom("b"), Type.atom("c")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not an integer")],
+          [Type.integer(2), Type.bitstring("not an integer")],
+          [Type.integer(3), Type.bitstring("not an integer")],
+        ]),
+      );
+    });
+
+    it("lists seq: zero increment", () => {
+      const stacktrace = listsStacktrace(
+        "seq",
+        Type.list([Type.integer(1), Type.integer(10), Type.integer(0)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(3), Type.bitstring("not a positive increment")],
+        ]),
+      );
+    });
+
+    it("lists seq: wrong positive increment", () => {
+      const stacktrace = listsStacktrace(
+        "seq",
+        Type.list([Type.integer(10), Type.integer(1), Type.integer(1)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(3), Type.bitstring("not a negative increment")],
+        ]),
+      );
+    });
+
+    it("lists seq: wrong negative increment", () => {
+      const stacktrace = listsStacktrace(
+        "seq",
+        Type.list([Type.integer(1), Type.integer(10), Type.integer(-1)]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(3), Type.bitstring("not a positive increment")],
+        ]),
       );
     });
 
@@ -1292,6 +1555,35 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
         Interpreter.buildFunctionClauseErrorMsg(
           ":erl_stdlib_errors.format_binary_error/3",
           [Type.atom("match"), Type.integer(2), Type.atom("none")],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError for an unknown lists function", () => {
+      const fun = Type.atom("zip");
+      const args = Type.list([Type.list(), Type.list()]);
+
+      assertBoxedError(
+        () => format_error(Type.atom("badarg"), listsStacktrace("zip", args)),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_stdlib_errors.format_lists_error/2",
+          [fun, args],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError when a lists clause needs args but the frame carries an arity", () => {
+      const fun = Type.atom("keyfind");
+      const arity = Type.integer(3);
+
+      assertBoxedError(
+        () =>
+          format_error(Type.atom("badarg"), listsStacktrace("keyfind", arity)),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_stdlib_errors.format_lists_error/2",
+          [fun, arity],
         ),
       );
     });
