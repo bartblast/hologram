@@ -111,6 +111,7 @@ defmodule Hologram.Compiler.CallGraph do
   # (the :format_error default), so the MFA is not visible in the JS code.
   @edges_used_by_client_runtime [
     error_message_derivation: [
+      {{ErlangError, :normalize, 2}, {:erl_erts_errors, :format_error, 2}},
       {{ErlangError, :normalize, 2}, {:erl_stdlib_errors, :format_error, 2}}
     ]
   ]
@@ -140,6 +141,9 @@ defmodule Hologram.Compiler.CallGraph do
     {{:elixir_aliases, :safe_concat, 1}, {:elixir_aliases, :concat, 1}},
     {{:elixir_locals, :yank, 2}, {:maps, :remove, 2}},
     {{:elixir_utils, :jaro_similarity, 2}, {:unicode_util, :cp, 1}},
+    {{:erl_erts_errors, :_format_error_map, 3}, {:erl_erts_errors, :_expand_error, 1}},
+    {{:erl_erts_errors, :format_error, 2}, {:erl_erts_errors, :_format_erlang_error, 3}},
+    {{:erl_erts_errors, :format_error, 2}, {:erl_erts_errors, :_format_error_map, 3}},
     {{:erl_stdlib_errors, :_format_binary_error, 3}, {:erl_stdlib_errors, :_must_be_binary, 1}},
     {{:erl_stdlib_errors, :_format_binary_error, 3},
      {:erl_stdlib_errors, :_must_be_binary_replacement, 1}},
