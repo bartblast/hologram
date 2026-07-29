@@ -18,9 +18,22 @@ defineRuntimeGlobals();
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/unicode_test.exs
 // Always update both together.
 
+function unicodeErrorFrame(functionName, args) {
+  return {
+    module: "unicode",
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo: Type.map([
+      [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+    ]),
+  };
+}
+
 describe("Erlang_Unicode", () => {
   describe("characters_to_binary/1", () => {
-    it("delegates to :unicode.characters_to_binary/3", () => {
+    it("returns the same result as characters_to_binary/3 with utf8 encodings", () => {
       const input = Type.bitstring("全息图");
       const encoding = Type.atom("utf8");
 
@@ -33,6 +46,23 @@ describe("Erlang_Unicode", () => {
       );
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang_Unicode["characters_to_binary/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_binary",
+          Type.list([Type.atom("abc")]),
+        ),
+      ]);
     });
   });
 
@@ -223,6 +253,23 @@ describe("Erlang_Unicode", () => {
         HologramInterpreterError,
         "encodings other than utf8 are not yet implemented in Hologram",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        characters_to_binary(Type.atom("abc"), utf8Atom, utf8Atom);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_binary",
+          Type.list([Type.atom("abc"), utf8Atom, utf8Atom]),
+        ),
+      ]);
     });
   });
 
@@ -623,6 +670,20 @@ describe("Erlang_Unicode", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame("characters_to_list", Type.list([Type.atom("abc")])),
+      ]);
+    });
   });
 
   describe("characters_to_nfc_binary/1", () => {
@@ -876,6 +937,39 @@ describe("Erlang_Unicode", () => {
           "not valid character data (an iodata term)",
         ),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_nfc_binary",
+          Type.list([Type.atom("abc")]),
+        ),
+      ]);
+    });
+
+    it("error frame carries args and error_info for invalid codepoints", () => {
+      const input = Type.list([Type.integer(99999999999)]);
+
+      let caught;
+
+      try {
+        fun(input);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame("characters_to_nfc_binary", Type.list([input])),
+      ]);
     });
   });
 
@@ -1194,6 +1288,23 @@ describe("Erlang_Unicode", () => {
         ),
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_nfc_list",
+          Type.list([Type.atom("abc")]),
+        ),
+      ]);
+    });
   });
 
   describe("characters_to_nfd_binary/1", () => {
@@ -1448,6 +1559,23 @@ describe("Erlang_Unicode", () => {
           "not valid character data (an iodata term)",
         ),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_nfd_binary",
+          Type.list([Type.atom("abc")]),
+        ),
+      ]);
     });
   });
 
@@ -1770,6 +1898,23 @@ describe("Erlang_Unicode", () => {
           "not valid character data (an iodata term)",
         ),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_nfkc_binary",
+          Type.list([Type.atom("abc")]),
+        ),
+      ]);
     });
   });
 
@@ -2148,6 +2293,23 @@ describe("Erlang_Unicode", () => {
           "not valid character data (an iodata term)",
         ),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_nfkd_binary",
+          Type.list([Type.atom("abc")]),
+        ),
+      ]);
     });
   });
 });

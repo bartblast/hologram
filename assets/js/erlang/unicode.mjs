@@ -62,12 +62,9 @@ const Erlang_Unicode = {
     const result = Erlang_Unicode["_chardata_to_utf8_binary/1"](input);
 
     if (result === null) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
+      Interpreter.raiseBifError("badarg", "unicode", "characters_to_binary", [
+        input,
+      ]);
     }
 
     return result;
@@ -96,12 +93,11 @@ const Erlang_Unicode = {
     const result = Erlang_Unicode["_chardata_to_utf8_binary/1"](input);
 
     if (result === null) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
+      Interpreter.raiseBifError("badarg", "unicode", "characters_to_binary", [
+        input,
+        inputEncoding,
+        outputEncoding,
+      ]);
     }
 
     return result;
@@ -305,12 +301,9 @@ const Erlang_Unicode = {
     };
 
     const raiseInvalidChardataError = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
+      Interpreter.raiseBifError("badarg", "unicode", "characters_to_list", [
+        data,
+      ]);
     };
 
     // Main logic
@@ -433,16 +426,16 @@ const Erlang_Unicode = {
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
       if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+        Interpreter.raiseBifError(
+          "badarg",
+          "unicode",
+          "characters_to_nfc_binary",
+          [data],
         );
       }
     };
 
-    // Handles error tuples from characters_to_binary/3.
+    // Handles error tuples from the chardata conversion.
     // Distinguishes between invalid codepoints (raises ArgumentError) and
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
@@ -481,11 +474,11 @@ const Erlang_Unicode = {
     const converted = Erlang_Unicode["_chardata_to_utf8_binary/1"](data);
 
     if (converted === null) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+      Interpreter.raiseBifError(
+        "badarg",
+        "unicode",
+        "characters_to_nfc_binary",
+        [data],
       );
     }
 
@@ -591,12 +584,9 @@ const Erlang_Unicode = {
     };
 
     const raiseInvalidChardataError = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
+      Interpreter.raiseBifError("badarg", "unicode", "characters_to_nfc_list", [
+        chardata,
+      ]);
     };
 
     // Main logic
@@ -723,16 +713,16 @@ const Erlang_Unicode = {
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
       if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+        Interpreter.raiseBifError(
+          "badarg",
+          "unicode",
+          "characters_to_nfd_binary",
+          [data],
         );
       }
     };
 
-    // Handles error tuples from characters_to_binary/3.
+    // Handles error tuples from the chardata conversion.
     // Distinguishes between invalid codepoints (raises ArgumentError) and
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
@@ -772,11 +762,11 @@ const Erlang_Unicode = {
     const converted = Erlang_Unicode["_chardata_to_utf8_binary/1"](data);
 
     if (converted === null) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+      Interpreter.raiseBifError(
+        "badarg",
+        "unicode",
+        "characters_to_nfd_binary",
+        [data],
       );
     }
 
@@ -865,16 +855,16 @@ const Erlang_Unicode = {
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
       if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+        Interpreter.raiseBifError(
+          "badarg",
+          "unicode",
+          "characters_to_nfkc_binary",
+          [data],
         );
       }
     };
 
-    // Handles error tuples from characters_to_binary/3.
+    // Handles error tuples from the chardata conversion.
     // Distinguishes between invalid codepoints (raises ArgumentError) and
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
@@ -913,11 +903,11 @@ const Erlang_Unicode = {
     const converted = Erlang_Unicode["_chardata_to_utf8_binary/1"](data);
 
     if (converted === null) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+      Interpreter.raiseBifError(
+        "badarg",
+        "unicode",
+        "characters_to_nfkc_binary",
+        [data],
       );
     }
 
@@ -1009,16 +999,16 @@ const Erlang_Unicode = {
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
       if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+        Interpreter.raiseBifError(
+          "badarg",
+          "unicode",
+          "characters_to_nfkd_binary",
+          [data],
         );
       }
     };
 
-    // Handles error tuples from characters_to_binary/3.
+    // Handles error tuples from the chardata conversion.
     // Distinguishes between invalid codepoints (raises ArgumentError) and
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
@@ -1057,11 +1047,11 @@ const Erlang_Unicode = {
     const converted = Erlang_Unicode["_chardata_to_utf8_binary/1"](data);
 
     if (converted === null) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+      Interpreter.raiseBifError(
+        "badarg",
+        "unicode",
+        "characters_to_nfkd_binary",
+        [data],
       );
     }
 

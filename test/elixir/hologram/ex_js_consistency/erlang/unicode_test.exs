@@ -10,9 +10,28 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
   @moduletag :consistency
 
-  test "characters_to_binary/1" do
-    assert :unicode.characters_to_binary("全息图") ==
-             :unicode.characters_to_binary("全息图", :utf8, :utf8)
+  describe "characters_to_binary/1" do
+    test "returns the same result as characters_to_binary/3 with utf8 encodings" do
+      assert :unicode.characters_to_binary("全息图") ==
+               :unicode.characters_to_binary("全息图", :utf8, :utf8)
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_binary(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_binary, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
   end
 
   describe "characters_to_binary/3" do
@@ -158,6 +177,25 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       expected = {:error, <<"abcd">>, [1_114_113, <<"efg">>]}
 
       assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_binary(chardata, :utf8, :utf8)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_binary, [:abc, :utf8, :utf8], location} =
+               wrap_term(top_frame)
+
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -359,6 +397,23 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
       assert :unicode.characters_to_list(input) == expected
     end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_list(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_list, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
   end
 
   describe "characters_to_nfc_binary/1" do
@@ -518,6 +573,42 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfc_binary(input)
       end
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_nfc_binary(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_nfc_binary, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
+
+    test "error frame carries args and error_info for invalid codepoints" do
+      chardata = wrap_term([99_999_999_999])
+
+      top_frame =
+        try do
+          :unicode.characters_to_nfc_binary(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_nfc_binary, [[99_999_999_999]], location} =
+               wrap_term(top_frame)
+
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -712,6 +803,23 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
         :unicode.characters_to_nfc_list(input)
       end
     end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_nfc_list(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_nfc_list, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
   end
 
   describe "characters_to_nfd_binary/1" do
@@ -874,6 +982,23 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfd_binary(input)
       end
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_nfd_binary(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_nfd_binary, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -1081,6 +1206,23 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfkc_binary(input)
       end
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_nfkc_binary(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_nfkc_binary, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -1358,6 +1500,23 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfkd_binary(input)
       end
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_nfkd_binary(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_nfkd_binary, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 end
