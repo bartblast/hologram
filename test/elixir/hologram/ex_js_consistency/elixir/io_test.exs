@@ -66,6 +66,24 @@ defmodule Hologram.ExJsConsistency.Elixir.IOTest do
         |> IO.inspect(:abc, [])
       end
     end
+
+    test "error frame carries args" do
+      device = wrap_term(123)
+
+      top_frame =
+        try do
+          # credo:disable-for-next-line Credo.Check.Warning.IoInspect
+          IO.inspect(device, :abc, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside io.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {IO, :inspect, [123, :abc, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "warn/1" do

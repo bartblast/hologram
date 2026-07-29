@@ -5,16 +5,17 @@ import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
 const Elixir_URI = {
-  "encode/2": function (string, predicate) {
+  "encode/2": (string, predicate) => {
     // Make it consistent with encode/2 guards: when is_binary(string) and is_function(predicate, 1)
     if (
       !Type.isBinary(string) ||
       !Type.isAnonymousFunction(predicate) ||
       predicate.arity !== 1
     ) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg("URI.encode/2", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("URI", "encode", 2, [
+        string,
+        predicate,
+      ]);
     }
 
     // Ensure bytes are available from the bitstring

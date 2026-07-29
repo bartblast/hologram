@@ -31,5 +31,22 @@ defmodule Hologram.ExJsConsistency.Elixir.CodeTest do
         |> Code.ensure_compiled()
       end
     end
+
+    test "error frame carries args" do
+      module = wrap_term(1)
+
+      top_frame =
+        try do
+          Code.ensure_compiled(module)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside code.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {Code, :ensure_compiled, [1], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 end

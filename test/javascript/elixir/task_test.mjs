@@ -54,5 +54,28 @@ describe("Elixir_Task", () => {
         expectedMessage,
       );
     });
+
+    it("error frame carries the await/2 args", () => {
+      const arg = Type.integer(123);
+
+      let caught;
+
+      try {
+        taskAwait(arg);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "Task",
+          function: "await",
+          arityOrArgs: Type.list([arg, Type.integer(5000)]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
   });
 });

@@ -17,11 +17,13 @@ const Elixir_IO = {
     return Elixir_IO["inspect/3"](Type.atom("stdio"), term, opts);
   },
 
-  "inspect/3": function (device, term, opts) {
+  "inspect/3": (device, term, opts) => {
     if (!Type.isAtom(device) && !Type.isPid(device)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg("IO.inspect/3", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("IO", "inspect", 3, [
+        device,
+        term,
+        opts,
+      ]);
     }
 
     if (

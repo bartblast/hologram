@@ -118,5 +118,23 @@ defmodule Hologram.ExJsConsistency.Elixir.URITest do
         URI.encode("hello", wrap_term(predicate))
       end
     end
+
+    test "error frame carries args" do
+      string = wrap_term(:hello)
+      predicate = wrap_term(:not_a_function)
+
+      top_frame =
+        try do
+          URI.encode(string, predicate)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside uri.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {URI, :encode, [:hello, :not_a_function], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 end

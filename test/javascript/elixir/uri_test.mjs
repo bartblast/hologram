@@ -248,6 +248,30 @@ describe("Elixir_URI", () => {
           ]),
         );
       });
+
+      it("error frame carries args", () => {
+        const string = Type.atom("hello");
+        const predicate = Type.atom("not_a_function");
+
+        let caught;
+
+        try {
+          encode(string, predicate);
+        } catch (e) {
+          caught = e;
+        }
+
+        assert.deepStrictEqual(caught.stacktrace, [
+          {
+            module: "URI",
+            function: "encode",
+            arityOrArgs: Type.list([string, predicate]),
+            file: null,
+            line: null,
+            errorInfo: null,
+          },
+        ]);
+      });
     });
   });
 });

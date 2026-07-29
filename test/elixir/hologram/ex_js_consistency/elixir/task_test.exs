@@ -23,5 +23,22 @@ defmodule Hologram.ExJsConsistency.Elixir.TaskTest do
         |> Task.await()
       end
     end
+
+    test "error frame carries the await/2 args" do
+      arg = wrap_term(123)
+
+      top_frame =
+        try do
+          Task.await(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside task.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {Task, :await, [123, 5000], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 end

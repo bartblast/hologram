@@ -104,6 +104,31 @@ describe("Elixir_IO", () => {
       );
     });
 
+    it("error frame carries args", () => {
+      const device = Type.integer(123);
+      const term = Type.atom("abc");
+      const opts = Type.keywordList();
+
+      let caught;
+
+      try {
+        inspect(device, term, opts);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "IO",
+          function: "inspect",
+          arityOrArgs: Type.list([device, term, opts]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
+
     describe("client-only behaviour", () => {
       const term = Type.atom("abc");
       const opts = Type.keywordList();

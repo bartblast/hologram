@@ -44,5 +44,28 @@ describe("Elixir_Code", () => {
         ]),
       );
     });
+
+    it("error frame carries args", () => {
+      const module = Type.integer(1);
+
+      let caught;
+
+      try {
+        ensure_compiled(module);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "Code",
+          function: "ensure_compiled",
+          arityOrArgs: Type.list([module]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
   });
 });
