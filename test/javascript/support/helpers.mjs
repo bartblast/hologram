@@ -652,11 +652,16 @@ function deriveErrorInfoMessage(reason, stacktrace) {
     ? Number(argsOrArity.value)
     : argsOrArity.data.length;
 
+  const flattenChardata = (term) =>
+    Type.isList(term)
+      ? term.data.map(flattenChardata).join("")
+      : Bitstring.toText(term);
+
   const entries = Object.values(fragments.data)
     .filter(
       ([key, _value]) => Type.isInteger(key) && Number(key.value) <= arity,
     )
-    .map(([key, value]) => [Number(key.value), Bitstring.toText(value)])
+    .map(([key, value]) => [Number(key.value), flattenChardata(value)])
     .sort(([n1, _msg1], [n2, _msg2]) => n1 - n2);
 
   if (entries.length === 0) {
