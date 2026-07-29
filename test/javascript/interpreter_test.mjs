@@ -9202,6 +9202,49 @@ describe("Interpreter", () => {
         "(ArgumentError) errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
       );
     });
+
+    it("plants the cause in the error_info map", () => {
+      const args = [
+        Type.bitstring("abc"),
+        Type.bitstring("b"),
+        Type.bitstring("x"),
+        Type.list([Type.atom("y")]),
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError(
+          "badarg",
+          "binary",
+          "replace",
+          args,
+          "erl_stdlib_errors",
+          "badopt",
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "binary",
+          function: "replace",
+          arityOrArgs: Type.list(args),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+            [Type.atom("cause"), Type.atom("badopt")],
+          ]),
+        },
+      ]);
+
+      assert.equal(
+        caught.message,
+        "(ArgumentError) errors were found at the given arguments:\n\n  * 4th argument: invalid options\n",
+      );
+    });
   });
 
   it("raiseCaseClauseError()", () => {

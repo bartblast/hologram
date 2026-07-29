@@ -989,17 +989,24 @@ export default class Interpreter {
   // BIF frame, not both - which also lets it carry a different identity
   // (e.g. :maps.get/2 reporting as :erlang.map_get/2).
   // To keep raise sites small, the reason is given unboxed and args is a
-  // plain array of boxed terms.
+  // plain array of boxed terms. A non-null cause is an unboxed atom planted
+  // as the error_info map's cause entry, refining the formatter's diagnosis
+  // the way OTP raise sites do (e.g. :binary.replace/4 planting :badopt).
   static raiseBifError(
     reason,
     module,
     functionName,
     args,
     formatModule = "erl_stdlib_errors",
+    cause = null,
   ) {
-    const errorInfo = Type.map([
-      [Type.atom("module"), Type.atom(formatModule)],
-    ]);
+    const errorInfoData = [[Type.atom("module"), Type.atom(formatModule)]];
+
+    if (cause !== null) {
+      errorInfoData.push([Type.atom("cause"), Type.atom(cause)]);
+    }
+
+    const errorInfo = Type.map(errorInfoData);
 
     const raisingFrame = {
       module,
