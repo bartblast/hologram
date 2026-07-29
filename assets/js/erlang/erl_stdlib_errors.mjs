@@ -20,12 +20,14 @@ const Erlang_Erl_Stdlib_Errors = {
   "_expand_error/1": (fragment) => {
     const texts = {
       bad_iterator: "not a valid iterator",
+      domain_error: "is outside the domain for this function",
       not_fun_1: "not a fun that takes one argument",
       not_fun_2: "not a fun that takes two arguments",
       not_fun_3: "not a fun that takes three arguments",
       not_list: "not a list",
       not_map: "not a map",
       not_map_or_iterator: "not a map or an iterator",
+      not_number: "not a number",
       not_proper_list: "not a proper list",
     };
 
@@ -165,6 +167,63 @@ const Erlang_Erl_Stdlib_Errors = {
   // End _format_maps_error/2
   // Deps: [:erl_stdlib_errors._must_be_fun/2, :erl_stdlib_errors._must_be_list/1, :erl_stdlib_errors._must_be_map/1, :erl_stdlib_errors._must_be_map_or_iter/1]
 
+  // Mirrors OTP's private format_math_error/2 and its maybe_domain_error/1
+  // helper. The domain-error set lists the functions whose clauses report a
+  // number outside the function's domain; every other math function falls to
+  // the catch-all clauses keyed by argument count, so unknown functions never
+  // reach a function clause error here. The fmod spec is omitted - the
+  // function has no client port, so only its zero-divisor case would diverge
+  // from the catch-all.
+  // Start _format_math_error/2
+  "_format_math_error/2": (fun, argsOrArity) => {
+    const mustBeNumber = Erlang_Erl_Stdlib_Errors["_must_be_number/1"];
+
+    const args = Type.isList(argsOrArity) ? argsOrArity.data : null;
+
+    const domainErrorFuns = [
+      "acos",
+      "acosh",
+      "asin",
+      "atanh",
+      "log",
+      "log2",
+      "log10",
+      "sqrt",
+    ];
+
+    if (domainErrorFuns.includes(fun.value)) {
+      if (args?.length !== 1) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(
+            ":erl_stdlib_errors.maybe_domain_error/1",
+            [argsOrArity],
+          ),
+        );
+      }
+
+      const fragment = mustBeNumber(args[0]);
+
+      return [fragment === "" ? "domain_error" : fragment];
+    }
+
+    if (args?.length === 1) {
+      return [mustBeNumber(args[0])];
+    }
+
+    if (args?.length === 2) {
+      return [mustBeNumber(args[0]), mustBeNumber(args[1])];
+    }
+
+    Interpreter.raiseFunctionClauseError(
+      Interpreter.buildFunctionClauseErrorMsg(
+        ":erl_stdlib_errors.format_math_error/2",
+        [fun, argsOrArity],
+      ),
+    );
+  },
+  // End _format_math_error/2
+  // Deps: [:erl_stdlib_errors._must_be_number/1]
+
   // Mirrors OTP's private must_be_fun/2.
   // Start _must_be_fun/2
   "_must_be_fun/2": (term, arity) =>
@@ -201,6 +260,12 @@ const Erlang_Erl_Stdlib_Errors = {
   // End _must_be_map_or_iter/1
   // Deps: [:maps.is_iterator_valid/1]
 
+  // Mirrors OTP's private must_be_number/1.
+  // Start _must_be_number/1
+  "_must_be_number/1": (term) => (Type.isNumber(term) ? "" : "not_number"),
+  // End _must_be_number/1
+  // Deps: []
+
   // TODO: dispatch to the remaining per-module formatters from
   // :erl_stdlib_errors (format_binary_error, format_lists_error, ...) as
   // their stdlib ports migrate to bare reasons with error_info.
@@ -235,6 +300,13 @@ const Erlang_Erl_Stdlib_Errors = {
         );
         break;
 
+      case "math":
+        fragments = Erlang_Erl_Stdlib_Errors["_format_math_error/2"](
+          frameFun,
+          frameArgsOrArity,
+        );
+        break;
+
       default:
         fragments = [];
     }
@@ -246,7 +318,7 @@ const Erlang_Erl_Stdlib_Errors = {
     );
   },
   // End format_error/2
-  // Deps: [:erl_stdlib_errors._format_error_map/3, :erl_stdlib_errors._format_maps_error/2]
+  // Deps: [:erl_stdlib_errors._format_error_map/3, :erl_stdlib_errors._format_maps_error/2, :erl_stdlib_errors._format_math_error/2]
 };
 
 export default Erlang_Erl_Stdlib_Errors;

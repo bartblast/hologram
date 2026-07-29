@@ -31,6 +31,17 @@ function mapsStacktrace(functionName, argsOrArity) {
   ]);
 }
 
+function mathStacktrace(functionName, argsOrArity) {
+  return Type.list([
+    Type.tuple([
+      Type.atom("math"),
+      Type.atom(functionName),
+      argsOrArity,
+      errorInfo,
+    ]),
+  ]);
+}
+
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/erl_stdlib_errors_test.exs
 // Always update both together.
@@ -486,6 +497,86 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       );
     });
 
+    it("math ceil: not a number", () => {
+      const stacktrace = mathStacktrace("ceil", Type.list([Type.atom("a")]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a number")]]),
+      );
+    });
+
+    it("math log: domain error", () => {
+      const stacktrace = mathStacktrace("log", Type.list([Type.integer(0)]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.integer(1),
+            Type.bitstring("is outside the domain for this function"),
+          ],
+        ]),
+      );
+    });
+
+    it("math log: not a number", () => {
+      const stacktrace = mathStacktrace("log", Type.list([Type.atom("a")]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a number")]]),
+      );
+    });
+
+    it("math pow: both arguments not numbers", () => {
+      const stacktrace = mathStacktrace(
+        "pow",
+        Type.list([Type.atom("a"), Type.atom("b")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("not a number")],
+          [Type.integer(2), Type.bitstring("not a number")],
+        ]),
+      );
+    });
+
+    it("math pow: valid number skips its fragment", () => {
+      const stacktrace = mathStacktrace(
+        "pow",
+        Type.list([Type.integer(7), Type.atom("a")]),
+      );
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("not a number")]]),
+      );
+    });
+
+    it("math unknown functions fall to the argument-count clauses", () => {
+      const stacktrace = mathStacktrace("unknown", Type.list([Type.atom("a")]));
+
+      const result = format_error(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(1), Type.bitstring("not a number")]]),
+      );
+    });
+
     it("raises FunctionClauseError when the stacktrace is empty", () => {
       const stacktrace = Type.list();
 
@@ -525,6 +616,32 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
         Interpreter.buildFunctionClauseErrorMsg(
           ":erl_stdlib_errors.format_maps_error/2",
           [Type.atom("get"), Type.integer(2)],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError when a math clause needs args but the frame carries an arity", () => {
+      const stacktrace = mathStacktrace("ceil", Type.integer(1));
+
+      assertBoxedError(
+        () => format_error(Type.atom("badarg"), stacktrace),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_stdlib_errors.format_math_error/2",
+          [Type.atom("ceil"), Type.integer(1)],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError when a math domain-error clause needs args but the frame carries an arity", () => {
+      const stacktrace = mathStacktrace("log", Type.integer(1));
+
+      assertBoxedError(
+        () => format_error(Type.atom("badarg"), stacktrace),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_stdlib_errors.maybe_domain_error/1",
+          [Type.integer(1)],
         ),
       );
     });
