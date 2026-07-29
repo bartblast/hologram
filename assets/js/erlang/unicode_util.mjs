@@ -153,7 +153,7 @@ const Erlang_Unicode_Util = {
 
     // Non-byte-aligned bitstring
     if (Type.isBitstring(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl/2", [
           list,
           restList,
@@ -162,7 +162,7 @@ const Erlang_Unicode_Util = {
     }
 
     // Should not reach here
-    Interpreter.raiseFunctionClauseError(
+    Interpreter.raiseFunctionClauseErrorMsg(
       Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl/2", [
         list,
         restList,
@@ -390,7 +390,7 @@ const Erlang_Unicode_Util = {
 
     // Non-byte-aligned bitstring
     if (Type.isBitstring(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl_cont/2", [
           list,
           restList,
@@ -399,7 +399,7 @@ const Erlang_Unicode_Util = {
     }
 
     // Should not reach here
-    Interpreter.raiseFunctionClauseError(
+    Interpreter.raiseFunctionClauseErrorMsg(
       Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl_cont/2", [
         list,
         restList,
@@ -701,7 +701,7 @@ const Erlang_Unicode_Util = {
     }
 
     // All other cases: invalid input type (including non-byte-aligned bitstrings)
-    Interpreter.raiseFunctionClauseError(
+    Interpreter.raiseFunctionClauseErrorMsg(
       Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [string]),
     );
   },

@@ -46,7 +46,7 @@ const Erlang_String = {
     }
 
     if (!Type.isAtom(direction)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":string.find/3", [
           string,
           searchPattern,
@@ -58,7 +58,7 @@ const Erlang_String = {
     const directionValue = direction.value;
 
     if (!["leading", "trailing"].includes(directionValue)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":string.find/3", [
           string,
           searchPattern,
@@ -173,7 +173,7 @@ const Erlang_String = {
   // Start join/2
   "join/2": function (list, separator) {
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":string.join/2", arguments),
       );
     }
@@ -188,7 +188,7 @@ const Erlang_String = {
 
     if (list.data.length === 0) {
       if (!Type.isProperList(separator)) {
-        Interpreter.raiseFunctionClauseError(
+        Interpreter.raiseFunctionClauseErrorMsg(
           Interpreter.buildFunctionClauseErrorMsg(":string.join/2", arguments),
         );
       }
@@ -241,7 +241,7 @@ const Erlang_String = {
     const isList = Type.isList(string);
 
     if (!isBinary && !isList) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [string]),
       );
     }
@@ -650,7 +650,7 @@ const Erlang_String = {
     }
 
     // If subject is neither binary nor list, raise FunctionClauseError
-    Interpreter.raiseFunctionClauseError(
+    Interpreter.raiseFunctionClauseErrorMsg(
       Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [subject]),
     );
   },

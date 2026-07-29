@@ -15,7 +15,7 @@ const Erlang_Sets = {
   // Start _validate_opts/1
   "_validate_opts/1": (opts) => {
     if (!Type.isList(opts)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":proplists.get_value/3", [
           Type.atom("version"),
           opts,
@@ -25,7 +25,7 @@ const Erlang_Sets = {
     }
 
     if (Type.isImproperList(opts)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":proplists.get_value/3"),
       );
     }
@@ -62,7 +62,7 @@ const Erlang_Sets = {
   // Start add_element/2
   "add_element/2": (element, set) => {
     if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.add_element/2", [
           element,
           set,
@@ -78,7 +78,7 @@ const Erlang_Sets = {
   // Start del_element/2
   "del_element/2": (element, set) => {
     if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.del_element/2", [
           element,
           set,
@@ -94,7 +94,7 @@ const Erlang_Sets = {
   // Start filter/2
   "filter/2": (fun, set) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1 || !Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.filter/2", [fun, set]),
       );
     }
@@ -121,7 +121,7 @@ const Erlang_Sets = {
   // Start fold/3
   "fold/3": (fun, initialAcc, set) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2 || !Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3", [
           fun,
           initialAcc,
@@ -150,7 +150,7 @@ const Erlang_Sets = {
   // Start intersection/2
   "intersection/2": (set1, set2) => {
     if (!Type.isMap(set1) || !Type.isMap(set2)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [
           !Type.isMap(set1) ? set1 : set2,
         ]),
@@ -174,7 +174,7 @@ const Erlang_Sets = {
   // Start is_disjoint/2
   "is_disjoint/2": (set1, set2) => {
     if (!Type.isMap(set1) || !Type.isMap(set2)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [
           !Type.isMap(set1) ? set1 : set2,
         ]),
@@ -192,7 +192,7 @@ const Erlang_Sets = {
   // Start is_element/2
   "is_element/2": (element, set) => {
     if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.is_element/2", [
           element,
           set,
@@ -208,7 +208,7 @@ const Erlang_Sets = {
   // Start is_subset/2
   "is_subset/2": (set1, set2) => {
     if (!Type.isMap(set1)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3"),
       );
     }
@@ -220,7 +220,7 @@ const Erlang_Sets = {
     const set1Items = Erlang_Sets["to_list/1"](set1).data;
 
     if (!Type.isMap(set2)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.is_element/2", [
           set1Items[0],
           set2,
@@ -248,7 +248,7 @@ const Erlang_Sets = {
   // Start size/1
   "size/1": (set) => {
     if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [set]),
       );
     }
@@ -261,7 +261,7 @@ const Erlang_Sets = {
   // Start subtract/2
   "subtract/2": (set1, set2) => {
     if (!Type.isMap(set1)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.filter/2"),
       );
     }
@@ -273,7 +273,7 @@ const Erlang_Sets = {
     if (!Type.isMap(set2)) {
       const firstElement = Object.values(set1.data)[0][0];
 
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.is_element/2", [
           firstElement,
           set2,
@@ -298,7 +298,7 @@ const Erlang_Sets = {
   // Start to_list/1
   "to_list/1": (set) => {
     if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.to_list/1", [set]),
       );
     }
@@ -311,7 +311,7 @@ const Erlang_Sets = {
   // Start union/2
   "union/2": (set1, set2) => {
     if (!Type.isMap(set1) || !Type.isMap(set2)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [
           !Type.isMap(set1) ? set1 : set2,
         ]),

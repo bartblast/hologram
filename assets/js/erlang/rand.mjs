@@ -23,7 +23,7 @@ const Erlang_Rand = {
       !Type.isInteger(integer) ||
       Interpreter.compareTerms(integer, Type.integer(0)) < 1
     ) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         "no function clause matching in :rand.uniform_s/2",
       );
     }

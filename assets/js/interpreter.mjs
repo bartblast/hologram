@@ -254,7 +254,7 @@ export default class Interpreter {
         }
       }
 
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(
           `anonymous fn/${fun.arity}`,
           argsArray,
@@ -1058,7 +1058,9 @@ export default class Interpreter {
     throw error;
   }
 
-  static raiseFunctionClauseError(message) {
+  // TODO: delete once every raise site builds a field-bearing struct instead
+  // of an eager message.
+  static raiseFunctionClauseErrorMsg(message) {
     Interpreter.raiseError("FunctionClauseError", message);
   }
 
@@ -1513,7 +1515,7 @@ export default class Interpreter {
           }
         }
 
-        Interpreter.raiseFunctionClauseError(
+        Interpreter.raiseFunctionClauseErrorMsg(
           Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
         );
       },

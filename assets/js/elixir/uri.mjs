@@ -12,7 +12,7 @@ const Elixir_URI = {
       !Type.isAnonymousFunction(predicate) ||
       predicate.arity !== 1
     ) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg("URI.encode/2", arguments),
       );
     }

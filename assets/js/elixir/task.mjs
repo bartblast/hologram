@@ -11,7 +11,7 @@ const Elixir_Task = {
   // when the full Elixir process model is ported.
   "await/1": (taskStruct) => {
     if (!Type.isStruct(taskStruct, "Task")) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg("Task.await/2", [
           taskStruct,
           Type.integer(5000),

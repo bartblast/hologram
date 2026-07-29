@@ -12,7 +12,7 @@ const Erlang_Elixir_Aliases = {
   // Start concat/1
   "concat/1": function (segments) {
     if (!Type.isList(segments)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
           arguments[0],
           Type.bitstring("Elixir"),
@@ -26,7 +26,7 @@ const Erlang_Elixir_Aliases = {
           acc.unshift("Elixir");
         }
 
-        Interpreter.raiseFunctionClauseError(
+        Interpreter.raiseFunctionClauseErrorMsg(
           Interpreter.buildFunctionClauseErrorMsg(
             ":elixir_aliases.do_concat/2",
             [

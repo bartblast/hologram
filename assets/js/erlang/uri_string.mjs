@@ -89,7 +89,7 @@ const Erlang_Uri_String = {
         const codepoint = Number(item.value);
 
         if (codepoint < 0 || codepoint > 1114111) {
-          Interpreter.raiseFunctionClauseError(
+          Interpreter.raiseFunctionClauseErrorMsg(
             Interpreter.buildFunctionClauseErrorMsg(
               ":uri_string.parse_scheme_start/2",
               [
@@ -111,7 +111,7 @@ const Erlang_Uri_String = {
       Bitstring.maybeSetTextFromBytes(binary);
 
       if (binary.text === false) {
-        Interpreter.raiseFunctionClauseError(
+        Interpreter.raiseFunctionClauseErrorMsg(
           Interpreter.buildFunctionClauseErrorMsg(
             ":uri_string.parse_scheme_start/2",
             [binary, Type.map()],
@@ -318,7 +318,7 @@ const Erlang_Uri_String = {
       return convertBinaryFieldsToLists(result);
     }
 
-    Interpreter.raiseFunctionClauseError(
+    Interpreter.raiseFunctionClauseErrorMsg(
       Interpreter.buildFunctionClauseErrorMsg(":uri_string.parse/1", [
         uriString,
       ]),

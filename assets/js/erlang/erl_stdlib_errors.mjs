@@ -220,7 +220,7 @@ const Erlang_Erl_Stdlib_Errors = {
         break;
     }
 
-    Interpreter.raiseFunctionClauseError(
+    Interpreter.raiseFunctionClauseErrorMsg(
       Interpreter.buildFunctionClauseErrorMsg(
         ":erl_stdlib_errors.format_binary_error/3",
         [fun, argsOrArity, cause],
@@ -284,7 +284,7 @@ const Erlang_Erl_Stdlib_Errors = {
   // Start _format_maps_error/2
   "_format_maps_error/2": (fun, argsOrArity) => {
     const raiseFunctionClause = () => {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(
           ":erl_stdlib_errors.format_maps_error/2",
           [fun, argsOrArity],
@@ -387,7 +387,7 @@ const Erlang_Erl_Stdlib_Errors = {
 
     if (domainErrorFuns.includes(fun.value)) {
       if (args?.length !== 1) {
-        Interpreter.raiseFunctionClauseError(
+        Interpreter.raiseFunctionClauseErrorMsg(
           Interpreter.buildFunctionClauseErrorMsg(
             ":erl_stdlib_errors.maybe_domain_error/1",
             [argsOrArity],
@@ -408,7 +408,7 @@ const Erlang_Erl_Stdlib_Errors = {
       return [mustBeNumber(args[0]), mustBeNumber(args[1])];
     }
 
-    Interpreter.raiseFunctionClauseError(
+    Interpreter.raiseFunctionClauseErrorMsg(
       Interpreter.buildFunctionClauseErrorMsg(
         ":erl_stdlib_errors.format_math_error/2",
         [fun, argsOrArity],
@@ -471,7 +471,7 @@ const Erlang_Erl_Stdlib_Errors = {
       return ["bad_char_data"];
     }
 
-    Interpreter.raiseFunctionClauseError(
+    Interpreter.raiseFunctionClauseErrorMsg(
       Interpreter.buildFunctionClauseErrorMsg(
         ":erl_stdlib_errors.format_unicode_error/2",
         [fun, argsOrArity],
@@ -639,7 +639,7 @@ const Erlang_Erl_Stdlib_Errors = {
       stacktrace.data[0].data.length === 4;
 
     if (!isFourTupleTopFrame) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(
           ":erl_stdlib_errors.format_error/2",
           [reason, stacktrace],

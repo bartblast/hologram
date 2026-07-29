@@ -9357,9 +9357,9 @@ describe("Interpreter", () => {
     });
   });
 
-  it("raiseFunctionClauseError()", () => {
+  it("raiseFunctionClauseErrorMsg()", () => {
     assertBoxedError(
-      () => Interpreter.raiseFunctionClauseError("my_message"),
+      () => Interpreter.raiseFunctionClauseErrorMsg("my_message"),
       "FunctionClauseError",
       "my_message",
     );

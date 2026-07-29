@@ -11,7 +11,7 @@ const Erlang_Lists = {
   // Start all/2
   "all/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.all/2", [fun, list]),
       );
     }
@@ -33,7 +33,7 @@ const Erlang_Lists = {
     }
 
     if (!list.isProper) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.all_1/2", [
           fun,
           list.data.at(-1),
@@ -49,7 +49,7 @@ const Erlang_Lists = {
   // Start any/2
   "any/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [fun, list]),
       );
     }
@@ -71,7 +71,7 @@ const Erlang_Lists = {
     }
 
     if (!list.isProper) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.any_1/2", [
           fun,
           list.data.at(-1),
@@ -87,7 +87,7 @@ const Erlang_Lists = {
   // Start duplicate/2
   "duplicate/2": (n, elem) => {
     if (!Type.isInteger(n) || n.value < 0n) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.duplicate/2", [
           n,
           elem,
@@ -110,7 +110,7 @@ const Erlang_Lists = {
   // Start filter/2
   "filter/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.filter/2", arguments),
       );
     }
@@ -153,7 +153,7 @@ const Erlang_Lists = {
   // Start flatmap/2
   "flatmap/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap/2", [
           fun,
           list,
@@ -162,7 +162,7 @@ const Erlang_Lists = {
     }
 
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap_1/2", [
           fun,
           list,
@@ -171,7 +171,7 @@ const Erlang_Lists = {
     }
 
     if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap_1/2", [
           fun,
           list.data.at(-1),
@@ -197,13 +197,13 @@ const Erlang_Lists = {
   // Start flatten/1
   "flatten/1": (list) => {
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.flatten/1", [list]),
       );
     }
 
     if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.flatten/1", [list]),
       );
     }
@@ -225,7 +225,7 @@ const Erlang_Lists = {
   // Start flatten/2
   "flatten/2": (list, tail) => {
     if (!Type.isList(list) || !Type.isProperList(list) || !Type.isList(tail)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.flatten/2", [
           list,
           tail,
@@ -244,7 +244,7 @@ const Erlang_Lists = {
   // Start foldl/3
   "foldl/3": function (fun, initialAcc, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.foldl/3", arguments),
       );
     }
@@ -255,7 +255,7 @@ const Erlang_Lists = {
 
     if (!Type.isProperList(list)) {
       // Client-side error message is intentionally simplified.
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.foldl_1/3"),
       );
     }
@@ -271,14 +271,14 @@ const Erlang_Lists = {
   // Start foldr/3
   "foldr/3": function (fun, initialAcc, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.foldr/3", arguments),
       );
     }
 
     if (!Type.isList(list) || !Type.isProperList(list)) {
       // Client-side error message is intentionally simplified.
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
       );
     }
@@ -294,7 +294,7 @@ const Erlang_Lists = {
   // Start foreach/2
   "foreach/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.foreach/2", [
           fun,
           list,
@@ -304,7 +304,7 @@ const Erlang_Lists = {
 
     if (!Type.isList(list) || !Type.isProperList(list)) {
       // Client-side error message is intentionally simplified.
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.foreach_1/2"),
       );
     }
@@ -321,7 +321,7 @@ const Erlang_Lists = {
   // Start keydelete/3
   "keydelete/3": function (key, index, tuples) {
     if (!Type.isInteger(index)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(
           ":lists.keydelete/3",
           arguments,
@@ -330,7 +330,7 @@ const Erlang_Lists = {
     }
 
     if (index.value < 1n) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(
           ":lists.keydelete/3",
           arguments,
@@ -341,7 +341,7 @@ const Erlang_Lists = {
     if (!Type.isProperList(tuples)) {
       const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
 
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", [
           key,
           index,
@@ -424,7 +424,7 @@ const Erlang_Lists = {
   // Start keyreplace/4
   "keyreplace/4": function (key, index, tuples, newTuple) {
     if (!Type.isInteger(index) || index.value < 1n || !Type.isTuple(newTuple)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(
           ":lists.keyreplace/4",
           arguments,
@@ -435,7 +435,7 @@ const Erlang_Lists = {
     if (!Type.isProperList(tuples)) {
       const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
 
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace3/4", [
           key,
           index,
@@ -472,7 +472,7 @@ const Erlang_Lists = {
   // Start keysort/2
   "keysort/2": (index, tuples) => {
     if (!Type.isInteger(index) || index.value <= 0n) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
           index,
           tuples,
@@ -489,7 +489,7 @@ const Erlang_Lists = {
         Interpreter.raiseCaseClauseError(tuples);
       } else if (tuples.data.every((item) => Type.isTuple(item))) {
         // Client-side error message is intentionally simplified.
-        Interpreter.raiseFunctionClauseError(
+        Interpreter.raiseFunctionClauseErrorMsg(
           Interpreter.buildFunctionClauseErrorMsg(":lists.keysplit_1/8"),
         );
       } else {
@@ -518,7 +518,7 @@ const Erlang_Lists = {
   // Start keystore/4
   "keystore/4": function (key, index, tuples, newTuple) {
     if (!Type.isInteger(index) || index.value < 1n || !Type.isTuple(newTuple)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.keystore/4", arguments),
       );
     }
@@ -526,7 +526,7 @@ const Erlang_Lists = {
     if (!Type.isProperList(tuples)) {
       const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
 
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.keystore2/4", [
           key,
           index,
@@ -562,14 +562,14 @@ const Erlang_Lists = {
   // Start keytake/3
   "keytake/3": function (key, index, tuples) {
     if (!Type.isInteger(index) || index.value < 1n) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/3", arguments),
       );
     }
 
     if (!Type.isProperList(tuples)) {
       // Client-side error message is intentionally simplified.
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/4"),
       );
     }
@@ -595,7 +595,7 @@ const Erlang_Lists = {
   // Start map/2
   "map/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.map/2", arguments),
       );
     }
@@ -605,7 +605,7 @@ const Erlang_Lists = {
     }
 
     if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.map_1/2"),
       );
     }
@@ -620,13 +620,13 @@ const Erlang_Lists = {
   // Start mapfoldl/3
   "mapfoldl/3": function (fun, initialAcc, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl/3", arguments),
       );
     }
 
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(
           ":lists.mapfoldl_1/3",
           arguments,
@@ -660,7 +660,7 @@ const Erlang_Lists = {
     if (!isProperList) {
       const improperTail = list.data.at(-1);
 
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl_1/3", [
           fun,
           acc,
@@ -677,7 +677,7 @@ const Erlang_Lists = {
   // Start max/1
   "max/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.max/1", [list]),
       );
     }
@@ -685,7 +685,7 @@ const Erlang_Lists = {
     // Notice that the error message says :lists.max/2 (not :lists.max/1)
     // :lists.max/2 is (probably) a private Erlang function that get's called by :lists.max/1
     if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.max/2", [list]),
       );
     }
@@ -739,7 +739,7 @@ const Erlang_Lists = {
   // Start min/1
   "min/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.min/1", [list]),
       );
     }
@@ -747,7 +747,7 @@ const Erlang_Lists = {
     // Notice that the error message says :lists.min/2 (not :lists.min/1)
     // :lists.min/2 is (probably) a private Erlang function that get's called by :lists.min/1
     if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.min/2", [list]),
       );
     }
@@ -768,7 +768,7 @@ const Erlang_Lists = {
   // Start prefix/2
   "prefix/2": (list1, list2) => {
     if (!Type.isList(list1) || !Type.isList(list2)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
           list1,
           list2,
@@ -799,7 +799,7 @@ const Erlang_Lists = {
         (length1 === index + 1 && Type.isImproperList(list1)) ||
         (length2 === index + 1 && Type.isImproperList(list2))
       ) {
-        Interpreter.raiseFunctionClauseError(
+        Interpreter.raiseFunctionClauseErrorMsg(
           Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
             tail(list1),
             tail(list2),
@@ -829,7 +829,7 @@ const Erlang_Lists = {
   // Start reverse/1
   "reverse/1": (list) => {
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.reverse/1", [list]),
       );
     }
@@ -879,7 +879,7 @@ const Erlang_Lists = {
       !Type.isInteger(to) ||
       from.value > to.value + 1n
     ) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.seq/2", [from, to]),
       );
     }
@@ -957,13 +957,13 @@ const Erlang_Lists = {
   // Start sort/1
   "sort/1": (list) => {
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.sort/1", [list]),
       );
     }
 
     if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.split_1/5"),
       );
     }
@@ -983,7 +983,7 @@ const Erlang_Lists = {
     }
 
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [fun, list]),
       );
     }
@@ -1002,7 +1002,7 @@ const Erlang_Lists = {
             ])
           : Interpreter.buildFunctionClauseErrorMsg(":lists.fsplit_1/6");
 
-      Interpreter.raiseFunctionClauseError(errorMsg);
+      Interpreter.raiseFunctionClauseErrorMsg(errorMsg);
     }
 
     return Type.list(

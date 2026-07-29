@@ -136,7 +136,7 @@ const Erlang_Filename = {
       return Type.list(combined);
     }
 
-    Interpreter.raiseFunctionClauseError(
+    Interpreter.raiseFunctionClauseErrorMsg(
       Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
         filename,
         tail,
@@ -602,7 +602,7 @@ const Erlang_Filename = {
   "join/1": (components) => {
     // Validate components is a non-empty list
     if (!Type.isList(components) || components.data.length === 0) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [
           components,
         ]),
@@ -616,7 +616,7 @@ const Erlang_Filename = {
     );
 
     if (hasInvalidComponent) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [
           components,
         ]),
@@ -651,7 +651,7 @@ const Erlang_Filename = {
       Type.isBinary(value) || Type.isList(value) || Type.isAtom(value);
 
     if (!isValidInput(name1) || !isValidInput(name2)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(":filename.join/2", [
           name1,
           name2,

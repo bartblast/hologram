@@ -19,7 +19,7 @@ const Elixir_IO = {
 
   "inspect/3": function (device, term, opts) {
     if (!Type.isAtom(device) && !Type.isPid(device)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg("IO.inspect/3", arguments),
       );
     }

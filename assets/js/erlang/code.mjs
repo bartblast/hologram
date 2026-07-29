@@ -12,7 +12,7 @@ const Erlang_Code = {
   // Start ensure_loaded/1
   "ensure_loaded/1": function (module) {
     if (!Type.isAtom(module)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(
           ":code.ensure_loaded/1",
           arguments,

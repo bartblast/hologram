@@ -8,7 +8,7 @@ import Type from "../type.mjs";
 const Elixir_String = {
   "contains?/2": function (subject, patternOrPatterns) {
     if (!Type.isBinary(subject)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg(
           "String.contains?/2",
           arguments,
@@ -80,7 +80,7 @@ const Elixir_String = {
         modeValue !== "greek" &&
         modeValue !== "turkic")
     ) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg("String.downcase/2", arguments),
       );
     }
@@ -96,7 +96,7 @@ const Elixir_String = {
 
   "replace/3": function (subject, pattern, replacement) {
     if (!Type.isBinary(subject)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg("String.replace/4", arguments),
       );
     }
@@ -122,7 +122,7 @@ const Elixir_String = {
 
   "trim/1": function (string) {
     if (!Type.isBinary(string)) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg("String.trim/1", arguments),
       );
     }
@@ -148,7 +148,7 @@ const Elixir_String = {
         modeValue !== "greek" &&
         modeValue !== "turkic")
     ) {
-      Interpreter.raiseFunctionClauseError(
+      Interpreter.raiseFunctionClauseErrorMsg(
         Interpreter.buildFunctionClauseErrorMsg("String.upcase/2", arguments),
       );
     }
