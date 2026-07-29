@@ -90,6 +90,9 @@ function errorFrame(module, functionName, args, errorInfo = null) {
   };
 }
 
+const ertsErrorInfo = () =>
+  Type.map([[Type.atom("module"), Type.atom("erl_erts_errors")]]);
+
 const stdlibErrorInfo = () =>
   Type.map([[Type.atom("module"), Type.atom("erl_stdlib_errors")]]);
 
@@ -1067,6 +1070,38 @@ describe("Erlang_Lists", () => {
 
       assert.deepStrictEqual(caught.stacktrace, [
         errorFrame("lists", "flatmap_1", Type.list([fun, integer3])),
+      ]);
+    });
+
+    it("error frame carries the concat operands and error_info for a bad mapper result", () => {
+      let caught;
+
+      try {
+        flatmap(
+          Type.anonymousFunction(
+            1,
+            [
+              {
+                params: (_context) => [Type.variablePattern("x")],
+                guards: [],
+                body: (_context) => atomAbc,
+              },
+            ],
+            contextFixture(),
+          ),
+          Type.list([integer1]),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "erlang",
+          "++",
+          Type.list([atomAbc, emptyList]),
+          ertsErrorInfo(),
+        ),
       ]);
     });
   });
@@ -2664,6 +2699,28 @@ describe("Erlang_Lists", () => {
 
       assert.deepStrictEqual(caught.stacktrace, [
         errorFrame("lists", "keysort", Type.list([atomAbc, emptyList])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a non-tuple element", () => {
+      let caught;
+
+      try {
+        keysort(
+          integer1,
+          Type.improperList([Type.tuple([atomA]), atomX, integer3]),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "erlang",
+          "element",
+          Type.list([integer1, atomX]),
+          ertsErrorInfo(),
+        ),
       ]);
     });
   });
@@ -4916,6 +4973,39 @@ describe("Erlang_Lists", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
+    });
+
+    it("error frame carries args and error_info for a non-list first argument", () => {
+      let caught;
+
+      try {
+        suffix(atomAbc, emptyList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("erlang", "length", Type.list([atomAbc]), ertsErrorInfo()),
+      ]);
+    });
+
+    it("error frame carries args and error_info for an improper second argument", () => {
+      let caught;
+
+      try {
+        suffix(emptyList, improperList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "erlang",
+          "length",
+          Type.list([improperList]),
+          ertsErrorInfo(),
+        ),
+      ]);
     });
   });
 });

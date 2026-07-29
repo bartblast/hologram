@@ -455,6 +455,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert {:lists, :flatmap_1, [^fun, 3], location} = wrap_term(top_frame)
       assert location[:error_info] == nil
     end
+
+    test "error frame carries the concat operands and error_info for a bad mapper result" do
+      fun = wrap_term(fn _x -> :abc end)
+
+      top_frame =
+        try do
+          :lists.flatmap(fun, [1])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :++, [:abc, []], [error_info: %{module: :erl_erts_errors}]}
+    end
   end
 
   describe "flatten/1" do
@@ -1430,6 +1443,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       # which the client doesn't mirror.
       assert {:lists, :keysort, [:abc, []], location} = wrap_term(top_frame)
       assert location[:error_info] == nil
+    end
+
+    test "error frame carries args and error_info for a non-tuple element" do
+      tuples = wrap_term([{:a}, :x | 3])
+
+      top_frame =
+        try do
+          :lists.keysort(1, tuples)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :element, [1, :x], [error_info: %{module: :erl_erts_errors}]}
     end
   end
 
@@ -2804,6 +2830,33 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a list"),
                    {:lists, :suffix, [[1, 2], [1, 2 | 3]]}
+    end
+
+    test "error frame carries args and error_info for a non-list first argument" do
+      list1 = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.suffix(list1, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :length, [:abc], [error_info: %{module: :erl_erts_errors}]}
+    end
+
+    test "error frame carries args and error_info for an improper second argument" do
+      list2 = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.suffix([], list2)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:erlang, :length, [[1, 2 | 3]], [error_info: %{module: :erl_erts_errors}]}
     end
   end
 end

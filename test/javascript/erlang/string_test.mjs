@@ -28,6 +28,9 @@ function errorFrame(module, functionName, args, errorInfo = null) {
   };
 }
 
+const ertsErrorInfo = () =>
+  Type.map([[Type.atom("module"), Type.atom("erl_erts_errors")]]);
+
 const unicodeErrorInfo = () =>
   Type.map([[Type.atom("module"), Type.atom("erl_stdlib_errors")]]);
 
@@ -661,6 +664,49 @@ describe("Erlang_String", () => {
 
       assert.deepStrictEqual(caught.stacktrace, [
         errorFrame("string", "join", Type.list([list, separator])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a single non-list element", () => {
+      const list = Type.list([Type.atom("abc")]);
+
+      let caught;
+
+      try {
+        join(list, Type.charlist(", "));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "erlang",
+          "++",
+          Type.list([Type.atom("abc"), Type.list()]),
+          ertsErrorInfo(),
+        ),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a non-list separator", () => {
+      const list = Type.list([Type.charlist("a"), Type.charlist("b")]);
+      const separator = Type.atom("sep");
+
+      let caught;
+
+      try {
+        join(list, separator);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "erlang",
+          "++",
+          Type.list([separator, Type.charlist("b")]),
+          ertsErrorInfo(),
+        ),
       ]);
     });
   });

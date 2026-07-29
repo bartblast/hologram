@@ -206,14 +206,12 @@ const Erlang_String = {
       if (!Type.isList(element)) {
         // The server fails concatenating the element with the joined rest,
         // so its badarg reports :erlang.++/2.
-        // TODO: plant the erl_erts_errors error_info once the client carries
-        // that format module.
         Interpreter.raiseBifError(
           "badarg",
           "erlang",
           "++",
           [element, Type.list()],
-          null,
+          "erl_erts_errors",
         );
       }
 
@@ -224,14 +222,12 @@ const Erlang_String = {
     if (!Type.isList(separator)) {
       // The server fails concatenating the separator with the second
       // element, so its badarg reports :erlang.++/2.
-      // TODO: plant the erl_erts_errors error_info once the client carries
-      // that format module.
       Interpreter.raiseBifError(
         "badarg",
         "erlang",
         "++",
         [separator, list.data[1]],
-        null,
+        "erl_erts_errors",
       );
     }
 

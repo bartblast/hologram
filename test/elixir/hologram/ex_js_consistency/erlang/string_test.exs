@@ -317,6 +317,32 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert {:string, :join, [:not_a_list, ~c", "], location} = wrap_term(top_frame)
       assert location[:error_info] == nil
     end
+
+    test "error frame carries args and error_info for a single non-list element" do
+      list = wrap_term([:abc])
+
+      top_frame =
+        try do
+          :string.join(list, ~c", ")
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :++, [:abc, []], [error_info: %{module: :erl_erts_errors}]}
+    end
+
+    test "error frame carries args and error_info for a non-list separator" do
+      separator = wrap_term(:sep)
+
+      top_frame =
+        try do
+          :string.join([~c"a", ~c"b"], separator)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :++, [:sep, ~c"b"], [error_info: %{module: :erl_erts_errors}]}
+    end
   end
 
   describe "length/1" do

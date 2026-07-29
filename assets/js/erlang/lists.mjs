@@ -198,14 +198,12 @@ const Erlang_Lists = {
       const mapped = mappedResults[i];
 
       if (!Type.isProperList(mapped)) {
-        // TODO: plant the erl_erts_errors error_info once the client carries
-        // that format module.
         Interpreter.raiseBifError(
           "badarg",
           "erlang",
           "++",
           [mapped, Type.list(acc)],
-          null,
+          "erl_erts_errors",
         );
       }
 
@@ -513,10 +511,16 @@ const Erlang_Lists = {
         // bare arity.
         Interpreter.raiseFunctionClauseError("lists", "keysplit_1", 8);
       } else {
-        // TODO: raise through the erl_erts_errors error_info once the client
-        // carries that format module.
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        // The server fails reading the sort key from the first non-tuple
+        // element, so its badarg reports :erlang.element/2.
+        const badItem = tuples.data.find((item) => !Type.isTuple(item));
+
+        Interpreter.raiseBifError(
+          "badarg",
+          "erlang",
+          "element",
+          [index, badItem],
+          "erl_erts_errors",
         );
       }
     }
@@ -1103,11 +1107,25 @@ const Erlang_Lists = {
 
   // Start suffix/2
   "suffix/2": (list1, list2) => {
-    // The Erlang implementation computes length/1 on both arguments, which
-    // rejects anything that is not a proper list with an "not a list" error.
-    if (!Type.isProperList(list1) || !Type.isProperList(list2)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+    // The server computes length/1 on both arguments (the second one first),
+    // so anything that is not a proper list fails in the length BIF.
+    if (!Type.isProperList(list2)) {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "length",
+        [list2],
+        "erl_erts_errors",
+      );
+    }
+
+    if (!Type.isProperList(list1)) {
+      Interpreter.raiseBifError(
+        "badarg",
+        "erlang",
+        "length",
+        [list1],
+        "erl_erts_errors",
       );
     }
 
