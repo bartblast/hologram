@@ -372,28 +372,16 @@ const Erlang_Lists = {
 
   // Start keyfind/3
   "keyfind/3": (value, index, tuples) => {
-    if (!Type.isInteger(index)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
-    }
-
-    if (index.value < 1) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
-    }
-
-    if (!Type.isList(tuples)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not a list"),
-      );
-    }
-
-    if (!Type.isProperList(tuples)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
-      );
+    if (
+      !Type.isInteger(index) ||
+      index.value < 1n ||
+      !Type.isProperList(tuples)
+    ) {
+      Interpreter.raiseBifError("badarg", "lists", "keyfind", [
+        value,
+        index,
+        tuples,
+      ]);
     }
 
     for (const tuple of tuples.data) {
@@ -414,9 +402,25 @@ const Erlang_Lists = {
 
   // Start keymember/3
   "keymember/3": (value, index, tuples) => {
-    return Type.boolean(
-      Type.isTuple(Erlang_Lists["keyfind/3"](value, index, tuples)),
-    );
+    let result;
+
+    try {
+      result = Erlang_Lists["keyfind/3"](value, index, tuples);
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError("badarg", "lists", "keymember", [
+          value,
+          index,
+          tuples,
+        ]);
+      }
+
+      throw error;
+    }
+
+    return Type.boolean(Type.isTuple(result));
   },
   // End keymember/3
   // Deps: [:lists.keyfind/3]
@@ -705,10 +709,12 @@ const Erlang_Lists = {
 
   // Start member/2
   "member/2": (elem, list) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "lists", "member", [elem, list]);
+    };
+
     if (!Type.isList(list)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a list"),
-      );
+      raiseBadarg();
     }
 
     const isProperList = Type.isProperList(list);
@@ -718,17 +724,13 @@ const Erlang_Lists = {
         if (i < list.data.length - 1 || isProperList) {
           return Type.boolean(true);
         } else {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
-          );
+          raiseBadarg();
         }
       }
     }
 
     if (!isProperList) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
-      );
+      raiseBadarg();
     }
 
     return Type.boolean(false);
@@ -828,16 +830,27 @@ const Erlang_Lists = {
 
   // Start reverse/1
   "reverse/1": (list) => {
-    if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.reverse/1", [list]),
-      );
+    // The BEAM matches the first two elements in reverse/1's own clauses, so
+    // a non-list or an improper list with fewer than two proper elements
+    // fails there, while a longer improper list fails in the reverse/2 BIF
+    // with the reversal state accumulated so far.
+    if (
+      !Type.isList(list) ||
+      (!Type.isProperList(list) && list.data.length === 2)
+    ) {
+      Interpreter.raiseFunctionClauseError("lists", "reverse", 1, [list]);
     }
 
     if (!Type.isProperList(list)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
-      );
+      const rest =
+        list.data.length === 3
+          ? list.data.at(-1)
+          : Type.improperList(list.data.slice(2));
+
+      Interpreter.raiseBifError("badarg", "lists", "reverse", [
+        rest,
+        Type.list([list.data[1], list.data[0]]),
+      ]);
     }
 
     return Type.list(list.data.toReversed());
@@ -847,16 +860,8 @@ const Erlang_Lists = {
 
   // Start reverse/2
   "reverse/2": (list, tail) => {
-    if (!Type.isList(list)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
-      );
-    }
-
     if (!Type.isProperList(list)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
-      );
+      Interpreter.raiseBifError("badarg", "lists", "reverse", [list, tail]);
     }
 
     if (list.data.length === 0 && !Type.isList(tail)) {
@@ -879,9 +884,7 @@ const Erlang_Lists = {
       !Type.isInteger(to) ||
       from.value > to.value + 1n
     ) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.seq/2", [from, to]),
-      );
+      Interpreter.raiseFunctionClauseError("lists", "seq", 2, [from, to]);
     }
 
     return Erlang_Lists["seq/3"](from, to, Type.integer(1));
@@ -891,22 +894,20 @@ const Erlang_Lists = {
 
   // Start seq/3
   "seq/3": (fromTerm, toTerm, incrTerm) => {
-    if (!Type.isInteger(fromTerm)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
-    }
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "lists", "seq", [
+        fromTerm,
+        toTerm,
+        incrTerm,
+      ]);
+    };
 
-    if (!Type.isInteger(toTerm)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
-    }
-
-    if (!Type.isInteger(incrTerm)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
-      );
+    if (
+      !Type.isInteger(fromTerm) ||
+      !Type.isInteger(toTerm) ||
+      !Type.isInteger(incrTerm)
+    ) {
+      raiseBadarg();
     }
 
     const from = fromTerm.value;
@@ -918,23 +919,13 @@ const Erlang_Lists = {
       return Type.list([Type.integer(from)]);
     }
 
-    // Erlang guard conditions:
-    // (incr > 0 andalso from - incr =< to) orelse (incr < 0 andalso from - incr >= to)
-    // Negating this (to find error cases):
-    // incr > 0 andalso from - incr > to  (i.e., to < from - incr when incr > 0)
-    // incr < 0 andalso from - incr < to  (i.e., to > from - incr when incr < 0)
-    // incr === 0 (special case already handled above when from === to)
-
-    if (incr > 0n && to < from - incr) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not a negative increment"),
-      );
-    }
-
-    if ((incr < 0n && to > from - incr) || incr === 0n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
-      );
+    // Erlang guard: (incr > 0 andalso from - incr =< to)
+    // orelse (incr < 0 andalso from - incr >= to)
+    if (!(
+      (incr > 0n && from - incr <= to) ||
+      (incr < 0n && from - incr >= to)
+    )) {
+      raiseBadarg();
     }
 
     const result = [];

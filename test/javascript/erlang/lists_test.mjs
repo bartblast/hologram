@@ -79,6 +79,20 @@ const tupleX = Type.tuple([atomX]);
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/lists_test.exs
 // Always update both together.
 
+function errorFrame(module, functionName, args, errorInfo = null) {
+  return {
+    module,
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo,
+  };
+}
+
+const stdlibErrorInfo = () =>
+  Type.map([[Type.atom("module"), Type.atom("erl_stdlib_errors")]]);
+
 describe("Erlang_Lists", () => {
   describe("all/2", () => {
     const all = Erlang_Lists["all/2"];
@@ -1762,6 +1776,24 @@ describe("Erlang_Lists", () => {
         Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        keyfind(atomAbc, Type.atom("xyz"), emptyList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "lists",
+          "keyfind",
+          Type.list([atomAbc, Type.atom("xyz"), emptyList]),
+          stdlibErrorInfo(),
+        ),
+      ]);
+    });
   });
 
   describe("keymember/3", () => {
@@ -1834,6 +1866,24 @@ describe("Erlang_Lists", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
       );
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        keymember(atomAbc, Type.atom("xyz"), emptyList);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "lists",
+          "keymember",
+          Type.list([atomAbc, Type.atom("xyz"), emptyList]),
+          stdlibErrorInfo(),
+        ),
+      ]);
     });
   });
 
@@ -3035,6 +3085,24 @@ describe("Erlang_Lists", () => {
         Interpreter.buildArgumentErrorMsg(2, "not a list"),
       );
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        member(integer2, atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "lists",
+          "member",
+          Type.list([integer2, atomAbc]),
+          stdlibErrorInfo(),
+        ),
+      ]);
+    });
   });
 
   describe("min/1", () => {
@@ -3354,6 +3422,104 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("reverse/1", () => {
+    const reverse = Erlang_Lists["reverse/1"];
+
+    it("returns a list with the elements in the argument in reverse order", () => {
+      const result = reverse(Type.list([integer1, integer2, integer3]));
+
+      assert.deepStrictEqual(result, Type.list([integer3, integer2, integer1]));
+    });
+
+    it("raises FunctionClauseError if the argument is not a list", () => {
+      assertBoxedError(
+        () => reverse(atomAbc),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.reverse/1", [atomAbc]),
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is a single-element improper list", () => {
+      const list = Type.improperList([integer1, integer2]);
+
+      assertBoxedError(
+        () => reverse(list),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.reverse/1", [list]),
+      );
+    });
+
+    it("raises ArgumentError if the argument is not a proper list", () => {
+      const list = Type.improperList([integer1, integer2, integer3]);
+
+      assertBoxedError(
+        () => reverse(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is a longer improper list", () => {
+      const list = Type.improperList([
+        integer1,
+        integer2,
+        integer3,
+        integer4,
+        atomX,
+      ]);
+
+      assertBoxedError(
+        () => reverse(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+
+    it("error frame carries args for a non-list argument", () => {
+      let caught;
+
+      try {
+        reverse(atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "reverse", Type.list([atomAbc])),
+      ]);
+    });
+
+    it("error frame carries the reversal state and error_info for an improper list", () => {
+      const list = Type.improperList([
+        integer1,
+        integer2,
+        integer3,
+        integer4,
+        atomX,
+      ]);
+
+      let caught;
+
+      try {
+        reverse(list);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "lists",
+          "reverse",
+          Type.list([
+            Type.improperList([integer3, integer4, atomX]),
+            Type.list([integer2, integer1]),
+          ]),
+          stdlibErrorInfo(),
+        ),
+      ]);
+    });
+  });
+
   describe("reverse/2", () => {
     const reverse = Erlang_Lists["reverse/2"];
 
@@ -3426,6 +3592,24 @@ describe("Erlang_Lists", () => {
         Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        reverse(integer5, list34);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "lists",
+          "reverse",
+          Type.list([integer5, list34]),
+          stdlibErrorInfo(),
+        ),
+      ]);
+    });
   });
 
   describe("seq/2", () => {
@@ -3480,6 +3664,19 @@ describe("Erlang_Lists", () => {
         "FunctionClauseError",
         expectedMessage,
       );
+    });
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        seq(atomAbc, Type.integer(5));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("lists", "seq", Type.list([atomAbc, Type.integer(5)])),
+      ]);
     });
   });
 
@@ -3651,6 +3848,24 @@ describe("Erlang_Lists", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
       );
+    });
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        seq(integer1, integer5, atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "lists",
+          "seq",
+          Type.list([integer1, integer5, atomAbc]),
+          stdlibErrorInfo(),
+        ),
+      ]);
     });
   });
 
