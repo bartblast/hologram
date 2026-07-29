@@ -31,6 +31,19 @@ const textBasedEmptyBinary = Bitstring.fromText("");
 // Each JavaScript test has a related Elixir consistency test in test/elixir/ex_js_consistency/erlang/binary_test.exs
 // Always update both together.
 
+function binaryErrorFrame(functionName, args) {
+  return {
+    module: "binary",
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo: Type.map([
+      [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+    ]),
+  };
+}
+
 describe("Erlang_Binary", () => {
   describe("at/2", () => {
     const at = Erlang_Binary["at/2"];
@@ -101,6 +114,36 @@ describe("Erlang_Binary", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        at(atomAbc, integer0);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        binaryErrorFrame("at", Type.list([atomAbc, integer0])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for an out-of-range position", () => {
+      const subject = Type.bitstring("abc");
+
+      let caught;
+
+      try {
+        at(subject, Type.integer(10));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        binaryErrorFrame("at", Type.list([subject, Type.integer(10)])),
+      ]);
     });
   });
 
@@ -227,6 +270,22 @@ describe("Erlang_Binary", () => {
         // Root has children for 'H' (72) and 'l' (108)
         assert.deepEqual(Array.from(saved.rootNode.children.keys()), [72, 108]);
       });
+    });
+
+    it("error frame carries args and error_info", () => {
+      const pattern = Type.bitstring("");
+
+      let caught;
+
+      try {
+        Erlang_Binary["compile_pattern/1"](pattern);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        binaryErrorFrame("compile_pattern", Type.list([pattern])),
+      ]);
     });
   });
 
@@ -366,6 +425,20 @@ describe("Erlang_Binary", () => {
         );
       });
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(atomAbc, Type.integer(-1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        binaryErrorFrame("copy", Type.list([atomAbc, Type.integer(-1)])),
+      ]);
+    });
   });
 
   describe("first/1", () => {
@@ -428,6 +501,22 @@ describe("Erlang_Binary", () => {
         ),
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      const subject = Type.bitstring("");
+
+      let caught;
+
+      try {
+        first(subject);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        binaryErrorFrame("first", Type.list([subject])),
+      ]);
+    });
   });
 
   describe("last/1", () => {
@@ -488,6 +577,22 @@ describe("Erlang_Binary", () => {
           "a zero-sized binary is not allowed",
         ),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      const subject = Type.bitstring("");
+
+      let caught;
+
+      try {
+        testedFun(subject);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        binaryErrorFrame("last", Type.list([subject])),
+      ]);
     });
   });
 

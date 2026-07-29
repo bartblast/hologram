@@ -221,30 +221,14 @@ const Erlang_Binary = {
 
   // Start at/2
   "at/2": (subject, pos) => {
-    if (!Type.isBinary(subject)) {
-      const msg = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
-
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
-    }
-
-    if (!Type.isInteger(pos)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
-    }
-
-    if (pos.value < 0n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
+    if (!Type.isBinary(subject) || !Type.isInteger(pos) || pos.value < 0n) {
+      Interpreter.raiseBifError("badarg", "binary", "at", [subject, pos]);
     }
 
     Bitstring.maybeSetBytesFromText(subject);
 
     if (pos.value >= subject.bytes.length) {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseBifError("badarg", "binary", "at", [subject, pos]);
     }
 
     return Type.integer(subject.bytes[pos.value]);
@@ -255,9 +239,9 @@ const Erlang_Binary = {
   // Start compile_pattern/1
   "compile_pattern/1": (pattern) => {
     const raiseInvalidPattern = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a valid pattern"),
-      );
+      Interpreter.raiseBifError("badarg", "binary", "compile_pattern", [
+        pattern,
+      ]);
     };
 
     const compileBoyerMoorePattern = (singlePattern) => {
@@ -373,24 +357,8 @@ const Erlang_Binary = {
 
   // Start copy/2
   "copy/2": (subject, count) => {
-    if (!Type.isBinary(subject)) {
-      const msg = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
-
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
-    }
-
-    if (!Type.isInteger(count)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
-    }
-
-    if (count.value < 0n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
+    if (!Type.isBinary(subject) || !Type.isInteger(count) || count.value < 0n) {
+      Interpreter.raiseBifError("badarg", "binary", "copy", [subject, count]);
     }
 
     if (count.value === 0n) {
@@ -427,23 +395,8 @@ const Erlang_Binary = {
 
   // Start first/1
   "first/1": (subject) => {
-    if (!Type.isBinary(subject)) {
-      const message = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
-
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, message),
-      );
-    }
-
-    if (Bitstring.isEmpty(subject)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "a zero-sized binary is not allowed",
-        ),
-      );
+    if (!Type.isBinary(subject) || Bitstring.isEmpty(subject)) {
+      Interpreter.raiseBifError("badarg", "binary", "first", [subject]);
     }
 
     Bitstring.maybeSetBytesFromText(subject);
@@ -455,23 +408,8 @@ const Erlang_Binary = {
 
   // Start last/1
   "last/1": (subject) => {
-    if (!Type.isBinary(subject)) {
-      const message = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
-
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, message),
-      );
-    }
-
-    if (Bitstring.isEmpty(subject)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "a zero-sized binary is not allowed",
-        ),
-      );
+    if (!Type.isBinary(subject) || Bitstring.isEmpty(subject)) {
+      Interpreter.raiseBifError("badarg", "binary", "last", [subject]);
     }
 
     Bitstring.maybeSetBytesFromText(subject);

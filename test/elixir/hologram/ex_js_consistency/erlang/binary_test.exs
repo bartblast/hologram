@@ -71,6 +71,33 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    build_argument_error_msg(2, "out of range"),
                    fn -> :binary.at(@binary, -1) end
     end
+
+    test "error frame carries args and error_info" do
+      subject = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :binary.at(subject, 0)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:binary, :at, [:abc, 0], [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info for an out-of-range position" do
+      subject = wrap_term("abc")
+
+      top_frame =
+        try do
+          :binary.at(subject, 10)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:binary, :at, ["abc", 10], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "compile_pattern/1" do
@@ -151,6 +178,20 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    build_argument_error_msg(1, "not a valid pattern"),
                    fn -> :binary.compile_pattern(["Hello", []]) end
     end
+
+    test "error frame carries args and error_info" do
+      pattern = wrap_term("")
+
+      top_frame =
+        try do
+          :binary.compile_pattern(pattern)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:binary, :compile_pattern, [""], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "copy/2" do
@@ -228,6 +269,20 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    build_argument_error_msg(2, "out of range"),
                    {:binary, :copy, ["hello", -1]}
     end
+
+    test "error frame carries args and error_info" do
+      subject = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :binary.copy(subject, -1)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:binary, :copy, [:abc, -1], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "first/1" do
@@ -264,6 +319,19 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    build_argument_error_msg(1, "a zero-sized binary is not allowed"),
                    {:binary, :first, [<<>>]}
     end
+
+    test "error frame carries args and error_info" do
+      subject = wrap_term("")
+
+      top_frame =
+        try do
+          :binary.first(subject)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:binary, :first, [""], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "last/1" do
@@ -299,6 +367,19 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "a zero-sized binary is not allowed"),
                    {:binary, :last, [""]}
+    end
+
+    test "error frame carries args and error_info" do
+      subject = wrap_term("")
+
+      top_frame =
+        try do
+          :binary.last(subject)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:binary, :last, [""], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
