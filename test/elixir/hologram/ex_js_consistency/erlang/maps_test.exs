@@ -27,9 +27,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
       top_frame =
         try do
-          :maps.find(:a, :b)
+          :maps.find(:a, map)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -200,9 +202,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
       top_frame =
         try do
-          :maps.get(:a, :b)
+          :maps.get(:a, map)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -212,9 +216,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info for a missing key" do
+      map = wrap_term(%{b: 2})
+
       top_frame =
         try do
-          :maps.get(:a, %{b: 2})
+          :maps.get(:a, map)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -449,9 +455,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
       top_frame =
         try do
-          :maps.is_key(:a, :b)
+          :maps.is_key(:a, map)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -515,9 +523,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info" do
+      map = wrap_term(:a)
+
       top_frame =
         try do
-          :maps.keys(:a)
+          :maps.keys(map)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -859,9 +869,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
       top_frame =
         try do
-          :maps.put(:a, 1, :b)
+          :maps.put(:a, 1, map)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -892,9 +904,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
       top_frame =
         try do
-          :maps.remove(:a, :b)
+          :maps.remove(:a, map)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -938,9 +952,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
       top_frame =
         try do
-          :maps.take(:a, :b)
+          :maps.take(:a, map)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -972,9 +988,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info" do
+      map = wrap_term(:a)
+
       top_frame =
         try do
-          :maps.to_list(:a)
+          :maps.to_list(map)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -1005,9 +1023,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
       top_frame =
         try do
-          :maps.update(:a, 1, :b)
+          :maps.update(:a, 1, map)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -1017,9 +1037,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info for a missing key" do
+      map = wrap_term(%{b: 2})
+
       top_frame =
         try do
-          :maps.update(:a, 1, %{b: 2})
+          :maps.update(:a, 1, map)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -1052,9 +1074,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "error frame carries args and error_info" do
+      map = wrap_term(:a)
+
       top_frame =
         try do
-          :maps.values(:a)
+          :maps.values(map)
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
