@@ -835,6 +835,23 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     test "delegates to replace/4 with empty options list" do
       assert :binary.replace("hello world", "world", "universe") == "hello universe"
     end
+
+    test "error frame carries args and error_info" do
+      replacement = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :binary.replace("abc", "b", replacement)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside binary.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:binary, :replace, ["abc", "b", :bad], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
   end
 
   describe "replace/4" do
@@ -1130,12 +1147,79 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    build_argument_error_msg(4, "invalid options"),
                    {:binary, :replace, ["hello", "l", "X", [scope: {-1, 5}]]}
     end
+
+    test "error frame carries args and error_info" do
+      replacement = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :binary.replace("abc", "b", replacement, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside binary.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:binary, :replace, ["abc", "b", :bad, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
+
+    test "error frame carries the badopt cause for an unknown option" do
+      options = wrap_term([:bad])
+
+      top_frame =
+        try do
+          :binary.replace("abc", "b", "x", options)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside binary.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:binary, :replace, ["abc", "b", "x", [:bad]], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{cause: :badopt, module: :erl_stdlib_errors}
+    end
+
+    test "error frame carries no cause for a scope not wholly inside the binary" do
+      options = wrap_term(scope: {0, 10})
+
+      top_frame =
+        try do
+          :binary.replace("abc", "b", "x", options)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside binary.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:binary, :replace, ["abc", "b", "x", [scope: {0, 10}]], location} =
+               wrap_term(top_frame)
+
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
   end
 
   describe "split/2" do
     # Verifies default options (no :global) - splits only on first match
     test "delegates to split/3 with empty options" do
       assert :binary.split("hello world world", " ") == ["hello", "world world"]
+    end
+
+    test "error frame carries args and error_info" do
+      pattern = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :binary.split("abc", pattern)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:binary, :split, ["abc", :bad], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
@@ -1375,6 +1459,35 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert_error ArgumentError,
                    build_argument_error_msg(3, "invalid options"),
                    fn -> :binary.split("abc", "b", scope: {1, 3}) end
+    end
+
+    test "error frame carries args and error_info" do
+      pattern = wrap_term(:bad)
+
+      top_frame =
+        try do
+          :binary.split("abc", pattern, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:binary, :split, ["abc", :bad, []], [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info for a scope not wholly inside the binary" do
+      options = wrap_term(scope: {0, 10})
+
+      top_frame =
+        try do
+          :binary.split("abc", "b", options)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:binary, :split, ["abc", "b", [scope: {0, 10}]],
+                [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 end

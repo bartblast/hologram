@@ -133,6 +133,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:binary, :replace, 4}, {:binary, :split, 3}},
     {{:binary, :replace, 4}, {:erlang, :iolist_to_binary, 1}},
     {{:binary, :split, 2}, {:binary, :split, 3}},
+    {{:binary, :split, 3}, {:binary, :_is_valid_pattern, 1}},
     {{:binary, :split, 3}, {:binary, :_parse_search_opts, 1}},
     {{:binary, :split, 3}, {:binary, :compile_pattern, 1}},
     {{:binary, :split, 3}, {:binary, :match, 3}},
