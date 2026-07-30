@@ -602,6 +602,7 @@ defmodule Hologram.Compiler.CallGraph do
     |> maybe_add_protocol_call_graph_edges(module)
     |> maybe_add_struct_call_graph_edges(module)
     |> maybe_add_ecto_schema_call_graph_edges(module)
+    |> maybe_add_exception_call_graph_edges(module)
     |> build(body, module)
   end
 
@@ -1465,6 +1466,17 @@ defmodule Hologram.Compiler.CallGraph do
   defp maybe_add_protocol_call_graph_edges(call_graph, module) do
     if Reflection.protocol?(module) do
       add_protocol_call_graph_edges(call_graph, module)
+    end
+
+    call_graph
+  end
+
+  # Exception.message/1 dispatches on the module of the struct it is given, so
+  # the callback isn't reachable from any call site - a reached exception
+  # module brings its own.
+  defp maybe_add_exception_call_graph_edges(call_graph, module) do
+    if Reflection.exception?(module) do
+      add_edge(call_graph, module, {module, :message, 1})
     end
 
     call_graph

@@ -116,6 +116,20 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "exception?/1" do
+    test "module which is an exception" do
+      assert exception?(ArgumentError)
+    end
+
+    test "module which is not an exception" do
+      refute exception?(Calendar.ISO)
+    end
+
+    test "non-module" do
+      refute exception?(123)
+    end
+  end
+
   describe "elixir_module?/1" do
     test "existing Elixir module" do
       assert elixir_module?(Calendar.ISO)

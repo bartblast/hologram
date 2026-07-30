@@ -118,6 +118,15 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns true if the given term is an exception module, or false otherwise.
+  """
+  @spec exception?(any) :: boolean
+  def exception?(term) do
+    elixir_module?(term) && has_function?(term, :exception, 1) &&
+      has_function?(term, :message, 1)
+  end
+
+  @doc """
   Returns true if the given term is an existing Elixir module, or false otherwise.
 
   Some Erlang modules use Elixir-style naming for interop (e.g. the atom `Luerl`,

@@ -570,6 +570,18 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module21, {Module21, :__schema__, 2})
     end
 
+    test "module definition IR, exception module adds exception-specific edges", %{
+      empty_call_graph: call_graph
+    } do
+      argument_error_ir = IR.for_module(ArgumentError)
+      result = build(call_graph, argument_error_ir)
+
+      assert result == call_graph
+
+      assert has_vertex?(call_graph, {ArgumentError, :message, 1})
+      assert has_edge?(call_graph, ArgumentError, {ArgumentError, :message, 1})
+    end
+
     test "module definition IR, protocol module adds protocol-specific edges", %{
       empty_call_graph: call_graph
     } do
