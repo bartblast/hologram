@@ -5,6 +5,15 @@ import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
 export default class HologramBoxedError extends Error {
+  // Set while an error is deriving its struct and message. Both run transpiled Elixir, which can
+  // itself raise - a port that isn't in the bundle, a formatter that fails on the term it is
+  // given. Deriving that inner error would run the same code and raise the same way, so
+  // derivation is skipped while it is already under way: the inner error keeps the raw form it
+  // arrived in, and the outer derivation fails with it rather than the two of them looping until
+  // the JavaScript stack is exhausted. Actions run sequentially, so a single flag is enough - the
+  // same reasoning the shadow call stack rests on.
+  static #isDeriving = false;
+
   constructor(value, kind = Type.atom("error")) {
     super("");
 
@@ -69,12 +78,39 @@ export default class HologramBoxedError extends Error {
       return;
     }
 
-    this.struct = Interpreter.normalizeError(this.value, boxedStacktrace);
-    this.blamedStruct = Interpreter.blameError(this.value, boxedStacktrace);
+    if (HologramBoxedError.#isDeriving) {
+      this.#takeRawForm();
+      return;
+    }
 
-    const boxedType = Interpreter.getErrorType(this);
-    const boxedMessage = Interpreter.resolveErrorMessage(this.blamedStruct);
+    HologramBoxedError.#isDeriving = true;
 
-    this.message = `(${boxedType}) ${boxedMessage}`;
+    try {
+      this.struct = Interpreter.normalizeError(this.value, boxedStacktrace);
+      this.blamedStruct = Interpreter.blameError(this.value, boxedStacktrace);
+
+      const boxedType = Interpreter.getErrorType(this);
+      const boxedMessage = Interpreter.resolveErrorMessage(this.blamedStruct);
+
+      this.message = `(${boxedType}) ${boxedMessage}`;
+    } finally {
+      // Reset even when the derivation raises, so the error carrying that raise out still derives.
+      HologramBoxedError.#isDeriving = false;
+    }
+  }
+
+  // The error as it arrived, with no Elixir run to refine it: an exception struct stands as its
+  // own normalized and blamed form, a bare reason has neither, and the message states what was
+  // raised instead of what the exception would have said about itself.
+  #takeRawForm() {
+    this.struct = Type.isStruct(this.value) ? this.value : null;
+    this.blamedStruct = this.struct;
+
+    const type =
+      this.struct === null
+        ? "error"
+        : Interpreter.inspect(this.struct.data["atom(__struct__)"][1]);
+
+    this.message = `(${type}) ${Interpreter.inspect(this.value)}`;
   }
 }

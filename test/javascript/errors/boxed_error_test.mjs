@@ -1,9 +1,10 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals} from "../support/helpers.mjs";
+import {assert, defineRuntimeGlobals, sinon} from "../support/helpers.mjs";
 
 import CallStack from "../../../assets/js/erts/call_stack.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -130,6 +131,97 @@ describe("HologramBoxedError", () => {
         assert.instanceOf(error, HologramBoxedError);
         assert.deepStrictEqual(error.struct, struct);
       }
+    });
+  });
+
+  describe("error raised while another error derives", () => {
+    let normalizeErrorStub;
+
+    // Mirrors a derivation that raises - a port missing from the bundle, a formatter failing on
+    // the term it is given - by raising a boxed error out of the first thing derivation calls.
+    const deriveByRaising = (reason) => {
+      normalizeErrorStub = sinon
+        .stub(Interpreter, "normalizeError")
+        .callsFake(() => {
+          throw new HologramBoxedError(reason);
+        });
+    };
+
+    afterEach(() => {
+      normalizeErrorStub?.restore();
+      normalizeErrorStub = null;
+    });
+
+    it("carries the raised error out instead of exhausting the stack", () => {
+      const reason = Type.errorStruct("MyRaisedType", "my raised message");
+      deriveByRaising(reason);
+
+      let caught;
+
+      try {
+        new HologramBoxedError(Type.errorStruct("MyType", "my message"));
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.instanceOf(caught, HologramBoxedError);
+      assert.deepStrictEqual(caught.value, reason);
+    });
+
+    it("leaves the raised error in the raw form it arrived in", () => {
+      const reason = Type.errorStruct("MyRaisedType", "my raised message");
+      deriveByRaising(reason);
+
+      let caught;
+
+      try {
+        new HologramBoxedError(Type.errorStruct("MyType", "my message"));
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.deepStrictEqual(caught.struct, reason);
+      assert.deepStrictEqual(caught.blamedStruct, reason);
+
+      assert.equal(
+        caught.message,
+        '(MyRaisedType) %{__exception__: true, message: "my raised message", __struct__: MyRaisedType}',
+      );
+    });
+
+    it("names no struct for a bare reason raised while deriving", () => {
+      deriveByRaising(Type.atom("badarg"));
+
+      let caught;
+
+      try {
+        new HologramBoxedError(Type.errorStruct("MyType", "my message"));
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.isNull(caught.struct);
+      assert.isNull(caught.blamedStruct);
+      assert.equal(caught.message, "(error) :badarg");
+    });
+
+    it("derives the next error normally once the raise has unwound", () => {
+      deriveByRaising(Type.atom("badarg"));
+
+      try {
+        new HologramBoxedError(Type.errorStruct("MyType", "my message"));
+      } catch {
+        // The raise is the point - what matters is the state it leaves behind.
+      }
+
+      normalizeErrorStub.restore();
+      normalizeErrorStub = null;
+
+      const struct = Type.errorStruct("MyType", "my message");
+      const error = new HologramBoxedError(struct);
+
+      assert.deepStrictEqual(error.struct, struct);
+      assert.equal(error.message, "(MyType) my message");
     });
   });
 
