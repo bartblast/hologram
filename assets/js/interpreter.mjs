@@ -1507,81 +1507,6 @@ export default class Interpreter {
     return true;
   }
 
-  // Recomputes against the actual arguments which parts of a clause head
-  // matched - the marking the server's blame does, which no build-time
-  // rendering can carry, since it depends on the call.
-  static #blameClauseHead(clauseHead, args) {
-    const context = Interpreter.buildContext();
-    const patterns = clauseHead.params(context);
-
-    const params = clauseHead.blame.params.map((source, index) => {
-      const matched = Interpreter.isMatched(
-        patterns[index],
-        args[index],
-        context,
-      );
-
-      if (matched) {
-        // What a param binds is visible to the params and guards after it,
-        // the way the BEAM matches a clause head.
-        Interpreter.updateVarsToMatchedValues(context);
-      }
-
-      return Interpreter.#blameNode(matched, source);
-    });
-
-    const guards = clauseHead.blame.guards.map((guard) =>
-      Interpreter.#blameGuard(guard, context),
-    );
-
-    return Type.tuple([Type.list(params), Type.list(guards)]);
-  }
-
-  // Returns null when the clause heads carry no rendered sources, which is
-  // how they arrive with client stacktraces disabled.
-  static #blameClauseHeads(clauseHeads, args) {
-    if (clauseHeads.length === 0 || !clauseHeads[0].blame) {
-      return null;
-    }
-
-    return Type.list(
-      clauseHeads.map((clauseHead) =>
-        Interpreter.#blameClauseHead(clauseHead, args),
-      ),
-    );
-  }
-
-  static #blameGuard(guard, context) {
-    if (guard.source !== undefined) {
-      return Interpreter.#blameNode(
-        Interpreter.#evaluatesToTrue(guard.test, context),
-        guard.source,
-      );
-    }
-
-    return Type.tuple([
-      Type.atom(guard.operator),
-      Interpreter.#blameGuard(guard.left, context),
-      Interpreter.#blameGuard(guard.right, context),
-    ]);
-  }
-
-  static #blameNode(match, source) {
-    return Type.map([
-      [Type.atom("match?"), Type.boolean(match)],
-      [Type.atom("source"), Type.bitstring(source)],
-    ]);
-  }
-
-  static #evaluatesToTrue(test, context) {
-    try {
-      return Type.isTrue(test(context));
-    } catch {
-      // A guard that raises is a guard that didn't hold, as on the BEAM.
-      return false;
-    }
-  }
-
   static #areCollectionsItemsStrictlyEqual(items1, items2) {
     if (items1.length !== items2.length) return false;
 
@@ -1665,6 +1590,72 @@ export default class Interpreter {
     context.stacktrace = Type.isList(error.stacktrace)
       ? error.stacktrace
       : Type.list(error.stacktrace.map(CallStack.boxFrame));
+  }
+
+  // Recomputes against the actual arguments which parts of a clause head
+  // matched - the marking the server's blame does, which no build-time
+  // rendering can carry, since it depends on the call.
+  static #blameClauseHead(clauseHead, args) {
+    const context = Interpreter.buildContext();
+    const patterns = clauseHead.params(context);
+
+    const params = clauseHead.blame.params.map((source, index) => {
+      const matched = Interpreter.isMatched(
+        patterns[index],
+        args[index],
+        context,
+      );
+
+      if (matched) {
+        // What a param binds is visible to the params and guards after it,
+        // the way the BEAM matches a clause head.
+        Interpreter.updateVarsToMatchedValues(context);
+      }
+
+      return Interpreter.#blameNode(matched, source);
+    });
+
+    const guards = clauseHead.blame.guards.map((guard) =>
+      Interpreter.#blameGuard(guard, context),
+    );
+
+    return Type.tuple([Type.list(params), Type.list(guards)]);
+  }
+
+  // Returns null when the clause heads carry no rendered sources, which is
+  // how they arrive with client stacktraces disabled.
+  static #blameClauseHeads(clauseHeads, args) {
+    if (clauseHeads.length === 0 || !clauseHeads[0].blame) {
+      return null;
+    }
+
+    return Type.list(
+      clauseHeads.map((clauseHead) =>
+        Interpreter.#blameClauseHead(clauseHead, args),
+      ),
+    );
+  }
+
+  static #blameGuard(guard, context) {
+    if (guard.source !== undefined) {
+      return Interpreter.#blameNode(
+        Interpreter.#evaluatesToTrue(guard.test, context),
+        guard.source,
+      );
+    }
+
+    return Type.tuple([
+      Type.atom(guard.operator),
+      Interpreter.#blameGuard(guard.left, context),
+      Interpreter.#blameGuard(guard.right, context),
+    ]);
+  }
+
+  static #blameNode(match, source) {
+    return Type.map([
+      [Type.atom("match?"), Type.boolean(match)],
+      [Type.atom("source"), Type.bitstring(source)],
+    ]);
   }
 
   // Boxes the unboxed reason shorthand the raise helpers accept: a string for
@@ -1982,6 +1973,15 @@ export default class Interpreter {
     }
 
     return NO_MATCH;
+  }
+
+  static #evaluatesToTrue(test, context) {
+    try {
+      return Type.isTrue(test(context));
+    } catch {
+      // A guard that raises is a guard that didn't hold, as on the BEAM.
+      return false;
+    }
   }
 
   static #handleMatchFail(right, raiseMatchError) {
