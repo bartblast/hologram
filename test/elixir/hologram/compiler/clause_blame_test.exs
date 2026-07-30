@@ -2,23 +2,22 @@ defmodule Hologram.Compiler.ClauseBlameTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.ClauseBlame
 
+  alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
+  alias Hologram.Reflection
 
-  # The functions whose ported raise sites report attempted clauses. Their
-  # heads come from Elixir's own source, so they are compared against what the
-  # server blames rather than against hardcoded text that would drift with the
-  # Elixir version.
-  @ported_calls [
-    {Code, :ensure_compiled, [1]},
-    {IO, :inspect, [123, :abc, []]},
-    {String, :contains?, [:hello, "test"]},
-    {String, :downcase, [:abc, :default]},
-    {String, :replace, [:abc, "ab", "xy", []]},
-    {String, :trim, [:abc]},
-    {String, :upcase, [:abc, :default]},
-    {Task, :await, [123, 5000]},
-    {URI, :encode, [:hello, &URI.char_unreserved?/1]}
-  ]
+  # The functions the client implements in JavaScript, whose raise sites report
+  # the clause heads rendered from Elixir's own source. They are compared
+  # against what the server blames rather than against hardcoded text, which
+  # would drift with the Elixir version. Modules the project doesn't carry are
+  # left out - the server can't blame them either.
+  @ported_functions CallGraph.manually_ported_elixir_mfas()
+                    |> Enum.map(fn {module, function, _arity} -> {module, function} end)
+                    |> Enum.uniq()
+                    |> Enum.filter(fn {module, _function} ->
+                      Reflection.elixir_module?(module)
+                    end)
+                    |> Enum.sort()
 
   # Guards read out of BEAM debug info spell their calls out as :erlang remote
   # calls, so the fixtures below are shaped that way rather than as source AST.
@@ -26,25 +25,29 @@ defmodule Hologram.Compiler.ClauseBlameTest do
     {:__aliases__, [alias: false], [name]}
   end
 
-  # Reads the clause heads the compiler rendered for the given function.
-  defp compiler_clause_heads(module, function, arity) do
-    {_key, {_visibility, clauses}} =
-      module
-      |> IR.for_module()
-      |> IR.aggregate_module_funs()
-      |> List.keyfind({function, arity}, 0)
-
-    Enum.map(clauses, & &1.blame)
+  # Reads the clause heads the compiler rendered for every arity of the given
+  # function - a default argument makes the ported arity differ from the raised
+  # one, and both are registered.
+  defp compiler_clause_heads(module, function) do
+    module
+    |> IR.for_module()
+    |> IR.aggregate_module_funs()
+    |> Enum.filter(fn {{name, _arity}, _fun} -> name == function end)
+    |> Enum.sort()
+    |> Enum.map(fn {{_name, arity}, {_visibility, clauses}} ->
+      {arity, Enum.map(clauses, & &1.blame)}
+    end)
   end
 
   defp erlang_call(function, args) do
     {{:., [], [:erlang, function]}, [], args}
   end
 
-  # Renders the clause heads the server blames, dropping the marks, which
-  # depend on the arguments and are placed by the client at raise time.
-  defp server_clause_heads(module, function, args) do
-    {:ok, _kind, clauses} = Exception.blame_mfa(module, function, args)
+  # Renders the clause heads the server blames, dropping the marks, which depend
+  # on the arguments and are placed by the client at raise time - so which
+  # arguments are blamed here doesn't matter, only how many.
+  defp server_clause_heads(module, function, arity) do
+    {:ok, _kind, clauses} = Exception.blame_mfa(module, function, List.duplicate(nil, arity))
 
     Enum.map(clauses, fn {blamed_params, guards} ->
       %{
@@ -94,14 +97,14 @@ defmodule Hologram.Compiler.ClauseBlameTest do
   end
 
   describe "rendering the clause heads of ported functions" do
-    for {module, function, args} <- @ported_calls do
-      arity = length(args)
+    for {module, function} <- @ported_functions do
+      test "#{inspect(module)}.#{function}" do
+        {module, function} = {unquote(module), unquote(function)}
 
-      test "#{inspect(module)}.#{function}/#{arity}" do
-        {module, function, args} = {unquote(module), unquote(function), unquote(args)}
-
-        assert compiler_clause_heads(module, function, length(args)) ==
-                 server_clause_heads(module, function, args)
+        for {arity, clause_heads} <- compiler_clause_heads(module, function) do
+          assert clause_heads == server_clause_heads(module, function, arity),
+                 "clause heads differ for #{inspect(module)}.#{function}/#{arity}"
+        end
       end
     end
   end
