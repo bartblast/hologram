@@ -50,21 +50,100 @@ defmodule Hologram.Compiler.ClauseBlame do
     end)
   end
 
-  defp build_guard({{:., _dot_meta, [:erlang, :andalso]}, _call_meta, [left, right]}) do
-    {:and, build_guard(left), build_guard(right)}
-  end
-
-  defp build_guard({{:., _dot_meta, [:erlang, :orelse]}, _call_meta, [left, right]}) do
-    {:or, build_guard(left), build_guard(right)}
-  end
-
   defp build_guard(ast) do
-    source =
-      ast
-      |> rewrite_guard()
-      |> Macro.to_string()
+    ast
+    |> build_node()
+    |> collapse_struct_macros()
+    |> to_guard()
+  end
 
-    {:leaf, source, ast}
+  defp build_node({{:., _dot_meta, [:erlang, :andalso]}, _call_meta, [left, right]} = ast) do
+    {:op, :and, ast, build_node(left), build_node(right)}
+  end
+
+  defp build_node({{:., _dot_meta, [:erlang, :orelse]}, _call_meta, [left, right]} = ast) do
+    {:op, :or, ast, build_node(left), build_node(right)}
+  end
+
+  defp build_node(ast) do
+    {:node, ast, rewrite_guard(ast)}
+  end
+
+  defp collapse_struct_macros({:op, op, ast, left, right} = node) do
+    case struct_macro_args(node) do
+      nil ->
+        {:op, op, ast, collapse_struct_macros(left), collapse_struct_macros(right)}
+
+      args ->
+        {:node, ast, {:is_struct, [], args}}
+    end
+  end
+
+  defp collapse_struct_macros(node), do: node
+
+  defp map_key_node?({:is_map_key, _meta, [_map, _key]}), do: true
+  defp map_key_node?(_node), do: false
+
+  defp map_node?({:is_map, _meta, [_term]}), do: true
+  defp map_node?(_node), do: false
+
+  # An is_struct/1,2 guard is spelled out as a conjunction of map, key and
+  # struct-field checks, which the server folds back into the macro call when
+  # it renders the clause. The conjunction stays as the node's AST, so the
+  # client evaluates it as one unit, the way the server marks it as one.
+  defp struct_macro_args(
+         {:op, :and, _ast,
+          {:op, :and, _left_ast, {:node, _map_ast, map_node = {_map_fun, _map_meta, [term]}},
+           {:node, _key_ast, key_node = {_key_fun, _key_meta, [term, _key]}}},
+          {:node, _validation_ast,
+           validation_node =
+             {_validation_fun, _validation_meta, [{_get_fun, _get_meta, [_key_name, term]}]}}}
+       ) do
+    if map_node?(map_node) and map_key_node?(key_node) and
+         struct_validation_node?(validation_node) do
+      [term]
+    end
+  end
+
+  defp struct_macro_args(
+         {:op, :and, _ast,
+          {:op, :and, _left_ast,
+           {:op, :and, _innermost_ast,
+            {:node, _map_ast, map_node = {_map_fun, _map_meta, [term]}},
+            {:op, :or, _or_ast, {:node, _atom_ast, {:is_atom, _atom_meta, [_module_ast]}},
+             {:node, _fail_ast, :fail}}},
+           {:node, _key_ast, key_node = {_key_fun, _key_meta, [term, _key]}}},
+          {:node, _validation_ast,
+           validation_node =
+             {_validation_fun, _validation_meta,
+              [{_get_fun, _get_meta, [_key_name, term]}, module]}}}
+       ) do
+    if map_node?(map_node) and map_key_node?(key_node) and
+         struct_validation_node?(validation_node) do
+      [term, module]
+    end
+  end
+
+  defp struct_macro_args(_node), do: nil
+
+  defp struct_validation_node?(
+         {:is_atom, _meta, [{{:., [], [:erlang, :map_get]}, _get_meta, [:__struct__, _term]}]}
+       ),
+       do: true
+
+  defp struct_validation_node?(
+         {:==, _meta, [{{:., [], [:erlang, :map_get]}, _get_meta, [:__struct__, _term]}, _module]}
+       ),
+       do: true
+
+  defp struct_validation_node?(_node), do: false
+
+  defp to_guard({:op, op, _ast, left, right}) do
+    {op, to_guard(left), to_guard(right)}
+  end
+
+  defp to_guard({:node, ast, rewritten_ast}) do
+    {:leaf, Macro.to_string(rewritten_ast), ast}
   end
 
   # Debug info spells guards out as :erlang remote calls, which the server maps

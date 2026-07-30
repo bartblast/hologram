@@ -4,8 +4,35 @@ defmodule Hologram.Compiler.ClauseBlameTest do
 
   # Guards read out of BEAM debug info spell their calls out as :erlang remote
   # calls, so the fixtures below are shaped that way rather than as source AST.
+  defp alias_ast(name) do
+    {:__aliases__, [alias: false], [name]}
+  end
+
   defp erlang_call(function, args) do
     {{:., [], [:erlang, function]}, [], args}
+  end
+
+  # Mirrors how the Elixir compiler spells an is_struct/1,2 guard out.
+  defp struct_macro_guard(term) do
+    map_check = erlang_call(:is_map, [term])
+    key_check = erlang_call(:is_map_key, [:__struct__, term])
+    struct_check = erlang_call(:is_atom, [erlang_call(:map_get, [:__struct__, term])])
+
+    erlang_call(:andalso, [erlang_call(:andalso, [map_check, key_check]), struct_check])
+  end
+
+  defp struct_macro_guard(term, module) do
+    map_check = erlang_call(:is_map, [term])
+    module_check = erlang_call(:orelse, [erlang_call(:is_atom, [module]), :fail])
+    key_check = erlang_call(:is_map_key, [:__struct__, term])
+
+    struct_check =
+      erlang_call(:==, [erlang_call(:map_get, [:__struct__, term]), module])
+
+    erlang_call(:andalso, [
+      erlang_call(:andalso, [erlang_call(:andalso, [map_check, module_check]), key_check]),
+      struct_check
+    ])
   end
 
   defp var(name) do
@@ -69,6 +96,33 @@ defmodule Hologram.Compiler.ClauseBlameTest do
       guard = {{:., [], [:maps, :is_key]}, [], [:a, var(:map)]}
 
       assert build_guards([guard]) == [{:leaf, ":maps.is_key(:a, map)", guard}]
+    end
+
+    test "guard spelling out an is_struct/1 call" do
+      guard = struct_macro_guard(var(:term))
+
+      assert build_guards([guard]) == [{:leaf, "is_struct(term)", guard}]
+    end
+
+    test "guard spelling out an is_struct/2 call" do
+      guard = struct_macro_guard(var(:term), alias_ast(:MapSet))
+
+      assert build_guards([guard]) == [{:leaf, "is_struct(term, MapSet)", guard}]
+    end
+
+    test "guard resembling but not spelling out an is_struct/1 call" do
+      term = var(:term)
+      map_check = erlang_call(:is_list, [term])
+      key_check = erlang_call(:is_map_key, [:__struct__, term])
+      struct_check = erlang_call(:is_atom, [erlang_call(:map_get, [:__struct__, term])])
+      guard = erlang_call(:andalso, [erlang_call(:andalso, [map_check, key_check]), struct_check])
+
+      assert build_guards([guard]) == [
+               {:and,
+                {:and, {:leaf, "is_list(term)", map_check},
+                 {:leaf, "is_map_key(term, :__struct__)", key_check}},
+                {:leaf, "is_atom(:erlang.map_get(:__struct__, term))", struct_check}}
+             ]
     end
   end
 
