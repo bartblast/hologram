@@ -93,6 +93,17 @@ export default class HologramBoxedError extends Error {
       const boxedMessage = Interpreter.resolveErrorMessage(this.blamedStruct);
 
       this.message = `(${boxedType}) ${boxedMessage}`;
+    } catch (error) {
+      // A boxed error means the derivation raised the way Elixir code does, and it names what is
+      // wrong better than this error could - it is carried out, having already taken its raw form
+      // above. Anything else is the derivation machinery itself faulting, which must not cost the
+      // caller the error they raised: they keep it in its raw form, with the fault named alongside
+      // so it doesn't pass unnoticed.
+      if (error instanceof HologramBoxedError) {
+        throw error;
+      }
+
+      this.#takeRawForm(error);
     } finally {
       // Reset even when the derivation raises, so the error carrying that raise out still derives.
       HologramBoxedError.#isDeriving = false;
@@ -101,8 +112,9 @@ export default class HologramBoxedError extends Error {
 
   // The error as it arrived, with no Elixir run to refine it: an exception struct stands as its
   // own normalized and blamed form, a bare reason has neither, and the message states what was
-  // raised instead of what the exception would have said about itself.
-  #takeRawForm() {
+  // raised instead of what the exception would have said about itself. A derivation error is the
+  // fault that stopped the refining, named so it isn't swallowed.
+  #takeRawForm(derivationError = null) {
     this.struct = Type.isStruct(this.value) ? this.value : null;
     this.blamedStruct = this.struct;
 
@@ -111,6 +123,11 @@ export default class HologramBoxedError extends Error {
         ? "error"
         : Interpreter.inspect(this.struct.data["atom(__struct__)"][1]);
 
-    this.message = `(${type}) ${Interpreter.inspect(this.value)}`;
+    const fault =
+      derivationError === null
+        ? ""
+        : ` (message derivation failed: ${derivationError.message})`;
+
+    this.message = `(${type}) ${Interpreter.inspect(this.value)}${fault}`;
   }
 }

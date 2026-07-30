@@ -225,6 +225,63 @@ describe("HologramBoxedError", () => {
     });
   });
 
+  describe("failure in the derivation itself", () => {
+    let normalizeErrorStub;
+
+    // Mirrors the derivation machinery faulting rather than raising the Elixir way - a helper
+    // reading a shape it doesn't handle, say - which arrives as a plain JavaScript error.
+    const deriveByFaulting = () => {
+      normalizeErrorStub = sinon
+        .stub(Interpreter, "normalizeError")
+        .callsFake(() => {
+          throw new TypeError("my fault");
+        });
+    };
+
+    afterEach(() => {
+      normalizeErrorStub?.restore();
+      normalizeErrorStub = null;
+    });
+
+    it("keeps the error the caller raised", () => {
+      deriveByFaulting();
+
+      const struct = Type.errorStruct("MyType", "my message");
+      const error = new HologramBoxedError(struct);
+
+      assert.deepStrictEqual(error.value, struct);
+      assert.deepStrictEqual(error.struct, struct);
+    });
+
+    it("names the fault alongside the raw form", () => {
+      deriveByFaulting();
+
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyType", "my message"),
+      );
+
+      assert.equal(
+        error.message,
+        '(MyType) %{__exception__: true, message: "my message", __struct__: MyType} ' +
+          "(message derivation failed: my fault)",
+      );
+    });
+
+    it("derives the next error normally", () => {
+      deriveByFaulting();
+
+      new HologramBoxedError(Type.errorStruct("MyType", "my message"));
+
+      normalizeErrorStub.restore();
+      normalizeErrorStub = null;
+
+      const struct = Type.errorStruct("MyType", "my message");
+      const error = new HologramBoxedError(struct);
+
+      assert.equal(error.message, "(MyType) my message");
+    });
+  });
+
   describe("throw kind", () => {
     it("sets kind and value", () => {
       const value = Type.integer(42);
