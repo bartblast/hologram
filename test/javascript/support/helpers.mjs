@@ -318,6 +318,12 @@ function defineElixirExceptionModule() {
       }
 
       if (Type.isAtom(reason) && reason.value === "badarg") {
+        const applyMessage = deriveApplyErrorMessage(stacktrace);
+
+        if (applyMessage !== null) {
+          return Type.errorStruct("ArgumentError", applyMessage);
+        }
+
         const message = deriveErrorInfoMessage(reason, stacktrace);
 
         return Type.errorStruct("ArgumentError", message ?? "argument error");
@@ -695,6 +701,69 @@ export function defineRuntimeGlobals() {
     "Elixir_WithClauseError",
     defineElixirTermErrorModule("no with clause matching:"),
   );
+}
+
+// Mirrors the ErlangError.normalize(:badarg, stacktrace) clause that reports
+// a non-atom module given to apply/3, picking the hint from what the module
+// term turns out to be. Returns null when the raising frame is not such a
+// call, leaving the message to the error_info path.
+function deriveApplyErrorMessage(stacktrace) {
+  if (!Type.isList(stacktrace) || stacktrace.data.length === 0) {
+    return null;
+  }
+
+  const topFrame = stacktrace.data[0];
+
+  if (!Type.isTuple(topFrame) || topFrame.data.length !== 4) {
+    return null;
+  }
+
+  const [frameModule, frameFun, frameArgs] = topFrame.data;
+
+  if (
+    !Type.isAtom(frameModule) ||
+    frameModule.value !== "erlang" ||
+    !Type.isAtom(frameFun) ||
+    frameFun.value !== "apply" ||
+    !Type.isList(frameArgs) ||
+    frameArgs.data.length !== 3
+  ) {
+    return null;
+  }
+
+  const [module, functionName, args] = frameArgs.data;
+
+  if (Type.isAtom(module)) {
+    return null;
+  }
+
+  const applyHint =
+    "If you are using Kernel.apply/3, make sure the module is an atom. ";
+
+  const dotSyntaxHint =
+    "If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module";
+
+  if (Type.isMap(module) && Type.isAtom(functionName)) {
+    const entry = module.data[Type.encodeMapKey(functionName)];
+
+    if (entry !== undefined) {
+      const mapHint = Type.isAnonymousFunction(entry[1])
+        ? `If you are trying to invoke an anonymous function in a map/struct, add a dot between the function name and the parenthesis: map.${functionName.value}.()`
+        : `If you are using the dot syntax, ensure there are no parentheses after the field name, such as map.${functionName.value}`;
+
+      return `you attempted to apply a function named ${Interpreter.inspect(functionName)} on a map/struct. ${applyHint}${mapHint}`;
+    }
+  }
+
+  if (
+    Type.isAtom(functionName) &&
+    Type.isList(args) &&
+    args.data.length === 0
+  ) {
+    return `you attempted to apply a function named ${Interpreter.inspect(functionName)} on ${Interpreter.inspect(module)}. ${applyHint}${dotSyntaxHint}`;
+  }
+
+  return `you attempted to apply a function on ${Interpreter.inspect(module)}. Modules (the first argument of apply) must always be an atom`;
 }
 
 // Mirrors ErlangError.error_info/3: reads error_info from the top stacktrace

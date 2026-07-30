@@ -1889,6 +1889,60 @@ describe("Erlang", () => {
       );
     });
 
+    it("raises ArgumentError if the first argument is not an atom and the args list is not empty", () => {
+      const module = Type.integer(123);
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+
+      const expectedMessage =
+        "you attempted to apply a function on 123. Modules (the first argument of apply) must always be an atom";
+
+      assertBoxedError(
+        () => apply(module, fun, args),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    it("raises ArgumentError if the first argument is a map with an anonymous function under the function name", () => {
+      const anonFun = Type.anonymousFunction(
+        0,
+        [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => Type.integer(123),
+          },
+        ],
+        contextFixture(),
+      );
+
+      const module = Type.map([[Type.atom("my_fun"), anonFun]]);
+      const fun = Type.atom("my_fun");
+
+      const expectedMessage =
+        "you attempted to apply a function named :my_fun on a map/struct. If you are using Kernel.apply/3, make sure the module is an atom. If you are trying to invoke an anonymous function in a map/struct, add a dot between the function name and the parenthesis: map.my_fun.()";
+
+      assertBoxedError(
+        () => apply(module, fun, args),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    it("raises ArgumentError if the first argument is a map with a non-function value under the function name", () => {
+      const module = Type.map([[Type.atom("my_fun"), Type.integer(123)]]);
+      const fun = Type.atom("my_fun");
+
+      const expectedMessage =
+        "you attempted to apply a function named :my_fun on a map/struct. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, ensure there are no parentheses after the field name, such as map.my_fun";
+
+      assertBoxedError(
+        () => apply(module, fun, args),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
     it("raises ArgumentError if the second argument is not an atom", () => {
       const fun = Type.integer(123);
 
