@@ -16,6 +16,12 @@ import uniqWith from "lodash/uniqWith.js";
 // term (nil/false) is never mistaken for "no clause matched".
 const NO_MATCH = Symbol("NO_MATCH");
 
+// The OTP application a module belongs to decides which formatter its BIF errors name: erts
+// modules name erl_erts_errors, kernel modules name erl_kernel_errors, and the rest are stdlib
+// modules naming erl_stdlib_errors. Only the modules that depart from the stdlib default are
+// listed - a raise site whose module names a different formatter states it at the site.
+const BIF_FORMAT_MODULES = {erlang: "erl_erts_errors", os: "erl_kernel_errors"};
+
 export default class Interpreter {
   // Clause heads of manually ported functions, keyed by "Module.function/arity".
   static #functionClauseHeads = {};
@@ -921,6 +927,8 @@ export default class Interpreter {
   // plain array of boxed terms. A non-null cause is an unboxed atom planted
   // as the error_info map's cause entry, refining the formatter's diagnosis
   // the way OTP raise sites do (e.g. :binary.replace/4 planting :badopt).
+  // The format module defaults to the one the raising module's OTP
+  // application defines, so a raise site states it only to depart from that.
   // A null format module omits the error_info entry entirely, for raising
   // identities whose format module isn't carried by the client runtime.
   static raiseBifError(
@@ -928,7 +936,7 @@ export default class Interpreter {
     module,
     functionName,
     args,
-    formatModule = "erl_stdlib_errors",
+    formatModule = BIF_FORMAT_MODULES[module] ?? "erl_stdlib_errors",
     cause = null,
   ) {
     let errorInfo = null;

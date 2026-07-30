@@ -20,13 +20,7 @@ const Erlang_Re = {
       if (error.struct) {
         // Re-raise with this function's own identity - the BEAM reports the
         // called function's frame, not the delegate's.
-        Interpreter.raiseBifError(
-          "badarg",
-          "re",
-          "compile",
-          [pattern],
-          "erl_stdlib_errors",
-        );
+        Interpreter.raiseBifError("badarg", "re", "compile", [pattern]);
       }
 
       throw error;
@@ -88,13 +82,10 @@ const Erlang_Re = {
 
       if (Type.isBitstring(pattern)) {
         if (!Type.isBinary(pattern)) {
-          Interpreter.raiseBifError(
-            "badarg",
-            "re",
-            "compile",
-            [pattern, options],
-            "erl_stdlib_errors",
-          );
+          Interpreter.raiseBifError("badarg", "re", "compile", [
+            pattern,
+            options,
+          ]);
         }
 
         Bitstring.maybeSetBytesFromText(pattern);
@@ -134,13 +125,10 @@ const Erlang_Re = {
         if (error.struct) {
           // Re-raise with this function's own identity - the BEAM reports
           // the BIF's frame, not the conversion's.
-          Interpreter.raiseBifError(
-            "badarg",
-            "re",
-            "compile",
-            [pattern, options],
-            "erl_stdlib_errors",
-          );
+          Interpreter.raiseBifError("badarg", "re", "compile", [
+            pattern,
+            options,
+          ]);
         }
 
         throw error;
@@ -183,13 +171,7 @@ const Erlang_Re = {
   // Start import/1
   "import/1": (exportedPattern) => {
     const raiseNotExported = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "re",
-        "import",
-        [exportedPattern],
-        "erl_stdlib_errors",
-      );
+      Interpreter.raiseBifError("badarg", "re", "import", [exportedPattern]);
     };
 
     const hasMagicPrefix = (binary, magic) => {
@@ -252,13 +234,10 @@ const Erlang_Re = {
   // Start inspect/2
   "inspect/2": (compiledPattern, item) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "re",
-        "inspect",
-        [compiledPattern, item],
-        "erl_stdlib_errors",
-      );
+      Interpreter.raiseBifError("badarg", "re", "inspect", [
+        compiledPattern,
+        item,
+      ]);
     };
 
     const registryEntry =
@@ -296,13 +275,7 @@ const Erlang_Re = {
       // unchanged: on the server they raise from OTP's urun wrapper, which
       // keeps the run/3 frame with the defaulted options.
       if (error.struct && error.stacktrace[0]?.errorInfo) {
-        Interpreter.raiseBifError(
-          "badarg",
-          "re",
-          "run",
-          [subject, pattern],
-          "erl_stdlib_errors",
-        );
+        Interpreter.raiseBifError("badarg", "re", "run", [subject, pattern]);
       }
 
       throw error;
@@ -562,13 +535,11 @@ const Erlang_Re = {
     // and no badopt cause applies, so the formatter derives no bullets and
     // the message stays the plain "argument error".
     const raiseArgumentError = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "re",
-        "run",
-        [subject, pattern, options],
-        "erl_stdlib_errors",
-      );
+      Interpreter.raiseBifError("badarg", "re", "run", [
+        subject,
+        pattern,
+        options,
+      ]);
     };
 
     // Char data conversion failures mirror the server's split: a binary
@@ -914,13 +885,11 @@ const Erlang_Re = {
       // pattern with default options, like the server's must_be_regexp
       // probe does.
       if (result.error) {
-        Interpreter.raiseBifError(
-          "badarg",
-          "re",
-          "run",
-          [subject, pattern, options],
-          "erl_stdlib_errors",
-        );
+        Interpreter.raiseBifError("badarg", "re", "run", [
+          subject,
+          pattern,
+          options,
+        ]);
       }
 
       entry = buildPatternEntry(result);

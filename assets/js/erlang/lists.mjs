@@ -198,13 +198,10 @@ const Erlang_Lists = {
       const mapped = mappedResults[i];
 
       if (!Type.isProperList(mapped)) {
-        Interpreter.raiseBifError(
-          "badarg",
-          "erlang",
-          "++",
-          [mapped, Type.list(acc)],
-          "erl_erts_errors",
-        );
+        Interpreter.raiseBifError("badarg", "erlang", "++", [
+          mapped,
+          Type.list(acc),
+        ]);
       }
 
       acc = mapped.data.concat(acc);
@@ -515,13 +512,10 @@ const Erlang_Lists = {
         // element, so its badarg reports :erlang.element/2.
         const badItem = tuples.data.find((item) => !Type.isTuple(item));
 
-        Interpreter.raiseBifError(
-          "badarg",
-          "erlang",
-          "element",
-          [index, badItem],
-          "erl_erts_errors",
-        );
+        Interpreter.raiseBifError("badarg", "erlang", "element", [
+          index,
+          badItem,
+        ]);
       }
     }
 
@@ -1110,23 +1104,11 @@ const Erlang_Lists = {
     // The server computes length/1 on both arguments (the second one first),
     // so anything that is not a proper list fails in the length BIF.
     if (!Type.isProperList(list2)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "length",
-        [list2],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "length", [list2]);
     }
 
     if (!Type.isProperList(list1)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "length",
-        [list1],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "length", [list1]);
     }
 
     const length1 = list1.data.length;

@@ -64,13 +64,7 @@ const Erlang = {
   // Start */2
   "*/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "*",
-        [left, right],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "*", [left, right]);
     }
 
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
@@ -88,13 +82,7 @@ const Erlang = {
   // Start +/2
   "+/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "+",
-        [left, right],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "+", [left, right]);
     }
 
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
@@ -112,13 +100,7 @@ const Erlang = {
   // Start +/1
   "+/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "+",
-        [number],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "+", [number]);
     }
 
     return number;
@@ -129,13 +111,7 @@ const Erlang = {
   // Start ++/2
   "++/2": (left, right) => {
     if (!Type.isProperList(left)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "++",
-        [left, right],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "++", [left, right]);
     }
 
     const data = left.data.concat(Type.isList(right) ? right.data : [right]);
@@ -148,13 +124,7 @@ const Erlang = {
   // Start -/1
   "-/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "-",
-        [number],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "-", [number]);
     }
 
     return number.value == 0 ? number : Type[number.type](-number.value);
@@ -165,13 +135,7 @@ const Erlang = {
   // Start -/2
   "-/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "-",
-        [left, right],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "-", [left, right]);
     }
 
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
@@ -192,13 +156,7 @@ const Erlang = {
   // Start --/2
   "--/2": (left, right) => {
     if (!Type.isList(left) || !Type.isList(right)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "--",
-        [left, right],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "--", [left, right]);
     }
 
     const result = Utils.shallowCloneArray(left.data);
@@ -220,13 +178,7 @@ const Erlang = {
   // Start //2
   "//2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right) || right.value == 0) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "/",
-        [left, right],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "/", [left, right]);
     }
 
     return Type.float(Number(left.value) / Number(right.value));
@@ -313,13 +265,7 @@ const Erlang = {
       return Type.integer(value < 0n ? -value : value);
     }
 
-    Interpreter.raiseBifError(
-      "badarg",
-      "erlang",
-      "abs",
-      [number],
-      "erl_erts_errors",
-    );
+    Interpreter.raiseBifError("badarg", "erlang", "abs", [number]);
   },
   // End abs/1
   // Deps: []
@@ -340,13 +286,10 @@ const Erlang = {
   // Start append_element/2
   "append_element/2": (tuple, term) => {
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "append_element",
-        [tuple, term],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "append_element", [
+        tuple,
+        term,
+      ]);
     }
 
     return Type.tuple([...tuple.data, term]);
@@ -361,13 +304,7 @@ const Erlang = {
     }
 
     if (!Type.isProperList(args)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "apply",
-        [fun, args],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "apply", [fun, args]);
     }
 
     return Interpreter.callAnonymousFunction(fun, args.data);
@@ -380,13 +317,11 @@ const Erlang = {
   // Start apply/3
   "apply/3": (module, fun, args) => {
     if (!Type.isAtom(module) || !Type.isAtom(fun) || !Type.isProperList(args)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "apply",
-        [module, fun, args],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "apply", [
+        module,
+        fun,
+        args,
+      ]);
     }
 
     const context = Interpreter.buildContext({module: Type.nil()});
@@ -404,13 +339,7 @@ const Erlang = {
       if (error.struct) {
         // Re-raise with this function's own identity - the BEAM reports the
         // called function's frame, not the delegate's.
-        Interpreter.raiseBifError(
-          "badarg",
-          "erlang",
-          "atom_to_binary",
-          [atom],
-          "erl_erts_errors",
-        );
+        Interpreter.raiseBifError("badarg", "erlang", "atom_to_binary", [atom]);
       }
 
       throw error;
@@ -422,13 +351,10 @@ const Erlang = {
   // Start atom_to_binary/2
   "atom_to_binary/2": (atom, encoding) => {
     if (!Type.isAtom(atom)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "atom_to_binary",
-        [atom, encoding],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "atom_to_binary", [
+        atom,
+        encoding,
+      ]);
     }
 
     // TODO: implement encoding argument validation
@@ -448,13 +374,7 @@ const Erlang = {
   // Start atom_to_list/1
   "atom_to_list/1": (atom) => {
     if (!Type.isAtom(atom)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "atom_to_list",
-        [atom],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "atom_to_list", [atom]);
     }
 
     return Bitstring.toCodepoints(Type.bitstring(atom.value));
@@ -465,13 +385,10 @@ const Erlang = {
   // Start band/2
   "band/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "band",
-        [integer1, integer2],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "band", [
+        integer1,
+        integer2,
+      ]);
     }
 
     return Type.integer(integer1.value & integer2.value);
@@ -482,13 +399,11 @@ const Erlang = {
   // Start binary_part/3
   "binary_part/3": (subject, start, length) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "binary_part",
-        [subject, start, length],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "binary_part", [
+        subject,
+        start,
+        length,
+      ]);
     };
 
     if (!Type.isBinary(subject)) {
@@ -540,13 +455,9 @@ const Erlang = {
       if (error.struct) {
         // Re-raise with this function's own identity - the BEAM reports the
         // called function's frame, not the delegate's.
-        Interpreter.raiseBifError(
-          "badarg",
-          "erlang",
-          "binary_to_atom",
-          [binary],
-          "erl_erts_errors",
-        );
+        Interpreter.raiseBifError("badarg", "erlang", "binary_to_atom", [
+          binary,
+        ]);
       }
 
       throw error;
@@ -558,13 +469,10 @@ const Erlang = {
   // Start binary_to_atom/2
   "binary_to_atom/2": (binary, encoding) => {
     if (!Type.isBinary(binary)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "binary_to_atom",
-        [binary, encoding],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "binary_to_atom", [
+        binary,
+        encoding,
+      ]);
     }
 
     // TODO: implement encoding argument validation
@@ -596,7 +504,6 @@ const Erlang = {
           "erlang",
           "binary_to_existing_atom",
           [binary],
-          "erl_erts_errors",
         );
       }
 
@@ -621,7 +528,6 @@ const Erlang = {
           "erlang",
           "binary_to_existing_atom",
           [binary, encoding],
-          "erl_erts_errors",
         );
       }
 
@@ -634,13 +540,9 @@ const Erlang = {
   // Start binary_to_float/1
   "binary_to_float/1": (binary) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "binary_to_float",
-        [binary],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "binary_to_float", [
+        binary,
+      ]);
     };
 
     if (!Type.isBinary(binary)) {
@@ -668,13 +570,9 @@ const Erlang = {
       if (error.struct) {
         // Re-raise with this function's own identity - the BEAM reports the
         // called function's frame, not the delegate's.
-        Interpreter.raiseBifError(
-          "badarg",
-          "erlang",
-          "binary_to_integer",
-          [binary],
-          "erl_erts_errors",
-        );
+        Interpreter.raiseBifError("badarg", "erlang", "binary_to_integer", [
+          binary,
+        ]);
       }
 
       throw error;
@@ -686,13 +584,10 @@ const Erlang = {
   // Start binary_to_integer/2
   "binary_to_integer/2": (binary, base) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "binary_to_integer",
-        [binary, base],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "binary_to_integer", [
+        binary,
+        base,
+      ]);
     };
 
     if (!Type.isBinary(binary)) {
@@ -734,13 +629,7 @@ const Erlang = {
   // Start binary_to_list/1
   "binary_to_list/1": (binary) => {
     if (!Type.isBinary(binary)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "binary_to_list",
-        [binary],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "binary_to_list", [binary]);
     }
 
     Bitstring.maybeSetBytesFromText(binary);
@@ -753,13 +642,7 @@ const Erlang = {
   // Start binary_to_term/1
   "binary_to_term/1": async (binary) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "binary_to_term",
-        [binary],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "binary_to_term", [binary]);
     };
 
     if (!Type.isBinary(binary)) {
@@ -1565,13 +1448,7 @@ const Erlang = {
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "bit_size",
-        [term],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "bit_size", [term]);
     }
 
     return Type.integer(Bitstring.calculateBitCount(term));
@@ -1582,13 +1459,7 @@ const Erlang = {
   // Start bnot/1
   "bnot/1": (integer) => {
     if (!Type.isInteger(integer)) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "bnot",
-        [integer],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "bnot", [integer]);
     }
 
     return Type.integer(~integer.value);
@@ -1599,13 +1470,10 @@ const Erlang = {
   // Start bor/2
   "bor/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "bor",
-        [integer1, integer2],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "bor", [
+        integer1,
+        integer2,
+      ]);
     }
 
     return Type.integer(integer1.value | integer2.value);
@@ -1616,13 +1484,7 @@ const Erlang = {
   // Start bsl/2
   "bsl/2": (integer, shift) => {
     if (!Type.isInteger(integer) || !Type.isInteger(shift)) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "bsl",
-        [integer, shift],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "bsl", [integer, shift]);
     }
 
     const integerValue = integer.value;
@@ -1641,13 +1503,7 @@ const Erlang = {
   // Start bsr/2
   "bsr/2": (integer, shift) => {
     if (!Type.isInteger(integer) || !Type.isInteger(shift)) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "bsr",
-        [integer, shift],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "bsr", [integer, shift]);
     }
 
     const integerValue = integer.value;
@@ -1666,13 +1522,10 @@ const Erlang = {
   // Start bxor/2
   "bxor/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "bxor",
-        [integer1, integer2],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "bxor", [
+        integer1,
+        integer2,
+      ]);
     }
 
     return Type.integer(integer1.value ^ integer2.value);
@@ -1683,13 +1536,7 @@ const Erlang = {
   // Start byte_size/1
   "byte_size/1": (bitstring) => {
     if (!Type.isBitstring(bitstring)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "byte_size",
-        [bitstring],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "byte_size", [bitstring]);
     }
 
     Bitstring.maybeSetBytesFromText(bitstring);
@@ -1702,13 +1549,7 @@ const Erlang = {
   // Start ceil/1
   "ceil/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "ceil",
-        [number],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "ceil", [number]);
     }
 
     if (Type.isInteger(number)) {
@@ -1765,13 +1606,11 @@ const Erlang = {
       !Erlang["_is_valid_time_unit/1"](fromUnit) ||
       !Erlang["_is_valid_time_unit/1"](toUnit)
     ) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "convert_time_unit",
-        [time, fromUnit, toUnit],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "convert_time_unit", [
+        time,
+        fromUnit,
+        toUnit,
+      ]);
     }
 
     const fromUnitValue = resolveTimeUnit(fromUnit);
@@ -1791,13 +1630,10 @@ const Erlang = {
   // Start delete_element/2
   "delete_element/2": (index, tuple) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "delete_element",
-        [index, tuple],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "delete_element", [
+        index,
+        tuple,
+      ]);
     };
 
     if (!Type.isInteger(index)) {
@@ -1826,13 +1662,10 @@ const Erlang = {
       !Type.isInteger(integer2) ||
       integer2.value === 0n
     ) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "div",
-        [integer1, integer2],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "div", [
+        integer1,
+        integer2,
+      ]);
     }
 
     // TODO: support integers outside Number range
@@ -1846,13 +1679,7 @@ const Erlang = {
   // Start element/2
   "element/2": (index, tuple) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "element",
-        [index, tuple],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "element", [index, tuple]);
     };
 
     if (!Type.isInteger(index)) {
@@ -1966,13 +1793,7 @@ const Erlang = {
       return number;
     }
 
-    Interpreter.raiseBifError(
-      "badarg",
-      "erlang",
-      "float",
-      [number],
-      "erl_erts_errors",
-    );
+    Interpreter.raiseBifError("badarg", "erlang", "float", [number]);
   },
   // End float/1
   // Deps: []
@@ -1985,13 +1806,10 @@ const Erlang = {
       if (error.struct) {
         // Re-raise with this function's own identity - the BEAM reports the
         // called function's frame, not the delegate's.
-        Interpreter.raiseBifError(
-          "badarg",
-          "erlang",
-          "float_to_list",
-          [float, opts],
-          "erl_erts_errors",
-        );
+        Interpreter.raiseBifError("badarg", "erlang", "float_to_list", [
+          float,
+          opts,
+        ]);
       }
 
       throw error;
@@ -2003,13 +1821,10 @@ const Erlang = {
   // Start float_to_binary/2
   "float_to_binary/2": (float, opts) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "float_to_binary",
-        [float, opts],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "float_to_binary", [
+        float,
+        opts,
+      ]);
     };
 
     if (!Type.isFloat(float)) {
@@ -2185,13 +2000,7 @@ const Erlang = {
   // Start floor/1
   "floor/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "floor",
-        [number],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "floor", [number]);
     }
 
     if (Type.isInteger(number)) {
@@ -2206,13 +2015,7 @@ const Erlang = {
   // Start fun_info/1
   "fun_info/1": (fun) => {
     if (!Type.isAnonymousFunction(fun)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "fun_info",
-        [fun],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "fun_info", [fun]);
     }
 
     const arity = Type.integer(fun.arity);
@@ -2301,13 +2104,7 @@ const Erlang = {
     const info = Erlang["fun_info/1"](fun);
 
     if (!Type.isAtom(item) || !validItems.has(item.value)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "fun_info",
-        [fun, item],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "fun_info", [fun, item]);
     }
 
     const result = info.data.find(
@@ -2326,13 +2123,11 @@ const Erlang = {
   // Start function_exported/3
   "function_exported/3": (module, functionName, arity) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "function_exported",
-        [module, functionName, arity],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "function_exported", [
+        module,
+        functionName,
+        arity,
+      ]);
     };
 
     if (!Type.isAtom(module)) {
@@ -2363,13 +2158,7 @@ const Erlang = {
   // Start hd/1
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "hd",
-        [list],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "hd", [list]);
     }
 
     return list.data[0];
@@ -2380,13 +2169,11 @@ const Erlang = {
   // Start insert_element/3
   "insert_element/3": (index, tuple, value) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "insert_element",
-        [index, tuple, value],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "insert_element", [
+        index,
+        tuple,
+        value,
+      ]);
     };
 
     if (!Type.isInteger(index)) {
@@ -2416,13 +2203,9 @@ const Erlang = {
       if (error.struct) {
         // Re-raise with this function's own identity - the BEAM reports the
         // called function's frame, not the delegate's.
-        Interpreter.raiseBifError(
-          "badarg",
-          "erlang",
-          "integer_to_binary",
-          [integer],
-          "erl_erts_errors",
-        );
+        Interpreter.raiseBifError("badarg", "erlang", "integer_to_binary", [
+          integer,
+        ]);
       }
 
       throw error;
@@ -2439,13 +2222,10 @@ const Erlang = {
       base.value < 2n ||
       base.value > 36n
     ) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "integer_to_binary",
-        [integer, base],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "integer_to_binary", [
+        integer,
+        base,
+      ]);
     }
 
     const str = integer.value.toString(Number(base.value)).toUpperCase();
@@ -2463,13 +2243,9 @@ const Erlang = {
       if (error.struct) {
         // Re-raise with this function's own identity - the BEAM reports the
         // called function's frame, not the delegate's.
-        Interpreter.raiseBifError(
-          "badarg",
-          "erlang",
-          "integer_to_list",
-          [integer],
-          "erl_erts_errors",
-        );
+        Interpreter.raiseBifError("badarg", "erlang", "integer_to_list", [
+          integer,
+        ]);
       }
 
       throw error;
@@ -2486,13 +2262,10 @@ const Erlang = {
       base.value < 2n ||
       base.value > 36n
     ) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "integer_to_list",
-        [integer, base],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "integer_to_list", [
+        integer,
+        base,
+      ]);
     }
 
     const text = integer.value.toString(Number(base.value)).toUpperCase();
@@ -2505,13 +2278,9 @@ const Erlang = {
   // Start iolist_to_binary/1
   "iolist_to_binary/1": (ioListOrBinary) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "iolist_to_binary",
-        [ioListOrBinary],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "iolist_to_binary", [
+        ioListOrBinary,
+      ]);
     };
 
     if (Type.isBinary(ioListOrBinary)) {
@@ -2650,13 +2419,7 @@ const Erlang = {
   // Start length/1
   "length/1": (list) => {
     if (!Type.isList(list)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "length",
-        [list],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "length", [list]);
     }
 
     return Type.integer(list.data.length);
@@ -2667,13 +2430,9 @@ const Erlang = {
   // Start list_to_atom/1
   "list_to_atom/1": (codePoints) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "list_to_atom",
-        [codePoints],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_atom", [
+        codePoints,
+      ]);
     };
 
     if (!Type.isList(codePoints)) {
@@ -2704,13 +2463,7 @@ const Erlang = {
   // Start list_to_binary/1
   "list_to_binary/1": (ioList) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "list_to_binary",
-        [ioList],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_binary", [ioList]);
     };
 
     if (!Type.isList(ioList)) {
@@ -2779,13 +2532,9 @@ const Erlang = {
       if (error.struct) {
         // Re-raise with this function's own identity - the BEAM reports the
         // called function's frame, not the delegate's.
-        Interpreter.raiseBifError(
-          "badarg",
-          "erlang",
-          "list_to_existing_atom",
-          [codePoints],
-          "erl_erts_errors",
-        );
+        Interpreter.raiseBifError("badarg", "erlang", "list_to_existing_atom", [
+          codePoints,
+        ]);
       }
 
       throw error;
@@ -2797,13 +2546,7 @@ const Erlang = {
   // Start list_to_float/1
   "list_to_float/1": (list) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "list_to_float",
-        [list],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_float", [list]);
     };
 
     if (!Type.isProperList(list)) {
@@ -2840,13 +2583,9 @@ const Erlang = {
       if (error.struct) {
         // Re-raise with this function's own identity - the BEAM reports the
         // called function's frame, not the delegate's.
-        Interpreter.raiseBifError(
-          "badarg",
-          "erlang",
-          "list_to_integer",
-          [list],
-          "erl_erts_errors",
-        );
+        Interpreter.raiseBifError("badarg", "erlang", "list_to_integer", [
+          list,
+        ]);
       }
 
       throw error;
@@ -2858,13 +2597,10 @@ const Erlang = {
   // Start list_to_integer/2
   "list_to_integer/2": (list, base) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "list_to_integer",
-        [list, base],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_integer", [
+        list,
+        base,
+      ]);
     };
 
     if (!Type.isList(list)) {
@@ -2943,13 +2679,9 @@ const Erlang = {
   // Start list_to_pid/1
   "list_to_pid/1": (codePoints) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "list_to_pid",
-        [codePoints],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_pid", [
+        codePoints,
+      ]);
     };
 
     if (!Type.isList(codePoints)) {
@@ -2987,13 +2719,9 @@ const Erlang = {
   // Start list_to_ref/1
   "list_to_ref/1": (codePoints) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "list_to_ref",
-        [codePoints],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_ref", [
+        codePoints,
+      ]);
     };
 
     if (!Type.isProperList(codePoints)) {
@@ -3042,13 +2770,7 @@ const Erlang = {
   // Start list_to_tuple/1
   "list_to_tuple/1": (list) => {
     if (!Type.isProperList(list)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "list_to_tuple",
-        [list],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_tuple", [list]);
     }
     return Type.tuple(list.data);
   },
@@ -3088,13 +2810,11 @@ const Erlang = {
   // Start make_fun/3
   "make_fun/3": (module, functionName, arity) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "make_fun",
-        [module, functionName, arity],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "make_fun", [
+        module,
+        functionName,
+        arity,
+      ]);
     };
 
     if (!Type.isAtom(module)) {
@@ -3171,13 +2891,10 @@ const Erlang = {
   "make_tuple/2": (arity, value) => {
     // The Erlang implementation says that the index is out of range even when it is not an integer
     if (!Type.isInteger(arity) || arity.value < 0n) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "make_tuple",
-        [arity, value],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "make_tuple", [
+        arity,
+        value,
+      ]);
     }
 
     const data = Array(Number(arity.value)).fill(value);
@@ -3273,13 +2990,7 @@ const Erlang = {
     // TODO: unit is validated twice - here (for correct arg index in error message)
     // and in convert_time_unit/3. This could be optimized in the future.
     if (!Erlang["_is_valid_time_unit/1"](unit)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "monotonic_time",
-        [unit],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "monotonic_time", [unit]);
     }
     const nativeTime = Erlang["monotonic_time/0"]();
 
@@ -3298,13 +3009,7 @@ const Erlang = {
   // Start not/1
   "not/1": (term) => {
     if (!Type.isBoolean(term)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "not",
-        [term],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "not", [term]);
     }
 
     return Type.boolean(term.value == "true" ? false : true);
@@ -3328,13 +3033,7 @@ const Erlang = {
   // Start pid_to_list/1
   "pid_to_list/1": (pid) => {
     if (!Type.isPid(pid)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "pid_to_list",
-        [pid],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "pid_to_list", [pid]);
     }
 
     const pidText = `<${pid.segments.join(".")}>`;
@@ -3400,13 +3099,7 @@ const Erlang = {
   // Start ref_to_list/1
   "ref_to_list/1": (reference) => {
     if (!Type.isReference(reference)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "ref_to_list",
-        [reference],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "ref_to_list", [reference]);
     }
 
     const localIncarnationId = ERTS.nodeTable.getLocalIncarnationId(
@@ -3428,13 +3121,10 @@ const Erlang = {
       !Type.isInteger(integer2) ||
       integer2.value === 0n
     ) {
-      Interpreter.raiseBifError(
-        "badarith",
-        "erlang",
-        "rem",
-        [integer1, integer2],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarith", "erlang", "rem", [
+        integer1,
+        integer2,
+      ]);
     }
 
     // JavaScript's % operator on BigInt has the same sign behavior as Erlang's rem
@@ -3447,13 +3137,7 @@ const Erlang = {
   // Start round/1
   "round/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "round",
-        [number],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "round", [number]);
     }
 
     if (Type.isInteger(number)) {
@@ -3473,13 +3157,11 @@ const Erlang = {
   // Start setelement/3
   "setelement/3": (index, tuple, value) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "setelement",
-        [index, tuple, value],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "setelement", [
+        index,
+        tuple,
+        value,
+      ]);
     };
 
     if (!Type.isInteger(index)) {
@@ -3506,13 +3188,10 @@ const Erlang = {
   // Start split_binary/2
   "split_binary/2": (binary, position) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "split_binary",
-        [binary, position],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "split_binary", [
+        binary,
+        position,
+      ]);
     };
 
     if (!Type.isBinary(binary)) {
@@ -3579,13 +3258,7 @@ const Erlang = {
       );
     }
 
-    Interpreter.raiseBifError(
-      "badarg",
-      "erlang",
-      "system_info",
-      [item],
-      "erl_erts_errors",
-    );
+    Interpreter.raiseBifError("badarg", "erlang", "system_info", [item]);
   },
   // End system_info/1
   // Deps: []
@@ -3637,13 +3310,7 @@ const Erlang = {
     // TODO: unit is validated twice - here (for correct arg index in error message)
     // and in convert_time_unit/3. This could be optimized in the future.
     if (!Erlang["_is_valid_time_unit/1"](unit)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "time_offset",
-        [unit],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "time_offset", [unit]);
     }
     const nativeTime = Erlang["time_offset/0"]();
 
@@ -3655,13 +3322,7 @@ const Erlang = {
   // Start tl/1
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "tl",
-        [list],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "tl", [list]);
     }
 
     const length = list.data.length;
@@ -3686,13 +3347,7 @@ const Erlang = {
   // Start trunc/1
   "trunc/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "trunc",
-        [number],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "trunc", [number]);
     }
 
     if (Type.isFloat(number)) {
@@ -3708,13 +3363,7 @@ const Erlang = {
   // Start tuple_size/1
   "tuple_size/1": (tuple) => {
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "tuple_size",
-        [tuple],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "tuple_size", [tuple]);
     }
 
     return Type.integer(tuple.data.length);
@@ -3725,13 +3374,7 @@ const Erlang = {
   // Start tuple_to_list/1
   "tuple_to_list/1": (tuple) => {
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "tuple_to_list",
-        [tuple],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "tuple_to_list", [tuple]);
     }
 
     return Type.list(tuple.data);
@@ -3750,13 +3393,9 @@ const Erlang = {
   // Simplified: always returns monotonic, positive integers regardless of modifiers.
   "unique_integer/1": (modifierList) => {
     const raiseBadarg = () => {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "unique_integer",
-        [modifierList],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "unique_integer", [
+        modifierList,
+      ]);
     };
 
     if (!Type.isList(modifierList)) {
@@ -3783,13 +3422,7 @@ const Erlang = {
   // Start xor/2
   "xor/2": (left, right) => {
     if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "xor",
-        [left, right],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "xor", [left, right]);
     }
 
     return Type.boolean(left.value != right.value);

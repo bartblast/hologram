@@ -206,13 +206,10 @@ const Erlang_String = {
       if (!Type.isList(element)) {
         // The server fails concatenating the element with the joined rest,
         // so its badarg reports :erlang.++/2.
-        Interpreter.raiseBifError(
-          "badarg",
-          "erlang",
-          "++",
-          [element, Type.list()],
-          "erl_erts_errors",
-        );
+        Interpreter.raiseBifError("badarg", "erlang", "++", [
+          element,
+          Type.list(),
+        ]);
       }
 
       return element;
@@ -222,13 +219,10 @@ const Erlang_String = {
     if (!Type.isList(separator)) {
       // The server fails concatenating the separator with the second
       // element, so its badarg reports :erlang.++/2.
-      Interpreter.raiseBifError(
-        "badarg",
-        "erlang",
-        "++",
-        [separator, list.data[1]],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "++", [
+        separator,
+        list.data[1],
+      ]);
     }
 
     // Join the strings with separator

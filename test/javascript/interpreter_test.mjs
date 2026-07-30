@@ -9162,13 +9162,7 @@ describe("Interpreter", () => {
       let caught;
 
       try {
-        Interpreter.raiseBifError(
-          reason,
-          "erlang",
-          "map_get",
-          args,
-          "erl_erts_errors",
-        );
+        Interpreter.raiseBifError(reason, "erlang", "map_get", args);
       } catch (e) {
         caught = e;
       }
@@ -9217,6 +9211,46 @@ describe("Interpreter", () => {
           ]),
         },
       ]);
+    });
+
+    it("names the kernel formatter for a kernel module", () => {
+      const args = [Type.atom("abc")];
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError("badarg", "os", "system_time", args);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(
+        caught.stacktrace[0].errorInfo,
+        Type.map([[Type.atom("module"), Type.atom("erl_kernel_errors")]]),
+      );
+    });
+
+    it("names the format module the raise site states over the inferred one", () => {
+      const args = [Type.atom("abc")];
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError(
+          "badarg",
+          "erlang",
+          "map_get",
+          args,
+          "erl_stdlib_errors",
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(
+        caught.stacktrace[0].errorInfo,
+        Type.map([[Type.atom("module"), Type.atom("erl_stdlib_errors")]]),
+      );
     });
 
     it("derives the message against the raising frame", () => {

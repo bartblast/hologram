@@ -22,13 +22,7 @@ const Erlang_Os = {
   // See: docs/erlang_time_functions_porting_strategy.md
   "system_time/1": (unit) => {
     if (!Erlang["_is_valid_time_unit/1"](unit)) {
-      Interpreter.raiseBifError(
-        "badarg",
-        "os",
-        "system_time",
-        [unit],
-        "erl_kernel_errors",
-      );
+      Interpreter.raiseBifError("badarg", "os", "system_time", [unit]);
     }
     const nativeTime = Erlang_Os["system_time/0"]();
 

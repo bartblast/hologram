@@ -31,13 +31,7 @@ const Elixir_String = {
         // The server sizes each pattern element first, so a non-bitstring
         // fails in the byte_size BIF.
         if (!Type.isBitstring(pattern)) {
-          Interpreter.raiseBifError(
-            "badarg",
-            "erlang",
-            "byte_size",
-            [pattern],
-            "erl_erts_errors",
-          );
+          Interpreter.raiseBifError("badarg", "erlang", "byte_size", [pattern]);
         }
 
         // The server searches with binary:match/2, so an invalid pattern

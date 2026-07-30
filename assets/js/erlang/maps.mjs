@@ -79,13 +79,10 @@ const Erlang_Maps = {
   // Start get/2
   "get/2": (key, map) => {
     if (!Type.isMap(map)) {
-      Interpreter.raiseBifError(
-        ["badmap", map],
-        "erlang",
-        "map_get",
-        [key, map],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError(["badmap", map], "erlang", "map_get", [
+        key,
+        map,
+      ]);
     }
 
     const encodedKey = Type.encodeMapKey(key);
@@ -94,13 +91,7 @@ const Erlang_Maps = {
       return map.data[encodedKey][1];
     }
 
-    Interpreter.raiseBifError(
-      ["badkey", key],
-      "erlang",
-      "map_get",
-      [key, map],
-      "erl_erts_errors",
-    );
+    Interpreter.raiseBifError(["badkey", key], "erlang", "map_get", [key, map]);
   },
   // End get/2
   // Deps: []
@@ -228,13 +219,10 @@ const Erlang_Maps = {
   // Start is_key/2
   "is_key/2": (key, map) => {
     if (!Type.isMap(map)) {
-      Interpreter.raiseBifError(
-        ["badmap", map],
-        "erlang",
-        "is_map_key",
-        [key, map],
-        "erl_erts_errors",
-      );
+      Interpreter.raiseBifError(["badmap", map], "erlang", "is_map_key", [
+        key,
+        map,
+      ]);
     }
 
     return Type.boolean(Type.encodeMapKey(key) in map.data);
