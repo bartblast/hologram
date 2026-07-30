@@ -9,6 +9,7 @@ import Type from "../type.mjs";
 // rendered at build time - so message/1 is ported rather than transpiled, and
 // reads those sources in place of Macro.to_string/1 calls.
 const Elixir_FunctionClauseError = {
+  // Deps: [Exception.format_mfa/3]
   "message/1": (struct) => {
     // TODO: drop once no raise site builds an eager message.
     const messageEntry = struct.data["atom(message)"];
@@ -24,9 +25,11 @@ const Elixir_FunctionClauseError = {
     }
 
     const module = struct.data["atom(module)"][1];
-    const functionName = functionTerm.value;
-    const arity = struct.data["atom(arity)"][1].value;
-    const mfa = formatMfa(module, functionName, arity);
+    const arity = struct.data["atom(arity)"][1];
+
+    const mfa = Bitstring.toText(
+      Elixir_Exception["format_mfa/3"](module, functionTerm, arity),
+    );
 
     const args = struct.data["atom(args)"][1];
 
@@ -34,6 +37,7 @@ const Elixir_FunctionClauseError = {
       return Type.bitstring(`no function clause matching in ${mfa}`);
     }
 
+    const functionName = functionTerm.value;
     const kind = struct.data["atom(kind)"][1];
     const clauses = struct.data["atom(clauses)"][1];
 
@@ -56,36 +60,6 @@ const CLAUSE_LIMIT = 10;
 
 // Kernel's and/or precedences, which decide where the rendering parenthesizes.
 const PRECEDENCES = {and: 130, or: 120};
-
-// Mirrors Code.Identifier.extract_anonymous_fun_parent/1: the name the BEAM
-// gives a function defined inside another one spells out the definition it
-// belongs to.
-function extractAnonymousFunParent(functionName) {
-  if (!functionName.startsWith("-")) {
-    return null;
-  }
-
-  const segments = functionName.slice(1).split("/");
-  const trailing = segments.pop().split("-");
-
-  if (trailing.length !== 4 || trailing[3] !== "") {
-    return null;
-  }
-
-  return {name: segments.join("/"), arity: trailing[0]};
-}
-
-// Mirrors Exception.format_mfa/3.
-function formatMfa(module, functionName, arity) {
-  const parent = extractAnonymousFunParent(functionName);
-  const moduleName = Interpreter.inspect(module);
-
-  if (parent === null) {
-    return `${moduleName}.${functionName}/${arity}`;
-  }
-
-  return `anonymous fn/${arity} in ${moduleName}.${parent.name}/${parent.arity}`;
-}
 
 function indent(text) {
   return text.replaceAll("\n", "\n    ");

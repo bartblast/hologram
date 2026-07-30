@@ -61,6 +61,23 @@ describe("Elixir_FunctionClauseError", () => {
       );
     });
 
+    it("quotes a function name that doesn't read as an identifier", () => {
+      const struct = Type.struct("FunctionClauseError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("args"), Type.nil()],
+        [Type.atom("arity"), Type.integer(2)],
+        [Type.atom("clauses"), Type.nil()],
+        [Type.atom("function"), Type.atom("my fun")],
+        [Type.atom("kind"), Type.nil()],
+        [Type.atom("module"), Type.alias("MyModule")],
+      ]);
+
+      assert.equal(
+        message(struct),
+        'no function clause matching in MyModule."my fun"/2',
+      );
+    });
+
     it("lists the arguments given to the failed call", () => {
       const struct = structFixture({
         args: Type.list([Type.atom("abc"), Type.integer(123)]),

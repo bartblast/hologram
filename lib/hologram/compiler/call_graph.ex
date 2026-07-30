@@ -421,6 +421,9 @@ defmodule Hologram.Compiler.CallGraph do
     manually_ported_code_module: [
       {:code, :ensure_loaded, 1}
     ],
+    manually_ported_function_clause_error_module: [
+      {Exception, :format_mfa, 3}
+    ],
     manually_ported_io_module: [
       {:erlang, :iolist_to_binary, 1}
     ],

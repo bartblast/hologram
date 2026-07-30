@@ -390,6 +390,11 @@ function defineElixirExceptionModule() {
       return Type.tuple([struct, stacktrace]);
     },
 
+    // Mirrors Exception.format_mfa/3, which spells a call the way source
+    // would.
+    "format_mfa/3": (module, fun, arity) =>
+      Type.bitstring(formatMfa(module, fun.value, arity.value)),
+
     // Mirrors Exception.message/1, which delegates to the exception module's
     // message/1 callback. When a test defines the exception module as a
     // global, it is dispatched to. Otherwise the default defexception
@@ -966,6 +971,42 @@ function deriveErrorInfoMessage(reason, stacktrace) {
 
 export function encodedSubscriptionReceiptKey(channel, cid) {
   return Type.encodeMapKey(Type.tuple([channel, Type.bitstring(cid)]));
+}
+
+// Mirrors Code.Identifier.extract_anonymous_fun_parent/1: the name the BEAM
+// gives a function defined inside another one spells out the definition it
+// belongs to.
+function extractAnonymousFunParent(functionName) {
+  if (!functionName.startsWith("-")) {
+    return null;
+  }
+
+  const segments = functionName.slice(1).split("/");
+  const trailing = segments.pop().split("-");
+
+  if (trailing.length !== 4 || trailing[3] !== "") {
+    return null;
+  }
+
+  return {name: segments.join("/"), arity: trailing[0]};
+}
+
+// Mirrors Exception.format_mfa/3, simplified: the function name is quoted
+// unless it reads as a plain identifier, whereas the server also leaves the
+// operator names unquoted.
+function formatMfa(module, functionName, arity) {
+  const parent = extractAnonymousFunParent(functionName);
+  const moduleName = Interpreter.inspect(module);
+
+  if (parent !== null) {
+    return `anonymous fn/${arity} in ${moduleName}.${parent.name}/${parent.arity}`;
+  }
+
+  const inspectedName = /^[_a-zA-Z][_a-zA-Z0-9]*[?!]?$/.test(functionName)
+    ? functionName
+    : `"${functionName}"`;
+
+  return `${moduleName}.${inspectedName}/${arity}`;
 }
 
 // Based on deepFreeze() from: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
