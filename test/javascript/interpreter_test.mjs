@@ -9690,6 +9690,151 @@ describe("Interpreter", () => {
         "(FunctionClauseError) no function clause matching in :sets.fold/3",
       );
     });
+
+    describe("with registered clause heads", () => {
+      const blamedNode = (match, source) =>
+        Type.map([
+          [Type.atom("match?"), Type.boolean(match)],
+          [Type.atom("source"), Type.bitstring(source)],
+        ]);
+
+      // def my_fun(x, y) when is_integer(x) and x + 1 > y
+      const defineClauseHeads = (blame = true) => {
+        const clauseHead = {
+          params: (_context) => [
+            Type.variablePattern("x"),
+            Type.variablePattern("y"),
+          ],
+          guards: [],
+        };
+
+        if (blame) {
+          clauseHead.blame = {
+            params: ["x", "y"],
+            guards: [
+              {
+                operator: "and",
+                left: {
+                  source: "is_integer(x)",
+                  test: (context) => Erlang["is_integer/1"](context.vars.x),
+                },
+                right: {
+                  source: "x + 1 > y",
+                  test: (context) =>
+                    Erlang[">/2"](
+                      Erlang["+/2"](context.vars.x, Type.integer(1)),
+                      context.vars.y,
+                    ),
+                },
+              },
+            ],
+          };
+        }
+
+        Interpreter.defineFunctionClauseHeads(
+          "MyBlamedModule",
+          "my_fun",
+          2,
+          "public",
+          [clauseHead],
+        );
+      };
+
+      it("marks the parts of the clause head that didn't match", () => {
+        defineClauseHeads();
+
+        const args = [Type.integer(1), Type.integer(9)];
+
+        let caught;
+
+        try {
+          Interpreter.raiseFunctionClauseError(
+            "MyBlamedModule",
+            "my_fun",
+            2,
+            args,
+          );
+        } catch (e) {
+          caught = e;
+        }
+
+        const clauses = caught.value.data["atom(clauses)"][1];
+
+        assert.deepStrictEqual(
+          clauses,
+          Type.list([
+            Type.tuple([
+              Type.list([blamedNode(true, "x"), blamedNode(true, "y")]),
+              Type.list([
+                Type.tuple([
+                  Type.atom("and"),
+                  blamedNode(true, "is_integer(x)"),
+                  blamedNode(false, "x + 1 > y"),
+                ]),
+              ]),
+            ]),
+          ]),
+        );
+
+        assert.deepStrictEqual(
+          caught.value.data["atom(kind)"][1],
+          Type.atom("def"),
+        );
+      });
+
+      it("treats a guard that raises as one that didn't hold", () => {
+        defineClauseHeads();
+
+        const args = [Type.atom("abc"), Type.integer(9)];
+
+        let caught;
+
+        try {
+          Interpreter.raiseFunctionClauseError(
+            "MyBlamedModule",
+            "my_fun",
+            2,
+            args,
+          );
+        } catch (e) {
+          caught = e;
+        }
+
+        const clauses = caught.value.data["atom(clauses)"][1];
+        const guard = clauses.data[0].data[1].data[0];
+
+        assert.deepStrictEqual(
+          guard,
+          Type.tuple([
+            Type.atom("and"),
+            blamedNode(false, "is_integer(x)"),
+            blamedNode(false, "x + 1 > y"),
+          ]),
+        );
+      });
+
+      it("leaves the clauses out when the heads carry no rendered sources", () => {
+        defineClauseHeads(false);
+
+        let caught;
+
+        try {
+          Interpreter.raiseFunctionClauseError("MyBlamedModule", "my_fun", 2, [
+            Type.integer(1),
+            Type.integer(9),
+          ]);
+        } catch (e) {
+          caught = e;
+        }
+
+        assert.deepStrictEqual(
+          caught.value.data["atom(clauses)"][1],
+          Type.nil(),
+        );
+
+        assert.deepStrictEqual(caught.value.data["atom(kind)"][1], Type.nil());
+      });
+    });
   });
 
   it("raiseFunctionClauseErrorMsg()", () => {
