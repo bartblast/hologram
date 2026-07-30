@@ -18,9 +18,10 @@ const Erlang_Erl_Stdlib_Errors = {
   // fragment text is colocated here. The formatter clauses and must_be_*
   // helpers return tags, and fragments without an entry (e.g. "not present in
   // map") are literal texts that pass through unchanged, like OTP's
-  // expand_error(Other) -> Other fallback. The not_fun tags form a closed
-  // set: the arity is always a literal demanded by a formatter clause, and
-  // OTP names no arities beyond these.
+  // expand_error(Other) -> Other fallback. The not_fun tags form a closed set
+  // at the arities OTP names, and all three are carried even though the ported
+  // clauses currently demand only 2 and 3 - a clause ported later that demands
+  // 1 would otherwise pass the raw tag through the fallback as its message.
   // Start _expand_error/1
   "_expand_error/1": (fragment) => {
     // Mirrors OTP's expand_error({bad_regexp, {Reason, Column}}) clause.
