@@ -24,7 +24,9 @@ anchors = [
   {0x30A2, "Katakana"},
   {0xAC00, "Hangul"},
   {0x0E01, "Thai"},
-  {0x10A0, "Georgian"},
+  # Mkhedruli - Asomtavruli (0x10A0) is Uncommon_Use, itself rejected by the tokenizer, and would
+  # zero the Georgian bit for every codepoint.
+  {0x10D0, "Georgian"},
   {0x0531, "Armenian"}
 ]
 
