@@ -340,6 +340,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Application, :get_env, 3},
     {Cldr.Locale, :language_data, 0},
     {Cldr.Validity.U, :encode_key, 2},
+    {Code, :ensure_compiled, 1},
     {Code, :ensure_loaded, 1},
     {FunctionClauseError, :message, 1},
     {Hologram.JS, :call, 4},

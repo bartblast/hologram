@@ -480,6 +480,11 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/Interpreter.defineFunctionClauseHeads("Task", "await", 2, "public"/
              )
+
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineFunctionClauseHeads("Code", "ensure_compiled", 1, "public"/
+             )
     end
 
     test "injects the client config when stacktraces are enabled", %{

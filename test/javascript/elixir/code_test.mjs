@@ -5,10 +5,29 @@ import {
 } from "../support/helpers.mjs";
 
 import Elixir_Code from "../../../assets/js/elixir/code.mjs";
+import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
+
+// Mirrors the clause heads the compiler emits for the ported function, which
+// the runtime script registers when the bundle loads.
+Interpreter.defineFunctionClauseHeads("Code", "ensure_compiled", 1, "public", [
+  {
+    params: (_context) => [Type.variablePattern("module_0")],
+    guards: [(context) => Erlang["is_atom/1"](context.vars.module_0)],
+    blame: {
+      params: ["module"],
+      guards: [
+        {
+          source: "is_atom(module)",
+          test: (context) => Erlang["is_atom/1"](context.vars.module_0),
+        },
+      ],
+    },
+  },
+]);
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/elixir/code_test.exs
@@ -34,14 +53,11 @@ describe("Elixir_Code", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    // TODO: client error message for this case is inconsistent with server error message
     it("raises FunctionClauseError if the argument is not an atom", () => {
       assertBoxedError(
         () => ensure_compiled(Type.integer(1)),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("Code.ensure_compiled/1", [
-          Type.integer(1),
-        ]),
+        "no function clause matching in Code.ensure_compiled/1\n\nThe following arguments were given to Code.ensure_compiled/1:\n\n    # 1\n    1\n\nAttempted function clauses (showing 1 out of 1):\n\n    def ensure_compiled(module) when -is_atom(module)-\n",
       );
     });
 
