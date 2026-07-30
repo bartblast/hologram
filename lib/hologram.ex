@@ -2,6 +2,34 @@ defmodule Hologram do
   alias Hologram.Reflection
 
   @doc """
+  Returns `true` when the client-side runtime error overlay is enabled, `false`
+  otherwise.
+
+  Controlled by the `:client_error_overlay` application environment key, which
+  defaults to whatever `client_stacktraces?/0` returns, so turning client
+  diagnostics on turns both on:
+
+      config :hologram, client_error_overlay: false
+
+  When enabled, an uncaught client error renders in the page as well as in the
+  browser console. Uncaught errors reach the console in every environment - this
+  setting only decides whether they are also shown in the page.
+
+  Setting it to `false` alongside enabled stacktraces leaves the frames in the
+  console without putting an error screen in front of the app's users. The two
+  differ in exposure: console output is read by whoever opens the devtools, or
+  collected by an error monitoring SDK, whereas the overlay is shown to everyone
+  who hits the error.
+
+  The value is read at compile time, so changing it requires recompiling the
+  bundles.
+  """
+  @spec client_error_overlay?() :: boolean
+  def client_error_overlay? do
+    Application.get_env(:hologram, :client_error_overlay, client_stacktraces?())
+  end
+
+  @doc """
   Returns `true` when client-side stacktraces are enabled, `false` otherwise.
 
   Controlled by the `:client_stacktraces` application environment key, which

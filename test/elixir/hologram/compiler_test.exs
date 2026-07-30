@@ -426,7 +426,10 @@ defmodule Hologram.CompilerTest do
 
   describe "build_runtime_js/4" do
     setup do
-      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      on_exit(fn ->
+        Application.delete_env(:hologram, :client_error_overlay)
+        Application.delete_env(:hologram, :client_stacktraces)
+      end)
 
       :ok
     end
@@ -482,26 +485,49 @@ defmodule Hologram.CompilerTest do
              )
     end
 
-    test "injects the client config when stacktraces are enabled", %{
+    test "injects the client config when the presentation settings are enabled", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
+      Application.put_env(:hologram, :client_error_overlay, true)
       Application.put_env(:hologram, :client_stacktraces, true)
 
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
 
-      assert String.contains?(js, "globalThis.Hologram.config = {stacktraces: true};")
+      assert String.contains?(
+               js,
+               "globalThis.Hologram.config = {errorOverlay: true, stacktraces: true};"
+             )
     end
 
-    test "injects the client config when stacktraces are disabled", %{
+    test "injects the client config when the presentation settings are disabled", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
+      Application.put_env(:hologram, :client_error_overlay, false)
       Application.put_env(:hologram, :client_stacktraces, false)
 
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
 
-      assert String.contains?(js, "globalThis.Hologram.config = {stacktraces: false};")
+      assert String.contains?(
+               js,
+               "globalThis.Hologram.config = {errorOverlay: false, stacktraces: false};"
+             )
+    end
+
+    test "injects the client config when the error overlay is opted out of", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_error_overlay, false)
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
+
+      assert String.contains?(
+               js,
+               "globalThis.Hologram.config = {errorOverlay: false, stacktraces: true};"
+             )
     end
   end
 

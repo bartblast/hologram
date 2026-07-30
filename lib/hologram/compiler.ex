@@ -796,7 +796,7 @@ defmodule Hologram.Compiler do
   end
 
   defp render_client_config do
-    ~s/{stacktraces: #{Hologram.client_stacktraces?()}}/
+    ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
   end
 
   defp render_elixir_function_defs(mfas, ir_plt, async_mfas) do
