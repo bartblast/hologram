@@ -540,6 +540,7 @@ export default class Interpreter {
         moduleExName,
         functionName,
         arity,
+        visibility,
         clauses,
         metadata.file ?? null,
       );
@@ -1157,21 +1158,28 @@ export default class Interpreter {
   // different identity (e.g. :sets.union/2 reporting :sets.size/1). A
   // capitalized module names an Elixir module and becomes an alias, like in
   // CallStack.boxFrame().
-  static raiseFunctionClauseError(module, functionName, arity, args = null) {
+  static raiseFunctionClauseError(
+    module,
+    functionName,
+    arity,
+    args = null,
+    clauseHeads = null,
+  ) {
     const moduleTerm = /^[A-Z]/.test(module)
       ? Type.alias(module)
       : Type.atom(module);
 
-    const clauseHeads =
+    const heads =
       args === null
         ? null
-        : Interpreter.functionClauseHeads(module, functionName, arity);
+        : (clauseHeads ??
+          Interpreter.functionClauseHeads(module, functionName, arity));
 
-    const clauses = clauseHeads
-      ? Interpreter.#blameClauseHeads(clauseHeads.clauses, args)
+    const clauses = heads
+      ? Interpreter.#blameClauseHeads(heads.clauses, args)
       : null;
 
-    const kind = clauseHeads?.visibility === "private" ? "defp" : "def";
+    const kind = heads?.visibility === "private" ? "defp" : "def";
 
     const struct = Type.struct("FunctionClauseError", [
       [Type.atom("__exception__"), Type.boolean(true)],
@@ -1183,16 +1191,23 @@ export default class Interpreter {
       [Type.atom("module"), moduleTerm],
     ]);
 
+    const error = new HologramBoxedError(struct);
+    const ownFrame = error.stacktrace[0];
+
+    // A raise from the function's own dispatch keeps its file and line - the
+    // BEAM reports those for an Elixir-implemented function, and only the args
+    // take the arity's place. A port reporting another identity has neither.
+    const keepsLocation =
+      ownFrame?.module === module && ownFrame?.function === functionName;
+
     const raisingFrame = {
       module,
       function: functionName,
       arityOrArgs: args === null ? arity : Type.list(args),
-      file: null,
-      line: null,
+      file: keepsLocation ? ownFrame.file : null,
+      line: keepsLocation ? ownFrame.line : null,
       errorInfo: null,
     };
-
-    const error = new HologramBoxedError(struct);
 
     error.stacktrace = [raisingFrame, ...error.stacktrace.slice(1)];
     error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
@@ -1670,6 +1685,7 @@ export default class Interpreter {
     moduleExName,
     functionName,
     arity,
+    visibility,
     clauses,
     file,
   ) {
@@ -1723,8 +1739,12 @@ export default class Interpreter {
           }
         }
 
-        Interpreter.raiseFunctionClauseErrorMsg(
-          Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
+        Interpreter.raiseFunctionClauseError(
+          moduleExName,
+          functionName,
+          arity,
+          [...arguments],
+          {visibility, clauses},
         );
       },
     );

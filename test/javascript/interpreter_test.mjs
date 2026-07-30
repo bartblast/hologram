@@ -3501,6 +3501,82 @@ describe("Interpreter", () => {
       );
     });
 
+    it("raises FunctionClauseError blaming the clause heads that carry rendered sources", () => {
+      // def my_fun_f(1), do: :expr_1
+      // def my_fun_f(x) when is_atom(x), do: :expr_2
+      Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_f", 1, "public", [
+        {
+          params: (_context) => [Type.integer(1)],
+          guards: [],
+          body: (_context) => Type.atom("expr_1"),
+          blame: {params: ["1"], guards: []},
+        },
+        {
+          params: (_context) => [Type.variablePattern("x")],
+          guards: [(context) => Erlang["is_atom/1"](context.vars.x)],
+          body: (_context) => Type.atom("expr_2"),
+          blame: {
+            params: ["x"],
+            guards: [
+              {
+                source: "is_atom(x)",
+                test: (context) => Erlang["is_atom/1"](context.vars.x),
+              },
+            ],
+          },
+        },
+      ]);
+
+      assertBoxedError(
+        () => globalThis.Elixir_Aaa_Bbb["my_fun_f/1"](Type.integer(3)),
+        "FunctionClauseError",
+        "no function clause matching in Aaa.Bbb.my_fun_f/1\n\nThe following arguments were given to Aaa.Bbb.my_fun_f/1:\n\n    # 1\n    3\n\nAttempted function clauses (showing 2 out of 2):\n\n    def my_fun_f(-1-)\n    def my_fun_f(x) when -is_atom(x)-\n",
+      );
+    });
+
+    it("the error frame carries the args in place of the arity, keeping the file", () => {
+      // def my_fun_g(1), do: :ok
+      Interpreter.defineElixirFunction(
+        "Aaa.Bbb",
+        "my_fun_g",
+        1,
+        "public",
+        [
+          {
+            params: (_context) => [Type.integer(1)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+          },
+        ],
+        {file: "lib/aaa/bbb.ex"},
+      );
+
+      CallStack.reset();
+      globalThis.Hologram.config.stacktraces = true;
+
+      let caught;
+
+      try {
+        globalThis.Elixir_Aaa_Bbb["my_fun_g/1"](Type.integer(3));
+      } catch (e) {
+        caught = e;
+      } finally {
+        globalThis.Hologram.config.stacktraces = false;
+        CallStack.reset();
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "Aaa.Bbb",
+          function: "my_fun_g",
+          arityOrArgs: Type.list([Type.integer(3)]),
+          file: "lib/aaa/bbb.ex",
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
+
     it("defines a function which has match operator in params", () => {
       // def my_fun_d(x = 1 = y), do: x + y
       Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_d", 1, "public", [
