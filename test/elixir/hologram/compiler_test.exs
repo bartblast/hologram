@@ -816,13 +816,7 @@ defmodule Hologram.CompilerTest do
         normalize_newlines("""
         (left, right) => {
             if (!Type.isNumber(left) || !Type.isNumber(right)) {
-              Interpreter.raiseBifError(
-                "badarith",
-                "erlang",
-                "+",
-                [left, right],
-                "erl_erts_errors",
-              );
+              Interpreter.raiseBifError("badarith", "erlang", "+", [left, right]);
             }
 
             const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
@@ -851,13 +845,10 @@ defmodule Hologram.CompilerTest do
         normalize_newlines("""
         (key, map) => {
             if (!Type.isMap(map)) {
-              Interpreter.raiseBifError(
-                ["badmap", map],
-                "erlang",
-                "map_get",
-                [key, map],
-                "erl_erts_errors",
-              );
+              Interpreter.raiseBifError(["badmap", map], "erlang", "map_get", [
+                key,
+                map,
+              ]);
             }
 
             const encodedKey = Type.encodeMapKey(key);
@@ -866,13 +857,7 @@ defmodule Hologram.CompilerTest do
               return map.data[encodedKey][1];
             }
 
-            Interpreter.raiseBifError(
-              ["badkey", key],
-              "erlang",
-              "map_get",
-              [key, map],
-              "erl_erts_errors",
-            );
+            Interpreter.raiseBifError(["badkey", key], "erlang", "map_get", [key, map]);
           }\
         """)
 
