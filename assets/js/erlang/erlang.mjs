@@ -475,10 +475,13 @@ const Erlang = {
   // Start band/2
   "band/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
-      const arg1 = Interpreter.inspect(integer1);
-      const arg2 = Interpreter.inspect(integer2);
-
-      Interpreter.raiseArithmeticError(`Bitwise.band(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "band",
+        [integer1, integer2],
+        "erl_erts_errors",
+      );
     }
 
     return Type.integer(integer1.value & integer2.value);
@@ -1589,8 +1592,13 @@ const Erlang = {
   // Start bnot/1
   "bnot/1": (integer) => {
     if (!Type.isInteger(integer)) {
-      const arg = Interpreter.inspect(integer);
-      Interpreter.raiseArithmeticError(`Bitwise.bnot(${arg})`);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "bnot",
+        [integer],
+        "erl_erts_errors",
+      );
     }
 
     return Type.integer(~integer.value);
@@ -1601,10 +1609,13 @@ const Erlang = {
   // Start bor/2
   "bor/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
-      const arg1 = Interpreter.inspect(integer1);
-      const arg2 = Interpreter.inspect(integer2);
-
-      Interpreter.raiseArithmeticError(`Bitwise.bor(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "bor",
+        [integer1, integer2],
+        "erl_erts_errors",
+      );
     }
 
     return Type.integer(integer1.value | integer2.value);
@@ -1615,10 +1626,13 @@ const Erlang = {
   // Start bsl/2
   "bsl/2": (integer, shift) => {
     if (!Type.isInteger(integer) || !Type.isInteger(shift)) {
-      const arg1 = Interpreter.inspect(integer);
-      const arg2 = Interpreter.inspect(shift);
-
-      Interpreter.raiseArithmeticError(`Bitwise.bsl(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "bsl",
+        [integer, shift],
+        "erl_erts_errors",
+      );
     }
 
     const integerValue = integer.value;
@@ -1637,10 +1651,13 @@ const Erlang = {
   // Start bsr/2
   "bsr/2": (integer, shift) => {
     if (!Type.isInteger(integer) || !Type.isInteger(shift)) {
-      const arg1 = Interpreter.inspect(integer);
-      const arg2 = Interpreter.inspect(shift);
-
-      Interpreter.raiseArithmeticError(`Bitwise.bsr(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "bsr",
+        [integer, shift],
+        "erl_erts_errors",
+      );
     }
 
     const integerValue = integer.value;
@@ -1659,10 +1676,13 @@ const Erlang = {
   // Start bxor/2
   "bxor/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
-      const arg1 = Interpreter.inspect(integer1);
-      const arg2 = Interpreter.inspect(integer2);
-
-      Interpreter.raiseArithmeticError(`Bitwise.bxor(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "bxor",
+        [integer1, integer2],
+        "erl_erts_errors",
+      );
     }
 
     return Type.integer(integer1.value ^ integer2.value);

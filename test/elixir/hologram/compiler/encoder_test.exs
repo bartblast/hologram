@@ -1692,8 +1692,13 @@ defmodule Hologram.Compiler.EncoderTest do
         normalize_newlines("""
         Interpreter.defineErlangFunction("erlang", "+", 2, (left, right) => {
             if (!Type.isNumber(left) || !Type.isNumber(right)) {
-              const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(right)}`;
-              Interpreter.raiseArithmeticError(blame);
+              Interpreter.raiseBifError(
+                "badarith",
+                "erlang",
+                "+",
+                [left, right],
+                "erl_erts_errors",
+              );
             }
 
             const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(

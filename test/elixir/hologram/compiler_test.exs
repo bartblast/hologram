@@ -798,8 +798,13 @@ defmodule Hologram.CompilerTest do
         normalize_newlines("""
         (left, right) => {
             if (!Type.isNumber(left) || !Type.isNumber(right)) {
-              const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(right)}`;
-              Interpreter.raiseArithmeticError(blame);
+              Interpreter.raiseBifError(
+                "badarith",
+                "erlang",
+                "+",
+                [left, right],
+                "erl_erts_errors",
+              );
             }
 
             const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(

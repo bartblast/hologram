@@ -958,13 +958,6 @@ export default class Interpreter {
     Interpreter.raiseError("ArgumentError", message);
   }
 
-  static raiseArithmeticError(blame = null) {
-    Interpreter.raiseError(
-      "ArithmeticError",
-      `bad argument in arithmetic expression${blame ? `: ${blame}` : ""}`,
-    );
-  }
-
   static raiseBadArityError(arity, args) {
     const numArgs = args.length === 0 ? "no" : args.length;
 

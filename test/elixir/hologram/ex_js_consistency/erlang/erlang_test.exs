@@ -1793,6 +1793,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    "bad argument in arithmetic expression: Bitwise.band(5, 3.0)",
                    {:erlang, :band, [5, 3.0]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(5.0)
+
+      top_frame =
+        try do
+          :erlang.band(arg, 3)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :band, [5.0, 3], @erts_info}
+    end
   end
 
   describe "binary_part/3" do
@@ -3314,6 +3327,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    "bad argument in arithmetic expression: Bitwise.bnot(2.0)",
                    {:erlang, :bnot, [2.0]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(2.0)
+
+      top_frame =
+        try do
+          :erlang.bnot(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :bnot, [2.0], @erts_info}
+    end
   end
 
   describe "bor/2" do
@@ -3381,6 +3407,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    "bad argument in arithmetic expression: Bitwise.bor(1, 2.0)",
                    {:erlang, :bor, [1, 2.0]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(1.0)
+
+      top_frame =
+        try do
+          :erlang.bor(arg, 2)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :bor, [1.0, 2], @erts_info}
+    end
   end
 
   describe "bsl/2" do
@@ -3439,6 +3478,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    "bad argument in arithmetic expression: Bitwise.bsl(1, 2.0)",
                    {:erlang, :bsl, [1, 2.0]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(1.0)
+
+      top_frame =
+        try do
+          :erlang.bsl(arg, 2)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :bsl, [1.0, 2], @erts_info}
+    end
   end
 
   describe "bsr/2" do
@@ -3496,6 +3548,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArithmeticError,
                    "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)",
                    {:erlang, :bsr, [1, 2.0]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(1.0)
+
+      top_frame =
+        try do
+          :erlang.bsr(arg, 2)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :bsr, [1.0, 2], @erts_info}
     end
   end
 
@@ -3568,6 +3633,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArithmeticError,
                    "bad argument in arithmetic expression: Bitwise.bxor(5, 3.0)",
                    {:erlang, :bxor, [5, 3.0]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(5.0)
+
+      top_frame =
+        try do
+          :erlang.bxor(arg, 3)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :bxor, [5.0, 3], @erts_info}
     end
   end
 

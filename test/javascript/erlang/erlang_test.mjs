@@ -2176,6 +2176,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: Bitwise.band(5, 3.0)",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.float(5.0), Type.integer(3));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("band", Type.list([Type.float(5.0), Type.integer(3)])),
+      ]);
+    });
   });
 
   describe("binary_part/3", () => {
@@ -4980,6 +4994,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: Bitwise.bnot(2.0)",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.float(2.0));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("bnot", Type.list([Type.float(2.0)])),
+      ]);
+    });
   });
 
   describe("bor/2", () => {
@@ -5082,6 +5110,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: Bitwise.bor(1, 2.0)",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        bor(Type.float(1.0), Type.integer(2));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("bor", Type.list([Type.float(1.0), Type.integer(2)])),
+      ]);
+    });
   });
 
   describe("bsl/2", () => {
@@ -5170,6 +5212,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: Bitwise.bsl(1, 2.0)",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.float(1.0), Type.integer(2));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("bsl", Type.list([Type.float(1.0), Type.integer(2)])),
+      ]);
+    });
   });
 
   describe("bsr/2", () => {
@@ -5257,6 +5313,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.float(1.0), Type.integer(2));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("bsr", Type.list([Type.float(1.0), Type.integer(2)])),
+      ]);
     });
   });
 
@@ -5363,6 +5433,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: Bitwise.bxor(5, 3.0)",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.float(5.0), Type.integer(3));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("bxor", Type.list([Type.float(5.0), Type.integer(3)])),
+      ]);
     });
   });
 
