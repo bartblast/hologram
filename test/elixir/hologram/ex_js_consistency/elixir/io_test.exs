@@ -52,7 +52,9 @@ defmodule Hologram.ExJsConsistency.Elixir.IOTest do
       assert output == "%{a: 1, b: 2}\n"
     end
 
-    # Client error message is intentionally different than server error message.
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the first arg is not an atom or a pid" do
       expected_msg =
         build_function_clause_error_msg("IO.inspect/3", [123, :abc, []], [

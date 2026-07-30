@@ -177,7 +177,9 @@ describe("Elixir_String", () => {
     });
 
     describe("error cases", () => {
-      // TODO: client error message for this case is inconsistent with server error message
+      // The attempted function clauses come from the clause heads the runtime script
+      // registers at bundle load, which unit tests don't run, so this twin asserts
+      // the message without them.
       it("raises FunctionClauseError when subject is not a bitstring", () => {
         const subject = Type.atom("hello");
         const pattern = Type.bitstring("test");
@@ -192,7 +194,9 @@ describe("Elixir_String", () => {
         );
       });
 
-      // TODO: client error message for this case is inconsistent with server error message
+      // The attempted function clauses come from the clause heads the runtime script
+      // registers at bundle load, which unit tests don't run, so this twin asserts
+      // the message without them.
       it("raises FunctionClauseError when subject is a non-binary bitstring", () => {
         const subject = Type.bitstring([1, 0, 1, 0]);
         const pattern = Type.bitstring("test");
@@ -379,7 +383,9 @@ describe("Elixir_String", () => {
       });
     });
 
-    // TODO: client error message for this case is inconsistent with server error message
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the first arg is not a bitstring", () => {
       const arg1 = Type.atom("abc");
 
@@ -393,7 +399,9 @@ describe("Elixir_String", () => {
       );
     });
 
-    // TODO: client error message for this case is inconsistent with server error message
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the first arg is a non-binary bitstring", () => {
       const arg1 = Type.bitstring([1, 0, 1, 0]);
 
@@ -407,7 +415,9 @@ describe("Elixir_String", () => {
       );
     });
 
-    // TODO: client error message for this case is inconsistent with server error message
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the second arg is not an atom", () => {
       const arg2 = Type.integer(123);
 
@@ -421,7 +431,9 @@ describe("Elixir_String", () => {
       );
     });
 
-    // TODO: client error message for this case is inconsistent with server error message
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the second arg is an atom, but is not a valid mode", () => {
       const arg2 = Type.atom("abc");
 
@@ -518,7 +530,9 @@ describe("Elixir_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    // TODO: client error message for this case is inconsistent with server error message
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("non-binary subject arg", () => {
       const subject = Type.atom("abc");
 
@@ -611,7 +625,9 @@ describe("Elixir_String", () => {
       assert.deepStrictEqual(result, Type.bitstring("abc"));
     });
 
-    // TODO: client error message for this case is inconsistent with server error message
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the arg is a non-binary bitstring", () => {
       const bitstring = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
 
@@ -622,7 +638,9 @@ describe("Elixir_String", () => {
       );
     });
 
-    // TODO: client error message for this case is inconsistent with server error message
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the arg is not a bitstring", () => {
       const atom = Type.atom("abc");
 
@@ -688,7 +706,9 @@ describe("Elixir_String", () => {
       });
     });
 
-    // TODO: client error message for this case is inconsistent with server error message
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the first arg is not a bitstring", () => {
       const arg1 = Type.atom("abc");
 
@@ -702,7 +722,9 @@ describe("Elixir_String", () => {
       );
     });
 
-    // TODO: client error message for this case is inconsistent with server error message
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the first arg is a non-binary bitstring", () => {
       const arg1 = Type.bitstring([1, 0, 1, 0]);
 
@@ -716,7 +738,9 @@ describe("Elixir_String", () => {
       );
     });
 
-    // TODO: client error message for this case is inconsistent with server error message
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the second arg is not an atom", () => {
       const arg2 = Type.integer(123);
 
@@ -730,7 +754,9 @@ describe("Elixir_String", () => {
       );
     });
 
-    // TODO: client error message for this case is inconsistent with server error message
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the second arg is an atom, but is not a valid mode", () => {
       const arg2 = Type.atom("abc");
 

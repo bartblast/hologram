@@ -165,6 +165,9 @@ describe("Elixir_URI", () => {
     });
 
     describe("error cases", () => {
+      // The attempted function clauses come from the clause heads the runtime
+      // script registers at bundle load, which unit tests don't run, so this
+      // twin asserts the message without them.
       it("raises FunctionClauseError when first argument is not a bitstring", () => {
         const string = Type.atom("hello");
 
@@ -186,6 +189,9 @@ describe("Elixir_URI", () => {
         );
       });
 
+      // The attempted function clauses come from the clause heads the runtime
+      // script registers at bundle load, which unit tests don't run, so this
+      // twin asserts the message without them.
       it("raises FunctionClauseError when first argument is a non-binary bitstring", () => {
         const string = Type.bitstring([1, 0, 1, 0]);
 
@@ -207,6 +213,9 @@ describe("Elixir_URI", () => {
         );
       });
 
+      // The attempted function clauses come from the clause heads the runtime
+      // script registers at bundle load, which unit tests don't run, so this
+      // twin asserts the message without them.
       it("raises FunctionClauseError when second argument is not a function", () => {
         const string = Type.bitstring("hello");
         const predicate = Type.atom("not_a_function");
@@ -221,6 +230,9 @@ describe("Elixir_URI", () => {
         );
       });
 
+      // The attempted function clauses come from the clause heads the runtime
+      // script registers at bundle load, which unit tests don't run, so this
+      // twin asserts the message without them.
       it("raises FunctionClauseError when predicate arity is not 1", () => {
         const string = Type.bitstring("hello");
 

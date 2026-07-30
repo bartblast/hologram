@@ -10,7 +10,9 @@ defmodule Hologram.ExJsConsistency.Elixir.TaskTest do
   @moduletag :consistency
 
   describe "await/1" do
-    # Client error message is intentionally different than server error message.
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the arg is not a Task struct" do
       expected_msg =
         build_function_clause_error_msg("Task.await/2", [123, 5000], [

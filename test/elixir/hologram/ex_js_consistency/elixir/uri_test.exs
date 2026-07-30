@@ -67,6 +67,9 @@ defmodule Hologram.ExJsConsistency.Elixir.URITest do
   end
 
   describe "encode/2, error cases" do
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError when first argument is not a bitstring" do
       expected_msg =
         build_function_clause_error_msg("URI.encode/2", [:hello, &URI.char_unreserved?/1], [
@@ -80,6 +83,9 @@ defmodule Hologram.ExJsConsistency.Elixir.URITest do
       end
     end
 
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError when first argument is a non-binary bitstring" do
       string = <<1::1, 0::1, 1::1, 0::1>>
 
@@ -95,6 +101,9 @@ defmodule Hologram.ExJsConsistency.Elixir.URITest do
       end
     end
 
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError when second argument is not a function" do
       expected_msg =
         build_function_clause_error_msg("URI.encode/2", ["hello", :not_a_function], [
@@ -106,6 +115,9 @@ defmodule Hologram.ExJsConsistency.Elixir.URITest do
       end
     end
 
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError when predicate arity is not 1" do
       predicate = fn _a, _b -> true end
 

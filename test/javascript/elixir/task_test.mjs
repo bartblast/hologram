@@ -41,7 +41,9 @@ describe("Elixir_Task", () => {
       assert.deepStrictEqual(result, Type.integer(42));
     });
 
-    // Client error message is intentionally different than server error message.
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the arg is not a Task struct", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         "Task.await/2",

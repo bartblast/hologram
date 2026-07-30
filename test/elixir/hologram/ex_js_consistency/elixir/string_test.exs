@@ -66,7 +66,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
   end
 
   describe "contains?/2, error cases" do
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError when subject is not a bitstring" do
       expected_msg =
         build_function_clause_error_msg("String.contains?/2", [:hello, "test"], [
@@ -81,7 +83,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError when subject is a non-binary bitstring" do
       subject = <<1::1, 0::1, 1::1, 0::1>>
 
@@ -195,7 +199,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       assert String.downcase("ŹRÓDŁO", :default) == "źródło"
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the first arg is not a bitstring" do
       expected_msg =
         build_function_clause_error_msg("String.downcase/2", [:abc, :default], [
@@ -212,7 +218,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the first arg is a non-binary bitstring" do
       arg_1 = <<1::1, 0::1, 1::1, 0::1>>
 
@@ -231,7 +239,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the second arg is not an atom" do
       expected_msg =
         build_function_clause_error_msg("String.downcase/2", ["HoLoGrAm", 123], [
@@ -246,7 +256,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the second arg is an atom, but is not a valid mode" do
       expected_msg =
         build_function_clause_error_msg("String.downcase/2", ["HoLoGrAm", :abc], [
@@ -296,7 +308,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       assert String.replace("é", "e", "o") == "é"
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "non-binary subject arg" do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg("String.replace/4", [:abc, "ab", "xy", []], [
@@ -336,7 +350,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       assert String.trim("  \n\tabc\t\n  ") == "abc"
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the arg is a non-binary bitstring" do
       bitstring = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
 
@@ -352,7 +368,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the arg is not a bitstring" do
       expected_msg =
         build_function_clause_error_msg("String.trim/1", [:abc], [
@@ -399,7 +417,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       assert String.upcase("źródło", :default) == "ŹRÓDŁO"
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the first arg is not a bitstring" do
       expected_msg =
         build_function_clause_error_msg("String.upcase/2", [:abc, :default], [
@@ -416,7 +436,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the first arg is a non-binary bitstring" do
       arg_1 = <<1::1, 0::1, 1::1, 0::1>>
 
@@ -435,7 +457,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the second arg is not an atom" do
       expected_msg =
         build_function_clause_error_msg("String.upcase/2", ["HoLoGrAm", 123], [
@@ -450,7 +474,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the second arg is an atom, but is not a valid mode" do
       expected_msg =
         build_function_clause_error_msg("String.upcase/2", ["HoLoGrAm", :abc], [

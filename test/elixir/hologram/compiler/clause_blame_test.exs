@@ -2,14 +2,68 @@ defmodule Hologram.Compiler.ClauseBlameTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.ClauseBlame
 
+  alias Hologram.Compiler.IR
+
+  # The functions whose ported raise sites report attempted clauses. Their
+  # heads come from Elixir's own source, so they are compared against what the
+  # server blames rather than against hardcoded text that would drift with the
+  # Elixir version.
+  @ported_calls [
+    {Code, :ensure_compiled, [1]},
+    {IO, :inspect, [123, :abc, []]},
+    {String, :contains?, [:hello, "test"]},
+    {String, :downcase, [:abc, :default]},
+    {String, :replace, [:abc, "ab", "xy", []]},
+    {String, :trim, [:abc]},
+    {String, :upcase, [:abc, :default]},
+    {Task, :await, [123, 5000]},
+    {URI, :encode, [:hello, &URI.char_unreserved?/1]}
+  ]
+
   # Guards read out of BEAM debug info spell their calls out as :erlang remote
   # calls, so the fixtures below are shaped that way rather than as source AST.
   defp alias_ast(name) do
     {:__aliases__, [alias: false], [name]}
   end
 
+  # Reads the clause heads the compiler rendered for the given function.
+  defp compiler_clause_heads(module, function, arity) do
+    {_key, {_visibility, clauses}} =
+      module
+      |> IR.for_module()
+      |> IR.aggregate_module_funs()
+      |> List.keyfind({function, arity}, 0)
+
+    Enum.map(clauses, & &1.blame)
+  end
+
   defp erlang_call(function, args) do
     {{:., [], [:erlang, function]}, [], args}
+  end
+
+  # Renders the clause heads the server blames, dropping the marks, which
+  # depend on the arguments and are placed by the client at raise time.
+  defp server_clause_heads(module, function, args) do
+    {:ok, _kind, clauses} = Exception.blame_mfa(module, function, args)
+
+    Enum.map(clauses, fn {blamed_params, guards} ->
+      %{
+        params: Enum.map(blamed_params, &server_guard_source/1),
+        guards: Enum.map(guards, &server_guard/1)
+      }
+    end)
+  end
+
+  defp server_guard({operator, _meta, [left, right]}) when operator in [:and, :or] do
+    {operator, server_guard(left), server_guard(right)}
+  end
+
+  defp server_guard(node) do
+    {:leaf, server_guard_source(node)}
+  end
+
+  defp server_guard_source(%{node: node}) do
+    Macro.to_string(node)
   end
 
   # Mirrors how the Elixir compiler spells an is_struct/1,2 guard out.
@@ -37,6 +91,19 @@ defmodule Hologram.Compiler.ClauseBlameTest do
 
   defp var(name) do
     {name, [], nil}
+  end
+
+  describe "rendering the clause heads of ported functions" do
+    for {module, function, args} <- @ported_calls do
+      arity = length(args)
+
+      test "#{inspect(module)}.#{function}/#{arity}" do
+        {module, function, args} = {unquote(module), unquote(function), unquote(args)}
+
+        assert compiler_clause_heads(module, function, length(args)) ==
+                 server_clause_heads(module, function, args)
+      end
+    end
   end
 
   describe "build/2" do

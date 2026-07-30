@@ -90,7 +90,9 @@ describe("Elixir_IO", () => {
       sinon.assert.calledOnceWithExactly(consoleLogStub, "%{a: 1, b: 2}\n");
     });
 
-    // Client error message is intentionally different than server error message.
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the first arg is not an atom or a pid", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         "IO.inspect/3",
