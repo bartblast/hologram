@@ -49,6 +49,7 @@ import ManuallyPortedElixirApplication from "./elixir/application.mjs";
 import ManuallyPortedElixirCldrLocale from "./elixir/cldr/locale.mjs";
 import ManuallyPortedElixirCldrValidityU from "./elixir/cldr/validity/u.mjs";
 import ManuallyPortedElixirCode from "./elixir/code.mjs";
+import ManuallyPortedElixirFunctionClauseError from "./elixir/function_clause_error.mjs";
 import ManuallyPortedElixirHologramJS from "./elixir/hologram/js.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
 import ManuallyPortedElixirIO from "./elixir/io.mjs";
@@ -473,6 +474,13 @@ export default class Hologram {
       "ensure_compiled/1",
       "public",
       ManuallyPortedElixirCode["ensure_compiled/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "FunctionClauseError",
+      "message/1",
+      "public",
+      ManuallyPortedElixirFunctionClauseError["message/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
