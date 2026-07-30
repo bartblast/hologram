@@ -109,24 +109,6 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Returns true if the given term is an Ecto schema module, or false otherwise.
-  """
-  @spec ecto_schema?(any) :: boolean
-  def ecto_schema?(term) do
-    elixir_module?(term) && has_function?(term, :__schema__, 1) &&
-      has_function?(term, :__changeset__, 0)
-  end
-
-  @doc """
-  Returns true if the given term is an exception module, or false otherwise.
-  """
-  @spec exception?(any) :: boolean
-  def exception?(term) do
-    elixir_module?(term) && has_function?(term, :exception, 1) &&
-      has_function?(term, :message, 1)
-  end
-
-  @doc """
   Returns true if the given term is an existing Elixir module, or false otherwise.
 
   Some Erlang modules use Elixir-style naming for interop (e.g. the atom `Luerl`,
@@ -201,6 +183,24 @@ defmodule Hologram.Reflection do
   end
 
   def erlang_module?(_term), do: false
+
+  @doc """
+  Returns true if the given term is an Ecto schema module, or false otherwise.
+  """
+  @spec ecto_schema?(any) :: boolean
+  def ecto_schema?(term) do
+    elixir_module?(term) && has_function?(term, :__schema__, 1) &&
+      has_function?(term, :__changeset__, 0)
+  end
+
+  @doc """
+  Returns true if the given term is an exception module, or false otherwise.
+  """
+  @spec exception?(any) :: boolean
+  def exception?(term) do
+    elixir_module?(term) && has_function?(term, :exception, 1) &&
+      has_function?(term, :message, 1)
+  end
 
   @doc """
   Returns true if module contains a public function with the given arity, otherwise false.
