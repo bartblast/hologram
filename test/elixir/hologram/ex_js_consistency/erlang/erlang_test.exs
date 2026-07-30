@@ -96,11 +96,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "error frame carries args and error_info" do
-      arg = wrap_term(:abc)
-
+      # The Elixir compiler can rewrite a direct unary call into its binary
+      # counterpart, which reports a different arity, so the BIF is applied
+      # here instead. The client always calls the ported function.
       top_frame =
         try do
-          :erlang.+(arg)
+          apply(:erlang, :+, wrap_term([:abc]))
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
@@ -227,11 +228,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "error frame carries args and error_info" do
-      arg = wrap_term(:abc)
-
+      # The Elixir compiler can rewrite a direct unary call into its binary
+      # counterpart, which reports a different arity, so the BIF is applied
+      # here instead. The client always calls the ported function.
       top_frame =
         try do
-          :erlang.-(arg)
+          apply(:erlang, :-, wrap_term([:abc]))
         rescue
           _error -> hd(wrap_term(__STACKTRACE__))
         end
