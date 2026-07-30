@@ -301,12 +301,10 @@ export default class Interpreter {
 
     if (typeof moduleProxy === "undefined") {
       Interpreter.raiseUndefinedFunctionError(
-        Interpreter.buildUndefinedFunctionErrorMsg(
-          module,
-          functionName.value,
-          arity,
-          false,
-        ),
+        module,
+        functionName.value,
+        arity,
+        false,
       );
     }
 
@@ -316,11 +314,9 @@ export default class Interpreter {
       !Interpreter.isEqual(module, context.module)
     ) {
       Interpreter.raiseUndefinedFunctionError(
-        Interpreter.buildUndefinedFunctionErrorMsg(
-          module,
-          functionName.value,
-          arity,
-        ),
+        module,
+        functionName.value,
+        arity,
       );
     }
 
@@ -918,11 +914,9 @@ export default class Interpreter {
           const [functionName, arity] = functionArityStr.split("/");
 
           Interpreter.raiseUndefinedFunctionError(
-            Interpreter.buildUndefinedFunctionErrorMsg(
-              target.__exModule__,
-              functionName,
-              arity,
-            ),
+            target.__exModule__,
+            functionName,
+            Number(arity),
           );
         },
       };
@@ -1229,8 +1223,27 @@ export default class Interpreter {
     ]);
   }
 
-  static raiseUndefinedFunctionError(message) {
-    Interpreter.raiseError("UndefinedFunctionError", message);
+  // Raises the way the BEAM reports a call to a function that isn't there. The
+  // reason is stated rather than left for the struct's message/1 callback to
+  // work out, since the callback asks the module whether it exports
+  // module_info/0, which a client module proxy never does.
+  static raiseUndefinedFunctionError(
+    module,
+    functionName,
+    arity,
+    isModuleAvailable = true,
+  ) {
+    const reason = isModuleAvailable
+      ? "function not exported"
+      : "module could not be loaded";
+
+    Interpreter.#raiseFieldBearingError("UndefinedFunctionError", [
+      [Type.atom("arity"), Type.integer(arity)],
+      [Type.atom("function"), Type.atom(functionName)],
+      [Type.atom("message"), Type.nil()],
+      [Type.atom("module"), module],
+      [Type.atom("reason"), Type.atom(reason)],
+    ]);
   }
 
   static raiseWithClauseError(term) {

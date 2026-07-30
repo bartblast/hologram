@@ -9997,12 +9997,59 @@ describe("Interpreter", () => {
     );
   });
 
-  it("raiseUndefinedFunctionError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseUndefinedFunctionError("my_message"),
-      "UndefinedFunctionError",
-      "my_message",
-    );
+  describe("raiseUndefinedFunctionError()", () => {
+    it("the module is available but doesn't export the function", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.raiseUndefinedFunctionError(
+            Type.alias("Aaa.Bbb"),
+            "my_fun",
+            2,
+          ),
+        "UndefinedFunctionError",
+        "function Aaa.Bbb.my_fun/2 is undefined or private",
+      );
+    });
+
+    it("the module is not available", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.raiseUndefinedFunctionError(
+            Type.alias("MyModule"),
+            "my_fun",
+            2,
+            false,
+          ),
+        "UndefinedFunctionError",
+        "function MyModule.my_fun/2 is undefined (module MyModule is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)",
+      );
+    });
+
+    it("carries the missing function as fields", () => {
+      let caught;
+
+      try {
+        Interpreter.raiseUndefinedFunctionError(
+          Type.alias("Aaa.Bbb"),
+          "my_fun",
+          2,
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(
+        caught.value,
+        Type.struct("UndefinedFunctionError", [
+          [Type.atom("__exception__"), Type.boolean(true)],
+          [Type.atom("arity"), Type.integer(2)],
+          [Type.atom("function"), Type.atom("my_fun")],
+          [Type.atom("message"), Type.nil()],
+          [Type.atom("module"), Type.alias("Aaa.Bbb")],
+          [Type.atom("reason"), Type.atom("function not exported")],
+        ]),
+      );
+    });
   });
 
   it("raiseWithClauseError()", () => {

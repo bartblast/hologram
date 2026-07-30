@@ -663,6 +663,44 @@ export function defineRuntimeGlobals() {
 
   defineGlobalModule("Elixir_String_Chars", defineElixirStringCharsModule());
 
+  defineGlobalModule("Elixir_UndefinedFunctionError", {
+    // Mirrors UndefinedFunctionError.message/1: an eager message passes
+    // through, otherwise the text names the missing function and states why
+    // the call couldn't be made.
+    "message/1": (struct) => {
+      const messageEntry = struct.data["atom(message)"];
+
+      if (messageEntry !== undefined && !Type.isNil(messageEntry[1])) {
+        return messageEntry[1];
+      }
+
+      const module = struct.data["atom(module)"][1];
+      const functionName = struct.data["atom(function)"][1].value;
+      const arity = struct.data["atom(arity)"][1].value;
+      const reason = struct.data["atom(reason)"][1];
+
+      const moduleName = Interpreter.inspect(module);
+      const mfa = `${moduleName}.${functionName}/${arity}`;
+
+      if (reason.value !== "module could not be loaded") {
+        return Type.bitstring(`function ${mfa} is undefined or private`);
+      }
+
+      // The alias hint is offered only for a module named by a single segment,
+      // which is what an undefined alias looks like.
+      const segments = moduleName.split(".");
+
+      const hint =
+        Type.isAlias(module) && segments.length === 1
+          ? ". Make sure the module name is correct and has been specified in full (or that an alias has been defined)"
+          : "";
+
+      return Type.bitstring(
+        `function ${mfa} is undefined (module ${moduleName} is not available)${hint}`,
+      );
+    },
+  });
+
   defineGlobalModule(
     "Elixir_TryClauseError",
     defineElixirTermErrorModule("no try clause matching:"),
