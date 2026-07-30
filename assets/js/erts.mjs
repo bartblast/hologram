@@ -73,6 +73,42 @@ export default class ERTS {
   static utf8Decoder = new TextDecoder("utf-8", {fatal: true});
   static utf8Encoder = new TextEncoder();
 
+  // Mirrors the format_error_map/3 that erl_erts_errors, erl_kernel_errors and erl_stdlib_errors
+  // each define identically: fragments name argument positions in order starting at the given
+  // number, an "" fragment leaves its position unnamed, and a {general: fragment} fragment names
+  // the call as a whole instead of an argument. Fragments are expanded by the calling module's own
+  // expand_error/1, which is the only part the three OTP copies differ in. The entries accumulate
+  // into the given boxed map.
+  static formatErrorMap(fragments, argumentNumber, map, expandError) {
+    const result = Type.cloneMap(map);
+    let currentArgumentNumber = argumentNumber;
+
+    for (const fragment of fragments) {
+      if (fragment === "") {
+        ++currentArgumentNumber;
+        continue;
+      }
+
+      if (typeof fragment === "object" && "general" in fragment) {
+        const generalKey = Type.atom("general");
+
+        result.data[Type.encodeMapKey(generalKey)] = [
+          generalKey,
+          expandError(fragment.general),
+        ];
+
+        continue;
+      }
+
+      const key = Type.integer(currentArgumentNumber);
+      result.data[Type.encodeMapKey(key)] = [key, expandError(fragment)];
+
+      ++currentArgumentNumber;
+    }
+
+    return result;
+  }
+
   static registerNativeObject(object) {
     const ref = $.uniqueReference();
     $.nativeObjectRegistry.put(ref, object);

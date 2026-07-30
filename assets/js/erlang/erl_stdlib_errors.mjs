@@ -14,20 +14,22 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Erl_Stdlib_Errors = {
-  // Mirrors OTP's private expand_error/1. Every fragment text is colocated
-  // here. The formatter clauses and must_be_* helpers return tags, and fragments
-  // without an entry (e.g. "not present in map") are literal chardata that
-  // passes through unchanged, like OTP's expand_error(Other) -> Other
-  // fallback. The not_fun tags form a closed set: the arity is always a
-  // literal demanded by a formatter clause, and OTP names no arities beyond
-  // these.
+  // Mirrors OTP's private expand_error/1, returning boxed chardata. Every
+  // fragment text is colocated here. The formatter clauses and must_be_*
+  // helpers return tags, and fragments without an entry (e.g. "not present in
+  // map") are literal texts that pass through unchanged, like OTP's
+  // expand_error(Other) -> Other fallback. The not_fun tags form a closed
+  // set: the arity is always a literal demanded by a formatter clause, and
+  // OTP names no arities beyond these.
   // Start _expand_error/1
   "_expand_error/1": (fragment) => {
     // Mirrors OTP's expand_error({bad_regexp, {Reason, Column}}) clause.
     if (typeof fragment === "object" && "badRegexp" in fragment) {
       const {message, position} = fragment.badRegexp;
 
-      return `could not parse regular expression\n${message} on character ${position}`;
+      return Type.bitstring(
+        `could not parse regular expression\n${message} on character ${position}`,
+      );
     }
 
     const texts = {
@@ -56,7 +58,7 @@ const Erlang_Erl_Stdlib_Errors = {
       range: "out of range",
     };
 
-    return texts[fragment] ?? fragment;
+    return Type.bitstring(texts[fragment] ?? fragment);
   },
   // End _expand_error/1
   // Deps: []
@@ -242,46 +244,19 @@ const Erlang_Erl_Stdlib_Errors = {
   // End _format_binary_error/3
   // Deps: [:erl_stdlib_errors._must_be_binary/1, :erl_stdlib_errors._must_be_binary_replacement/1, :erl_stdlib_errors._must_be_non_neg_integer/1, :erl_stdlib_errors._must_be_pattern/1, :erl_stdlib_errors._must_be_position/1]
 
-  // Mirrors OTP's private format_error_map/3. Fragments map to argument
-  // positions in order starting at the given number, "" entries skip their
-  // position, and {general: text} entries land under the :general key
-  // instead of consuming a position. Other composite fragments (e.g. the
-  // badRegexp one) consume a position like plain tags. Entries accumulate
-  // into the given boxed map.
+  // Mirrors OTP's private format_error_map/3, which the three OTP error
+  // modules define identically - the client keeps the one implementation in
+  // the ERTS facade and passes this module's expand_error/1 to it. Composite
+  // fragments other than {general: text} (e.g. the badRegexp one) consume an
+  // argument position like plain tags do.
   // Start _format_error_map/3
-  "_format_error_map/3": (fragments, argumentNumber, map) => {
-    const result = Type.cloneMap(map);
-    let currentArgumentNumber = argumentNumber;
-
-    for (const fragment of fragments) {
-      if (fragment === "") {
-        ++currentArgumentNumber;
-        continue;
-      }
-
-      const expand = Erlang_Erl_Stdlib_Errors["_expand_error/1"];
-
-      if (typeof fragment === "object" && "general" in fragment) {
-        const key = Type.atom("general");
-        result.data[Type.encodeMapKey(key)] = [
-          key,
-          Type.bitstring(expand(fragment.general)),
-        ];
-
-        continue;
-      }
-
-      const key = Type.integer(currentArgumentNumber);
-      result.data[Type.encodeMapKey(key)] = [
-        key,
-        Type.bitstring(expand(fragment)),
-      ];
-
-      ++currentArgumentNumber;
-    }
-
-    return result;
-  },
+  "_format_error_map/3": (fragments, argumentNumber, map) =>
+    ERTS.formatErrorMap(
+      fragments,
+      argumentNumber,
+      map,
+      Erlang_Erl_Stdlib_Errors["_expand_error/1"],
+    ),
   // End _format_error_map/3
   // Deps: [:erl_stdlib_errors._expand_error/1]
 

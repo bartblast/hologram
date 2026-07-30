@@ -9,6 +9,94 @@ import Type from "../../assets/js/type.mjs";
 defineRuntimeGlobals();
 
 describe("ERTS", () => {
+  describe("formatErrorMap()", () => {
+    const expandError = (fragment) => Type.bitstring(`expanded ${fragment}`);
+
+    it("names the argument positions the fragments describe", () => {
+      const result = ERTS.formatErrorMap(
+        ["not_atom", "not_list"],
+        1,
+        Type.map(),
+        expandError,
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.integer(1), Type.bitstring("expanded not_atom")],
+          [Type.integer(2), Type.bitstring("expanded not_list")],
+        ]),
+      );
+    });
+
+    it("counts the argument positions from the given number", () => {
+      const result = ERTS.formatErrorMap(
+        ["not_atom"],
+        3,
+        Type.map(),
+        expandError,
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(3), Type.bitstring("expanded not_atom")]]),
+      );
+    });
+
+    it("leaves the position of an empty fragment unnamed", () => {
+      const result = ERTS.formatErrorMap(
+        ["", "not_list"],
+        1,
+        Type.map(),
+        expandError,
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.integer(2), Type.bitstring("expanded not_list")]]),
+      );
+    });
+
+    it("names the call as a whole for a general fragment", () => {
+      const result = ERTS.formatErrorMap(
+        [{general: "bad_options"}, "not_list"],
+        1,
+        Type.map(),
+        expandError,
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.atom("general"), Type.bitstring("expanded bad_options")],
+          [Type.integer(1), Type.bitstring("expanded not_list")],
+        ]),
+      );
+    });
+
+    it("keeps the entries the given map already holds", () => {
+      const map = Type.map([[Type.atom("reason"), Type.bitstring("boom")]]);
+
+      const result = ERTS.formatErrorMap(["not_atom"], 1, map, expandError);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.atom("reason"), Type.bitstring("boom")],
+          [Type.integer(1), Type.bitstring("expanded not_atom")],
+        ]),
+      );
+    });
+
+    it("leaves the given map untouched", () => {
+      const map = Type.map();
+
+      ERTS.formatErrorMap(["not_atom"], 1, map, expandError);
+
+      assert.deepStrictEqual(map, Type.map());
+    });
+  });
+
   describe("registerNativeObject()", () => {
     it("returns a reference", () => {
       const obj = {a: 1};

@@ -545,30 +545,17 @@ const Erlang_Erl_Erts_Errors = {
   // End _format_erlang_error/3
   // Deps: [:erlang._is_valid_time_unit/1]
 
-  // Mirrors OTP's private format_error_map/3. Fragments map to argument
-  // positions in order starting at the given number, and "" entries skip
-  // their position. Entries accumulate into the given boxed map.
+  // Mirrors OTP's private format_error_map/3, which the three OTP error
+  // modules define identically - the client keeps the one implementation in
+  // the ERTS facade and passes this module's expand_error/1 to it.
   // Start _format_error_map/3
-  "_format_error_map/3": (fragments, argumentNumber, map) => {
-    const result = Type.cloneMap(map);
-    let currentArgumentNumber = argumentNumber;
-
-    for (const fragment of fragments) {
-      if (fragment === "") {
-        ++currentArgumentNumber;
-        continue;
-      }
-
-      const expand = Erlang_Erl_Erts_Errors["_expand_error/1"];
-
-      const key = Type.integer(currentArgumentNumber);
-      result.data[Type.encodeMapKey(key)] = [key, expand(fragment)];
-
-      ++currentArgumentNumber;
-    }
-
-    return result;
-  },
+  "_format_error_map/3": (fragments, argumentNumber, map) =>
+    ERTS.formatErrorMap(
+      fragments,
+      argumentNumber,
+      map,
+      Erlang_Erl_Erts_Errors["_expand_error/1"],
+    ),
   // End _format_error_map/3
   // Deps: [:erl_erts_errors._expand_error/1]
 
