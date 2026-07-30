@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import ERTS from "../erts.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -581,13 +582,9 @@ const Erlang_Erl_Erts_Errors = {
   // unknown error tags.
   // Start format_bs_fail/2
   "format_bs_fail/2": (reason, stacktrace) => {
-    const isFourTupleTopFrame =
-      Type.isList(stacktrace) &&
-      stacktrace.data.length > 0 &&
-      Type.isTuple(stacktrace.data[0]) &&
-      stacktrace.data[0].data.length === 4;
+    const frame = ERTS.callStack.unboxTopFrame(stacktrace);
 
-    if (!isFourTupleTopFrame) {
+    if (frame === null) {
       Interpreter.raiseFunctionClauseError(
         "erl_erts_errors",
         "format_bs_fail",
@@ -596,20 +593,7 @@ const Erlang_Erl_Erts_Errors = {
       );
     }
 
-    const frameLocation = stacktrace.data[0].data[3];
-
-    const errorInfoEntry = Type.isList(frameLocation)
-      ? frameLocation.data.find(
-          (entry) =>
-            Type.isTuple(entry) &&
-            entry.data.length === 2 &&
-            Type.isAtom(entry.data[0]) &&
-            entry.data[0].value === "error_info" &&
-            Type.isMap(entry.data[1]),
-        )
-      : undefined;
-
-    const errorInfoMap = errorInfoEntry?.data[1];
+    const errorInfoMap = frame.errorInfo;
 
     const cause =
       errorInfoMap?.data[Type.encodeMapKey(Type.atom("cause"))]?.[1];
@@ -703,13 +687,9 @@ const Erlang_Erl_Erts_Errors = {
 
   // Start format_error/2
   "format_error/2": (reason, stacktrace) => {
-    const isFourTupleTopFrame =
-      Type.isList(stacktrace) &&
-      stacktrace.data.length > 0 &&
-      Type.isTuple(stacktrace.data[0]) &&
-      stacktrace.data[0].data.length === 4;
+    const frame = ERTS.callStack.unboxTopFrame(stacktrace);
 
-    if (!isFourTupleTopFrame) {
+    if (frame === null) {
       Interpreter.raiseFunctionClauseError(
         "erl_erts_errors",
         "format_error",
@@ -718,34 +698,13 @@ const Erlang_Erl_Erts_Errors = {
       );
     }
 
-    const frameModule = stacktrace.data[0].data[0];
-    const frameFun = stacktrace.data[0].data[1];
-    const frameArgsOrArity = stacktrace.data[0].data[2];
-    const frameLocation = stacktrace.data[0].data[3];
-
-    // Mirrors OTP's cause lookup: the location's error_info map may carry a
+    // Mirrors OTP's cause lookup: the frame's error_info map may carry a
     // cause entry that refines the formatter's diagnosis, defaulting to
     // :none.
-    let cause = Type.atom("none");
+    const causeEntry =
+      frame.errorInfo?.data[Type.encodeMapKey(Type.atom("cause"))];
 
-    if (Type.isList(frameLocation)) {
-      for (const entry of frameLocation.data) {
-        if (
-          Type.isTuple(entry) &&
-          entry.data.length === 2 &&
-          Type.isAtom(entry.data[0]) &&
-          entry.data[0].value === "error_info" &&
-          Type.isMap(entry.data[1])
-        ) {
-          const causeEntry =
-            entry.data[1].data[Type.encodeMapKey(Type.atom("cause"))];
-
-          if (causeEntry !== undefined) {
-            cause = causeEntry[1];
-          }
-        }
-      }
-    }
+    const cause = causeEntry ? causeEntry[1] : Type.atom("none");
 
     let fragments = [];
 
@@ -754,10 +713,10 @@ const Erlang_Erl_Erts_Errors = {
     const isSystemLimit =
       Type.isAtom(reason) && reason.value === "system_limit";
 
-    if (!isSystemLimit && frameModule.value === "erlang") {
+    if (!isSystemLimit && frame.module.value === "erlang") {
       fragments = Erlang_Erl_Erts_Errors["_format_erlang_error/3"](
-        frameFun,
-        frameArgsOrArity,
+        frame.function,
+        frame.arityOrArgs,
         cause,
       );
     }

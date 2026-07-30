@@ -92,6 +92,44 @@ export default class CallStack {
   static snapshot() {
     return $.#frames.slice().reverse();
   }
+
+  // Reads the innermost entry of a boxed Erlang stacktrace, returning the identity that raised,
+  // its boxed args (or bare arity), and its location's error_info map, which is null when the
+  // location names none. A location holding more than one error_info entry resolves to the first,
+  // the way a keyword list lookup does. Returns null when the stacktrace has no innermost entry
+  // in the {module, function, arity_or_args, location} shape - the OTP error formatters that
+  // consume one accept nothing else.
+  static unboxTopFrame(stacktrace) {
+    if (
+      !Type.isList(stacktrace) ||
+      stacktrace.data.length === 0 ||
+      !Type.isTuple(stacktrace.data[0]) ||
+      stacktrace.data[0].data.length !== 4
+    ) {
+      return null;
+    }
+
+    const [module, functionName, arityOrArgs, location] =
+      stacktrace.data[0].data;
+
+    const errorInfoEntry = Type.isList(location)
+      ? location.data.find(
+          (entry) =>
+            Type.isTuple(entry) &&
+            entry.data.length === 2 &&
+            Type.isAtom(entry.data[0]) &&
+            entry.data[0].value === "error_info" &&
+            Type.isMap(entry.data[1]),
+        )
+      : undefined;
+
+    return {
+      arityOrArgs,
+      errorInfo: errorInfoEntry ? errorInfoEntry.data[1] : null,
+      function: functionName,
+      module,
+    };
+  }
 }
 
 const $ = CallStack;
