@@ -395,6 +395,15 @@ function defineElixirExceptionModule() {
     "format_mfa/3": (module, fun, arity) =>
       Type.bitstring(formatMfa(module, fun.value, arity.value)),
 
+    // Mirrors Exception.format_stacktrace/1: one indented entry per frame,
+    // each naming where the call was made and then the call itself.
+    "format_stacktrace/1": (stacktrace) =>
+      Type.bitstring(
+        stacktrace.data
+          .map((entry) => `    ${formatStacktraceEntry(entry)}\n`)
+          .join(""),
+      ),
+
     // Mirrors Exception.message/1, which delegates to the exception module's
     // message/1 callback. When a test defines the exception module as a
     // global, it is dispatched to. Otherwise the default defexception
@@ -1007,6 +1016,30 @@ function formatMfa(module, functionName, arity) {
     : `"${functionName}"`;
 
   return `${moduleName}.${inspectedName}/${arity}`;
+}
+
+// Mirrors Exception.format_stacktrace_entry/1 for the frames the tests build:
+// the file and line the call was made from, then the call. A frame carrying
+// args spells them out in place of the arity, as the server does.
+function formatStacktraceEntry(entry) {
+  const [module, fun, arityOrArgs, location] = entry.data;
+
+  const locationValue = (key) =>
+    location.data.find((item) => item.data[0].value === key)?.data[1];
+
+  const file = locationValue("file").data.map((byte) =>
+    String.fromCharCode(Number(byte.value)),
+  );
+
+  const line = locationValue("line").value;
+
+  const call = Type.isList(arityOrArgs)
+    ? `${Interpreter.inspect(module)}.${fun.value}(${arityOrArgs.data
+        .map((arg) => Interpreter.inspect(arg))
+        .join(", ")})`
+    : formatMfa(module, fun.value, arityOrArgs.value);
+
+  return `${file.join("")}:${line}: ${call}`;
 }
 
 // Based on deepFreeze() from: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze

@@ -310,6 +310,30 @@ export default class Hologram {
     };
   }
 
+  // Prints an uncaught boxed error to the console the way the server prints
+  // one, so the reader sees Elixir frames instead of the minified JavaScript
+  // stack the browser would report. Returns whether the error was a boxed one,
+  // which is what decides if the browser's own reporting is suppressed - an
+  // error from outside the runtime keeps it.
+  static handleUncaughtError(error) {
+    if (!(error instanceof HologramBoxedError)) {
+      return false;
+    }
+
+    // Read by the feature test helpers, which assert against the error the
+    // page last raised.
+    GlobalRegistry.set("lastBoxedError", {
+      module: Interpreter.inspect(
+        Erlang_Maps["get/2"](Type.atom("__struct__"), error.struct),
+      ),
+      message: Interpreter.resolveErrorMessage(error.blamedStruct),
+    });
+
+    console.error(Interpreter.formatBoxedError(error));
+
+    return true;
+  }
+
   // Made public to make tests easier
   static async loadNewPage(pagePath, html) {
     await $.#savePageSnapshot();
@@ -837,33 +861,19 @@ export default class Hologram {
   // Executed only once, on the initial page load.
   // Deps: [:maps.get/2]
   static async #init() {
-    // TODO: consider when porting Elixir error handling
-    // window.addEventListener("error", (event) => {
-    //   if (event.error instanceof HologramBoxedError) {
-    //     console.error(`${event.error.message}\n`, event.error);
-    //     event.preventDefault();
-    //   }
-    // });
-
-    // TODO: consider when porting Elixir error handling
-    const handleBoxedError = (error) => {
-      if (error instanceof HologramBoxedError) {
-        GlobalRegistry.set("lastBoxedError", {
-          module: Interpreter.inspect(
-            Erlang_Maps["get/2"](Type.atom("__struct__"), error.struct),
-          ),
-          message: Interpreter.resolveErrorMessage(error.blamedStruct),
-        });
+    window.addEventListener("error", (event) => {
+      if ($.handleUncaughtError(event.error)) {
+        event.preventDefault();
       }
-    };
-
-    window.addEventListener("error", (event) => handleBoxedError(event.error));
+    });
 
     // Async action errors surface as rejected Promises (from the .then() path
     // in executeAction) and fire "unhandledrejection" instead of "error".
-    window.addEventListener("unhandledrejection", (event) =>
-      handleBoxedError(event.reason),
-    );
+    window.addEventListener("unhandledrejection", (event) => {
+      if ($.handleUncaughtError(event.reason)) {
+        event.preventDefault();
+      }
+    });
 
     window.addEventListener("beforeunload", () => {
       // Force synchronous session storage save since async OPFS may not complete before page termination

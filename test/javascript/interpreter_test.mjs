@@ -4175,6 +4175,43 @@ describe("Interpreter", () => {
     assert.deepStrictEqual(result, Type.integer(1));
   });
 
+  describe("formatBoxedError()", () => {
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    it("renders the banner and the stacktrace", () => {
+      CallStack.push({
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      });
+
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyError", "my message"),
+      );
+
+      assert.equal(
+        Interpreter.formatBoxedError(error),
+        "** (MyError) my message\n    lib/my_module.ex:11: MyModule.my_fun/1\n",
+      );
+    });
+
+    it("renders the banner alone when the error has no frames", () => {
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyError", "my message"),
+      );
+
+      assert.equal(
+        Interpreter.formatBoxedError(error),
+        "** (MyError) my message",
+      );
+    });
+  });
+
   it("getErrorType()", () => {
     const errorStruct = Type.errorStruct("MyError", "my message");
     const jsError = new HologramBoxedError(errorStruct);

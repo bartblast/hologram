@@ -8,12 +8,15 @@ import {
   UUID_REGEX,
 } from "./support/helpers.mjs";
 
+import CallStack from "../../assets/js/erts/call_stack.mjs";
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Config from "../../assets/js/config.mjs";
 import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
+import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
+import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -1092,6 +1095,59 @@ describe("Hologram", () => {
       });
 
       sinon.assert.notCalled(loadNewPageStub);
+    });
+  });
+
+  describe("handleUncaughtError()", () => {
+    let consoleErrorStub;
+
+    const boxedError = () =>
+      new HologramBoxedError(Type.errorStruct("MyError", "my message"));
+
+    beforeEach(() => {
+      CallStack.reset();
+      consoleErrorStub = sinon.stub(console, "error");
+    });
+
+    afterEach(() => {
+      consoleErrorStub.restore();
+    });
+
+    it("prints the error the way the server prints an uncaught one", () => {
+      CallStack.push({
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      });
+
+      Hologram.handleUncaughtError(boxedError());
+
+      sinon.assert.calledWith(
+        consoleErrorStub,
+        "** (MyError) my message\n    lib/my_module.ex:11: MyModule.my_fun/1\n",
+      );
+    });
+
+    it("records the error for the feature test helpers", () => {
+      Hologram.handleUncaughtError(boxedError());
+
+      assert.deepStrictEqual(GlobalRegistry.get("lastBoxedError"), {
+        module: "MyError",
+        message: "my message",
+      });
+    });
+
+    it("reports a boxed error as handled", () => {
+      assert.isTrue(Hologram.handleUncaughtError(boxedError()));
+    });
+
+    it("leaves an error raised outside the runtime to the browser", () => {
+      assert.isFalse(Hologram.handleUncaughtError(new Error("my message")));
+
+      sinon.assert.notCalled(consoleErrorStub);
     });
   });
 

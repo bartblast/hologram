@@ -555,6 +555,28 @@ export default class Interpreter {
     return Interpreter.evaluateJavaScriptCode(`return (${expr});`);
   }
 
+  // Renders a boxed error the way the server renders an uncaught one: the
+  // banner naming the exception and its message, then the stacktrace, which
+  // the transpiled Exception.format_stacktrace/1 renders so the frames read
+  // as they do on the server. A frameless error is its banner alone, as
+  // Exception.format/3 leaves the section off for an empty stacktrace.
+  // Deps: [Exception.format_stacktrace/1]
+  static formatBoxedError(error) {
+    const banner = `** ${error.message}`;
+
+    if (error.stacktrace.length === 0) {
+      return banner;
+    }
+
+    const boxedStacktrace = Type.list(error.stacktrace.map(CallStack.boxFrame));
+
+    const stacktraceText = Bitstring.toText(
+      Elixir_Exception["format_stacktrace/1"](boxedStacktrace),
+    );
+
+    return `${banner}\n${stacktraceText}`;
+  }
+
   // Returns the registered clause heads of the given function, or null when it
   // has none.
   static functionClauseHeads(moduleExName, functionName, arity) {
