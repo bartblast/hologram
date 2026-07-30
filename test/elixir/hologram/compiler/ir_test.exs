@@ -110,7 +110,8 @@ defmodule Hologram.Compiler.IRTest do
                   }
                 ]
               },
-              line: 3
+              line: 3,
+              blame: %{params: ["x", "y"], guards: []}
             }
           },
           %IR.FunctionDefinition{
@@ -150,7 +151,8 @@ defmodule Hologram.Compiler.IRTest do
                   }
                 ]
               },
-              line: 7
+              line: 7,
+              blame: %{params: [], guards: []}
             }
           }
         ]

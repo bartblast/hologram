@@ -2722,7 +2722,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                        ]
                      }
                    ]
-                 }
+                 },
+                 blame: %{params: ["x0", "x1", "x2"], guards: []}
                }
              }
     end
@@ -4504,7 +4505,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                      body: %IR.Block{
                        expressions: [%IR.AtomType{value: Protocol1.Integer}]
                      },
-                     line: 2
+                     line: 2,
+                     blame: %{params: [":target"], guards: []}
                    }
                  }
 
@@ -4521,7 +4523,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: Integer}]
                  },
-                 line: 2
+                 line: 2,
+                 blame: %{params: [":for"], guards: []}
                }
              }
 
@@ -4535,7 +4538,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: Protocol1}]
                  },
-                 line: 2
+                 line: 2,
+                 blame: %{params: [":protocol"], guards: []}
                }
              }
     end
@@ -4566,7 +4570,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: Protocol1}]
                  },
-                 line: 2
+                 line: 2,
+                 blame: %{params: [":module"], guards: []}
                }
              }
 
@@ -4591,7 +4596,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                      }
                    ]
                  },
-                 line: 2
+                 line: 2,
+                 blame: %{params: [":functions"], guards: []}
                }
              }
 
@@ -4605,7 +4611,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: true}]
                  },
-                 line: 2
+                 line: 2,
+                 blame: %{params: [":consolidated?"], guards: []}
                }
              }
 
@@ -4631,7 +4638,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                      }
                    ]
                  },
-                 line: 2
+                 line: 2,
+                 blame: %{params: [":impls"], guards: []}
                }
              }
     end
@@ -4966,7 +4974,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                      %IR.AtomType{value: Module.safe_concat(Protocol1, Struct1)}
                    ]
                  },
-                 line: 2
+                 line: 2,
+                 blame: %{params: [inspect(Struct1)], guards: []}
                }
              }
 
@@ -4980,7 +4989,10 @@ defmodule Hologram.Compiler.CallGraphTest do
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: nil}]
                  },
-                 line: 2
+                 line: 2,
+                 # Consolidation gives the catch-all param a context that Macro
+                 # walking rejects, so its clause head can't be rendered.
+                 blame: nil
                }
              }
     end

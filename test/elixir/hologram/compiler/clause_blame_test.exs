@@ -39,6 +39,23 @@ defmodule Hologram.Compiler.ClauseBlameTest do
     {name, [], nil}
   end
 
+  describe "build/2" do
+    test "renders the clause head" do
+      guard = erlang_call(:is_atom, [var(:module)])
+
+      assert build([var(:module)], [guard]) ==
+               %{params: ["module"], guards: [{:leaf, "is_atom(module)"}]}
+    end
+
+    test "returns nil when the clause head can't be rendered" do
+      # Struct expansion can leave a variable whose context is an unresolved
+      # alias, which Macro walking rejects.
+      param = {:my_var, [], {:__aliases__, [alias: false], [:Kernel, :Utils]}}
+
+      assert build([param], []) == nil
+    end
+  end
+
   describe "build_guards/1" do
     test "clause without guards" do
       assert build_guards([]) == []
@@ -47,7 +64,7 @@ defmodule Hologram.Compiler.ClauseBlameTest do
     test "guard without and/or operators" do
       guard = erlang_call(:is_atom, [var(:module)])
 
-      assert build_guards([guard]) == [{:leaf, "is_atom(module)", guard}]
+      assert build_guards([guard]) == [{:leaf, "is_atom(module)"}]
     end
 
     test "guard with an and operator" do
@@ -55,9 +72,7 @@ defmodule Hologram.Compiler.ClauseBlameTest do
       right = erlang_call(:>=, [var(:n), 0])
       guard = erlang_call(:andalso, [left, right])
 
-      assert build_guards([guard]) == [
-               {:and, {:leaf, "is_integer(n)", left}, {:leaf, "n >= 0", right}}
-             ]
+      assert build_guards([guard]) == [{:and, {:leaf, "is_integer(n)"}, {:leaf, "n >= 0"}}]
     end
 
     test "guard with an or operator" do
@@ -66,7 +81,7 @@ defmodule Hologram.Compiler.ClauseBlameTest do
       guard = erlang_call(:orelse, [left, right])
 
       assert build_guards([guard]) == [
-               {:or, {:leaf, "timeout == :infinity", left}, {:leaf, "is_integer(timeout)", right}}
+               {:or, {:leaf, "timeout == :infinity"}, {:leaf, "is_integer(timeout)"}}
              ]
     end
 
@@ -77,8 +92,8 @@ defmodule Hologram.Compiler.ClauseBlameTest do
       guard = erlang_call(:orelse, [leaf_1, erlang_call(:andalso, [leaf_2, leaf_3])])
 
       assert build_guards([guard]) == [
-               {:or, {:leaf, "timeout == :infinity", leaf_1},
-                {:and, {:leaf, "is_integer(timeout)", leaf_2}, {:leaf, "timeout >= 0", leaf_3}}}
+               {:or, {:leaf, "timeout == :infinity"},
+                {:and, {:leaf, "is_integer(timeout)"}, {:leaf, "timeout >= 0"}}}
              ]
     end
 
@@ -87,27 +102,27 @@ defmodule Hologram.Compiler.ClauseBlameTest do
       guard_2 = erlang_call(:is_binary, [var(:module)])
 
       assert build_guards([guard_1, guard_2]) == [
-               {:leaf, "is_atom(module)", guard_1},
-               {:leaf, "is_binary(module)", guard_2}
+               {:leaf, "is_atom(module)"},
+               {:leaf, "is_binary(module)"}
              ]
     end
 
     test "guard calling a function outside Kernel" do
       guard = {{:., [], [:maps, :is_key]}, [], [:a, var(:map)]}
 
-      assert build_guards([guard]) == [{:leaf, ":maps.is_key(:a, map)", guard}]
+      assert build_guards([guard]) == [{:leaf, ":maps.is_key(:a, map)"}]
     end
 
     test "guard spelling out an is_struct/1 call" do
       guard = struct_macro_guard(var(:term))
 
-      assert build_guards([guard]) == [{:leaf, "is_struct(term)", guard}]
+      assert build_guards([guard]) == [{:leaf, "is_struct(term)"}]
     end
 
     test "guard spelling out an is_struct/2 call" do
       guard = struct_macro_guard(var(:term), alias_ast(:MapSet))
 
-      assert build_guards([guard]) == [{:leaf, "is_struct(term, MapSet)", guard}]
+      assert build_guards([guard]) == [{:leaf, "is_struct(term, MapSet)"}]
     end
 
     test "guard resembling but not spelling out an is_struct/1 call" do
@@ -118,10 +133,8 @@ defmodule Hologram.Compiler.ClauseBlameTest do
       guard = erlang_call(:andalso, [erlang_call(:andalso, [map_check, key_check]), struct_check])
 
       assert build_guards([guard]) == [
-               {:and,
-                {:and, {:leaf, "is_list(term)", map_check},
-                 {:leaf, "is_map_key(term, :__struct__)", key_check}},
-                {:leaf, "is_atom(:erlang.map_get(:__struct__, term))", struct_check}}
+               {:and, {:and, {:leaf, "is_list(term)"}, {:leaf, "is_map_key(term, :__struct__)"}},
+                {:leaf, "is_atom(:erlang.map_get(:__struct__, term))"}}
              ]
     end
   end

@@ -14,9 +14,30 @@ defmodule Hologram.Compiler.ClauseBlame do
   @typedoc """
   A guard split at its top-level and/or operators: either one of those
   operators with its two operands, or a leaf carrying the rendered source of a
-  guard expression together with the AST it was rendered from.
+  guard expression. The guard IR carries the same structure, so a leaf's own IR
+  is found by walking both in step.
   """
-  @type guard :: {:and | :or, guard, guard} | {:leaf, String.t(), Macro.t()}
+  @type guard :: {:and | :or, guard, guard} | {:leaf, String.t()}
+
+  @doc """
+  Renders the given clause head, or returns nil when it can't be rendered.
+
+  Struct expansion can leave AST that Macro walking chokes on, which the server
+  handles by dropping the attempted-clauses section for the function - so the
+  same failure drops the metadata here.
+
+  ## Examples
+
+      iex> build([{:module, [], nil}], [])
+      %{params: ["module"], guards: []}
+  """
+  @spec build(list(Macro.t()), list(Macro.t())) ::
+          %{params: list(String.t()), guards: list(guard)} | nil
+  def build(params, guards) do
+    %{params: build_params(params), guards: build_guards(guards)}
+  rescue
+    _error -> nil
+  end
 
   @doc """
   Splits the given clause guards at their top-level and/or operators, rendering
@@ -25,7 +46,7 @@ defmodule Hologram.Compiler.ClauseBlame do
   ## Examples
 
       iex> build_guards([{{:., [], [:erlang, :is_atom]}, [], [{:module, [], nil}]}])
-      [{:leaf, "is_atom(module)", {{:., [], [:erlang, :is_atom]}, [], [{:module, [], nil}]}}]
+      [{:leaf, "is_atom(module)"}]
   """
   @spec build_guards(list(Macro.t())) :: list(guard)
   def build_guards(guards) do
@@ -89,8 +110,8 @@ defmodule Hologram.Compiler.ClauseBlame do
 
   # An is_struct/1,2 guard is spelled out as a conjunction of map, key and
   # struct-field checks, which the server folds back into the macro call when
-  # it renders the clause. The conjunction stays as the node's AST, so the
-  # client evaluates it as one unit, the way the server marks it as one.
+  # it renders the clause. The conjunction becomes a single leaf, so the client
+  # evaluates it as one unit, the way the server marks it as one.
   defp struct_macro_args(
          {:op, :and, _ast,
           {:op, :and, _left_ast, {:node, _map_ast, map_node = {_map_fun, _map_meta, [term]}},
@@ -142,8 +163,8 @@ defmodule Hologram.Compiler.ClauseBlame do
     {op, to_guard(left), to_guard(right)}
   end
 
-  defp to_guard({:node, ast, rewritten_ast}) do
-    {:leaf, Macro.to_string(rewritten_ast), ast}
+  defp to_guard({:node, _ast, rewritten_ast}) do
+    {:leaf, Macro.to_string(rewritten_ast)}
   end
 
   # Debug info spells guards out as :erlang remote calls, which the server maps

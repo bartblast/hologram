@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.IR do
   alias Hologram.Commons.AtomUtils
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler.AST
+  alias Hologram.Compiler.ClauseBlame
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Transformer
@@ -218,13 +219,16 @@ defmodule Hologram.Compiler.IR do
 
     # line is the clause head's line in the module's source file, or nil when
     # the AST metadata carries none.
-    defstruct [:params, :guards, :body, :line]
+    # blame is the clause head rendered for attempted-clause reporting, or nil
+    # for an anonymous function clause, which the server doesn't report either.
+    defstruct [:params, :guards, :body, :line, :blame]
 
     @type t :: %__MODULE__{
             params: list(IR.t()),
             guards: list(IR.t()),
             body: IR.Block.t(),
-            line: integer | nil
+            line: integer | nil,
+            blame: %{params: list(String.t()), guards: list(ClauseBlame.guard())} | nil
           }
   end
 

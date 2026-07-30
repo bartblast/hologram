@@ -12,6 +12,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   alias Hologram.Compiler.AST
+  alias Hologram.Compiler.ClauseBlame
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
@@ -808,13 +809,14 @@ defmodule Hologram.Compiler.Transformer do
         :private
       end
 
-    guards_ir =
+    guards_asts =
       if guards do
-        transform_guards(guards, context)
+        split_guards(guards)
       else
         []
       end
 
+    guards_ir = Enum.map(guards_asts, &transform(&1, context))
     params_ir = transform_list(params, %{context | pattern?: true})
 
     %IR.FunctionDefinition{
@@ -825,17 +827,24 @@ defmodule Hologram.Compiler.Transformer do
         params: params_ir,
         guards: guards_ir,
         body: transform(body, context),
-        line: meta[:line]
+        line: meta[:line],
+        blame: ClauseBlame.build(params, guards_asts)
       }
     }
   end
 
-  defp transform_guards({:when, _meta, [guard, rest]}, context) do
-    [transform(guard, context) | transform_guards(rest, context)]
+  defp split_guards({:when, _meta, [guard, rest]}) do
+    [guard | split_guards(rest)]
+  end
+
+  defp split_guards(ast) do
+    [ast]
   end
 
   defp transform_guards(ast, context) do
-    [transform(ast, context)]
+    ast
+    |> split_guards()
+    |> Enum.map(&transform(&1, context))
   end
 
   defp transform_list(list, context) do

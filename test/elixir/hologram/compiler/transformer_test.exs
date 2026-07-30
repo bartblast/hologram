@@ -4041,7 +4041,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.Variable{name: :x}
                    ]
                  },
-                 line: 1
+                 line: 1,
+                 blame: %{params: ["x"], guards: [{:leaf, "is_integer(x)"}]}
                }
              }
     end
@@ -4067,7 +4068,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.Variable{name: :x, version: 0}
                    ]
                  },
-                 line: 3
+                 line: 3,
+                 blame: %{params: ["x"], guards: [{:leaf, "is_integer(x)"}]}
                }
              }
     end
@@ -4103,7 +4105,11 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.Variable{name: :x}
                    ]
                  },
-                 line: 1
+                 line: 1,
+                 blame: %{
+                   params: ["x"],
+                   guards: [{:leaf, "is_integer(x)"}, {:leaf, "x > 1"}]
+                 }
                }
              }
     end
@@ -4134,7 +4140,11 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.Variable{name: :x, version: 0}
                    ]
                  },
-                 line: 3
+                 line: 3,
+                 blame: %{
+                   params: ["x"],
+                   guards: [{:leaf, "is_integer(x)"}, {:leaf, "x > 1"}]
+                 }
                }
              }
     end
@@ -4174,7 +4184,11 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.Variable{name: :x}
                    ]
                  },
-                 line: 1
+                 line: 1,
+                 blame: %{
+                   params: ["x"],
+                   guards: [{:leaf, "is_integer(x)"}, {:leaf, "x > 1"}, {:leaf, "x < 9"}]
+                 }
                }
              }
     end
@@ -4210,7 +4224,11 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.Variable{name: :x, version: 0}
                    ]
                  },
-                 line: 3
+                 line: 3,
+                 blame: %{
+                   params: ["x"],
+                   guards: [{:leaf, "is_integer(x)"}, {:leaf, "x > 1"}, {:leaf, "x < 9"}]
+                 }
                }
              }
     end
