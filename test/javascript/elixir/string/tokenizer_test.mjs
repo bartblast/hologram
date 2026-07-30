@@ -155,6 +155,13 @@ describe("Elixir_String_Tokenizer", () => {
       );
     });
 
+    it("micro sign normalizes to Greek mu", () => {
+      assert.deepStrictEqual(
+        tokenize([181]),
+        success("identifier", "μ", "", 1, false, ["nfkc"]),
+      );
+    });
+
     it("Greek mu combines with any script", () => {
       assert.deepStrictEqual(
         tokenize(codePoints("aμ")),

@@ -168,17 +168,11 @@ const intersect = (scriptSet1, scriptSet2) => {
 
 const isEmpty = (scriptSet) => scriptSet !== ALL && scriptSet.size === 0;
 
-// NFC form of a single codepoint, as an array of codepoints, or null when it is NFC-stable.
-const nfcExpansion = (codePoint) => {
-  const char = String.fromCodePoint(codePoint);
-  const normalized = char.normalize("NFC");
-
-  if (normalized === char) {
-    return null;
-  }
-
-  return Array.from(normalized).map((c) => c.codePointAt(0));
-};
+// Mirrors normalize_start/1, whose entire domain - verified against the oracle across every
+// usable codepoint - is the micro sign, normalized to Greek mu the way Elixir's Unicode syntax
+// documents. It is not a normalization rule: NFC-unstable codepoints outside this map are
+// rejected, and NFC of the accumulated identifier happens in validate.
+const NORMALIZE_START = new Map([[181, 956]]);
 
 // Mirrors chunks_single?/1: underscore splits an identifier into chunks, each of which must be
 // single-script on its own - how "fox_狐" stays valid while "fox狐" does not.
@@ -225,12 +219,17 @@ const moveToFront = (list, name) => {
 };
 
 // Mirrors continue/6. Consumes codepoints from index onward, returning
-// {acc, restIndex, length, asciiLetters, scriptSet, special} or an error object. acc keeps the
-// original codepoints - validate normalizes once at the end, which lands on the same NFC form as
-// the server's per-character replacement.
-const continueTokens = (codePoints, index, acc, asciiLetters, scriptSet) => {
-  const special = [];
-
+// {acc, restIndex, length, asciiLetters, scriptSet, special} or an error object. Except for the
+// normalize_start replacement, acc keeps the original codepoints - validate normalizes once at
+// the end, which lands on the same NFC form as the server's per-character replacement.
+const continueTokens = (
+  codePoints,
+  index,
+  acc,
+  asciiLetters,
+  scriptSet,
+  special,
+) => {
   while (index < codePoints.length) {
     const head = codePoints[index];
 
@@ -266,23 +265,24 @@ const continueTokens = (codePoints, index, acc, asciiLetters, scriptSet) => {
       return {acc, restIndex: index, asciiLetters, scriptSet, special};
     }
 
+    // The normalize map wins over the class table: its members are recorded there as usable
+    // (the oracle probe sees only the success), yet on the BEAM they reach normalize_start.
+    if (NORMALIZE_START.has(head)) {
+      const normalized = NORMALIZE_START.get(head);
+      acc.push(normalized);
+      scriptSet = intersect(scriptSet, scriptSetOf(normalized));
+      asciiLetters = false;
+      moveToFront(special, "nfkc");
+      ++index;
+      continue;
+    }
+
     const headClass = classOf(head);
 
     if (headClass === "I" || headClass === "A" || headClass === "C") {
       acc.push(head);
       scriptSet = intersect(scriptSet, scriptSetOf(head));
       asciiLetters = false;
-      ++index;
-      continue;
-    }
-
-    const expansion = nfcExpansion(head);
-
-    if (expansion !== null && classOf(expansion[0]) === "I") {
-      acc.push(head);
-      scriptSet = intersect(scriptSet, scriptSetOf(expansion[0]));
-      asciiLetters = false;
-      moveToFront(special, "nfkc");
       ++index;
       continue;
     }
@@ -383,6 +383,9 @@ const Elixir_String_Tokenizer = {
     let asciiLetters;
     let scriptSet;
 
+    let firstCodePoint = head;
+    let special = [];
+
     if (asciiUpper(head)) {
       kind = "alias";
       asciiLetters = true;
@@ -395,6 +398,13 @@ const Elixir_String_Tokenizer = {
       kind = "identifier";
       asciiLetters = true;
       scriptSet = ALL;
+    } else if (NORMALIZE_START.has(head)) {
+      // Wins over the class table - see the note in continueTokens.
+      firstCodePoint = NORMALIZE_START.get(head);
+      kind = "identifier";
+      asciiLetters = false;
+      scriptSet = scriptSetOf(firstCodePoint);
+      special = ["nfkc"];
     } else {
       const headClass = classOf(head);
 
@@ -407,24 +417,17 @@ const Elixir_String_Tokenizer = {
         asciiLetters = false;
         scriptSet = scriptSetOf(head);
       } else {
-        const expansion = nfcExpansion(head);
-
-        if (expansion !== null && classOf(expansion[0]) === "I") {
-          kind = "identifier";
-          asciiLetters = false;
-          scriptSet = scriptSetOf(expansion[0]);
-        } else {
-          return Type.tuple([Type.atom("error"), Type.atom("empty")]);
-        }
+        return Type.tuple([Type.atom("error"), Type.atom("empty")]);
       }
     }
 
     const state = continueTokens(
       codePoints,
       1,
-      [head],
+      [firstCodePoint],
       asciiLetters,
       scriptSet,
+      special,
     );
 
     return validate(state, kind, codePoints);

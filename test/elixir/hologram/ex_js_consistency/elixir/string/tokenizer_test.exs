@@ -70,6 +70,10 @@ defmodule Hologram.ExJsConsistency.Elixir.String.TokenizerTest do
                {:identifier, ~c"é", [], 2, false, [:nfkc]}
     end
 
+    test "micro sign normalizes to Greek mu" do
+      assert String.Tokenizer.tokenize([181]) == {:identifier, ~c"μ", [], 1, false, [:nfkc]}
+    end
+
     test "Greek mu combines with any script" do
       assert String.Tokenizer.tokenize(~c"aμ") == {:identifier, ~c"aμ", [], 2, false, []}
     end
