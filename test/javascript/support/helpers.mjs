@@ -663,6 +663,11 @@ export function defineRuntimeGlobals() {
 
   defineGlobalModule("Elixir_String_Chars", defineElixirStringCharsModule());
 
+  defineGlobalModule(
+    "Elixir_TryClauseError",
+    defineElixirTermErrorModule("no try clause matching:"),
+  );
+
   defineGlobalModule("Elixir_UndefinedFunctionError", {
     // Mirrors UndefinedFunctionError.message/1: an eager message passes
     // through, otherwise the text names the missing function and states why
@@ -700,11 +705,6 @@ export function defineRuntimeGlobals() {
       );
     },
   });
-
-  defineGlobalModule(
-    "Elixir_TryClauseError",
-    defineElixirTermErrorModule("no try clause matching:"),
-  );
 
   defineGlobalModule(
     "Elixir_WithClauseError",
