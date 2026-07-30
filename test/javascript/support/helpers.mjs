@@ -121,7 +121,13 @@ function assertCapturedBoxedError(
   }
 
   const receivedErrorType = Interpreter.getErrorType(error);
-  const receivedErrorMessage = Interpreter.resolveErrorMessage(error.struct);
+
+  // The blamed struct is compared, matching the Elixir consistency helper,
+  // which resolves the expected message through Exception.blame/3 as well.
+  const receivedErrorMessage = Interpreter.resolveErrorMessage(
+    error.blamedStruct,
+  );
+
   const typeMatches = receivedErrorType === expectedErrorType;
 
   // The derived message text is compared, not the struct shape - errors
@@ -199,7 +205,22 @@ function defineElixirEnumModule() {
 }
 
 function defineElixirExceptionModule() {
-  return {
+  const moduleObj = {
+    // Mirrors Exception.blame(:error, reason, stacktrace): the reason is
+    // normalized and the exception module's blame/2 callback refines the
+    // result when the module defines one.
+    "blame/3": (kind, reason, stacktrace) => {
+      const struct = moduleObj["normalize/3"](kind, reason, stacktrace);
+      const structModule = struct.data["atom(__struct__)"][1];
+      const moduleProxy = Interpreter.moduleProxy(structModule);
+
+      if (moduleProxy && "blame/2" in moduleProxy) {
+        return moduleProxy["blame/2"](struct, stacktrace);
+      }
+
+      return Type.tuple([struct, stacktrace]);
+    },
+
     // Mirrors Exception.message/1, which delegates to the exception module's
     // message/1 callback. When a test defines the exception module as a
     // global, it is dispatched to. Otherwise the default defexception
@@ -321,6 +342,8 @@ function defineElixirExceptionModule() {
       ]);
     },
   };
+
+  return moduleObj;
 }
 
 function defineElixirHologramRouterHelpersModule() {

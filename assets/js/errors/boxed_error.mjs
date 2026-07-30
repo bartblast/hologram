@@ -45,25 +45,35 @@ export default class HologramBoxedError extends Error {
         configurable: true,
       });
 
+      // blamedStruct carries the same exception in its display form - what
+      // rescue sees and what an error report shows differ, since blame/2
+      // callbacks refine the struct against the stacktrace.
+      Object.defineProperty(this, "blamedStruct", {
+        value: null,
+        writable: true,
+        configurable: true,
+      });
+
       this.rederive(Type.list());
     } else {
       this.message = `(${kind.value}) ${Interpreter.inspect(value)}`;
     }
   }
 
-  // Re-derives the normalized struct and display message using the given
-  // boxed stacktrace. Message derivation may depend on the raising frame's
-  // args and error_info, which :erlang.error/3 attaches only after
-  // construction.
+  // Re-derives the normalized struct, its blamed counterpart and the display
+  // message using the given boxed stacktrace. Both derivations may depend on
+  // the raising frame's args and error_info, which :erlang.error/3 attaches
+  // only after construction.
   rederive(boxedStacktrace) {
     if (this.kind.value !== "error") {
       return;
     }
 
     this.struct = Interpreter.normalizeError(this.value, boxedStacktrace);
+    this.blamedStruct = Interpreter.blameError(this.value, boxedStacktrace);
 
     const boxedType = Interpreter.getErrorType(this);
-    const boxedMessage = Interpreter.resolveErrorMessage(this.struct);
+    const boxedMessage = Interpreter.resolveErrorMessage(this.blamedStruct);
 
     this.message = `(${boxedType}) ${boxedMessage}`;
   }

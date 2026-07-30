@@ -49,6 +49,23 @@ export default class Interpreter {
     }
   }
 
+  // Turns an :error reason into the exception struct in its display form,
+  // mirroring Elixir's Exception.blame/3: the reason is normalized and the
+  // exception module's blame/2 callback refines the struct against the
+  // stacktrace (e.g. ArithmeticError appending the failed operation). Only
+  // the struct is taken from the returned pair - the client keeps reporting
+  // the raw trace, the way rescue clauses see it.
+  // Deps: [Exception.blame/3]
+  static blameError(reason, stacktrace = Type.list()) {
+    const result = Elixir_Exception["blame/3"](
+      Type.atom("error"),
+      reason,
+      stacktrace,
+    );
+
+    return result.data[0];
+  }
+
   static buildArgumentErrorMsg(argumentIndex, message) {
     return $.buildMultiArgumentErrorMsg([[argumentIndex, message]]);
   }

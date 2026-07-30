@@ -64,10 +64,34 @@ describe("HologramBoxedError", () => {
       assert.equal(error.message, "(MyType) my message");
     });
 
+    it("renders the message from the blamed struct, which struct doesn't mirror", () => {
+      globalThis.Elixir_MyBlamedType = {
+        "blame/2": (_struct, stacktrace) =>
+          Type.tuple([
+            Type.errorStruct("MyBlamedType", "my blamed message"),
+            stacktrace,
+          ]),
+      };
+
+      const struct = Type.errorStruct("MyBlamedType", "my message");
+      const error = new HologramBoxedError(struct);
+
+      delete globalThis.Elixir_MyBlamedType;
+
+      assert.deepStrictEqual(error.struct, struct);
+
+      assert.deepStrictEqual(
+        error.blamedStruct,
+        Type.errorStruct("MyBlamedType", "my blamed message"),
+      );
+
+      assert.equal(error.message, "(MyBlamedType) my blamed message");
+    });
+
     // Extra enumerable own-properties on a thrown Error blank out the message that
     // the browser's uncaught-error reporting surfaces, so the internal carriers
     // must stay non-enumerable.
-    it("defines kind, value, stacktrace and struct as non-enumerable", () => {
+    it("defines kind, value, stacktrace, struct and blamedStruct as non-enumerable", () => {
       const struct = Type.errorStruct("MyType", "my message");
       const error = new HologramBoxedError(struct);
 
@@ -88,6 +112,11 @@ describe("HologramBoxedError", () => {
 
       assert.equal(
         Object.getOwnPropertyDescriptor(error, "struct").enumerable,
+        false,
+      );
+
+      assert.equal(
+        Object.getOwnPropertyDescriptor(error, "blamedStruct").enumerable,
         false,
       );
     });

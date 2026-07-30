@@ -409,7 +409,7 @@ export default class Hologram {
       } catch (error) {
         if (error instanceof HologramBoxedError) {
           error.name = Interpreter.getErrorType(error);
-          error.message = Interpreter.resolveErrorMessage(error.struct);
+          error.message = Interpreter.resolveErrorMessage(error.blamedStruct);
         }
 
         throw error;
@@ -844,7 +844,7 @@ export default class Hologram {
           module: Interpreter.inspect(
             Erlang_Maps["get/2"](Type.atom("__struct__"), error.struct),
           ),
-          message: Interpreter.resolveErrorMessage(error.struct),
+          message: Interpreter.resolveErrorMessage(error.blamedStruct),
         });
       }
     };

@@ -861,6 +861,44 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("blameError()", () => {
+    it("normalizes a bare reason", () => {
+      const result = Interpreter.blameError(Type.atom("badarg"));
+
+      assert.deepStrictEqual(
+        result,
+        Type.errorStruct("ArgumentError", "argument error"),
+      );
+    });
+
+    it("applies the exception module's blame/2 callback", () => {
+      globalThis.Elixir_MyBlamedType = {
+        "blame/2": (_struct, stacktrace) =>
+          Type.tuple([
+            Type.errorStruct("MyBlamedType", "my blamed message"),
+            stacktrace,
+          ]),
+      };
+
+      const struct = Type.errorStruct("MyBlamedType", "my message");
+      const result = Interpreter.blameError(struct);
+
+      delete globalThis.Elixir_MyBlamedType;
+
+      assert.deepStrictEqual(
+        result,
+        Type.errorStruct("MyBlamedType", "my blamed message"),
+      );
+    });
+
+    it("returns the struct unchanged when the exception module has no blame/2 callback", () => {
+      const struct = Type.errorStruct("MyType", "my message");
+      const result = Interpreter.blameError(struct);
+
+      assert.deepStrictEqual(result, struct);
+    });
+  });
+
   it("buildArgumentErrorMsg()", () => {
     const result = Interpreter.buildArgumentErrorMsg(2, "my message");
 
