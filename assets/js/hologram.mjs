@@ -22,6 +22,7 @@ import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
+import RuntimeErrorOverlay from "./runtime_error_overlay.mjs";
 import Serializer from "./serializer.mjs";
 import Sse from "./sse.mjs";
 import Throttler from "./throttler.mjs";
@@ -310,11 +311,12 @@ export default class Hologram {
     };
   }
 
-  // Prints an uncaught boxed error to the console the way the server prints
-  // one, so the reader sees Elixir frames instead of the minified JavaScript
-  // stack the browser would report. Returns whether the error was a boxed one,
-  // which is what decides if the browser's own reporting is suppressed - an
-  // error from outside the runtime keeps it.
+  // Reports an uncaught boxed error the way the server reports one, so the
+  // reader sees Elixir frames instead of the minified JavaScript stack the
+  // browser would give them. The console gets it in every environment, and the
+  // page does too where the error overlay is enabled. Returns whether the error
+  // was a boxed one, which is what decides if the browser's own reporting is
+  // suppressed - an error from outside the runtime keeps it.
   static handleUncaughtError(error) {
     if (!(error instanceof HologramBoxedError)) {
       return false;
@@ -329,7 +331,15 @@ export default class Hologram {
       message: Interpreter.resolveErrorMessage(error.blamedStruct),
     });
 
-    console.error(Interpreter.formatBoxedError(error));
+    const report = Interpreter.formatBoxedError(error);
+
+    // Written before the overlay renders, so an overlay that fails to render
+    // still leaves the error recorded.
+    console.error(report);
+
+    if (globalThis.Hologram.config.errorOverlay) {
+      RuntimeErrorOverlay.show(report);
+    }
 
     return true;
   }

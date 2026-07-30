@@ -19,6 +19,7 @@ import Hologram from "../../assets/js/hologram.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
+import RuntimeErrorOverlay from "../../assets/js/runtime_error_overlay.mjs";
 import Type from "../../assets/js/type.mjs";
 import Vdom from "../../assets/js/vdom.mjs";
 
@@ -1100,6 +1101,7 @@ describe("Hologram", () => {
 
   describe("handleUncaughtError()", () => {
     let consoleErrorStub;
+    let overlayShowStub;
 
     const boxedError = () =>
       new HologramBoxedError(Type.errorStruct("MyError", "my message"));
@@ -1107,10 +1109,14 @@ describe("Hologram", () => {
     beforeEach(() => {
       CallStack.reset();
       consoleErrorStub = sinon.stub(console, "error");
+      overlayShowStub = sinon.stub(RuntimeErrorOverlay, "show");
+      globalThis.Hologram.config.errorOverlay = false;
     });
 
     afterEach(() => {
       consoleErrorStub.restore();
+      overlayShowStub.restore();
+      globalThis.Hologram.config.errorOverlay = false;
     });
 
     it("prints the error the way the server prints an uncaught one", () => {
@@ -1131,6 +1137,31 @@ describe("Hologram", () => {
       );
     });
 
+    it("renders the error in the page when the overlay is enabled", () => {
+      globalThis.Hologram.config.errorOverlay = true;
+
+      Hologram.handleUncaughtError(boxedError());
+
+      sinon.assert.calledOnceWithExactly(
+        overlayShowStub,
+        "** (MyError) my message",
+      );
+    });
+
+    it("keeps the error out of the page when the overlay is disabled", () => {
+      Hologram.handleUncaughtError(boxedError());
+
+      sinon.assert.notCalled(overlayShowStub);
+    });
+
+    it("prints the error before rendering it, so a failed render still logs", () => {
+      globalThis.Hologram.config.errorOverlay = true;
+
+      Hologram.handleUncaughtError(boxedError());
+
+      sinon.assert.callOrder(consoleErrorStub, overlayShowStub);
+    });
+
     it("records the error for the feature test helpers", () => {
       Hologram.handleUncaughtError(boxedError());
 
@@ -1145,9 +1176,12 @@ describe("Hologram", () => {
     });
 
     it("leaves an error raised outside the runtime to the browser", () => {
+      globalThis.Hologram.config.errorOverlay = true;
+
       assert.isFalse(Hologram.handleUncaughtError(new Error("my message")));
 
       sinon.assert.notCalled(consoleErrorStub);
+      sinon.assert.notCalled(overlayShowStub);
     });
   });
 
