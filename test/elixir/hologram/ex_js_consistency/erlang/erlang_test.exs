@@ -1488,6 +1488,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    "argument error: nil",
                    fn -> :erlang.andalso(arg, true) end
     end
+
+    test "the error is attributed to the caller" do
+      arg = prevent_term_typing_violation(nil)
+
+      top_frame =
+        try do
+          :erlang.andalso(arg, true)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert elem(top_frame, 0) == __MODULE__
+    end
   end
 
   describe "append_element/2" do
@@ -6751,6 +6764,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    "argument error: nil",
                    fn -> :erlang.orelse(arg, true) end
+    end
+
+    test "the error is attributed to the caller" do
+      arg = prevent_term_typing_violation(nil)
+
+      top_frame =
+        try do
+          :erlang.orelse(arg, true)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert elem(top_frame, 0) == __MODULE__
     end
   end
 

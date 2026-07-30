@@ -329,9 +329,7 @@ const Erlang = {
     const left = leftFun(context);
 
     if (!Type.isBoolean(left)) {
-      Interpreter.raiseArgumentError(
-        `argument error: ${Interpreter.inspect(left)}`,
-      );
+      Interpreter.raiseFramelessError(["badarg", left]);
     }
 
     return Type.isTrue(left) ? rightFun(context) : left;
@@ -3319,9 +3317,7 @@ const Erlang = {
     const left = leftFun(context);
 
     if (!Type.isBoolean(left)) {
-      Interpreter.raiseArgumentError(
-        `argument error: ${Interpreter.inspect(left)}`,
-      );
+      Interpreter.raiseFramelessError(["badarg", left]);
     }
 
     return Type.isTrue(left) ? left : rightFun(context);

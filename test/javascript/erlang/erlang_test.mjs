@@ -1678,6 +1678,26 @@ describe("Erlang", () => {
         "argument error: nil",
       );
     });
+
+    it("the error is attributed to the caller", () => {
+      const context = contextFixture({
+        vars: {left: Type.nil(), right: Type.boolean(true)},
+      });
+
+      let caught;
+
+      try {
+        andalso(
+          (context) => context.vars.left,
+          (context) => context.vars.right,
+          context,
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, []);
+    });
   });
 
   describe("append_element/2", () => {
@@ -11273,6 +11293,26 @@ describe("Erlang", () => {
         "ArgumentError",
         "argument error: nil",
       );
+    });
+
+    it("the error is attributed to the caller", () => {
+      const context = contextFixture({
+        vars: {left: Type.nil(), right: Type.boolean(true)},
+      });
+
+      let caught;
+
+      try {
+        orelse(
+          (context) => context.vars.left,
+          (context) => context.vars.right,
+          context,
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, []);
     });
   });
 
