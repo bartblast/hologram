@@ -77,11 +77,11 @@ const Erlang_Erl_Kernel_Errors = {
       stacktrace.data[0].data.length === 4;
 
     if (!isFourTupleTopFrame) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_kernel_errors.format_error/2",
-          [reason, stacktrace],
-        ),
+      Interpreter.raiseFunctionClauseError(
+        "erl_kernel_errors",
+        "format_error",
+        2,
+        [reason, stacktrace],
       );
     }
 

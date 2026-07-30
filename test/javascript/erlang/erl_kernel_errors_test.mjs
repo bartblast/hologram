@@ -108,5 +108,28 @@ describe("Erlang_Erl_Kernel_Errors", () => {
         ),
       );
     });
+
+    it("error frame carries args", () => {
+      const stacktrace = Type.list();
+
+      let caught;
+
+      try {
+        format_error(Type.atom("badarg"), stacktrace);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "erl_kernel_errors",
+          function: "format_error",
+          arityOrArgs: Type.list([Type.atom("badarg"), stacktrace]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
   });
 });

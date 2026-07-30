@@ -588,11 +588,11 @@ const Erlang_Erl_Erts_Errors = {
       stacktrace.data[0].data.length === 4;
 
     if (!isFourTupleTopFrame) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_erts_errors.format_bs_fail/2",
-          [reason, stacktrace],
-        ),
+      Interpreter.raiseFunctionClauseError(
+        "erl_erts_errors",
+        "format_bs_fail",
+        2,
+        [reason, stacktrace],
       );
     }
 
@@ -710,11 +710,11 @@ const Erlang_Erl_Erts_Errors = {
       stacktrace.data[0].data.length === 4;
 
     if (!isFourTupleTopFrame) {
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_erts_errors.format_error/2",
-          [reason, stacktrace],
-        ),
+      Interpreter.raiseFunctionClauseError(
+        "erl_erts_errors",
+        "format_error",
+        2,
+        [reason, stacktrace],
       );
     }
 

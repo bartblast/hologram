@@ -772,5 +772,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlErtsErrorsTest do
         :erl_erts_errors.format_error(:badarg, [{:erlang}])
       end
     end
+
+    test "error frame carries args" do
+      stacktrace = wrap_term([])
+
+      top_frame =
+        try do
+          :erl_erts_errors.format_error(:badarg, stacktrace)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside erl_erts_errors.erl,
+      # so its frame location also carries the corresponding file and line,
+      # which the client doesn't mirror.
+      assert {module, function, args, location} = top_frame
+
+      assert {module, function, args} == {:erl_erts_errors, :format_error, [:badarg, []]}
+      assert location[:error_info] == nil
+    end
   end
 end
