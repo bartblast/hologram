@@ -5,6 +5,11 @@ import {
   assertBoxedError,
   assertBoxedErrorAsync,
   assertBoxedStrictEqual,
+  buildCaseClauseErrorMsg,
+  buildFunctionClauseErrorMsg,
+  buildMatchErrorMsg,
+  buildUndefinedFunctionErrorMsg,
+  buildWithClauseErrorMsg,
   contextFixture,
   defineRuntimeGlobals,
   sinon,
@@ -899,27 +904,6 @@ describe("Interpreter", () => {
     });
   });
 
-  it("buildArgumentErrorMsg()", () => {
-    const result = Interpreter.buildArgumentErrorMsg(2, "my message");
-
-    const expected =
-      "errors were found at the given arguments:\n\n  * 2nd argument: my message\n";
-
-    assert.equal(result, expected);
-  });
-
-  it("buildBadFunctionErrorMsg()", () => {
-    const term = Type.map([
-      [Type.atom("a"), Type.integer(1)],
-      [Type.atom("b"), Type.integer(2)],
-    ]);
-
-    const result = Interpreter.buildBadFunctionErrorMsg(term);
-    const expected = "expected a function, got: %{a: 1, b: 2}";
-
-    assert.equal(result, expected);
-  });
-
   describe("buildContext()", () => {
     it("module undefined, vars undefined", () => {
       const result = Interpreter.buildContext();
@@ -995,105 +979,6 @@ describe("Interpreter", () => {
     });
   });
 
-  it("buildErlangErrorMsg()", () => {
-    const result = Interpreter.buildErlangErrorMsg("my message");
-
-    assert.equal(result, "Erlang error: my message");
-  });
-
-  describe("buildFunctionClauseErrorMsg()", () => {
-    it("no args param given", () => {
-      const result =
-        Interpreter.buildFunctionClauseErrorMsg("MyModule.my_fun/2");
-
-      const expected = "no function clause matching in MyModule.my_fun/2";
-
-      assert.equal(result, expected);
-    });
-
-    it("0 args", () => {
-      const result = Interpreter.buildFunctionClauseErrorMsg(
-        "MyModule.my_fun/2",
-        [],
-      );
-
-      const expected = "no function clause matching in MyModule.my_fun/2";
-
-      assert.equal(result, expected);
-    });
-
-    it("1 arg", () => {
-      const result = Interpreter.buildFunctionClauseErrorMsg(
-        "MyModule.my_fun/2",
-        [Type.integer(123)],
-      );
-
-      const expected =
-        "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n";
-
-      assert.equal(result, expected);
-    });
-
-    it("2 args", () => {
-      const result = Interpreter.buildFunctionClauseErrorMsg(
-        "MyModule.my_fun/2",
-        [Type.integer(123), Type.atom("abc")],
-      );
-
-      const expected =
-        "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n\n    # 2\n    :abc\n";
-
-      assert.equal(result, expected);
-    });
-  });
-
-  it("buildKeyErrorMsg()", () => {
-    const key = Type.atom("c");
-
-    const map = Type.map([
-      [Type.atom("b"), Type.integer(2)],
-      [Type.atom("a"), Type.integer(1)],
-    ]);
-
-    const result = Interpreter.buildKeyErrorMsg(key, map);
-    const expected = "key :c not found in:\n\n    %{a: 1, b: 2}\n";
-
-    assert.equal(result, expected);
-  });
-
-  it("buildMatchErrorMsg()", () => {
-    const result = Interpreter.buildMatchErrorMsg(Type.atom("abc"));
-    const expected = "no match of right hand side value:\n\n    :abc\n";
-
-    assert.equal(result, expected);
-  });
-
-  describe("buildMultiArgumentErrorMsg()", () => {
-    it("builds a bullet per entry", () => {
-      const result = Interpreter.buildMultiArgumentErrorMsg([
-        [1, "my message 1"],
-        [2, "my message 2"],
-      ]);
-
-      const expected =
-        "errors were found at the given arguments:\n\n  * 1st argument: my message 1\n  * 2nd argument: my message 2\n";
-
-      assert.equal(result, expected);
-    });
-
-    it("skips entries with a nullish message", () => {
-      const result = Interpreter.buildMultiArgumentErrorMsg([
-        [1, null],
-        [2, "my message"],
-      ]);
-
-      const expected =
-        "errors were found at the given arguments:\n\n  * 2nd argument: my message\n";
-
-      assert.equal(result, expected);
-    });
-  });
-
   it("buildTooBigOutputErrorMsg()", () => {
     const result = Interpreter.buildTooBigOutputErrorMsg(
       "{MyModule, :my_fun, 3}",
@@ -1104,43 +989,6 @@ describe("Interpreter", () => {
       "See what to do here: https://www.hologram.page/TODO";
 
     assert.equal(result, expected);
-  });
-
-  it("buildTryClauseErrorMsg()", () => {
-    const result = Interpreter.buildTryClauseErrorMsg(Type.atom("abc"));
-    const expected = "no try clause matching:\n\n    :abc\n";
-
-    assert.equal(result, expected);
-  });
-
-  describe("buildUndefinedFunctionErrorMsg", () => {
-    const module = Type.alias("Aaa.Bbb");
-
-    it("module is available", () => {
-      const result = Interpreter.buildUndefinedFunctionErrorMsg(
-        module,
-        "my_fun",
-        2,
-      );
-
-      const expected = "function Aaa.Bbb.my_fun/2 is undefined or private";
-
-      assert.equal(result, expected);
-    });
-
-    it("module is not available", () => {
-      const result = Interpreter.buildUndefinedFunctionErrorMsg(
-        module,
-        "my_fun",
-        2,
-        false,
-      );
-
-      const expected =
-        "function Aaa.Bbb.my_fun/2 is undefined (module Aaa.Bbb is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)";
-
-      assert.equal(result, expected);
-    });
   });
 
   // Only frame tracking is unit-tested here - clause dispatch behavior is
@@ -3311,7 +3159,7 @@ describe("Interpreter", () => {
             context,
           ),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(Type.integer(0)),
+        buildCaseClauseErrorMsg(Type.integer(0)),
       );
     });
   });
@@ -3511,9 +3359,7 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => globalThis.Elixir_Aaa_Bbb["my_fun_b/1"](Type.integer(3)),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_b/1", [
-          Type.integer(3),
-        ]),
+        buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_b/1", [Type.integer(3)]),
       );
     });
 
@@ -3550,9 +3396,7 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(3)),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_a/1", [
-          Type.integer(3),
-        ]),
+        buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_a/1", [Type.integer(3)]),
       );
     });
 
@@ -3792,9 +3636,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(3)),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_a/1", [
-            Type.integer(3),
-          ]),
+          buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_a/1", [Type.integer(3)]),
         );
 
         assert.deepStrictEqual(CallStack.snapshot(), []);
@@ -3953,11 +3795,7 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => globalThis.Elixir_Aaa_Bbb["my_fun_x/5"],
         "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(
-          Type.alias("Aaa.Bbb"),
-          "my_fun_x",
-          5,
-        ),
+        buildUndefinedFunctionErrorMsg(Type.alias("Aaa.Bbb"), "my_fun_x", 5),
       );
     });
   });
@@ -4103,7 +3941,7 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => globalThis.Elixir_MyModuleExName["my_undefined_fun/3"],
         "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(
+        buildUndefinedFunctionErrorMsg(
           Type.alias("MyModuleExName"),
           "my_undefined_fun",
           3,
@@ -5297,7 +5135,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(myAtom, Type.atom("abc"), context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(myAtom),
+          buildMatchErrorMsg(myAtom),
         );
       });
 
@@ -5308,7 +5146,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(myInteger, Type.atom("abc"), context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(myInteger),
+          buildMatchErrorMsg(myInteger),
         );
       });
     });
@@ -5345,7 +5183,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(myBitstring),
+          buildMatchErrorMsg(myBitstring),
         );
       });
 
@@ -5357,7 +5195,7 @@ describe("Interpreter", () => {
           () =>
             Interpreter.matchOperator(myAtom, emptyBitstringPattern, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(myAtom),
+          buildMatchErrorMsg(myAtom),
         );
       });
 
@@ -5394,7 +5232,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(myBitstring),
+          buildMatchErrorMsg(myBitstring),
         );
       });
 
@@ -5411,7 +5249,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(myAtom),
+          buildMatchErrorMsg(myAtom),
         );
       });
 
@@ -5578,7 +5416,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(multiSegmentBitstringValue),
+          buildMatchErrorMsg(multiSegmentBitstringValue),
         );
       });
 
@@ -5598,7 +5436,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(multiSegmentBitstringValue),
+          buildMatchErrorMsg(multiSegmentBitstringValue),
         );
       });
 
@@ -5618,7 +5456,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(multiSegmentBitstringValue),
+          buildMatchErrorMsg(multiSegmentBitstringValue),
         );
       });
 
@@ -6044,7 +5882,7 @@ describe("Interpreter", () => {
                 context,
               ),
             "MatchError",
-            Interpreter.buildMatchErrorMsg(myBitstring),
+            buildMatchErrorMsg(myBitstring),
           );
         });
 
@@ -6069,7 +5907,7 @@ describe("Interpreter", () => {
                 context,
               ),
             "MatchError",
-            Interpreter.buildMatchErrorMsg(myBitstring),
+            buildMatchErrorMsg(myBitstring),
           );
         });
 
@@ -6093,7 +5931,7 @@ describe("Interpreter", () => {
                 context,
               ),
             "MatchError",
-            Interpreter.buildMatchErrorMsg(myBitstring),
+            buildMatchErrorMsg(myBitstring),
           );
         });
       });
@@ -6207,7 +6045,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
 
@@ -6351,7 +6189,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
 
@@ -7376,7 +7214,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
 
@@ -7393,7 +7231,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
 
@@ -7405,7 +7243,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
 
@@ -7444,7 +7282,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
 
@@ -7619,7 +7457,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(3)),
+          buildMatchErrorMsg(Type.integer(3)),
         );
       });
 
@@ -7657,7 +7495,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(3)),
+          buildMatchErrorMsg(Type.integer(3)),
         );
       });
 
@@ -7704,7 +7542,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(context.vars.x),
+          buildMatchErrorMsg(context.vars.x),
         );
       });
 
@@ -7728,7 +7566,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(2)),
+          buildMatchErrorMsg(Type.integer(2)),
         );
       });
 
@@ -7812,7 +7650,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(2)),
+          buildMatchErrorMsg(Type.integer(2)),
         );
       });
 
@@ -7837,7 +7675,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(1)),
+          buildMatchErrorMsg(Type.integer(1)),
         );
       });
 
@@ -7863,7 +7701,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(2)),
+          buildMatchErrorMsg(Type.integer(2)),
         );
       });
 
@@ -7889,7 +7727,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(1)),
+          buildMatchErrorMsg(Type.integer(1)),
         );
       });
 
@@ -8868,7 +8706,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
     });
@@ -8991,7 +8829,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => globalThis.Elixir_MyModuleExName["my_undefined_fun/3"](),
           "UndefinedFunctionError",
-          Interpreter.buildUndefinedFunctionErrorMsg(
+          buildUndefinedFunctionErrorMsg(
             Type.alias("MyModuleExName"),
             "my_undefined_fun",
             3,
@@ -9068,7 +8906,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => globalThis.Erlang_My_Module["my_undefined_fun/3"](),
           "UndefinedFunctionError",
-          Interpreter.buildUndefinedFunctionErrorMsg(
+          buildUndefinedFunctionErrorMsg(
             Type.atom("my_module"),
             "my_undefined_fun",
             3,
@@ -11331,7 +11169,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(context.vars.a),
+          buildMatchErrorMsg(context.vars.a),
         );
       });
     });
@@ -11505,7 +11343,7 @@ describe("Interpreter", () => {
               context,
             ),
           "WithClauseError",
-          Interpreter.buildWithClauseErrorMsg(context.vars.a),
+          buildWithClauseErrorMsg(context.vars.a),
         );
       });
     });

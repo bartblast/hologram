@@ -1,13 +1,13 @@
 import {
   assert,
   assertBoxedError,
+  buildFunctionClauseErrorMsg,
   defineRuntimeGlobals,
   sinon,
 } from "../support/helpers.mjs";
 
 import Elixir_IO from "../../../assets/js/elixir/io.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -94,10 +94,11 @@ describe("Elixir_IO", () => {
     // registers at bundle load, which unit tests don't run, so this twin asserts
     // the message without them.
     it("raises FunctionClauseError if the first arg is not an atom or a pid", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        "IO.inspect/3",
-        [Type.integer(123), Type.atom("abc"), Type.keywordList()],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg("IO.inspect/3", [
+        Type.integer(123),
+        Type.atom("abc"),
+        Type.keywordList(),
+      ]);
 
       assertBoxedError(
         () => inspect(Type.integer(123), Type.atom("abc"), Type.keywordList()),

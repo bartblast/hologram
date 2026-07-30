@@ -36,6 +36,7 @@ import RegexParser from "../../../assets/js/erts/regex/regex_parser.mjs";
 import Renderer from "../../../assets/js/renderer.mjs";
 import Serializer from "../../../assets/js/serializer.mjs";
 import Type from "../../../assets/js/type.mjs";
+import Utils from "../../../assets/js/utils.mjs";
 
 export {assert} from "../../../assets/node_modules/chai/index.js";
 
@@ -158,6 +159,110 @@ export function assertRegexParseError(source, message, position, opts = {}) {
   assert.instanceOf(error, RegexParseError);
   assert.equal(error.message, message);
   assert.equal(error.position, position);
+}
+
+export function buildArgumentErrorMsg(argumentIndex, message) {
+  return buildMultiArgumentErrorMsg([[argumentIndex, message]]);
+}
+
+// Keep this message in sync with build_bad_function_error_msg in Hologram.Commons.TestUtils.
+export function buildBadFunctionErrorMsg(term) {
+  return "expected a function, got: " + Interpreter.inspect(term);
+}
+
+// Keep this message in sync with build_bad_map_error_msg in Hologram.Commons.TestUtils.
+export function buildBadMapErrorMsg(arg) {
+  return "expected a map, got:\n\n    " + Interpreter.inspect(arg) + "\n";
+}
+
+// Keep this message in sync with build_case_clause_error_msg in Hologram.Commons.TestUtils.
+export function buildCaseClauseErrorMsg(arg) {
+  return "no case clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
+}
+
+// Keep this message in sync with build_erlang_error_msg in Hologram.Commons.TestUtils.
+export function buildErlangErrorMsg(message) {
+  return `Erlang error: ${message}`;
+}
+
+// Builds the message a clause mismatch produces when no attempted clauses are
+// reported, which is what a unit test sees - the clause heads are registered by
+// the runtime script, which unit tests don't run.
+// Keep this message in sync with build_function_clause_error_msg in Hologram.Commons.TestUtils.
+export function buildFunctionClauseErrorMsg(funName, args = null) {
+  let argsInfo = "";
+
+  if (args && args.length > 0) {
+    argsInfo = Array.from(args).reduce(
+      (acc, arg, idx) =>
+        `${acc}\n    # ${idx + 1}\n    ${Interpreter.inspect(arg)}\n`,
+      `\n\nThe following arguments were given to ${funName}:\n`,
+    );
+  }
+
+  return `no function clause matching in ${funName}${argsInfo}`;
+}
+
+// Keep this message in sync with build_key_error_msg in Hologram.Commons.TestUtils.
+export function buildKeyErrorMsg(key, map) {
+  const opts = Type.keywordList([
+    [
+      Type.atom("custom_options"),
+      Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
+    ],
+  ]);
+
+  return `key ${Interpreter.inspect(key)} not found in:\n\n    ${Interpreter.inspect(map, opts)}\n`;
+}
+
+// Keep this message in sync with build_match_error_msg in Hologram.Commons.TestUtils.
+export function buildMatchErrorMsg(right) {
+  return (
+    "no match of right hand side value:\n\n    " +
+    Interpreter.inspect(right) +
+    "\n"
+  );
+}
+
+// Builds the message for errors at multiple arguments from [index, message]
+// entries. Entries with a nullish message are skipped.
+// Keep this message in sync with build_multi_argument_error_msg in Hologram.Commons.TestUtils.
+export function buildMultiArgumentErrorMsg(entries) {
+  const bullets = entries
+    .filter(([_index, message]) => message != null)
+    .map(
+      ([index, message]) =>
+        `  * ${Utils.ordinal(index)} argument: ${message}\n`,
+    )
+    .join("");
+
+  return `errors were found at the given arguments:\n\n${bullets}`;
+}
+
+// Keep this message in sync with build_try_clause_error_msg in Hologram.Commons.TestUtils.
+export function buildTryClauseErrorMsg(arg) {
+  return "no try clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
+}
+
+// Keep this message in sync with build_undefined_function_error_msg in Hologram.Commons.TestUtils.
+export function buildUndefinedFunctionErrorMsg(
+  module,
+  functionName,
+  arity,
+  isModuleAvailable = true,
+) {
+  const moduleName = Interpreter.inspect(module);
+
+  if (isModuleAvailable) {
+    return `function ${moduleName}.${functionName}/${arity} is undefined or private`;
+  }
+
+  return `function ${moduleName}.${functionName}/${arity} is undefined (module ${moduleName} is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)`;
+}
+
+// Keep this message in sync with build_with_clause_error_msg in Hologram.Commons.TestUtils.
+export function buildWithClauseErrorMsg(arg) {
+  return "no with clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
 }
 
 export function componentRegistryEntryFixture(data = {}) {
@@ -841,7 +946,7 @@ function deriveErrorInfoMessage(reason, stacktrace) {
     .sort(([n1, _msg1], [n2, _msg2]) => n1 - n2);
 
   if (entries.length > 0) {
-    return Interpreter.buildMultiArgumentErrorMsg(entries);
+    return buildMultiArgumentErrorMsg(entries);
   }
 
   const general = fragments.data["atom(general)"]?.[1];

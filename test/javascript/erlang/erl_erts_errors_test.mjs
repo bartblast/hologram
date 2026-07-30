@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  buildFunctionClauseErrorMsg,
   contextFixture,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
@@ -347,10 +348,10 @@ describe("Erlang_Erl_Erts_Errors", () => {
       assertBoxedError(
         () => format_bs_fail(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_erts_errors.format_bs_fail/2",
-          [Type.atom("badarg"), stacktrace],
-        ),
+        buildFunctionClauseErrorMsg(":erl_erts_errors.format_bs_fail/2", [
+          Type.atom("badarg"),
+          stacktrace,
+        ]),
       );
     });
   });
@@ -1739,10 +1740,10 @@ describe("Erlang_Erl_Erts_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_erts_errors.format_error/2",
-          [Type.atom("badarg"), stacktrace],
-        ),
+        buildFunctionClauseErrorMsg(":erl_erts_errors.format_error/2", [
+          Type.atom("badarg"),
+          stacktrace,
+        ]),
       );
     });
 
@@ -1752,10 +1753,10 @@ describe("Erlang_Erl_Erts_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_erts_errors.format_error/2",
-          [Type.atom("badarg"), stacktrace],
-        ),
+        buildFunctionClauseErrorMsg(":erl_erts_errors.format_error/2", [
+          Type.atom("badarg"),
+          stacktrace,
+        ]),
       );
     });
 

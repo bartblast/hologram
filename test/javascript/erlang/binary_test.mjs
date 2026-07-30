@@ -4,6 +4,7 @@ import {
   assert,
   assertBoxedError,
   assertBoxedStrictEqual,
+  buildArgumentErrorMsg,
   contextFixture,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
@@ -11,7 +12,6 @@ import {
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Binary from "../../../assets/js/erlang/binary.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -83,7 +83,7 @@ describe("Erlang_Binary", () => {
       assertBoxedError(
         () => at(subject, integer0),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -93,10 +93,7 @@ describe("Erlang_Binary", () => {
       assertBoxedError(
         () => at(subject, integer0),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "is a bitstring (expected a binary)",
-        ),
+        buildArgumentErrorMsg(1, "is a bitstring (expected a binary)"),
       );
     });
 
@@ -106,7 +103,7 @@ describe("Erlang_Binary", () => {
       assertBoxedError(
         () => at(bytesBasedBinary, pos),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+        buildArgumentErrorMsg(2, "not an integer"),
       );
     });
 
@@ -116,7 +113,7 @@ describe("Erlang_Binary", () => {
       assertBoxedError(
         () => at(bytesBasedBinary, pos),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -188,7 +185,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => compilePattern(Type.integer(1)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a valid pattern"),
+          buildArgumentErrorMsg(1, "not a valid pattern"),
         );
       });
 
@@ -196,7 +193,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => compilePattern(Type.bitstring([1, 0, 1])),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a valid pattern"),
+          buildArgumentErrorMsg(1, "not a valid pattern"),
         );
       });
 
@@ -204,7 +201,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => compilePattern(Type.bitstring("")),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a valid pattern"),
+          buildArgumentErrorMsg(1, "not a valid pattern"),
         );
       });
 
@@ -212,7 +209,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => compilePattern(Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a valid pattern"),
+          buildArgumentErrorMsg(1, "not a valid pattern"),
         );
       });
     });
@@ -222,7 +219,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => compilePattern(Type.list([patternHello, Type.integer(1)])),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a valid pattern"),
+          buildArgumentErrorMsg(1, "not a valid pattern"),
         );
       });
 
@@ -233,7 +230,7 @@ describe("Erlang_Binary", () => {
               Type.list([patternHello, Type.bitstring([1, 0, 1])]),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a valid pattern"),
+          buildArgumentErrorMsg(1, "not a valid pattern"),
         );
       });
 
@@ -241,7 +238,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => compilePattern(Type.list([patternHello, Type.bitstring("")])),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a valid pattern"),
+          buildArgumentErrorMsg(1, "not a valid pattern"),
         );
       });
 
@@ -249,7 +246,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => compilePattern(Type.list([patternHello, Type.list()])),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a valid pattern"),
+          buildArgumentErrorMsg(1, "not a valid pattern"),
         );
       });
     });
@@ -396,7 +393,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => testedFun(atomAbc, integer3),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -404,10 +401,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => testedFun(Type.bitstring([1, 0, 1]), integer3),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "is a bitstring (expected a binary)",
-          ),
+          buildArgumentErrorMsg(1, "is a bitstring (expected a binary)"),
         );
       });
 
@@ -415,7 +409,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => testedFun(subject, atomAbc),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+          buildArgumentErrorMsg(2, "not an integer"),
         );
       });
 
@@ -425,7 +419,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => testedFun(subject, count),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "out of range"),
+          buildArgumentErrorMsg(2, "out of range"),
         );
       });
     });
@@ -480,7 +474,7 @@ describe("Erlang_Binary", () => {
       assertBoxedError(
         () => first(integer123),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -488,10 +482,7 @@ describe("Erlang_Binary", () => {
       assertBoxedError(
         () => first(Type.bitstring([1, 0, 1])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "is a bitstring (expected a binary)",
-        ),
+        buildArgumentErrorMsg(1, "is a bitstring (expected a binary)"),
       );
     });
 
@@ -499,10 +490,7 @@ describe("Erlang_Binary", () => {
       assertBoxedError(
         () => first(Type.bitstring([])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "a zero-sized binary is not allowed",
-        ),
+        buildArgumentErrorMsg(1, "a zero-sized binary is not allowed"),
       );
     });
 
@@ -557,7 +545,7 @@ describe("Erlang_Binary", () => {
       assertBoxedError(
         () => testedFun(atomAbc),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -565,10 +553,7 @@ describe("Erlang_Binary", () => {
       assertBoxedError(
         () => testedFun(Type.bitstring([1, 0, 1])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "is a bitstring (expected a binary)",
-        ),
+        buildArgumentErrorMsg(1, "is a bitstring (expected a binary)"),
       );
     });
 
@@ -576,10 +561,7 @@ describe("Erlang_Binary", () => {
       assertBoxedError(
         () => testedFun(textBasedEmptyBinary),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "a zero-sized binary is not allowed",
-        ),
+        buildArgumentErrorMsg(1, "a zero-sized binary is not allowed"),
       );
     });
 
@@ -908,7 +890,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(Type.atom("not_binary"), pattern, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -919,10 +901,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "is a bitstring (expected a binary)",
-          ),
+          buildArgumentErrorMsg(1, "is a bitstring (expected a binary)"),
         );
       });
 
@@ -933,7 +912,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -944,7 +923,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -955,7 +934,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -966,7 +945,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -978,7 +957,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
     });
@@ -991,7 +970,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, Type.atom("invalid")),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -1007,7 +986,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -1019,7 +998,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -1034,7 +1013,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -1052,7 +1031,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
+          buildArgumentErrorMsg(
             3,
             "specified part is not wholly inside binary",
           ),
@@ -1073,7 +1052,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
+          buildArgumentErrorMsg(
             3,
             "specified part is not wholly inside binary",
           ),
@@ -1094,7 +1073,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
+          buildArgumentErrorMsg(
             3,
             "specified part is not wholly inside binary",
           ),
@@ -1115,7 +1094,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
+          buildArgumentErrorMsg(
             3,
             "specified part is not wholly inside binary",
           ),
@@ -1136,7 +1115,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -1154,7 +1133,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
     });
@@ -1432,7 +1411,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(Type.atom("not_binary"), pattern, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -1443,10 +1422,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "is a bitstring (expected a binary)",
-          ),
+          buildArgumentErrorMsg(1, "is a bitstring (expected a binary)"),
         );
       });
 
@@ -1457,7 +1433,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -1468,7 +1444,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -1479,7 +1455,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -1494,7 +1470,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, compiled, Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
     });
@@ -1507,7 +1483,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, Type.atom("bad")),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -1523,7 +1499,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -1535,7 +1511,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -1550,7 +1526,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -1568,7 +1544,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
+          buildArgumentErrorMsg(
             3,
             "specified part is not wholly inside binary",
           ),
@@ -1589,7 +1565,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
+          buildArgumentErrorMsg(
             3,
             "specified part is not wholly inside binary",
           ),
@@ -1610,7 +1586,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
+          buildArgumentErrorMsg(
             3,
             "specified part is not wholly inside binary",
           ),
@@ -1631,7 +1607,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
+          buildArgumentErrorMsg(
             3,
             "specified part is not wholly inside binary",
           ),
@@ -1652,7 +1628,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -1670,7 +1646,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
     });
@@ -2011,7 +1987,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
     });
@@ -2202,7 +2178,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -2215,10 +2191,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "is a bitstring (expected a binary)",
-          ),
+          buildArgumentErrorMsg(1, "is a bitstring (expected a binary)"),
         );
       });
 
@@ -2231,7 +2204,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -2247,7 +2220,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
 
@@ -2260,7 +2233,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
 
@@ -2277,7 +2250,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
 
@@ -2296,7 +2269,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
 
@@ -2315,7 +2288,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
 
@@ -2334,7 +2307,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
 
@@ -2347,7 +2320,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
+          buildArgumentErrorMsg(3, "not a valid replacement"),
         );
       });
 
@@ -2360,7 +2333,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
+          buildArgumentErrorMsg(3, "not a valid replacement"),
         );
       });
 
@@ -2373,7 +2346,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
+          buildArgumentErrorMsg(3, "not a valid replacement"),
         );
       });
 
@@ -2391,7 +2364,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -2404,7 +2377,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -2420,7 +2393,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
 
@@ -2436,7 +2409,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
 
@@ -2455,7 +2428,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
 
@@ -2476,7 +2449,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
 
@@ -2495,7 +2468,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
 
@@ -2514,7 +2487,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => replace(subject, pattern, replacement, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          buildArgumentErrorMsg(4, "invalid options"),
         );
       });
     });
@@ -2853,7 +2826,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, compiledPattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
     });
@@ -3088,7 +3061,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -3100,10 +3073,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "is a bitstring (expected a binary)",
-          ),
+          buildArgumentErrorMsg(1, "is a bitstring (expected a binary)"),
         );
       });
 
@@ -3115,7 +3085,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -3127,7 +3097,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -3139,7 +3109,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -3151,7 +3121,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -3163,7 +3133,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -3180,7 +3150,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -3197,7 +3167,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -3209,7 +3179,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -3225,7 +3195,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -3243,7 +3213,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -3261,7 +3231,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
 
@@ -3279,7 +3249,7 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => split(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          buildArgumentErrorMsg(3, "invalid options"),
         );
       });
     });

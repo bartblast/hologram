@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  buildFunctionClauseErrorMsg,
   contextFixture,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
@@ -10,7 +11,6 @@ import {
 import Erlang_Binary from "../../../assets/js/erlang/binary.mjs";
 import Erlang_Erl_Stdlib_Errors from "../../../assets/js/erlang/erl_stdlib_errors.mjs";
 import Erlang_Re from "../../../assets/js/erlang/re.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -1877,10 +1877,10 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_stdlib_errors.format_error/2",
-          [Type.atom("badarg"), stacktrace],
-        ),
+        buildFunctionClauseErrorMsg(":erl_stdlib_errors.format_error/2", [
+          Type.atom("badarg"),
+          stacktrace,
+        ]),
       );
     });
 
@@ -1894,10 +1894,10 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_stdlib_errors.format_error/2",
-          [Type.atom("badarg"), stacktrace],
-        ),
+        buildFunctionClauseErrorMsg(":erl_stdlib_errors.format_error/2", [
+          Type.atom("badarg"),
+          stacktrace,
+        ]),
       );
     });
 
@@ -1907,7 +1907,7 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
+        buildFunctionClauseErrorMsg(
           ":erl_stdlib_errors.format_binary_error/3",
           [Type.atom("at"), Type.integer(2), Type.atom("none")],
         ),
@@ -1920,7 +1920,7 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
+        buildFunctionClauseErrorMsg(
           ":erl_stdlib_errors.format_binary_error/3",
           [Type.atom("match"), Type.integer(2), Type.atom("none")],
         ),
@@ -1934,10 +1934,10 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), listsStacktrace("zip", args)),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_stdlib_errors.format_lists_error/2",
-          [fun, args],
-        ),
+        buildFunctionClauseErrorMsg(":erl_stdlib_errors.format_lists_error/2", [
+          fun,
+          args,
+        ]),
       );
     });
 
@@ -1949,10 +1949,10 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
         () =>
           format_error(Type.atom("badarg"), listsStacktrace("keyfind", arity)),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_stdlib_errors.format_lists_error/2",
-          [fun, arity],
-        ),
+        buildFunctionClauseErrorMsg(":erl_stdlib_errors.format_lists_error/2", [
+          fun,
+          arity,
+        ]),
       );
     });
 
@@ -1962,10 +1962,10 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_stdlib_errors.format_maps_error/2",
-          [Type.atom("get"), Type.integer(2)],
-        ),
+        buildFunctionClauseErrorMsg(":erl_stdlib_errors.format_maps_error/2", [
+          Type.atom("get"),
+          Type.integer(2),
+        ]),
       );
     });
 
@@ -1975,10 +1975,10 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_stdlib_errors.format_math_error/2",
-          [Type.atom("ceil"), Type.integer(1)],
-        ),
+        buildFunctionClauseErrorMsg(":erl_stdlib_errors.format_math_error/2", [
+          Type.atom("ceil"),
+          Type.integer(1),
+        ]),
       );
     });
 
@@ -1988,10 +1988,9 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_stdlib_errors.maybe_domain_error/1",
-          [Type.integer(1)],
-        ),
+        buildFunctionClauseErrorMsg(":erl_stdlib_errors.maybe_domain_error/1", [
+          Type.integer(1),
+        ]),
       );
     });
 
@@ -2002,10 +2001,11 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), reStacktrace("version", args)),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_stdlib_errors.format_re_error/3",
-          [fun, args, Type.atom("none")],
-        ),
+        buildFunctionClauseErrorMsg(":erl_stdlib_errors.format_re_error/3", [
+          fun,
+          args,
+          Type.atom("none"),
+        ]),
       );
     });
 
@@ -2015,10 +2015,11 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_stdlib_errors.format_re_error/3",
-          [Type.atom("run"), Type.integer(2), Type.atom("none")],
-        ),
+        buildFunctionClauseErrorMsg(":erl_stdlib_errors.format_re_error/3", [
+          Type.atom("run"),
+          Type.integer(2),
+          Type.atom("none"),
+        ]),
       );
     });
 
@@ -2031,7 +2032,7 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
+        buildFunctionClauseErrorMsg(
           ":erl_stdlib_errors.format_unicode_error/2",
           [Type.atom("characters_to_nfc_binary"), Type.integer(1)],
         ),
@@ -2047,7 +2048,7 @@ describe("Erlang_Erl_Stdlib_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
+        buildFunctionClauseErrorMsg(
           ":erl_stdlib_errors.format_unicode_error/2",
           [Type.atom("characters_to_binary"), Type.integer(1)],
         ),

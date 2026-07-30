@@ -5,13 +5,15 @@ import {
   assertBoxedError,
   assertBoxedFalse,
   assertBoxedTrue,
+  buildArgumentErrorMsg,
+  buildBadMapErrorMsg,
+  buildKeyErrorMsg,
   contextFixture,
   defineRuntimeGlobals,
   freeze,
 } from "../support/helpers.mjs";
 
 import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -90,7 +92,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => find(Type.string("a"), Type.integer(1)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
+        buildBadMapErrorMsg(Type.integer(1)),
       );
     });
 
@@ -156,10 +158,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fold(Type.atom("abc"), Type.integer(10), Type.map()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes three arguments"),
       );
     });
 
@@ -179,10 +178,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fold(fun, Type.integer(10), Type.map()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes three arguments"),
       );
     });
 
@@ -190,7 +186,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fold(fun, Type.integer(10), Type.atom("abc")),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+        buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -256,7 +252,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => from_keys(atomA, integer1),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -264,7 +260,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => from_keys(Type.improperList([atomA, atomB]), integer1),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+        buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
 
@@ -331,7 +327,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => from_list(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -371,7 +367,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => get(Type.atom("a"), Type.integer(1)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
+        buildBadMapErrorMsg(Type.integer(1)),
       );
     });
 
@@ -382,7 +378,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => get(key, map),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(key, map),
+        buildKeyErrorMsg(key, map),
       );
     });
 
@@ -439,7 +435,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => get(Type.atom("a"), Type.integer(1), defaultValue),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
+        buildBadMapErrorMsg(Type.integer(1)),
       );
     });
 
@@ -552,7 +548,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect(map1, map2),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(map1),
+        buildBadMapErrorMsg(map1),
       );
     });
 
@@ -563,7 +559,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect(map1, map2),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(map2),
+        buildBadMapErrorMsg(map2),
       );
     });
 
@@ -724,10 +720,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect_with(notAFun, map1, map2),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes three arguments"),
       );
     });
 
@@ -753,10 +746,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect_with(badFun, map1, map2),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes three arguments"),
       );
     });
 
@@ -767,7 +757,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect_with(fun, map1, map2),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(map1),
+        buildBadMapErrorMsg(map1),
       );
     });
 
@@ -778,7 +768,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect_with(fun, map1, map2),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(map2),
+        buildBadMapErrorMsg(map2),
       );
     });
 
@@ -911,7 +901,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => is_key(atomA, atomAbc),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(atomAbc),
+        buildBadMapErrorMsg(atomAbc),
       );
     });
 
@@ -957,7 +947,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => iterator(atomAbc),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(atomAbc),
+        buildBadMapErrorMsg(atomAbc),
       );
     });
 
@@ -996,7 +986,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => keys(atomAbc),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(atomAbc),
+        buildBadMapErrorMsg(atomAbc),
       );
     });
 
@@ -1064,10 +1054,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => map(Type.atom("abc"), Type.map()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes two arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes two arguments"),
       );
     });
 
@@ -1089,10 +1076,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => map(fun, Type.map()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes two arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes two arguments"),
       );
     });
 
@@ -1100,7 +1084,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => map(fun, Type.atom("abc")),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+        buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -1186,7 +1170,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge(Type.integer(123), map),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
+        buildBadMapErrorMsg(Type.integer(123)),
       );
     });
 
@@ -1196,7 +1180,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge(map, Type.integer(123)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
+        buildBadMapErrorMsg(Type.integer(123)),
       );
     });
 
@@ -1336,10 +1320,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge_with(Type.atom("not_a_function"), map1, map2),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes three arguments"),
       );
     });
 
@@ -1365,10 +1346,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge_with(wrongArityFun, map1, map2),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes three arguments"),
       );
     });
 
@@ -1378,7 +1356,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge_with(combiner, Type.integer(123), map),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
+        buildBadMapErrorMsg(Type.integer(123)),
       );
     });
 
@@ -1388,7 +1366,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge_with(combiner, map, Type.integer(123)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
+        buildBadMapErrorMsg(Type.integer(123)),
       );
     });
 
@@ -1484,7 +1462,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => next(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a valid iterator"),
+        buildArgumentErrorMsg(1, "not a valid iterator"),
       );
     });
 
@@ -1494,7 +1472,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => next(term),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a valid iterator"),
+        buildArgumentErrorMsg(1, "not a valid iterator"),
       );
     });
 
@@ -1548,7 +1526,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => put(Type.atom("a"), Type.integer(1), Type.atom("abc")),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+        buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -1623,7 +1601,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => remove(Type.atom("b"), Type.integer(123)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
+        buildBadMapErrorMsg(Type.integer(123)),
       );
     });
 
@@ -1734,7 +1712,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => take(Type.atom("a"), Type.integer(123)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
+        buildBadMapErrorMsg(Type.integer(123)),
       );
     });
 
@@ -1792,7 +1770,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => to_list(Type.atom("abc")),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+        buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -1807,7 +1785,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => to_list(iterator),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(iterator),
+        buildBadMapErrorMsg(iterator),
       );
     });
 
@@ -1836,7 +1814,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fun(key, Type.integer(2), map),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(key, map),
+        buildKeyErrorMsg(key, map),
       );
     });
 
@@ -1860,7 +1838,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fun(Type.atom("a"), Type.integer(1), Type.atom("abc")),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+        buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -1915,7 +1893,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fun(atomAbc),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(atomAbc),
+        buildBadMapErrorMsg(atomAbc),
       );
     });
 

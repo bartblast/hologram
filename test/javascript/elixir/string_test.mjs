@@ -1,11 +1,12 @@
 import {
   assert,
   assertBoxedError,
+  buildArgumentErrorMsg,
+  buildFunctionClauseErrorMsg,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Elixir_String from "../../../assets/js/elixir/string.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 
@@ -187,10 +188,7 @@ describe("Elixir_String", () => {
         assertBoxedError(
           () => contains(subject, pattern),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", [
-            subject,
-            pattern,
-          ]),
+          buildFunctionClauseErrorMsg("String.contains?/2", [subject, pattern]),
         );
       });
 
@@ -204,10 +202,7 @@ describe("Elixir_String", () => {
         assertBoxedError(
           () => contains(subject, pattern),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", [
-            subject,
-            pattern,
-          ]),
+          buildFunctionClauseErrorMsg("String.contains?/2", [subject, pattern]),
         );
       });
 
@@ -218,7 +213,7 @@ describe("Elixir_String", () => {
         assertBoxedError(
           () => contains(subject, pattern),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -229,7 +224,7 @@ describe("Elixir_String", () => {
         assertBoxedError(
           () => contains(subject, pattern),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -244,7 +239,7 @@ describe("Elixir_String", () => {
         assertBoxedError(
           () => contains(subject, patterns),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+          buildArgumentErrorMsg(1, "not a bitstring"),
         );
       });
 
@@ -259,7 +254,7 @@ describe("Elixir_String", () => {
         assertBoxedError(
           () => contains(subject, patterns),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+          buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
@@ -392,10 +387,7 @@ describe("Elixir_String", () => {
       assertBoxedError(
         () => downcase(arg1, mode),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("String.downcase/2", [
-          arg1,
-          mode,
-        ]),
+        buildFunctionClauseErrorMsg("String.downcase/2", [arg1, mode]),
       );
     });
 
@@ -408,10 +400,7 @@ describe("Elixir_String", () => {
       assertBoxedError(
         () => downcase(arg1, mode),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("String.downcase/2", [
-          arg1,
-          mode,
-        ]),
+        buildFunctionClauseErrorMsg("String.downcase/2", [arg1, mode]),
       );
     });
 
@@ -424,10 +413,7 @@ describe("Elixir_String", () => {
       assertBoxedError(
         () => downcase(string, arg2),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("String.downcase/2", [
-          string,
-          arg2,
-        ]),
+        buildFunctionClauseErrorMsg("String.downcase/2", [string, arg2]),
       );
     });
 
@@ -440,10 +426,7 @@ describe("Elixir_String", () => {
       assertBoxedError(
         () => downcase(string, arg2),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("String.downcase/2", [
-          string,
-          arg2,
-        ]),
+        buildFunctionClauseErrorMsg("String.downcase/2", [string, arg2]),
       );
     });
 
@@ -539,7 +522,7 @@ describe("Elixir_String", () => {
       assertBoxedError(
         () => replace(subject, pattern, replacement),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("String.replace/4", [
+        buildFunctionClauseErrorMsg("String.replace/4", [
           subject,
           pattern,
           replacement,
@@ -634,7 +617,7 @@ describe("Elixir_String", () => {
       assertBoxedError(
         () => trim(bitstring),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("String.trim/1", [bitstring]),
+        buildFunctionClauseErrorMsg("String.trim/1", [bitstring]),
       );
     });
 
@@ -647,7 +630,7 @@ describe("Elixir_String", () => {
       assertBoxedError(
         () => trim(atom),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("String.trim/1", [atom]),
+        buildFunctionClauseErrorMsg("String.trim/1", [atom]),
       );
     });
 
@@ -715,10 +698,7 @@ describe("Elixir_String", () => {
       assertBoxedError(
         () => upcase(arg1, mode),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("String.upcase/2", [
-          arg1,
-          mode,
-        ]),
+        buildFunctionClauseErrorMsg("String.upcase/2", [arg1, mode]),
       );
     });
 
@@ -731,10 +711,7 @@ describe("Elixir_String", () => {
       assertBoxedError(
         () => upcase(arg1, mode),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("String.upcase/2", [
-          arg1,
-          mode,
-        ]),
+        buildFunctionClauseErrorMsg("String.upcase/2", [arg1, mode]),
       );
     });
 
@@ -747,10 +724,7 @@ describe("Elixir_String", () => {
       assertBoxedError(
         () => upcase(string, arg2),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("String.upcase/2", [
-          string,
-          arg2,
-        ]),
+        buildFunctionClauseErrorMsg("String.upcase/2", [string, arg2]),
       );
     });
 
@@ -763,10 +737,7 @@ describe("Elixir_String", () => {
       assertBoxedError(
         () => upcase(string, arg2),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("String.upcase/2", [
-          string,
-          arg2,
-        ]),
+        buildFunctionClauseErrorMsg("String.upcase/2", [string, arg2]),
       );
     });
 

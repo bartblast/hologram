@@ -3,12 +3,12 @@
 import {
   assert,
   assertBoxedError,
+  buildFunctionClauseErrorMsg,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Elixir_Task from "../../../assets/js/elixir/task.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -45,10 +45,10 @@ describe("Elixir_Task", () => {
     // registers at bundle load, which unit tests don't run, so this twin asserts
     // the message without them.
     it("raises FunctionClauseError if the arg is not a Task struct", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        "Task.await/2",
-        [Type.integer(123), Type.integer(5000)],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg("Task.await/2", [
+        Type.integer(123),
+        Type.integer(5000),
+      ]);
 
       assertBoxedError(
         () => taskAwait(Type.integer(123)),

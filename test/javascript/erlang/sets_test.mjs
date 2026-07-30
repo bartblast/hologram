@@ -5,6 +5,10 @@ import {
   assertBoxedError,
   assertBoxedFalse,
   assertBoxedTrue,
+  buildArgumentErrorMsg,
+  buildCaseClauseErrorMsg,
+  buildErlangErrorMsg,
+  buildFunctionClauseErrorMsg,
   contextFixture,
   defineRuntimeGlobals,
   freeze,
@@ -102,10 +106,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => add_element_2(elem, notASet),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.add_element/2", [
-          elem,
-          notASet,
-        ]),
+        buildFunctionClauseErrorMsg(":sets.add_element/2", [elem, notASet]),
       );
     });
 
@@ -167,10 +168,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => del_element_2(elem, notASet),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.del_element/2", [
-          elem,
-          notASet,
-        ]),
+        buildFunctionClauseErrorMsg(":sets.del_element/2", [elem, notASet]),
       );
     });
 
@@ -273,10 +271,10 @@ describe("Erlang_Sets", () => {
     });
 
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.filter/2",
-        [Type.atom("invalid"), set123],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":sets.filter/2", [
+        Type.atom("invalid"),
+        set123,
+      ]);
 
       assertBoxedError(
         () => filter_2(Type.atom("invalid"), set123),
@@ -303,10 +301,10 @@ describe("Erlang_Sets", () => {
         contextFixture(),
       );
 
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.filter/2",
-        [wrongArityFun, set123],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":sets.filter/2", [
+        wrongArityFun,
+        set123,
+      ]);
 
       assertBoxedError(
         () => filter_2(wrongArityFun, set123),
@@ -316,10 +314,10 @@ describe("Erlang_Sets", () => {
     });
 
     it("raises FunctionClauseError if the second argument is not a set", () => {
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.filter/2",
-        [fun, atomAbc],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":sets.filter/2", [
+        fun,
+        atomAbc,
+      ]);
 
       assertBoxedError(
         () => filter_2(fun, atomAbc),
@@ -343,9 +341,7 @@ describe("Erlang_Sets", () => {
         contextFixture(),
       );
 
-      const expectedMsg = Interpreter.buildErlangErrorMsg(
-        `{:bad_filter, :not_a_boolean}`,
-      );
+      const expectedMsg = buildErlangErrorMsg(`{:bad_filter, :not_a_boolean}`);
 
       assertBoxedError(
         () => filter_2(badFun, set123),
@@ -460,10 +456,11 @@ describe("Erlang_Sets", () => {
         opts,
       );
 
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.fold/3",
-        [atomAbc, Type.integer(0), set],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":sets.fold/3", [
+        atomAbc,
+        Type.integer(0),
+        set,
+      ]);
 
       assertBoxedError(
         () => fold_3(atomAbc, Type.integer(0), set),
@@ -492,10 +489,11 @@ describe("Erlang_Sets", () => {
         contextFixture(),
       );
 
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.fold/3",
-        [fun, Type.integer(0), set],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":sets.fold/3", [
+        fun,
+        Type.integer(0),
+        set,
+      ]);
 
       assertBoxedError(
         () => fold_3(fun, Type.integer(0), set),
@@ -505,10 +503,11 @@ describe("Erlang_Sets", () => {
     });
 
     it("raises FunctionClauseError if the third argument is not a set", () => {
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.fold/3",
-        [returnAccFun, Type.integer(0), atomAbc],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":sets.fold/3", [
+        returnAccFun,
+        Type.integer(0),
+        atomAbc,
+      ]);
 
       assertBoxedError(
         () => fold_3(returnAccFun, Type.integer(0), atomAbc),
@@ -574,7 +573,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => from_list_2(Type.atom("invalid"), opts),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -584,12 +583,12 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => from_list_2(list, opts),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+        buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
 
     it("raises FunctionClauseError if the second argument is not a list", () => {
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMsg = buildFunctionClauseErrorMsg(
         ":proplists.get_value/3",
         [Type.atom("version"), Type.atom("invalid"), integer2],
       );
@@ -604,7 +603,7 @@ describe("Erlang_Sets", () => {
     it("raises FunctionClauseError if the second argument is an a improper list", () => {
       const opts = Type.improperList([integer1, integer2]);
 
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMsg = buildFunctionClauseErrorMsg(
         ":proplists.get_value/3",
         [Type.atom("version"), integer2, integer2],
       );
@@ -622,7 +621,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => from_list_2(emptyList, opts),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(atomAbc),
+        buildCaseClauseErrorMsg(atomAbc),
       );
     });
 
@@ -709,7 +708,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => intersection_2(atomAbc, set123),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
+        buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
       );
     });
 
@@ -717,7 +716,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => intersection_2(set123, atomAbc),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
+        buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
       );
     });
 
@@ -781,7 +780,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => is_disjoint_2(atomAbc, set123),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
+        buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
       );
     });
 
@@ -789,7 +788,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => is_disjoint_2(set123, atomAbc),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
+        buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
       );
     });
 
@@ -845,10 +844,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => is_element_2(elem, notASet),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.is_element/2", [
-          elem,
-          notASet,
-        ]),
+        buildFunctionClauseErrorMsg(":sets.is_element/2", [elem, notASet]),
       );
     });
 
@@ -923,8 +919,7 @@ describe("Erlang_Sets", () => {
     });
 
     it("raises FunctionClauseError if the first argument is not a set", () => {
-      const expectedMessage =
-        Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3");
+      const expectedMessage = buildFunctionClauseErrorMsg(":sets.fold/3");
 
       assertBoxedError(
         () => is_subset(atomAbc, set123),
@@ -934,7 +929,7 @@ describe("Erlang_Sets", () => {
     });
 
     it("raises FunctionClauseError if the second argument is not a set", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":sets.is_element/2",
         [Type.integer(1), atomAbc],
       );
@@ -982,7 +977,7 @@ describe("Erlang_Sets", () => {
     });
 
     it("raises FunctionClauseError if the first argument is not a list", () => {
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMsg = buildFunctionClauseErrorMsg(
         ":proplists.get_value/3",
         [Type.atom("version"), Type.atom("invalid"), integer2],
       );
@@ -997,7 +992,7 @@ describe("Erlang_Sets", () => {
     it("raises FunctionClauseError if the first argument is an a improper list", () => {
       const opts = Type.improperList([integer1, integer2]);
 
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMsg = buildFunctionClauseErrorMsg(
         ":proplists.get_value/3",
         [Type.atom("version"), integer2, integer2],
       );
@@ -1011,7 +1006,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => new_1(opts),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(atomAbc),
+        buildCaseClauseErrorMsg(atomAbc),
       );
     });
 
@@ -1089,10 +1084,9 @@ describe("Erlang_Sets", () => {
     });
 
     it("raises FunctionClauseError if the argument is not a set", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.size/1",
-        [atomAbc],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":sets.size/1", [
+        atomAbc,
+      ]);
 
       assertBoxedError(
         () => size(atomAbc),
@@ -1178,7 +1172,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => subtract_2(atomAbc, set123),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.filter/2"),
+        buildFunctionClauseErrorMsg(":sets.filter/2"),
       );
     });
 
@@ -1186,10 +1180,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => subtract_2(set123, atomAbc),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.is_element/2", [
-          integer1,
-          atomAbc,
-        ]),
+        buildFunctionClauseErrorMsg(":sets.is_element/2", [integer1, atomAbc]),
       );
     });
 
@@ -1232,10 +1223,9 @@ describe("Erlang_Sets", () => {
     });
 
     it("raises FunctionClauseError if the argument is not a set", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.to_list/1",
-        [atomAbc],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":sets.to_list/1", [
+        atomAbc,
+      ]);
 
       assertBoxedError(
         () => to_list(atomAbc),
@@ -1326,7 +1316,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => union_2(atomAbc, set123),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
+        buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
       );
     });
 
@@ -1334,7 +1324,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => union_2(set123, atomAbc),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
+        buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
       );
     });
 

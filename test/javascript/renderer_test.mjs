@@ -5,6 +5,7 @@
 import {
   assert,
   assertBoxedError,
+  buildKeyErrorMsg,
   componentRegistryEntryFixture,
   contextFixture,
   defineRuntimeGlobals,
@@ -4950,7 +4951,7 @@ describe("Renderer", () => {
             parentTagName,
           ),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(Type.atom("aaa"), Type.map()),
+        buildKeyErrorMsg(Type.atom("aaa"), Type.map()),
       );
     });
 
@@ -5082,7 +5083,7 @@ describe("Renderer", () => {
             parentTagName,
           ),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(
+        buildKeyErrorMsg(
           Type.atom("b"),
           Type.map([[Type.atom("a"), Type.bitstring("111")]]),
         ),
@@ -5406,7 +5407,7 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid, entry);
 
-      const expectedMessage = Interpreter.buildKeyErrorMsg(
+      const expectedMessage = buildKeyErrorMsg(
         Type.atom("c"),
         Type.map([
           [Type.atom("a"), Type.bitstring("111")],

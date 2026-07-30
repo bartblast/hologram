@@ -3,13 +3,13 @@
 import {
   assert,
   assertBoxedError,
+  buildArgumentErrorMsg,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -117,10 +117,7 @@ describe("Erlang_Unicode", () => {
         () =>
           characters_to_binary(Type.bitstring([1, 0, 1]), utf8Atom, utf8Atom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -148,10 +145,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => characters_to_binary(input, utf8Atom, utf8Atom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -177,10 +171,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => characters_to_binary(input, utf8Atom, utf8Atom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -188,10 +179,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => characters_to_binary(Type.atom("abc"), utf8Atom, utf8Atom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -610,10 +598,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -623,10 +608,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -636,10 +618,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -876,10 +855,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -889,10 +865,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -902,10 +875,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -915,10 +885,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -932,10 +899,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1214,10 +1178,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1227,10 +1188,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1240,10 +1198,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1253,10 +1208,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1269,10 +1221,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1282,10 +1231,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1498,10 +1444,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1511,10 +1454,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1524,10 +1464,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1537,10 +1474,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1554,10 +1488,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1824,10 +1755,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1837,10 +1765,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1850,10 +1775,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1863,10 +1785,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1876,10 +1795,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1893,10 +1809,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -2221,10 +2134,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -2234,10 +2144,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -2245,10 +2152,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.integer(65)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -2258,10 +2162,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -2271,10 +2172,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -2288,10 +2186,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 

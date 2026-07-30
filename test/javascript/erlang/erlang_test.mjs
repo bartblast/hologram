@@ -7,6 +7,11 @@ import {
   assertBoxedFalse,
   assertBoxedStrictEqual,
   assertBoxedTrue,
+  buildArgumentErrorMsg,
+  buildBadFunctionErrorMsg,
+  buildBadMapErrorMsg,
+  buildKeyErrorMsg,
+  buildUndefinedFunctionErrorMsg,
   contextFixture,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
@@ -1600,7 +1605,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
     });
 
@@ -1737,7 +1742,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => append_element(Type.atom("abc"), Type.integer(1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+        buildArgumentErrorMsg(1, "not a tuple"),
       );
     });
 
@@ -1828,7 +1833,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(fun, Type.list()),
         "BadFunctionError",
-        Interpreter.buildBadFunctionErrorMsg(fun),
+        buildBadFunctionErrorMsg(fun),
       );
     });
 
@@ -1969,7 +1974,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+        buildArgumentErrorMsg(2, "not an atom"),
       );
     });
 
@@ -1979,7 +1984,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+        buildArgumentErrorMsg(3, "not a list"),
       );
     });
 
@@ -1990,7 +1995,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+        buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
 
@@ -2002,7 +2007,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(module, "fun_2", 2, false),
+        buildUndefinedFunctionErrorMsg(module, "fun_2", 2, false),
       );
     });
 
@@ -2013,11 +2018,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(
-          module,
-          "nonexistent_fun",
-          2,
-        ),
+        buildUndefinedFunctionErrorMsg(module, "nonexistent_fun", 2),
       );
     });
 
@@ -2078,7 +2079,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(123), encoding),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+        buildArgumentErrorMsg(1, "not an atom"),
       );
     });
 
@@ -2143,7 +2144,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => atom_to_list(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+        buildArgumentErrorMsg(1, "not an atom"),
       );
     });
 
@@ -2362,7 +2363,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_part(Type.atom("abc"), Type.integer(1), Type.integer(2)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2375,7 +2376,7 @@ describe("Erlang", () => {
             Type.integer(2),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2388,7 +2389,7 @@ describe("Erlang", () => {
             Type.integer(2),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+        buildArgumentErrorMsg(2, "not an integer"),
       );
     });
 
@@ -2401,7 +2402,7 @@ describe("Erlang", () => {
             Type.integer(2),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -2414,7 +2415,7 @@ describe("Erlang", () => {
             Type.integer(2),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -2427,7 +2428,7 @@ describe("Erlang", () => {
             Type.integer(9),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+        buildArgumentErrorMsg(3, "out of range"),
       );
     });
 
@@ -2440,7 +2441,7 @@ describe("Erlang", () => {
             Type.float(2.0),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+        buildArgumentErrorMsg(3, "not an integer"),
       );
     });
 
@@ -2453,7 +2454,7 @@ describe("Erlang", () => {
             Type.integer(8),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+        buildArgumentErrorMsg(3, "out of range"),
       );
     });
 
@@ -2466,7 +2467,7 @@ describe("Erlang", () => {
             Type.integer(-5),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+        buildArgumentErrorMsg(3, "out of range"),
       );
     });
 
@@ -2525,7 +2526,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_atom(Type.bitstring([1, 0, 1]), encoding),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2533,7 +2534,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_atom(Type.atom("abc"), encoding),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2666,10 +2667,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2679,10 +2677,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2692,10 +2687,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2726,7 +2718,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2736,7 +2728,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2746,10 +2738,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2759,10 +2748,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2772,10 +2758,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2785,10 +2768,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2798,10 +2778,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2811,10 +2788,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2824,10 +2798,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2837,10 +2808,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2850,10 +2818,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2863,10 +2828,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2876,10 +2838,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2889,10 +2848,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2902,10 +2858,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2915,10 +2868,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -3102,7 +3052,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.atom("abc"), Type.integer(10)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -3110,7 +3060,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring([1, 0, 1]), Type.integer(10)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -3118,7 +3068,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring(""), Type.integer(10)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
+          buildArgumentErrorMsg(
             1,
             "not a textual representation of an integer",
           ),
@@ -3129,7 +3079,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring("123"), Type.integer(2)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
+          buildArgumentErrorMsg(
             1,
             "not a textual representation of an integer",
           ),
@@ -3140,10 +3090,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring("123"), Type.atom("abc")),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
 
@@ -3151,10 +3098,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring("123"), Type.integer(1)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
 
@@ -3162,10 +3106,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring("123"), Type.integer(37)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
     });
@@ -3238,7 +3179,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_list(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -3246,7 +3187,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_list(Type.bitstring([1, 0, 1])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -3372,10 +3313,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3386,10 +3324,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3400,10 +3335,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3597,10 +3529,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3611,10 +3540,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3625,10 +3551,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3639,10 +3562,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3662,10 +3582,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3688,10 +3605,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3777,10 +3691,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -3874,10 +3785,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3889,10 +3797,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3903,10 +3808,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4008,10 +3910,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4022,10 +3921,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4064,10 +3960,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4081,10 +3974,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4150,10 +4040,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4164,10 +4051,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4181,10 +4065,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4197,10 +4078,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4213,10 +4091,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4237,10 +4112,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4281,10 +4153,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4298,10 +4167,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4313,10 +4179,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4472,10 +4335,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4490,10 +4350,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4508,10 +4365,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4649,10 +4503,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4666,10 +4517,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4683,10 +4531,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4807,10 +4652,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4831,10 +4673,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4862,10 +4701,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4882,10 +4718,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4895,7 +4728,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(Type.atom("test")),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -4905,7 +4738,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(bits),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -4915,10 +4748,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4928,10 +4758,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4953,10 +4780,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4973,10 +4797,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -5004,7 +4825,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => bit_size(myAtom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+        buildArgumentErrorMsg(1, "not a bitstring"),
       );
     });
 
@@ -5554,7 +5375,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => byte_size(atom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+        buildArgumentErrorMsg(1, "not a bitstring"),
       );
     });
 
@@ -5643,7 +5464,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
     });
 
@@ -5816,7 +5637,7 @@ describe("Erlang", () => {
         () =>
           testedFun(Type.float(1.0), Type.atom("second"), Type.atom("second")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -5825,7 +5646,7 @@ describe("Erlang", () => {
         () =>
           testedFun(Type.integer(1), Type.atom("banana"), Type.atom("second")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+        buildArgumentErrorMsg(2, "invalid time unit"),
       );
     });
 
@@ -5833,7 +5654,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), Type.atom("second"), integer0),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid time unit"),
+        buildArgumentErrorMsg(3, "invalid time unit"),
       );
     });
 
@@ -5841,7 +5662,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), Type.integer(-1), Type.atom("second")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+        buildArgumentErrorMsg(2, "invalid time unit"),
       );
     });
 
@@ -5849,7 +5670,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), integer0, Type.atom("second")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+        buildArgumentErrorMsg(2, "invalid time unit"),
       );
     });
 
@@ -5857,7 +5678,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), Type.atom("second"), Type.float(1.5)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid time unit"),
+        buildArgumentErrorMsg(3, "invalid time unit"),
       );
     });
 
@@ -5870,7 +5691,7 @@ describe("Erlang", () => {
             Type.atom("second"),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+        buildArgumentErrorMsg(2, "invalid time unit"),
       );
     });
 
@@ -5963,7 +5784,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => delete_element(Type.atom("abc"), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -5971,7 +5792,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => delete_element(Type.integer(1), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -5985,7 +5806,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => delete_element(Type.integer(10), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -5999,7 +5820,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => delete_element(Type.integer(0), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -6013,7 +5834,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => delete_element(Type.integer(-1), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -6171,7 +5992,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.atom("abc"), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -6179,7 +6000,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.integer(1), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -6187,7 +6008,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.integer(10), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -6195,7 +6016,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.integer(0), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -6578,7 +6399,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => float(atomAbc),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
     });
 
@@ -6799,7 +6620,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
 
@@ -6811,7 +6632,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
 
@@ -6823,7 +6644,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
     });
@@ -7028,7 +6849,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
 
@@ -7040,7 +6861,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
     });
@@ -7481,7 +7302,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => float_to_binary(Type.float(10.0), opts),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        buildArgumentErrorMsg(2, "invalid option in list"),
       );
     });
 
@@ -7492,7 +7313,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(integer123, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a float"),
+          buildArgumentErrorMsg(1, "not a float"),
         );
       });
 
@@ -7500,7 +7321,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, integer123),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a list"),
+          buildArgumentErrorMsg(2, "not a list"),
         );
       });
 
@@ -7513,7 +7334,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
+          buildArgumentErrorMsg(2, "not a proper list"),
         );
       });
 
@@ -7521,7 +7342,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, Type.list([atomAbc])),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
     });
@@ -7653,7 +7474,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
     });
 
@@ -7928,7 +7749,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun_info(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a fun"),
+        buildArgumentErrorMsg(1, "not a fun"),
       );
     });
 
@@ -8007,7 +7828,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun_info(Type.atom("abc"), Type.atom("arity")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a fun"),
+        buildArgumentErrorMsg(1, "not a fun"),
       );
     });
 
@@ -8023,7 +7844,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun_info(fun, Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+        buildArgumentErrorMsg(2, "invalid item"),
       );
     });
 
@@ -8039,7 +7860,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun_info(fun, Type.atom("invalid_item")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+        buildArgumentErrorMsg(2, "invalid item"),
       );
     });
 
@@ -8063,7 +7884,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun_info(fun, Type.atom("invalid_item")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+        buildArgumentErrorMsg(2, "invalid item"),
       );
     });
   });
@@ -8263,7 +8084,7 @@ describe("Erlang", () => {
               Type.integer(1),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+          buildArgumentErrorMsg(1, "not an atom"),
         );
       });
 
@@ -8276,7 +8097,7 @@ describe("Erlang", () => {
               Type.integer(1),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+          buildArgumentErrorMsg(2, "not an atom"),
         );
       });
 
@@ -8289,7 +8110,7 @@ describe("Erlang", () => {
               Type.float(2.0),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+          buildArgumentErrorMsg(3, "not an integer"),
         );
       });
     });
@@ -8335,7 +8156,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => hd(Type.list()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
+        buildArgumentErrorMsg(1, "not a nonempty list"),
       );
     });
 
@@ -8343,7 +8164,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => hd(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
+        buildArgumentErrorMsg(1, "not a nonempty list"),
       );
     });
 
@@ -8405,7 +8226,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => insert_element(atomB, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -8413,7 +8234,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => insert_element(integer1, atomB, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -8421,7 +8242,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => insert_element(integer4, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -8429,7 +8250,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => insert_element(integer0, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -8487,10 +8308,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_binary(Type.integer(123123), Type.integer(1)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
 
@@ -8524,10 +8342,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_binary(Type.integer(123123), Type.integer(37)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
     });
@@ -8544,7 +8359,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => integer_to_binary(Type.atom("abc"), Type.integer(16)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -8552,10 +8367,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => integer_to_binary(Type.integer(123123), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
+        buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
       );
     });
 
@@ -8656,7 +8468,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_list_2(Type.float(3.14), integer10),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+          buildArgumentErrorMsg(1, "not an integer"),
         );
       });
 
@@ -8664,10 +8476,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_list_2(integer123, Type.float(3.14)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
 
@@ -8675,10 +8484,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_list_2(integer123, integer1),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
 
@@ -8686,10 +8492,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_list_2(integer123, Type.integer(37)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
     });
@@ -8747,7 +8550,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => iolist_to_binary(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        buildArgumentErrorMsg(1, "not an iodata term"),
       );
     });
 
@@ -8762,7 +8565,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => iolist_to_binary(Type.list([nonBinary])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        buildArgumentErrorMsg(1, "not an iodata term"),
       );
     });
 
@@ -8940,7 +8743,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => is_map_key(atomA, atomAbc),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(atomAbc),
+        buildBadMapErrorMsg(atomAbc),
       );
     });
   });
@@ -9025,7 +8828,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => length(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -9095,7 +8898,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_atom(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -9104,7 +8907,7 @@ describe("Erlang", () => {
         () =>
           list_to_atom(Type.improperList([Type.integer(97), Type.integer(98)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+        buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
 
@@ -9115,7 +8918,7 @@ describe("Erlang", () => {
             Type.list([Type.integer(97), Type.atom("x"), Type.integer(99)]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
+        buildArgumentErrorMsg(1, "not a list of characters"),
       );
     });
 
@@ -9123,7 +8926,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_atom(Type.list([Type.integer(-1)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
+        buildArgumentErrorMsg(1, "not a list of characters"),
       );
     });
 
@@ -9131,7 +8934,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_atom(Type.bitstring("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -9145,7 +8948,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
+        buildArgumentErrorMsg(1, "not a list of characters"),
       );
     });
 
@@ -9153,7 +8956,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_atom(Type.list([Type.integer(97), Type.bitstring("bc")])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
+        buildArgumentErrorMsg(1, "not a list of characters"),
       );
     });
 
@@ -9295,7 +9098,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_binary(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -9303,7 +9106,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_binary(Type.bitstring("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -9311,7 +9114,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_binary(Type.list([Type.atom("abc")])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -9319,7 +9122,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_binary(Type.list([Type.float(1.0)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -9327,7 +9130,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_binary(Type.list([Type.integer(256)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -9335,7 +9138,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_binary(Type.list([Type.integer(-1)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -9350,7 +9153,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -9368,7 +9171,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -9636,7 +9439,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -9651,7 +9454,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -9662,10 +9465,7 @@ describe("Erlang", () => {
             Type.list([Type.integer(49), Type.atom("abc"), Type.integer(51)]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9677,10 +9477,7 @@ describe("Erlang", () => {
             Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9697,10 +9494,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9709,10 +9503,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.list([Type.integer(48)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9732,10 +9523,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9754,10 +9542,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9769,10 +9554,7 @@ describe("Erlang", () => {
             Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9780,10 +9562,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.list()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9792,10 +9571,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.list([Type.integer(46)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9804,10 +9580,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.list([Type.integer(46), Type.integer(53)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9816,10 +9589,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.list([Type.integer(53), Type.integer(46)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9836,10 +9606,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9848,10 +9615,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.list([Type.integer(50), Type.integer(101)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9869,10 +9633,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9890,10 +9651,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9911,10 +9669,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9935,10 +9690,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -9958,10 +9710,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -10226,7 +9975,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_integer(Type.atom("abc"), Type.integer(10)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -10242,7 +9991,7 @@ describe("Erlang", () => {
             Type.integer(10),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+        buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
 
@@ -10250,10 +9999,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_integer(Type.list(), Type.integer(10)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -10265,10 +10011,7 @@ describe("Erlang", () => {
             Type.integer(10),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -10276,10 +10019,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_integer(Type.list([Type.integer(50)]), Type.integer(2)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -10296,10 +10036,7 @@ describe("Erlang", () => {
             Type.integer(10),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -10317,10 +10054,7 @@ describe("Erlang", () => {
             Type.integer(10),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -10328,10 +10062,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_integer(Type.list([Type.integer(45)]), Type.integer(10)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -10339,10 +10070,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_integer(Type.list([Type.integer(43)]), Type.integer(10)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -10350,10 +10078,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_integer(Type.list([Type.integer(49)]), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
+        buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
       );
     });
 
@@ -10365,10 +10090,7 @@ describe("Erlang", () => {
             Type.integer(1),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
+        buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
       );
     });
 
@@ -10380,10 +10102,7 @@ describe("Erlang", () => {
             Type.integer(37),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
+        buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
       );
     });
 
@@ -10443,10 +10162,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a pid",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a pid"),
       );
     });
 
@@ -10454,7 +10170,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -10468,10 +10184,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a pid",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a pid"),
       );
     });
 
@@ -10485,10 +10198,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a pid",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a pid"),
       );
     });
 
@@ -10591,10 +10301,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a reference",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a reference"),
       );
     });
 
@@ -10622,10 +10329,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a reference",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a reference"),
       );
     });
 
@@ -10633,7 +10337,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -10643,7 +10347,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(arg),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -10657,10 +10361,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a reference",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a reference"),
       );
     });
 
@@ -10675,10 +10376,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a reference",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a reference"),
       );
     });
   });
@@ -10706,7 +10404,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_tuple(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -10720,7 +10418,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_tuple(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -10895,7 +10593,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_fun(integer123, Type.atom("fun_0"), integer0),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+        buildArgumentErrorMsg(1, "not an atom"),
       );
     });
 
@@ -10903,7 +10601,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_fun(module, integer123, integer0),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+        buildArgumentErrorMsg(2, "not an atom"),
       );
     });
 
@@ -10911,7 +10609,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_fun(module, Type.atom("fun_0"), float2),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+        buildArgumentErrorMsg(3, "not an integer"),
       );
     });
 
@@ -10919,7 +10617,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_fun(module, Type.atom("fun_0"), Type.integer(-1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+        buildArgumentErrorMsg(3, "out of range"),
       );
     });
 
@@ -10979,7 +10677,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_tuple(Type.integer(-1), atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -10987,7 +10685,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_tuple(float2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -11028,7 +10726,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => map_get(Type.atom("a"), Type.integer(1)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
+        buildBadMapErrorMsg(Type.integer(1)),
       );
     });
 
@@ -11039,7 +10737,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => map_get(key, map),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(key, map),
+        buildKeyErrorMsg(key, map),
       );
     });
   });
@@ -11060,7 +10758,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => map_size(Type.atom("abc")),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+        buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
   });
@@ -11151,7 +10849,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => monotonic_time(Type.float(1.0)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -11159,7 +10857,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => monotonic_time(Type.atom("invalid")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -11167,7 +10865,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => monotonic_time(Type.integer(0)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -11175,7 +10873,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => monotonic_time(Type.integer(-1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -11362,7 +11060,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+        buildArgumentErrorMsg(1, "not a pid"),
       );
     });
 
@@ -11656,7 +11354,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => ref_to_list(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+        buildArgumentErrorMsg(1, "not a reference"),
       );
     });
 
@@ -11917,7 +11615,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
     });
 
@@ -11961,7 +11659,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(atomB, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -11969,7 +11667,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(integer1, atomB, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -11977,7 +11675,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(integer3, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -11985,7 +11683,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(integer0, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -12093,7 +11791,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.atom("abc"), Type.integer(1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -12101,7 +11799,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.bitstring([1, 0, 1]), Type.integer(1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -12109,7 +11807,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.bitstring("abc"), Type.atom("invalid")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+        buildArgumentErrorMsg(2, "not an integer"),
       );
     });
 
@@ -12117,7 +11815,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.bitstring("abc"), Type.integer(-1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -12125,7 +11823,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.bitstring("abc"), Type.integer(4)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -12166,7 +11864,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => system_info(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid system info item"),
+        buildArgumentErrorMsg(1, "invalid system info item"),
       );
     });
 
@@ -12294,7 +11992,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => time_offset(Type.float(1.0)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -12302,7 +12000,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => time_offset(Type.atom("invalid")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -12310,7 +12008,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => time_offset(Type.integer(0)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -12318,7 +12016,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => time_offset(Type.integer(-1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -12399,7 +12097,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => tl(Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
+          buildArgumentErrorMsg(1, "not a nonempty list"),
         );
       });
 
@@ -12407,7 +12105,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => tl(Type.integer(123)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
+          buildArgumentErrorMsg(1, "not a nonempty list"),
         );
       });
     });
@@ -12493,7 +12191,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
     });
 
@@ -12533,7 +12231,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => tuple_size(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+        buildArgumentErrorMsg(1, "not a tuple"),
       );
     });
 
@@ -12569,7 +12267,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => tuple_to_list(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+        buildArgumentErrorMsg(1, "not a tuple"),
       );
     });
 
@@ -12656,7 +12354,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => unique_integer(atomAbc),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -12665,7 +12363,7 @@ describe("Erlang", () => {
         () =>
           unique_integer(Type.improperList([Type.atom("positive"), atomAbc])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+        buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
 
@@ -12673,7 +12371,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => unique_integer(Type.list([Type.integer(123)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
+        buildArgumentErrorMsg(1, "invalid modifier"),
       );
     });
 
@@ -12681,7 +12379,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => unique_integer(Type.list([Type.atom("invalid")])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
+        buildArgumentErrorMsg(1, "invalid modifier"),
       );
     });
 

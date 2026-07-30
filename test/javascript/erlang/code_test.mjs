@@ -3,11 +3,11 @@
 import {
   assert,
   assertBoxedError,
+  buildFunctionClauseErrorMsg,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Erlang_Code from "../../../assets/js/erlang/code.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -40,9 +40,7 @@ describe("Erlang_Code", () => {
       assertBoxedError(
         () => ensure_loaded(Type.integer(1)),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":code.ensure_loaded/1", [
-          Type.integer(1),
-        ]),
+        buildFunctionClauseErrorMsg(":code.ensure_loaded/1", [Type.integer(1)]),
       );
     });
 

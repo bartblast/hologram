@@ -2,12 +2,12 @@ import {
   assert,
   assertBoxedError,
   assertBoxedStrictEqual,
+  buildFunctionClauseErrorMsg,
   contextFixture,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Elixir_URI from "../../../assets/js/elixir/uri.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -182,10 +182,7 @@ describe("Elixir_URI", () => {
         assertBoxedError(
           () => encode(string, predicate),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("URI.encode/2", [
-            string,
-            predicate,
-          ]),
+          buildFunctionClauseErrorMsg("URI.encode/2", [string, predicate]),
         );
       });
 
@@ -206,10 +203,7 @@ describe("Elixir_URI", () => {
         assertBoxedError(
           () => encode(string, predicate),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("URI.encode/2", [
-            string,
-            predicate,
-          ]),
+          buildFunctionClauseErrorMsg("URI.encode/2", [string, predicate]),
         );
       });
 
@@ -223,10 +217,7 @@ describe("Elixir_URI", () => {
         assertBoxedError(
           () => encode(string, predicate),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("URI.encode/2", [
-            string,
-            predicate,
-          ]),
+          buildFunctionClauseErrorMsg("URI.encode/2", [string, predicate]),
         );
       });
 
@@ -254,10 +245,7 @@ describe("Elixir_URI", () => {
         assertBoxedError(
           () => encode(string, predicate),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("URI.encode/2", [
-            string,
-            predicate,
-          ]),
+          buildFunctionClauseErrorMsg("URI.encode/2", [string, predicate]),
         );
       });
 

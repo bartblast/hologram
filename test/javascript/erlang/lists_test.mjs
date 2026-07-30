@@ -6,12 +6,16 @@ import {
   assertBoxedFalse,
   assertBoxedStrictEqual,
   assertBoxedTrue,
+  buildArgumentErrorMsg,
+  buildCaseClauseErrorMsg,
+  buildErlangErrorMsg,
+  buildFunctionClauseErrorMsg,
+  buildMatchErrorMsg,
   contextFixture,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -260,7 +264,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => all(Type.atom("not_function"), properList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.all/2", [
+        buildFunctionClauseErrorMsg(":lists.all/2", [
           Type.atom("not_function"),
           properList,
         ]),
@@ -288,10 +292,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => all(fun, properList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.all/2", [
-          fun,
-          properList,
-        ]),
+        buildFunctionClauseErrorMsg(":lists.all/2", [fun, properList]),
       );
     });
 
@@ -313,7 +314,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => all(fun, Type.atom("abc")),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
+        buildCaseClauseErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -335,10 +336,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => all(fun, improperList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.all_1/2", [
-          fun,
-          Type.integer(3),
-        ]),
+        buildFunctionClauseErrorMsg(":lists.all_1/2", [fun, Type.integer(3)]),
       );
     });
 
@@ -544,7 +542,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => any(Type.atom("abc"), properList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [
+        buildFunctionClauseErrorMsg(":lists.any/2", [
           Type.atom("abc"),
           properList,
         ]),
@@ -572,7 +570,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => any(funArity2, properList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [
+        buildFunctionClauseErrorMsg(":lists.any/2", [
           anonymousCompareFn,
           properList,
         ]),
@@ -597,7 +595,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => any(fun, Type.atom("abc")),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
+        buildCaseClauseErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -619,10 +617,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => any(fun, improperList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.any_1/2", [
-          fun,
-          Type.integer(3),
-        ]),
+        buildFunctionClauseErrorMsg(":lists.any_1/2", [fun, Type.integer(3)]),
       );
     });
 
@@ -694,10 +689,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => duplicate(float1, atomB),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.duplicate/2", [
-          float1,
-          atomB,
-        ]),
+        buildFunctionClauseErrorMsg(":lists.duplicate/2", [float1, atomB]),
       );
     });
 
@@ -707,10 +699,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => duplicate(negativeOne, atomB),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.duplicate/2", [
-          negativeOne,
-          atomB,
-        ]),
+        buildFunctionClauseErrorMsg(":lists.duplicate/2", [negativeOne, atomB]),
       );
     });
 
@@ -762,10 +751,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("first arg is not an anonymous function", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.filter/2",
-        [Type.atom("abc"), properList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.filter/2", [
+        Type.atom("abc"),
+        properList,
+      ]);
 
       assertBoxedError(
         () => filter(Type.atom("abc"), properList),
@@ -776,10 +765,10 @@ describe("Erlang_Lists", () => {
 
     // Client error message is intentionally different than server error message.
     it("first arg is an anonymous function with arity different than 1", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.filter/2",
-        [funArity2, properList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.filter/2", [
+        funArity2,
+        properList,
+      ]);
 
       assertBoxedError(
         () => filter(funArity2, properList),
@@ -789,9 +778,7 @@ describe("Erlang_Lists", () => {
     });
 
     it("second arg is not a list", () => {
-      const expectedMessage = Interpreter.buildErlangErrorMsg(
-        "{:bad_generator, :abc}",
-      );
+      const expectedMessage = buildErlangErrorMsg("{:bad_generator, :abc}");
 
       assertBoxedError(
         () => filter(fun, Type.atom("abc")),
@@ -801,9 +788,7 @@ describe("Erlang_Lists", () => {
     });
 
     it("second arg is not a proper list", () => {
-      const expectedMessage = Interpreter.buildErlangErrorMsg(
-        "{:bad_generator, 3}",
-      );
+      const expectedMessage = buildErlangErrorMsg("{:bad_generator, 3}");
 
       assertBoxedError(
         () => filter(fun, improperList),
@@ -833,8 +818,7 @@ describe("Erlang_Lists", () => {
         Type.integer(4),
       ]);
 
-      const expectedMessage =
-        Interpreter.buildErlangErrorMsg("{:bad_filter, 4}");
+      const expectedMessage = buildErlangErrorMsg("{:bad_filter, 4}");
 
       assertBoxedError(() => filter(fun, list), "ErlangError", expectedMessage);
     });
@@ -954,10 +938,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.flatmap/2",
-        [atomAbc, emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.flatmap/2", [
+        atomAbc,
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => flatmap(atomAbc, emptyList),
@@ -967,10 +951,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 1", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.flatmap/2",
-        [funArity2, emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.flatmap/2", [
+        funArity2,
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => flatmap(funArity2, emptyList),
@@ -980,7 +964,7 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the second argument is not a list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":lists.flatmap_1/2",
         [fun, atomAbc],
       );
@@ -993,7 +977,7 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the second argument is an improper list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":lists.flatmap_1/2",
         [fun, integer3],
       );
@@ -1154,10 +1138,9 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError if the argument is not a list", () => {
       const arg = Type.atom("abc");
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.flatten/1",
-        [arg],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.flatten/1", [
+        arg,
+      ]);
 
       assertBoxedError(
         () => flatten(arg),
@@ -1174,7 +1157,7 @@ describe("Erlang_Lists", () => {
         Type.integer(5),
       ]);
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":lists.do_flatten/2",
         [Type.integer(5), Type.list()],
       );
@@ -1199,7 +1182,7 @@ describe("Erlang_Lists", () => {
         Type.integer(5),
       ]);
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":lists.do_flatten/2",
         [Type.integer(4), Type.list([Type.integer(5)])],
       );
@@ -1370,10 +1353,10 @@ describe("Erlang_Lists", () => {
       const list = Type.atom("abc");
       const tail = Type.list([Type.integer(1), Type.integer(2)]);
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.flatten/2",
-        [list, tail],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.flatten/2", [
+        list,
+        tail,
+      ]);
 
       assertBoxedError(
         () => flatten(list, tail),
@@ -1391,7 +1374,7 @@ describe("Erlang_Lists", () => {
 
       const tail = Type.list([Type.integer(4), Type.integer(5)]);
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":lists.do_flatten/2",
         [Type.integer(3), tail],
       );
@@ -1413,7 +1396,7 @@ describe("Erlang_Lists", () => {
       const list = Type.list([Type.integer(1), nestedImproperList]);
       const tail = Type.list([Type.integer(5), Type.integer(6)]);
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":lists.do_flatten/2",
         [Type.integer(4), tail],
       );
@@ -1429,10 +1412,10 @@ describe("Erlang_Lists", () => {
       const list = Type.list([Type.integer(1), Type.integer(2)]);
       const tail = Type.atom("abc");
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.flatten/2",
-        [list, tail],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.flatten/2", [
+        list,
+        tail,
+      ]);
 
       assertBoxedError(
         () => flatten(list, tail),
@@ -1507,10 +1490,11 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.foldl/3",
-        [Type.atom("abc"), acc, emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.foldl/3", [
+        Type.atom("abc"),
+        acc,
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => foldl(Type.atom("abc"), acc, emptyList),
@@ -1534,10 +1518,11 @@ describe("Erlang_Lists", () => {
         contextFixture(),
       );
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.foldl/3",
-        [fun, acc, emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.foldl/3", [
+        fun,
+        acc,
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => foldl(fun, acc, emptyList),
@@ -1550,7 +1535,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => foldl(fun, acc, Type.atom("abc")),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
+        buildCaseClauseErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -1564,7 +1549,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => foldl(fun, acc, list),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldl_1/3", [
+        buildFunctionClauseErrorMsg(":lists.foldl_1/3", [
           fun,
           Type.list([Type.integer(2), Type.integer(1)]),
           Type.integer(3),
@@ -1652,10 +1637,11 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.foldr/3",
-        [Type.atom("abc"), acc, emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.foldr/3", [
+        Type.atom("abc"),
+        acc,
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => foldr(Type.atom("abc"), acc, emptyList),
@@ -1679,10 +1665,11 @@ describe("Erlang_Lists", () => {
         contextFixture(),
       );
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.foldr/3",
-        [fun, acc, emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.foldr/3", [
+        fun,
+        acc,
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => foldr(fun, acc, emptyList),
@@ -1695,7 +1682,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => foldr(fun, acc, Type.atom("abc")),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
+        buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
           fun,
           acc,
           Type.atom("abc"),
@@ -1713,7 +1700,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => foldr(fun, acc, improperList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
+        buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
           fun,
           acc,
           Type.integer(3),
@@ -1813,10 +1800,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.foreach/2",
-        [atomAbc, properList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.foreach/2", [
+        atomAbc,
+        properList,
+      ]);
 
       assertBoxedError(
         () => foreach(atomAbc, properList),
@@ -1826,10 +1813,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 1", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.foreach/2",
-        [funArity2, properList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.foreach/2", [
+        funArity2,
+        properList,
+      ]);
 
       assertBoxedError(
         () => foreach(funArity2, properList),
@@ -1842,10 +1829,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => foreach(fun, atomAbc),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach_1/2", [
-          fun,
-          atomAbc,
-        ]),
+        buildFunctionClauseErrorMsg(":lists.foreach_1/2", [fun, atomAbc]),
       );
     });
 
@@ -1853,10 +1837,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => foreach(fun, improperList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach_1/2", [
-          fun,
-          integer3,
-        ]),
+        buildFunctionClauseErrorMsg(":lists.foreach_1/2", [fun, integer3]),
       );
     });
 
@@ -1997,7 +1978,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keydelete(atomA, float2, Type.list()),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete/3", [
+        buildFunctionClauseErrorMsg(":lists.keydelete/3", [
           atomA,
           float2,
           Type.list(),
@@ -2009,7 +1990,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keydelete(atomA, integer0, Type.list()),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete/3", [
+        buildFunctionClauseErrorMsg(":lists.keydelete/3", [
           atomA,
           integer0,
           Type.list(),
@@ -2020,10 +2001,11 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError if the third argument (tuples) is not a list", () => {
       const tuples = Type.tuple([Type.tuple([atomB]), Type.tuple([atomC])]);
 
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.keydelete3/3",
-        [atomA, integer1, tuples],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":lists.keydelete3/3", [
+        atomA,
+        integer1,
+        tuples,
+      ]);
 
       assertBoxedError(
         () => keydelete(atomA, integer1, tuples),
@@ -2033,10 +2015,11 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the third argument (tuples) is an improper list", () => {
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.keydelete3/3",
-        [atomA, integer1, Type.tuple([atomD])],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":lists.keydelete3/3", [
+        atomA,
+        integer1,
+        Type.tuple([atomD]),
+      ]);
 
       const tuples = Type.improperList([
         Type.tuple([atomB]),
@@ -2123,7 +2106,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keyfind(Type.atom("abc"), Type.atom("xyz"), Type.list()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+        buildArgumentErrorMsg(2, "not an integer"),
       );
     });
 
@@ -2131,7 +2114,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keyfind(Type.atom("abc"), Type.integer(0), Type.list()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -2139,7 +2122,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keyfind(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+        buildArgumentErrorMsg(3, "not a list"),
       );
     });
 
@@ -2156,7 +2139,7 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+        buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
 
@@ -2215,7 +2198,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keymember(Type.atom("abc"), Type.atom("xyz"), Type.list()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+        buildArgumentErrorMsg(2, "not an integer"),
       );
     });
 
@@ -2223,7 +2206,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keymember(Type.atom("abc"), Type.integer(0), Type.list()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -2231,7 +2214,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keymember(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+        buildArgumentErrorMsg(3, "not a list"),
       );
     });
 
@@ -2248,7 +2231,7 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+        buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
 
@@ -2380,7 +2363,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keyreplace(atomA, float2, Type.list(), Type.tuple()),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
+        buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
           atomA,
           float2,
           Type.list(),
@@ -2393,7 +2376,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keyreplace(atomA, integer0, Type.list(), Type.tuple()),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
+        buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
           atomA,
           integer0,
           Type.list(),
@@ -2405,10 +2388,12 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError if the third argument (tuples) is not a list", () => {
       const tuples = Type.tuple([Type.tuple([atomB]), Type.tuple([atomC])]);
 
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.keyreplace3/4",
-        [atomA, integer1, tuples, Type.tuple()],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":lists.keyreplace3/4", [
+        atomA,
+        integer1,
+        tuples,
+        Type.tuple(),
+      ]);
 
       assertBoxedError(
         () => keyreplace(atomA, integer1, tuples, Type.tuple()),
@@ -2418,10 +2403,12 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the third argument (tuples) is an improper list", () => {
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.keyreplace3/4",
-        [atomA, integer1, Type.tuple([atomD]), Type.tuple()],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":lists.keyreplace3/4", [
+        atomA,
+        integer1,
+        Type.tuple([atomD]),
+        Type.tuple(),
+      ]);
 
       const tuples = Type.improperList([
         Type.tuple([atomB]),
@@ -2476,7 +2463,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keyreplace(atomA, integer1, Type.list(), atomX),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
+        buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
           atomA,
           integer1,
           Type.list(),
@@ -2594,7 +2581,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keysort(Type.float(1.0), emptyList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
+        buildFunctionClauseErrorMsg(":lists.keysort/2", [
           Type.float(1.0),
           emptyList,
         ]),
@@ -2605,7 +2592,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keysort(Type.integer(0), emptyList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
+        buildFunctionClauseErrorMsg(":lists.keysort/2", [
           Type.integer(0),
           emptyList,
         ]),
@@ -2616,7 +2603,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keysort(Type.integer(-1), emptyList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
+        buildFunctionClauseErrorMsg(":lists.keysort/2", [
           Type.integer(-1),
           emptyList,
         ]),
@@ -2627,7 +2614,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keysort(Type.integer(1), Type.atom("a")),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(Type.atom("a")),
+        buildCaseClauseErrorMsg(Type.atom("a")),
       );
     });
 
@@ -2639,7 +2626,7 @@ describe("Erlang_Lists", () => {
             Type.improperList([Type.integer(1), Type.integer(2)]),
           ),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(
+        buildCaseClauseErrorMsg(
           Type.improperList([Type.integer(1), Type.integer(2)]),
         ),
       );
@@ -2658,7 +2645,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keysort(index, input),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keysplit_1/8"),
+        buildFunctionClauseErrorMsg(":lists.keysplit_1/8"),
       );
     });
 
@@ -2666,7 +2653,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keysort(Type.integer(1), improperList),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -2676,7 +2663,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keysort(Type.integer(1), input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -2686,7 +2673,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keysort(Type.integer(1), input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -2871,7 +2858,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keystore(atomA, float2, Type.list(), Type.tuple()),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keystore/4", [
+        buildFunctionClauseErrorMsg(":lists.keystore/4", [
           atomA,
           float2,
           Type.list(),
@@ -2884,7 +2871,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keystore(atomA, integer0, Type.list(), Type.tuple()),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keystore/4", [
+        buildFunctionClauseErrorMsg(":lists.keystore/4", [
           atomA,
           integer0,
           Type.list(),
@@ -2896,10 +2883,12 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError if the third argument (tuples) is not a list", () => {
       const tuples = Type.tuple([Type.tuple([atomB]), Type.tuple([atomC])]);
 
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.keystore2/4",
-        [atomA, integer1, tuples, Type.tuple()],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":lists.keystore2/4", [
+        atomA,
+        integer1,
+        tuples,
+        Type.tuple(),
+      ]);
 
       assertBoxedError(
         () => keystore(atomA, integer1, tuples, Type.tuple()),
@@ -2909,10 +2898,12 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the third argument (tuples) is an improper list", () => {
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.keystore2/4",
-        [atomA, integer1, Type.tuple([atomD]), Type.tuple()],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":lists.keystore2/4", [
+        atomA,
+        integer1,
+        Type.tuple([atomD]),
+        Type.tuple(),
+      ]);
 
       const tuples = Type.improperList([
         Type.tuple([atomB]),
@@ -2967,7 +2958,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keystore(atomA, integer1, Type.list(), atomX),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keystore/4", [
+        buildFunctionClauseErrorMsg(":lists.keystore/4", [
           atomA,
           integer1,
           Type.list(),
@@ -3132,7 +3123,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keytake(atomA, float2, Type.list()),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/3", [
+        buildFunctionClauseErrorMsg(":lists.keytake/3", [
           atomA,
           float2,
           Type.list(),
@@ -3144,7 +3135,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keytake(atomA, integer0, Type.list()),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/3", [
+        buildFunctionClauseErrorMsg(":lists.keytake/3", [
           atomA,
           integer0,
           Type.list(),
@@ -3155,10 +3146,12 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError if the third argument (tuples) is not a list", () => {
       const tuples = Type.tuple([Type.tuple([atomB]), Type.tuple([atomC])]);
 
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.keytake/4",
-        [atomA, integer1, tuples, emptyList],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":lists.keytake/4", [
+        atomA,
+        integer1,
+        tuples,
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => keytake(atomA, integer1, tuples),
@@ -3174,15 +3167,12 @@ describe("Erlang_Lists", () => {
         Type.tuple([atomD]),
       ]);
 
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.keytake/4",
-        [
-          atomA,
-          integer1,
-          Type.tuple([atomD]),
-          Type.list([Type.tuple([atomC]), Type.tuple([atomB])]),
-        ],
-      );
+      const expectedMsg = buildFunctionClauseErrorMsg(":lists.keytake/4", [
+        atomA,
+        integer1,
+        Type.tuple([atomD]),
+        Type.list([Type.tuple([atomC]), Type.tuple([atomB])]),
+      ]);
 
       assertBoxedError(
         () => keytake(atomA, integer1, tuples),
@@ -3277,10 +3267,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.map/2",
-        [Type.atom("abc"), emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.map/2", [
+        Type.atom("abc"),
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => map(Type.atom("abc"), emptyList),
@@ -3291,10 +3281,10 @@ describe("Erlang_Lists", () => {
 
     // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 1", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.map/2",
-        [funArity2, emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.map/2", [
+        funArity2,
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => map(funArity2, emptyList),
@@ -3307,7 +3297,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => map(fun, Type.atom("abc")),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
+        buildCaseClauseErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -3323,10 +3313,7 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.map_1/2", [
-          fun,
-          Type.integer(3),
-        ]),
+        buildFunctionClauseErrorMsg(":lists.map_1/2", [fun, Type.integer(3)]),
       );
     });
 
@@ -3408,10 +3395,11 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.mapfoldl/3",
-        [Type.atom("abc"), acc, emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.mapfoldl/3", [
+        Type.atom("abc"),
+        acc,
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => mapfoldl(Type.atom("abc"), acc, emptyList),
@@ -3435,10 +3423,11 @@ describe("Erlang_Lists", () => {
         contextFixture(),
       );
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.mapfoldl/3",
-        [funArity1, acc, emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.mapfoldl/3", [
+        funArity1,
+        acc,
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => mapfoldl(funArity1, acc, emptyList),
@@ -3450,7 +3439,7 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError if the third argument is not a list", () => {
       const invalidArg = Type.atom("abc");
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":lists.mapfoldl_1/3",
         [fun, acc, invalidArg],
       );
@@ -3469,7 +3458,7 @@ describe("Erlang_Lists", () => {
         Type.integer(3),
       ]);
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":lists.mapfoldl_1/3",
         [fun, Type.integer(3), Type.integer(3)],
       );
@@ -3502,7 +3491,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => mapfoldl(invalidFun, acc, Type.list([integer1])),
         "MatchError",
-        Interpreter.buildMatchErrorMsg(integer1),
+        buildMatchErrorMsg(integer1),
       );
     });
 
@@ -3595,10 +3584,9 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the argument is not a list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.max/1",
-        [atomAbc],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.max/1", [
+        atomAbc,
+      ]);
 
       assertBoxedError(
         () => max(atomAbc),
@@ -3608,10 +3596,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the argument is an improper list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.max/2",
-        [integer3, integer2],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.max/2", [
+        integer3,
+        integer2,
+      ]);
 
       assertBoxedError(
         () => max(improperList),
@@ -3649,10 +3637,9 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the argument is an empty list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.max/1",
-        [emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.max/1", [
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => max(emptyList),
@@ -3679,7 +3666,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => member(Type.integer(3), improperList),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
+        buildArgumentErrorMsg(2, "not a proper list"),
       );
     });
 
@@ -3692,7 +3679,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => member(Type.integer(4), improperList),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
+        buildArgumentErrorMsg(2, "not a proper list"),
       );
     });
 
@@ -3711,7 +3698,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => member(Type.integer(2), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+        buildArgumentErrorMsg(2, "not a list"),
       );
     });
 
@@ -3795,10 +3782,9 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the argument is not a list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.min/1",
-        [atomAbc],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.min/1", [
+        atomAbc,
+      ]);
 
       assertBoxedError(
         () => min(atomAbc),
@@ -3808,10 +3794,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the argument is an improper list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.min/2",
-        [integer3, integer1],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.min/2", [
+        integer3,
+        integer1,
+      ]);
 
       assertBoxedError(
         () => min(improperList),
@@ -3849,10 +3835,9 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the argument is an empty list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.min/1",
-        [emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.min/1", [
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => min(emptyList),
@@ -3974,10 +3959,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => prefix(Type.atom("a"), list2),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
-          Type.atom("a"),
-          list2,
-        ]),
+        buildFunctionClauseErrorMsg(":lists.prefix/2", [Type.atom("a"), list2]),
       );
     });
 
@@ -3985,10 +3967,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => prefix(list2, Type.atom("a")),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
-          list2,
-          Type.atom("a"),
-        ]),
+        buildFunctionClauseErrorMsg(":lists.prefix/2", [list2, Type.atom("a")]),
       );
     });
 
@@ -4004,7 +3983,7 @@ describe("Erlang_Lists", () => {
             Type.list([Type.integer(1), Type.integer(2)]),
           ),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+        buildFunctionClauseErrorMsg(":lists.prefix/2", [
           Type.integer(3),
           emptyList,
         ]),
@@ -4023,7 +4002,7 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+        buildFunctionClauseErrorMsg(":lists.prefix/2", [
           emptyList,
           Type.integer(3),
         ]),
@@ -4046,7 +4025,7 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+        buildFunctionClauseErrorMsg(":lists.prefix/2", [
           Type.integer(3),
           Type.integer(4),
         ]),
@@ -4070,7 +4049,7 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+        buildFunctionClauseErrorMsg(":lists.prefix/2", [
           Type.integer(3),
           Type.improperList([Type.integer(3), Type.integer(4)]),
         ]),
@@ -4126,7 +4105,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => reverse(atomAbc),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.reverse/1", [atomAbc]),
+        buildFunctionClauseErrorMsg(":lists.reverse/1", [atomAbc]),
       );
     });
 
@@ -4136,7 +4115,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => reverse(list),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.reverse/1", [list]),
+        buildFunctionClauseErrorMsg(":lists.reverse/1", [list]),
       );
     });
 
@@ -4146,7 +4125,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => reverse(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -4162,7 +4141,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => reverse(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+        buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
 
@@ -4251,7 +4230,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => reverse(improperList12, list34),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+        buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
 
@@ -4280,7 +4259,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => reverse(integer5, list34),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -4320,10 +4299,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first argument is not an integer", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.seq/2",
-        [Type.atom("abc"), Type.integer(5)],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.seq/2", [
+        Type.atom("abc"),
+        Type.integer(5),
+      ]);
 
       assertBoxedError(
         () => seq(Type.atom("abc"), Type.integer(5)),
@@ -4333,10 +4312,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the second argument is not an integer", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.seq/2",
-        [Type.integer(1), Type.atom("abc")],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.seq/2", [
+        Type.integer(1),
+        Type.atom("abc"),
+      ]);
 
       assertBoxedError(
         () => seq(Type.integer(1), Type.atom("abc")),
@@ -4346,10 +4325,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError when from > to + 1", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.seq/2",
-        [Type.integer(10), Type.integer(5)],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.seq/2", [
+        Type.integer(10),
+        Type.integer(5),
+      ]);
 
       assertBoxedError(
         () => seq(Type.integer(10), Type.integer(5)),
@@ -4499,7 +4478,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => seq(Type.atom("abc"), Type.integer(5), Type.integer(1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -4507,7 +4486,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => seq(Type.integer(1), Type.atom("abc"), Type.integer(1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+        buildArgumentErrorMsg(2, "not an integer"),
       );
     });
 
@@ -4515,7 +4494,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => seq(Type.integer(1), Type.integer(5), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+        buildArgumentErrorMsg(3, "not an integer"),
       );
     });
 
@@ -4523,7 +4502,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => seq(Type.integer(10), Type.integer(1), Type.integer(1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a negative increment"),
+        buildArgumentErrorMsg(3, "not a negative increment"),
       );
     });
 
@@ -4531,7 +4510,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => seq(Type.integer(1), Type.integer(10), Type.integer(-1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
+        buildArgumentErrorMsg(3, "not a positive increment"),
       );
     });
 
@@ -4539,7 +4518,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => seq(Type.integer(1), Type.integer(5), Type.integer(0)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
+        buildArgumentErrorMsg(3, "not a positive increment"),
       );
     });
 
@@ -4590,10 +4569,9 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the argument is not a list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.sort/1",
-        [Type.atom("abc")],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.sort/1", [
+        Type.atom("abc"),
+      ]);
 
       assertBoxedError(
         () => sort(Type.atom("abc")),
@@ -4606,7 +4584,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => sort(improperList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.split_1/5", [
+        buildFunctionClauseErrorMsg(":lists.split_1/5", [
           integer1,
           integer2,
           integer3,
@@ -4622,7 +4600,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => sort(list),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.split_2/5", [
+        buildFunctionClauseErrorMsg(":lists.split_2/5", [
           integer2,
           integer1,
           atomX,
@@ -4801,10 +4779,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the second argument is not a list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.sort/2",
-        [fun, atomAbc],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.sort/2", [
+        fun,
+        atomAbc,
+      ]);
 
       assertBoxedError(
         () => sort(fun, atomAbc),
@@ -4816,10 +4794,10 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError if the second argument is an improper list with 2 elements", () => {
       const improperList = Type.improperList([integer1, integer2]);
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.sort/2",
-        [fun, improperList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.sort/2", [
+        fun,
+        improperList,
+      ]);
 
       assertBoxedError(
         () => sort(fun, improperList),
@@ -4829,10 +4807,14 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the second argument is an improper list with at least 3 elements", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.fsplit_1/6",
-        [integer2, integer1, fun, integer3, emptyList, emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.fsplit_1/6", [
+        integer2,
+        integer1,
+        fun,
+        integer3,
+        emptyList,
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => sort(fun, improperList),
@@ -4844,10 +4826,14 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError in fsplit_2 if the first comparison is false", () => {
       const list = Type.improperList([integer2, integer1, atomX]);
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.fsplit_2/6",
-        [integer1, integer2, fun, atomX, emptyList, emptyList],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg(":lists.fsplit_2/6", [
+        integer1,
+        integer2,
+        fun,
+        atomX,
+        emptyList,
+        emptyList,
+      ]);
 
       assertBoxedError(
         () => sort(fun, list),
@@ -4953,7 +4939,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => suffix(atomA, list2),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -4961,7 +4947,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => suffix(list2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -4969,7 +4955,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => suffix(improperList, list3),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -4977,7 +4963,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => suffix(list2, improperList),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 

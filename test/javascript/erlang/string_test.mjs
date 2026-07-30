@@ -3,12 +3,16 @@
 import {
   assert,
   assertBoxedError,
+  buildArgumentErrorMsg,
+  buildCaseClauseErrorMsg,
+  buildErlangErrorMsg,
+  buildFunctionClauseErrorMsg,
+  buildMatchErrorMsg,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_String from "../../../assets/js/erlang/string.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -239,7 +243,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => find(invalidArg, Type.bitstring("_"), Type.atom("leading")),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(invalidArg),
+          buildMatchErrorMsg(invalidArg),
         );
       });
 
@@ -250,7 +254,7 @@ describe("Erlang_String", () => {
           () =>
             find(nonBinaryBitstring, Type.bitstring("x"), Type.atom("leading")),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(nonBinaryBitstring),
+          buildMatchErrorMsg(nonBinaryBitstring),
         );
       });
 
@@ -263,10 +267,7 @@ describe("Erlang_String", () => {
               Type.atom("leading"),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+          buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
         );
       });
 
@@ -279,10 +280,7 @@ describe("Erlang_String", () => {
               Type.atom("leading"),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+          buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
         );
       });
 
@@ -295,7 +293,7 @@ describe("Erlang_String", () => {
               Type.bitstring("leading"),
             ),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.find/3", [
+          buildFunctionClauseErrorMsg(":string.find/3", [
             Type.bitstring("Hello World"),
             Type.bitstring(" "),
             Type.bitstring("leading"),
@@ -312,7 +310,7 @@ describe("Erlang_String", () => {
               Type.atom("all"),
             ),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.find/3", [
+          buildFunctionClauseErrorMsg(":string.find/3", [
             Type.bitstring("Hello World"),
             Type.bitstring(" "),
             Type.atom("all"),
@@ -602,10 +600,7 @@ describe("Erlang_String", () => {
       assertBoxedError(
         () => join(list, separator),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
-          list,
-          separator,
-        ]),
+        buildFunctionClauseErrorMsg(":string.join/2", [list, separator]),
       );
     });
 
@@ -620,7 +615,7 @@ describe("Erlang_String", () => {
       assertBoxedError(
         () => join(list, separator),
         "ErlangError",
-        Interpreter.buildErlangErrorMsg("{:bad_generator, :tail}"),
+        buildErlangErrorMsg("{:bad_generator, :tail}"),
       );
     });
 
@@ -631,10 +626,7 @@ describe("Erlang_String", () => {
       assertBoxedError(
         () => join(list, separator),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
-          list,
-          separator,
-        ]),
+        buildFunctionClauseErrorMsg(":string.join/2", [list, separator]),
       );
     });
 
@@ -833,7 +825,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(Type.atom("atom")),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.atom("atom"),
           ]),
         );
@@ -843,9 +835,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(Type.integer(42)),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.integer(42),
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [Type.integer(42)]),
         );
       });
 
@@ -855,9 +845,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(bitstring),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            bitstring,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [bitstring]),
         );
       });
 
@@ -865,7 +853,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(Type.list([Type.atom("atom")])),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.atom("atom"),
           ]),
         );
@@ -877,9 +865,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(Type.list([bitstring])),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            bitstring,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [bitstring]),
         );
       });
 
@@ -887,9 +873,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(Type.list([Type.integer(-1)])),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.integer(-1),
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [Type.integer(-1)]),
         );
       });
 
@@ -897,7 +881,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(Type.list([Type.integer(9_999_999)])),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.integer(9_999_999),
           ]),
         );
@@ -908,7 +892,7 @@ describe("Erlang_String", () => {
           () =>
             length(Type.improperList([Type.integer(104), Type.atom("tail")])),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.atom("tail"),
           ]),
         );
@@ -1206,7 +1190,7 @@ describe("Erlang_String", () => {
               Type.atom("all"),
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(invalidArg),
+          buildMatchErrorMsg(invalidArg),
         );
       });
 
@@ -1220,10 +1204,7 @@ describe("Erlang_String", () => {
               Type.atom("all"),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+          buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
         );
       });
 
@@ -1237,7 +1218,7 @@ describe("Erlang_String", () => {
               Type.bitstring("all"),
             ),
           "CaseClauseError",
-          Interpreter.buildCaseClauseErrorMsg(Type.bitstring("all")),
+          buildCaseClauseErrorMsg(Type.bitstring("all")),
         );
       });
 
@@ -1251,7 +1232,7 @@ describe("Erlang_String", () => {
               Type.atom("invalid"),
             ),
           "CaseClauseError",
-          Interpreter.buildCaseClauseErrorMsg(Type.atom("invalid")),
+          buildCaseClauseErrorMsg(Type.atom("invalid")),
         );
       });
     });
@@ -1404,7 +1385,7 @@ describe("Erlang_String", () => {
             Type.atom("all"),
           ),
         "MatchError",
-        Interpreter.buildMatchErrorMsg(Type.atom("hello_world")),
+        buildMatchErrorMsg(Type.atom("hello_world")),
       );
     });
 
@@ -1414,7 +1395,7 @@ describe("Erlang_String", () => {
       assertBoxedError(
         () => split(nonBinaryBitstring, Type.bitstring(" "), Type.atom("all")),
         "MatchError",
-        Interpreter.buildMatchErrorMsg(nonBinaryBitstring),
+        buildMatchErrorMsg(nonBinaryBitstring),
       );
     });
 
@@ -1427,10 +1408,7 @@ describe("Erlang_String", () => {
             Type.atom("all"),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1443,10 +1421,7 @@ describe("Erlang_String", () => {
             Type.atom("all"),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1459,7 +1434,7 @@ describe("Erlang_String", () => {
             Type.bitstring("all"),
           ),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(Type.bitstring("all")),
+        buildCaseClauseErrorMsg(Type.bitstring("all")),
       );
     });
 
@@ -1472,7 +1447,7 @@ describe("Erlang_String", () => {
             Type.atom("invalid"),
           ),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(Type.atom("invalid")),
+        buildCaseClauseErrorMsg(Type.atom("invalid")),
       );
     });
 
@@ -2201,9 +2176,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.integer(-1),
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [Type.integer(-1)]),
         );
       });
 
@@ -2213,7 +2186,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.integer(9_999_999),
           ]),
         );
@@ -2225,9 +2198,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(bitstring),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
-            bitstring,
-          ]),
+          buildFunctionClauseErrorMsg(":string.titlecase/1", [bitstring]),
         );
       });
 
@@ -2238,9 +2209,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            bitstring,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [bitstring]),
         );
       });
     });
@@ -2252,9 +2221,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
-            input,
-          ]),
+          buildFunctionClauseErrorMsg(":string.titlecase/1", [input]),
         );
       });
 
@@ -2264,9 +2231,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
-            input,
-          ]),
+          buildFunctionClauseErrorMsg(":string.titlecase/1", [input]),
         );
       });
 
@@ -2276,9 +2241,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
-            input,
-          ]),
+          buildFunctionClauseErrorMsg(":string.titlecase/1", [input]),
         );
       });
 
@@ -2288,7 +2251,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.atom("invalid"),
           ]),
         );
@@ -2300,9 +2263,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.float(3.14),
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [Type.float(3.14)]),
         );
       });
     });

@@ -3,11 +3,11 @@
 import {
   assert,
   assertBoxedError,
+  buildArgumentErrorMsg,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Erlang_Math from "../../../assets/js/erlang/math.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -97,7 +97,7 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
     });
 
@@ -242,7 +242,7 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => exp(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
     });
 
@@ -342,7 +342,7 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
     });
 
@@ -480,7 +480,7 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => log(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
     });
 
@@ -592,7 +592,7 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc"), Type.integer(3)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
     });
 
@@ -600,7 +600,7 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => testedFun(Type.integer(7), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a number"),
+        buildArgumentErrorMsg(2, "not a number"),
       );
     });
 

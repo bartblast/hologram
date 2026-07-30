@@ -3,6 +3,8 @@
 import {
   assert,
   assertBoxedError,
+  buildArgumentErrorMsg,
+  buildMultiArgumentErrorMsg,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
@@ -10,7 +12,6 @@ import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Erlang_Re from "../../../assets/js/erlang/re.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -102,7 +103,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compile(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        buildArgumentErrorMsg(1, "not an iodata term"),
       );
     });
 
@@ -544,7 +545,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compileWithOpts(Type.atom("abc"), []),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        buildArgumentErrorMsg(1, "not an iodata term"),
       );
     });
 
@@ -552,7 +553,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compileWithOpts(Type.bitstring([1]), []),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        buildArgumentErrorMsg(1, "not an iodata term"),
       );
     });
 
@@ -560,7 +561,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compileWithOpts(Type.list([Type.integer(256)]), []),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        buildArgumentErrorMsg(1, "not an iodata term"),
       );
     });
 
@@ -570,7 +571,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compileWithOpts(pattern, []),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        buildArgumentErrorMsg(1, "not an iodata term"),
       );
     });
 
@@ -578,7 +579,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compileWithOpts(Type.bitstring([1]), [Type.atom("unicode")]),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        buildArgumentErrorMsg(1, "not an iodata term"),
       );
     });
 
@@ -637,7 +638,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compileWithOpts(Type.bitstring("ab"), [Type.atom("bad")]),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid options"),
+        buildArgumentErrorMsg(2, "invalid options"),
       );
     });
 
@@ -645,7 +646,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compileWithOpts(Type.bitstring("ab"), [Type.atom("notempty")]),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid options"),
+        buildArgumentErrorMsg(2, "invalid options"),
       );
     });
 
@@ -653,7 +654,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compileWithOpts(Type.bitstring("ab"), [Type.integer(1)]),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid options"),
+        buildArgumentErrorMsg(2, "invalid options"),
       );
     });
 
@@ -664,7 +665,7 @@ describe("Erlang_Re", () => {
             Type.tuple([Type.atom("newline"), Type.atom("xx")]),
           ]),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid options"),
+        buildArgumentErrorMsg(2, "invalid options"),
       );
     });
 
@@ -672,7 +673,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compile(Type.bitstring("ab"), Type.atom("unicode")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid options"),
+        buildArgumentErrorMsg(2, "invalid options"),
       );
     });
 
@@ -685,7 +686,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compile(Type.bitstring("ab"), options),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid options"),
+        buildArgumentErrorMsg(2, "invalid options"),
       );
     });
 
@@ -693,7 +694,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compileWithOpts(Type.atom("abc"), [Type.atom("bad")]),
         "ArgumentError",
-        Interpreter.buildMultiArgumentErrorMsg([
+        buildMultiArgumentErrorMsg([
           [1, "not an iodata term"],
           [2, "invalid options"],
         ]),
@@ -704,7 +705,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => compileWithOpts(Type.bitstring("a("), [Type.atom("bad")]),
         "ArgumentError",
-        Interpreter.buildMultiArgumentErrorMsg([
+        buildMultiArgumentErrorMsg([
           [
             1,
             "could not parse regular expression\nmissing closing parenthesis on character 2",
@@ -854,10 +855,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => importPattern(Type.atom("foo")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not an exported regular expression",
-        ),
+        buildArgumentErrorMsg(1, "not an exported regular expression"),
       );
     });
 
@@ -868,10 +866,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => importPattern(exported),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not an exported regular expression",
-        ),
+        buildArgumentErrorMsg(1, "not an exported regular expression"),
       );
     });
 
@@ -882,10 +877,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => importPattern(truncated),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not an exported regular expression",
-        ),
+        buildArgumentErrorMsg(1, "not an exported regular expression"),
       );
     });
 
@@ -904,10 +896,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => importPattern(exported),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not an exported regular expression",
-        ),
+        buildArgumentErrorMsg(1, "not an exported regular expression"),
       );
     });
 
@@ -918,10 +907,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => importPattern(exported),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not an exported regular expression",
-        ),
+        buildArgumentErrorMsg(1, "not an exported regular expression"),
       );
     });
 
@@ -932,10 +918,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => importPattern(exported),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not an exported regular expression",
-        ),
+        buildArgumentErrorMsg(1, "not an exported regular expression"),
       );
     });
 
@@ -1017,10 +1000,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => inspect(Type.atom("foo"), Type.atom("namelist")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a compiled regular expression",
-        ),
+        buildArgumentErrorMsg(1, "not a compiled regular expression"),
       );
     });
 
@@ -1036,10 +1016,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => inspect(rePattern, Type.atom("namelist")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a compiled regular expression",
-        ),
+        buildArgumentErrorMsg(1, "not a compiled regular expression"),
       );
     });
 
@@ -1049,7 +1026,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => inspect(compiled, Type.atom("foo")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a valid item"),
+        buildArgumentErrorMsg(2, "not a valid item"),
       );
     });
 
@@ -1057,10 +1034,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => inspect(Type.atom("foo"), Type.atom("bar")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a compiled regular expression",
-        ),
+        buildArgumentErrorMsg(1, "not a compiled regular expression"),
       );
     });
 
@@ -1224,7 +1198,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         callable,
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(index, message),
+        buildArgumentErrorMsg(index, message),
       );
 
     const captureOption = (valueSpec, type) =>
@@ -2656,7 +2630,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => run(Type.atom("a"), Type.atom("b")),
         "ArgumentError",
-        Interpreter.buildMultiArgumentErrorMsg([
+        buildMultiArgumentErrorMsg([
           [1, "not an iodata term"],
           [2, "neither an iodata term nor a compiled regular expression"],
         ]),
@@ -2670,7 +2644,7 @@ describe("Erlang_Re", () => {
             Type.atom("bad"),
           ]),
         "ArgumentError",
-        Interpreter.buildMultiArgumentErrorMsg([
+        buildMultiArgumentErrorMsg([
           [
             2,
             "could not parse regular expression\nnumbers out of order in {} quantifier on character 5",
@@ -2684,7 +2658,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => run(Type.atom("a"), Type.bitstring("ok"), [Type.atom("bad")]),
         "ArgumentError",
-        Interpreter.buildMultiArgumentErrorMsg([
+        buildMultiArgumentErrorMsg([
           [1, "not an iodata term"],
           [3, "invalid options"],
         ]),
@@ -2695,7 +2669,7 @@ describe("Erlang_Re", () => {
       assertBoxedError(
         () => run(Type.atom("a"), Type.atom("b"), [Type.atom("bad")]),
         "ArgumentError",
-        Interpreter.buildMultiArgumentErrorMsg([
+        buildMultiArgumentErrorMsg([
           [1, "not an iodata term"],
           [2, "neither an iodata term nor a compiled regular expression"],
           [3, "invalid options"],
@@ -2711,7 +2685,7 @@ describe("Erlang_Re", () => {
             Type.atom("bad"),
           ]),
         "ArgumentError",
-        Interpreter.buildMultiArgumentErrorMsg([
+        buildMultiArgumentErrorMsg([
           [2, "neither an iodata term nor a compiled regular expression"],
           [3, "invalid options"],
         ]),

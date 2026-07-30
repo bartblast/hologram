@@ -3,11 +3,11 @@
 import {
   assert,
   assertBoxedError,
+  buildFunctionClauseErrorMsg,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Erlang_Erl_Kernel_Errors from "../../../assets/js/erlang/erl_kernel_errors.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -89,10 +89,10 @@ describe("Erlang_Erl_Kernel_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_kernel_errors.format_error/2",
-          [Type.atom("badarg"), stacktrace],
-        ),
+        buildFunctionClauseErrorMsg(":erl_kernel_errors.format_error/2", [
+          Type.atom("badarg"),
+          stacktrace,
+        ]),
       );
     });
 
@@ -102,10 +102,10 @@ describe("Erlang_Erl_Kernel_Errors", () => {
       assertBoxedError(
         () => format_error(Type.atom("badarg"), stacktrace),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":erl_kernel_errors.format_error/2",
-          [Type.atom("badarg"), stacktrace],
-        ),
+        buildFunctionClauseErrorMsg(":erl_kernel_errors.format_error/2", [
+          Type.atom("badarg"),
+          stacktrace,
+        ]),
       );
     });
 

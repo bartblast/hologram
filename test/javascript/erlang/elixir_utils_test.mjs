@@ -4,12 +4,12 @@ import {
   assert,
   assertBoxedError,
   assertBoxedStrictEqual,
+  buildFunctionClauseErrorMsg,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Elixir_Utils from "../../../assets/js/erlang/elixir_utils.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -242,7 +242,7 @@ describe("Erlang_Elixir_Utils", () => {
     // - Multi-element list with invalid type raises :unicode_util.cpl/2 error (with remaining elements)
 
     it("raises FunctionClauseError when first argument is not bitstring or list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":unicode_util.cp/1",
         [Type.integer(123)],
       );
@@ -255,7 +255,7 @@ describe("Erlang_Elixir_Utils", () => {
     });
 
     it("raises FunctionClauseError when second argument is not bitstring or list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":unicode_util.cp/1",
         [Type.integer(123)],
       );
@@ -270,7 +270,7 @@ describe("Erlang_Elixir_Utils", () => {
     it("raises FunctionClauseError when first argument is non-binary bitstring", () => {
       const arg = Type.bitstring([1, 0, 1]);
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":unicode_util.cp/1",
         [arg],
       );
@@ -285,7 +285,7 @@ describe("Erlang_Elixir_Utils", () => {
     it("raises FunctionClauseError when second argument is non-binary bitstring", () => {
       const arg = Type.bitstring([1, 0, 1]);
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":unicode_util.cp/1",
         [arg],
       );
@@ -300,7 +300,7 @@ describe("Erlang_Elixir_Utils", () => {
     it("raises FunctionClauseError when first argument is single-element list with invalid element", () => {
       const emptyMap = Type.map();
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":unicode_util.cp/1",
         [emptyMap],
       );
@@ -315,7 +315,7 @@ describe("Erlang_Elixir_Utils", () => {
     it("raises FunctionClauseError when second argument is single-element list with invalid element", () => {
       const emptyMap = Type.map();
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":unicode_util.cp/1",
         [emptyMap],
       );
@@ -328,7 +328,7 @@ describe("Erlang_Elixir_Utils", () => {
     });
 
     it("raises FunctionClauseError when first argument is multi-element list with invalid element", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":unicode_util.cpl/2",
         [Type.atom("a"), Type.list([Type.atom("b")])],
       );
@@ -345,7 +345,7 @@ describe("Erlang_Elixir_Utils", () => {
     });
 
     it("raises FunctionClauseError when second argument is multi-element list with invalid element", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+      const expectedMessage = buildFunctionClauseErrorMsg(
         ":unicode_util.cpl/2",
         [Type.atom("a"), Type.list([Type.atom("b")])],
       );

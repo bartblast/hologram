@@ -3,12 +3,13 @@
 import {
   assert,
   assertBoxedError,
+  buildArgumentErrorMsg,
+  buildFunctionClauseErrorMsg,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Uri_String from "../../../assets/js/erlang/uri_string.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -576,7 +577,7 @@ describe("Erlang_Uri_String", () => {
       assertBoxedError(
         () => parse(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":uri_string.parse/1", [arg]),
+        buildFunctionClauseErrorMsg(":uri_string.parse/1", [arg]),
       );
     });
 
@@ -586,7 +587,7 @@ describe("Erlang_Uri_String", () => {
       assertBoxedError(
         () => parse(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":uri_string.parse/1", [arg]),
+        buildFunctionClauseErrorMsg(":uri_string.parse/1", [arg]),
       );
     });
 
@@ -596,10 +597,10 @@ describe("Erlang_Uri_String", () => {
       assertBoxedError(
         () => parse(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":uri_string.parse_scheme_start/2",
-          [arg, Type.map()],
-        ),
+        buildFunctionClauseErrorMsg(":uri_string.parse_scheme_start/2", [
+          arg,
+          Type.map(),
+        ]),
       );
     });
 
@@ -609,10 +610,7 @@ describe("Erlang_Uri_String", () => {
       assertBoxedError(
         () => parse(arg),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -622,13 +620,10 @@ describe("Erlang_Uri_String", () => {
       assertBoxedError(
         () => parse(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":uri_string.parse_scheme_start/2",
-          [
-            Type.tuple([Type.atom("error"), Type.bitstring(""), arg]),
-            Type.map(),
-          ],
-        ),
+        buildFunctionClauseErrorMsg(":uri_string.parse_scheme_start/2", [
+          Type.tuple([Type.atom("error"), Type.bitstring(""), arg]),
+          Type.map(),
+        ]),
       );
     });
 
@@ -638,13 +633,10 @@ describe("Erlang_Uri_String", () => {
       assertBoxedError(
         () => parse(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":uri_string.parse_scheme_start/2",
-          [
-            Type.tuple([Type.atom("error"), Type.bitstring(""), arg]),
-            Type.map(),
-          ],
-        ),
+        buildFunctionClauseErrorMsg(":uri_string.parse_scheme_start/2", [
+          Type.tuple([Type.atom("error"), Type.bitstring(""), arg]),
+          Type.map(),
+        ]),
       );
     });
 
