@@ -108,9 +108,9 @@ defmodule Hologram.Compiler.ClauseBlameTest do
     end
 
     test "guard calling a function outside Kernel" do
-      guard = {{:., [], [:maps, :is_key]}, [], [:a, var(:map)]}
+      guard = erlang_call(:map_get, [:a, var(:map)])
 
-      assert build_guards([guard]) == [{:leaf, ":maps.is_key(:a, map)"}]
+      assert build_guards([guard]) == [{:leaf, ":erlang.map_get(:a, map)"}]
     end
 
     test "guard spelling out an is_struct/1 call" do
