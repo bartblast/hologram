@@ -321,15 +321,24 @@ defmodule Hologram.Compiler.Encoder do
     params_closure = "(context) => #{params_array}"
 
     # Guards are never async — Elixir guards are restricted to a safe subset of functions.
-    guards = encode_as_array(clause.guards, %{context | async?: false}, &encode_closure/2)
+    guards_context = %{context | async?: false}
+    guards = encode_as_array(clause.guards, guards_context, &encode_closure/2)
 
     body = encode_closure(clause.body, context)
 
-    if Hologram.client_stacktraces?() && clause.line do
-      "{params: #{params_closure}, guards: #{guards}, body: #{body}, line: #{clause.line}}"
-    else
-      "{params: #{params_closure}, guards: #{guards}, body: #{body}}"
-    end
+    properties =
+      Enum.reject(
+        [
+          params: params_closure,
+          guards: guards,
+          body: body,
+          line: encode_clause_line(clause),
+          blame: encode_clause_blame(clause, guards_context)
+        ],
+        fn {_name, value} -> is_nil(value) end
+      )
+
+    encode_as_object(properties)
   end
 
   def encode_ir(%IR.IntegerType{value: value}, _context) do
@@ -705,6 +714,61 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_block_expr(expr_js, false, false) do
     "\n#{expr_js};"
+  end
+
+  # The clause head is rendered at build time, but which of its parts failed to
+  # match is known only at raise time, so each guard leaf travels with its own
+  # closure for the client to evaluate. The leaves line up with the guard IR,
+  # which carries the same and/or structure they were split at.
+  defp encode_clause_blame(%IR.FunctionClause{blame: nil}, _context), do: nil
+
+  defp encode_clause_blame(%IR.FunctionClause{blame: blame} = clause, context) do
+    if Hologram.client_stacktraces?() do
+      encode_clause_blame_properties(blame, clause.guards, context)
+    end
+  end
+
+  defp encode_clause_blame_properties(blame, guards_ir, context) do
+    params = Enum.map_join(blame.params, ", ", &encode_as_string(&1, true))
+
+    guards =
+      blame.guards
+      |> Enum.zip(guards_ir)
+      |> Enum.map_join(", ", fn {guard, guard_ir} ->
+        encode_clause_blame_guard(guard, guard_ir, context)
+      end)
+
+    encode_as_object(
+      params: StringUtils.wrap(params, "[", "]"),
+      guards: StringUtils.wrap(guards, "[", "]")
+    )
+  end
+
+  defp encode_clause_blame_guard(
+         {operator, left, right},
+         %IR.RemoteFunctionCall{module: %IR.AtomType{value: :erlang}, args: [left_ir, right_ir]},
+         context
+       ) do
+    encode_as_object(
+      operator: encode_as_string(operator, true),
+      left: encode_clause_blame_guard(left, left_ir, context),
+      right: encode_clause_blame_guard(right, right_ir, context)
+    )
+  end
+
+  defp encode_clause_blame_guard({:leaf, source}, guard_ir, context) do
+    encode_as_object(
+      source: encode_as_string(source, true),
+      test: encode_closure(guard_ir, context)
+    )
+  end
+
+  defp encode_clause_line(%IR.FunctionClause{line: nil}), do: nil
+
+  defp encode_clause_line(%IR.FunctionClause{line: line}) do
+    if Hologram.client_stacktraces?() do
+      to_string(line)
+    end
   end
 
   defp encode_clause_properties(%IR.Clause{} = clause, context) do

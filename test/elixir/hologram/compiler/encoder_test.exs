@@ -1915,6 +1915,118 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) == expected
     end
+
+    test "with blame metadata for a clause without guards" do
+      # (x) do
+      #  :expr_1
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{params: ["x"], guards: []}
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
+        return Type.atom("expr_1");
+        }, blame: {params: ["x"], guards: []}}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with blame metadata for a clause with a guard" do
+      # (x) when :erlang.is_integer(x) do
+      #  :expr_1
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_integer,
+            args: [%IR.Variable{name: :x}]
+          }
+        ],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{params: ["x"], guards: [{:leaf, "is_integer(x)"}]}
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x")], guards: [(context) => Erlang["is_integer/1"](context.vars.x)], body: (context) => {
+        return Type.atom("expr_1");
+        }, blame: {params: ["x"], guards: [{source: "is_integer(x)", test: (context) => Erlang["is_integer/1"](context.vars.x)}]}}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with blame metadata for a guard split at its and/or operators" do
+      # (x) when :erlang.is_integer(x) andalso :erlang.>(x, 1) do
+      #  :expr_1
+      left_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :is_integer,
+        args: [%IR.Variable{name: :x}]
+      }
+
+      right_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :>,
+        args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}]
+      }
+
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :andalso,
+            args: [left_ir, right_ir]
+          }
+        ],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{
+          params: ["x"],
+          guards: [{:and, {:leaf, "is_integer(x)"}, {:leaf, "x > 1"}}]
+        }
+      }
+
+      assert encode_ir(ir) =~
+               ~s/blame: {params: ["x"], guards: [{operator: "and", left: {source: "is_integer(x)", test: (context) => Erlang["is_integer\/1"](context.vars.x)}, right: {source: "x > 1", test: (context) => Erlang[">\/2"](context.vars.x, Type.integer(1n))}}]}}/
+    end
+
+    test "without blame metadata when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      # (x) do
+      #  :expr_1
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{params: ["x"], guards: []}
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
+        return Type.atom("expr_1");
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
   end
 
   test "integer type" do
