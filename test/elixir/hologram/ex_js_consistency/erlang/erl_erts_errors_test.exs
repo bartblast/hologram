@@ -11,6 +11,133 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlErtsErrorsTest do
 
   @error_info [error_info: %{module: :erl_erts_errors}]
 
+  defp bs_stacktrace(error_info_map) do
+    [{:m, :f, 1, [error_info: error_info_map]}]
+  end
+
+  defp expected_bs_result(general) do
+    %{general: general, reason: "construction of binary failed"}
+  end
+
+  describe "format_bs_fail/2" do
+    test "returns an empty map when the error_info carries no cause" do
+      stacktrace = bs_stacktrace(%{module: :erl_erts_errors})
+
+      assert :erl_erts_errors.format_bs_fail(:badarg, stacktrace) == %{}
+    end
+
+    test "returns an empty map when the frame carries no error_info" do
+      stacktrace = [{:m, :f, 1, []}]
+
+      assert :erl_erts_errors.format_bs_fail(:badarg, stacktrace) == %{}
+    end
+
+    test "formats an integer type mismatch" do
+      stacktrace = bs_stacktrace(%{cause: {1, :integer, :type, 1.5}})
+
+      assert :erl_erts_errors.format_bs_fail(:badarg, stacktrace) ==
+               expected_bs_result("segment 1 of type 'integer': expected an integer but got: 1.5")
+    end
+
+    test "formats a binary type mismatch" do
+      stacktrace = bs_stacktrace(%{cause: {1, :binary, :type, 5}})
+
+      assert :erl_erts_errors.format_bs_fail(:badarg, stacktrace) ==
+               expected_bs_result("segment 1 of type 'binary': expected a binary but got: 5")
+    end
+
+    test "formats a utf type mismatch" do
+      stacktrace = bs_stacktrace(%{cause: {2, :utf8, :type, 5}})
+
+      assert :erl_erts_errors.format_bs_fail(:badarg, stacktrace) ==
+               expected_bs_result(
+                 "segment 2 of type 'utf8': expected a non-negative integer encodable as utf8 but got: 5"
+               )
+    end
+
+    test "formats an invalid float size" do
+      stacktrace = bs_stacktrace(%{cause: {1, :float, :invalid, 8}})
+
+      assert :erl_erts_errors.format_bs_fail(:badarg, stacktrace) ==
+               expected_bs_result(
+                 "segment 1 of type 'float': expected one of the supported sizes 16, 32, or 64 but got: 8"
+               )
+    end
+
+    test "formats a short value" do
+      stacktrace = bs_stacktrace(%{cause: {1, :integer, :short, 5}})
+
+      assert :erl_erts_errors.format_bs_fail(:badarg, stacktrace) ==
+               expected_bs_result(
+                 "segment 1 of type 'integer': the value 5 is shorter than the size of the segment"
+               )
+    end
+
+    test "formats an invalid size" do
+      stacktrace = bs_stacktrace(%{cause: {1, :integer, :size, -1}})
+
+      assert :erl_erts_errors.format_bs_fail(:badarg, stacktrace) ==
+               expected_bs_result(
+                 "segment 1 of type 'integer': expected a non-negative integer as size but got: -1"
+               )
+    end
+
+    test "honors the override_segment_position" do
+      stacktrace =
+        bs_stacktrace(%{cause: {1, :integer, :type, 5}, override_segment_position: 3})
+
+      assert :erl_erts_errors.format_bs_fail(:badarg, stacktrace) ==
+               expected_bs_result("segment 3 of type 'integer': expected an integer but got: 5")
+    end
+
+    test "applies the error_info pretty printer" do
+      stacktrace =
+        bs_stacktrace(%{cause: {1, :binary, :unit, <<1::size(3)>>}, pretty_printer: &inspect/1})
+
+      assert :erl_erts_errors.format_bs_fail(:badarg, stacktrace) ==
+               expected_bs_result(
+                 "segment 1 of type 'binary': the size of the value <<1::size(3)>> is not a multiple of the unit for the segment"
+               )
+    end
+
+    test "formats a float outside the expressible range with the pretty printer" do
+      stacktrace =
+        bs_stacktrace(%{cause: {1, :float, :no_float, :abc}, pretty_printer: &inspect/1})
+
+      assert :erl_erts_errors.format_bs_fail(:badarg, stacktrace) ==
+               expected_bs_result(
+                 "segment 1 of type 'float': the value :abc is outside the range expressible as a float"
+               )
+    end
+
+    test "formats a too large size for a system_limit reason" do
+      stacktrace = bs_stacktrace(%{cause: {1, :integer, :size, 99}})
+
+      assert :erl_erts_errors.format_bs_fail(:system_limit, stacktrace) ==
+               expected_bs_result("segment 1 of type 'integer': the size 99 is too large")
+    end
+
+    test "formats a too large binary for a system_limit reason" do
+      stacktrace = bs_stacktrace(%{cause: {1, :binary, :binary, :size}})
+
+      assert :erl_erts_errors.format_bs_fail(:system_limit, stacktrace) ==
+               expected_bs_result(
+                 "segment 1 of type 'binary': the size of the binary/bitstring is too large (exceeding 2147483647 bits)"
+               )
+    end
+
+    test "raises FunctionClauseError when the stacktrace is empty" do
+      stacktrace = []
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":erl_erts_errors.format_bs_fail/2", [
+                     :badarg,
+                     stacktrace
+                   ]),
+                   {:erl_erts_errors, :format_bs_fail, [:badarg, stacktrace]}
+    end
+  end
+
   describe "format_error/2" do
     test "returns an empty map when the module has no formatter" do
       stacktrace = [{:some_module, :f, [1], @error_info}]

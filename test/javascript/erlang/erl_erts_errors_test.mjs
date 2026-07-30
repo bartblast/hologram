@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  contextFixture,
   defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
@@ -36,6 +37,324 @@ function erlangStacktrace(functionName, argsOrArity) {
 // Always update both together.
 
 describe("Erlang_Erl_Erts_Errors", () => {
+  describe("format_bs_fail/2", () => {
+    const format_bs_fail = Erlang_Erl_Erts_Errors["format_bs_fail/2"];
+
+    const bsStacktrace = (errorInfoMap) =>
+      Type.list([
+        Type.tuple([
+          Type.atom("m"),
+          Type.atom("f"),
+          Type.integer(1),
+          Type.keywordList([[Type.atom("error_info"), errorInfoMap]]),
+        ]),
+      ]);
+
+    const causeErrorInfo = (cause) => Type.map([[Type.atom("cause"), cause]]);
+
+    const expectedResult = (general) =>
+      Type.map([
+        [Type.atom("general"), Type.bitstring(general)],
+        [Type.atom("reason"), Type.bitstring("construction of binary failed")],
+      ]);
+
+    const inspectPrettyPrinter = () =>
+      Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("value")],
+            guards: [],
+            body: (context) =>
+              Type.bitstring(Interpreter.inspect(context.vars.value)),
+          },
+        ],
+        contextFixture(),
+      );
+
+    it("returns an empty map when the error_info carries no cause", () => {
+      const stacktrace = bsStacktrace(
+        Type.map([[Type.atom("module"), Type.atom("erl_erts_errors")]]),
+      );
+
+      const result = format_bs_fail(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("returns an empty map when the frame carries no error_info", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.atom("m"),
+          Type.atom("f"),
+          Type.integer(1),
+          Type.list(),
+        ]),
+      ]);
+
+      const result = format_bs_fail(Type.atom("badarg"), stacktrace);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("formats an integer type mismatch", () => {
+      const cause = Type.tuple([
+        Type.integer(1),
+        Type.atom("integer"),
+        Type.atom("type"),
+        Type.float(1.5),
+      ]);
+
+      const result = format_bs_fail(
+        Type.atom("badarg"),
+        bsStacktrace(causeErrorInfo(cause)),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        expectedResult(
+          "segment 1 of type 'integer': expected an integer but got: 1.5",
+        ),
+      );
+    });
+
+    it("formats a binary type mismatch", () => {
+      const cause = Type.tuple([
+        Type.integer(1),
+        Type.atom("binary"),
+        Type.atom("type"),
+        Type.integer(5),
+      ]);
+
+      const result = format_bs_fail(
+        Type.atom("badarg"),
+        bsStacktrace(causeErrorInfo(cause)),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        expectedResult(
+          "segment 1 of type 'binary': expected a binary but got: 5",
+        ),
+      );
+    });
+
+    it("formats a utf type mismatch", () => {
+      const cause = Type.tuple([
+        Type.integer(2),
+        Type.atom("utf8"),
+        Type.atom("type"),
+        Type.integer(5),
+      ]);
+
+      const result = format_bs_fail(
+        Type.atom("badarg"),
+        bsStacktrace(causeErrorInfo(cause)),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        expectedResult(
+          "segment 2 of type 'utf8': expected a non-negative integer encodable as utf8 but got: 5",
+        ),
+      );
+    });
+
+    it("formats an invalid float size", () => {
+      const cause = Type.tuple([
+        Type.integer(1),
+        Type.atom("float"),
+        Type.atom("invalid"),
+        Type.integer(8),
+      ]);
+
+      const result = format_bs_fail(
+        Type.atom("badarg"),
+        bsStacktrace(causeErrorInfo(cause)),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        expectedResult(
+          "segment 1 of type 'float': expected one of the supported sizes 16, 32, or 64 but got: 8",
+        ),
+      );
+    });
+
+    it("formats a short value", () => {
+      const cause = Type.tuple([
+        Type.integer(1),
+        Type.atom("integer"),
+        Type.atom("short"),
+        Type.integer(5),
+      ]);
+
+      const result = format_bs_fail(
+        Type.atom("badarg"),
+        bsStacktrace(causeErrorInfo(cause)),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        expectedResult(
+          "segment 1 of type 'integer': the value 5 is shorter than the size of the segment",
+        ),
+      );
+    });
+
+    it("formats an invalid size", () => {
+      const cause = Type.tuple([
+        Type.integer(1),
+        Type.atom("integer"),
+        Type.atom("size"),
+        Type.integer(-1),
+      ]);
+
+      const result = format_bs_fail(
+        Type.atom("badarg"),
+        bsStacktrace(causeErrorInfo(cause)),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        expectedResult(
+          "segment 1 of type 'integer': expected a non-negative integer as size but got: -1",
+        ),
+      );
+    });
+
+    it("honors the override_segment_position", () => {
+      const cause = Type.tuple([
+        Type.integer(1),
+        Type.atom("integer"),
+        Type.atom("type"),
+        Type.integer(5),
+      ]);
+
+      const errorInfoMap = Type.map([
+        [Type.atom("cause"), cause],
+        [Type.atom("override_segment_position"), Type.integer(3)],
+      ]);
+
+      const result = format_bs_fail(
+        Type.atom("badarg"),
+        bsStacktrace(errorInfoMap),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        expectedResult(
+          "segment 3 of type 'integer': expected an integer but got: 5",
+        ),
+      );
+    });
+
+    it("applies the error_info pretty printer", () => {
+      const cause = Type.tuple([
+        Type.integer(1),
+        Type.atom("binary"),
+        Type.atom("unit"),
+        Type.bitstring([0, 0, 1]),
+      ]);
+
+      const errorInfoMap = Type.map([
+        [Type.atom("cause"), cause],
+        [Type.atom("pretty_printer"), inspectPrettyPrinter()],
+      ]);
+
+      const result = format_bs_fail(
+        Type.atom("badarg"),
+        bsStacktrace(errorInfoMap),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        expectedResult(
+          "segment 1 of type 'binary': the size of the value <<1::size(3)>> is not a multiple of the unit for the segment",
+        ),
+      );
+    });
+
+    it("formats a float outside the expressible range with the pretty printer", () => {
+      const cause = Type.tuple([
+        Type.integer(1),
+        Type.atom("float"),
+        Type.atom("no_float"),
+        Type.atom("abc"),
+      ]);
+
+      const errorInfoMap = Type.map([
+        [Type.atom("cause"), cause],
+        [Type.atom("pretty_printer"), inspectPrettyPrinter()],
+      ]);
+
+      const result = format_bs_fail(
+        Type.atom("badarg"),
+        bsStacktrace(errorInfoMap),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        expectedResult(
+          "segment 1 of type 'float': the value :abc is outside the range expressible as a float",
+        ),
+      );
+    });
+
+    it("formats a too large size for a system_limit reason", () => {
+      const cause = Type.tuple([
+        Type.integer(1),
+        Type.atom("integer"),
+        Type.atom("size"),
+        Type.integer(99),
+      ]);
+
+      const result = format_bs_fail(
+        Type.atom("system_limit"),
+        bsStacktrace(causeErrorInfo(cause)),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        expectedResult("segment 1 of type 'integer': the size 99 is too large"),
+      );
+    });
+
+    it("formats a too large binary for a system_limit reason", () => {
+      const cause = Type.tuple([
+        Type.integer(1),
+        Type.atom("binary"),
+        Type.atom("binary"),
+        Type.atom("size"),
+      ]);
+
+      const result = format_bs_fail(
+        Type.atom("system_limit"),
+        bsStacktrace(causeErrorInfo(cause)),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        expectedResult(
+          "segment 1 of type 'binary': the size of the binary/bitstring is too large (exceeding 2147483647 bits)",
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError when the stacktrace is empty", () => {
+      const stacktrace = Type.list();
+
+      assertBoxedError(
+        () => format_bs_fail(Type.atom("badarg"), stacktrace),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_erts_errors.format_bs_fail/2",
+          [Type.atom("badarg"), stacktrace],
+        ),
+      );
+    });
+  });
+
   describe("format_error/2", () => {
     const format_error = Erlang_Erl_Erts_Errors["format_error/2"];
 

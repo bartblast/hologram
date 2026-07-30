@@ -571,6 +571,136 @@ const Erlang_Erl_Erts_Errors = {
   // End _format_error_map/3
   // Deps: [:erl_erts_errors._expand_error/1]
 
+  // Mirrors OTP's format_bs_fail/2 with its do_format_bs_fail helpers. The
+  // frame's error_info pretty printer is applied to the offending value;
+  // when absent, the client substitutes Elixir-style inspection for OTP's
+  // possibly_truncated default - the client derivation path (Exception's
+  // error_info handling) always injects Elixir's &inspect/1 anyway. The
+  // cause shapes form a closed set produced by the BEAM's binary
+  // construction instructions, so there is no function clause fallback for
+  // unknown error tags.
+  // Start format_bs_fail/2
+  "format_bs_fail/2": (reason, stacktrace) => {
+    const isFourTupleTopFrame =
+      Type.isList(stacktrace) &&
+      stacktrace.data.length > 0 &&
+      Type.isTuple(stacktrace.data[0]) &&
+      stacktrace.data[0].data.length === 4;
+
+    if (!isFourTupleTopFrame) {
+      Interpreter.raiseFunctionClauseErrorMsg(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":erl_erts_errors.format_bs_fail/2",
+          [reason, stacktrace],
+        ),
+      );
+    }
+
+    const frameLocation = stacktrace.data[0].data[3];
+
+    const errorInfoEntry = Type.isList(frameLocation)
+      ? frameLocation.data.find(
+          (entry) =>
+            Type.isTuple(entry) &&
+            entry.data.length === 2 &&
+            Type.isAtom(entry.data[0]) &&
+            entry.data[0].value === "error_info" &&
+            Type.isMap(entry.data[1]),
+        )
+      : undefined;
+
+    const errorInfoMap = errorInfoEntry?.data[1];
+
+    const cause =
+      errorInfoMap?.data[Type.encodeMapKey(Type.atom("cause"))]?.[1];
+
+    if (
+      cause === undefined ||
+      !Type.isTuple(cause) ||
+      cause.data.length !== 4
+    ) {
+      return Type.map();
+    }
+
+    const [segment, type, errorTag, value] = cause.data;
+
+    const overrideEntry =
+      errorInfoMap.data[
+        Type.encodeMapKey(Type.atom("override_segment_position"))
+      ];
+
+    const segmentPosition = overrideEntry ? overrideEntry[1] : segment;
+
+    const prettyPrinterEntry =
+      errorInfoMap.data[Type.encodeMapKey(Type.atom("pretty_printer"))];
+
+    const prettyPrint = (term) => {
+      if (prettyPrinterEntry === undefined) {
+        return Interpreter.inspect(term);
+      }
+
+      return Bitstring.toText(
+        Interpreter.callAnonymousFunction(prettyPrinterEntry[1], [term]),
+      );
+    };
+
+    const formatDetail = () => {
+      const typeName = type.value;
+      const tag = errorTag.value;
+
+      if (Type.isAtom(reason) && reason.value === "system_limit") {
+        if (
+          typeName === "binary" &&
+          tag === "binary" &&
+          Type.isAtom(value) &&
+          value.value === "size"
+        ) {
+          return "the size of the binary/bitstring is too large (exceeding 2147483647 bits)";
+        }
+
+        return `the size ${Interpreter.inspect(value)} is too large`;
+      }
+
+      if (typeName === "float" && tag === "invalid") {
+        return `expected one of the supported sizes 16, 32, or 64 but got: ${Interpreter.inspect(value)}`;
+      }
+
+      if (typeName === "float" && tag === "no_float") {
+        return `the value ${prettyPrint(value)} is outside the range expressible as a float`;
+      }
+
+      if (typeName === "binary" && tag === "unit") {
+        return `the size of the value ${prettyPrint(value)} is not a multiple of the unit for the segment`;
+      }
+
+      if (tag === "short") {
+        return `the value ${prettyPrint(value)} is shorter than the size of the segment`;
+      }
+
+      if (tag === "size") {
+        return `expected a non-negative integer as size but got: ${prettyPrint(value)}`;
+      }
+
+      const expected =
+        {
+          binary: "a binary",
+          float: "a float or an integer",
+          integer: "an integer",
+        }[typeName] ?? `a non-negative integer encodable as ${typeName}`;
+
+      return `expected ${expected} but got: ${prettyPrint(value)}`;
+    };
+
+    const general = `segment ${segmentPosition.value} of type '${type.value}': ${formatDetail()}`;
+
+    return Type.map([
+      [Type.atom("general"), Type.bitstring(general)],
+      [Type.atom("reason"), Type.bitstring("construction of binary failed")],
+    ]);
+  },
+  // End format_bs_fail/2
+  // Deps: []
+
   // Start format_error/2
   "format_error/2": (reason, stacktrace) => {
     const isFourTupleTopFrame =
