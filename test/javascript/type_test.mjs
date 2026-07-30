@@ -81,6 +81,7 @@ describe("Type", () => {
       capturedModule: null,
       clauses: clauses,
       context: context,
+      name: null,
       uniq: 1,
     };
 
@@ -566,6 +567,7 @@ describe("Type", () => {
       capturedModule: capturedModule,
       clauses: clauses,
       context: contextFixture({module: "Aaa.Bbb", vars: {}}),
+      name: null,
       uniq: 1,
     };
 

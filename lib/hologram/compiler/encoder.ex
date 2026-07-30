@@ -70,7 +70,7 @@ defmodule Hologram.Compiler.Encoder do
         ) :: String.t()
   def encode_elixir_function(module_name, function, arity, visibility, clauses, context) do
     async? = MapSet.member?(context.async_mfas, {context.module, function, arity})
-    clause_context = %{context | async?: async?}
+    clause_context = %{context | arity: arity, async?: async?, function: function}
     clauses_js = encode_as_array(clauses, clause_context)
 
     metadata_js =
@@ -190,8 +190,9 @@ defmodule Hologram.Compiler.Encoder do
     async? = has_async_call?(clauses, context)
     clause_context = %{context | async?: async?}
     clauses_js = encode_as_array(clauses, clause_context)
+    name_js = encode_anonymous_function_name(context)
 
-    "Type.anonymousFunction(#{arity}, #{clauses_js}, context)"
+    "Type.anonymousFunction(#{arity}, #{clauses_js}, context#{name_js})"
   end
 
   def encode_ir(
@@ -671,6 +672,16 @@ defmodule Hologram.Compiler.Encoder do
     value
     |> encode_as_string(false)
     |> StringUtils.wrap("\"", "\"")
+  end
+
+  # The BEAM names an anonymous function after the definition it appears in,
+  # numbering the ones defined there. The index is left at zero, because the
+  # BEAM's counts every generated function in the module - comprehensions and
+  # captures included - and it shows up in no message, only in the name itself.
+  defp encode_anonymous_function_name(%Context{function: nil}), do: ""
+
+  defp encode_anonymous_function_name(%Context{arity: arity, function: function}) do
+    ", " <> encode_as_string("-#{function}/#{arity}-fun-0-", true)
   end
 
   defp encode_bitstring_modifier({:size, size}, context) do

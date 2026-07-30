@@ -26,7 +26,7 @@ const Elixir_FunctionClauseError = {
     const module = struct.data["atom(module)"][1];
     const functionName = functionTerm.value;
     const arity = struct.data["atom(arity)"][1].value;
-    const mfa = `${Interpreter.inspect(module)}.${functionName}/${arity}`;
+    const mfa = formatMfa(module, functionName, arity);
 
     const args = struct.data["atom(args)"][1];
 
@@ -56,6 +56,36 @@ const CLAUSE_LIMIT = 10;
 
 // Kernel's and/or precedences, which decide where the rendering parenthesizes.
 const PRECEDENCES = {and: 130, or: 120};
+
+// Mirrors Code.Identifier.extract_anonymous_fun_parent/1: the name the BEAM
+// gives a function defined inside another one spells out the definition it
+// belongs to.
+function extractAnonymousFunParent(functionName) {
+  if (!functionName.startsWith("-")) {
+    return null;
+  }
+
+  const segments = functionName.slice(1).split("/");
+  const trailing = segments.pop().split("-");
+
+  if (trailing.length !== 4 || trailing[3] !== "") {
+    return null;
+  }
+
+  return {name: segments.join("/"), arity: trailing[0]};
+}
+
+// Mirrors Exception.format_mfa/3.
+function formatMfa(module, functionName, arity) {
+  const parent = extractAnonymousFunParent(functionName);
+  const moduleName = Interpreter.inspect(module);
+
+  if (parent === null) {
+    return `${moduleName}.${functionName}/${arity}`;
+  }
+
+  return `anonymous fn/${arity} in ${moduleName}.${parent.name}/${parent.arity}`;
+}
 
 function indent(text) {
   return text.replaceAll("\n", "\n    ");

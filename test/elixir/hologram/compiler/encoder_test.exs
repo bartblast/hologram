@@ -504,6 +504,44 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, context) == expected
     end
+
+    test "names the function after the definition it is encoded in" do
+      # fn x -> x end
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_function: nil,
+        captured_module: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{expressions: [%IR.Variable{name: :x}]}
+          }
+        ]
+      }
+
+      context = %Context{arity: 2, function: :my_fun, module: Aaa.Bbb}
+
+      assert encode_ir(ir, context) =~ ~s/, context, "-my_fun\/2-fun-0-")/
+    end
+
+    test "leaves the function unnamed outside a definition" do
+      # fn x -> x end
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_function: nil,
+        captured_module: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{expressions: [%IR.Variable{name: :x}]}
+          }
+        ]
+      }
+
+      assert encode_ir(ir, %Context{module: Aaa.Bbb}) =~ ", context)"
+    end
   end
 
   describe "atom type" do

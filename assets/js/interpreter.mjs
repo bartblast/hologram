@@ -228,10 +228,7 @@ export default class Interpreter {
         module: fun.context.module
           ? Interpreter.moduleExName(fun.context.module)
           : null,
-        // TODO: take the BEAM-generated fun name ("-parent/arity-fun-N-")
-        // from compile-time metadata, so the frame renders as
-        // "anonymous fn/N in Module.parent/arity".
-        function: null,
+        function: fun.name,
         arityOrArgs: fun.arity,
         file: definingModuleProxy?.__metadata__?.file ?? null,
         line: null,
@@ -274,11 +271,13 @@ export default class Interpreter {
         }
       }
 
-      Interpreter.raiseFunctionClauseErrorMsg(
-        Interpreter.buildFunctionClauseErrorMsg(
-          `anonymous fn/${fun.arity}`,
-          argsArray,
-        ),
+      Interpreter.raiseFunctionClauseError(
+        fun.context.module
+          ? Interpreter.moduleExName(fun.context.module)
+          : null,
+        fun.name,
+        fun.arity,
+        argsArray,
       );
     } finally {
       if (popsFrameOnExit) {
@@ -1155,9 +1154,8 @@ export default class Interpreter {
     args = null,
     clauseHeads = null,
   ) {
-    const moduleTerm = /^[A-Z]/.test(module)
-      ? Type.alias(module)
-      : Type.atom(module);
+    const moduleTerm = Interpreter.#boxFrameIdentity(module);
+    const functionTerm = Interpreter.#boxFrameIdentity(functionName);
 
     const heads =
       args === null
@@ -1176,7 +1174,7 @@ export default class Interpreter {
       [Type.atom("args"), args === null ? Type.nil() : Type.list(args)],
       [Type.atom("arity"), Type.integer(arity)],
       [Type.atom("clauses"), clauses ?? Type.nil()],
-      [Type.atom("function"), Type.atom(functionName)],
+      [Type.atom("function"), functionTerm],
       [Type.atom("kind"), clauses ? Type.atom(kind) : Type.nil()],
       [Type.atom("module"), moduleTerm],
     ]);
@@ -1680,6 +1678,17 @@ export default class Interpreter {
       [Type.atom("match?"), Type.boolean(match)],
       [Type.atom("source"), Type.bitstring(source)],
     ]);
+  }
+
+  // Boxes an identity a frame reports: a capitalized name is an Elixir module
+  // alias, an absent one is nil - the way the BEAM reports a function it can't
+  // name.
+  static #boxFrameIdentity(name) {
+    if (name === null) {
+      return Type.nil();
+    }
+
+    return /^[A-Z]/.test(name) ? Type.alias(name) : Type.atom(name);
   }
 
   // Boxes the unboxed reason shorthand the raise helpers accept: a string for

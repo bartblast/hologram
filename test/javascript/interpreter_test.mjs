@@ -1206,17 +1206,38 @@ describe("Interpreter", () => {
           },
         ],
         context,
+        "-my_fun/0-fun-0-",
       );
 
       assertBoxedError(
         () => Interpreter.callAnonymousFunction(fun, [Type.integer(2)]),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("anonymous fn/1", [
-          Type.integer(2),
-        ]),
+        "no function clause matching in anonymous fn/1 in Aaa.Bbb.my_fun/0\n\nThe following arguments were given to anonymous fn/1 in Aaa.Bbb.my_fun/0:\n\n    # 1\n    2\n",
       );
 
       assert.deepStrictEqual(CallStack.snapshot(), []);
+    });
+
+    it("names no function when the function carries no name", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.integer(1)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+          },
+        ],
+        context,
+      );
+
+      // Every anonymous function in transpiled code is named by the compiler,
+      // so only one built by the client runtime itself lands here.
+      assertBoxedError(
+        () => Interpreter.callAnonymousFunction(fun, [Type.integer(2)]),
+        "FunctionClauseError",
+        "no function clause matches",
+      );
     });
 
     it("the frame carries the file from the defining module's metadata", () => {
