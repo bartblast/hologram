@@ -1124,10 +1124,6 @@ export default class Interpreter {
     Interpreter.raiseError("CompileError", message);
   }
 
-  static raiseErlangError(message) {
-    Interpreter.raiseError("ErlangError", message);
-  }
-
   // Deps: [:erlang.error/1]
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
@@ -2520,11 +2516,7 @@ export default class Interpreter {
       const source = qualifier.body(context);
 
       if (!Type.isBitstring(source)) {
-        Interpreter.raiseErlangError(
-          Interpreter.buildErlangErrorMsg(
-            `{:bad_generator, ${Interpreter.inspect(source)}}`,
-          ),
-        );
+        Erlang["error/1"](Type.tuple([Type.atom("bad_generator"), source]));
       }
 
       // Appending a rest segment makes the exact-match bitstring pattern machinery
@@ -2615,11 +2607,7 @@ export default class Interpreter {
       const source = await qualifier.body(context);
 
       if (!Type.isBitstring(source)) {
-        Interpreter.raiseErlangError(
-          Interpreter.buildErlangErrorMsg(
-            `{:bad_generator, ${Interpreter.inspect(source)}}`,
-          ),
-        );
+        Erlang["error/1"](Type.tuple([Type.atom("bad_generator"), source]));
       }
 
       // Appending a rest segment makes the exact-match bitstring pattern machinery

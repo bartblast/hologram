@@ -103,6 +103,17 @@ defmodule Hologram.ExJsConsistency.ComprehensionTest do
         for <<x <- wrap_term([1, 2])>>, do: x
       end
     end
+
+    test "the raised error carries the source it couldn't generate from" do
+      error =
+        try do
+          for <<x <- wrap_term([1, 2])>>, do: x
+        rescue
+          error -> error
+        end
+
+      assert error.original == {:bad_generator, [1, 2]}
+    end
   end
 
   describe "filters" do

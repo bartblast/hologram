@@ -2385,6 +2385,40 @@ describe("Interpreter", () => {
           "Erlang error: {:bad_generator, [1, 2]}",
         );
       });
+
+      it("the raised error carries the source it couldn't generate from", () => {
+        const context = contextFixture();
+
+        const generator = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("x"), {type: "integer"}),
+          ]),
+          body: (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+        };
+
+        let caught;
+
+        try {
+          Interpreter.comprehension(
+            [generator],
+            Type.list(),
+            false,
+            (context) => context.vars.x,
+            context,
+          );
+        } catch (e) {
+          caught = e;
+        }
+
+        assert.deepStrictEqual(
+          caught.value,
+          Type.tuple([
+            Type.atom("bad_generator"),
+            Type.list([Type.integer(1), Type.integer(2)]),
+          ]),
+        );
+      });
     });
 
     describe("guards", () => {
@@ -9579,14 +9613,6 @@ describe("Interpreter", () => {
     assertBoxedError(
       () => Interpreter.raiseCompileError("abc"),
       "CompileError",
-      "abc",
-    );
-  });
-
-  it("raiseErlangError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseErlangError("abc"),
-      "ErlangError",
       "abc",
     );
   });
