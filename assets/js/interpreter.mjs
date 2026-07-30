@@ -1031,6 +1031,51 @@ export default class Interpreter {
     throw error;
   }
 
+  // Raises the badarg attributed the way the BEAM reports a failed bitstring
+  // construction: no frame of its own is added, since the construction runs
+  // inline in the enclosing function's body - instead that function's frame
+  // gains an error_info entry naming :erl_erts_errors.format_bs_fail/2 and
+  // carrying the {segment, type, error, value} cause tuple the formatter
+  // diagnoses. When frame tracking is disabled the error_info stands on a
+  // frame of its own, so the message still derives.
+  static raiseBitstringConstructionError(index, segmentType, errorTag, value) {
+    const errorInfo = Type.map([
+      [
+        Type.atom("cause"),
+        Type.tuple([
+          Type.integer(index),
+          Type.atom(segmentType),
+          Type.atom(errorTag),
+          value,
+        ]),
+      ],
+      [Type.atom("function"), Type.atom("format_bs_fail")],
+      [Type.atom("module"), Type.atom("erl_erts_errors")],
+    ]);
+
+    const error = new HologramBoxedError(Type.atom("badarg"));
+    const [enclosingFrame, ...outerFrames] = error.stacktrace;
+
+    // The captured frames are shared with the live call stack, so the
+    // decoration goes onto a copy - decorating in place would leak the
+    // error_info into every later trace taken through that frame.
+    const raisingFrame = enclosingFrame
+      ? {...enclosingFrame, errorInfo}
+      : {
+          module: null,
+          function: null,
+          arityOrArgs: 0,
+          file: null,
+          line: null,
+          errorInfo,
+        };
+
+    error.stacktrace = [raisingFrame, ...outerFrames];
+    error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
+
+    throw error;
+  }
+
   static raiseCaseClauseError(term) {
     Interpreter.#raiseFieldBearingError("CaseClauseError", [
       [Type.atom("term"), term],

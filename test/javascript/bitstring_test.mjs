@@ -7,6 +7,7 @@ import {
 } from "./support/helpers.mjs";
 
 import Bitstring from "../../assets/js/bitstring.mjs";
+import CallStack from "../../assets/js/erts/call_stack.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -7107,6 +7108,55 @@ describe("Bitstring", () => {
           "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123",
         );
       });
+
+      it("error frame carries the failure cause in its error_info", () => {
+        const segment = Type.bitstringSegment(Type.integer(170), {
+          type: "binary",
+        });
+
+        const enclosingFrame = {
+          module: "MyModule",
+          function: "my_fun",
+          arityOrArgs: 1,
+          file: "lib/my_module.ex",
+          line: 11,
+          errorInfo: null,
+        };
+
+        CallStack.reset();
+        CallStack.push(enclosingFrame);
+
+        let caught;
+
+        try {
+          Bitstring.validateSegment(segment, 1);
+        } catch (error) {
+          caught = error;
+        } finally {
+          CallStack.reset();
+        }
+
+        // The construction runs inline in the enclosing function's body, so
+        // the error_info decorates that function's own frame.
+        assert.deepStrictEqual(caught.stacktrace, [
+          {
+            ...enclosingFrame,
+            errorInfo: Type.map([
+              [
+                Type.atom("cause"),
+                Type.tuple([
+                  Type.integer(1),
+                  Type.atom("binary"),
+                  Type.atom("type"),
+                  Type.integer(170),
+                ]),
+              ],
+              [Type.atom("function"), Type.atom("format_bs_fail")],
+              [Type.atom("module"), Type.atom("erl_erts_errors")],
+            ]),
+          },
+        ]);
+      });
     });
 
     describe("bitstring segments", () => {
@@ -7237,7 +7287,7 @@ describe("Bitstring", () => {
         assertBoxedError(
           () => Bitstring.validateSegment(segment, 1),
           "ArgumentError",
-          "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45",
+          "construction of binary failed: segment 1 of type 'float': expected one of the supported sizes 16, 32, or 64 but got: 24",
         );
       });
     });

@@ -1270,18 +1270,6 @@ export default class Bitstring {
     return segment.endianness === "little";
   }
 
-  static #raiseTypeMismatchError(
-    index,
-    segmentType,
-    expectedValueTypesStr,
-    value,
-  ) {
-    const inspectedValue = Interpreter.inspect(value);
-    const message = `construction of binary failed: segment ${index} of type '${segmentType}': expected ${expectedValueTypesStr} but got: ${inspectedValue}`;
-
-    Interpreter.raiseArgumentError(message);
-  }
-
   static #setFloat16(dataView, value, isLittleEndian) {
     // Handle zeros
     if (value === 0) {
@@ -1455,14 +1443,20 @@ export default class Bitstring {
     const valueType = segment.value.type;
 
     if (valueType !== "bitstring" && valueType !== "string") {
-      $.#raiseTypeMismatchError(index, "binary", "a binary", segment.value);
+      Interpreter.raiseBitstringConstructionError(
+        index,
+        "binary",
+        "type",
+        segment.value,
+      );
     }
 
     if (valueType === "bitstring" && segment.value.leftoverBitCount !== 0) {
-      const inspectedValue = Interpreter.inspect(segment.value);
-
-      Interpreter.raiseArgumentError(
-        `construction of binary failed: segment ${index} of type 'binary': the size of the value ${inspectedValue} is not a multiple of the unit for the segment`,
+      Interpreter.raiseBitstringConstructionError(
+        index,
+        "binary",
+        "unit",
+        segment.value,
       );
     }
 
@@ -1473,11 +1467,21 @@ export default class Bitstring {
     const valueType = segment.value.type;
 
     if (valueType === "float" || valueType === "integer") {
-      $.#raiseTypeMismatchError(index, "binary", "a binary", segment.value);
+      Interpreter.raiseBitstringConstructionError(
+        index,
+        "binary",
+        "type",
+        segment.value,
+      );
     }
 
     if (segment.size !== null || segment.signedness !== null) {
-      $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
+      Interpreter.raiseBitstringConstructionError(
+        index,
+        "integer",
+        "type",
+        segment.value,
+      );
     }
 
     return true;
@@ -1491,10 +1495,10 @@ export default class Bitstring {
       valueType !== "integer" &&
       valueType !== "variable_pattern"
     ) {
-      $.#raiseTypeMismatchError(
+      Interpreter.raiseBitstringConstructionError(
         index,
         "float",
-        "a float or an integer",
+        "type",
         segment.value,
       );
     }
@@ -1508,7 +1512,12 @@ export default class Bitstring {
     const bitCount = $.calculateSegmentBitCount(segment);
 
     if (bitCount !== 16 && bitCount !== 32 && bitCount !== 64) {
-      $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
+      Interpreter.raiseBitstringConstructionError(
+        index,
+        "float",
+        "invalid",
+        Type.integer(bitCount),
+      );
     }
 
     return true;
@@ -1518,7 +1527,12 @@ export default class Bitstring {
     const valueType = segment.value.type;
 
     if (valueType !== "integer" && valueType !== "variable_pattern") {
-      $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
+      Interpreter.raiseBitstringConstructionError(
+        index,
+        "integer",
+        "type",
+        segment.value,
+      );
     }
 
     return true;
@@ -1528,10 +1542,10 @@ export default class Bitstring {
     const valueType = segment.value.type;
 
     if (valueType === "bitstring" || valueType === "float") {
-      $.#raiseTypeMismatchError(
+      Interpreter.raiseBitstringConstructionError(
         index,
         segment.type,
-        "a non-negative integer encodable as " + segment.type,
+        "type",
         segment.value,
       );
     }
@@ -1541,7 +1555,12 @@ export default class Bitstring {
       segment.unit !== null ||
       segment.signedness !== null
     ) {
-      $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
+      Interpreter.raiseBitstringConstructionError(
+        index,
+        "integer",
+        "type",
+        segment.value,
+      );
     }
 
     return true;

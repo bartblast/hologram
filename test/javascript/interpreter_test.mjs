@@ -9272,6 +9272,144 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("raiseBitstringConstructionError()", () => {
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    it("decorates the enclosing function's frame with the error_info", () => {
+      const enclosingFrame = {
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      };
+
+      CallStack.push(enclosingFrame);
+
+      let caught;
+
+      try {
+        Interpreter.raiseBitstringConstructionError(
+          1,
+          "binary",
+          "type",
+          Type.integer(170),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          ...enclosingFrame,
+          errorInfo: Type.map([
+            [
+              Type.atom("cause"),
+              Type.tuple([
+                Type.integer(1),
+                Type.atom("binary"),
+                Type.atom("type"),
+                Type.integer(170),
+              ]),
+            ],
+            [Type.atom("function"), Type.atom("format_bs_fail")],
+            [Type.atom("module"), Type.atom("erl_erts_errors")],
+          ]),
+        },
+      ]);
+    });
+
+    it("leaves the frame on the call stack undecorated", () => {
+      const enclosingFrame = {
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      };
+
+      CallStack.push(enclosingFrame);
+
+      try {
+        Interpreter.raiseBitstringConstructionError(
+          1,
+          "binary",
+          "type",
+          Type.integer(170),
+        );
+      } catch {
+        // The decoration must not leak into later traces taken through the
+        // same frame.
+      }
+
+      assert.isNull(CallStack.peek().errorInfo);
+    });
+
+    it("the error_info stands alone when frame tracking is disabled", () => {
+      let caught;
+
+      try {
+        Interpreter.raiseBitstringConstructionError(
+          1,
+          "binary",
+          "type",
+          Type.integer(170),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: null,
+          function: null,
+          arityOrArgs: 0,
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [
+              Type.atom("cause"),
+              Type.tuple([
+                Type.integer(1),
+                Type.atom("binary"),
+                Type.atom("type"),
+                Type.integer(170),
+              ]),
+            ],
+            [Type.atom("function"), Type.atom("format_bs_fail")],
+            [Type.atom("module"), Type.atom("erl_erts_errors")],
+          ]),
+        },
+      ]);
+    });
+
+    it("derives the message against the decorated frame", () => {
+      let caught;
+
+      try {
+        Interpreter.raiseBitstringConstructionError(
+          2,
+          "float",
+          "invalid",
+          Type.integer(24),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.value, Type.atom("badarg"));
+
+      assert.equal(
+        caught.message,
+        "(ArgumentError) construction of binary failed: segment 2 of type 'float': expected one of the supported sizes 16, 32, or 64 but got: 24",
+      );
+    });
+  });
+
   it("raiseCaseClauseError()", () => {
     const term = Type.atom("abc");
 

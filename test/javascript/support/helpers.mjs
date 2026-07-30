@@ -607,10 +607,11 @@ export function defineRuntimeGlobals() {
 }
 
 // Mirrors ErlangError.error_info/3: reads error_info from the top stacktrace
-// frame, dispatches to the format module's format_error/2, and renders the
-// positional fragments into the multi-argument error message. Returns null
-// when no message can be derived (no error_info, no format module, or no
-// positional fragments).
+// frame, dispatches to the format module's format_error/2 (or to the function
+// the error_info names instead), and renders the fragments into the message -
+// the positional ones into the multi-argument listing, a general one into the
+// reason-prefixed one-liner. Returns null when no message can be derived (no
+// error_info, no format module, or no fragments).
 function deriveErrorInfoMessage(reason, stacktrace) {
   if (!Type.isList(stacktrace) || stacktrace.data.length === 0) {
     return null;
@@ -644,11 +645,15 @@ function deriveErrorInfoMessage(reason, stacktrace) {
   const errorModule = errorInfoMap.data["atom(module)"]?.[1] ?? frameModule;
   const errorModuleProxy = Interpreter.moduleProxy(errorModule);
 
-  if (!errorModuleProxy || !("format_error/2" in errorModuleProxy)) {
+  const errorFun =
+    errorInfoMap.data["atom(function)"]?.[1].value ?? "format_error";
+  const errorFunKey = `${errorFun}/2`;
+
+  if (!errorModuleProxy || !(errorFunKey in errorModuleProxy)) {
     return null;
   }
 
-  const fragments = errorModuleProxy["format_error/2"](reason, stacktrace);
+  const fragments = errorModuleProxy[errorFunKey](reason, stacktrace);
 
   const arity = Type.isInteger(argsOrArity)
     ? Number(argsOrArity.value)
@@ -666,11 +671,23 @@ function deriveErrorInfoMessage(reason, stacktrace) {
     .map(([key, value]) => [Number(key.value), flattenChardata(value)])
     .sort(([n1, _msg1], [n2, _msg2]) => n1 - n2);
 
-  if (entries.length === 0) {
+  if (entries.length > 0) {
+    return Interpreter.buildMultiArgumentErrorMsg(entries);
+  }
+
+  const general = fragments.data["atom(general)"]?.[1];
+
+  if (general === undefined) {
     return null;
   }
 
-  return Interpreter.buildMultiArgumentErrorMsg(entries);
+  const reasonFragment = fragments.data["atom(reason)"]?.[1];
+
+  const reasonText = reasonFragment
+    ? flattenChardata(reasonFragment)
+    : "errors were found at the given arguments";
+
+  return `${reasonText}: ${flattenChardata(general)}`;
 }
 
 export function encodedSubscriptionReceiptKey(channel, cid) {
