@@ -56,6 +56,7 @@ import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/
 import ManuallyPortedElixirIO from "./elixir/io.mjs";
 import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
 import ManuallyPortedElixirString from "./elixir/string.mjs";
+import ManuallyPortedElixirStringTokenizer from "./elixir/string/tokenizer.mjs";
 import ManuallyPortedElixirTask from "./elixir/task.mjs";
 import ManuallyPortedElixirURI from "./elixir/uri.mjs";
 
@@ -704,6 +705,13 @@ export default class Hologram {
       "upcase/2",
       "public",
       ManuallyPortedElixirString["upcase/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "String.Tokenizer",
+      "tokenize/1",
+      "public",
+      ManuallyPortedElixirStringTokenizer["tokenize/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(

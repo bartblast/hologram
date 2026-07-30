@@ -369,6 +369,7 @@ defmodule Hologram.Compiler.CallGraph do
     {String, :trim, 1},
     {String, :upcase, 1},
     {String, :upcase, 2},
+    {String.Tokenizer, :tokenize, 1},
     {Task, :await, 1},
     {URI, :encode, 2}
   ]

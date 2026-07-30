@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-// Script to generate assets/js/elixir/string/tokenizer/identifier_data.mjs from
-// classes_elixir.txt - the BEAM's identifier classification of every Unicode codepoint, carried
-// by the runtime because no native JavaScript property can express it (see generate_classes.mjs).
+// Script to regenerate the identifier class table inside
+// assets/js/elixir/string/tokenizer.mjs (the GENERATED RANGES section) from classes_elixir.txt -
+// the BEAM's identifier classification of every Unicode codepoint, carried by the runtime because
+// no native JavaScript property can express it (see generate_classes.mjs).
 //
 // Codepoints outside the table are unusable in identifiers. The ones inside carry one of four
 // combined classes:
@@ -16,11 +17,11 @@
 // each range is gap-from-previous-range-end "." length, followed by its uppercase class letter.
 // Class letters can't collide with the number tokens, which base36 keeps lowercase.
 //
-// After writing the module, the script imports it back and checks the classification of every
-// codepoint against classes_elixir.txt, so a generation bug cannot survive silently.
+// After splicing, the script decodes the encoded string back (the same way the module does) and
+// checks the classification of every codepoint against classes_elixir.txt, so a generation bug
+// cannot survive silently.
 
 import fs from "fs";
-import zlib from "zlib";
 
 import {fileURLToPath} from "url";
 import {dirname} from "path";
@@ -28,9 +29,12 @@ import {dirname} from "path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const sourceFile = __dirname + "/classes_elixir.txt";
+const moduleFile = __dirname + "/../../assets/js/elixir/string/tokenizer.mjs";
 
-const outputFile =
-  __dirname + "/../../assets/js/elixir/string/tokenizer/identifier_data.mjs";
+const startMarker =
+  "// GENERATED RANGES START - regenerate with: node scripts/identifier_tokenizer/generate_table.mjs";
+
+const endMarker = "// GENERATED RANGES END";
 
 // start class + continue flag -> class letter
 const classLetter = (start, continues) => {
@@ -82,77 +86,67 @@ for (const {start, end, letter} of ranges) {
   previousEnd = end;
 }
 
-const moduleSource = `"use strict";
+const moduleSource = fs.readFileSync(moduleFile, "utf8");
+const startIndex = moduleSource.indexOf(startMarker);
+const endIndex = moduleSource.indexOf(endMarker);
 
-// GENERATED FILE - do not edit. Regenerate with:
-//   node scripts/identifier_tokenizer/generate_table.mjs
-//
-// The BEAM's identifier classification of every Unicode codepoint, from UTS 39's
-// IdentifierType.txt as Elixir's String.Tokenizer applies it. Carried as data because no native
-// JavaScript property expresses it. See scripts/identifier_tokenizer/ for the derivation and the
-// comparison against the closest native approximation.
-//
-// Encoding: base36 delta string - per range, gap-from-previous-range-end "." length, then the
-// range's class letter: I identifier start, A atom start, L alias start, C continues only. All
-// four classes may continue an identifier. RANGE_STARTS/RANGE_ENDS are sorted for binary search.
+if (startIndex === -1 || endIndex === -1) {
+  console.log(`FAIL: markers not found in ${moduleFile}`);
+  process.exit(1);
+}
 
+const generatedSection = `${startMarker}
 const ENCODED_RANGES =
   "${encoded}";
+`;
 
-const rangeCount = (ENCODED_RANGES.match(/[IALC]/g) ?? []).length;
+const updatedSource =
+  moduleSource.slice(0, startIndex) +
+  generatedSection +
+  moduleSource.slice(endIndex);
 
-const RANGE_STARTS = new Uint32Array(rangeCount);
-const RANGE_ENDS = new Uint32Array(rangeCount);
-const RANGE_CLASSES = new Array(rangeCount);
+fs.writeFileSync(moduleFile, updatedSource);
+
+console.log(`Updated ${moduleFile} (${encoded.length} chars encoded)`);
+
+// Verification: decode the encoded string the way the module does, and check every codepoint
+// against the source data.
+console.log("Verifying against the oracle...");
+
+const rangeStarts = [];
+const rangeEnds = [];
+const rangeClasses = [];
 
 {
-  const tokenRegex = /([0-9a-z]+)\\.([0-9a-z]*)([IALC])/g;
-  let index = 0;
-  let previousEnd = 0;
+  const tokenRegex = /([0-9a-z]+)\.([0-9a-z]*)([IALC])/g;
+  let decodedEnd = 0;
   let match;
 
-  while ((match = tokenRegex.exec(ENCODED_RANGES)) !== null) {
-    const start = previousEnd + parseInt(match[1], 36);
+  while ((match = tokenRegex.exec(encoded)) !== null) {
+    const start = decodedEnd + parseInt(match[1], 36);
     const end = start + (match[2] === "" ? 0 : parseInt(match[2], 36));
 
-    RANGE_STARTS[index] = start;
-    RANGE_ENDS[index] = end;
-    RANGE_CLASSES[index] = match[3];
+    rangeStarts.push(start);
+    rangeEnds.push(end);
+    rangeClasses.push(match[3]);
 
-    previousEnd = end;
-    ++index;
+    decodedEnd = end;
   }
 }
 
-export {RANGE_CLASSES, RANGE_ENDS, RANGE_STARTS};
-`;
-
-fs.writeFileSync(outputFile, moduleSource);
-
-const gzipped = zlib.gzipSync(moduleSource, {level: 9}).length;
-
-console.log(
-  `Written ${outputFile}: ${moduleSource.length} bytes raw, ${gzipped} gzipped`,
-);
-
-// Verification: import the emitted module and check every codepoint against the source data.
-console.log("Verifying against the oracle...");
-
-const {RANGE_CLASSES, RANGE_ENDS, RANGE_STARTS} = await import(outputFile);
-
 const lookup = (codepoint) => {
   let low = 0;
-  let high = RANGE_STARTS.length - 1;
+  let high = rangeStarts.length - 1;
 
   while (low <= high) {
     const middle = (low + high) >> 1;
 
-    if (codepoint < RANGE_STARTS[middle]) {
+    if (codepoint < rangeStarts[middle]) {
       high = middle - 1;
-    } else if (codepoint > RANGE_ENDS[middle]) {
+    } else if (codepoint > rangeEnds[middle]) {
       low = middle + 1;
     } else {
-      return RANGE_CLASSES[middle];
+      return rangeClasses[middle];
     }
   }
 
