@@ -19,8 +19,8 @@ import Hologram from "../../assets/js/hologram.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
-import RuntimeErrorOverlay from "../../assets/js/runtime_error_overlay.mjs";
 import Type from "../../assets/js/type.mjs";
+import UncaughtErrorOverlay from "../../assets/js/uncaught_error_overlay.mjs";
 import Vdom from "../../assets/js/vdom.mjs";
 
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
@@ -1109,7 +1109,7 @@ describe("Hologram", () => {
     beforeEach(() => {
       CallStack.reset();
       consoleErrorStub = sinon.stub(console, "error");
-      overlayShowStub = sinon.stub(RuntimeErrorOverlay, "show");
+      overlayShowStub = sinon.stub(UncaughtErrorOverlay, "show");
       globalThis.Hologram.config.errorOverlay = false;
     });
 

@@ -22,11 +22,11 @@ import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
-import RuntimeErrorOverlay from "./runtime_error_overlay.mjs";
 import Serializer from "./serializer.mjs";
 import Sse from "./sse.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
+import UncaughtErrorOverlay from "./uncaught_error_overlay.mjs";
 import Utils from "./utils.mjs";
 import Vdom from "./vdom.mjs";
 
@@ -338,7 +338,7 @@ export default class Hologram {
     console.error(report);
 
     if (globalThis.Hologram.config.errorOverlay) {
-      RuntimeErrorOverlay.show(report);
+      UncaughtErrorOverlay.show(report);
     }
 
     return true;

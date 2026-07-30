@@ -1,13 +1,13 @@
 "use strict";
 
-const OVERLAY_ID = "hologram-runtime-error-overlay";
+const OVERLAY_ID = "hologram-uncaught-error-overlay";
 
 // Renders an uncaught client error in the page, in the visual language of the
 // live reload compilation error overlay. Unlike that one it can be dismissed:
 // a compilation error leaves the page meaningless, whereas a runtime error
 // often leaves the rest of it usable, and an overlay with no way out would
 // make the app impossible to exercise by hand after an incidental error.
-export default class RuntimeErrorOverlay {
+export default class UncaughtErrorOverlay {
   // The page's own overflow, restored on dismissal so the overlay doesn't leave
   // the document permanently unscrollable.
   static #pageOverflow = null;
@@ -106,4 +106,4 @@ export default class RuntimeErrorOverlay {
   }
 }
 
-const $ = RuntimeErrorOverlay;
+const $ = UncaughtErrorOverlay;
