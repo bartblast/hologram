@@ -511,6 +511,13 @@ export default class Hologram {
     );
 
     Interpreter.defineManuallyPortedFunction(
+      "Code",
+      "ensure_loaded/1",
+      "public",
+      ManuallyPortedElixirCode["ensure_loaded/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
       "FunctionClauseError",
       "message/1",
       "public",
