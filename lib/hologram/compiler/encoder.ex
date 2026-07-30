@@ -92,6 +92,40 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   @doc """
+  Generates the interpreter registration statement carrying the clause heads of
+  the given manually ported Elixir function.
+
+  A manually ported function has no encoded clauses of its own, so its raise
+  sites have nothing to report attempted clauses from - this registers the
+  heads the server would blame, without their bodies.
+
+  ## Examples
+
+      iex> encode_elixir_function_clause_heads("Code", :ensure_compiled, 1, :public, clauses, context)
+      "Interpreter.defineFunctionClauseHeads(\"Code\", \"ensure_compiled\", 1, \"public\", [...]);"
+  """
+  @spec encode_elixir_function_clause_heads(
+          String.t(),
+          atom,
+          non_neg_integer,
+          :public | :private,
+          list(IR.FunctionClause.t()),
+          Context.t()
+        ) :: String.t()
+  def encode_elixir_function_clause_heads(
+        module_name,
+        function,
+        arity,
+        visibility,
+        clauses,
+        context
+      ) do
+    heads_js = encode_as_array(clauses, %{context | async?: false}, &encode_clause_head/2)
+
+    ~s/Interpreter.defineFunctionClauseHeads("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{heads_js});/
+  end
+
+  @doc """
   Generates interpreter function definition JavaScript statement for the given ported Erlang function.
 
   If the function is implemented (has corresponding JavaScript code), wraps it in `Interpreter.defineErlangFunction`.
@@ -761,6 +795,22 @@ defmodule Hologram.Compiler.Encoder do
       source: encode_as_string(source, true),
       test: encode_closure(guard_ir, context)
     )
+  end
+
+  defp encode_clause_head(%IR.FunctionClause{} = clause, context) do
+    params_array = encode_as_array(clause.params, %{context | pattern?: true})
+
+    properties =
+      Enum.reject(
+        [
+          params: "(context) => #{params_array}",
+          guards: encode_as_array(clause.guards, context, &encode_closure/2),
+          blame: encode_clause_blame(clause, context)
+        ],
+        fn {_name, value} -> is_nil(value) end
+      )
+
+    encode_as_object(properties)
   end
 
   defp encode_clause_line(%IR.FunctionClause{line: nil}), do: nil

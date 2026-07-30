@@ -464,6 +464,24 @@ defmodule Hologram.CompilerTest do
              )
     end
 
+    test "renders the clause heads of manually ported functions", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineFunctionClauseHeads("Code", "ensure_loaded", 1, "public", [{params: (context) => [Type.variablePattern("module_0")], guards: [(context) => Erlang["is_atom\/1"](context.vars.module_0)], blame: {params: ["module"], guards: [{source: "is_atom(module)", test: (context) => Erlang["is_atom\/1"](context.vars.module_0)}]}}]);/
+             )
+
+      # A default argument makes the ported arity differ from the raised one.
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineFunctionClauseHeads("Task", "await", 2, "public"/
+             )
+    end
+
     test "injects the client config when stacktraces are enabled", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas

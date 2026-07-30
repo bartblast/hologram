@@ -17,6 +17,9 @@ import uniqWith from "lodash/uniqWith.js";
 const NO_MATCH = Symbol("NO_MATCH");
 
 export default class Interpreter {
+  // Clause heads of manually ported functions, keyed by "Module.function/arity".
+  static #functionClauseHeads = {};
+
   // Deps: [:lists.keyfind/3]
   static accessKeywordListElement(keywordList, key, defaultValue = null) {
     const keyfindRes = Erlang_Lists["keyfind/3"](
@@ -564,6 +567,22 @@ export default class Interpreter {
     globalThis[moduleJsName].__exports__.add(functionArityStr);
   }
 
+  // Registers the clause heads a manually ported function stands in for, so its
+  // raise sites can report attempted clauses. Ported functions have no encoded
+  // clauses of their own - only the JavaScript implementation - so the heads
+  // arrive separately, without bodies.
+  static defineFunctionClauseHeads(
+    moduleExName,
+    functionName,
+    arity,
+    visibility,
+    clauseHeads,
+  ) {
+    const key = `${moduleExName}.${functionName}/${arity}`;
+
+    Interpreter.#functionClauseHeads[key] = {visibility, clauses: clauseHeads};
+  }
+
   static defineManuallyPortedFunction(
     moduleExName,
     functionArityStr,
@@ -634,6 +653,14 @@ export default class Interpreter {
 
   static evaluateJavaScriptExpression(expr) {
     return Interpreter.evaluateJavaScriptCode(`return (${expr});`);
+  }
+
+  // Returns the registered clause heads of the given function, or null when it
+  // has none.
+  static functionClauseHeads(moduleExName, functionName, arity) {
+    const key = `${moduleExName}.${functionName}/${arity}`;
+
+    return Interpreter.#functionClauseHeads[key] ?? null;
   }
 
   // Renders the exception struct's module the way the server renders it in

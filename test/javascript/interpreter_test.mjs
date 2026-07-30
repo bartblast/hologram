@@ -3914,6 +3914,50 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("defineFunctionClauseHeads()", () => {
+    const clauseHeads = [
+      {
+        params: (_context) => [Type.variablePattern("module_0")],
+        guards: [(_context) => Type.boolean(true)],
+        blame: {params: ["module"], guards: [{source: "is_atom(module)"}]},
+      },
+    ];
+
+    it("registers the clause heads under the function's identity", () => {
+      Interpreter.defineFunctionClauseHeads(
+        "MyModuleExName",
+        "my_fun",
+        1,
+        "public",
+        clauseHeads,
+      );
+
+      assert.deepStrictEqual(
+        Interpreter.functionClauseHeads("MyModuleExName", "my_fun", 1),
+        {visibility: "public", clauses: clauseHeads},
+      );
+    });
+
+    it("registers each arity separately", () => {
+      Interpreter.defineFunctionClauseHeads(
+        "MyModuleExName",
+        "my_other_fun",
+        2,
+        "private",
+        clauseHeads,
+      );
+
+      assert.isNull(
+        Interpreter.functionClauseHeads("MyModuleExName", "my_other_fun", 1),
+      );
+
+      assert.deepStrictEqual(
+        Interpreter.functionClauseHeads("MyModuleExName", "my_other_fun", 2),
+        {visibility: "private", clauses: clauseHeads},
+      );
+    });
+  });
+
   describe("defineManuallyPortedFunction()", () => {
     beforeEach(() => delete globalThis.Elixir_MyModuleExName);
 

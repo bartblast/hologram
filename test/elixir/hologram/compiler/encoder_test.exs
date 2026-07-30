@@ -1684,6 +1684,56 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "encode_elixir_function_clause_heads/6" do
+    test "encodes the clause heads without their bodies" do
+      # (x) when :erlang.is_integer(x) do
+      #  :expr_1
+      clause = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_integer,
+            args: [%IR.Variable{name: :x}]
+          }
+        ],
+        body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]},
+        line: 3,
+        blame: %{params: ["x"], guards: [{:leaf, "is_integer(x)"}]}
+      }
+
+      result =
+        encode_elixir_function_clause_heads("Aaa.Bbb", :my_fun, 1, :public, [clause], %Context{
+          module: Aaa.Bbb
+        })
+
+      assert result ==
+               ~s/Interpreter.defineFunctionClauseHeads("Aaa.Bbb", "my_fun", 1, "public", [{params: (context) => [Type.variablePattern("x")], guards: [(context) => Erlang["is_integer\/1"](context.vars.x)], blame: {params: ["x"], guards: [{source: "is_integer(x)", test: (context) => Erlang["is_integer\/1"](context.vars.x)}]}}]);/
+    end
+
+    test "omits the blame metadata when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      # (x) do
+      #  :expr_1
+      clause = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [],
+        body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]},
+        blame: %{params: ["x"], guards: []}
+      }
+
+      result =
+        encode_elixir_function_clause_heads("Aaa.Bbb", :my_fun, 1, :public, [clause], %Context{
+          module: Aaa.Bbb
+        })
+
+      assert result ==
+               ~s/Interpreter.defineFunctionClauseHeads("Aaa.Bbb", "my_fun", 1, "public", [{params: (context) => [Type.variablePattern("x")], guards: []}]);/
+    end
+  end
+
   describe "encode_erlang_function/4" do
     test "when function is implemented" do
       result = encode_erlang_function(:erlang, :+, 2, @erlang_js_dir)

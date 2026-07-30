@@ -255,6 +255,11 @@ defmodule Hologram.Compiler do
       |> render_elixir_function_defs(ir_plt, async_mfas)
       |> render_block()
 
+    manually_ported_clause_heads =
+      ir_plt
+      |> render_manually_ported_clause_heads()
+      |> render_block()
+
     """
     "use strict";
 
@@ -271,7 +276,7 @@ defmodule Hologram.Compiler do
 
     const startTime = PerformanceTimer.start();
 
-    globalThis.Hologram.config = #{render_client_config()};#{erlang_function_defs}#{elixir_function_defs}
+    globalThis.Hologram.config = #{render_client_config()};#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
@@ -807,6 +812,48 @@ defmodule Hologram.Compiler do
     end)
     |> Task.await_many(:infinity)
     |> Enum.join("\n\n")
+  end
+
+  # A manually ported function's clauses aren't encoded, so its raise sites have
+  # no attempted clauses to report. Their heads are registered separately, from
+  # the IR of the Elixir function the port stands in for.
+  defp render_manually_ported_clause_heads(ir_plt) do
+    CallGraph.manually_ported_elixir_mfas()
+    |> Enum.map(fn {module, function, _arity} -> {module, function} end)
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.flat_map(fn {module, function} ->
+      render_manually_ported_clause_heads(ir_plt, module, function)
+    end)
+    |> Enum.join("\n")
+  end
+
+  # A raise reports the arity the function was defined with, which a default
+  # argument makes differ from the arity the port replaces - Task.await/1 is
+  # ported, but its clause is await/2 - so every arity is registered.
+  defp render_manually_ported_clause_heads(ir_plt, module, function) do
+    module_name = Reflection.module_name(module)
+
+    case PLT.get(ir_plt, module) do
+      {:ok, module_def} ->
+        module_def
+        |> IR.aggregate_module_funs()
+        |> Enum.filter(fn {{name, _arity}, _fun} -> name == function end)
+        |> Enum.sort()
+        |> Enum.map(fn {{name, arity}, {visibility, clauses}} ->
+          Encoder.encode_elixir_function_clause_heads(
+            module_name,
+            name,
+            arity,
+            visibility,
+            clauses,
+            %Context{module: module}
+          )
+        end)
+
+      :error ->
+        []
+    end
   end
 
   defp render_erlang_function_defs(mfas, erlang_js_dir) do
