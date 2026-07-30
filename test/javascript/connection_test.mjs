@@ -402,21 +402,14 @@ describe("Connection", () => {
 
     describe("reload message", () => {
       it("handles reload message", () => {
-        const originalDocument = globalThis.document;
-        const reloadSpy = sinon.spy();
-
-        globalThis.document = {
-          location: {
-            reload: reloadSpy,
-          },
-        };
+        const reloadStub = sinon.stub(LiveReload, "reload");
 
         const event = {data: '"reload"'};
         Connection.handleMessage(event);
 
-        sinon.assert.calledOnce(reloadSpy);
+        sinon.assert.calledOnce(reloadStub);
 
-        globalThis.document = originalDocument;
+        reloadStub.restore();
       });
     });
 
