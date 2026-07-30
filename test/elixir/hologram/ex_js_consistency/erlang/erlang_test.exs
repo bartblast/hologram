@@ -49,6 +49,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    "bad argument in arithmetic expression: 1 * :a",
                    {:erlang, :*, [1, :a]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:a)
+
+      top_frame =
+        try do
+          :erlang.*(arg, 1)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :*, [:a, 1], @erts_info}
+    end
   end
 
   describe "+/1" do
@@ -81,6 +94,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    "bad argument in arithmetic expression: +(:abc)",
                    {:erlang, :+, [:abc]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.+(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :+, [:abc], @erts_info}
+    end
   end
 
   describe "+/2" do
@@ -110,6 +136,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArithmeticError,
                    "bad argument in arithmetic expression: 1 + :a",
                    {:erlang, :+, [1, :a]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:a)
+
+      top_frame =
+        try do
+          :erlang.+(arg, 1)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :+, [:a, 1], @erts_info}
     end
   end
 
@@ -186,6 +225,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    "bad argument in arithmetic expression: -(:abc)",
                    {:erlang, :-, [:abc]}
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.-(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :-, [:abc], @erts_info}
+    end
   end
 
   describe "-/2" do
@@ -215,6 +267,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArithmeticError,
                    "bad argument in arithmetic expression: 1 - :a",
                    {:erlang, :-, [1, :a]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:a)
+
+      top_frame =
+        try do
+          :erlang.-(arg, 1)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :-, [:a, 1], @erts_info}
     end
   end
 
@@ -292,6 +357,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArithmeticError,
                    "bad argument in arithmetic expression: 1 / 0",
                    {:erlang, :/, [1, 0]}
+    end
+
+    test "error frame carries args and error_info" do
+      # The Elixir compiler inlines a direct :erlang./ call into the division
+      # operator, which raises without a frame of its own, so the BIF is
+      # applied here instead. The client always calls the ported function.
+      top_frame =
+        try do
+          apply(:erlang, :/, wrap_term([:abc, 3]))
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :/, [:abc, 3], @erts_info}
     end
   end
 
@@ -3849,6 +3928,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         assert :erlang.div(5, wrap_term(:abc))
       end
     end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(0)
+
+      top_frame =
+        try do
+          :erlang.div(5, arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :div, [5, 0], @erts_info}
+    end
   end
 
   describe "element/2" do
@@ -6824,6 +6916,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5, :abc)", fn ->
         assert :erlang.rem(5, wrap_term(:abc))
       end
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(0)
+
+      top_frame =
+        try do
+          :erlang.rem(5, arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :rem, [5, 0], @erts_info}
     end
   end
 

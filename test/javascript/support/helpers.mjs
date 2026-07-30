@@ -190,6 +190,69 @@ export function contextFixture(data = {}) {
   });
 }
 
+function defineElixirArithmeticErrorModule() {
+  const unaryOps = ["+", "-"];
+  const binaryOps = ["*", "+", "-", "/"];
+  const binaryFuns = ["div", "rem"];
+  const bitwiseBinaryFuns = ["band", "bor", "bsl", "bsr", "bxor"];
+
+  // Mirrors ArithmeticError.blame/2: an :erlang frame with the failed call's
+  // args at the top of the stacktrace renders the operation into the message.
+  const buildOperationText = (functionName, args) => {
+    const inspected = args.map((arg) => Interpreter.inspect(arg));
+
+    if (args.length === 1 && unaryOps.includes(functionName)) {
+      return `: ${functionName}(${inspected[0]})`;
+    }
+
+    if (args.length === 2 && binaryOps.includes(functionName)) {
+      return `: ${inspected[0]} ${functionName} ${inspected[1]}`;
+    }
+
+    if (args.length === 2 && binaryFuns.includes(functionName)) {
+      return `: ${functionName}(${inspected[0]}, ${inspected[1]})`;
+    }
+
+    if (args.length === 2 && bitwiseBinaryFuns.includes(functionName)) {
+      return `: Bitwise.${functionName}(${inspected[0]}, ${inspected[1]})`;
+    }
+
+    if (args.length === 1 && functionName === "bnot") {
+      return `: Bitwise.bnot(${inspected[0]})`;
+    }
+
+    return "";
+  };
+
+  return {
+    "blame/2": (struct, stacktrace) => {
+      const topFrame = Type.isList(stacktrace) ? stacktrace.data[0] : undefined;
+
+      let operationText = "";
+
+      if (
+        topFrame !== undefined &&
+        Type.isAtom(topFrame.data[0]) &&
+        topFrame.data[0].value === "erlang" &&
+        Type.isList(topFrame.data[2])
+      ) {
+        operationText = buildOperationText(
+          topFrame.data[1].value,
+          topFrame.data[2].data,
+        );
+      }
+
+      const message =
+        Bitstring.toText(struct.data["atom(message)"][1]) + operationText;
+
+      return Type.tuple([
+        Type.errorStruct("ArithmeticError", message),
+        stacktrace,
+      ]);
+    },
+  };
+}
+
 function defineElixirEnumModule() {
   return {
     "reverse/1": (term) => {
@@ -491,6 +554,11 @@ export function defineRuntimeGlobals() {
   defineGlobalModule("Erlang_Sets", Erlang_Sets);
   defineGlobalModule("Erlang_Unicode", Erlang_Unicode);
   defineGlobalModule("Erlang_Uri_String", Erlang_Uri_String);
+
+  defineGlobalModule(
+    "Elixir_ArithmeticError",
+    defineElixirArithmeticErrorModule(),
+  );
 
   defineGlobalModule("Elixir_BadFunctionError", {
     // Mirrors BadFunctionError.message/1 (single-line, unlike the other

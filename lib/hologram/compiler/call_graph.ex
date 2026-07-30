@@ -109,12 +109,15 @@ defmodule Hologram.Compiler.CallGraph do
   # Deps annotations can't carry these either: the raise sites reference the
   # format module only as data, and the format function name is implicit
   # (the :format_error default), so the MFA is not visible in the JS code.
+  # Exception.blame/3 dispatches the same way, on the module of the exception
+  # struct it is given.
   @edges_used_by_client_runtime [
     error_message_derivation: [
       {{ErlangError, :normalize, 2}, {:erl_erts_errors, :format_bs_fail, 2}},
       {{ErlangError, :normalize, 2}, {:erl_erts_errors, :format_error, 2}},
       {{ErlangError, :normalize, 2}, {:erl_kernel_errors, :format_error, 2}},
-      {{ErlangError, :normalize, 2}, {:erl_stdlib_errors, :format_error, 2}}
+      {{ErlangError, :normalize, 2}, {:erl_stdlib_errors, :format_error, 2}},
+      {{Exception, :blame, 3}, {ArithmeticError, :blame, 2}}
     ]
   ]
 

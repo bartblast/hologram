@@ -127,6 +127,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: 1 * :a",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(atomA, integer1);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("*", Type.list([atomA, integer1])),
+      ]);
+    });
   });
 
   describe("+/1", () => {
@@ -163,6 +177,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: +(:abc)",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("+", Type.list([atomAbc])),
+      ]);
+    });
   });
 
   describe("+/2", () => {
@@ -198,6 +226,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: 1 + :a",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(atomA, integer1);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("+", Type.list([atomA, integer1])),
+      ]);
     });
   });
 
@@ -340,6 +382,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: -(:abc)",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("-", Type.list([atomAbc])),
+      ]);
+    });
   });
 
   describe("-/2", () => {
@@ -375,6 +431,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: 1 - :a",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(atomA, integer1);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("-", Type.list([atomA, integer1])),
+      ]);
     });
   });
 
@@ -516,6 +586,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: 1 / 0",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.atom("abc"), Type.integer(3));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("/", Type.list([Type.atom("abc"), Type.integer(3)])),
+      ]);
     });
   });
 
@@ -5894,6 +5978,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: div(5, :abc)",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.integer(5), Type.integer(0));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("div", Type.list([Type.integer(5), Type.integer(0)])),
+      ]);
     });
   });
 
@@ -11488,6 +11586,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: rem(5, :abc)",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.integer(5), Type.integer(0));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("rem", Type.list([Type.integer(5), Type.integer(0)])),
+      ]);
     });
   });
 

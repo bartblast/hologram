@@ -64,8 +64,13 @@ const Erlang = {
   // Start */2
   "*/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      const blame = `${Interpreter.inspect(left)} * ${Interpreter.inspect(right)}`;
-      Interpreter.raiseArithmeticError(blame);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "*",
+        [left, right],
+        "erl_erts_errors",
+      );
     }
 
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
@@ -83,8 +88,13 @@ const Erlang = {
   // Start +/2
   "+/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(right)}`;
-      Interpreter.raiseArithmeticError(blame);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "+",
+        [left, right],
+        "erl_erts_errors",
+      );
     }
 
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
@@ -102,8 +112,13 @@ const Erlang = {
   // Start +/1
   "+/1": (number) => {
     if (!Type.isNumber(number)) {
-      const blame = `+(${Interpreter.inspect(number)})`;
-      Interpreter.raiseArithmeticError(blame);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "+",
+        [number],
+        "erl_erts_errors",
+      );
     }
 
     return number;
@@ -133,8 +148,13 @@ const Erlang = {
   // Start -/1
   "-/1": (number) => {
     if (!Type.isNumber(number)) {
-      const blame = `-(${Interpreter.inspect(number)})`;
-      Interpreter.raiseArithmeticError(blame);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "-",
+        [number],
+        "erl_erts_errors",
+      );
     }
 
     return number.value == 0 ? number : Type[number.type](-number.value);
@@ -145,8 +165,13 @@ const Erlang = {
   // Start -/2
   "-/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      const blame = `${Interpreter.inspect(left)} - ${Interpreter.inspect(right)}`;
-      Interpreter.raiseArithmeticError(blame);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "-",
+        [left, right],
+        "erl_erts_errors",
+      );
     }
 
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
@@ -195,8 +220,13 @@ const Erlang = {
   // Start //2
   "//2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right) || right.value == 0) {
-      const blame = `${Interpreter.inspect(left)} / ${Interpreter.inspect(right)}`;
-      Interpreter.raiseArithmeticError(blame);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "/",
+        [left, right],
+        "erl_erts_errors",
+      );
     }
 
     return Type.float(Number(left.value) / Number(right.value));
@@ -1786,10 +1816,13 @@ const Erlang = {
       !Type.isInteger(integer2) ||
       integer2.value === 0n
     ) {
-      const arg1 = Interpreter.inspect(integer1);
-      const arg2 = Interpreter.inspect(integer2);
-
-      Interpreter.raiseArithmeticError(`div(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "div",
+        [integer1, integer2],
+        "erl_erts_errors",
+      );
     }
 
     // TODO: support integers outside Number range
@@ -3387,10 +3420,13 @@ const Erlang = {
       !Type.isInteger(integer2) ||
       integer2.value === 0n
     ) {
-      const arg1 = Interpreter.inspect(integer1);
-      const arg2 = Interpreter.inspect(integer2);
-
-      Interpreter.raiseArithmeticError(`rem(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError(
+        "badarith",
+        "erlang",
+        "rem",
+        [integer1, integer2],
+        "erl_erts_errors",
+      );
     }
 
     // JavaScript's % operator on BigInt has the same sign behavior as Erlang's rem
