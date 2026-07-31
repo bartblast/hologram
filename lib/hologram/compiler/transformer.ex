@@ -138,14 +138,14 @@ defmodule Hologram.Compiler.Transformer do
     %IR.AtomType{value: value}
   end
 
-  def transform({:<<>>, _meta, segments}, context) do
+  def transform({:<<>>, meta, segments}, context) do
     segments_ir =
       segments
       |> Enum.map(&transform_bitstring_segment(&1, context))
       |> flatten_bitstring_segments()
       |> filter_out_empty_bitstring_segments()
 
-    %IR.BitstringType{segments: segments_ir}
+    %IR.BitstringType{segments: segments_ir, line: meta[:line]}
   end
 
   def transform({:__block__, _meta, exprs}, context) do
@@ -153,10 +153,11 @@ defmodule Hologram.Compiler.Transformer do
     %IR.Block{expressions: exprs_ir}
   end
 
-  def transform({:case, _meta, [condition, [do: clauses]]}, context) do
+  def transform({:case, meta, [condition, [do: clauses]]}, context) do
     %IR.Case{
       condition: transform(condition, context),
-      clauses: transform_list(clauses, context)
+      clauses: transform_list(clauses, context),
+      line: meta[:line]
     }
   end
 
@@ -192,7 +193,7 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:for, _meta, parts}, context) when is_list(parts) do
+  def transform({:for, meta, parts}, context) when is_list(parts) do
     initial_acc = %{
       qualifiers: [],
       collectable: %IR.ListType{data: []},
@@ -219,7 +220,8 @@ defmodule Hologram.Compiler.Transformer do
       collectable: collectable,
       unique: unique,
       mapper: mapper,
-      reducer: reducer
+      reducer: reducer,
+      line: meta[:line]
     }
   end
 
@@ -230,7 +232,10 @@ defmodule Hologram.Compiler.Transformer do
   def transform({:cond, _meta, [[do: clauses]]}, context) do
     clauses_ir = Enum.map(clauses, &build_cond_clause_ir(&1, context))
 
-    %IR.Cond{clauses: clauses_ir}
+    # The BEAM reports a cond that matched no clause at the last clause's line.
+    {:->, last_clause_meta, _parts} = List.last(clauses)
+
+    %IR.Cond{clauses: clauses_ir, line: last_clause_meta[:line]}
   end
 
   def transform([{:|, _meta, [head, tail]}], context) do
@@ -406,7 +411,7 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:try, _meta, [opts]}, context) do
+  def transform({:try, meta, [opts]}, context) do
     initial_acc = %{
       body: nil,
       rescue_clauses: [],
@@ -433,17 +438,19 @@ defmodule Hologram.Compiler.Transformer do
       rescue_clauses: rescue_clauses,
       catch_clauses: catch_clauses,
       else_clauses: else_clauses,
-      after_block: after_block
+      after_block: after_block,
+      line: meta[:line]
     }
   end
 
-  def transform({:with, _meta, parts}, context) when is_list(parts) do
+  def transform({:with, meta, parts}, context) when is_list(parts) do
     {clauses_ast, [[{:do, do_part}, {:else, else_clauses}]]} = Enum.split(parts, -1)
 
     %IR.With{
       clauses: Enum.map(clauses_ast, &transform_with_clause(&1, context)),
       else_clauses: Enum.map(else_clauses, &transform_with_else_clause(&1, context)),
-      body: transform(do_part, context)
+      body: transform(do_part, context),
+      line: meta[:line]
     }
   end
 

@@ -108,9 +108,10 @@ defmodule Hologram.Compiler.IR do
   defmodule BitstringType do
     @moduledoc false
 
-    defstruct [:segments]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:segments, :line]
 
-    @type t :: %__MODULE__{segments: list(IR.BitstringSegment.t())}
+    @type t :: %__MODULE__{segments: list(IR.BitstringSegment.t()), line: integer | nil}
   end
 
   defmodule Block do
@@ -124,9 +125,14 @@ defmodule Hologram.Compiler.IR do
   defmodule Case do
     @moduledoc false
 
-    defstruct [:condition, :clauses]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:condition, :clauses, :line]
 
-    @type t :: %__MODULE__{condition: IR.t(), clauses: list(IR.Clause.t())}
+    @type t :: %__MODULE__{
+            condition: IR.t(),
+            clauses: list(IR.Clause.t()),
+            line: integer | nil
+          }
   end
 
   defmodule Clause do
@@ -140,7 +146,8 @@ defmodule Hologram.Compiler.IR do
   defmodule Comprehension do
     @moduledoc false
 
-    defstruct [:qualifiers, :collectable, :unique, :mapper, :reducer]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:qualifiers, :collectable, :unique, :mapper, :reducer, :line]
 
     @type t :: %__MODULE__{
             qualifiers:
@@ -157,7 +164,8 @@ defmodule Hologram.Compiler.IR do
                 initial_value: IR.t(),
                 clauses: list(IR.Clause.t())
               }
-              | nil
+              | nil,
+            line: integer | nil
           }
   end
 
@@ -180,9 +188,12 @@ defmodule Hologram.Compiler.IR do
   defmodule Cond do
     @moduledoc false
 
-    defstruct [:clauses]
+    # line is the last clause's line, which is where the BEAM reports a cond
+    # that matched none of them - cond expands into nested cases, and the raise
+    # ends up in the innermost one. See IR.AnonymousFunctionCall about line.
+    defstruct [:clauses, :line]
 
-    @type t :: %__MODULE__{clauses: list(IR.CondClause.t())}
+    @type t :: %__MODULE__{clauses: list(IR.CondClause.t()), line: integer | nil}
   end
 
   defmodule CondClause do
@@ -388,14 +399,16 @@ defmodule Hologram.Compiler.IR do
   defmodule Try do
     @moduledoc false
 
-    defstruct [:body, :rescue_clauses, :catch_clauses, :else_clauses, :after_block]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:body, :rescue_clauses, :catch_clauses, :else_clauses, :after_block, :line]
 
     @type t :: %__MODULE__{
             body: IR.Block.t(),
             rescue_clauses: list(IR.TryRescueClause.t()),
             catch_clauses: list(IR.TryCatchClause.t()),
             else_clauses: list(IR.Clause.t()),
-            after_block: IR.Block.t()
+            after_block: IR.Block.t(),
+            line: integer | nil
           }
   end
 
@@ -439,12 +452,14 @@ defmodule Hologram.Compiler.IR do
   defmodule With do
     @moduledoc false
 
-    defstruct [:clauses, :body, :else_clauses]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:clauses, :body, :else_clauses, :line]
 
     @type t :: %__MODULE__{
             clauses: list(IR.WithBareClause.t() | IR.WithMatchClause.t()),
             body: IR.Block.t(),
-            else_clauses: list(IR.Clause.t())
+            else_clauses: list(IR.Clause.t()),
+            line: integer | nil
           }
   end
 

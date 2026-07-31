@@ -251,10 +251,11 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("Type.bitstringPattern([", "])")
   end
 
-  def encode_ir(%IR.BitstringType{segments: segments}, %{pattern?: false} = context) do
+  def encode_ir(%IR.BitstringType{segments: segments, line: line}, %{pattern?: false} = context) do
     segments
     |> encode_bitstring_segments(context)
     |> StringUtils.wrap("Type.bitstring([", "])")
+    |> encode_with_frame_line(line, context)
   end
 
   def encode_ir(%IR.Block{} = block, %{async?: true} = context) do
@@ -265,7 +266,7 @@ defmodule Hologram.Compiler.Encoder do
     "(#{encode_closure(block, context)})(context)"
   end
 
-  def encode_ir(%IR.Case{condition: condition, clauses: clauses}, context) do
+  def encode_ir(%IR.Case{condition: condition, clauses: clauses, line: line}, context) do
     condition_js =
       case condition do
         %IR.Block{} = block -> encode_closure(block, context)
@@ -274,11 +275,14 @@ defmodule Hologram.Compiler.Encoder do
 
     clauses_js = encode_as_array(clauses, context)
 
-    if context.async? do
-      "(await Interpreter.asyncCase(#{condition_js}, #{clauses_js}, context))"
-    else
-      "Interpreter.case(#{condition_js}, #{clauses_js}, context)"
-    end
+    call =
+      if context.async? do
+        "(await Interpreter.asyncCase(#{condition_js}, #{clauses_js}, context))"
+      else
+        "Interpreter.case(#{condition_js}, #{clauses_js}, context)"
+      end
+
+    encode_with_frame_line(call, line, context)
   end
 
   def encode_ir(%IR.Clause{} = clause, context) do
@@ -295,11 +299,14 @@ defmodule Hologram.Compiler.Encoder do
     unique = comprehension.unique.value
     mapper = encode_closure(comprehension.mapper, context)
 
-    if context.async? do
-      "(await Interpreter.asyncComprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context))"
-    else
-      "Interpreter.comprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context)"
-    end
+    call =
+      if context.async? do
+        "(await Interpreter.asyncComprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context))"
+      else
+        "Interpreter.comprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context)"
+      end
+
+    encode_with_frame_line(call, comprehension.line, context)
   end
 
   def encode_ir(%IR.Comprehension{} = comprehension, context) do
@@ -309,21 +316,27 @@ defmodule Hologram.Compiler.Encoder do
     initial_value = encode_ir(comprehension.reducer.initial_value, context)
     clauses = encode_as_array(comprehension.reducer.clauses, context)
 
-    if context.async? do
-      "(await Interpreter.asyncComprehensionReduce(#{qualifiers}, #{initial_value}, #{clauses}, context))"
-    else
-      "Interpreter.comprehensionReduce(#{qualifiers}, #{initial_value}, #{clauses}, context)"
-    end
+    call =
+      if context.async? do
+        "(await Interpreter.asyncComprehensionReduce(#{qualifiers}, #{initial_value}, #{clauses}, context))"
+      else
+        "Interpreter.comprehensionReduce(#{qualifiers}, #{initial_value}, #{clauses}, context)"
+      end
+
+    encode_with_frame_line(call, comprehension.line, context)
   end
 
-  def encode_ir(%IR.Cond{clauses: clauses_ir}, context) do
+  def encode_ir(%IR.Cond{clauses: clauses_ir, line: line}, context) do
     clauses_js = encode_as_array(clauses_ir, context)
 
-    if context.async? do
-      "(await Interpreter.asyncCond(#{clauses_js}, context))"
-    else
-      "Interpreter.cond(#{clauses_js}, context)"
-    end
+    call =
+      if context.async? do
+        "(await Interpreter.asyncCond(#{clauses_js}, context))"
+      else
+        "Interpreter.cond(#{clauses_js}, context)"
+      end
+
+    encode_with_frame_line(call, line, context)
   end
 
   def encode_ir(%IR.CondClause{condition: condition_ir, body: body_ir}, context) do
@@ -530,11 +543,14 @@ defmodule Hologram.Compiler.Encoder do
     args_js =
       "#{body_js}, #{rescue_clauses_js}, #{catch_clauses_js}, #{else_clauses_js}, #{after_block_js}, context"
 
-    if context.async? do
-      "(await Interpreter.asyncTry(#{args_js}))"
-    else
-      "Interpreter.try(#{args_js})"
-    end
+    call =
+      if context.async? do
+        "(await Interpreter.asyncTry(#{args_js}))"
+      else
+        "Interpreter.try(#{args_js})"
+      end
+
+    encode_with_frame_line(call, ir.line, context)
   end
 
   def encode_ir(%IR.TryCatchClause{} = ir, context) do
@@ -578,16 +594,22 @@ defmodule Hologram.Compiler.Encoder do
     encode_var(name, version)
   end
 
-  def encode_ir(%IR.With{body: body, clauses: clauses, else_clauses: else_clauses}, context) do
+  def encode_ir(
+        %IR.With{body: body, clauses: clauses, else_clauses: else_clauses, line: line},
+        context
+      ) do
     body_js = encode_closure(body, context)
     clauses_js = encode_as_array(clauses, context)
     else_clauses_js = encode_as_array(else_clauses, context)
 
-    if context.async? do
-      "(await Interpreter.asyncWith(#{body_js}, #{clauses_js}, #{else_clauses_js}, context))"
-    else
-      "Interpreter.with(#{body_js}, #{clauses_js}, #{else_clauses_js}, context)"
-    end
+    call =
+      if context.async? do
+        "(await Interpreter.asyncWith(#{body_js}, #{clauses_js}, #{else_clauses_js}, context))"
+      else
+        "Interpreter.with(#{body_js}, #{clauses_js}, #{else_clauses_js}, context)"
+      end
+
+    encode_with_frame_line(call, line, context)
   end
 
   def encode_ir(%IR.WithBareClause{expression: expression}, context) do

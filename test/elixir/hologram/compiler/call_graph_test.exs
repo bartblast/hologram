@@ -4824,6 +4824,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                  body: %IR.Block{
                    expressions: [
                      %IR.Case{
+                       line: 2,
                        condition: %IR.LocalFunctionCall{
                          function: :impl_for,
                          args: [%IR.Variable{name: :data, version: 0}],

@@ -672,6 +672,28 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir, @context) ==
                ~s/Type.bitstring([Type.bitstringSegment(Type.integer(1n), {type: "integer"}), Type.bitstringSegment(Type.integer(2n), {type: "integer"})])/
     end
+
+    test "records the line the bitstring is built on" do
+      # <<1>>
+      ir = %IR.BitstringType{
+        segments: [%IR.BitstringSegment{value: %IR.IntegerType{value: 1}, modifiers: []}],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.setFrameLine(123), Type.bitstring([Type.bitstringSegment(Type.integer(1n), {})]))"
+    end
+
+    test "records no line for a bitstring pattern, which builds nothing" do
+      # <<1>>
+      ir = %IR.BitstringType{
+        segments: [%IR.BitstringSegment{value: %IR.IntegerType{value: 1}, modifiers: []}],
+        line: 123
+      }
+
+      assert encode_ir(ir, %Context{pattern?: true}) ==
+               "Type.bitstringPattern([Type.bitstringSegment(Type.integer(1n), {})])"
+    end
   end
 
   describe "bitstring segment" do
@@ -1069,6 +1091,28 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, %Context{async?: true}) == expected
     end
+
+    test "records the line the case is on" do
+      # case my_var do
+      #   x -> x
+      # end
+      ir = %IR.Case{
+        condition: %IR.Variable{name: :my_var},
+        clauses: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [],
+            body: %IR.Block{expressions: [%IR.Variable{name: :x}]}
+          }
+        ],
+        line: 123
+      }
+
+      assert String.starts_with?(
+               encode_ir(ir),
+               "(Interpreter.setFrameLine(123), Interpreter.case(context.vars.my_var, "
+             )
+    end
   end
 
   describe "clause" do
@@ -1366,6 +1410,22 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir, %Context{async?: true}) ==
                "(await Interpreter.asyncComprehensionReduce([{type: \"generator\", match: Type.variablePattern(\"x\"), guards: [], body: async (context) => Type.list([Type.integer(1n), Type.integer(2n)])}], Type.integer(0n), [{match: Type.variablePattern(\"acc\"), guards: [], body: async (context) => {\nreturn Erlang[\"+/2\"](context.vars.acc, context.vars.x);\n}}], context))"
     end
+
+    test "records the line the comprehension is on" do
+      ir = %IR.Comprehension{
+        qualifiers: [],
+        collectable: %IR.ListType{data: []},
+        unique: %IR.AtomType{value: false},
+        mapper: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+        reducer: nil,
+        line: 123
+      }
+
+      assert String.starts_with?(
+               encode_ir(ir),
+               "(Interpreter.setFrameLine(123), Interpreter.comprehension("
+             )
+    end
   end
 
   test "comprehension generator" do
@@ -1470,6 +1530,21 @@ defmodule Hologram.Compiler.EncoderTest do
         """)
 
       assert encode_ir(ir, %Context{async?: true}) == expected
+    end
+
+    test "records the line the last clause is on, which is where the BEAM reports it" do
+      ir = %IR.Cond{
+        clauses: [
+          %IR.CondClause{
+            condition: %IR.Variable{name: :x},
+            body: %IR.Block{expressions: [%IR.IntegerType{value: 1}]}
+          }
+        ],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.setFrameLine(123), Interpreter.cond([{condition: (context) => context.vars.x, body: (context) => {\nreturn Type.integer(1n);\n}}], context))"
     end
   end
 
@@ -3497,6 +3572,22 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir, %Context{async?: true}) ==
                "{kind: Type.atom(\"throw\"), value: Type.variablePattern(\"value\"), guards: [(context) => context.vars.guard], body: async (context) => {\nreturn Type.atom(\"caught\");\n}}"
     end
+
+    test "records the line the try is on" do
+      ir = %IR.Try{
+        body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+        rescue_clauses: [],
+        catch_clauses: [],
+        else_clauses: [],
+        after_block: nil,
+        line: 123
+      }
+
+      assert String.starts_with?(
+               encode_ir(ir),
+               "(Interpreter.setFrameLine(123), Interpreter.try("
+             )
+    end
   end
 
   describe "tuple type" do
@@ -4118,6 +4209,20 @@ defmodule Hologram.Compiler.EncoderTest do
         """)
 
       assert encode_ir(ir, %Context{async?: true}) == expected
+    end
+
+    test "records the line the with is on" do
+      ir = %IR.With{
+        clauses: [%IR.WithBareClause{expression: %IR.AtomType{value: :ok}}],
+        else_clauses: [],
+        body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+        line: 123
+      }
+
+      assert String.starts_with?(
+               encode_ir(ir),
+               "(Interpreter.setFrameLine(123), Interpreter.with("
+             )
     end
   end
 

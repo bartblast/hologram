@@ -877,7 +877,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "empty" do
       ast = ast("<<>>")
 
-      assert transform(ast, %Context{}) == %IR.BitstringType{segments: []}
+      assert transform(ast, %Context{}) == %IR.BitstringType{segments: [], line: 1}
     end
 
     test "single segment" do
@@ -2255,7 +2255,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.Variable{name: :x}]
                    }
                  }
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -2270,7 +2271,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.Variable{name: :x, version: 0}]
                    }
                  }
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -2300,7 +2302,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.IntegerType{value: 3}]
                    }
                  }
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -2322,7 +2325,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.IntegerType{value: 3}]
                    }
                  }
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -2349,7 +2353,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -2367,7 +2372,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -2400,7 +2406,9 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.Variable{name: :n}]
                    }
                  }
-               ]
+               ],
+               line: 4,
+               line: 1
              }
     end
 
@@ -2427,7 +2435,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.Variable{name: :n, version: 1}]
                    }
                  }
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -2465,7 +2474,9 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.Variable{name: :n}]
                    }
                  }
-               ]
+               ],
+               line: 4,
+               line: 1
              }
     end
 
@@ -2498,7 +2509,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.Variable{name: :n, version: 1}]
                    }
                  }
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -2541,7 +2553,9 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.Variable{name: :n}]
                    }
                  }
-               ]
+               ],
+               line: 4,
+               line: 1
              }
     end
 
@@ -2580,7 +2594,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.Variable{name: :n, version: 1}]
                    }
                  }
-               ]
+               ],
+               line: 4
              }
     end
   end
@@ -3623,7 +3638,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.AtomType{value: :expr}]
                    }
                  }
-               ]
+               ],
+               line: 2
              }
     end
 
@@ -3636,7 +3652,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.AtomType{value: :expr}]
                    }
                  }
-               ]
+               ],
+               line: 5
              }
     end
 
@@ -3663,7 +3680,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.AtomType{value: :expr_2}]
                    }
                  }
-               ]
+               ],
+               line: 3
              }
     end
 
@@ -3692,7 +3710,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.AtomType{value: :expr_2}]
                    }
                  }
-               ]
+               ],
+               line: 8
              }
     end
 
@@ -3717,7 +3736,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ]
+               ],
+               line: 2
              }
     end
 
@@ -3733,7 +3753,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ]
+               ],
+               line: 5
              }
     end
   end
@@ -6910,7 +6931,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.With{
                clauses: [],
                else_clauses: [],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -6918,7 +6940,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform_module_and_fetch_expr(Module174) == %IR.With{
                clauses: [],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 4
              }
     end
 
@@ -6938,7 +6961,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -6952,7 +6976,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 4
              }
     end
 
@@ -6977,7 +7002,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.Variable{name: :x}]}
+               body: %IR.Block{expressions: [%IR.Variable{name: :x}]},
+               line: 1
              }
     end
 
@@ -6998,7 +7024,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.Variable{name: :x, version: 0}]}
+               body: %IR.Block{expressions: [%IR.Variable{name: :x, version: 0}]},
+               line: 4
              }
     end
 
@@ -7037,7 +7064,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 1
              }
     end
 
@@ -7074,7 +7102,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 4
              }
     end
 
@@ -7113,7 +7142,9 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+               line: 4,
+               line: 1
              }
     end
 
@@ -7146,7 +7177,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+               line: 4
              }
     end
 
@@ -7169,7 +7201,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.Variable{name: :a}]}
+               body: %IR.Block{expressions: [%IR.Variable{name: :a}]},
+               line: 1
              }
     end
 
@@ -7185,7 +7218,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.Variable{name: :a, version: 0}]}
+               body: %IR.Block{expressions: [%IR.Variable{name: :a, version: 0}]},
+               line: 5
              }
     end
 
@@ -7222,7 +7256,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      data: [%IR.Variable{name: :a}, %IR.Variable{name: :b}]
                    }
                  ]
-               }
+               },
+               line: 1
              }
     end
 
@@ -7254,7 +7289,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  ]
-               }
+               },
+               line: 5
              }
     end
 
@@ -7279,7 +7315,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -7298,7 +7335,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 4
              }
     end
 
@@ -7319,7 +7357,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+               line: 1
              }
     end
 
@@ -7333,7 +7372,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+               line: 5
              }
     end
 
@@ -7364,7 +7404,9 @@ defmodule Hologram.Compiler.TransformerTest do
                    },
                    %IR.Variable{name: :a}
                  ]
-               }
+               },
+               line: 2,
+               line: 1
              }
     end
 
@@ -7387,7 +7429,9 @@ defmodule Hologram.Compiler.TransformerTest do
                    },
                    %IR.Variable{name: :a, version: 2}
                  ]
-               }
+               },
+               line: 5,
+               line: 4
              }
     end
 
@@ -7415,7 +7459,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.IntegerType{value: 0}]}
                  }
                ],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -7435,7 +7480,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.IntegerType{value: 0}]}
                  }
                ],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 5
              }
     end
 
@@ -7469,7 +7515,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.IntegerType{value: 1}]}
                  }
                ],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -7494,7 +7541,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.IntegerType{value: 1}]}
                  }
                ],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 5
              }
     end
 
@@ -7528,7 +7576,9 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.Variable{name: :msg}]}
                  }
                ],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 5,
+               line: 1
              }
     end
 
@@ -7555,7 +7605,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.Variable{name: :msg, version: 1}]}
                  }
                ],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 5
              }
     end
 
@@ -7607,7 +7658,9 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.Variable{name: :msg}]}
                  }
                ],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 5,
+               line: 1
              }
     end
 
@@ -7655,7 +7708,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.Variable{name: :msg, version: 1}]}
                  }
                ],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 5
              }
     end
 
@@ -7713,7 +7767,9 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.Variable{name: :code}]}
                  }
                ],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 5,
+               line: 1
              }
     end
 
@@ -7761,7 +7817,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.Variable{name: :code, version: 3}]}
                  }
                ],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 5
              }
     end
 
@@ -7781,7 +7838,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -7795,7 +7853,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 4
              }
     end
 
@@ -7819,7 +7878,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 3
              }
     end
 
@@ -7839,7 +7899,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 6
              }
     end
 
@@ -7871,7 +7932,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
                  }
                ],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 3
              }
     end
 
@@ -7897,7 +7959,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
                  }
                ],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 7
              }
     end
 
@@ -7930,7 +7993,9 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.Variable{name: :x}]}
+               body: %IR.Block{expressions: [%IR.Variable{name: :x}]},
+               line: 2,
+               line: 1
              }
     end
 
@@ -7955,7 +8020,9 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.Variable{name: :x, version: 0}]}
+               body: %IR.Block{expressions: [%IR.Variable{name: :x, version: 0}]},
+               line: 7,
+               line: 6
              }
     end
   end
