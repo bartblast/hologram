@@ -2378,11 +2378,20 @@ export default class Interpreter {
 
   // Deps: [:maps.get/2]
   static #matchRescueClause(clause, error, context) {
-    // rescue only catches :error-kind failures. By this point error.struct is
-    // always a normalized exception struct - a bare reason like :badarg or a
-    // non-exception struct has already become an ArgumentError/ErlangError/...
-    // via Exception.normalize/3 - so its __struct__ alone decides matching.
+    // rescue only catches :error-kind failures. An error normally carries its
+    // reason's normalized exception form - a bare reason like :badarg has
+    // become an ArgumentError/ErlangError/... via Exception.normalize/3 - so
+    // its __struct__ alone decides matching.
     if (error.kind.value !== "error") {
+      return false;
+    }
+
+    // An error that arrived while another one was deriving, or whose derivation
+    // faulted, has no normalized form (see HologramBoxedError). Which exception
+    // it is was never established, so no clause claims it: it keeps travelling,
+    // carrying the fault named in its message, rather than being rescued into a
+    // shape no clause body could read.
+    if (error.struct === null) {
       return false;
     }
 

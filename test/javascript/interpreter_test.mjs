@@ -10600,6 +10600,86 @@ describe("Interpreter", () => {
       );
     });
 
+    // Case not possible on the server - normalizing a reason there always
+    // succeeds, so every error reaching a rescue carries its exception struct.
+    describe("error that never derived its exception struct", () => {
+      let normalizeErrorStub;
+
+      // Mirrors the derivation machinery faulting, which leaves a bare reason
+      // with no normalized form (see HologramBoxedError).
+      const buildStructlessError = () => {
+        normalizeErrorStub = sinon
+          .stub(Interpreter, "normalizeError")
+          .callsFake(() => {
+            throw new TypeError("my fault");
+          });
+
+        const error = new HologramBoxedError(Type.atom("badarg"));
+
+        normalizeErrorStub.restore();
+        normalizeErrorStub = null;
+
+        return error;
+      };
+
+      afterEach(() => {
+        normalizeErrorStub?.restore();
+        normalizeErrorStub = null;
+      });
+
+      it("isn't claimed by a bare rescue clause", () => {
+        const error = buildStructlessError();
+
+        const body = (_context) => {
+          throw error;
+        };
+
+        const rescueClauses = [
+          {
+            variable: Type.variablePattern("e"),
+            modules: [],
+            body: (context) => context.vars.e,
+          },
+        ];
+
+        let caught;
+
+        try {
+          Interpreter.try(body, rescueClauses, [], [], null, context);
+        } catch (thrownError) {
+          caught = thrownError;
+        }
+
+        assert.equal(caught, error);
+      });
+
+      it("isn't claimed by a rescue clause listing modules", () => {
+        const error = buildStructlessError();
+
+        const body = (_context) => {
+          throw error;
+        };
+
+        const rescueClauses = [
+          {
+            variable: null,
+            modules: [Type.alias("ArgumentError")],
+            body: (_context) => Type.atom("rescued"),
+          },
+        ];
+
+        let caught;
+
+        try {
+          Interpreter.try(body, rescueClauses, [], [], null, context);
+        } catch (thrownError) {
+          caught = thrownError;
+        }
+
+        assert.equal(caught, error);
+      });
+    });
+
     it("reraise re-raises the rescued exception", () => {
       // try (raise ArgumentError) rescue error -> reraise error, __STACKTRACE__
       // reraise expands to :erlang.raise(:error, error, __STACKTRACE__), so the
