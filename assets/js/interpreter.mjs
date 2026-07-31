@@ -1623,6 +1623,14 @@ export default class Interpreter {
     ]);
   }
 
+  // Boxes the unboxed reason shorthand the raise helpers accept: a string for
+  // an atom reason or a [tag, term] array for a tagged tuple reason.
+  static #boxErrorReason(reason) {
+    return typeof reason === "string"
+      ? Type.atom(reason)
+      : Type.tuple([Type.atom(reason[0]), ...reason.slice(1)]);
+  }
+
   // Boxes an identity a frame reports: a capitalized name is an Elixir module
   // alias, an absent one is nil - the way the BEAM reports a function it can't
   // name.
@@ -1632,14 +1640,6 @@ export default class Interpreter {
     }
 
     return /^[A-Z]/.test(name) ? Type.alias(name) : Type.atom(name);
-  }
-
-  // Boxes the unboxed reason shorthand the raise helpers accept: a string for
-  // an atom reason or a [tag, term] array for a tagged tuple reason.
-  static #boxErrorReason(reason) {
-    return typeof reason === "string"
-      ? Type.atom(reason)
-      : Type.tuple([Type.atom(reason[0]), ...reason.slice(1)]);
   }
 
   // Boxes the stacktrace carried on an error. A trace given to :erlang.raise/3
