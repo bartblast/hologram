@@ -245,7 +245,8 @@ defmodule Hologram.Compiler.Transformer do
     if {:no_parens, true} in meta do
       %IR.DotOperator{
         left: transform(left, context),
-        right: transform(right, context)
+        right: transform(right, context),
+        line: meta[:line]
       }
     else
       transform_remote_function_call(left, right, [], meta, context)
@@ -316,10 +317,11 @@ defmodule Hologram.Compiler.Transformer do
     %IR.MapType{data: data_ir}
   end
 
-  def transform({:=, _meta, [left, right]}, context) do
+  def transform({:=, meta, [left, right]}, context) do
     %IR.MatchOperator{
       left: transform(left, %{context | pattern?: true}),
-      right: transform(right, context)
+      right: transform(right, context),
+      line: meta[:line]
     }
   end
 

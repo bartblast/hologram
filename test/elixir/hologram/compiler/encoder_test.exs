@@ -1523,15 +1523,26 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  test "dot operator" do
-    # my_module.my_key
-    ir = %IR.DotOperator{
-      left: %IR.Variable{name: :my_module},
-      right: %IR.AtomType{value: :my_key}
-    }
+  describe "dot operator" do
+    setup do
+      # my_module.my_key
+      ir = %IR.DotOperator{
+        left: %IR.Variable{name: :my_module},
+        right: %IR.AtomType{value: :my_key}
+      }
 
-    assert encode_ir(ir) ==
-             "Interpreter.dotOperator(context.vars.my_module, Type.atom(\"my_key\"))"
+      [ir: ir]
+    end
+
+    test "without a line", %{ir: ir} do
+      assert encode_ir(ir) ==
+               "Interpreter.dotOperator(context.vars.my_module, Type.atom(\"my_key\"))"
+    end
+
+    test "records the line the key is read on", %{ir: ir} do
+      assert encode_ir(%{ir | line: 123}) ==
+               "(Interpreter.setFrameLine(123), Interpreter.dotOperator(context.vars.my_module, Type.atom(\"my_key\")))"
+    end
   end
 
   describe "encode_closure/2 (private, tested indirectly)" do
@@ -2244,6 +2255,30 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) ==
                ~s/Interpreter.matchOperator(Type.integer(2n), Type.variablePattern("x"), context)/
+    end
+
+    test "records the line the match is made on" do
+      # x = 2
+      ir = %IR.MatchOperator{
+        left: %IR.Variable{name: :x},
+        right: %IR.IntegerType{value: 2},
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               ~s/(Interpreter.setFrameLine(123), Interpreter.matchOperator(Type.integer(2n), Type.variablePattern("x"), context))/
+    end
+
+    test "records the line of a match nested in another match" do
+      # y = x = 2
+      ir = %IR.MatchOperator{
+        left: %IR.Variable{name: :x},
+        right: %IR.IntegerType{value: 2},
+        line: 123
+      }
+
+      assert encode_ir(ir, %Context{match_operator?: true}) ==
+               ~s/(Interpreter.setFrameLine(123), Interpreter.matchOperator(Type.integer(2n), Type.variablePattern("x"), context))/
     end
 
     test "variable in expression" do

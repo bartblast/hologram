@@ -3866,14 +3866,16 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.DotOperator{
                left: %IR.Variable{name: :my_var},
-               right: %IR.AtomType{value: :my_key}
+               right: %IR.AtomType{value: :my_key},
+               line: 1
              }
     end
 
     test "AST from BEAM file" do
       assert transform_module_and_fetch_expr(Module66) == %IR.DotOperator{
                left: %IR.Variable{name: :my_var, version: 0},
-               right: %IR.AtomType{value: :my_key}
+               right: %IR.AtomType{value: :my_key},
+               line: 4
              }
     end
   end
@@ -4531,7 +4533,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
                    {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                  ]
-               }
+               },
+               line: 1
              }
     end
 
@@ -4548,7 +4551,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
                    {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                  ]
-               }
+               },
+               line: 4
              }
     end
   end
@@ -7159,7 +7163,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :a},
-                     right: %IR.IntegerType{value: 1}
+                     right: %IR.IntegerType{value: 1},
+                     line: 1
                    }
                  }
                ],
@@ -7174,7 +7179,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :a, version: 0},
-                     right: %IR.IntegerType{value: 1}
+                     right: %IR.IntegerType{value: 1},
+                     line: 5
                    }
                  }
                ],
@@ -7197,13 +7203,15 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :a},
-                     right: %IR.IntegerType{value: 1}
+                     right: %IR.IntegerType{value: 1},
+                     line: 1
                    }
                  },
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :b},
-                     right: %IR.IntegerType{value: 2}
+                     right: %IR.IntegerType{value: 2},
+                     line: 2
                    }
                  }
                ],
@@ -7224,13 +7232,15 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :a, version: 0},
-                     right: %IR.IntegerType{value: 1}
+                     right: %IR.IntegerType{value: 1},
+                     line: 5
                    }
                  },
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :b, version: 1},
-                     right: %IR.IntegerType{value: 2}
+                     right: %IR.IntegerType{value: 2},
+                     line: 6
                    }
                  }
                ],
@@ -7349,7 +7359,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  expressions: [
                    %IR.MatchOperator{
                      left: %IR.Variable{name: :a},
-                     right: %IR.Variable{name: :x}
+                     right: %IR.Variable{name: :x},
+                     line: 2
                    },
                    %IR.Variable{name: :a}
                  ]
@@ -7371,7 +7382,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  expressions: [
                    %IR.MatchOperator{
                      left: %IR.Variable{name: :a, version: 2},
-                     right: %IR.Variable{name: :x, version: 1}
+                     right: %IR.Variable{name: :x, version: 1},
+                     line: 5
                    },
                    %IR.Variable{name: :a, version: 2}
                  ]
@@ -7912,7 +7924,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :x},
-                     right: %IR.IntegerType{value: 1}
+                     right: %IR.IntegerType{value: 1},
+                     line: 2
                    }
                  }
                ],
@@ -7936,7 +7949,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :x, version: 0},
-                     right: %IR.IntegerType{value: 1}
+                     right: %IR.IntegerType{value: 1},
+                     line: 7
                    }
                  }
                ],

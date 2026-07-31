@@ -204,9 +204,10 @@ defmodule Hologram.Compiler.IR do
   defmodule DotOperator do
     @moduledoc false
 
-    defstruct [:left, :right]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:left, :right, :line]
 
-    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t(), line: integer | nil}
   end
 
   defmodule FloatType do
@@ -292,9 +293,10 @@ defmodule Hologram.Compiler.IR do
   defmodule MatchOperator do
     @moduledoc false
 
-    defstruct [:left, :right]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:left, :right, :line]
 
-    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t(), line: integer | nil}
   end
 
   defmodule MatchPlaceholder do

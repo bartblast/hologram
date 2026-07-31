@@ -341,11 +341,11 @@ defmodule Hologram.Compiler.Encoder do
     "Interpreter.consOperator(#{encode_ir(head, context)}, #{encode_ir(tail, context)})"
   end
 
-  def encode_ir(%IR.DotOperator{left: left, right: right}, context) do
+  def encode_ir(%IR.DotOperator{left: left, right: right, line: line}, context) do
     left_js = encode_ir(left, context)
     right_js = encode_ir(right, context)
 
-    "Interpreter.dotOperator(#{left_js}, #{right_js})"
+    encode_with_frame_line("Interpreter.dotOperator(#{left_js}, #{right_js})", line, context)
   end
 
   def encode_ir(%IR.FloatType{value: value}, _context) do
@@ -406,18 +406,21 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("Type.map([", "])")
   end
 
-  def encode_ir(%IR.MatchOperator{left: left, right: right}, %{match_operator?: true} = context) do
+  def encode_ir(
+        %IR.MatchOperator{left: left, right: right, line: line},
+        %{match_operator?: true} = context
+      ) do
     left = encode_ir(left, %{context | pattern?: true})
     right = encode_ir(right, context)
 
-    "Interpreter.matchOperator(#{right}, #{left}, context)"
+    encode_with_frame_line("Interpreter.matchOperator(#{right}, #{left}, context)", line, context)
   end
 
-  def encode_ir(%IR.MatchOperator{left: left, right: right}, context) do
+  def encode_ir(%IR.MatchOperator{left: left, right: right, line: line}, context) do
     left = encode_ir(left, %{context | match_operator?: true, pattern?: true})
     right = encode_ir(right, %{context | match_operator?: true})
 
-    "Interpreter.matchOperator(#{right}, #{left}, context)"
+    encode_with_frame_line("Interpreter.matchOperator(#{right}, #{left}, context)", line, context)
   end
 
   def encode_ir(%IR.MatchPlaceholder{}, _context) do
