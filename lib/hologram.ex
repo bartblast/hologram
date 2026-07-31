@@ -86,9 +86,10 @@ defmodule Hologram do
   @doc """
   Returns the secret key base.
 
-  Uses the `SECRET_KEY_BASE` env var when set. In :dev/:test, falls back to the
-  Phoenix endpoint's configured `:secret_key_base`. In all other environments the
-  env var is required.
+  Uses the `SECRET_KEY_BASE` env var when set. In embedded mode, `:dev` and
+  `:test` fall back to the Phoenix endpoint's configured `:secret_key_base` -
+  standalone mode has no endpoint to read it from. Everywhere else the env var
+  is required.
   """
   @spec secret_key_base() :: String.t()
   def secret_key_base do
