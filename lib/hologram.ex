@@ -15,11 +15,10 @@ defmodule Hologram do
   browser console. Uncaught errors reach the console in every environment - this
   setting only decides whether they are also shown in the page.
 
-  Setting it to `false` alongside enabled stacktraces leaves the frames in the
+  Setting it to `false` alongside enabled stacktraces leaves the report in the
   console without putting an error screen in front of the app's users. The two
-  differ in exposure: console output is read by whoever opens the devtools, or
-  collected by an error monitoring SDK, whereas the overlay is shown to everyone
-  who hits the error.
+  reach different people: console output is read by whoever opens the devtools,
+  whereas the overlay is shown to everyone who hits the error.
 
   The value is read at compile time, so changing it requires recompiling the
   bundles.
