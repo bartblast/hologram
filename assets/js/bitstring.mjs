@@ -240,6 +240,13 @@ export default class Bitstring {
         endianness = segment.endianness || "big";
         return $.toInteger(chunk, signedness, endianness);
 
+      // The chunk holds exactly the sequence measured by utf8SegmentBitCount(),
+      // so it decodes to the one code point the segment matched.
+      case "utf8":
+        $.maybeSetBytesFromText(chunk);
+
+        return Type.integer($.#decoder.decode(chunk.bytes).codePointAt(0));
+
       default:
         throw new HologramInterpreterError(
           `${segment.type} segment type modifier is not yet implemented in Hologram`,
@@ -835,6 +842,47 @@ export default class Bitstring {
     $.maybeSetTextFromBytes(bitstring);
 
     return bitstring.text;
+  }
+
+  // Returns how many bits the UTF-8 sequence starting at the given bit offset
+  // occupies, or null when no valid sequence starts there - too few bits left,
+  // a byte that leads no sequence, a broken continuation, an overlong encoding,
+  // a surrogate, or a code point beyond Unicode. A sequence needs no byte
+  // alignment, the same way the BEAM matches one.
+  static utf8SegmentBitCount(bitstring, bitOffset) {
+    const bitCount = $.calculateBitCount(bitstring);
+
+    if (bitOffset + 8 > bitCount) {
+      return null;
+    }
+
+    const leaderChunk = $.takeChunk(bitstring, bitOffset, 8);
+    $.maybeSetBytesFromText(leaderChunk);
+
+    const sequenceByteCount = $.getUtf8SequenceLength(leaderChunk.bytes[0]);
+
+    if (sequenceByteCount === false) {
+      return null;
+    }
+
+    const sequenceBitCount = 8 * sequenceByteCount;
+
+    if (bitOffset + sequenceBitCount > bitCount) {
+      return null;
+    }
+
+    const sequenceChunk = $.takeChunk(bitstring, bitOffset, sequenceBitCount);
+    $.maybeSetBytesFromText(sequenceChunk);
+
+    try {
+      // The decoder is fatal, so it rejects everything the leader byte alone
+      // can't rule out.
+      $.#decoder.decode(sequenceChunk.bytes);
+    } catch {
+      return null;
+    }
+
+    return sequenceBitCount;
   }
 
   static validateCodePoint(codePoint) {

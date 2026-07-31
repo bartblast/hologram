@@ -6081,6 +6081,294 @@ describe("Interpreter", () => {
           );
         });
       });
+
+      // IMPORTANT!
+      // Each test here has a related Elixir consistency test in
+      // test/elixir/hologram/ex_js_consistency/match_operator_test.exs ("utf8 type modifier" section).
+      describe("utf8 type modifier", () => {
+        const matchUtf8 = (value) =>
+          Interpreter.matchOperator(
+            value,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            contextFixture(),
+          );
+
+        // <<x::utf8, rest::binary>> = "abc"
+        it("one-byte code point", () => {
+          const context = contextFixture();
+
+          Interpreter.matchOperator(
+            Type.bitstring("abc"),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assert.deepStrictEqual(context.vars.x, Type.integer(97));
+          assertBoxedStrictEqual(context.vars.rest, Type.bitstring("bc"));
+        });
+
+        // <<x::utf8, rest::binary>> = "élo"
+        it("two-byte code point", () => {
+          const context = contextFixture();
+
+          Interpreter.matchOperator(
+            Type.bitstring("élo"),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assert.deepStrictEqual(context.vars.x, Type.integer(233));
+          assertBoxedStrictEqual(context.vars.rest, Type.bitstring("lo"));
+        });
+
+        // <<x::utf8, rest::binary>> = "日本"
+        it("three-byte code point", () => {
+          const context = contextFixture();
+
+          Interpreter.matchOperator(
+            Type.bitstring("日本"),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assert.deepStrictEqual(context.vars.x, Type.integer(26085));
+          assertBoxedStrictEqual(context.vars.rest, Type.bitstring("本"));
+        });
+
+        // <<x::utf8, rest::binary>> = "😀a"
+        it("four-byte code point", () => {
+          const context = contextFixture();
+
+          Interpreter.matchOperator(
+            Type.bitstring("😀a"),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assert.deepStrictEqual(context.vars.x, Type.integer(128512));
+          assertBoxedStrictEqual(context.vars.rest, Type.bitstring("a"));
+        });
+
+        // <<x::utf8, y::utf8, rest::binary>> = "héllo"
+        it("multiple utf8 segments", () => {
+          const context = contextFixture();
+
+          Interpreter.matchOperator(
+            Type.bitstring("héllo"),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("y"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assert.deepStrictEqual(context.vars.x, Type.integer(104));
+          assert.deepStrictEqual(context.vars.y, Type.integer(233));
+          assertBoxedStrictEqual(context.vars.rest, Type.bitstring("llo"));
+        });
+
+        // <<?a::utf8, rest::binary>> = "abc"
+        it("literal code point that matches", () => {
+          const context = contextFixture();
+
+          Interpreter.matchOperator(
+            Type.bitstring("abc"),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.integer(97), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assertBoxedStrictEqual(context.vars.rest, Type.bitstring("bc"));
+        });
+
+        // <<x::utf8, _rest::bitstring>> = <<1::1, "a">>
+        it("a sequence needs no byte alignment", () => {
+          const context = contextFixture();
+
+          const myBitstring = Type.bitstring([
+            Type.bitstringSegment(Type.integer(1), {
+              type: "integer",
+              size: Type.integer(1),
+            }),
+            Type.bitstringSegment(Type.bitstring("a"), {type: "binary"}),
+          ]);
+
+          Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.integer(1), {
+                type: "integer",
+                size: Type.integer(1),
+              }),
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.matchPlaceholder(), {
+                type: "bitstring",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assert.deepStrictEqual(context.vars.x, Type.integer(97));
+        });
+
+        // <<?z::utf8, rest::binary>> = "abc"
+        it("literal code point that doesn't match", () => {
+          const myBitstring = Type.bitstring("abc");
+
+          assertBoxedError(
+            () =>
+              Interpreter.matchOperator(
+                myBitstring,
+                Type.bitstringPattern([
+                  Type.bitstringSegment(Type.integer(122), {type: "utf8"}),
+                  Type.bitstringSegment(Type.variablePattern("rest"), {
+                    type: "binary",
+                  }),
+                ]),
+                contextFixture(),
+              ),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // <<x::utf8, rest::binary>> = <<0xFF, 0xFE>>
+        it("invalid utf8 bytes", () => {
+          const myBitstring = Type.bitstring([
+            Type.bitstringSegment(Type.integer(0xff), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(0xfe), {type: "integer"}),
+          ]);
+
+          assertBoxedError(
+            () => matchUtf8(myBitstring),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // <<x::utf8, rest::binary>> = ""
+        it("empty bitstring", () => {
+          const myBitstring = Type.bitstring("");
+
+          assertBoxedError(
+            () => matchUtf8(myBitstring),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // <<x::utf8, rest::binary>> = <<0xC3>>
+        it("truncated sequence", () => {
+          const myBitstring = Type.bitstring([
+            Type.bitstringSegment(Type.integer(0xc3), {type: "integer"}),
+          ]);
+
+          assertBoxedError(
+            () => matchUtf8(myBitstring),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // <<x::utf8, rest::binary>> = <<0xED, 0xA0, 0x80>>
+        it("surrogate is invalid", () => {
+          const myBitstring = Type.bitstring([
+            Type.bitstringSegment(Type.integer(0xed), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(0xa0), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(0x80), {type: "integer"}),
+          ]);
+
+          assertBoxedError(
+            () => matchUtf8(myBitstring),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // <<x::utf8, rest::binary>> = <<0xC0, 0xAF>>
+        it("overlong encoding is invalid", () => {
+          const myBitstring = Type.bitstring([
+            Type.bitstringSegment(Type.integer(0xc0), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(0xaf), {type: "integer"}),
+          ]);
+
+          assertBoxedError(
+            () => matchUtf8(myBitstring),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // <<x::utf8>> = "ab"
+        it("leftover bits after the sequence", () => {
+          const myBitstring = Type.bitstring("ab");
+
+          assertBoxedError(
+            () =>
+              Interpreter.matchOperator(
+                myBitstring,
+                Type.bitstringPattern([
+                  Type.bitstringSegment(Type.variablePattern("x"), {
+                    type: "utf8",
+                  }),
+                ]),
+                contextFixture(),
+              ),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // Not implemented on the client - the raise names them.
+        // it("utf16 type modifier")
+        // it("utf32 type modifier")
+      });
     });
 
     describe("bitstring segment decoding, signed modifier", () => {

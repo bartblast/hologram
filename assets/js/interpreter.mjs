@@ -2331,22 +2331,27 @@ export default class Interpreter {
       const segmentType = segment.type;
       const isLastSegment = i === left.segments.length - 1;
 
-      if (
-        segmentType === "utf8" ||
-        segmentType === "utf16" ||
-        segmentType === "utf32"
-      ) {
+      if (segmentType === "utf16" || segmentType === "utf32") {
         const message =
-          "Pattern matching on bitstring segments with utf* type modifiers is not yet implemented in Hologram";
+          "Pattern matching on bitstring segments with utf16 and utf32 type modifiers is not yet implemented in Hologram";
 
         throw new HologramInterpreterError(message);
       }
 
       let chunkBitCount;
 
-      // Special case: last segment with binary or bitstring type and no explicit size
-      // should consume all remaining bits
-      if (
+      // A utf8 segment is as wide as the sequence it matches, so what it
+      // consumes is known only by reading that sequence. Anything that isn't
+      // one code point there is a failed match, as on the BEAM.
+      if (segmentType === "utf8") {
+        chunkBitCount = Bitstring.utf8SegmentBitCount(right, chunkOffset);
+
+        if (chunkBitCount === null) {
+          return $.#handleMatchFail(right, raiseMatchError);
+        }
+      } else if (
+        // Special case: last segment with binary or bitstring type and no explicit size
+        // should consume all remaining bits
         isLastSegment &&
         (segmentType === "binary" || segmentType === "bitstring") &&
         segment.size === null
