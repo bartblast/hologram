@@ -312,15 +312,14 @@ export default class Hologram {
     };
   }
 
-  // Reports an uncaught boxed error the way the server reports one, so the
-  // reader sees Elixir frames instead of the minified JavaScript stack the
-  // browser would give them. The console gets it in every environment, and the
-  // page does too where the error overlay is enabled. Returns whether the error
-  // was a boxed one, which is what decides if the browser's own reporting is
-  // suppressed - an error from outside the runtime keeps it.
+  // Reports an uncaught boxed error the way the server reports one, alongside
+  // the browser's own report: this one carries the Elixir frames, the browser's
+  // carries the JavaScript stack - and stays the one witness if this reporting
+  // itself ever breaks. The console gets the report in every environment, and
+  // the page does too where the error overlay is enabled.
   static handleUncaughtError(error) {
     if (!(error instanceof HologramBoxedError)) {
-      return false;
+      return;
     }
 
     // Read by the feature test helpers, which assert against the error the
@@ -340,8 +339,6 @@ export default class Hologram {
     if (globalThis.Hologram.config.errorOverlay) {
       UncaughtErrorOverlay.show(report);
     }
-
-    return true;
   }
 
   // Made public to make tests easier
@@ -886,17 +883,13 @@ export default class Hologram {
   // Deps: [:maps.get/2]
   static async #init() {
     window.addEventListener("error", (event) => {
-      if ($.handleUncaughtError(event.error)) {
-        event.preventDefault();
-      }
+      $.handleUncaughtError(event.error);
     });
 
     // Async action errors surface as rejected Promises (from the .then() path
     // in executeAction) and fire "unhandledrejection" instead of "error".
     window.addEventListener("unhandledrejection", (event) => {
-      if ($.handleUncaughtError(event.reason)) {
-        event.preventDefault();
-      }
+      $.handleUncaughtError(event.reason);
     });
 
     window.addEventListener("beforeunload", () => {

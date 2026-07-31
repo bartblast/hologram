@@ -1193,14 +1193,10 @@ describe("Hologram", () => {
       });
     });
 
-    it("reports a boxed error as handled", () => {
-      assert.isTrue(Hologram.handleUncaughtError(boxedError()));
-    });
-
-    it("leaves an error raised outside the runtime to the browser", () => {
+    it("ignores an error raised outside the runtime", () => {
       globalThis.Hologram.config.errorOverlay = true;
 
-      assert.isFalse(Hologram.handleUncaughtError(new Error("my message")));
+      Hologram.handleUncaughtError(new Error("my message"));
 
       sinon.assert.notCalled(consoleErrorStub);
       sinon.assert.notCalled(overlayShowStub);
