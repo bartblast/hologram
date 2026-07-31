@@ -338,27 +338,70 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, @env, @server) == {~s(<div id="my_id"></div>), %{}, @server}
     end
 
-    test "keyword list value, entries applied in list order" do
+    test "keyword list value" do
       node = {:element, "div", [{:spread, {[id: "my_id", class: "my_class"]}}], []}
 
       assert render_dom(node, @env, @server) ==
-               {~s(<div id="my_id" class="my_class"></div>), %{}, @server}
+               {~s(<div class="my_class" id="my_id"></div>), %{}, @server}
     end
 
-    # Map entries have no meaningful order, so only their presence is asserted.
     test "map value with multiple entries" do
       node = {:element, "div", [{:spread, {%{id: "my_id", class: "my_class"}}}], []}
 
-      {html, %{}, @server} = render_dom(node, @env, @server)
-
-      assert html =~ ~s(id="my_id")
-      assert html =~ ~s(class="my_class")
+      assert render_dom(node, @env, @server) ==
+               {~s(<div class="my_class" id="my_id"></div>), %{}, @server}
     end
 
     test "string keys" do
       node = {:element, "div", [{:spread, {%{"id" => "my_id"}}}], []}
 
       assert render_dom(node, @env, @server) == {~s(<div id="my_id"></div>), %{}, @server}
+    end
+
+    test "entries are sorted by name, regardless of key type" do
+      node =
+        {:element, "div", [{:spread, {%{:my_key_3 => "c", "my_key_1" => "a", :my_key_2 => "b"}}}],
+         []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div my-key-1="a" my-key-2="b" my-key-3="c"></div>), %{}, @server}
+    end
+
+    test "entries are sorted by the composed name, so nested ones stay next to their siblings" do
+      node =
+        {:element, "div",
+         [{:spread, {[my_key_2: "b", data: [user_id: 1, role: "admin"], my_key_1: "a"]}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div data-role="admin" data-user-id="1" my-key-1="a" my-key-2="b"></div>), %{},
+                @server}
+    end
+
+    # Only the block a single spread expands to is sorted.
+    test "sorting doesn't move attributes written literally" do
+      node =
+        {:element, "div",
+         [
+           {"zzz", [text: "my_value_1"]},
+           {:spread, {%{bbb: "my_value_2", aaa: "my_value_3"}}},
+           {"yyy", [text: "my_value_4"]}
+         ], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div zzz="my_value_1" aaa="my_value_3" bbb="my_value_2" yyy="my_value_4"></div>),
+                %{}, @server}
+    end
+
+    test "each spread is sorted on its own" do
+      node =
+        {:element, "div",
+         [
+           {:spread, {%{zzz: "my_value_1", aaa: "my_value_2"}}},
+           {:spread, {%{bbb: "my_value_3"}}}
+         ], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div aaa="my_value_2" zzz="my_value_1" bbb="my_value_3"></div>), %{}, @server}
     end
 
     test "underscores in an atom key are converted to hyphens" do
@@ -404,6 +447,7 @@ defmodule Hologram.Template.RendererTest do
                {~s(<div data-my-group-my-key="my_value"></div>), %{}, @server}
     end
 
+    # Sorting is stable, so a keyword list's order still decides which duplicate key wins.
     test "duplicate keys in a keyword list, later wins" do
       node = {:element, "div", [{:spread, {[id: "my_value_1", id: "my_value_2"]}}], []}
 

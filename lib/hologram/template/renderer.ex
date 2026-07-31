@@ -304,6 +304,21 @@ defmodule Hologram.Template.Renderer do
     {name, value_str}
   end
 
+  defp expand_attribute(attr_dom)
+
+  # A spread's own entries are sorted by name, so that rendering is reproducible: map key order is
+  # undefined in Erlang, and a keyword list's order decides only which duplicate key wins, never how
+  # the surviving entries are laid out. The sort is stable, which is what keeps that later-wins rule
+  # intact. Only the block a single spread expands to is sorted, so attributes written literally in
+  # the markup keep their authored position.
+  defp expand_attribute({:spread, {value}}) do
+    value
+    |> expand_spread(nil)
+    |> Enum.sort_by(fn {name, _value_dom} -> name end)
+  end
+
+  defp expand_attribute(attr_dom), do: [attr_dom]
+
   # Spread entries are splatted into synthetic named attributes at the spread's position, so that
   # everything downstream (event attribute filtering, boolean attribute rules, value rendering) is
   # reached through the same path as attributes written literally in the markup. Names then resolve
@@ -311,10 +326,7 @@ defmodule Hologram.Template.Renderer do
   defp expand_attribute_spreads(attrs_dom) do
     if Enum.any?(attrs_dom, &match?({:spread, _value}, &1)) do
       attrs_dom
-      |> Enum.flat_map(fn
-        {:spread, {value}} -> expand_spread(value, nil)
-        attr_dom -> [attr_dom]
-      end)
+      |> Enum.flat_map(&expand_attribute/1)
       |> dedupe_attributes()
     else
       attrs_dom
