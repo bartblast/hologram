@@ -3,8 +3,8 @@ defmodule HologramFeatureTests.ErrorOverlayTest do
 
   alias HologramFeatureTests.ErrorOverlayPage
 
-  @overlay css("#hologram-uncaught-error-overlay")
   @dismiss_button css("#hologram-uncaught-error-overlay button[aria-label='Dismiss']")
+  @overlay css("#hologram-uncaught-error-overlay")
 
   # Raises an uncaught error in the page, consuming the JavaScript error it logs
   # so that later interactions don't fail on it, and returns the session.
