@@ -1108,8 +1108,10 @@ defmodule Hologram.Compiler.EncoderTest do
         line: 123
       }
 
+      result = encode_ir(ir)
+
       assert String.starts_with?(
-               encode_ir(ir),
+               result,
                "(Interpreter.setFrameLine(123), Interpreter.case(context.vars.my_var, "
              )
     end
@@ -1421,8 +1423,10 @@ defmodule Hologram.Compiler.EncoderTest do
         line: 123
       }
 
+      result = encode_ir(ir)
+
       assert String.starts_with?(
-               encode_ir(ir),
+               result,
                "(Interpreter.setFrameLine(123), Interpreter.comprehension("
              )
     end
@@ -3583,10 +3587,9 @@ defmodule Hologram.Compiler.EncoderTest do
         line: 123
       }
 
-      assert String.starts_with?(
-               encode_ir(ir),
-               "(Interpreter.setFrameLine(123), Interpreter.try("
-             )
+      result = encode_ir(ir)
+
+      assert String.starts_with?(result, "(Interpreter.setFrameLine(123), Interpreter.try(")
     end
   end
 
@@ -4219,10 +4222,9 @@ defmodule Hologram.Compiler.EncoderTest do
         line: 123
       }
 
-      assert String.starts_with?(
-               encode_ir(ir),
-               "(Interpreter.setFrameLine(123), Interpreter.with("
-             )
+      result = encode_ir(ir)
+
+      assert String.starts_with?(result, "(Interpreter.setFrameLine(123), Interpreter.with(")
     end
   end
 
