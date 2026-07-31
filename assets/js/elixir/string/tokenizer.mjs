@@ -55,6 +55,9 @@ const RANGE_CLASSES = new Array(RANGE_COUNT);
 }
 
 // Codepoint class from the carried table, or null when unusable.
+// Stands in for a term that is not a number - see the note in tokenize/1.
+const NON_NUMERIC = Infinity;
+
 const classOf = (codePoint) => {
   let low = 0;
   let high = RANGE_STARTS.length - 1;
@@ -277,6 +280,10 @@ const continueTokens = (
       continue;
     }
 
+    if (head === NON_NUMERIC) {
+      return {error: "unexpected_token", errorIndex: index, acc};
+    }
+
     const headClass = classOf(head);
 
     if (headClass === "I" || headClass === "A" || headClass === "C") {
@@ -287,20 +294,23 @@ const continueTokens = (
       continue;
     }
 
-    return {error: "unexpected_token", acc: [...acc, head]};
+    return {error: "unexpected_token", errorIndex: index, acc};
   }
 
   return {acc, restIndex: index, asciiLetters, scriptSet, special};
 };
 
 // Mirrors validate/2.
-const validate = (state, kind, codePoints) => {
+const validate = (state, kind, terms) => {
   if (state.error === "unexpected_token") {
     return Type.tuple([
       Type.atom("error"),
       Type.tuple([
         Type.atom("unexpected_token"),
-        Type.list(state.acc.map((codePoint) => Type.integer(codePoint))),
+        Type.list([
+          ...state.acc.map((codePoint) => Type.integer(codePoint)),
+          terms[state.errorIndex],
+        ]),
       ]),
     ]);
   }
@@ -308,9 +318,7 @@ const validate = (state, kind, codePoints) => {
   const {acc, restIndex, asciiLetters, scriptSet, special} = state;
   const length = restIndex;
 
-  const rest = Type.list(
-    codePoints.slice(restIndex).map((codePoint) => Type.integer(codePoint)),
-  );
+  const rest = Type.list(terms.slice(restIndex));
 
   let resultAcc = acc;
   const resultSpecial = special;
@@ -371,7 +379,15 @@ const Elixir_String_Tokenizer = {
       ]);
     }
 
-    const codePoints = subject.data.map((term) => Number(term.value));
+    const terms = subject.data;
+
+    // A term that isn't a number sorts above every code point in Erlang term
+    // order, so it fails the "<= 127" test the way the server's guard does.
+    // The result carries the original terms - the server reports the term it
+    // stopped at, not a number derived from it.
+    const codePoints = terms.map((term) =>
+      Type.isNumber(term) ? Number(term.value) : NON_NUMERIC,
+    );
 
     if (codePoints.length === 0) {
       return Type.tuple([Type.atom("error"), Type.atom("empty")]);
@@ -405,6 +421,8 @@ const Elixir_String_Tokenizer = {
       asciiLetters = false;
       scriptSet = scriptSetOf(firstCodePoint);
       special = ["nfkc"];
+    } else if (head === NON_NUMERIC) {
+      return Type.tuple([Type.atom("error"), Type.atom("empty")]);
     } else {
       const headClass = classOf(head);
 
@@ -430,7 +448,7 @@ const Elixir_String_Tokenizer = {
       special,
     );
 
-    return validate(state, kind, codePoints);
+    return validate(state, kind, terms);
   },
 };
 

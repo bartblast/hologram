@@ -43,6 +43,9 @@ const tokenize = (codePoints) =>
     Type.list(codePoints.map((codePoint) => Type.integer(codePoint))),
   );
 
+const tokenizeTerms = (terms) =>
+  Elixir_String_Tokenizer["tokenize/1"](Type.list(terms));
+
 const codePoints = (text) => Array.from(text).map((c) => c.codePointAt(0));
 
 const charlist = (text) => Type.list(codePoints(text).map(Type.integer));
@@ -126,6 +129,20 @@ describe("Elixir_String_Tokenizer", () => {
       );
     });
 
+    it("identifier stops at a number that is not a code point", () => {
+      assert.deepStrictEqual(
+        tokenizeTerms([Type.integer(97), Type.float(1.5), Type.integer(99)]),
+        Type.tuple([
+          Type.atom("identifier"),
+          charlist("a"),
+          Type.list([Type.float(1.5), Type.integer(99)]),
+          Type.integer(1),
+          Type.boolean(true),
+          Type.list([]),
+        ]),
+      );
+    });
+
     it("Unicode identifier", () => {
       assert.deepStrictEqual(
         tokenize(codePoints("héllo")),
@@ -205,6 +222,13 @@ describe("Elixir_String_Tokenizer", () => {
       );
     });
 
+    it("term that is not a number can't start an identifier", () => {
+      assert.deepStrictEqual(
+        tokenizeTerms([Type.atom("b"), Type.integer(97)]),
+        Type.tuple([Type.atom("error"), Type.atom("empty")]),
+      );
+    });
+
     it("restricted codepoint inside an identifier is unexpected", () => {
       // superscript two is excluded by UTS 39
       assert.deepStrictEqual(
@@ -212,6 +236,19 @@ describe("Elixir_String_Tokenizer", () => {
         Type.tuple([
           Type.atom("error"),
           Type.tuple([Type.atom("unexpected_token"), charlist("x²")]),
+        ]),
+      );
+    });
+
+    it("term that is not a number inside an identifier is unexpected", () => {
+      assert.deepStrictEqual(
+        tokenizeTerms([Type.integer(97), Type.atom("b"), Type.integer(99)]),
+        Type.tuple([
+          Type.atom("error"),
+          Type.tuple([
+            Type.atom("unexpected_token"),
+            Type.list([Type.integer(97), Type.atom("b")]),
+          ]),
         ]),
       );
     });

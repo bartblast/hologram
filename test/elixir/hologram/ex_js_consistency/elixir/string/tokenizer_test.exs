@@ -52,6 +52,11 @@ defmodule Hologram.ExJsConsistency.Elixir.String.TokenizerTest do
                {:identifier, ~c"foo", ~c" bar", 3, true, []}
     end
 
+    test "identifier stops at a number that is not a code point" do
+      assert String.Tokenizer.tokenize([?a, 1.5, ?c]) ==
+               {:identifier, ~c"a", [1.5, ?c], 1, true, []}
+    end
+
     test "Unicode identifier" do
       assert String.Tokenizer.tokenize(~c"héllo") == {:identifier, ~c"héllo", [], 5, false, []}
     end
@@ -99,9 +104,18 @@ defmodule Hologram.ExJsConsistency.Elixir.String.TokenizerTest do
       assert String.Tokenizer.tokenize(~c"ｆｏｏ") == {:error, :empty}
     end
 
+    test "term that is not a number can't start an identifier" do
+      assert String.Tokenizer.tokenize([:b, ?a]) == {:error, :empty}
+    end
+
     test "restricted codepoint inside an identifier is unexpected" do
       # superscript two is excluded by UTS 39
       assert String.Tokenizer.tokenize(~c"x²") == {:error, {:unexpected_token, ~c"x²"}}
+    end
+
+    test "term that is not a number inside an identifier is unexpected" do
+      assert String.Tokenizer.tokenize([?a, :b, ?c]) ==
+               {:error, {:unexpected_token, [?a, :b]}}
     end
 
     test "mixed scripts are rejected" do
