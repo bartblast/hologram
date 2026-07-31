@@ -46,8 +46,6 @@ defmodule Hologram.Template.Parser do
            | :start_tag
            | :text, any}
 
-  @type tag_name :: String.t() | {:expression, String.t()}
-
   @type status ::
           :attribute_assignment
           | :attribute_name
@@ -60,6 +58,8 @@ defmodule Hologram.Template.Parser do
           | :text
           | :start_tag
           | :start_tag_name
+
+  @type tag_name :: String.t() | {:expression, String.t()}
 
   defmodule Context do
     @moduledoc false
