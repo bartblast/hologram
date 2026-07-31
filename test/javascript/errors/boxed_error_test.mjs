@@ -70,7 +70,7 @@ describe("HologramBoxedError", () => {
       const error = new HologramBoxedError(struct);
 
       assert.equal(error.type, "MyType");
-      assert.equal(error.messageText, "my message");
+      assert.equal(error.text, "my message");
     });
 
     it("renders the message from the blamed struct, which struct doesn't mirror", () => {
@@ -107,9 +107,9 @@ describe("HologramBoxedError", () => {
       const carriers = [
         "blamedStruct",
         "kind",
-        "messageText",
         "stacktrace",
         "struct",
+        "text",
         "type",
         "value",
       ];
@@ -218,7 +218,7 @@ describe("HologramBoxedError", () => {
       }
 
       assert.equal(caught.type, "error");
-      assert.equal(caught.messageText, ":badarg");
+      assert.equal(caught.text, ":badarg");
     });
 
     it("derives the next error normally once the raise has unwound", () => {
@@ -293,7 +293,7 @@ describe("HologramBoxedError", () => {
       assert.equal(error.type, "MyType");
 
       assert.equal(
-        error.messageText,
+        error.text,
         '%{__exception__: true, message: "my message", __struct__: MyType} ' +
           "(message derivation failed: my fault)",
       );
@@ -348,7 +348,7 @@ describe("HologramBoxedError", () => {
       );
 
       assert.equal(error.type, "throw");
-      assert.equal(error.messageText, "42");
+      assert.equal(error.text, "42");
     });
   });
 

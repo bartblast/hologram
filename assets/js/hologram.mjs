@@ -328,7 +328,7 @@ export default class Hologram {
     // error that failed to derive is still reported, with the fault named.
     GlobalRegistry.set("lastBoxedError", {
       module: error.type,
-      message: error.messageText,
+      message: error.text,
     });
 
     const report = Interpreter.formatBoxedError(error);
@@ -444,7 +444,7 @@ export default class Hologram {
       } catch (error) {
         if (error instanceof HologramBoxedError) {
           error.name = error.type;
-          error.message = error.messageText;
+          error.message = error.text;
         }
 
         throw error;

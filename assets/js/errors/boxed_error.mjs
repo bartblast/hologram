@@ -44,17 +44,17 @@ export default class HologramBoxedError extends Error {
       configurable: true,
     });
 
-    // The two parts the display message is composed of: what was raised (the
-    // exception module, or the kind for a throw or an exit) and what it says
-    // about itself. Both are kept so a reporter can name the error without
-    // deriving it a second time - a derivation that could fault where the
-    // first one didn't, since it would run outside the guards below.
+    // The two parts message is composed of: what was raised (the exception
+    // module, or the kind for a throw or an exit) and what it says about
+    // itself. Both are kept so a reporter can name the error without deriving
+    // it a second time - a derivation that could fault where the first one
+    // didn't, since it would run outside the guards below.
     Object.defineProperty(this, "type", {
       value: null,
       writable: true,
       configurable: true,
     });
-    Object.defineProperty(this, "messageText", {
+    Object.defineProperty(this, "text", {
       value: null,
       writable: true,
       configurable: true,
@@ -82,8 +82,8 @@ export default class HologramBoxedError extends Error {
       this.rederive(Type.list());
     } else {
       this.type = kind.value;
-      this.messageText = Interpreter.inspect(value);
-      this.message = `(${this.type}) ${this.messageText}`;
+      this.text = Interpreter.inspect(value);
+      this.message = `(${this.type}) ${this.text}`;
     }
   }
 
@@ -108,9 +108,9 @@ export default class HologramBoxedError extends Error {
       this.blamedStruct = Interpreter.blameError(this.value, boxedStacktrace);
 
       this.type = Interpreter.getErrorType(this);
-      this.messageText = Interpreter.resolveErrorMessage(this.blamedStruct);
+      this.text = Interpreter.resolveErrorMessage(this.blamedStruct);
 
-      this.message = `(${this.type}) ${this.messageText}`;
+      this.message = `(${this.type}) ${this.text}`;
     } catch (error) {
       // A boxed error means the derivation raised the way Elixir code does, and it names what is
       // wrong better than this error could - it is carried out, having already taken its raw form
@@ -146,7 +146,7 @@ export default class HologramBoxedError extends Error {
         ? ""
         : ` (message derivation failed: ${derivationError.message})`;
 
-    this.messageText = `${Interpreter.inspect(this.value)}${fault}`;
-    this.message = `(${this.type}) ${this.messageText}`;
+    this.text = `${Interpreter.inspect(this.value)}${fault}`;
+    this.message = `(${this.type}) ${this.text}`;
   }
 }
