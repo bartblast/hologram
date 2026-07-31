@@ -406,22 +406,6 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse_tokens(
-        %{delimiter_stack: [:expression], node_type: :spread} = context,
-        :expression,
-        [{:symbol, "}"} = token | rest]
-      ) do
-    context
-    |> buffer_token(token)
-    |> add_processed_token(token)
-    |> add_spread_attribute()
-    |> reset_token_buffer()
-    |> pop_delimiter_stack()
-    |> set_prev_status(:expression)
-    |> set_node_type(:tag)
-    |> parse_tokens(:start_tag, rest)
-  end
-
-  def parse_tokens(
         %{delimiter_stack: [:expression | _tail], node_type: :block} = context,
         :expression,
         [
@@ -437,6 +421,22 @@ defmodule Hologram.Template.Parser do
     |> set_prev_status(:expression)
     |> set_node_type(:text)
     |> parse_tokens(:text, rest)
+  end
+
+  def parse_tokens(
+        %{delimiter_stack: [:expression], node_type: :spread} = context,
+        :expression,
+        [{:symbol, "}"} = token | rest]
+      ) do
+    context
+    |> buffer_token(token)
+    |> add_processed_token(token)
+    |> add_spread_attribute()
+    |> reset_token_buffer()
+    |> pop_delimiter_stack()
+    |> set_prev_status(:expression)
+    |> set_node_type(:tag)
+    |> parse_tokens(:start_tag, rest)
   end
 
   def parse_tokens(
