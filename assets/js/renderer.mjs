@@ -416,7 +416,10 @@ export default class Renderer {
   // Based on cast_props/2
   // Deps: [:maps.from_list/1]
   static #castProps(propsDom, moduleProxy) {
-    const propsTuples = Renderer.#filterAllowedProps(propsDom, moduleProxy)
+    const propsTuples = Renderer.#filterAllowedProps(
+      Renderer.#expandPropSpreads(propsDom),
+      moduleProxy,
+    )
       .map((propDom) => Renderer.#evalutatePropValue(propDom))
       .map((propDom) => Renderer.#normalizePropName(propDom));
 
@@ -716,6 +719,31 @@ export default class Renderer {
     return hasSpread ? $.#dedupeAttributes(expanded) : expanded;
   }
 
+  // Based on expand_prop/1
+  static #expandProp(propDom) {
+    return Type.isRecordTuple(propDom, "spread", 2)
+      ? $.#expandSpreadProps(propDom.data[1].data[0])
+      : [propDom];
+  }
+
+  // Based on expand_prop_spreads/1
+  // Spread entries are splatted into synthetic named props at the spread's position, so that
+  // everything downstream (filtering to declared props, name normalization, context injection,
+  // defaults, cid detection) is reached through the same path as props written literally in the
+  // markup. Names then resolve positionally, last one wins, which the final collapse into a map
+  // already does - no deduplication step is needed here.
+  //
+  // Returns an array of prop tuples rather than a boxed list, since the caller iterates it anyway.
+  static #expandPropSpreads(propsDom) {
+    const hasSpread = propsDom.data.some((propDom) =>
+      Type.isRecordTuple(propDom, "spread", 2),
+    );
+
+    return hasSpread
+      ? propsDom.data.flatMap((propDom) => $.#expandProp(propDom))
+      : propsDom.data;
+  }
+
   // Based on expand_slots/2 (including fallback case)
   static #expandSlots(dom, slots) {
     if (Type.isList(dom)) {
@@ -801,6 +829,22 @@ export default class Renderer {
     );
   }
 
+  // Based on expand_spread_props/1
+  // Props live in the Elixir namespace, so unlike attribute names they are verbatim and flat - a map
+  // or keyword list entry value is simply a raw prop value, and doesn't compose a nested name.
+  static #expandSpreadProps(value) {
+    return $.#spreadEntries(value).map(([key, entryValue]) => {
+      const name = $.#validateSpreadKey($.toText(key));
+
+      return Type.tuple([
+        Type.bitstring(name),
+        Type.list([
+          Type.tuple([Type.atom("expression"), Type.tuple([entryValue])]),
+        ]),
+      ]);
+    });
+  }
+
   // Based on evaluate_prop_value/2
   static #evalutatePropValue(propDom) {
     const [name, valueDom] = propDom.data;
@@ -848,14 +892,15 @@ export default class Renderer {
   }
 
   // Based on filter_allowed_props/2
-  static #filterAllowedProps(propsDom, moduleProxy) {
+  // Takes an array of prop tuples, as returned by #expandPropSpreads().
+  static #filterAllowedProps(propDoms, moduleProxy) {
     const registeredPropNames = Renderer.#getPropDefinitions(moduleProxy)
       .data.filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
       .map((prop) => $.toBitstring(prop.data[0]));
 
     const allowedPropNames = registeredPropNames.concat(Type.bitstring("cid"));
 
-    return propsDom.data.filter((propDom) =>
+    return propDoms.filter((propDom) =>
       allowedPropNames.some((name) =>
         Interpreter.isStrictlyEqual(name, propDom.data[0]),
       ),

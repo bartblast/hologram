@@ -69,6 +69,7 @@ import {defineModule7Fixture} from "./support/fixtures/renderer/module_7.mjs";
 import {defineModule76Fixture} from "./support/fixtures/renderer/module_76.mjs";
 import {defineModule77Fixture} from "./support/fixtures/renderer/module_77.mjs";
 import {defineModule78Fixture} from "./support/fixtures/renderer/module_78.mjs";
+import {defineModule86Fixture} from "./support/fixtures/renderer/module_86.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
 import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client_only/module_1.mjs";
@@ -142,6 +143,7 @@ defineModule7Fixture();
 defineModule76Fixture();
 defineModule77Fixture();
 defineModule78Fixture();
+defineModule86Fixture();
 defineModule8Fixture();
 defineModule9Fixture();
 defineClientOnlyModule1Fixture();
@@ -5578,6 +5580,317 @@ describe("Renderer", () => {
       const expected = ["prop_aaa = 987"];
 
       assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("component prop spread", () => {
+    const module16 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module16",
+    );
+
+    const module86 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module86",
+    );
+
+    const spread = (value) =>
+      Type.tuple([Type.atom("spread"), Type.tuple([value])]);
+
+    const namedProp = (name, text) =>
+      Type.tuple([
+        Type.bitstring(name),
+        Type.keywordList([[Type.atom("text"), Type.bitstring(text)]]),
+      ]);
+
+    const renderComponent = (moduleAlias, propsDom) =>
+      Renderer.renderDom(
+        Type.tuple([
+          Type.atom("component"),
+          moduleAlias,
+          Type.list(propsDom),
+          Type.list(),
+        ]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+    const assertRaises = (propsDom, errorType, message) =>
+      assertBoxedError(
+        () => renderComponent(module16, propsDom),
+        errorType,
+        message,
+      );
+
+    it("map value", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [Type.atom("prop_1"), Type.bitstring("my_value_1")],
+            [Type.atom("prop_2"), Type.integer(2)],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1", prop_2: 2}',
+      ]);
+    });
+
+    it("keyword list value", () => {
+      const propsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("prop_1"), Type.bitstring("my_value_1")],
+            [Type.atom("prop_2"), Type.integer(2)],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1", prop_2: 2}',
+      ]);
+    });
+
+    it("string keys", () => {
+      const propsDom = [
+        spread(
+          Type.map([[Type.bitstring("prop_1"), Type.bitstring("my_value_1")]]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1"}',
+      ]);
+    });
+
+    // Prop names live in the Elixir namespace, so they are not dasherized the way attributes are.
+    it("underscores in names are kept verbatim", () => {
+      const propsDom = [
+        spread(
+          Type.map([[Type.atom("my_prop_1"), Type.bitstring("my_value_1")]]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        'component vars = %{my_prop_1: "my_value_1"}',
+      ]);
+    });
+
+    it("undeclared keys are filtered out", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [Type.atom("prop_1"), Type.bitstring("my_value_1")],
+            [Type.atom("undeclared"), Type.bitstring("my_value_2")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1"}',
+      ]);
+    });
+
+    it("values are passed as raw terms", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("my_prop"),
+              Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderComponent(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module64"),
+          propsDom,
+        ),
+        ["my_prop = {1, 2, 3}"],
+      );
+    });
+
+    // Unlike the element branch, a map value doesn't recurse into composed names.
+    it("map value of an entry is a raw prop value", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("my_prop_2"),
+              Type.map([[Type.atom("my_nested_key"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        "component vars = %{my_prop_2: %{my_nested_key: 1}}",
+      ]);
+    });
+
+    it("keyword list value of an entry is a raw prop value", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("my_prop_3"),
+              Type.keywordList([[Type.atom("my_nested_key"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        "component vars = %{my_prop_3: [my_nested_key: 1]}",
+      ]);
+    });
+
+    it("nil value is passed as-is", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("my_prop_1"), Type.nil()]])),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        "component vars = %{my_prop_1: nil}",
+      ]);
+    });
+
+    it("false value is passed as-is", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("my_prop_1"), Type.boolean(false)]])),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        "component vars = %{my_prop_1: false}",
+      ]);
+    });
+
+    it("named prop before the spread is overridden", () => {
+      const propsDom = [
+        namedProp("prop_1", "my_value_1"),
+        spread(Type.map([[Type.atom("prop_1"), Type.bitstring("my_value_2")]])),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_2"}',
+      ]);
+    });
+
+    it("named prop after the spread wins", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("prop_1"), Type.bitstring("my_value_1")]])),
+        namedProp("prop_1", "my_value_2"),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_2"}',
+      ]);
+    });
+
+    it("later spread wins over an earlier one", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("prop_1"), Type.bitstring("my_value_1")]])),
+        spread(Type.map([[Type.atom("prop_1"), Type.bitstring("my_value_2")]])),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_2"}',
+      ]);
+    });
+
+    it("cid supplied through a spread initializes a stateful component", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [Type.atom("cid"), Type.bitstring("my_component")],
+            [Type.atom("prop_1"), Type.bitstring("my_value")],
+          ]),
+        ),
+      ];
+
+      initComponentRegistryEntry(Type.bitstring("my_component"));
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{cid: "my_component", prop_1: "my_value"}',
+      ]);
+    });
+
+    it("declared default value is applied for a key not supplied by the spread", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("prop_2"), Type.atom("my_value")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderComponent(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module65"),
+          propsDom,
+        ),
+        ['component vars = %{prop_1: "abc", prop_2: :my_value, prop_3: 123}'],
+      );
+    });
+
+    it("empty map value supplies no props", () => {
+      const propsDom = [namedProp("prop_1", "my_value_1"), spread(Type.map())];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1"}',
+      ]);
+    });
+
+    it("raises for a nil value", () => {
+      assertRaises(
+        [spread(Type.nil())],
+        "ArgumentError",
+        "spread value must be a map or a keyword list, got: nil",
+      );
+    });
+
+    it("raises for a string value", () => {
+      assertRaises(
+        [spread(Type.bitstring("my_string"))],
+        "ArgumentError",
+        'spread value must be a map or a keyword list, got: "my_string"',
+      );
+    });
+
+    it("raises for a list which is not a keyword list", () => {
+      assertRaises(
+        [
+          spread(
+            Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          ),
+        ],
+        "ArgumentError",
+        "spread value must be a map or a keyword list, got: [1, 2, 3]",
+      );
+    });
+
+    it("raises for a struct value", () => {
+      const structDom = Type.map([
+        [Type.atom("__struct__"), Type.alias("Aaa.Bbb")],
+        [Type.atom("my_key"), Type.integer(1)],
+      ]);
+
+      assertRaises(
+        [spread(structDom)],
+        "ArgumentError",
+        `spread value must be a map or a keyword list, got: ${Interpreter.inspect(structDom)}`,
+      );
+    });
+
+    it("raises for a '$'-prefixed key", () => {
+      assertRaises(
+        [
+          spread(
+            Type.map([[Type.bitstring("$click"), Type.atom("my_command")]]),
+          ),
+        ],
+        "ArgumentError",
+        `event bindings can't be set through a spread, got the "$click" key`,
+      );
     });
   });
 
