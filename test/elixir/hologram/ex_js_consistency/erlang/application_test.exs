@@ -24,9 +24,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ApplicationTest do
     end
 
     test "raises FunctionClauseError if the argument is not an atom" do
+      module = wrap_term(123)
+
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":application.get_application/1", [123]),
-                   fn -> :application.get_application(wrap_term(123)) end
+                   fn -> :application.get_application(module) end
     end
   end
 
@@ -49,7 +51,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ApplicationTest do
     end
 
     test "application that is not an atom" do
-      assert :application.get_key(wrap_term("hologram"), :vsn) == :undefined
+      app = wrap_term("hologram")
+
+      assert :application.get_key(app, :vsn) == :undefined
     end
 
     test "key that is not an atom" do

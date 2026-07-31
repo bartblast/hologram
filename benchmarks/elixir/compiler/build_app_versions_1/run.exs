@@ -8,8 +8,7 @@ Benchee.run(
     end
   },
   before_scenario: fn _input ->
-    Compiler.build_ir_plt()
-    |> Compiler.build_call_graph()
+    Compiler.build_call_graph(Compiler.build_ir_plt())
   end,
   after_scenario: fn call_graph ->
     CallGraph.stop(call_graph)
