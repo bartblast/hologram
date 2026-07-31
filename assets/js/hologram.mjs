@@ -324,12 +324,11 @@ export default class Hologram {
     }
 
     // Read by the feature test helpers, which assert against the error the
-    // page last raised.
+    // page last raised. Both parts are taken as the error derived them, so an
+    // error that failed to derive is still reported, with the fault named.
     GlobalRegistry.set("lastBoxedError", {
-      module: Interpreter.inspect(
-        Erlang_Maps["get/2"](Type.atom("__struct__"), error.struct),
-      ),
-      message: Interpreter.resolveErrorMessage(error.blamedStruct),
+      module: error.type,
+      message: error.messageText,
     });
 
     const report = Interpreter.formatBoxedError(error);
@@ -444,8 +443,8 @@ export default class Hologram {
         Hologram.#mountPage();
       } catch (error) {
         if (error instanceof HologramBoxedError) {
-          error.name = Interpreter.getErrorType(error);
-          error.message = Interpreter.resolveErrorMessage(error.blamedStruct);
+          error.name = error.type;
+          error.message = error.messageText;
         }
 
         throw error;

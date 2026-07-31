@@ -18,6 +18,7 @@ import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
+import Interpreter from "../../assets/js/interpreter.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
 import UncaughtErrorOverlay from "../../assets/js/uncaught_error_overlay.mjs";
@@ -1168,6 +1169,27 @@ describe("Hologram", () => {
       assert.deepStrictEqual(GlobalRegistry.get("lastBoxedError"), {
         module: "MyError",
         message: "my message",
+      });
+    });
+
+    // Deriving here a second time would fault the same way the first one did,
+    // leaving the error unreported - the very thing the reader needs to see.
+    it("records an error that failed to derive its message, naming the fault", () => {
+      const normalizeErrorStub = sinon
+        .stub(Interpreter, "normalizeError")
+        .callsFake(() => {
+          throw new TypeError("my fault");
+        });
+
+      const error = new HologramBoxedError(Type.atom("badarg"));
+
+      normalizeErrorStub.restore();
+
+      Hologram.handleUncaughtError(error);
+
+      assert.deepStrictEqual(GlobalRegistry.get("lastBoxedError"), {
+        module: "error",
+        message: ":badarg (message derivation failed: my fault)",
       });
     });
 

@@ -65,6 +65,14 @@ describe("HologramBoxedError", () => {
       assert.equal(error.message, "(MyType) my message");
     });
 
+    it("carries the parts the message is composed of", () => {
+      const struct = Type.errorStruct("MyType", "my message");
+      const error = new HologramBoxedError(struct);
+
+      assert.equal(error.type, "MyType");
+      assert.equal(error.messageText, "my message");
+    });
+
     it("renders the message from the blamed struct, which struct doesn't mirror", () => {
       globalThis.Elixir_MyBlamedType = {
         "blame/2": (_struct, stacktrace) =>
@@ -92,34 +100,27 @@ describe("HologramBoxedError", () => {
     // Extra enumerable own-properties on a thrown Error blank out the message that
     // the browser's uncaught-error reporting surfaces, so the internal carriers
     // must stay non-enumerable.
-    it("defines kind, value, stacktrace, struct and blamedStruct as non-enumerable", () => {
+    it("defines the internal carriers as non-enumerable", () => {
       const struct = Type.errorStruct("MyType", "my message");
       const error = new HologramBoxedError(struct);
 
-      assert.equal(
-        Object.getOwnPropertyDescriptor(error, "kind").enumerable,
-        false,
-      );
+      const carriers = [
+        "blamedStruct",
+        "kind",
+        "messageText",
+        "stacktrace",
+        "struct",
+        "type",
+        "value",
+      ];
 
-      assert.equal(
-        Object.getOwnPropertyDescriptor(error, "value").enumerable,
-        false,
-      );
-
-      assert.equal(
-        Object.getOwnPropertyDescriptor(error, "stacktrace").enumerable,
-        false,
-      );
-
-      assert.equal(
-        Object.getOwnPropertyDescriptor(error, "struct").enumerable,
-        false,
-      );
-
-      assert.equal(
-        Object.getOwnPropertyDescriptor(error, "blamedStruct").enumerable,
-        false,
-      );
+      for (const carrier of carriers) {
+        assert.equal(
+          Object.getOwnPropertyDescriptor(error, carrier).enumerable,
+          false,
+          `${carrier} must be non-enumerable`,
+        );
+      }
     });
 
     it("can throw and catch", () => {
@@ -205,6 +206,21 @@ describe("HologramBoxedError", () => {
       assert.equal(caught.message, "(error) :badarg");
     });
 
+    it("carries the raw form parts of a bare reason raised while deriving", () => {
+      deriveByRaising(Type.atom("badarg"));
+
+      let caught;
+
+      try {
+        new HologramBoxedError(Type.errorStruct("MyType", "my message"));
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught.type, "error");
+      assert.equal(caught.messageText, ":badarg");
+    });
+
     it("derives the next error normally once the raise has unwound", () => {
       deriveByRaising(Type.atom("badarg"));
 
@@ -267,6 +283,22 @@ describe("HologramBoxedError", () => {
       );
     });
 
+    it("carries the raw form parts, the fault among them", () => {
+      deriveByFaulting();
+
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyType", "my message"),
+      );
+
+      assert.equal(error.type, "MyType");
+
+      assert.equal(
+        error.messageText,
+        '%{__exception__: true, message: "my message", __struct__: MyType} ' +
+          "(message derivation failed: my fault)",
+      );
+    });
+
     it("derives the next error normally", () => {
       deriveByFaulting();
 
@@ -307,6 +339,16 @@ describe("HologramBoxedError", () => {
       const error = new HologramBoxedError(value, Type.atom("throw"));
 
       assert.equal(error.message, "(throw) 42");
+    });
+
+    it("carries the kind and the inspected value as the message parts", () => {
+      const error = new HologramBoxedError(
+        Type.integer(42),
+        Type.atom("throw"),
+      );
+
+      assert.equal(error.type, "throw");
+      assert.equal(error.messageText, "42");
     });
   });
 

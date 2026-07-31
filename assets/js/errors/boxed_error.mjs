@@ -44,6 +44,22 @@ export default class HologramBoxedError extends Error {
       configurable: true,
     });
 
+    // The two parts the display message is composed of: what was raised (the
+    // exception module, or the kind for a throw or an exit) and what it says
+    // about itself. Both are kept so a reporter can name the error without
+    // deriving it a second time - a derivation that could fault where the
+    // first one didn't, since it would run outside the guards below.
+    Object.defineProperty(this, "type", {
+      value: null,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(this, "messageText", {
+      value: null,
+      writable: true,
+      configurable: true,
+    });
+
     if (kind.value === "error") {
       // value carries the raw reason; struct carries its normalized exception
       // form. Normalizing here means rescue always matches against a real
@@ -65,7 +81,9 @@ export default class HologramBoxedError extends Error {
 
       this.rederive(Type.list());
     } else {
-      this.message = `(${kind.value}) ${Interpreter.inspect(value)}`;
+      this.type = kind.value;
+      this.messageText = Interpreter.inspect(value);
+      this.message = `(${this.type}) ${this.messageText}`;
     }
   }
 
@@ -89,10 +107,10 @@ export default class HologramBoxedError extends Error {
       this.struct = Interpreter.normalizeError(this.value, boxedStacktrace);
       this.blamedStruct = Interpreter.blameError(this.value, boxedStacktrace);
 
-      const boxedType = Interpreter.getErrorType(this);
-      const boxedMessage = Interpreter.resolveErrorMessage(this.blamedStruct);
+      this.type = Interpreter.getErrorType(this);
+      this.messageText = Interpreter.resolveErrorMessage(this.blamedStruct);
 
-      this.message = `(${boxedType}) ${boxedMessage}`;
+      this.message = `(${this.type}) ${this.messageText}`;
     } catch (error) {
       // A boxed error means the derivation raised the way Elixir code does, and it names what is
       // wrong better than this error could - it is carried out, having already taken its raw form
@@ -118,7 +136,7 @@ export default class HologramBoxedError extends Error {
     this.struct = Type.isStruct(this.value) ? this.value : null;
     this.blamedStruct = this.struct;
 
-    const type =
+    this.type =
       this.struct === null
         ? "error"
         : Interpreter.inspect(this.struct.data["atom(__struct__)"][1]);
@@ -128,6 +146,7 @@ export default class HologramBoxedError extends Error {
         ? ""
         : ` (message derivation failed: ${derivationError.message})`;
 
-    this.message = `(${type}) ${Interpreter.inspect(this.value)}${fault}`;
+    this.messageText = `${Interpreter.inspect(this.value)}${fault}`;
+    this.message = `(${this.type}) ${this.messageText}`;
   }
 }
