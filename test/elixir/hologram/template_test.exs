@@ -65,6 +65,70 @@ defmodule Hologram.TemplateTest do
       assert sigil_HOLO("test", []).(%{}) == [text: "test"]
     end
 
+    test "element spread" do
+      template = ~HOLO"""
+      <div ...{@my_var}></div>
+      """
+
+      assert template.(%{my_var: %{id: "my_id"}}) == [
+               {:element, "div", [spread: {%{id: "my_id"}}], []}
+             ]
+    end
+
+    test "component spread" do
+      alias Aaa.Bbb.Ccc
+      template = ~HOLO"<Ccc ...{@my_var} />"
+
+      assert template.(%{my_var: %{id: "my_id"}}) == [
+               {:component, Aaa.Bbb.Ccc, [spread: {%{id: "my_id"}}], []}
+             ]
+    end
+
+    test "spread interleaved with named attributes" do
+      template = ~HOLO"""
+      <div class="btn" ...{@my_var} id={@my_id}></div>
+      """
+
+      assert template.(%{my_var: %{title: "my_title"}, my_id: "my_id"}) == [
+               {:element, "div",
+                [
+                  {"class", [text: "btn"]},
+                  {:spread, {%{title: "my_title"}}},
+                  {"id", [expression: {"my_id"}]}
+                ], []}
+             ]
+    end
+
+    test "multiple spreads" do
+      template = ~HOLO"""
+      <div ...{@my_var_1} ...{@my_var_2}></div>
+      """
+
+      assert template.(%{my_var_1: %{a: 1}, my_var_2: [b: 2]}) == [
+               {:element, "div", [spread: {%{a: 1}}, spread: {[b: 2]}], []}
+             ]
+    end
+
+    test "spread with implicit keyword list" do
+      template = ~HOLO"""
+      <div ...{my_key_1: "abc", my_key_2: [my_key_3: "xyz"]}></div>
+      """
+
+      assert template.(%{}) == [
+               {:element, "div", [spread: {[my_key_1: "abc", my_key_2: [my_key_3: "xyz"]]}], []}
+             ]
+    end
+
+    test "spread with expression" do
+      template = ~HOLO"""
+      <div ...{Map.merge(@my_base, @my_overrides)}></div>
+      """
+
+      assert template.(%{my_base: %{a: 1}, my_overrides: %{b: 2}}) == [
+               {:element, "div", [spread: {%{a: 1, b: 2}}], []}
+             ]
+    end
+
     test "compiler correctly detects alias used in template" do
       assert Module1.template().(%{}) == [
                text: "Remote function call result = ",
