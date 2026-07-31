@@ -4168,10 +4168,46 @@ describe("Interpreter", () => {
       );
     });
 
+    it("renders the banner and an already boxed stacktrace", () => {
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyError", "my message"),
+      );
+
+      error.stacktrace = Type.list([
+        Type.tuple([
+          Type.alias("MyModule"),
+          Type.atom("my_fun"),
+          Type.integer(1),
+          Type.list([
+            Type.tuple([Type.atom("file"), Type.charlist("lib/my_module.ex")]),
+            Type.tuple([Type.atom("line"), Type.integer(11)]),
+          ]),
+        ]),
+      ]);
+
+      assert.equal(
+        Interpreter.formatBoxedError(error),
+        "** (MyError) my message\n    lib/my_module.ex:11: MyModule.my_fun/1\n",
+      );
+    });
+
     it("renders the banner alone when the error has no frames", () => {
       const error = new HologramBoxedError(
         Type.errorStruct("MyError", "my message"),
       );
+
+      assert.equal(
+        Interpreter.formatBoxedError(error),
+        "** (MyError) my message",
+      );
+    });
+
+    it("renders the banner alone when the already boxed stacktrace is empty", () => {
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyError", "my message"),
+      );
+
+      error.stacktrace = Type.list();
 
       assert.equal(
         Interpreter.formatBoxedError(error),

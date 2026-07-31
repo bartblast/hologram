@@ -580,17 +580,17 @@ export default class Interpreter {
   // Renders a boxed error the way the server renders an uncaught one: the
   // banner naming the exception and its message, then the stacktrace, which
   // the transpiled Exception.format_stacktrace/1 renders so the frames read
-  // as they do on the server. A frameless error is its banner alone, as
-  // Exception.format/3 leaves the section off for an empty stacktrace.
+  // as they do on the server. Both trace shapes an error can carry render the
+  // same. A frameless error is its banner alone, as Exception.format/3 leaves
+  // the section off for an empty stacktrace.
   // Deps: [Exception.format_stacktrace/1]
   static formatBoxedError(error) {
     const banner = `** ${error.message}`;
+    const boxedStacktrace = $.#boxStacktrace(error);
 
-    if (error.stacktrace.length === 0) {
+    if (boxedStacktrace.data.length === 0) {
       return banner;
     }
-
-    const boxedStacktrace = Type.list(error.stacktrace.map(CallStack.boxFrame));
 
     const stacktraceText = Bitstring.toText(
       Elixir_Exception["format_stacktrace/1"](boxedStacktrace),
@@ -1554,11 +1554,7 @@ export default class Interpreter {
   // clause body's nested closures, while function dispatch builds fresh
   // contexts, so it never leaks into called functions.
   static #bindStacktrace(error, context) {
-    // A trace given to :erlang.raise/3 is stored on the error as an already
-    // boxed list, while a captured trace is an array of frame objects.
-    context.stacktrace = Type.isList(error.stacktrace)
-      ? error.stacktrace
-      : Type.list(error.stacktrace.map(CallStack.boxFrame));
+    context.stacktrace = $.#boxStacktrace(error);
   }
 
   // Recomputes against the actual arguments which parts of a clause head
@@ -1644,6 +1640,14 @@ export default class Interpreter {
     return typeof reason === "string"
       ? Type.atom(reason)
       : Type.tuple([Type.atom(reason[0]), ...reason.slice(1)]);
+  }
+
+  // Boxes the stacktrace carried on an error. A trace given to :erlang.raise/3
+  // is stored already boxed, while a captured one is an array of frame objects.
+  static #boxStacktrace(error) {
+    return Type.isList(error.stacktrace)
+      ? error.stacktrace
+      : Type.list(error.stacktrace.map(CallStack.boxFrame));
   }
 
   static #buildElixirFunction(
