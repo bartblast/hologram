@@ -34,6 +34,20 @@ const ATOM_FAST_PATHS = {
   remote_call: (name) => name,
 };
 
+// The characters a charlist shows as an escape sequence instead of itself.
+const CHARLIST_ESCAPES = {
+  7: "\\a",
+  8: "\\b",
+  9: "\\t",
+  10: "\\n",
+  11: "\\v",
+  12: "\\f",
+  13: "\\r",
+  27: "\\e",
+  34: '\\"',
+  92: "\\\\",
+};
+
 export default class Interpreter {
   // Clause heads of manually ported functions, keyed by "Module.function/arity".
   static #functionClauseHeads = {};
@@ -2130,6 +2144,15 @@ export default class Interpreter {
   }
 
   static #inspectList(term, opts) {
+    if (Interpreter.#isPrintableCharlist(term)) {
+      const chars = term.data.map(
+        ({value}) =>
+          CHARLIST_ESCAPES[value] ?? String.fromCodePoint(Number(value)),
+      );
+
+      return `~c"${chars.join("")}"`;
+    }
+
     if (term.data.length !== 0 && Type.isKeywordList(term)) {
       return Interpreter.#inspectKeywordList(term, opts);
     }
@@ -2235,6 +2258,23 @@ export default class Interpreter {
       "{" +
       term.data.map((elem) => Interpreter.inspect(elem, opts)).join(", ") +
       "}"
+    );
+  }
+
+  // Mirrors List.ascii_printable?/1 on a proper, nonempty list: 7..13 are the
+  // characters "\a\b\t\n\v\f\r", 27 is "\e", and 32..126 are the printable
+  // ASCII ones. Such a list is what Elixir shows as a charlist.
+  static #isPrintableCharlist(term) {
+    if (!term.isProper || term.data.length === 0) {
+      return false;
+    }
+
+    return term.data.every(
+      (item) =>
+        item.type === "integer" &&
+        ((item.value >= 7n && item.value <= 13n) ||
+          item.value === 27n ||
+          (item.value >= 32n && item.value <= 126n)),
     );
   }
 

@@ -4451,6 +4451,53 @@ describe("Interpreter", () => {
         assert.equal(result, "[1, 2 | 3]");
       });
 
+      describe("charlist", () => {
+        it("printable characters", () => {
+          const term = Type.list([
+            Type.integer(97),
+            Type.integer(98),
+            Type.integer(99),
+          ]);
+
+          assert.equal(Interpreter.inspect(term), '~c"abc"');
+        });
+
+        it("characters shown as escape sequences", () => {
+          const term = Type.list(
+            [7, 8, 9, 10, 11, 12, 13, 27].map(Type.integer),
+          );
+
+          assert.equal(
+            Interpreter.inspect(term),
+            '~c"\\a\\b\\t\\n\\v\\f\\r\\e"',
+          );
+        });
+
+        it("quote and backslash", () => {
+          const term = Type.list([34, 92].map(Type.integer));
+
+          assert.equal(Interpreter.inspect(term), '~c"\\"\\\\"');
+        });
+
+        it("a non-printable character keeps the list form", () => {
+          const term = Type.list([104, 105, 0].map(Type.integer));
+
+          assert.equal(Interpreter.inspect(term), "[104, 105, 0]");
+        });
+
+        it("a codepoint above ASCII keeps the list form", () => {
+          const term = Type.list([104, 105, 233].map(Type.integer));
+
+          assert.equal(Interpreter.inspect(term), "[104, 105, 233]");
+        });
+
+        it("an improper list keeps the list form", () => {
+          const term = Type.improperList([104, 105].map(Type.integer));
+
+          assert.equal(Interpreter.inspect(term), "[104 | 105]");
+        });
+      });
+
       describe("keyword list", () => {
         it("single item", () => {
           const term = Type.keywordList([[Type.atom("a"), Type.integer(1)]]);

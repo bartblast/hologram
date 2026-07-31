@@ -259,6 +259,30 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert Kernel.inspect([1, 2 | 3], []) == "[1, 2 | 3]"
     end
 
+    test "list, charlist, printable characters" do
+      assert Kernel.inspect([97, 98, 99], []) == ~s'~c"abc"'
+    end
+
+    test "list, charlist, characters shown as escape sequences" do
+      assert Kernel.inspect([7, 8, 9, 10, 11, 12, 13, 27], []) == ~S'~c"\a\b\t\n\v\f\r\e"'
+    end
+
+    test "list, charlist, quote and backslash" do
+      assert Kernel.inspect([34, 92], []) == ~S'~c"\"\\"'
+    end
+
+    test "list, charlist, a non-printable character keeps the list form" do
+      assert Kernel.inspect([104, 105, 0], []) == "[104, 105, 0]"
+    end
+
+    test "list, charlist, a codepoint above ASCII keeps the list form" do
+      assert Kernel.inspect([104, 105, 233], []) == "[104, 105, 233]"
+    end
+
+    test "list, charlist, an improper list keeps the list form" do
+      assert Kernel.inspect([104 | 105], []) == "[104 | 105]"
+    end
+
     # TODO: lits / keyword list (see client-side Interpreter.inspect() tests)
 
     test "map, empty" do
