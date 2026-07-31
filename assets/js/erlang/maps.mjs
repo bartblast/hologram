@@ -25,6 +25,7 @@ const Erlang_Maps = {
   // End find/2
   // Deps: []
 
+  // TODO: implement iterators
   // Start fold/3
   "fold/3": (fun, initialAcc, map) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 3) {
