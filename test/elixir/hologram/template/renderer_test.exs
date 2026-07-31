@@ -69,6 +69,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module80
   alias Hologram.Test.Fixtures.Template.Renderer.Module84
   alias Hologram.Test.Fixtures.Template.Renderer.Module86
+  alias Hologram.Test.Fixtures.Template.Renderer.Module87
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
   @csrf_token "test-csrf-token"
@@ -1216,6 +1217,223 @@ defmodule Hologram.Template.RendererTest do
       assert normalize_newlines(html) == "\n  \n"
       assert component_registry == %{}
       assert server_struct == @server
+    end
+  end
+
+  describe "dynamic tag node, element branch" do
+    test "without attributes or children" do
+      # <{"div"}></{"div"}>
+      node = {:dynamic_tag, {"div"}, [], []}
+
+      assert render_dom(node, @env, @server) == {"<div></div>", %{}, @server}
+    end
+
+    test "with attributes" do
+      node =
+        {:dynamic_tag, {"div"},
+         [
+           {"attr_1", [text: "aaa"]},
+           {"attr_2", [expression: {123}]},
+           {"attr_3", [text: "ccc", expression: {987}, text: "eee"]}
+         ], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div attr_1="aaa" attr_2="123" attr_3="ccc987eee"></div>), %{}, @server}
+    end
+
+    test "with children" do
+      node = {:dynamic_tag, {"div"}, [], [{:element, "span", [], [text: "abc"]}, {:text, "xyz"}]}
+
+      assert render_dom(node, @env, @server) == {"<div><span>abc</span>xyz</div>", %{}, @server}
+    end
+
+    test "void element" do
+      node = {:dynamic_tag, {"img"}, [{"attr_1", [text: "aaa"]}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<img attr_1="aaa" />), %{}, @server}
+    end
+
+    test "custom element" do
+      node = {:dynamic_tag, {"my-widget"}, [], [{:text, "abc"}]}
+
+      assert render_dom(node, @env, @server) == {"<my-widget>abc</my-widget>", %{}, @server}
+    end
+
+    test "filters out attributes that specify event handlers (starting with '$' character)" do
+      node =
+        {:dynamic_tag, {"div"},
+         [
+           {"attr_1", [text: "aaa"]},
+           {"$attr_2", [text: "bbb"]},
+           {"$attr_3", [text: "ccc"], ["mod_1"]}
+         ], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div attr_1="aaa"></div>), %{}, @server}
+    end
+
+    test "cid attribute is rendered as a plain HTML attribute" do
+      node = {:dynamic_tag, {"div"}, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div cid="my_component"></div>), %{}, @server}
+    end
+
+    test "with spread" do
+      # <{"div"} ...{%{id: "my_id", class: "my_class"}}></{"div"}>
+      node = {:dynamic_tag, {"div"}, [{:spread, {%{id: "my_id", class: "my_class"}}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div class="my_class" id="my_id"></div>), %{}, @server}
+    end
+
+    test "with nested stateful component" do
+      node =
+        {:dynamic_tag, {"div"}, [], [{:component, Module3, [{"cid", [text: "component_3"]}], []}]}
+
+      {html, component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert html == "<div><div>state_a = 1, state_b = 2</div></div>"
+
+      assert component_registry == %{
+               "component_3" => %{module: Module3, struct: %Component{state: %{a: 1, b: 2}}}
+             }
+    end
+  end
+
+  describe "dynamic tag node, component branch" do
+    test "stateless component without props" do
+      # <{Module1} />
+      node = {:dynamic_tag, {Module1}, [], []}
+
+      assert render_dom(node, @env, @server) == {"<div>abc</div>", %{}, @server}
+    end
+
+    test "stateless component with props" do
+      node =
+        {:dynamic_tag, {Module2},
+         [
+           {"a", [text: "ddd"]},
+           {"b", [expression: {222}]},
+           {"c", [text: "fff", expression: {333}, text: "hhh"]}
+         ], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>", %{}, @server}
+    end
+
+    test "stateful component" do
+      node = {:dynamic_tag, {Module3}, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<div>state_a = 1, state_b = 2</div>",
+                %{"my_component" => %{module: Module3, struct: %Component{state: %{a: 1, b: 2}}}},
+                %Server{
+                  cookies: %{
+                    "initial_cookie_key" => :initial_cookie_value,
+                    "cookie_key_3" => :cookie_value_3
+                  },
+                  __meta__: %Metadata{
+                    cookie_ops: %{
+                      "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                      "cookie_key_3" => %Cookie{value: :cookie_value_3}
+                    }
+                  }
+                }}
+    end
+
+    test "undeclared props are dropped" do
+      node = {:dynamic_tag, {Module1}, [{"my_undeclared_prop", [text: "my_value"]}], []}
+
+      assert render_dom(node, @env, @server) == {"<div>abc</div>", %{}, @server}
+    end
+
+    test "event attributes are not passed as props" do
+      node = {:dynamic_tag, {Module2}, [{"$click", [text: "my_action"]}], []}
+
+      expected_msg = build_key_error_msg(:a, %{})
+
+      assert_raise KeyError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with slot content" do
+      node = {:dynamic_tag, {Module8}, [], [text: "123"]}
+
+      assert render_dom(node, @env, @server) == {"abc123xyz", %{}, @server}
+    end
+
+    test "with prop spread" do
+      node = {:dynamic_tag, {Module2}, [{:spread, {%{a: "ddd", b: 222, c: "fff"}}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<div>prop_a = ddd, prop_b = 222, prop_c = fff</div>", %{}, @server}
+    end
+  end
+
+  describe "dynamic tag node, slots" do
+    test "slot content is expanded through dynamic tag children" do
+      node = {:component, Module87, [], [text: "abc"]}
+
+      assert render_dom(node, @env, @server) ==
+               {"87a,32a,87b,<div>abc</div>,87x,32z,87z", %{}, @server}
+    end
+  end
+
+  describe "dynamic tag node, invalid tag name value" do
+    test "non-component atom" do
+      node = {:dynamic_tag, {:div}, [], []}
+
+      expected_msg =
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: :div, which is not a component module"
+
+      assert_raise ArgumentError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "page module" do
+      node = {:dynamic_tag, {Module14}, [], []}
+
+      expected_msg =
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: Hologram.Test.Fixtures.Template.Renderer.Module14, which is not a component module"
+
+      assert_raise ArgumentError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "nil" do
+      node = {:dynamic_tag, {nil}, [], []}
+
+      expected_msg =
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: nil, which is not a component module"
+
+      assert_raise ArgumentError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "integer" do
+      node = {:dynamic_tag, {123}, [], []}
+
+      expected_msg =
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: 123"
+
+      assert_raise ArgumentError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "map" do
+      node = {:dynamic_tag, {%{a: 1}}, [], []}
+
+      expected_msg =
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: %{a: 1}"
+
+      assert_raise ArgumentError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
     end
   end
 
