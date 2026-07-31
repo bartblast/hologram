@@ -18,6 +18,27 @@ defmodule Hologram.Commons.TestUtils do
     build_multi_argument_error_msg([{arg_idx, blame}])
   end
 
+  # Keep this message in sync with buildBadArityErrorMsg in test/javascript/support/helpers.mjs.
+  @doc """
+  Builds an error message for BadArityError.
+  """
+  @spec build_bad_arity_error_msg(fun, list) :: String.t()
+  def build_bad_arity_error_msg(fun, args) do
+    {:arity, arity} = Function.info(fun, :arity)
+
+    count =
+      if Enum.empty?(args) do
+        "no arguments"
+      else
+        inspected_args = Enum.map_join(args, ", ", &KernelUtils.inspect/1)
+        noun = if length(args) == 1, do: "argument", else: "arguments"
+
+        "#{length(args)} #{noun} (#{inspected_args})"
+      end
+
+    "#{KernelUtils.inspect(fun)} with arity #{arity} called with #{count}"
+  end
+
   # Keep this message in sync with buildBadFunctionErrorMsg in test/javascript/support/helpers.mjs.
   @doc """
   Builds an error message for BadFunctionError.

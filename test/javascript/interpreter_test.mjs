@@ -5,6 +5,7 @@ import {
   assertBoxedError,
   assertBoxedErrorAsync,
   assertBoxedStrictEqual,
+  buildBadArityErrorMsg,
   buildCaseClauseErrorMsg,
   buildFunctionClauseErrorMsg,
   buildMatchErrorMsg,
@@ -9107,28 +9108,38 @@ describe("Interpreter", () => {
   });
 
   describe("raiseBadArityError()", () => {
+    const buildFun = (arity) =>
+      Type.anonymousFunction(arity, [], contextFixture(), "-my_fun/1-fun-0-");
+
     it("called with no args", () => {
+      const fun = buildFun(1);
+
       assertBoxedError(
-        () => Interpreter.raiseBadArityError(1, []),
+        () => Interpreter.raiseBadArityError(fun, []),
         "BadArityError",
-        "anonymous function with arity 1 called with no arguments",
+        buildBadArityErrorMsg(fun, []),
       );
     });
 
     it("called with a single arg", () => {
+      const fun = buildFun(2);
+      const args = [Type.integer(9)];
+
       assertBoxedError(
-        () => Interpreter.raiseBadArityError(2, [Type.integer(9)]),
+        () => Interpreter.raiseBadArityError(fun, args),
         "BadArityError",
-        "anonymous function with arity 2 called with 1 argument (9)",
+        buildBadArityErrorMsg(fun, args),
       );
     });
 
     it("called with multiple args", () => {
+      const fun = buildFun(1);
+      const args = [Type.integer(9), Type.integer(8)];
+
       assertBoxedError(
-        () =>
-          Interpreter.raiseBadArityError(1, [Type.integer(9), Type.integer(8)]),
+        () => Interpreter.raiseBadArityError(fun, args),
         "BadArityError",
-        "anonymous function with arity 1 called with 2 arguments (9, 8)",
+        buildBadArityErrorMsg(fun, args),
       );
     });
   });

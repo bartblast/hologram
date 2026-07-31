@@ -22,7 +22,6 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
   # Keep consistent with feature tests in test/features/test/function_calls/anonymous_function_test.exs
   # TODO: reimplement to be consistent with feature tests in test/features/test/function_calls/anonymous_function_test.exs
   describe "call anonymous function" do
-    # TODO: client error message for this case is inconsistent with server error message
     test "arity is invalid, called with no args" do
       fun =
         wrap_term(fn
@@ -30,13 +29,11 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
           2 -> :expr_2
         end)
 
-      expected_msg =
-        ~r'#Function<[0-9]+\.[0-9]+/1 in Hologram.ExJsConsistency\.InterpreterTest\."test call anonymous function arity is invalid, called with no args"/1> with arity 1 called with no arguments'
+      expected_msg = build_bad_arity_error_msg(fun, [])
 
       assert_error BadArityError, expected_msg, fn -> fun.() end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
     test "arity is invalid, called with a single arg" do
       fun =
         wrap_term(fn
@@ -44,13 +41,11 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
           3, 4 -> :expr_2
         end)
 
-      expected_msg =
-        ~r'#Function<[0-9]+\.[0-9]+/2 in Hologram.ExJsConsistency\.InterpreterTest\."test call anonymous function arity is invalid, called with a single arg"/1> with arity 2 called with 1 argument \(9\)'
+      expected_msg = build_bad_arity_error_msg(fun, [9])
 
       assert_error BadArityError, expected_msg, fn -> fun.(9) end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
     test "arity is invalid, called with multiple args" do
       fun =
         wrap_term(fn
@@ -58,8 +53,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
           2 -> :expr_2
         end)
 
-      expected_msg =
-        ~r'#Function<[0-9]+\.[0-9]+/1 in Hologram.ExJsConsistency\.InterpreterTest\."test call anonymous function arity is invalid, called with multiple args"/1> with arity 1 called with 2 arguments \(9, 8\)'
+      expected_msg = build_bad_arity_error_msg(fun, [9, 8])
 
       assert_error BadArityError, expected_msg, fn -> fun.(9, 8) end
     end

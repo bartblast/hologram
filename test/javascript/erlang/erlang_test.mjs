@@ -8,6 +8,7 @@ import {
   assertBoxedStrictEqual,
   assertBoxedTrue,
   buildArgumentErrorMsg,
+  buildBadArityErrorMsg,
   buildBadFunctionErrorMsg,
   buildBadMapErrorMsg,
   buildKeyErrorMsg,
@@ -1861,7 +1862,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(funMultipleArgs, args),
         "BadArityError",
-        "anonymous function with arity 2 called with 1 argument (1)",
+        buildBadArityErrorMsg(funMultipleArgs, args.data),
       );
     });
   });

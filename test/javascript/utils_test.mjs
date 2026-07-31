@@ -62,28 +62,6 @@ describe("Utils", () => {
     });
   });
 
-  describe("naiveNounPlural", () => {
-    it("0", () => {
-      const result = Utils.naiveNounPlural("car", 0);
-      assert.equal(result, "cars");
-    });
-
-    it("1", () => {
-      const result = Utils.naiveNounPlural("car", 1);
-      assert.equal(result, "car");
-    });
-
-    it("2", () => {
-      const result = Utils.naiveNounPlural("car", 2);
-      assert.equal(result, "cars");
-    });
-
-    it("3", () => {
-      const result = Utils.naiveNounPlural("car", 3);
-      assert.equal(result, "cars");
-    });
-  });
-
   describe("ordinal", () => {
     it("1st", () => {
       assert.equal(Utils.ordinal(1), "1st");

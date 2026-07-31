@@ -165,6 +165,22 @@ export function buildArgumentErrorMsg(argumentIndex, message) {
   return buildMultiArgumentErrorMsg([[argumentIndex, message]]);
 }
 
+// Keep this message in sync with build_bad_arity_error_msg in Hologram.Commons.TestUtils.
+export function buildBadArityErrorMsg(fun, args) {
+  let count = "no arguments";
+
+  if (args.length > 0) {
+    const inspectedArgs = args
+      .map((arg) => Interpreter.inspect(arg))
+      .join(", ");
+    const noun = args.length === 1 ? "argument" : "arguments";
+
+    count = `${args.length} ${noun} (${inspectedArgs})`;
+  }
+
+  return `${Interpreter.inspect(fun)} with arity ${fun.arity} called with ${count}`;
+}
+
 // Keep this message in sync with build_bad_function_error_msg in Hologram.Commons.TestUtils.
 export function buildBadFunctionErrorMsg(term) {
   return "expected a function, got: " + Interpreter.inspect(term);
@@ -685,6 +701,17 @@ export function defineRuntimeGlobals() {
     "Elixir_ArithmeticError",
     defineElixirArithmeticErrorModule(),
   );
+
+  defineGlobalModule("Elixir_BadArityError", {
+    // Mirrors BadArityError.message/1.
+    "message/1": (struct) =>
+      Type.bitstring(
+        buildBadArityErrorMsg(
+          struct.data["atom(function)"][1],
+          struct.data["atom(args)"][1].data,
+        ),
+      ),
+  });
 
   defineGlobalModule("Elixir_BadFunctionError", {
     // Mirrors BadFunctionError.message/1 (single-line, unlike the other

@@ -26,12 +26,6 @@ export default class Utils {
     }, new Uint8Array());
   }
 
-  static naiveNounPlural(noun, count) {
-    const enPluralRules = new Intl.PluralRules("en-US");
-
-    return `${noun}${enPluralRules.select(count) === "one" ? "" : "s"}`;
-  }
-
   static ordinal(number) {
     const enOrdinalRules = new Intl.PluralRules("en-US", {type: "ordinal"});
 

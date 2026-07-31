@@ -112,7 +112,7 @@ export default class Interpreter {
   // each time Hologram.Compiler.Encoder's implementation changes.
   static callAnonymousFunction(fun, argsArray) {
     if (argsArray.length !== fun.arity) {
-      Interpreter.raiseBadArityError(fun.arity, argsArray);
+      Interpreter.raiseBadArityError(fun, argsArray);
     }
 
     // A capture of a named function pushes no frame of its own - the call
@@ -905,25 +905,11 @@ export default class Interpreter {
     Interpreter.raiseError("ArgumentError", message);
   }
 
-  static raiseBadArityError(arity, args) {
-    const numArgs = args.length === 0 ? "no" : args.length;
-
-    const argumentNounPluralized = Utils.naiveNounPlural(
-      "argument",
-      args.length,
-    );
-
-    const inspectedArgs = args.map((arg) => Interpreter.inspect(arg));
-
-    let maybeInspectedArgs = "";
-    if (args.length > 0) {
-      maybeInspectedArgs = ` (${inspectedArgs.join(", ")})`;
-    }
-
-    Interpreter.raiseError(
-      "BadArityError",
-      `anonymous function with arity ${arity} called with ${numArgs} ${argumentNounPluralized}${maybeInspectedArgs}`,
-    );
+  static raiseBadArityError(fun, args) {
+    Interpreter.#raiseFieldBearingError("BadArityError", [
+      [Type.atom("args"), Type.list(args)],
+      [Type.atom("function"), fun],
+    ]);
   }
 
   static raiseBadFunctionError(term) {
