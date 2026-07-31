@@ -148,10 +148,9 @@ defmodule Hologram.TemplateTest do
       assert template.(%{}) == [{:dynamic_tag, {Aaa.Bbb.Ccc}, [], []}]
     end
 
-    # Implicit keyword args need parens here, exactly as they do in any other template expression.
     test "dynamic tag with conditional tag name expression" do
       template = ~HOLO"""
-      <{if(@flag, do: "a", else: "button")} />
+      <{if @flag do "a" else "button" end} />
       """
 
       assert template.(%{flag: true}) == [{:dynamic_tag, {"a"}, [], []}]
