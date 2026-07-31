@@ -330,6 +330,261 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "element spread" do
+    test "map value" do
+      # <div ...{%{id: "my_id"}}></div>
+      node = {:element, "div", [{:spread, {%{id: "my_id"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_id"></div>), %{}, @server}
+    end
+
+    test "keyword list value, entries applied in list order" do
+      node = {:element, "div", [{:spread, {[id: "my_id", class: "my_class"]}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div id="my_id" class="my_class"></div>), %{}, @server}
+    end
+
+    # Map entries have no meaningful order, so only their presence is asserted.
+    test "map value with multiple entries" do
+      node = {:element, "div", [{:spread, {%{id: "my_id", class: "my_class"}}}], []}
+
+      {html, %{}, @server} = render_dom(node, @env, @server)
+
+      assert html =~ ~s(id="my_id")
+      assert html =~ ~s(class="my_class")
+    end
+
+    test "string keys" do
+      node = {:element, "div", [{:spread, {%{"id" => "my_id"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_id"></div>), %{}, @server}
+    end
+
+    test "underscores in an atom key are converted to hyphens" do
+      node = {:element, "div", [{:spread, {%{my_key: "my_value"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div my-key="my_value"></div>), %{}, @server}
+    end
+
+    test "underscores in a string key are converted to hyphens" do
+      node = {:element, "div", [{:spread, {%{"my_key" => "my_value"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div my-key="my_value"></div>), %{}, @server}
+    end
+
+    test "nested map value composes a dash-joined name" do
+      node = {:element, "div", [{:spread, {%{data: %{user_id: 1}}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div data-user-id="1"></div>), %{}, @server}
+    end
+
+    test "nested keyword list value composes a dash-joined name" do
+      node = {:element, "div", [{:spread, {[data: [user_id: 1]]}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div data-user-id="1"></div>), %{}, @server}
+    end
+
+    test "map nested in a keyword list" do
+      node = {:element, "div", [{:spread, {[data: %{user_id: 1}]}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div data-user-id="1"></div>), %{}, @server}
+    end
+
+    test "keyword list nested in a map" do
+      node = {:element, "div", [{:spread, {%{data: [user_id: 1]}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div data-user-id="1"></div>), %{}, @server}
+    end
+
+    test "nesting at multiple levels" do
+      node = {:element, "div", [{:spread, {[data: [my_group: %{my_key: "my_value"}]]}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div data-my-group-my-key="my_value"></div>), %{}, @server}
+    end
+
+    test "duplicate keys in a keyword list, later wins" do
+      node = {:element, "div", [{:spread, {[id: "my_value_1", id: "my_value_2"]}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_value_2"></div>), %{}, @server}
+    end
+
+    test "entry with nil value is not rendered" do
+      node = {:element, "div", [{:spread, {[id: nil, class: "my_class"]}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div class="my_class"></div>), %{}, @server}
+    end
+
+    test "entry with false value is not rendered" do
+      node = {:element, "div", [{:spread, {[id: false, class: "my_class"]}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div class="my_class"></div>), %{}, @server}
+    end
+
+    test "entry with true value is stringified, same as a named attribute" do
+      node = {:element, "div", [{:spread, {%{id: true}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="true"></div>), %{}, @server}
+    end
+
+    test "entry with empty string value renders the bare name, same as a named attribute" do
+      node = {:element, "div", [{:spread, {%{id: ""}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id></div>), %{}, @server}
+    end
+
+    test "struct entry value is a leaf and is stringified" do
+      node = {:element, "div", [{:spread, {%{my_key: ~D[2024-01-15]}}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div my-key="2024-01-15"></div>), %{}, @server}
+    end
+
+    # Only maps and keyword lists recurse, so a non-keyword list nested inside a spread is a value.
+    test "nested list which is not a keyword list is a leaf and is stringified" do
+      node = {:element, "div", [{:spread, {%{my_key: ~c"abc"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div my-key="abc"></div>), %{}, @server}
+    end
+
+    test "empty map value renders no attributes" do
+      node = {:element, "div", [{:spread, {%{}}}], []}
+
+      assert render_dom(node, @env, @server) == {"<div></div>", %{}, @server}
+    end
+
+    test "empty keyword list value renders no attributes" do
+      node = {:element, "div", [{:spread, {[]}}], []}
+
+      assert render_dom(node, @env, @server) == {"<div></div>", %{}, @server}
+    end
+
+    test "void element" do
+      node = {:element, "img", [{:spread, {%{id: "my_id"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<img id="my_id" />), %{}, @server}
+    end
+
+    test "named attribute before the spread is overridden" do
+      node =
+        {:element, "div", [{"id", [text: "my_value_1"]}, {:spread, {%{id: "my_value_2"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_value_2"></div>), %{}, @server}
+    end
+
+    test "named attribute after the spread wins" do
+      node =
+        {:element, "div", [{:spread, {%{id: "my_value_1"}}}, {"id", [text: "my_value_2"]}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_value_2"></div>), %{}, @server}
+    end
+
+    test "later spread wins over an earlier one" do
+      node =
+        {:element, "div", [{:spread, {%{id: "my_value_1"}}}, {:spread, {%{id: "my_value_2"}}}],
+         []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_value_2"></div>), %{}, @server}
+    end
+
+    # Attribute order carries no meaning in HTML, so the winning entry simply stays where it is.
+    test "overridden name is rendered at the position of the winning entry" do
+      node =
+        {:element, "div",
+         [
+           {"id", [text: "my_value_1"]},
+           {"class", [text: "my_class"]},
+           {:spread, {%{id: "my_value_2"}}}
+         ], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div class="my_class" id="my_value_2"></div>), %{}, @server}
+    end
+
+    test "interleaved with named attributes" do
+      node =
+        {:element, "div",
+         [
+           {"attr_1", [text: "my_value_1"]},
+           {:spread, {%{attr_2: "my_value_2"}}},
+           {"attr_3", [expression: {"my_value_3"}]}
+         ], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div attr_1="my_value_1" attr-2="my_value_2" attr_3="my_value_3"></div>), %{},
+                @server}
+    end
+
+    test "event attributes are filtered out, same as without a spread" do
+      node =
+        {:element, "div",
+         [
+           {"$click", [expression: {:my_command}]},
+           {:spread, {%{id: "my_id"}}},
+           {"$key_down", [expression: {:my_command}], %{key: [["enter"]]}}
+         ], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_id"></div>), %{}, @server}
+    end
+
+    test "raises for a nil value" do
+      node = {:element, "div", [{:spread, {nil}}], []}
+
+      assert_raise ArgumentError,
+                   "spread value must be a map or a keyword list, got: nil",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a string value" do
+      node = {:element, "div", [{:spread, {"my_string"}}], []}
+
+      assert_raise ArgumentError,
+                   ~s(spread value must be a map or a keyword list, got: "my_string"),
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a list which is not a keyword list" do
+      node = {:element, "div", [{:spread, {[1, 2, 3]}}], []}
+
+      assert_raise ArgumentError,
+                   "spread value must be a map or a keyword list, got: [1, 2, 3]",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a struct value" do
+      node = {:element, "div", [{:spread, {~D[2024-01-15]}}], []}
+
+      assert_raise ArgumentError,
+                   "spread value must be a map or a keyword list, got: ~D[2024-01-15]",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a '$'-prefixed atom key" do
+      node = {:element, "div", [{:spread, {%{"$click": :my_command}}}], []}
+
+      assert_raise ArgumentError,
+                   ~s(event bindings can't be set through a spread, got the "$click" key),
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a '$'-prefixed string key" do
+      node = {:element, "div", [{:spread, {%{"$click" => :my_command}}}], []}
+
+      assert_raise ArgumentError,
+                   ~s(event bindings can't be set through a spread, got the "$click" key),
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a '$'-prefixed nested key" do
+      node = {:element, "div", [{:spread, {%{data: %{"$click" => :my_command}}}}], []}
+
+      assert_raise ArgumentError,
+                   ~s(event bindings can't be set through a spread, got the "$click" key),
+                   fn -> render_dom(node, @env, @server) end
+    end
+  end
+
   # Some client tests are different than server tests.
   describe "node list" do
     test "text and expression nodes" do
