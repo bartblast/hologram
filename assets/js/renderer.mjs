@@ -1630,9 +1630,6 @@ export default class Renderer {
     );
   }
 
-  // Returns true when the modifiers map carries a stop_propagation modifier, which stops the
-  // event from bubbling past the bound element.
-  // Deps: [:maps.is_key/2]
   // Based on spread_entries/1
   // Returns [key, value] term pairs. Structs are maps, but their __struct__ key is not a name.
   static #spreadEntries(value) {
@@ -1647,6 +1644,9 @@ export default class Renderer {
     return $.#raiseInvalidSpreadValue(value);
   }
 
+  // Returns true when the modifiers map carries a stop_propagation modifier, which stops the
+  // event from bubbling past the bound element.
+  // Deps: [:maps.is_key/2]
   static #stopPropagationFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return false;
