@@ -70,6 +70,7 @@ import {defineModule7Fixture} from "./support/fixtures/renderer/module_7.mjs";
 import {defineModule76Fixture} from "./support/fixtures/renderer/module_76.mjs";
 import {defineModule77Fixture} from "./support/fixtures/renderer/module_77.mjs";
 import {defineModule78Fixture} from "./support/fixtures/renderer/module_78.mjs";
+import {defineModule86Fixture} from "./support/fixtures/renderer/module_86.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
 import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client_only/module_1.mjs";
@@ -143,6 +144,7 @@ defineModule7Fixture();
 defineModule76Fixture();
 defineModule77Fixture();
 defineModule78Fixture();
+defineModule86Fixture();
 defineModule8Fixture();
 defineModule9Fixture();
 defineClientOnlyModule1Fixture();
@@ -4519,6 +4521,602 @@ describe("Renderer", () => {
     });
   });
 
+  describe("element spread", () => {
+    const spread = (value) =>
+      Type.tuple([Type.atom("spread"), Type.tuple([value])]);
+
+    const namedAttr = (name, valueDom) =>
+      Type.tuple([Type.bitstring(name), valueDom]);
+
+    const textValue = (text) =>
+      Type.keywordList([[Type.atom("text"), Type.bitstring(text)]]);
+
+    const renderElement = (tagName, attrsDom) =>
+      Renderer.renderDom(
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring(tagName),
+          Type.list(attrsDom),
+          Type.list(),
+        ]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+    const assertRaises = (attrsDom, errorType, message) =>
+      assertBoxedError(
+        () => renderElement("div", attrsDom),
+        errorType,
+        message,
+      );
+
+    it("map value", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("id"), Type.bitstring("my_id")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "my_id"}, on: {}}, []),
+      );
+    });
+
+    it("keyword list value", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("id"), Type.bitstring("my_id")],
+            [Type.atom("class"), Type.bitstring("my_class")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {class: "my_class", id: "my_id"}, on: {}}, []),
+      );
+    });
+
+    it("map value with multiple entries", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [Type.atom("id"), Type.bitstring("my_id")],
+            [Type.atom("class"), Type.bitstring("my_class")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {class: "my_class", id: "my_id"}, on: {}}, []),
+      );
+    });
+
+    it("string keys", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.bitstring("id"), Type.bitstring("my_id")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "my_id"}, on: {}}, []),
+      );
+    });
+
+    it("entries are sorted by name, regardless of key type", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [Type.atom("my_key_3"), Type.bitstring("c")],
+            [Type.bitstring("my_key_1"), Type.bitstring("a")],
+            [Type.atom("my_key_2"), Type.bitstring("b")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode(
+          "div",
+          {
+            attrs: {"my-key-1": "a", "my-key-2": "b", "my-key-3": "c"},
+            on: {},
+          },
+          [],
+        ),
+      );
+    });
+
+    it("entries are sorted by the composed name, so nested ones stay next to their siblings", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("my_key_2"), Type.bitstring("b")],
+            [
+              Type.atom("data"),
+              Type.keywordList([
+                [Type.atom("user_id"), Type.integer(1)],
+                [Type.atom("role"), Type.bitstring("admin")],
+              ]),
+            ],
+            [Type.atom("my_key_1"), Type.bitstring("a")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode(
+          "div",
+          {
+            attrs: {
+              "data-role": "admin",
+              "data-user-id": "1",
+              "my-key-1": "a",
+              "my-key-2": "b",
+            },
+            on: {},
+          },
+          [],
+        ),
+      );
+    });
+
+    it("underscores in an atom key are converted to hyphens", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("my_key"), Type.bitstring("my_value")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"my-key": "my_value"}, on: {}}, []),
+      );
+    });
+
+    it("underscores in a string key are converted to hyphens", () => {
+      const attrsDom = [
+        spread(
+          Type.map([[Type.bitstring("my_key"), Type.bitstring("my_value")]]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"my-key": "my_value"}, on: {}}, []),
+      );
+    });
+
+    it("nested map value composes a dash-joined name", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("data"),
+              Type.map([[Type.atom("user_id"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"data-user-id": "1"}, on: {}}, []),
+      );
+    });
+
+    it("nested keyword list value composes a dash-joined name", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [
+              Type.atom("data"),
+              Type.keywordList([[Type.atom("user_id"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"data-user-id": "1"}, on: {}}, []),
+      );
+    });
+
+    it("map nested in a keyword list", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [
+              Type.atom("data"),
+              Type.map([[Type.atom("user_id"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"data-user-id": "1"}, on: {}}, []),
+      );
+    });
+
+    it("keyword list nested in a map", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("data"),
+              Type.keywordList([[Type.atom("user_id"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"data-user-id": "1"}, on: {}}, []),
+      );
+    });
+
+    it("nesting at multiple levels", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [
+              Type.atom("data"),
+              Type.keywordList([
+                [
+                  Type.atom("my_group"),
+                  Type.map([[Type.atom("my_key"), Type.bitstring("my_value")]]),
+                ],
+              ]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"data-my-group-my-key": "my_value"}, on: {}}, []),
+      );
+    });
+
+    // Sorting is stable, so a keyword list's order still decides which duplicate key wins.
+    it("duplicate keys in a keyword list, later wins", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("id"), Type.bitstring("my_value_1")],
+            [Type.atom("id"), Type.bitstring("my_value_2")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "my_value_2"}, on: {}}, []),
+      );
+    });
+
+    it("entry with nil value is not rendered", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("id"), Type.nil()],
+            [Type.atom("class"), Type.bitstring("my_class")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {class: "my_class"}, on: {}}, []),
+      );
+    });
+
+    it("entry with false value is not rendered", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("id"), Type.boolean(false)],
+            [Type.atom("class"), Type.bitstring("my_class")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {class: "my_class"}, on: {}}, []),
+      );
+    });
+
+    it("entry with true value is stringified, same as a named attribute", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("id"), Type.boolean(true)]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "true"}, on: {}}, []),
+      );
+    });
+
+    it("entry with empty string value renders the bare name, same as a named attribute", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("id"), Type.bitstring("")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: true}, on: {}}, []),
+      );
+    });
+
+    // Only maps and keyword lists recurse, so a non-keyword list nested inside a spread is a value.
+    // String.Chars is stubbed in these tests, hence the dummy stringification result.
+    it("nested list which is not a keyword list is a leaf and is stringified", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("my_key"), Type.charlist("abc")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode(
+          "div",
+          {
+            attrs: {"my-key": "Dummy String.Chars protocol result"},
+            on: {},
+          },
+          [],
+        ),
+      );
+    });
+
+    it("empty map value renders no attributes", () => {
+      assert.deepStrictEqual(
+        renderElement("div", [spread(Type.map())]),
+        vnode("div", {attrs: {}, on: {}}, []),
+      );
+    });
+
+    it("empty keyword list value renders no attributes", () => {
+      assert.deepStrictEqual(
+        renderElement("div", [spread(Type.keywordList())]),
+        vnode("div", {attrs: {}, on: {}}, []),
+      );
+    });
+
+    it("void element", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("id"), Type.bitstring("my_id")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("img", attrsDom),
+        vnode("img", {attrs: {id: "my_id"}, on: {}}, []),
+      );
+    });
+
+    it("named attribute before the spread is overridden", () => {
+      const attrsDom = [
+        namedAttr("id", textValue("my_value_1")),
+        spread(Type.map([[Type.atom("id"), Type.bitstring("my_value_2")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "my_value_2"}, on: {}}, []),
+      );
+    });
+
+    it("named attribute after the spread wins", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("id"), Type.bitstring("my_value_1")]])),
+        namedAttr("id", textValue("my_value_2")),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "my_value_2"}, on: {}}, []),
+      );
+    });
+
+    it("later spread wins over an earlier one", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("id"), Type.bitstring("my_value_1")]])),
+        spread(Type.map([[Type.atom("id"), Type.bitstring("my_value_2")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "my_value_2"}, on: {}}, []),
+      );
+    });
+
+    // A named attribute which is overridden by a spread must not survive as a leftover, even when
+    // the winning entry renders nothing.
+    it("named attribute overridden by a nil spread entry is dropped", () => {
+      const attrsDom = [
+        namedAttr("id", textValue("my_value")),
+        spread(Type.map([[Type.atom("id"), Type.nil()]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {}, on: {}}, []),
+      );
+    });
+
+    // Only the block a single spread expands to is sorted.
+    it("sorting doesn't move attributes written literally", () => {
+      const attrsDom = [
+        namedAttr("zzz", textValue("my_value_1")),
+        spread(
+          Type.map([
+            [Type.atom("bbb"), Type.bitstring("my_value_2")],
+            [Type.atom("aaa"), Type.bitstring("my_value_3")],
+          ]),
+        ),
+        namedAttr("yyy", textValue("my_value_4")),
+      ];
+
+      assert.deepStrictEqual(
+        Object.keys(renderElement("div", attrsDom).data.attrs),
+        ["zzz", "aaa", "bbb", "yyy"],
+      );
+    });
+
+    it("each spread is sorted on its own", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [Type.atom("zzz"), Type.bitstring("my_value_1")],
+            [Type.atom("aaa"), Type.bitstring("my_value_2")],
+          ]),
+        ),
+        spread(Type.map([[Type.atom("bbb"), Type.bitstring("my_value_3")]])),
+      ];
+
+      assert.deepStrictEqual(
+        Object.keys(renderElement("div", attrsDom).data.attrs),
+        ["aaa", "zzz", "bbb"],
+      );
+    });
+
+    it("interleaved with named attributes", () => {
+      const attrsDom = [
+        namedAttr("attr_1", textValue("my_value_1")),
+        spread(Type.map([[Type.atom("attr_2"), Type.bitstring("my_value_2")]])),
+        namedAttr(
+          "attr_3",
+          Type.keywordList([
+            [
+              Type.atom("expression"),
+              Type.tuple([Type.bitstring("my_value_3")]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode(
+          "div",
+          {
+            attrs: {
+              attr_1: "my_value_1",
+              "attr-2": "my_value_2",
+              attr_3: "my_value_3",
+            },
+            on: {},
+          },
+          [],
+        ),
+      );
+    });
+
+    // Client-only: the controlled-input path reads the type and value attributes back out of the
+    // expanded list, so a spread has to reach it the same way a named attribute does.
+    it("controlled input value supplied through a spread", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [Type.atom("type"), Type.bitstring("email")],
+            [Type.atom("value"), Type.bitstring("my_value")],
+          ]),
+        ),
+      ];
+
+      const result = renderElement("input", attrsDom);
+
+      assert.isUndefined(result.data.attrs.value);
+      assert.isUndefined(result.data.attrs["data-hologram-form-input-value"]);
+      assert.strictEqual(result.data.hologramFormInputValue, "my_value");
+      assert.strictEqual(typeof result.data.hook, "object");
+    });
+
+    it("raises for a nil value", () => {
+      assertRaises(
+        [spread(Type.nil())],
+        "ArgumentError",
+        "spread value must be a map or a keyword list, got: nil",
+      );
+    });
+
+    it("raises for a string value", () => {
+      assertRaises(
+        [spread(Type.bitstring("my_string"))],
+        "ArgumentError",
+        'spread value must be a map or a keyword list, got: "my_string"',
+      );
+    });
+
+    it("raises for a list which is not a keyword list", () => {
+      assertRaises(
+        [
+          spread(
+            Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          ),
+        ],
+        "ArgumentError",
+        "spread value must be a map or a keyword list, got: [1, 2, 3]",
+      );
+    });
+
+    it("raises for a struct value", () => {
+      const structDom = Type.map([
+        [Type.atom("__struct__"), Type.alias("Aaa.Bbb")],
+        [Type.atom("my_key"), Type.integer(1)],
+      ]);
+
+      assertRaises(
+        [spread(structDom)],
+        "ArgumentError",
+        `spread value must be a map or a keyword list, got: ${Interpreter.inspect(structDom)}`,
+      );
+    });
+
+    it("raises for a '$'-prefixed atom key", () => {
+      assertRaises(
+        [spread(Type.map([[Type.atom("$click"), Type.atom("my_command")]]))],
+        "ArgumentError",
+        `event bindings can't be set through a spread, got the "$click" key`,
+      );
+    });
+
+    it("raises for a '$'-prefixed string key", () => {
+      assertRaises(
+        [
+          spread(
+            Type.map([[Type.bitstring("$click"), Type.atom("my_command")]]),
+          ),
+        ],
+        "ArgumentError",
+        `event bindings can't be set through a spread, got the "$click" key`,
+      );
+    });
+
+    it("raises for a '$'-prefixed nested key", () => {
+      assertRaises(
+        [
+          spread(
+            Type.map([
+              [
+                Type.atom("data"),
+                Type.map([[Type.bitstring("$click"), Type.atom("my_command")]]),
+              ],
+            ]),
+          ),
+        ],
+        "ArgumentError",
+        `event bindings can't be set through a spread, got the "$click" key`,
+      );
+    });
+  });
+
   // Some client tests are different than server tests.
   describe("node list", () => {
     it("multiple nodes without merging", () => {
@@ -4983,6 +5581,348 @@ describe("Renderer", () => {
       const expected = ["prop_aaa = 987"];
 
       assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("component prop spread", () => {
+    const module16 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module16",
+    );
+
+    const module86 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module86",
+    );
+
+    const spread = (value) =>
+      Type.tuple([Type.atom("spread"), Type.tuple([value])]);
+
+    const namedProp = (name, text) =>
+      Type.tuple([
+        Type.bitstring(name),
+        Type.keywordList([[Type.atom("text"), Type.bitstring(text)]]),
+      ]);
+
+    const renderComponent = (moduleAlias, propsDom) =>
+      Renderer.renderDom(
+        Type.tuple([
+          Type.atom("component"),
+          moduleAlias,
+          Type.list(propsDom),
+          Type.list(),
+        ]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+    const assertRaises = (propsDom, errorType, message) =>
+      assertBoxedError(
+        () => renderComponent(module16, propsDom),
+        errorType,
+        message,
+      );
+
+    it("map value", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [Type.atom("prop_1"), Type.bitstring("my_value_1")],
+            [Type.atom("prop_2"), Type.integer(2)],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1", prop_2: 2}',
+      ]);
+    });
+
+    it("keyword list value", () => {
+      const propsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("prop_1"), Type.bitstring("my_value_1")],
+            [Type.atom("prop_2"), Type.integer(2)],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1", prop_2: 2}',
+      ]);
+    });
+
+    it("string keys", () => {
+      const propsDom = [
+        spread(
+          Type.map([[Type.bitstring("prop_1"), Type.bitstring("my_value_1")]]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1"}',
+      ]);
+    });
+
+    // Prop names live in the Elixir namespace, so they are not dasherized the way attributes are.
+    it("underscores in names are kept verbatim", () => {
+      const propsDom = [
+        spread(
+          Type.map([[Type.atom("my_prop_1"), Type.bitstring("my_value_1")]]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        'component vars = %{my_prop_1: "my_value_1"}',
+      ]);
+    });
+
+    it("undeclared keys are filtered out", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [Type.atom("prop_1"), Type.bitstring("my_value_1")],
+            [Type.atom("undeclared"), Type.bitstring("my_value_2")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1"}',
+      ]);
+    });
+
+    it("values are passed as raw terms", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("my_prop"),
+              Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderComponent(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module64"),
+          propsDom,
+        ),
+        ["my_prop = {1, 2, 3}"],
+      );
+    });
+
+    // Unlike the element branch, a map value doesn't recurse into composed names.
+    it("map value of an entry is a raw prop value", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("my_prop_2"),
+              Type.map([[Type.atom("my_nested_key"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        "component vars = %{my_prop_2: %{my_nested_key: 1}}",
+      ]);
+    });
+
+    it("keyword list value of an entry is a raw prop value", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("my_prop_3"),
+              Type.keywordList([[Type.atom("my_nested_key"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        "component vars = %{my_prop_3: [my_nested_key: 1]}",
+      ]);
+    });
+
+    it("nil value is passed as-is", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("my_prop_1"), Type.nil()]])),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        "component vars = %{my_prop_1: nil}",
+      ]);
+    });
+
+    it("false value is passed as-is", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("my_prop_1"), Type.boolean(false)]])),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        "component vars = %{my_prop_1: false}",
+      ]);
+    });
+
+    it("named prop before the spread is overridden", () => {
+      const propsDom = [
+        namedProp("prop_1", "my_value_1"),
+        spread(Type.map([[Type.atom("prop_1"), Type.bitstring("my_value_2")]])),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_2"}',
+      ]);
+    });
+
+    it("named prop after the spread wins", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("prop_1"), Type.bitstring("my_value_1")]])),
+        namedProp("prop_1", "my_value_2"),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_2"}',
+      ]);
+    });
+
+    it("later spread wins over an earlier one", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("prop_1"), Type.bitstring("my_value_1")]])),
+        spread(Type.map([[Type.atom("prop_1"), Type.bitstring("my_value_2")]])),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_2"}',
+      ]);
+    });
+
+    it("cid supplied through a spread initializes a stateful component", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [Type.atom("cid"), Type.bitstring("my_component")],
+            [Type.atom("prop_1"), Type.bitstring("my_value")],
+          ]),
+        ),
+      ];
+
+      initComponentRegistryEntry(Type.bitstring("my_component"));
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{cid: "my_component", prop_1: "my_value"}',
+      ]);
+    });
+
+    // Module3 is uninitialized here and declares no props, so its state can only reach the template
+    // through the stateful path, which the cid arriving via the spread is what selects.
+    it("cid supplied through a spread runs init and merges the resulting state into vars", () => {
+      const module3 = Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.Module3",
+      );
+
+      const cid = Type.bitstring("my_component");
+      const propsDom = [spread(Type.map([[Type.atom("cid"), cid]]))];
+
+      assert.deepStrictEqual(renderComponent(module3, propsDom), [
+        vnode("div", {attrs: {}, on: {}}, ["state_a = 11, state_b = 22"]),
+      ]);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: module3,
+              state: Type.map([
+                [Type.atom("a"), Type.integer(11)],
+                [Type.atom("b"), Type.integer(22)],
+              ]),
+            }),
+          ],
+        ]),
+      );
+    });
+
+    it("declared default value is applied for a key not supplied by the spread", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("prop_2"), Type.atom("my_value")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderComponent(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module65"),
+          propsDom,
+        ),
+        ['component vars = %{prop_1: "abc", prop_2: :my_value, prop_3: 123}'],
+      );
+    });
+
+    it("empty map value supplies no props", () => {
+      const propsDom = [namedProp("prop_1", "my_value_1"), spread(Type.map())];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1"}',
+      ]);
+    });
+
+    it("raises for a nil value", () => {
+      assertRaises(
+        [spread(Type.nil())],
+        "ArgumentError",
+        "spread value must be a map or a keyword list, got: nil",
+      );
+    });
+
+    it("raises for a string value", () => {
+      assertRaises(
+        [spread(Type.bitstring("my_string"))],
+        "ArgumentError",
+        'spread value must be a map or a keyword list, got: "my_string"',
+      );
+    });
+
+    it("raises for a list which is not a keyword list", () => {
+      assertRaises(
+        [
+          spread(
+            Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          ),
+        ],
+        "ArgumentError",
+        "spread value must be a map or a keyword list, got: [1, 2, 3]",
+      );
+    });
+
+    it("raises for a struct value", () => {
+      const structDom = Type.map([
+        [Type.atom("__struct__"), Type.alias("Aaa.Bbb")],
+        [Type.atom("my_key"), Type.integer(1)],
+      ]);
+
+      assertRaises(
+        [spread(structDom)],
+        "ArgumentError",
+        `spread value must be a map or a keyword list, got: ${Interpreter.inspect(structDom)}`,
+      );
+    });
+
+    it("raises for a '$'-prefixed key", () => {
+      assertRaises(
+        [
+          spread(
+            Type.map([[Type.bitstring("$click"), Type.atom("my_command")]]),
+          ),
+        ],
+        "ArgumentError",
+        `event bindings can't be set through a spread, got the "$click" key`,
+      );
     });
   });
 

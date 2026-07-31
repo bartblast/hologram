@@ -3,4 +3,6 @@ reviews:
   auto_review:
     base_branches: [".*"]
     drafts: true
+  path_filters:
+    - "!test/javascript/**"
   poem: false

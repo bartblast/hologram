@@ -37,6 +37,11 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Escape curly braces with backslash: `\{literal\}`.
 - Raw output (no processing): `{%raw}...{/raw}`.
 - When an attribute expression evaluates to `nil` or `false`, the attribute is not rendered at all.
+- Spread a map or keyword list as attributes or props with `...{expr}`: `<div ...{@html_attrs}>`, `<MyComponent ...{@props} />`. **Not** HEEx's `{@rest}` - the `...` marker is required.
+- Spreads and named attributes resolve by position, last one wins: a literal before a spread is a default, a literal after it is forced.
+- On elements, spread keys dasherize (`user_id` renders `user-id`) and nested maps or keyword lists compose dash-joined names (`data: [user_id: 1]` renders `data-user-id="1"`). On components, keys match declared prop names verbatim and values stay raw terms.
+- Event bindings (`$`-prefixed keys) can't be spread and raise `ArgumentError` - write them as literal attributes.
+- To forward arbitrary attributes through a wrapper component, declare a map prop (`prop :html_attrs, :map`) and spread it onto the inner element: `<button class="fancy" ...{@html_attrs}>`.
 - All interpolated expressions are automatically HTML-escaped to prevent XSS.
 
 ## Components

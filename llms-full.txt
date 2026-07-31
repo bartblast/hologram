@@ -472,6 +472,63 @@ For security purposes, all interpolated expressions are automatically HTML-escap
 
 If `@user_input` contains `"<script>alert('XSS')</script>"`, it will be safely rendered as escaped text rather than executed as JavaScript. This escaping happens automatically for all values interpolated in text content and HTML attributes.
 
+#### Attribute and Prop Spread
+
+A bare braced expression prefixed with `...` injects a map's or keyword list's entries as the tag's attributes (on elements) or props (on components). The `...` marker sits outside the braces, so their content is ordinary Elixir - any expression is allowed:
+
+```holo
+<div class="btn" ...{@html_attrs}>Content</div>
+<MyComponent title="Hello" ...{@props} />
+```
+
+The expression must evaluate to a map or a keyword list - anything else, including `nil`, raises an `ArgumentError`. Bare keyword shorthand works inside the braces, the same convention event bindings already use:
+
+```holo
+<div ...{class: "btn", data: [user_id: @id]}>Content</div>
+```
+
+Spread adds no rules of its own: every entry behaves exactly as if you had written it as a named attribute or prop at that position. On elements, values are stringified and falsy ones drop the attribute, exactly as described above. On components, values stay raw Elixir terms and undeclared keys are silently ignored, just like named props.
+
+##### Attribute Names
+
+On elements, underscores in a key convert to hyphens, whether the key is an atom or a string - `:data_value` and `"data_value"` both render `data-value`. A map or keyword list value nests, composing the name with hyphens at each level, so the example above renders `data-user-id`. Literal markup is never touched, so writing the attribute out by hand remains the exact-name escape hatch.
+
+On components, neither rule applies. A key like `:my_prop` sets the prop declared with exactly that name, with no hyphen conversion, since prop names are Elixir atoms. Values don't nest either - a map value is not expanded into multiple props, it's simply what that one prop receives. The `cid` prop may be supplied through a spread.
+
+Event bindings cannot be set through a spread. A `$`-prefixed key raises an `ArgumentError`, because silently not binding an intended event would be worse than erroring. Write events as literal attributes. They don't need a spread to be conditional anyway - a binding whose operation resolves to `nil` is switched off, as described in the Events documentation.
+
+The entries a single spread expands to render in alphabetical order. Map key order is undefined in Elixir, so sorting is what keeps the output reproducible. Attributes you write out yourself keep their position.
+
+##### Precedence
+
+Multiple spreads are allowed, and they interleave freely with named attributes and props. Names resolve by position, and the last one wins - so a literal before a spread is a default, and a literal after it is forced:
+
+```holo
+<div title="default" ...{@attrs}>Content</div>
+<div ...{@attrs} title="forced">Content</div>
+<div ...{@base} ...{@overrides}>Content</div>
+```
+
+##### Forwarding Wrapper
+
+There is nothing to declare on the receiving component - spread resolves at the call site, so props arrive indistinguishable from named ones and every existing component is already a valid target. To let a wrapper pass arbitrary attributes through to an inner element, declare an ordinary map prop:
+
+```elixir
+prop :html_attrs, :map
+```
+
+and spread it in the wrapper's template:
+
+```holo
+<button class="fancy" ...{@html_attrs}><slot /></button>
+```
+
+Callers then pass the attributes as a single prop:
+
+```holo
+<FancyButton html_attrs={@button_attrs}>Save</FancyButton>
+```
+
 #### Control Flow Blocks
 
 ##### If Block

@@ -1,10 +1,12 @@
 defmodule HologramFeatureTests.TemplateSyntaxTest do
   use HologramFeatureTests.TestCase, async: true
 
+  alias HologramFeatureTests.TemplateSyntax.AttributeSpreadPage
   alias HologramFeatureTests.TemplateSyntax.ComponentPage
   alias HologramFeatureTests.TemplateSyntax.ForBlockPage
   alias HologramFeatureTests.TemplateSyntax.IfBlockPage
   alias HologramFeatureTests.TemplateSyntax.InterpolationPage
+  alias HologramFeatureTests.TemplateSyntax.PropSpreadPage
   alias HologramFeatureTests.TemplateSyntax.PublicCommentPage
   alias HologramFeatureTests.TemplateSyntax.RawBlockPage
   alias HologramFeatureTests.TemplateSyntax.TextAndElementPage
@@ -90,5 +92,105 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
     session
     |> visit(PublicCommentPage)
     |> assert_public_comment("my comment")
+  end
+
+  describe "attribute spread" do
+    feature "map value", %{session: session} do
+      session
+      |> visit(AttributeSpreadPage)
+      |> assert_has(css("#scenario_1[title='value_1']"))
+    end
+
+    feature "keyword shorthand value", %{session: session} do
+      session
+      |> visit(AttributeSpreadPage)
+      |> assert_has(css("#scenario_2[title='value_2']"))
+    end
+
+    feature "state value", %{session: session} do
+      session
+      |> visit(AttributeSpreadPage)
+      |> assert_has(css("#scenario_3[title='value_3']"))
+    end
+
+    feature "nested value composes a dash-joined name", %{session: session} do
+      session
+      |> visit(AttributeSpreadPage)
+      |> assert_has(css("#scenario_4[data-user-id='value_4']"))
+    end
+
+    feature "entry with nil value is not rendered", %{session: session} do
+      session
+      |> visit(AttributeSpreadPage)
+      |> assert_has(css("#scenario_5[class='value_5']:not([title])"))
+    end
+
+    feature "literal attribute before the spread is overridden", %{session: session} do
+      session
+      |> visit(AttributeSpreadPage)
+      |> assert_has(css("#scenario_6[title='value_6']"))
+    end
+
+    feature "literal attribute after the spread wins", %{session: session} do
+      session
+      |> visit(AttributeSpreadPage)
+      |> assert_has(css("#scenario_7[title='value_7']"))
+    end
+
+    feature "later spread wins over an earlier one", %{session: session} do
+      session
+      |> visit(AttributeSpreadPage)
+      |> assert_has(css("#scenario_8[title='value_8']"))
+    end
+  end
+
+  describe "prop spread" do
+    feature "map value", %{session: session} do
+      session
+      |> visit(PropSpreadPage)
+      |> assert_has(css("#scenario_1", text: "prop_1 = value_1"))
+    end
+
+    feature "keyword shorthand value", %{session: session} do
+      session
+      |> visit(PropSpreadPage)
+      |> assert_has(css("#scenario_2", text: "prop_1 = value_2"))
+    end
+
+    feature "state value", %{session: session} do
+      session
+      |> visit(PropSpreadPage)
+      |> assert_has(css("#scenario_3", text: "prop_1 = value_3"))
+    end
+
+    feature "undeclared keys are filtered out", %{session: session} do
+      session
+      |> visit(PropSpreadPage)
+      |> assert_has(css("#scenario_4", text: "prop_1 = value_4"))
+    end
+
+    feature "named prop before the spread is overridden", %{session: session} do
+      session
+      |> visit(PropSpreadPage)
+      |> assert_has(css("#scenario_5", text: "prop_1 = value_5"))
+    end
+
+    feature "named prop after the spread wins", %{session: session} do
+      session
+      |> visit(PropSpreadPage)
+      |> assert_has(css("#scenario_6", text: "prop_1 = value_6"))
+    end
+
+    feature "cid supplied through a spread initializes a stateful component", %{session: session} do
+      session
+      |> visit(PropSpreadPage)
+      |> assert_has(css("#scenario_7", text: "my_state_value = value_7"))
+    end
+
+    feature "forwarding wrapper spreads its map prop onto an inner element", %{session: session} do
+      session
+      |> visit(PropSpreadPage)
+      |> assert_has(css("#scenario_8[title='value_8']", text: "forwarded"))
+    end
   end
 end

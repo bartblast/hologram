@@ -265,9 +265,9 @@ export default class Renderer {
     attrsVdom,
     defaultTarget,
   ) {
-    const attributeName = Bitstring.toText(attrDom.data[0]);
+    const attributeName = $.#eventAttributeName(attrDom);
 
-    if (!attributeName.startsWith("$")) {
+    if (attributeName === null || !attributeName.startsWith("$")) {
       return null;
     }
 
@@ -416,7 +416,10 @@ export default class Renderer {
   // Based on cast_props/2
   // Deps: [:maps.from_list/1]
   static #castProps(propsDom, moduleProxy) {
-    const propsTuples = Renderer.#filterAllowedProps(propsDom, moduleProxy)
+    const propsTuples = Renderer.#filterAllowedProps(
+      Renderer.#expandPropSpreads(propsDom),
+      moduleProxy,
+    )
       .map((propDom) => Renderer.#evalutatePropValue(propDom))
       .map((propDom) => Renderer.#normalizePropName(propDom));
 
@@ -434,7 +437,7 @@ export default class Renderer {
   // #buildEventHandler, so its once is wired here rather than inheriting the shared dispatch path.
   static #collectClickOutsideBindings(attrsDom, elementVnode, defaultTarget) {
     attrsDom.data.forEach((attrDom, attrIndex) => {
-      if (Bitstring.toText(attrDom.data[0]) !== "$click_outside") {
+      if ($.#eventAttributeName(attrDom) !== "$click_outside") {
         return;
       }
 
@@ -534,7 +537,13 @@ export default class Renderer {
   // edge for a handler that branches on it.
   static #collectReachBindings(attrsDom, elementVnode, defaultTarget) {
     attrsDom.data.forEach((attrDom, attrIndex) => {
-      const eventName = Bitstring.toText(attrDom.data[0]).substring(1);
+      const attributeName = $.#eventAttributeName(attrDom);
+
+      if (attributeName === null) {
+        return;
+      }
+
+      const eventName = attributeName.substring(1);
 
       if (!eventName.startsWith("reach_")) {
         return;
@@ -571,7 +580,7 @@ export default class Renderer {
   // currentTarget. The Hologram event type is "resize", the same one the window binding dispatches.
   static #collectResizeBindings(attrsDom, elementVnode, defaultTarget) {
     attrsDom.data.forEach((attrDom, attrIndex) => {
-      if (Bitstring.toText(attrDom.data[0]) !== "$resize") {
+      if ($.#eventAttributeName(attrDom) !== "$resize") {
         return;
       }
 
@@ -590,6 +599,16 @@ export default class Renderer {
         once: $.#onceFromModifiers(attrDom.data[2]),
       });
     });
+  }
+
+  // Based on compose_attribute_name/2
+  // HTML attribute names are dash-separated, while Elixir identifiers can't contain dashes, so each
+  // name segment converts to the convention of the namespace it lands in. Nesting composes the
+  // segments with hyphens, e.g. %{data: %{user_id: 1}} becomes "data-user-id".
+  static #composeAttributeName(key, namePrefix) {
+    const segment = $.#validateSpreadKey($.toText(key)).replaceAll("_", "-");
+
+    return namePrefix === null ? segment : `${namePrefix}-${segment}`;
   }
 
   static #contextKey(opts) {
@@ -616,6 +635,25 @@ export default class Renderer {
     return debounce === null ? null : Number(debounce.value);
   }
 
+  // Based on dedupe_attributes/1
+  // Event attributes are exempt, because a tag may carry multiple bindings which share a base name
+  // once their modifiers are decomposed at compile time, e.g. both $key_down.enter and
+  // $key_down.escape are named "$key_down".
+  static #dedupeAttributes(attrs) {
+    const lastIndexByName = new Map();
+
+    attrs.forEach(([name], index) => {
+      if (!name.startsWith("$")) {
+        lastIndexByName.set(name, index);
+      }
+    });
+
+    return attrs.filter(
+      ([name], index) =>
+        name.startsWith("$") || lastIndexByName.get(name) === index,
+    );
+  }
+
   static #determineInputType(tagName, attrs) {
     let typeAttr;
 
@@ -632,6 +670,78 @@ export default class Renderer {
     }
 
     return null;
+  }
+
+  // A spread entry is {:spread, {value}} - its name slot holds the :spread atom rather than a
+  // bitstring name. Event bindings can never come from a spread, since "$"-prefixed keys are
+  // rejected during expansion, so the binding collectors read names through this and skip spreads.
+  // They walk the unexpanded attribute list on purpose: their positional slot keys (debounce and
+  // throttle windows, once state) must not shift when a spread's entry count changes.
+  static #eventAttributeName(attrDom) {
+    return Type.isRecordTuple(attrDom, "spread", 2)
+      ? null
+      : Bitstring.toText(attrDom.data[0]);
+  }
+
+  // Based on expand_attribute/1
+  // Returns unboxed [name, valueDom] pairs, since every caller unboxes the name anyway.
+  //
+  // A spread's own entries are sorted by name, so that rendering is reproducible: map key order is
+  // undefined in Erlang, and a keyword list's order decides only which duplicate key wins, never how
+  // the surviving entries are laid out. Array.prototype.sort() is stable, which is what keeps that
+  // later-wins rule intact. Only the block a single spread expands to is sorted, so attributes
+  // written literally in the markup keep their authored position.
+  static #expandAttribute(attrDom) {
+    if (!Type.isRecordTuple(attrDom, "spread", 2)) {
+      return [[Bitstring.toText(attrDom.data[0]), attrDom.data[1]]];
+    }
+
+    return $.#expandSpreadAttributes(attrDom.data[1].data[0], null).sort(
+      ([nameA], [nameB]) => (nameA < nameB ? -1 : nameA > nameB ? 1 : 0),
+    );
+  }
+
+  // Based on expand_attribute_spreads/1
+  // Spread entries are splatted into synthetic named attributes at the spread's position, so that
+  // everything downstream (event attribute filtering, boolean attribute rules, value rendering) is
+  // reached through the same path as attributes written literally in the markup. Names then resolve
+  // positionally, last one wins. A tag with no spread is left alone, so that duplicate names written
+  // literally keep behaving as they did.
+  static #expandAttributeSpreads(attrsDom) {
+    const hasSpread = attrsDom.data.some((attrDom) =>
+      Type.isRecordTuple(attrDom, "spread", 2),
+    );
+
+    const expanded = attrsDom.data.flatMap((attrDom) =>
+      $.#expandAttribute(attrDom),
+    );
+
+    return hasSpread ? $.#dedupeAttributes(expanded) : expanded;
+  }
+
+  // Based on expand_prop/1
+  static #expandProp(propDom) {
+    return Type.isRecordTuple(propDom, "spread", 2)
+      ? $.#expandSpreadProps(propDom.data[1].data[0])
+      : [propDom];
+  }
+
+  // Based on expand_prop_spreads/1
+  // Spread entries are splatted into synthetic named props at the spread's position, so that
+  // everything downstream (filtering to declared props, name normalization, context injection,
+  // defaults, cid detection) is reached through the same path as props written literally in the
+  // markup. Names then resolve positionally, last one wins, which the final collapse into a map
+  // already does - no deduplication step is needed here.
+  //
+  // Returns an array of prop tuples rather than a boxed list, since the caller iterates it anyway.
+  static #expandPropSpreads(propsDom) {
+    const hasSpread = propsDom.data.some((propDom) =>
+      Type.isRecordTuple(propDom, "spread", 2),
+    );
+
+    return hasSpread
+      ? propsDom.data.flatMap((propDom) => $.#expandProp(propDom))
+      : propsDom.data;
   }
 
   // Based on expand_slots/2 (including fallback case)
@@ -696,6 +806,45 @@ export default class Renderer {
     );
   }
 
+  // Based on expand_spread_attribute/2
+  static #expandSpreadAttribute(key, value, namePrefix) {
+    const name = $.#composeAttributeName(key, namePrefix);
+
+    if ($.#isNestedSpreadValue(value)) {
+      return $.#expandSpreadAttributes(value, name);
+    }
+
+    return [
+      [
+        name,
+        Type.list([Type.tuple([Type.atom("expression"), Type.tuple([value])])]),
+      ],
+    ];
+  }
+
+  // Based on expand_spread_attributes/2
+  static #expandSpreadAttributes(value, namePrefix) {
+    return $.#spreadEntries(value).flatMap(([key, entryValue]) =>
+      $.#expandSpreadAttribute(key, entryValue, namePrefix),
+    );
+  }
+
+  // Based on expand_spread_props/1
+  // Props live in the Elixir namespace, so unlike attribute names they are verbatim and flat - a map
+  // or keyword list entry value is simply a raw prop value, and doesn't compose a nested name.
+  static #expandSpreadProps(value) {
+    return $.#spreadEntries(value).map(([key, entryValue]) => {
+      const name = $.#validateSpreadKey($.toText(key));
+
+      return Type.tuple([
+        Type.bitstring(name),
+        Type.list([
+          Type.tuple([Type.atom("expression"), Type.tuple([entryValue])]),
+        ]),
+      ]);
+    });
+  }
+
   // Based on evaluate_prop_value/2
   static #evalutatePropValue(propDom) {
     const [name, valueDom] = propDom.data;
@@ -743,14 +892,15 @@ export default class Renderer {
   }
 
   // Based on filter_allowed_props/2
-  static #filterAllowedProps(propsDom, moduleProxy) {
+  // Takes an array of prop tuples, as returned by #expandPropSpreads().
+  static #filterAllowedProps(propDoms, moduleProxy) {
     const registeredPropNames = Renderer.#getPropDefinitions(moduleProxy)
       .data.filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
       .map((prop) => $.toBitstring(prop.data[0]));
 
     const allowedPropNames = registeredPropNames.concat(Type.bitstring("cid"));
 
-    return propsDom.data.filter((propDom) =>
+    return propDoms.filter((propDom) =>
       allowedPropNames.some((name) =>
         Interpreter.isStrictlyEqual(name, propDom.data[0]),
       ),
@@ -834,6 +984,15 @@ export default class Renderer {
     // Radios and checkboxes use value attribute for submit value, not display value
     // Also control value for textarea and select elements
     return inputType !== "checkbox" && inputType !== "radio";
+  }
+
+  // Based on nested_spread_value?/1
+  // Maps and keyword lists compose nested attribute names, everything else is a leaf value. Structs
+  // are excluded, since they are ordinary values which stringify through String.Chars, e.g. Date.
+  static #isNestedSpreadValue(value) {
+    return (
+      (Type.isMap(value) && !Type.isStruct(value)) || Type.isKeywordList(value)
+    );
   }
 
   static #mapEventName(eventName, tagName, attrsVdom) {
@@ -993,6 +1152,13 @@ export default class Renderer {
     );
   }
 
+  // Based on raise_invalid_spread_value/1
+  static #raiseInvalidSpreadValue(value) {
+    Interpreter.raiseArgumentError(
+      `spread value must be a map or a keyword list, got: ${Interpreter.inspect(value)}`,
+    );
+  }
+
   // Based on render_attribute/2
   static #renderAttribute(
     name,
@@ -1051,16 +1217,11 @@ export default class Renderer {
       return {attrs, props};
     }
 
-    // Unbox name and filter out event attributes (starting with $) in single loop pass
-    const regularAttrs = attrsDom.data.reduce((acc, attrDom) => {
-      const name = Bitstring.toText(attrDom.data[0]);
-
-      if (!name.startsWith("$")) {
-        acc.push([name, attrDom.data[1]]);
-      }
-
-      return acc;
-    }, []);
+    // Expand spreads into unboxed [name, valueDom] pairs, then filter out event attributes
+    // (starting with $)
+    const regularAttrs = $.#expandAttributeSpreads(attrsDom).filter(
+      ([name]) => !name.startsWith("$"),
+    );
 
     // Check if this is a form element with special handling of checked and value attributes
     const isFormInput =
@@ -1469,6 +1630,20 @@ export default class Renderer {
     );
   }
 
+  // Based on spread_entries/1
+  // Returns [key, value] term pairs. Structs are maps, but their __struct__ key is not a name.
+  static #spreadEntries(value) {
+    if (Type.isMap(value) && !Type.isStruct(value)) {
+      return Object.values(value.data);
+    }
+
+    if (Type.isKeywordList(value)) {
+      return value.data.map((entryDom) => entryDom.data);
+    }
+
+    return $.#raiseInvalidSpreadValue(value);
+  }
+
   // Returns true when the modifiers map carries a stop_propagation modifier, which stops the
   // event from bubbling past the bound element.
   // Deps: [:maps.is_key/2]
@@ -1515,6 +1690,20 @@ export default class Renderer {
     }
 
     element.value = newValue;
+  }
+
+  // Based on validate_spread_key/1
+  // Event bindings require compile-time modifier parsing and listener collection, so they can be
+  // written only as literal attributes. Silently not binding an intended event would be worse than
+  // erroring here.
+  static #validateSpreadKey(key) {
+    if (key.startsWith("$")) {
+      Interpreter.raiseArgumentError(
+        `event bindings can't be set through a spread, got the "${key}" key`,
+      );
+    }
+
+    return key;
   }
 
   static #valueDomToText(valueDom) {

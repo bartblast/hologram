@@ -89,10 +89,10 @@ defmodule Hologram.Template.Parser do
     @type t :: %__MODULE__{
             attribute_name: String.t() | nil,
             attribute_value: list(attribute_value_part),
-            attributes: list({String.t(), list(attribute_value_part())}),
+            attributes: list({String.t(), list(attribute_value_part())} | {:spread, String.t()}),
             block_name: String.t() | nil,
             delimiter_stack: list(delimiter),
-            node_type: :attribute | :block | :public_comment | :tag | :text,
+            node_type: :attribute | :block | :public_comment | :spread | :tag | :text,
             prev_status: Parser.status() | nil,
             processed_tags: list(Parser.parsed_tag()),
             processed_tokens: list(Tokenizer.token()),
@@ -309,6 +309,19 @@ defmodule Hologram.Template.Parser do
 
   # --- EXPRESSION ---
 
+  def parse_tokens(context, :expression, []) do
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Unclosed expression.
+
+      Hint:
+      Close the expression with '}' character.
+      """)
+
+    raise_error(details, context, :expression, nil, [])
+  end
+
   def parse_tokens(%{delimiter_stack: [delimiter | _tail]} = context, :expression, [
         {:symbol, "\#{"} = token | rest
       ])
@@ -424,6 +437,22 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse_tokens(
+        %{delimiter_stack: [:expression], node_type: :spread} = context,
+        :expression,
+        [{:symbol, "}"} = token | rest]
+      ) do
+    context
+    |> buffer_token(token)
+    |> add_processed_token(token)
+    |> add_spread_attribute()
+    |> reset_token_buffer()
+    |> pop_delimiter_stack()
+    |> set_prev_status(:expression)
+    |> set_node_type(:tag)
+    |> parse_tokens(:start_tag, rest)
+  end
+
+  def parse_tokens(
         %{delimiter_stack: [:expression | _tail], node_type: node_type} = context,
         :expression,
         [
@@ -536,12 +565,70 @@ defmodule Hologram.Template.Parser do
     raise_error(details, context, :start_tag, token, rest)
   end
 
+  # The hint spells out both steps, since the spread syntax it points at is itself rejected inside a
+  # raw block.
+  def parse_tokens(%{raw?: true} = context, :start_tag, [{:symbol, "{"} = token | rest]) do
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Unexpected '{' character inside raw block.
+
+      Hint:
+      Remove the parent raw block, then prefix the expression with the '...' marker to spread it, e.g. ...{@attrs}.
+      """)
+
+    raise_error(details, context, :start_tag, token, rest)
+  end
+
+  def parse_tokens(context, :start_tag, [{:symbol, "{"} = token | rest]) do
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Unexpected '{' character.
+
+      Hint:
+      To spread attributes or properties prefix the expression with the '...' marker, e.g. ...{@attrs}.
+      """)
+
+    raise_error(details, context, :start_tag, token, rest)
+  end
+
   def parse_tokens(context, :start_tag, [{:symbol, "/>"} = token | rest]) do
     parse_start_tag_end(context, token, rest, true)
   end
 
   def parse_tokens(context, :start_tag, [{:symbol, ">"} = token | rest]) do
     parse_start_tag_end(context, token, rest, false)
+  end
+
+  def parse_tokens(%{raw?: false} = context, :start_tag, [
+        {:string, "..."} = marker_token,
+        {:symbol, "{"} = token | rest
+      ]) do
+    context
+    |> reset_attribute_value()
+    |> reset_token_buffer()
+    |> add_processed_token(marker_token)
+    |> set_prev_status(:start_tag)
+    |> set_node_type(:spread)
+    |> push_delimiter_stack(:expression)
+    |> parse_expression(token, rest)
+  end
+
+  def parse_tokens(%{raw?: true} = context, :start_tag, [
+        {:string, "..."} = marker_token,
+        {:symbol, "{"} = token | rest
+      ]) do
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Spread inside raw block detected.
+
+      Hint:
+      Remove the parent raw block to use the spread syntax.
+      """)
+
+    raise_error(details, context, :start_tag, marker_token, [token | rest])
   end
 
   def parse_tokens(context, :start_tag, [{:string, _str} = token | rest]) do
@@ -940,6 +1027,11 @@ defmodule Hologram.Template.Parser do
     attributes = Enum.reverse(context.attributes)
     new_tag = {:self_closing_tag, {context.tag_name, attributes}}
     add_processed_tag(context, new_tag)
+  end
+
+  defp add_spread_attribute(%{token_buffer: token_buffer} = context) do
+    new_attr = {:spread, encode_tokens(token_buffer)}
+    %{context | attributes: [new_attr | context.attributes]}
   end
 
   defp add_start_tag(context) do
