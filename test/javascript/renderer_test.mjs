@@ -298,6 +298,7 @@ describe("Renderer", () => {
       ]);
 
       const entry3 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
         state: Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.integer(2)],
@@ -307,6 +308,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid3, entry3);
 
       const entry7 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module7"),
         state: Type.map([
           [Type.atom("c"), Type.integer(3)],
           [Type.atom("d"), Type.integer(4)],
@@ -742,6 +744,7 @@ describe("Renderer", () => {
       ]);
 
       const entry3 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
         state: Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.integer(2)],
@@ -751,6 +754,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid3, entry3);
 
       const entry7 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module7"),
         state: Type.map([
           [Type.atom("c"), Type.integer(3)],
           [Type.atom("d"), Type.integer(4)],
@@ -2219,7 +2223,10 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          initComponentRegistryEntry(cid);
+          initComponentRegistryEntry(
+            cid,
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module55"),
+          );
 
           const vdom = Renderer.renderDom(
             node,
@@ -2290,8 +2297,14 @@ describe("Renderer", () => {
         });
 
         it("page", () => {
-          initComponentRegistryEntry(Type.bitstring("page"));
-          initComponentRegistryEntry(Type.bitstring("layout"));
+          initComponentRegistryEntry(
+            Type.bitstring("page"),
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module56"),
+          );
+          initComponentRegistryEntry(
+            Type.bitstring("layout"),
+            Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+          );
 
           const vdom = Renderer.renderPage(
             Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module56"),
@@ -2320,8 +2333,14 @@ describe("Renderer", () => {
         });
 
         it("layout", () => {
-          initComponentRegistryEntry(Type.bitstring("page"));
-          initComponentRegistryEntry(Type.bitstring("layout"));
+          initComponentRegistryEntry(
+            Type.bitstring("page"),
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module57"),
+          );
+          initComponentRegistryEntry(
+            Type.bitstring("layout"),
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module58"),
+          );
 
           const vdom = Renderer.renderPage(
             Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module57"),
@@ -2385,9 +2404,18 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          initComponentRegistryEntry(Type.bitstring("component_59"));
-          initComponentRegistryEntry(Type.bitstring("component_60"));
-          initComponentRegistryEntry(Type.bitstring("component_61"));
+          initComponentRegistryEntry(
+            Type.bitstring("component_59"),
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module59"),
+          );
+          initComponentRegistryEntry(
+            Type.bitstring("component_60"),
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module60"),
+          );
+          initComponentRegistryEntry(
+            Type.bitstring("component_61"),
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module61"),
+          );
 
           const vdom = Renderer.renderDom(
             node,
@@ -5252,6 +5280,7 @@ describe("Renderer", () => {
       ]);
 
       const entry3 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
         state: Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.integer(2)],
@@ -5261,6 +5290,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid3, entry3);
 
       const entry7 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module7"),
         state: Type.map([
           [Type.atom("c"), Type.integer(3)],
           [Type.atom("d"), Type.integer(4)],
@@ -5325,6 +5355,7 @@ describe("Renderer", () => {
       ]);
 
       const entry51 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module51"),
         state: Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.integer(2)],
@@ -5334,6 +5365,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid51, entry51);
 
       const entry52 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module52"),
         state: Type.map([
           [Type.atom("c"), Type.integer(3)],
           [Type.atom("d"), Type.integer(4)],
@@ -5509,7 +5541,10 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      initComponentRegistryEntry(Type.bitstring("component_37"));
+      initComponentRegistryEntry(
+        Type.bitstring("component_37"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module37"),
+      );
 
       const result = Renderer.renderDom(
         node,
@@ -5539,7 +5574,10 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      initComponentRegistryEntry(Type.bitstring("component_76"));
+      initComponentRegistryEntry(
+        Type.bitstring("component_76"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module76"),
+      );
 
       assertBoxedError(
         () =>
@@ -5570,7 +5608,10 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      initComponentRegistryEntry(Type.bitstring("component_77"));
+      initComponentRegistryEntry(
+        Type.bitstring("component_77"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module77"),
+      );
 
       const result = Renderer.renderDom(
         node,
@@ -5814,7 +5855,10 @@ describe("Renderer", () => {
         ),
       ];
 
-      initComponentRegistryEntry(Type.bitstring("my_component"));
+      initComponentRegistryEntry(
+        Type.bitstring("my_component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module16"),
+      );
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
         'component vars = %{cid: "my_component", prop_1: "my_value"}',
@@ -6048,7 +6092,10 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      initComponentRegistryEntry(cid);
+      initComponentRegistryEntry(
+        cid,
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+      );
 
       const resultVDom = Renderer.renderDom(
         node,
@@ -6062,7 +6109,14 @@ describe("Renderer", () => {
       assert.deepStrictEqual(resultVDom, expectedVdom);
 
       const expectedComponentRegistryEntries = Type.map([
-        [cid, componentRegistryEntryFixture()],
+        [
+          cid,
+          componentRegistryEntryFixture({
+            module: Type.alias(
+              "Hologram.Test.Fixtures.Template.Renderer.Module1",
+            ),
+          }),
+        ],
       ]);
 
       assert.deepStrictEqual(
@@ -6102,7 +6156,10 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      initComponentRegistryEntry(cid);
+      initComponentRegistryEntry(
+        cid,
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+      );
 
       const resultVDom = Renderer.renderDom(
         node,
@@ -6121,7 +6178,14 @@ describe("Renderer", () => {
       assert.deepStrictEqual(resultVDom, expectedVdom);
 
       const expectedComponentRegistryEntries = Type.map([
-        [cid, componentRegistryEntryFixture()],
+        [
+          cid,
+          componentRegistryEntryFixture({
+            module: Type.alias(
+              "Hologram.Test.Fixtures.Template.Renderer.Module2",
+            ),
+          }),
+        ],
       ]);
 
       assert.deepStrictEqual(
@@ -6144,6 +6208,7 @@ describe("Renderer", () => {
       ]);
 
       const entry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
         state: Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.integer(2)],
@@ -6241,6 +6306,7 @@ describe("Renderer", () => {
       ]);
 
       const entry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module4"),
         state: Type.map([
           [Type.atom("a"), Type.bitstring("state_a")],
           [Type.atom("b"), Type.bitstring("state_b")],
@@ -6306,7 +6372,10 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      initComponentRegistryEntry(cid);
+      initComponentRegistryEntry(
+        cid,
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module16"),
+      );
 
       const result = Renderer.renderDom(
         node,
@@ -6344,6 +6413,7 @@ describe("Renderer", () => {
       ]);
 
       const entry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module18"),
         state: Type.map([[Type.atom("b"), Type.integer(222)]]),
       });
 
@@ -6369,6 +6439,165 @@ describe("Renderer", () => {
           ),
         "KeyError",
         expectedMessage,
+      );
+    });
+  });
+
+  // A stateful component's identity is {module, cid}, so a cid rendered by a different module than
+  // the registered one is a different component - it must not inherit the previous module's state.
+  describe("module swap under a cid", () => {
+    const module3 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module3",
+    );
+    const module4 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module4",
+    );
+
+    const componentNode = (module) =>
+      Type.tuple([
+        Type.atom("component"),
+        module,
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+    const registeredState = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    it("different module under the same cid re-initializes the component", () => {
+      ComponentRegistry.putEntry(
+        cid,
+        componentRegistryEntryFixture({
+          module: module4,
+          state: registeredState,
+        }),
+      );
+
+      const resultVdom = Renderer.renderDom(
+        componentNode(module3),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // Module3's init/2 puts %{a: 11, b: 22}, so the state of the swapped-out module is gone.
+      assert.deepStrictEqual(resultVdom, [
+        vnode("div", {attrs: {}, on: {}}, ["state_a = 11, state_b = 22"]),
+      ]);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: module3,
+              state: Type.map([
+                [Type.atom("a"), Type.integer(11)],
+                [Type.atom("b"), Type.integer(22)],
+              ]),
+            }),
+          ],
+        ]),
+      );
+    });
+
+    it("same module under the same cid keeps the state", () => {
+      const entry = componentRegistryEntryFixture({
+        module: module3,
+        state: registeredState,
+      });
+
+      ComponentRegistry.putEntry(cid, entry);
+
+      const resultVdom = Renderer.renderDom(
+        componentNode(module3),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(resultVdom, [
+        vnode("div", {attrs: {}, on: {}}, ["state_a = 1, state_b = 2"]),
+      ]);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([[cid, entry]]),
+      );
+    });
+
+    it("different module under the same cid re-emits the context of the new module", () => {
+      ComponentRegistry.putEntry(
+        cid,
+        componentRegistryEntryFixture({
+          module: module4,
+          emittedContext: Type.map([
+            [Type.atom("my_key"), Type.bitstring("swapped_out_value")],
+          ]),
+          state: registeredState,
+        }),
+      );
+
+      Renderer.renderDom(
+        componentNode(module3),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        ComponentRegistry.getComponentEmittedContext(cid),
+        Type.map(),
+      );
+    });
+
+    it("a dynamic tag swapping the module under a cid re-initializes the component", () => {
+      ComponentRegistry.putEntry(
+        cid,
+        componentRegistryEntryFixture({
+          module: module4,
+          state: registeredState,
+        }),
+      );
+
+      const node = Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([module3]),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const resultVdom = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(resultVdom, [
+        vnode("div", {attrs: {}, on: {}}, ["state_a = 11, state_b = 22"]),
+      ]);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.getComponentModule(cid),
+        module3,
       );
     });
   });
@@ -6459,18 +6688,21 @@ describe("Renderer", () => {
       ]);
 
       const entry10 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module10"),
         state: Type.map([[Type.atom("a"), Type.integer(10)]]),
       });
 
       ComponentRegistry.putEntry(cid10, entry10);
 
       const entry11 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module11"),
         state: Type.map([[Type.atom("a"), Type.integer(11)]]),
       });
 
       ComponentRegistry.putEntry(cid11, entry11);
 
       const entry12 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module12"),
         state: Type.map([[Type.atom("a"), Type.integer(12)]]),
       });
 
@@ -6539,6 +6771,7 @@ describe("Renderer", () => {
       ]);
 
       const entry34 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module34"),
         state: Type.map([
           [Type.atom("cid"), cid34],
           [Type.atom("a"), Type.bitstring("34a_prop")],
@@ -6553,6 +6786,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid34, entry34);
 
       const entry35 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module35"),
         state: Type.map([
           [Type.atom("cid"), cid35],
           [Type.atom("a"), Type.bitstring("35a_prop")],
@@ -6563,6 +6797,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid35, entry35);
 
       const entry36 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module36"),
         state: Type.map([
           [Type.atom("cid"), cid36],
           [Type.atom("a"), Type.bitstring("36a_prop")],
@@ -6800,7 +7035,10 @@ describe("Renderer", () => {
         ]),
       ]);
 
-      initComponentRegistryEntry(cid);
+      initComponentRegistryEntry(
+        cid,
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+      );
 
       const result = render(
         dynamicTag(Type.bitstring("div"), Type.list(), childrenDom),
@@ -6815,7 +7053,16 @@ describe("Renderer", () => {
 
       assert.deepStrictEqual(
         ComponentRegistry.entries,
-        Type.map([[cid, componentRegistryEntryFixture()]]),
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: Type.alias(
+                "Hologram.Test.Fixtures.Template.Renderer.Module1",
+              ),
+            }),
+          ],
+        ]),
       );
     });
   });
@@ -6894,7 +7141,10 @@ describe("Renderer", () => {
         ]),
       ]);
 
-      initComponentRegistryEntry(cid);
+      initComponentRegistryEntry(
+        cid,
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+      );
 
       const result = render(
         dynamicTag(
@@ -6909,7 +7159,16 @@ describe("Renderer", () => {
 
       assert.deepStrictEqual(
         ComponentRegistry.entries,
-        Type.map([[cid, componentRegistryEntryFixture()]]),
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: Type.alias(
+                "Hologram.Test.Fixtures.Template.Renderer.Module1",
+              ),
+            }),
+          ],
+        ]),
       );
     });
 
@@ -7790,9 +8049,13 @@ describe("Renderer", () => {
 
   describe("context", () => {
     it("emitted in page, accessed in component nested in page", () => {
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+      );
 
       const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module39"),
         emittedContext: Type.map([
           [
             Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -7816,9 +8079,13 @@ describe("Renderer", () => {
     });
 
     it("emitted in page, accessed in component nested in layout", () => {
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module47"),
+      );
 
       const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module46"),
         emittedContext: Type.map([
           [
             Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -7842,9 +8109,13 @@ describe("Renderer", () => {
     });
 
     it("emitted in page, accessed in layout", () => {
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module41"),
+      );
 
       const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module40"),
         emittedContext: Type.map([
           [
             Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -7868,9 +8139,13 @@ describe("Renderer", () => {
     });
 
     it("emmited in layout, accessed in component nested in page", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module43"),
+      );
 
       const layoutEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module42"),
         emittedContext: Type.map([
           [
             Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -7894,9 +8169,13 @@ describe("Renderer", () => {
     });
 
     it("emitted in layout, accessed in component nested in layout", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module45"),
+      );
 
       const layoutEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module44"),
         emittedContext: Type.map([
           [
             Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -7923,6 +8202,7 @@ describe("Renderer", () => {
       const cid = Type.bitstring("component_37");
 
       const entry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module37"),
         emittedContext: Type.map([
           [
             Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -7959,8 +8239,14 @@ describe("Renderer", () => {
 
   describe("page", () => {
     it("inside layout slot", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
+      );
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module15"),
+      );
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
@@ -7980,8 +8266,14 @@ describe("Renderer", () => {
     // it("cast page params")
 
     it("cast layout explicit static props", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module25"),
+      );
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module26"),
+      );
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module25"),
@@ -7999,6 +8291,7 @@ describe("Renderer", () => {
 
     it("cast layout props passed implicitely from page state", () => {
       const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module27"),
         state: Type.map([
           [Type.atom("prop_1"), Type.bitstring("prop_value_1")],
           [Type.atom("prop_2"), Type.bitstring("prop_value_2")],
@@ -8008,7 +8301,10 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(Type.bitstring("page"), pageEntry);
 
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module26"),
+      );
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module27"),
@@ -8026,6 +8322,7 @@ describe("Renderer", () => {
 
     it("aggregate page vars, giving state vars priority over param vars when there are name conflicts", () => {
       const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
         state: Type.map([
           [Type.atom("key_2"), Type.bitstring("state_value_2")],
           [Type.atom("key_3"), Type.bitstring("state_value_3")],
@@ -8034,7 +8331,10 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(Type.bitstring("page"), pageEntry);
 
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+      );
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
@@ -8054,9 +8354,13 @@ describe("Renderer", () => {
     });
 
     it("aggregate layout vars, giving state vars priority over prop vars when there are name conflicts", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module24"),
+      );
 
       const layoutEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module23"),
         state: Type.map([
           [Type.atom("key_2"), Type.bitstring("state_value_2")],
           [Type.atom("key_3"), Type.bitstring("state_value_3")],
@@ -8080,8 +8384,14 @@ describe("Renderer", () => {
     });
 
     it("with DOCTYPE", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module62"),
+      );
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+      );
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module62"),
@@ -8098,8 +8408,14 @@ describe("Renderer", () => {
     });
 
     it("without the root <html> element", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module63"),
+      );
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+      );
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module63"),
@@ -8876,6 +9192,9 @@ describe("Renderer", () => {
 
       // Pre-initialize the component in registry
       const entry = componentRegistryEntryFixture({
+        module: Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module1",
+        ),
         state: Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.integer(2)],

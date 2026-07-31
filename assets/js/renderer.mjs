@@ -1020,6 +1020,15 @@ export default class Renderer {
   // Based on nested_spread_value?/1
   // Maps and keyword lists compose nested attribute names, everything else is a leaf value. Structs
   // are excluded, since they are ordinary values which stringify through String.Chars, e.g. Date.
+  static #isModuleRegisteredForCid(cid, moduleProxy) {
+    const registeredModule = ComponentRegistry.getComponentModule(cid);
+
+    return (
+      registeredModule !== null &&
+      Interpreter.isStrictlyEqual(registeredModule, moduleProxy.__exModule__)
+    );
+  }
+
   static #isNestedSpreadValue(value) {
     return (
       (Type.isMap(value) && !Type.isStruct(value)) || Type.isKeywordList(value)
@@ -1044,9 +1053,16 @@ export default class Renderer {
     return eventName;
   }
 
+  // A stateful component's identity is {module, cid}. When the module rendered under a cid changes
+  // between renders, the registered entry describes a different component, so it is discarded and
+  // the new module initializes fresh - state, emitted context, and action/command targeting all
+  // follow the new module.
   // Deps: [:maps.get/2]
   static #maybeInitComponent(cid, moduleProxy, props) {
-    let componentState = ComponentRegistry.getComponentState(cid);
+    let componentState = Renderer.#isModuleRegisteredForCid(cid, moduleProxy)
+      ? ComponentRegistry.getComponentState(cid)
+      : null;
+
     let componentEmittedContext;
 
     if (componentState === null) {
