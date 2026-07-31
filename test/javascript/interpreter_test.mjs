@@ -4267,6 +4267,20 @@ describe("Interpreter", () => {
         );
       });
 
+      it("non-capture, defined in a definition whose name isn't a valid identifier", () => {
+        const anonFun = Type.anonymousFunction(
+          2,
+          clauses,
+          context,
+          "-my fun/1-fun-0-",
+        );
+
+        assert.equal(
+          Interpreter.inspect(anonFun),
+          `#Function<${anonFun.uniq}.${anonFun.uniq}/2 in MyModule."my fun"/1>`,
+        );
+      });
+
       // Case not possible on the server - every fun there is defined inside a function definition.
       it("non-capture, defined outside of a function definition", () => {
         const anonFun = Type.anonymousFunction(2, clauses, context);
@@ -4314,10 +4328,24 @@ describe("Interpreter", () => {
         assert.equal(result, "Aaa.Bbb");
       });
 
+      it("module alias naming Elixir itself", () => {
+        const result = Interpreter.inspect(Type.alias("Elixir.Aaa"));
+        assert.equal(result, "Elixir.Elixir.Aaa");
+      });
+
       it("non-boolean and non-nil", () => {
         const result = Interpreter.inspect(Type.atom("abc"));
         assert.equal(result, ":abc");
       });
+
+      it("name that isn't a valid identifier", () => {
+        const result = Interpreter.inspect(Type.atom("aaa bbb"));
+        assert.equal(result, ':"aaa bbb"');
+      });
+
+      // The client classifies operators through the transpiled Macro.inspect_atom/3, which the
+      // stand-in here doesn't carry the operator tables for - the Elixir consistency test pins them.
+      // it("operator")
     });
 
     describe("bitstring", () => {
@@ -4465,6 +4493,22 @@ describe("Interpreter", () => {
         const result = Interpreter.inspect(map);
 
         assert.equal(result, '%{a: 1, b: "xyz"}');
+      });
+
+      it("with an alias key", () => {
+        const map = Type.map([[Type.alias("Aaa.Bbb"), Type.integer(1)]]);
+
+        const result = Interpreter.inspect(map);
+
+        assert.equal(result, "%{Aaa.Bbb => 1}");
+      });
+
+      it("with a key that isn't a valid identifier", () => {
+        const map = Type.map([[Type.atom("aaa bbb"), Type.integer(1)]]);
+
+        const result = Interpreter.inspect(map);
+
+        assert.equal(result, '%{"aaa bbb": 1}');
       });
 
       it("with non-atom keys", () => {

@@ -22,6 +22,18 @@ const NO_MATCH = Symbol("NO_MATCH");
 // listed - a raise site whose module names a different formatter states it at the site.
 const BIF_FORMAT_MODULES = {erlang: "erl_erts_errors", os: "erl_kernel_errors"};
 
+// Atoms whose names match render without asking Elixir how to - see #inspectAtomAs().
+// ALIAS_REGEX mirrors Macro's valid_alias?/1: "Elixir" followed by dot-separated segments,
+// each starting with an uppercase letter.
+const ALIAS_REGEX = /^Elixir(\.[A-Z][a-zA-Z0-9_]*)*$/;
+const ATOM_IDENTIFIER_REGEX = /^[a-z_][a-zA-Z0-9_]*[?!]?$/;
+
+const ATOM_FAST_PATHS = {
+  key: (name) => `${name}:`,
+  literal: (name) => `:${name}`,
+  remote_call: (name) => name,
+};
+
 export default class Interpreter {
   // Clause heads of manually ported functions, keyed by "Module.function/arity".
   static #functionClauseHeads = {};
@@ -2008,28 +2020,67 @@ export default class Interpreter {
     const id = `${term.uniq}.${term.uniq}`;
 
     // A fun defined outside of any function definition carries no name, and is
-    // then shown by its defining module alone.
-    // TODO: quote the definition name when it isn't a valid identifier,
-    // e.g. a fun defined in a test, named "test my example/1"
-    const definition =
-      term.name === null
-        ? ""
-        : "." + term.name.replace(/^-/, "").replace(/-fun-\d+-$/, "");
+    // then shown by its defining module alone. The name of the definition it
+    // does come from is rendered the way a remote call's is, so one that isn't
+    // a valid identifier - a fun defined in a test, say - comes out quoted.
+    let definition = "";
+
+    if (term.name !== null) {
+      const source = term.name.replace(/^-/, "").replace(/-fun-\d+-$/, "");
+
+      // The arity follows the last slash - what precedes it is the name, which
+      // may hold slashes of its own when it needed quoting to be defined.
+      const slashIndex = source.lastIndexOf("/");
+      const parentName = source.slice(0, slashIndex);
+      const parentArity = source.slice(slashIndex + 1);
+
+      definition = `.${Interpreter.#inspectAtomAs("remote_call", parentName)}/${parentArity}`;
+    }
 
     return `#Function<${id}/${term.arity} in ${moduleName}${definition}>`;
   }
 
-  // TODO: handle correctly atoms which need to be double quoted, e.g. :"1"
   static #inspectAtom(term, _opts) {
     if (Type.isBoolean(term) || Type.isNil(term)) {
       return term.value;
     }
 
-    if (Type.isAlias(term)) {
-      return $.moduleExName(term);
+    // An alias drops its "Elixir." prefix, unless what follows is Elixir
+    // itself - the prefix is then what tells :"Elixir.Elixir" from :Elixir.
+    if (ALIAS_REGEX.test(term.value)) {
+      const isElixirItself =
+        term.value === "Elixir" ||
+        term.value === "Elixir.Elixir" ||
+        term.value.startsWith("Elixir.Elixir.");
+
+      return isElixirItself ? term.value : $.moduleExName(term);
     }
 
-    return ":" + term.value;
+    return Interpreter.#inspectAtomAs("literal", term.value);
+  }
+
+  // Renders an atom's name in one of the three formats it takes in source: as a
+  // literal (:foo), as a key (foo:) or as the name of a remote call (foo).
+  // A name that is a plain ASCII identifier renders as it stands, which is what
+  // most atoms are - a map key, a struct field, a function name. Every other
+  // name is rendered by Macro.inspect_atom/3, the code the server renders atoms
+  // with, so what needs quoting is decided there rather than guessed at here.
+  // The fast path is verified against the server for every 1-to-3-character
+  // name, the words Elixir gives meaning to, and the identifiers real
+  // applications use: scripts/inspect_atom/verify_fast_path.exs.
+  // Deps: [Macro.inspect_atom/3]
+  static #inspectAtomAs(sourceFormat, name) {
+    if (ATOM_IDENTIFIER_REGEX.test(name)) {
+      return ATOM_FAST_PATHS[sourceFormat](name);
+    }
+
+    return Bitstring.toText(
+      Elixir_Macro["inspect_atom/3"](
+        Type.atom(sourceFormat),
+        Type.atom(name),
+        Type.list(),
+      ),
+    );
   }
 
   static #inspectBitstring(term, _opts) {
@@ -2128,8 +2179,10 @@ export default class Interpreter {
       );
     }
 
-    const isAtomKeyMap = Object.values(term.data).every(([key, _value]) =>
-      Type.isAtom(key),
+    // Mirrors Inspect.List.keyword?/1: an alias key keeps the whole map in the
+    // "key => value" form, since Foo: would read as the atom :Foo, not Foo.
+    const isAtomKeyMap = Object.values(term.data).every(
+      ([key, _value]) => Type.isAtom(key) && !Type.isAlias(key),
     );
 
     let itemsStr = "";
@@ -2137,7 +2190,8 @@ export default class Interpreter {
     if (isAtomKeyMap) {
       itemsStr = Object.values(term.data)
         .map(
-          ([key, value]) => `${key.value}: ${Interpreter.inspect(value, opts)}`,
+          ([key, value]) =>
+            `${Interpreter.#inspectAtomAs("key", key.value)} ${Interpreter.inspect(value, opts)}`,
         )
         .join(", ");
     } else {

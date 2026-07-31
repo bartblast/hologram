@@ -802,6 +802,29 @@ export function defineRuntimeGlobals() {
     },
   });
 
+  defineGlobalModule("Elixir_Macro", {
+    // Stands in for Macro.inspect_atom/3, which the client reaches for when an
+    // atom's name isn't a plain identifier. It quotes such a name in the
+    // position each source format puts it, which is what the transpiled
+    // function does for every name except an operator or an alias - those are
+    // classified against tables this stand-in doesn't carry, so the Elixir
+    // consistency tests are what pin them.
+    "inspect_atom/3": (sourceFormat, atom, _opts) => {
+      const quoted = `"${atom.value}"`;
+
+      switch (sourceFormat.value) {
+        case "key":
+          return Type.bitstring(`${quoted}:`);
+
+        case "literal":
+          return Type.bitstring(`:${quoted}`);
+
+        default:
+          return Type.bitstring(quoted);
+      }
+    },
+  });
+
   defineGlobalModule(
     "Elixir_MatchError",
     defineElixirTermErrorModule("no match of right hand side value:"),

@@ -412,6 +412,7 @@ defmodule Hologram.Compiler.CallGraph do
       {Exception, :format_stacktrace, 1},
       {Exception, :message, 1},
       {Exception, :normalize, 3},
+      {Macro, :inspect_atom, 3},
       {:erlang, :error, 1},
       {:erlang, :hd, 1},
       {:erlang, :tl, 1},

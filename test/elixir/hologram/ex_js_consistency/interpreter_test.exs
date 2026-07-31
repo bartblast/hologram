@@ -199,8 +199,22 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert Kernel.inspect(Aaa.Bbb, []) == "Aaa.Bbb"
     end
 
+    test "atom, module alias naming Elixir itself" do
+      assert Kernel.inspect(Elixir.Elixir.Aaa, []) == "Elixir.Elixir.Aaa"
+    end
+
     test "atom, non-boolean and non-nil" do
       assert Kernel.inspect(:abc, []) == ":abc"
+    end
+
+    test "atom, name that isn't a valid identifier" do
+      assert Kernel.inspect(:"aaa bbb", []) == ~s':"aaa bbb"'
+    end
+
+    # The client classifies operators through the transpiled Macro.inspect_atom/3, which the
+    # JavaScript unit tests stand in for without the operator tables - this is what pins them.
+    test "atom, operator" do
+      assert Kernel.inspect(:<>, []) == ":<>"
     end
 
     test "bitstring, text, empty" do
@@ -256,6 +270,14 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
                ~s'%{a: 1, b: "xyz"}',
                ~s'%{b: "xyz", a: 1}'
              ]
+    end
+
+    test "map, with an alias key" do
+      assert Kernel.inspect(%{Aaa.Bbb => 1}, []) == "%{Aaa.Bbb => 1}"
+    end
+
+    test "map, with a key that isn't a valid identifier" do
+      assert Kernel.inspect(%{"aaa bbb": 1}, []) == ~s'%{"aaa bbb": 1}'
     end
 
     test "map, with non-atom keys" do
