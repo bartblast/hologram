@@ -14,7 +14,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - The page cid is `"page"`, the layout cid is `"layout"`. Don't forget these when targeting actions.
 - Not all Elixir standard library functions are available client-side yet. Check the Client Runtime reference for coverage.
 - Protocol implementations ship to the browser only for types the compiler can see: structs referenced in client code, in `init`/command code, or in action broadcasts. A type resolved purely at runtime (e.g. from a string or external data) won't have its implementations bundled - reference its struct module anywhere in client-reachable code if needed.
-- `try` (with `rescue`/`catch`/`else`/`after`), `raise`, `reraise`, `throw`, and `exit` work client-side. `__STACKTRACE__` is supported but always evaluates to an empty list, because the client does not have stacktraces yet.
+- `try` (with `rescue`/`catch`/`else`/`after`), `raise`, `reraise`, `throw`, and `exit` work client-side, and so does `__STACKTRACE__`. Client errors carry the same messages and stacktraces as server errors, except in environments where `:client_stacktraces` is disabled (the default outside `dev`/`test`), where a trace holds only the frame the error was raised in.
 - Realtime: inside `init/3`/commands use `put_subscription`/`put_broadcast` on the `server` struct (deferred until the handler succeeds). The `Hologram.Realtime.*` functions fire immediately and are only for code outside a handler (background jobs, workers).
 
 ## Architecture
@@ -227,3 +227,9 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Elixir anonymous functions can be passed as JS callbacks.
 - JS interop only works in action handlers (client-side). It is a no-op during server-side rendering.
 - Prefer `JS.call` over `JS.exec`/`JS.eval`. Isolate JS interop behind facade modules.
+
+## Configuration
+
+- Hologram settings live under `:hologram` in `config/config.exs`, or in an environment-specific file like `config/prod.exs`. They are read while the client bundles compile, so `config/runtime.exs` is too late and changing one requires a recompile, not just a restart.
+- `:client_stacktraces` defaults to `true` in `dev`/`test` and `false` elsewhere. `:client_error_overlay` follows it unless set on its own - set it to `false` to keep the console report without showing an error screen to users.
+- `:max_bundle_size` (bytes) fails the build when a generated bundle grows past it. Unset by default.

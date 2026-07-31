@@ -3693,6 +3693,67 @@ Since JS interop functions only work in the browser, functions that use them can
 
 Planning to publish a reusable package that wraps a JavaScript library, a Web API, or provides Hologram utilities? Check the Package Naming conventions to help distinguish official and community packages.
 
+### Configuration
+
+Hologram is configured under the `:hologram` key in your config files, and reads a few things from environment variables. Everything is optional - the defaults are chosen so that a new app needs no configuration at all.
+
+**Note:** These settings belong in `config/config.exs`, or in an environment-specific file such as `config/prod.exs`. The compiler reads them while it builds the client bundles, so changing one requires recompiling, not just restarting - and setting one in `config/runtime.exs` has no effect on a release, whose bundles were compiled long before that file is evaluated.
+
+#### Client Diagnostics
+
+Two settings control how much an error raised on the client tells you. Neither of them changes the error itself: error messages and `rescue` semantics are identical in every environment, on the client and on the server alike. They only decide how much diagnostic detail travels with the error, and who gets to see it.
+
+##### client_stacktraces
+
+Defaults to `true` in the `dev` and `test` environments, and `false` everywhere else.
+
+```elixir
+config :hologram, client_stacktraces: true
+```
+
+When enabled, the compiler emits source metadata into the client bundle and the runtime tracks a call stack, so an error raised on the client carries the same stacktrace as one raised on the server: Elixir frames naming the module, function and arity, each pointing at the line its function had reached. `__STACKTRACE__` holds those frames inside a `rescue` or `catch` clause, and `reraise/2,3` preserves them.
+
+When disabled, an error still carries the frame it was raised in - message derivation depends on it - but nothing below that frame.
+
+Enabling it outside of `dev` and `test` has trade-offs worth weighing:
+
+- Argument values appear in stacktrace frames, and can leave the device through screenshots, support tickets, or pasted console output.
+- Source paths and line numbers reveal the project's file layout, on top of the module names already readable in the bundle.
+
+##### client_error_overlay
+
+Defaults to whatever `client_stacktraces` resolves to, so turning client diagnostics on turns both on.
+
+```elixir
+config :hologram,
+  client_stacktraces: true,
+  client_error_overlay: false
+```
+
+When enabled, an uncaught client error is rendered in the page, on top of the app, as well as printed to the browser console. The overlay can be dismissed with the Escape key or its close button.
+
+Uncaught errors reach the console in every environment - this setting only decides whether they are also shown in the page. The two reach different people: console output is read by whoever opens the devtools, whereas the overlay is shown to everyone who hits the error. Setting it to `false` alongside enabled stacktraces keeps the server-shaped report in the console, without putting an error screen in front of the app's users.
+
+#### Compilation
+
+##### max_bundle_size
+
+Unset by default, which means no limit.
+
+```elixir
+config :hologram, max_bundle_size: 5_000_000
+```
+
+The maximum size of a generated JavaScript bundle, in bytes. A bundle larger than this fails the build, so an accidental dependency that drags a large module into a page is caught before it ships.
+
+#### Environment Variables
+
+A few things are read from the environment rather than from config, because they are needed before the application environment is available or because they differ per machine:
+
+- `HOLOGRAM_ENV` - the environment Hologram runs as, falling back to `MIX_ENV`. It decides which defaults apply, e.g. `client_stacktraces` is enabled in `dev` and `test`, and disabled elsewhere.
+- `HOLOGRAM_START` - set it to `1` to start Hologram in `dev` and `test`, which is exactly what `mix holo` does. Outside those environments Hologram always starts.
+- `SECRET_KEY_BASE` - the secret Hologram signs with, required in every environment. In **embedded mode** (Hologram inside your Phoenix endpoint), `dev` and `test` fall back to the endpoint's configured `:secret_key_base`.
+
 ## Reference
 
 ### Client Runtime
@@ -3760,7 +3821,7 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 
 #### Tooling
 
-**Development:** Incremental Compilation (done), Live Reload (done), Standalone Mode (in progress, 70%), Template Formatter (in progress, 60%), VS Code Extension (done)
+**Development:** Client Error Overlay (done), Incremental Compilation (done), Live Reload (done), Standalone Mode (in progress, 70%), Template Formatter (in progress, 60%), VS Code Extension (done)
 
 #### Elixir Client Runtime
 
@@ -3778,7 +3839,7 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 
 **Bitstrings:** Computed-Size Matching (todo), Construction (done), Dynamic-Size Matching (todo), Fixed-Size Matching (done), UTF Matching (todo), UTF16 and UTF32 Encoding (todo)
 
-**Other:** Behaviours (done), Bitwise Module Operators (done), Error Handling (done), Essential Stdlib Functions (done), Processes (deferred), Protocols (done), Regular Expressions (done)
+**Other:** Behaviours (done), Bitwise Module Operators (done), Error Handling (done), Error Stacktraces (done), Essential Stdlib Functions (done), Processes (deferred), Protocols (done), Regular Expressions (done)
 
 ### Roadmap
 
@@ -3801,7 +3862,6 @@ Our development roadmap is organized by timeline, with colors representing proxi
 - **Advanced Bitstring Support** - Add support for the remaining bitstring capabilities: dynamic and computed segment sizes in patterns, UTF pattern matching, and UTF16/UTF32 encodings.
 - **Advanced Routing** - Add support for multi-tenant routing (subdomain-based) and catch-all (wildcard) routes for dynamic path segments of arbitrary depth.
 - **Auth** - Built-in authentication, authorization, and access control system for managing user identities and protecting resources.
-- **Client Error Stacktraces** - Ensure error messages and stacktraces on the client match those on the server for easier debugging.
 - **Client MFAs Whitelisting** - Create a mechanism to explicitly whitelist Module-Function-Arity combinations that should be compiled for client-side execution when not automatically detected by the compiler.
 - **Command Failure Handling Control** - Add more granular control over how command failures are handled, allowing developers to customize error handling strategies, retry logic, and failure recovery mechanisms.
 - **Internationalization** - Built-in i18n: locale detection and management, locale-aware routing, translation resolution across server and client, and locale-aware date, number, and currency formatting.
