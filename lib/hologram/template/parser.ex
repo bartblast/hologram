@@ -552,6 +552,21 @@ defmodule Hologram.Template.Parser do
     raise_error(details, context, :start_tag, token, rest)
   end
 
+  # The hint spells out both steps, since the spread syntax it points at is itself rejected inside a
+  # raw block.
+  def parse_tokens(%{raw?: true} = context, :start_tag, [{:symbol, "{"} = token | rest]) do
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Unexpected '{' character inside raw block.
+
+      Hint:
+      Remove the parent raw block, then prefix the expression with the '...' marker to spread it, e.g. ...{@attrs}.
+      """)
+
+    raise_error(details, context, :start_tag, token, rest)
+  end
+
   def parse_tokens(context, :start_tag, [{:symbol, "{"} = token | rest]) do
     details =
       StringUtils.normalize_newlines("""

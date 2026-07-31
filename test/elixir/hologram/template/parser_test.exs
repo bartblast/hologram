@@ -1990,6 +1990,22 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("<Aa.Bb {@spread}>", expected_msg)
     end
 
+    test "expression in attribute position inside raw block" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unexpected '{' character inside raw block.
+
+        Hint:
+        Remove the parent raw block, then prefix the expression with the '...' marker to spread it, e.g. ...{@attrs}.
+
+        {%raw}<div {@spread}></div>{/raw
+                   ^
+        """)
+
+      test_syntax_error_msg("{%raw}<div {@spread}></div>{/raw}", expected_msg)
+    end
+
     test "spread inside raw block" do
       expected_msg =
         normalize_newlines("""
