@@ -515,6 +515,20 @@ defmodule Hologram.CompilerTest do
              )
     end
 
+    test "registers the metadata of the modules it defines", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/ERTS.registerModuleMetadata({"Access": {app: "elixir", file: "lib\/access.ex"/
+             )
+    end
+
     test "injects the versions of the applications the frames name", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas

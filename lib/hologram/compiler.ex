@@ -68,6 +68,33 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the version of each OTP application the given call graph reaches, keyed by application
+  name and sorted by it.
+
+  A stacktrace frame names the application its module belongs to and that application's version,
+  the way the server renders one, and this is where the client reads the version from.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_app_versions_1/README.md
+  """
+  @spec build_app_versions(CallGraph.t()) :: keyword(String.t())
+  def build_app_versions(call_graph) do
+    call_graph
+    |> CallGraph.vertices()
+    |> Enum.map(fn
+      {module, _function, _arity} -> module
+      module -> module
+    end)
+    |> Enum.uniq()
+    |> Enum.map(&Application.get_application/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.map(fn app -> {app, Application.spec(app, :vsn)} end)
+    |> Enum.reject(fn {_app, vsn} -> is_nil(vsn) end)
+    |> Enum.map(fn {app, vsn} -> {app, to_string(vsn)} end)
+    |> Enum.sort()
+  end
+
+  @doc """
   Builds the call graph of all modules in the project.
   """
   @spec build_call_graph :: CallGraph.t()
@@ -143,31 +170,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns the version of each OTP application the given call graph reaches, keyed by application
-  name and sorted by it.
-
-  A stacktrace frame names the application its module belongs to and that application's version,
-  the way the server renders one, and this is where the client reads the version from.
-  """
-  @spec build_app_versions(CallGraph.t()) :: keyword(String.t())
-  def build_app_versions(call_graph) do
-    call_graph
-    |> CallGraph.vertices()
-    |> Enum.map(fn
-      {module, _function, _arity} -> module
-      module -> module
-    end)
-    |> Enum.uniq()
-    |> Enum.map(&Application.get_application/1)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-    |> Enum.map(fn app -> {app, Application.spec(app, :vsn)} end)
-    |> Enum.reject(fn {_app, vsn} -> is_nil(vsn) end)
-    |> Enum.map(fn {app, vsn} -> {app, to_string(vsn)} end)
-    |> Enum.sort()
-  end
-
-  @doc """
   Builds page digest PLT, where the keys represent page modules,
   and the values are hex digests of their corresponding JavaScript bundles.
   """
@@ -238,6 +240,11 @@ defmodule Hologram.Compiler do
       |> render_elixir_function_defs(ir_plt, async_mfas)
       |> render_block()
 
+    module_metadata_registration =
+      mfas
+      |> render_module_metadata_registration()
+      |> render_block()
+
     """
     "use strict";
 
@@ -255,7 +262,7 @@ defmodule Hologram.Compiler do
         MemoryStorage,
         Type,
         Utils,
-      } = deps;#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}
+      } = deps;#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}
     }
 
     globalThis.Hologram.pageScriptLoaded = true;
@@ -281,6 +288,11 @@ defmodule Hologram.Compiler do
       |> render_elixir_function_defs(ir_plt, async_mfas)
       |> render_block()
 
+    module_metadata_registration =
+      runtime_mfas
+      |> render_module_metadata_registration()
+      |> render_block()
+
     manually_ported_clause_heads =
       ir_plt
       |> render_manually_ported_clause_heads()
@@ -304,7 +316,7 @@ defmodule Hologram.Compiler do
 
     globalThis.Hologram.config = #{render_client_config()};
 
-    ERTS.appVersions = #{render_app_versions(app_versions)};#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
+    ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
@@ -819,6 +831,19 @@ defmodule Hologram.Compiler do
     end
   end
 
+  # Travels with the per-module metadata, which is emitted under the same
+  # setting - a bundle built without client stacktraces names no application
+  # and no version anywhere.
+  defp render_app_versions(app_versions) do
+    if Hologram.client_stacktraces?() do
+      app_versions
+      |> Enum.map_join(", ", fn {app, vsn} -> ~s/#{app}: "#{vsn}"/ end)
+      |> then(&"{#{&1}}")
+    else
+      "{}"
+    end
+  end
+
   defp render_block(str) do
     str = String.trim(str)
 
@@ -831,19 +856,6 @@ defmodule Hologram.Compiler do
 
   defp render_client_config do
     ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
-  end
-
-  # Travels with the per-module metadata, which is emitted under the same
-  # setting - a bundle built without client stacktraces names no application
-  # and no version anywhere.
-  defp render_app_versions(app_versions) do
-    if Hologram.client_stacktraces?() do
-      app_versions
-      |> Enum.map_join(", ", fn {app, vsn} -> ~s/#{app}: "#{vsn}"/ end)
-      |> then(&"{#{&1}}")
-    else
-      "{}"
-    end
   end
 
   defp render_elixir_function_defs(mfas, ir_plt, async_mfas) do
@@ -901,6 +913,14 @@ defmodule Hologram.Compiler do
       :error ->
         []
     end
+  end
+
+  defp render_module_metadata_registration(mfas) do
+    mfas
+    |> filter_elixir_mfas()
+    |> Enum.map(fn {module, _function, _arity} -> module end)
+    |> Enum.uniq()
+    |> Encoder.encode_module_metadata_registration()
   end
 
   defp render_erlang_function_defs(mfas, erlang_js_dir) do

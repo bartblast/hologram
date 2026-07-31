@@ -642,6 +642,41 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   @doc """
+  Generates the ERTS registration statement carrying the metadata of the given modules.
+
+  Each bundle registers the modules it defines, so a stacktrace frame can name the application a
+  module belongs to and the source file it was compiled from. Returns an empty string when client
+  stacktraces are disabled, or when none of the modules can be loaded to read their metadata
+  from.
+
+  ## Examples
+
+      iex> encode_module_metadata_registration([Aaa.Bbb])
+      "ERTS.registerModuleMetadata({\"Aaa.Bbb\": {app: \"my_app\", file: \"lib/aaa/bbb.ex\"}});"
+  """
+  @spec encode_module_metadata_registration(list(module)) :: String.t()
+  def encode_module_metadata_registration(modules) do
+    entries =
+      if Hologram.client_stacktraces?() do
+        modules
+        |> Enum.sort()
+        |> Enum.map(fn module -> {module, encode_module_metadata(module)} end)
+        |> Enum.reject(fn {_module, metadata} -> metadata == "{}" end)
+        |> Enum.map_join(", ", fn {module, metadata} ->
+          ~s/"#{Reflection.module_name(module)}": #{metadata}/
+        end)
+      else
+        ""
+      end
+
+    if entries == "" do
+      ""
+    else
+      "ERTS.registerModuleMetadata({#{entries}});"
+    end
+  end
+
+  @doc """
   Encodes Elixir term into JavaScript.
   If the term can be encoded into JavaScript then the result is in the shape of {:ok, js}.
   If the term can't be encoded into JavaScript then an error message is returned in the shape of {:error, message}.

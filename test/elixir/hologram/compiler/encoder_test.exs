@@ -1822,6 +1822,34 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "encode_module_metadata_registration/1" do
+    setup do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      :ok
+    end
+
+    test "registers the metadata of each module the bundle defines" do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      vsn = to_string(Application.spec(:hologram, :vsn))
+
+      assert encode_module_metadata_registration([Hologram.Reflection]) ==
+               ~s/ERTS.registerModuleMetadata({"Hologram.Reflection": {app: "hologram", file: "lib\/hologram\/reflection.ex", vsn: "#{vsn}"}});/
+    end
+
+    test "registers nothing when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+
+      assert encode_module_metadata_registration([Hologram.Reflection]) == ""
+    end
+
+    test "registers nothing for a module that can't be loaded" do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      assert encode_module_metadata_registration([Aaa.Bbb]) == ""
+    end
+  end
+
   describe "encode_elixir_function_clause_heads/6" do
     test "encodes the clause heads without their bodies" do
       # (x) when :erlang.is_integer(x) do

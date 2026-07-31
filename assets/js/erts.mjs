@@ -32,17 +32,18 @@ export default class ERTS {
     return $.#initPid;
   }
 
-  static applicationEnv = ApplicationEnv;
-  static binaryPatternRegistry = BinaryPatternRegistry;
-
-  // Shadow call stack backing Elixir stacktraces. Ported Erlang functions reach it through this
-  // facade, since their bodies are extracted per-MFA into the bundle and can't carry imports.
   // Version of each OTP application whose modules the bundle carries, keyed by
   // application name - what :application.get_key/2 answers :vsn from. Assigned
   // by the runtime bundle from compiler-emitted data, and empty when client
   // stacktraces are disabled, which also emits no per-module app metadata.
   static appVersions = {};
 
+  static applicationEnv = ApplicationEnv;
+
+  static binaryPatternRegistry = BinaryPatternRegistry;
+
+  // Shadow call stack backing Elixir stacktraces. Ported Erlang functions reach it through this
+  // facade, since their bodies are extracted per-MFA into the bundle and can't carry imports.
   static callStack = CallStack;
 
   static ets = {};
@@ -72,6 +73,12 @@ export default class ERTS {
   static graphemeSegmenter = new Intl.Segmenter(undefined, {
     granularity: "grapheme",
   });
+
+  // Where each module's code lives, keyed by module name - the application that
+  // owns it and its source file, which stacktrace frames render. Filled per
+  // bundle, so the runtime and each page contribute their own modules, and left
+  // empty when client stacktraces are disabled.
+  static moduleMetadata = {};
 
   static nodeTable = NodeTable;
   static referenceSequence = new Sequence();
@@ -113,6 +120,12 @@ export default class ERTS {
     }
 
     return result;
+  }
+
+  // Takes in the modules of one bundle. Each bundle registers its own, so the
+  // runtime's modules and every page's modules end up in the same table.
+  static registerModuleMetadata(entries) {
+    Object.assign($.moduleMetadata, entries);
   }
 
   static registerNativeObject(object) {

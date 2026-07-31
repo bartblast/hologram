@@ -97,6 +97,39 @@ describe("ERTS", () => {
     });
   });
 
+  describe("registerModuleMetadata()", () => {
+    afterEach(() => {
+      ERTS.moduleMetadata = {};
+    });
+
+    it("takes in the entries of a bundle", () => {
+      ERTS.registerModuleMetadata({
+        "Aaa.Bbb": {app: "my_app", file: "lib/aaa/bbb.ex"},
+      });
+
+      assert.deepStrictEqual(ERTS.moduleMetadata, {
+        "Aaa.Bbb": {app: "my_app", file: "lib/aaa/bbb.ex"},
+      });
+    });
+
+    // The runtime bundle registers its modules and each page bundle registers
+    // its own, so what a later bundle brings joins what is already there.
+    it("keeps the entries of the bundles registered before it", () => {
+      ERTS.registerModuleMetadata({
+        "Aaa.Bbb": {app: "my_app", file: "lib/aaa/bbb.ex"},
+      });
+
+      ERTS.registerModuleMetadata({
+        "Ccc.Ddd": {app: "my_app", file: "lib/ccc/ddd.ex"},
+      });
+
+      assert.deepStrictEqual(ERTS.moduleMetadata, {
+        "Aaa.Bbb": {app: "my_app", file: "lib/aaa/bbb.ex"},
+        "Ccc.Ddd": {app: "my_app", file: "lib/ccc/ddd.ex"},
+      });
+    });
+  });
+
   describe("registerNativeObject()", () => {
     it("returns a reference", () => {
       const obj = {a: 1};
