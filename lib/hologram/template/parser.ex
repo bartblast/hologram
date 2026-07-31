@@ -34,6 +34,14 @@ defmodule Hologram.Template.Parser do
                                         Remove the parent raw block to use the dynamic tag syntax.
                                         """)
 
+  @unclosed_end_tag_details StringUtils.normalize_newlines("""
+                            Reason:
+                            Unclosed end tag.
+
+                            Hint:
+                            Close the end tag with '>' character.
+                            """)
+
   @unescaped_lt_char_details StringUtils.normalize_newlines("""
                              Reason:
                              Unescaped '<' character inside text node.
@@ -268,6 +276,11 @@ defmodule Hologram.Template.Parser do
   end
 
   # --- END TAG NAME ---
+
+  def parse_tokens(context, :end_tag_name, []) do
+    raise_error(@unclosed_end_tag_details, context, :end_tag_name, nil, [])
+  end
+
   def parse_tokens(%{tag_name: ""} = context, :end_tag_name, [{:symbol, "-"} = token | rest]) do
     details =
       StringUtils.normalize_newlines("""
@@ -308,6 +321,10 @@ defmodule Hologram.Template.Parser do
   end
 
   # --- END TAG ---
+
+  def parse_tokens(context, :end_tag, []) do
+    raise_error(@unclosed_end_tag_details, context, :end_tag, nil, [])
+  end
 
   def parse_tokens(context, :end_tag, [{:whitespace, _value} = token | rest]) do
     context

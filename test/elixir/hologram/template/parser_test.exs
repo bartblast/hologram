@@ -2198,6 +2198,54 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("<div", expected_msg)
     end
 
+    test "unclosed end tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed end tag.
+
+        Hint:
+        Close the end tag with '>' character.
+
+        </div
+             ^
+        """)
+
+      test_syntax_error_msg("</div", expected_msg)
+    end
+
+    test "unclosed end tag without a tag name" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed end tag.
+
+        Hint:
+        Close the end tag with '>' character.
+
+        </
+          ^
+        """)
+
+      test_syntax_error_msg("</", expected_msg)
+    end
+
+    test "unclosed dynamic end tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed end tag.
+
+        Hint:
+        Close the end tag with '>' character.
+
+        </{@module}
+                   ^
+        """)
+
+      test_syntax_error_msg("</{@module}", expected_msg)
+    end
+
     test "unclosed public comment" do
       expected_msg =
         normalize_newlines("""
