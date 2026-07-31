@@ -2,6 +2,7 @@
 
 import Bitstring from "./bitstring.mjs";
 import CallStack from "./erts/call_stack.mjs";
+import ERTS from "./erts.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import NodeTable from "./erts/node_table.mjs";
@@ -150,17 +151,15 @@ export default class Interpreter {
     let frame = null;
 
     if (popsFrameOnExit) {
-      const definingModuleProxy = fun.context.module
-        ? Interpreter.moduleProxy(fun.context.module)
+      const definingModule = fun.context.module
+        ? Interpreter.moduleExName(fun.context.module)
         : null;
 
       frame = {
-        module: fun.context.module
-          ? Interpreter.moduleExName(fun.context.module)
-          : null,
+        module: definingModule,
         function: fun.name,
         arityOrArgs: fun.arity,
-        file: definingModuleProxy?.__metadata__?.file ?? null,
+        file: ERTS.moduleMetadata[definingModule]?.file ?? null,
         line: null,
         errorInfo: null,
       };
@@ -452,13 +451,10 @@ export default class Interpreter {
     arity,
     visibility,
     clauses,
-    metadata = {},
   ) {
     const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
 
     Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName);
-
-    globalThis[moduleJsName].__metadata__ = metadata;
 
     globalThis[moduleJsName][`${functionName}/${arity}`] =
       Interpreter.#buildElixirFunction(
@@ -467,7 +463,7 @@ export default class Interpreter {
         arity,
         visibility,
         clauses,
-        metadata.file ?? null,
+        ERTS.moduleMetadata[moduleExName]?.file ?? null,
       );
 
     if (visibility === "public") {
@@ -884,7 +880,6 @@ export default class Interpreter {
       moduleProxy.__exports__ = new Set();
       moduleProxy.__jsBindings__ = new Map();
       moduleProxy.__jsName__ = moduleJsName;
-      moduleProxy.__metadata__ = {};
     }
   }
 

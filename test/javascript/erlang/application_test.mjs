@@ -23,14 +23,9 @@ describe("Erlang_Application", () => {
     const get_application = Erlang_Application["get_application/1"];
 
     before(() => {
-      Interpreter.defineElixirFunction(
-        "MyModuleWithMetadata",
-        "my_fun",
-        0,
-        "public",
-        [],
-        {app: "my_app", file: "lib/my_module.ex", vsn: "1.2.3"},
-      );
+      ERTS.registerModuleMetadata({
+        MyModuleWithMetadata: {app: "my_app", file: "lib/my_module.ex"},
+      });
 
       Interpreter.defineElixirFunction(
         "MyModuleWithoutMetadata",
@@ -39,6 +34,10 @@ describe("Erlang_Application", () => {
         "public",
         [],
       );
+    });
+
+    after(() => {
+      ERTS.moduleMetadata = {};
     });
 
     it("module belonging to an application", () => {

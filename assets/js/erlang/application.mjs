@@ -9,11 +9,11 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Application = {
-  // The application a module belongs to is read from the metadata the compiler
-  // emits alongside it, which it does only when client stacktraces are enabled.
-  // A module carrying none - a ported Erlang module, or any module at all when
-  // the setting is off - is :undefined here, the same answer the BEAM gives for
-  // a module it can't place.
+  // The application a module belongs to is read from the metadata its bundle
+  // registered, which happens only when client stacktraces are enabled. A module
+  // with no entry - a ported Erlang module, or any module at all when the
+  // setting is off - is :undefined here, the same answer the BEAM gives for a
+  // module it can't place.
   // Start get_application/1
   "get_application/1": (module) => {
     if (!Type.isAtom(module)) {
@@ -25,7 +25,7 @@ const Erlang_Application = {
       );
     }
 
-    const app = Interpreter.moduleProxy(module)?.__metadata__?.app;
+    const app = ERTS.moduleMetadata[Interpreter.moduleExName(module)]?.app;
 
     return typeof app === "undefined"
       ? Type.atom("undefined")

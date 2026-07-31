@@ -73,22 +73,7 @@ defmodule Hologram.Compiler.Encoder do
     clause_context = %{context | arity: arity, async?: async?, function: function}
     clauses_js = encode_as_array(clauses, clause_context)
 
-    metadata_js =
-      if Hologram.client_stacktraces?() do
-        encode_module_metadata(context.module)
-      else
-        "{}"
-      end
-
-    # Empty metadata is omitted - the runtime defaults it to an empty object.
-    metadata_arg_js =
-      if metadata_js == "{}" do
-        ""
-      else
-        ", #{metadata_js}"
-      end
-
-    ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js}#{metadata_arg_js});/
+    ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
   end
 
   @doc """
@@ -987,16 +972,14 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   # Module-level frame metadata: the module's source file (relative to its
-  # source root) and the app that owns it with its version, so client frames
-  # render the same "(app vsn) file:line" prefix as server frames.
+  # source root) and the app that owns it, so client frames render the same
+  # "(app vsn) file:line" prefix as server frames - the version comes from
+  # ERTS.appVersions, keyed by the app named here.
   # Nil values are omitted rather than encoded as null.
   defp encode_module_metadata(module) do
     entries =
       if Code.ensure_loaded?(module) do
-        app = Application.get_application(module)
-        vsn = app && Application.spec(app, :vsn)
-
-        [app: app, file: Reflection.relative_source_path(module), vsn: vsn]
+        [app: Application.get_application(module), file: Reflection.relative_source_path(module)]
       else
         []
       end

@@ -1787,39 +1787,6 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, context) == expected
     end
-
-    test "emits module metadata for a loaded module", %{clauses: clauses} do
-      context = %Context{module: Hologram.Reflection}
-      vsn = Application.spec(:hologram, :vsn)
-
-      result =
-        encode_elixir_function("Hologram.Reflection", :fun_2, 1, :private, clauses, context)
-
-      assert String.ends_with?(
-               result,
-               ~s/, {app: "hologram", file: "lib\/hologram\/reflection.ex", vsn: "#{vsn}"});/
-             )
-    end
-
-    test "omits module metadata for a module that can't be loaded", %{clauses: clauses} do
-      context = %Context{module: Aaa.Bbb}
-
-      result = encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, context)
-
-      assert String.ends_with?(result, "}}]);")
-    end
-
-    test "omits module metadata when client stacktraces are disabled", %{clauses: clauses} do
-      Application.put_env(:hologram, :client_stacktraces, false)
-      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
-
-      context = %Context{module: Hologram.Reflection}
-
-      result =
-        encode_elixir_function("Hologram.Reflection", :fun_2, 1, :private, clauses, context)
-
-      assert String.ends_with?(result, "}}]);")
-    end
   end
 
   describe "encode_module_metadata_registration/1" do
@@ -1831,10 +1798,8 @@ defmodule Hologram.Compiler.EncoderTest do
     test "registers the metadata of each module the bundle defines" do
       Application.put_env(:hologram, :client_stacktraces, true)
 
-      vsn = to_string(Application.spec(:hologram, :vsn))
-
       assert encode_module_metadata_registration([Hologram.Reflection]) ==
-               ~s/ERTS.registerModuleMetadata({"Hologram.Reflection": {app: "hologram", file: "lib\/hologram\/reflection.ex", vsn: "#{vsn}"}});/
+               ~s/ERTS.registerModuleMetadata({"Hologram.Reflection": {app: "hologram", file: "lib\/hologram\/reflection.ex"}});/
     end
 
     test "registers nothing when client stacktraces are disabled" do

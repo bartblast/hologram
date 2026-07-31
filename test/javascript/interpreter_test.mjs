@@ -21,6 +21,7 @@ import {defineModule1Fixture as defineMatchOperatorModule1Fixture} from "./suppo
 
 import Bitstring from "../../assets/js/bitstring.mjs";
 import CallStack from "../../assets/js/erts/call_stack.mjs";
+import ERTS from "../../assets/js/erts.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
@@ -1016,6 +1017,7 @@ describe("Interpreter", () => {
     });
 
     afterEach(() => {
+      ERTS.moduleMetadata = {};
       globalThis.Hologram.config = {stacktraces: false};
     });
 
@@ -1089,13 +1091,11 @@ describe("Interpreter", () => {
       );
     });
 
-    it("the frame carries the file from the defining module's metadata", () => {
+    it("the frame carries the file the module registered", () => {
       let framesDuringCall;
 
-      Interpreter.defineElixirFunction("Iii.Jjj", "my_fun", 0, "public", [], {
-        app: "my_app",
-        file: "lib/iii/jjj.ex",
-        vsn: "1.0.0",
+      ERTS.registerModuleMetadata({
+        "Iii.Jjj": {app: "my_app", file: "lib/iii/jjj.ex"},
       });
 
       const fun = Type.anonymousFunction(
@@ -3200,6 +3200,10 @@ describe("Interpreter", () => {
   });
 
   describe("defineElixirFunction()", () => {
+    afterEach(() => {
+      ERTS.moduleMetadata = {};
+    });
+
     beforeEach(() => {
       // def my_fun_a(1), do: :expr_1
       // def my_fun_a(2), do: :expr_2
@@ -3435,21 +3439,16 @@ describe("Interpreter", () => {
     });
 
     it("the error frame carries the args in place of the arity, keeping the file", () => {
+      ERTS.registerModuleMetadata({"Aaa.Bbb": {file: "lib/aaa/bbb.ex"}});
+
       // def my_fun_g(1), do: :ok
-      Interpreter.defineElixirFunction(
-        "Aaa.Bbb",
-        "my_fun_g",
-        1,
-        "public",
-        [
-          {
-            params: (_context) => [Type.integer(1)],
-            guards: [],
-            body: (_context) => Type.atom("ok"),
-          },
-        ],
-        {file: "lib/aaa/bbb.ex"},
-      );
+      Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 1, "public", [
+        {
+          params: (_context) => [Type.integer(1)],
+          guards: [],
+          body: (_context) => Type.atom("ok"),
+        },
+      ]);
 
       CallStack.reset();
       globalThis.Hologram.config.stacktraces = true;
@@ -3689,26 +3688,23 @@ describe("Interpreter", () => {
         assert.deepStrictEqual(CallStack.snapshot(), []);
       });
 
-      it("the frame carries the file from the module metadata", () => {
+      it("the frame carries the file the module registered", () => {
         let framesDuringCall;
 
-        Interpreter.defineElixirFunction(
-          "Aaa.Bbb",
-          "my_fun_g",
-          0,
-          "public",
-          [
-            {
-              params: (_context) => [],
-              guards: [],
-              body: (_context) => {
-                framesDuringCall = CallStack.snapshot();
-                return Type.atom("ok");
-              },
+        ERTS.registerModuleMetadata({
+          "Aaa.Bbb": {app: "my_app", file: "lib/aaa/bbb.ex"},
+        });
+
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 0, "public", [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => {
+              framesDuringCall = CallStack.snapshot();
+              return Type.atom("ok");
             },
-          ],
-          {app: "my_app", file: "lib/aaa/bbb.ex", vsn: "1.0.0"},
-        );
+          },
+        ]);
 
         globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
 
@@ -3760,35 +3756,6 @@ describe("Interpreter", () => {
         globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
 
         assert.deepStrictEqual(framesDuringCall, []);
-      });
-    });
-
-    describe("module metadata", () => {
-      it("stores the metadata on the module proxy", () => {
-        const metadata = {app: "my_app", file: "lib/aaa/bbb.ex", vsn: "1.0.0"};
-
-        Interpreter.defineElixirFunction(
-          "Aaa.Bbb",
-          "my_fun_g",
-          0,
-          "public",
-          [],
-          metadata,
-        );
-
-        assert.equal(globalThis.Elixir_Aaa_Bbb.__metadata__, metadata);
-      });
-
-      it("defaults the metadata to an empty object when not provided", () => {
-        Interpreter.defineElixirFunction(
-          "Aaa.Bbb",
-          "my_fun_g",
-          0,
-          "public",
-          [],
-        );
-
-        assert.deepStrictEqual(globalThis.Elixir_Aaa_Bbb.__metadata__, {});
       });
     });
 
@@ -9247,11 +9214,6 @@ describe("Interpreter", () => {
           "Elixir_MyModuleExName",
         );
 
-        assert.deepStrictEqual(
-          globalThis.Elixir_MyModuleExName.__metadata__,
-          {},
-        );
-
         globalThis.Elixir_MyModuleExName["my_defined_fun/3"] = () =>
           "my_defined_fun/3 result";
 
@@ -9326,8 +9288,6 @@ describe("Interpreter", () => {
           globalThis.Erlang_My_Module.__jsName__,
           "Erlang_My_Module",
         );
-
-        assert.deepStrictEqual(globalThis.Erlang_My_Module.__metadata__, {});
 
         globalThis.Erlang_My_Module["my_defined_fun/3"] = () =>
           "my_defined_fun/3 result";
