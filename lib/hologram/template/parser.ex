@@ -309,6 +309,19 @@ defmodule Hologram.Template.Parser do
 
   # --- EXPRESSION ---
 
+  def parse_tokens(context, :expression, []) do
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Unclosed expression.
+
+      Hint:
+      Close the expression with '}' character.
+      """)
+
+    raise_error(details, context, :expression, nil, [])
+  end
+
   def parse_tokens(%{delimiter_stack: [delimiter | _tail]} = context, :expression, [
         {:symbol, "\#{"} = token | rest
       ])

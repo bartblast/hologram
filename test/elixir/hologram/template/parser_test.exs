@@ -2026,17 +2026,64 @@ defmodule Hologram.Template.ParserTest do
       expected_msg =
         normalize_newlines("""
         Reason:
-        Unknown reason.
+        Unclosed expression.
 
         Hint:
-        Please report that you received this message here: https://github.com/bartblast/hologram/issues
-        and include a markup snippet that will allow us to reproduce the issue.
+        Close the expression with '}' character.
 
         <div ...{@spread
                         ^
         """)
 
       test_syntax_error_msg("<div ...{@spread", expected_msg)
+    end
+
+    test "unclosed attribute value expression" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed expression.
+
+        Hint:
+        Close the expression with '}' character.
+
+        iv my_key={@my_value
+                            ^
+        """)
+
+      test_syntax_error_msg("<div my_key={@my_value", expected_msg)
+    end
+
+    test "unclosed expression in text" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed expression.
+
+        Hint:
+        Close the expression with '}' character.
+
+        {@my_value
+                  ^
+        """)
+
+      test_syntax_error_msg("{@my_value", expected_msg)
+    end
+
+    test "unclosed block start tag expression" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed expression.
+
+        Hint:
+        Close the expression with '}' character.
+
+        {%if @my_condition
+                          ^
+        """)
+
+      test_syntax_error_msg("{%if @my_condition", expected_msg)
     end
 
     test "unclosed start tag containing a spread" do
