@@ -704,6 +704,23 @@ defmodule Hologram.Template.DOMTest do
       end
     end)
 
+    test "spread with implicit keyword list, spanning multiple lines" do
+      tags = [
+        {:start_tag, {"div", [{:spread, "{\n  my_key_1: 1,\n  my_key_2: 2\n}"}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [spread: {:{}, [line: 1], [[my_key_1: 1, my_key_2: 2]]}],
+                  []
+                ]}
+             ]
+    end
+
     test "spread with implicit keyword list, starting with a key with double quotes" do
       tags = [
         {:start_tag, {"div", [{:spread, ~s'{"aaa bbb": 1, c: 2}'}]}},
@@ -1151,6 +1168,24 @@ defmodule Hologram.Template.DOMTest do
       tags = [{:expression, "{my_key!: 1, b: 2}"}]
 
       assert build_ast(tags) == [expression: {:{}, [line: 1], [[my_key!: 1, b: 2]]}]
+    end
+
+    test "with implicit keyword list, having whitespace after the opening curly bracket" do
+      tags = [{:expression, "{ my_key_1: 1, my_key_2: 2}"}]
+
+      assert build_ast(tags) == [expression: {:{}, [line: 1], [[my_key_1: 1, my_key_2: 2]]}]
+    end
+
+    test "with implicit keyword list, spanning multiple lines" do
+      tags = [{:expression, "{\n  my_key_1: 1,\n  my_key_2: 2\n}"}]
+
+      assert build_ast(tags) == [expression: {:{}, [line: 1], [[my_key_1: 1, my_key_2: 2]]}]
+    end
+
+    test "with implicit keyword list, having a newline after the colon" do
+      tags = [{:expression, "{my_key:\n  1}"}]
+
+      assert build_ast(tags) == [expression: {:{}, [line: 1], [[my_key: 1]]}]
     end
   end
 

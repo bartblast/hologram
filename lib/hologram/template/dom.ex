@@ -87,7 +87,7 @@ defmodule Hologram.Template.DOM do
   # Wraps implicit keyword list.
   # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
   defp normalize_implicit_keyword_list(templ_expr) do
-    regex = ~r/^\{(([a-zA-Z_][a-zA-Z0-9_]*[?!]?|"[^"]+"): .+)\}$/
+    regex = ~r/^\{\s*(([a-zA-Z_][a-zA-Z0-9_]*[?!]?|"[^"]+"):\s.+)\}$/s
 
     case Regex.run(regex, templ_expr) do
       [_full, content, _beginning] ->
