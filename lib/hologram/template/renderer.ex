@@ -255,6 +255,7 @@ defmodule Hologram.Template.Renderer do
 
   defp cast_props(props_dom, module) do
     props_dom
+    |> expand_prop_spreads()
     |> filter_allowed_props(module)
     |> Stream.map(&evaluate_prop_value/1)
     |> Stream.map(&normalize_prop_name/1)
@@ -313,7 +314,7 @@ defmodule Hologram.Template.Renderer do
   # the markup keep their authored position.
   defp expand_attribute({:spread, {value}}) do
     value
-    |> expand_spread(nil)
+    |> expand_spread_attributes(nil)
     |> Enum.sort_by(fn {name, _value_dom} -> name end)
   end
 
@@ -330,6 +331,25 @@ defmodule Hologram.Template.Renderer do
       |> dedupe_attributes()
     else
       attrs_dom
+    end
+  end
+
+  defp expand_prop(prop_dom)
+
+  defp expand_prop({:spread, {value}}), do: expand_spread_props(value)
+
+  defp expand_prop(prop_dom), do: [prop_dom]
+
+  # Spread entries are splatted into synthetic named props at the spread's position, so that
+  # everything downstream (filtering to declared props, name normalization, context injection,
+  # defaults, cid detection) is reached through the same path as props written literally in the
+  # markup. Names then resolve positionally, last one wins, which the final collapse into a map
+  # already does - no deduplication step is needed here.
+  defp expand_prop_spreads(props_dom) do
+    if Enum.any?(props_dom, &match?({:spread, _value}, &1)) do
+      Enum.flat_map(props_dom, &expand_prop/1)
+    else
+      props_dom
     end
   end
 
@@ -355,37 +375,35 @@ defmodule Hologram.Template.Renderer do
 
   defp expand_slots(node, _slots), do: node
 
-  defp expand_spread(value, name_prefix)
-
-  # Structs are maps, but their __struct__ key is not an attribute name.
-  defp expand_spread(%_struct{} = value, _name_prefix) do
-    raise_invalid_spread_value(value)
-  end
-
-  defp expand_spread(value, name_prefix) when is_map(value) do
-    Enum.flat_map(value, &expand_spread_entry(&1, name_prefix))
-  end
-
-  defp expand_spread(value, name_prefix) when is_list(value) do
-    if Keyword.keyword?(value) do
-      Enum.flat_map(value, &expand_spread_entry(&1, name_prefix))
-    else
-      raise_invalid_spread_value(value)
-    end
-  end
-
-  defp expand_spread(value, _name_prefix) do
-    raise_invalid_spread_value(value)
-  end
-
-  defp expand_spread_entry({key, value}, name_prefix) do
+  defp expand_spread_attribute({key, value}, name_prefix) do
     name = compose_attribute_name(key, name_prefix)
 
     if nested_spread_value?(value) do
-      expand_spread(value, name)
+      expand_spread_attributes(value, name)
     else
       [{name, [expression: {value}]}]
     end
+  end
+
+  defp expand_spread_attributes(value, name_prefix) do
+    value
+    |> spread_entries()
+    |> Enum.flat_map(&expand_spread_attribute(&1, name_prefix))
+  end
+
+  # Props live in the Elixir namespace, so unlike attribute names they are verbatim and flat - a map
+  # or keyword list entry value is simply a raw prop value, and doesn't compose a nested name.
+  defp expand_spread_props(value) do
+    value
+    |> spread_entries()
+    |> Enum.map(fn {key, entry_value} ->
+      name =
+        key
+        |> to_string()
+        |> validate_spread_key()
+
+      {name, [expression: {entry_value}]}
+    end)
   end
 
   defp filter_allowed_props(props_dom, module) do
@@ -615,6 +633,19 @@ defmodule Hologram.Template.Renderer do
     |> module.template().()
     |> render_dom(%Env{context: context, slots: [default: children_dom]}, server_struct)
   end
+
+  defp spread_entries(value)
+
+  # Structs are maps, but their __struct__ key is not a name.
+  defp spread_entries(%_struct{} = value), do: raise_invalid_spread_value(value)
+
+  defp spread_entries(value) when is_map(value), do: Enum.to_list(value)
+
+  defp spread_entries(value) when is_list(value) do
+    if Keyword.keyword?(value), do: value, else: raise_invalid_spread_value(value)
+  end
+
+  defp spread_entries(value), do: raise_invalid_spread_value(value)
 
   # Event bindings require compile-time modifier parsing and listener collection, so they can be
   # written only as literal attributes. Silently not binding an intended event would be worse than

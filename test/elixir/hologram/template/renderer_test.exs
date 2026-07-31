@@ -68,6 +68,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module80
   alias Hologram.Test.Fixtures.Template.Renderer.Module84
+  alias Hologram.Test.Fixtures.Template.Renderer.Module86
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
   @csrf_token "test-csrf-token"
@@ -778,6 +779,171 @@ defmodule Hologram.Template.RendererTest do
 
       assert {"prop_aaa = 987", _component_registry, _server_struct} =
                render_dom(node, @env, @server)
+    end
+  end
+
+  describe "component prop spread" do
+    test "map value" do
+      node = {:component, Module16, [{:spread, {%{prop_1: "my_value_1", prop_2: 2}}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;, prop_2: 2}', _registry,
+              _server_struct} = render_dom(node, @env, @server)
+    end
+
+    test "keyword list value" do
+      node = {:component, Module16, [{:spread, {[prop_1: "my_value_1", prop_2: 2]}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;, prop_2: 2}', _registry,
+              _server_struct} = render_dom(node, @env, @server)
+    end
+
+    test "string keys" do
+      node = {:component, Module16, [{:spread, {%{"prop_1" => "my_value_1"}}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    # Prop names live in the Elixir namespace, so they are not dasherized the way attributes are.
+    test "underscores in names are kept verbatim" do
+      node = {:component, Module86, [{:spread, {%{my_prop_1: "my_value_1"}}}], []}
+
+      assert {~s'component vars = %{my_prop_1: &quot;my_value_1&quot;}', _registry,
+              _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "undeclared keys are filtered out" do
+      node =
+        {:component, Module16, [{:spread, {%{prop_1: "my_value_1", undeclared: "my_value_2"}}}],
+         []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "values are passed as raw terms" do
+      node = {:component, Module64, [{:spread, {%{my_prop: {1, 2, 3}}}}], []}
+
+      assert render_dom(node, @env, @server) == {"my_prop = {1, 2, 3}", %{}, @server}
+    end
+
+    # Unlike the element branch, a map value doesn't recurse into composed names.
+    test "map value of an entry is a raw prop value" do
+      node = {:component, Module86, [{:spread, {%{my_prop_2: %{my_nested_key: 1}}}}], []}
+
+      assert {~s'component vars = %{my_prop_2: %{my_nested_key: 1}}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "keyword list value of an entry is a raw prop value" do
+      node = {:component, Module86, [{:spread, {%{my_prop_3: [my_nested_key: 1]}}}], []}
+
+      assert {~s'component vars = %{my_prop_3: [my_nested_key: 1]}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "nil value is passed as-is" do
+      node = {:component, Module86, [{:spread, {%{my_prop_1: nil}}}], []}
+
+      assert {"component vars = %{my_prop_1: nil}", _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "false value is passed as-is" do
+      node = {:component, Module86, [{:spread, {%{my_prop_1: false}}}], []}
+
+      assert {"component vars = %{my_prop_1: false}", _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "named prop before the spread is overridden" do
+      node =
+        {:component, Module16,
+         [{"prop_1", [text: "my_value_1"]}, {:spread, {%{prop_1: "my_value_2"}}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_2&quot;}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "named prop after the spread wins" do
+      node =
+        {:component, Module16,
+         [{:spread, {%{prop_1: "my_value_1"}}}, {"prop_1", [text: "my_value_2"]}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_2&quot;}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "later spread wins over an earlier one" do
+      node =
+        {:component, Module16,
+         [{:spread, {%{prop_1: "my_value_1"}}}, {:spread, {%{prop_1: "my_value_2"}}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_2&quot;}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "cid supplied through a spread initializes a stateful component" do
+      node = {:component, Module16, [{:spread, {%{cid: "my_component", prop_1: "my_value"}}}], []}
+
+      assert {~s'component vars = %{cid: &quot;my_component&quot;, prop_1: &quot;my_value&quot;}',
+              %{"my_component" => %{module: Module16, struct: %Component{}}}, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "declared default value is applied for a key not supplied by the spread" do
+      node = {:component, Module65, [{:spread, {%{prop_2: :my_value}}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;abc&quot;, prop_2: :my_value, prop_3: 123}',
+              _registry, _server_struct} = render_dom(node, @env, @server)
+    end
+
+    test "empty map value supplies no props" do
+      node = {:component, Module16, [{"prop_1", [text: "my_value_1"]}, {:spread, {%{}}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "raises for a nil value" do
+      node = {:component, Module16, [{:spread, {nil}}], []}
+
+      assert_raise ArgumentError,
+                   "spread value must be a map or a keyword list, got: nil",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a string value" do
+      node = {:component, Module16, [{:spread, {"my_string"}}], []}
+
+      assert_raise ArgumentError,
+                   ~s(spread value must be a map or a keyword list, got: "my_string"),
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a list which is not a keyword list" do
+      node = {:component, Module16, [{:spread, {[1, 2, 3]}}], []}
+
+      assert_raise ArgumentError,
+                   "spread value must be a map or a keyword list, got: [1, 2, 3]",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a struct value" do
+      node = {:component, Module16, [{:spread, {~D[2024-01-15]}}], []}
+
+      assert_raise ArgumentError,
+                   "spread value must be a map or a keyword list, got: ~D[2024-01-15]",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a '$'-prefixed key" do
+      node = {:component, Module16, [{:spread, {%{"$click" => :my_command}}}], []}
+
+      assert_raise ArgumentError,
+                   ~s(event bindings can't be set through a spread, got the "$click" key),
+                   fn -> render_dom(node, @env, @server) end
     end
   end
 
