@@ -9,11 +9,11 @@ defmodule HologramFeatureTests.StacktraceTest do
 
   # The lines the pinned frames point at, in app/pages/stacktrace_page.ex and
   # app/stacktrace_fixture.ex.
-  @anonymous_call_line 47
-  @anonymous_raise_line 42
-  @fixture_raise_line 3
-  @local_call_line 58
-  @remote_call_line 73
+  @anonymous_call_line 51
+  @anonymous_raise_line 46
+  @fixture_raise_line 6
+  @local_call_line 62
+  @remote_call_line 77
 
   # The raising frame reports the raise expression's line and carries the
   # error_info naming the exception formatter. Each caller frame below it

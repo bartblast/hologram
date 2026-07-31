@@ -6,6 +6,10 @@ defmodule HologramFeatureTests.StacktracePage do
 
   alias HologramFeatureTests.StacktraceFixture
 
+  # The scenarios raise on every path, so the functions carrying them never return.
+  @dialyzer {:no_return, action: 3}
+  @dialyzer {:no_return, local_fun: 1}
+
   route "/stacktrace"
 
   layout HologramFeatureTests.Components.DefaultLayout
