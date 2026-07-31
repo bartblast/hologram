@@ -38,10 +38,12 @@ usable =
 
 IO.puts("Usable codepoints: #{length(usable)}")
 
+usable_set = MapSet.new(usable)
+
 unusable_sample =
   0..0x10FFFF
   |> Enum.take_every(97)
-  |> Enum.reject(&(&1 in MapSet.new(usable)))
+  |> Enum.reject(&(&1 in usable_set))
 
 signature_reps =
   scriptsets_file
