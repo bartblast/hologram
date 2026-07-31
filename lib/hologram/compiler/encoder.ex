@@ -176,7 +176,7 @@ defmodule Hologram.Compiler.Encoder do
     call = "Interpreter.callAnonymousFunction(#{function_js}, #{args_js})"
     awaited_call = if context.async?, do: "(await #{call})", else: call
 
-    encode_with_frame_line(awaited_call, line, context)
+    maybe_encode_frame_line(awaited_call, line, context)
   end
 
   def encode_ir(
@@ -255,7 +255,7 @@ defmodule Hologram.Compiler.Encoder do
     segments
     |> encode_bitstring_segments(context)
     |> StringUtils.wrap("Type.bitstring([", "])")
-    |> encode_with_frame_line(line, context)
+    |> maybe_encode_frame_line(line, context)
   end
 
   def encode_ir(%IR.Block{} = block, %{async?: true} = context) do
@@ -282,7 +282,7 @@ defmodule Hologram.Compiler.Encoder do
         "Interpreter.case(#{condition_js}, #{clauses_js}, context)"
       end
 
-    encode_with_frame_line(call, line, context)
+    maybe_encode_frame_line(call, line, context)
   end
 
   def encode_ir(%IR.Clause{} = clause, context) do
@@ -306,7 +306,7 @@ defmodule Hologram.Compiler.Encoder do
         "Interpreter.comprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context)"
       end
 
-    encode_with_frame_line(call, comprehension.line, context)
+    maybe_encode_frame_line(call, comprehension.line, context)
   end
 
   def encode_ir(%IR.Comprehension{} = comprehension, context) do
@@ -323,7 +323,7 @@ defmodule Hologram.Compiler.Encoder do
         "Interpreter.comprehensionReduce(#{qualifiers}, #{initial_value}, #{clauses}, context)"
       end
 
-    encode_with_frame_line(call, comprehension.line, context)
+    maybe_encode_frame_line(call, comprehension.line, context)
   end
 
   def encode_ir(%IR.Cond{clauses: clauses_ir, line: line}, context) do
@@ -336,7 +336,7 @@ defmodule Hologram.Compiler.Encoder do
         "Interpreter.cond(#{clauses_js}, context)"
       end
 
-    encode_with_frame_line(call, line, context)
+    maybe_encode_frame_line(call, line, context)
   end
 
   def encode_ir(%IR.CondClause{condition: condition_ir, body: body_ir}, context) do
@@ -358,7 +358,7 @@ defmodule Hologram.Compiler.Encoder do
     left_js = encode_ir(left, context)
     right_js = encode_ir(right, context)
 
-    encode_with_frame_line("Interpreter.dotOperator(#{left_js}, #{right_js})", line, context)
+    maybe_encode_frame_line("Interpreter.dotOperator(#{left_js}, #{right_js})", line, context)
   end
 
   def encode_ir(%IR.FloatType{value: value}, _context) do
@@ -407,7 +407,7 @@ defmodule Hologram.Compiler.Encoder do
 
     module_ir
     |> encode_named_function_call(function, args, context)
-    |> encode_with_frame_line(line, context)
+    |> maybe_encode_frame_line(line, context)
   end
 
   def encode_ir(%IR.MapType{data: data}, context) do
@@ -426,14 +426,22 @@ defmodule Hologram.Compiler.Encoder do
     left = encode_ir(left, %{context | pattern?: true})
     right = encode_ir(right, context)
 
-    encode_with_frame_line("Interpreter.matchOperator(#{right}, #{left}, context)", line, context)
+    maybe_encode_frame_line(
+      "Interpreter.matchOperator(#{right}, #{left}, context)",
+      line,
+      context
+    )
   end
 
   def encode_ir(%IR.MatchOperator{left: left, right: right, line: line}, context) do
     left = encode_ir(left, %{context | match_operator?: true, pattern?: true})
     right = encode_ir(right, %{context | match_operator?: true})
 
-    encode_with_frame_line("Interpreter.matchOperator(#{right}, #{left}, context)", line, context)
+    maybe_encode_frame_line(
+      "Interpreter.matchOperator(#{right}, #{left}, context)",
+      line,
+      context
+    )
   end
 
   def encode_ir(%IR.MatchPlaceholder{}, _context) do
@@ -518,7 +526,7 @@ defmodule Hologram.Compiler.Encoder do
       ) do
     module
     |> encode_named_function_call(function, args, context)
-    |> encode_with_frame_line(line, context)
+    |> maybe_encode_frame_line(line, context)
   end
 
   # __STACKTRACE__ - the interpreter binds the boxed trace captured on the
@@ -550,7 +558,7 @@ defmodule Hologram.Compiler.Encoder do
         "Interpreter.try(#{args_js})"
       end
 
-    encode_with_frame_line(call, ir.line, context)
+    maybe_encode_frame_line(call, ir.line, context)
   end
 
   def encode_ir(%IR.TryCatchClause{} = ir, context) do
@@ -609,7 +617,7 @@ defmodule Hologram.Compiler.Encoder do
         "Interpreter.with(#{body_js}, #{clauses_js}, #{else_clauses_js}, context)"
       end
 
-    encode_with_frame_line(call, line, context)
+    maybe_encode_frame_line(call, line, context)
   end
 
   def encode_ir(%IR.WithBareClause{expression: expression}, context) do
@@ -1054,22 +1062,6 @@ defmodule Hologram.Compiler.Encoder do
     encode_as_string(name, false) <> "_#{version}"
   end
 
-  # A stacktrace frame reports the line the function currently running has
-  # reached, so each call records its own line before it is made - the way the
-  # BEAM does it. A call the AST gave no line to records nothing, and the frame
-  # keeps the line it already had.
-  defp encode_with_frame_line(js, nil, _context), do: js
-
-  defp encode_with_frame_line(js, _line, %Context{guard?: true}), do: js
-
-  defp encode_with_frame_line(js, line, _context) do
-    if Hologram.client_stacktraces?() do
-      "(Interpreter.setFrameLine(#{line}), #{js})"
-    else
-      js
-    end
-  end
-
   defp escape_non_printable_and_special_chars(str)
 
   defp escape_non_printable_and_special_chars("\\" <> rest) do
@@ -1170,6 +1162,22 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp has_match_operator?(_ast), do: false
+
+  # A stacktrace frame reports the line the function currently running has
+  # reached, so each call records its own line before it is made - the way the
+  # BEAM does it. A call the AST gave no line to records nothing, and the frame
+  # keeps the line it already had.
+  defp maybe_encode_frame_line(js, nil, _context), do: js
+
+  defp maybe_encode_frame_line(js, _line, %Context{guard?: true}), do: js
+
+  defp maybe_encode_frame_line(js, line, _context) do
+    if Hologram.client_stacktraces?() do
+      "(Interpreter.setFrameLine(#{line}), #{js})"
+    else
+      js
+    end
+  end
 
   # Parses NEWER_REFERENCE_EXT binary format to extract node name, creation number, and ID words
   # See: https://www.erlang.org/doc/apps/erts/erl_ext_dist.html
