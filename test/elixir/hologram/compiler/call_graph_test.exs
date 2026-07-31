@@ -2454,6 +2454,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ~s/:erlang.error(:badarg, [:a], error_info: %{module: MyFormatter, function: :my_format_error})/
 
       assert IR.for_code(code, %Context{}) == %IR.RemoteFunctionCall{
+               line: 1,
                module: %IR.AtomType{value: :erlang},
                function: :error,
                args: [
@@ -2707,9 +2708,12 @@ defmodule Hologram.Compiler.CallGraphTest do
          %{ir_plt: ir_plt} do
       assert [fun_def] = find_fun_defs(ir_plt, Date, :new, 3)
 
-      # The clause line points into Elixir's own source, so its value depends on
-      # the Elixir version - neutralize it before the exact comparison.
-      fun_def = %{fun_def | clause: %{fun_def.clause | line: nil}}
+      # The clause and the call in its body point into Elixir's own source, so
+      # their lines depend on the Elixir version - neutralize them before the
+      # exact comparison.
+      [call] = fun_def.clause.body.expressions
+      body = %{fun_def.clause.body | expressions: [%{call | line: nil}]}
+      fun_def = %{fun_def | clause: %{fun_def.clause | line: nil, body: body}}
 
       assert fun_def == %IR.FunctionDefinition{
                name: :new,
@@ -4688,14 +4692,16 @@ defmodule Hologram.Compiler.CallGraphTest do
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :is_atom,
-                     args: [%IR.Variable{name: :x, version: -1}]
+                     args: [%IR.Variable{name: :x, version: -1}],
+                     line: 2
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
                      %IR.LocalFunctionCall{
                        function: :struct_impl_for,
-                       args: [%IR.Variable{name: :x, version: -1}]
+                       args: [%IR.Variable{name: :x, version: -1}],
+                       line: 2
                      }
                    ]
                  },
@@ -4713,7 +4719,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :is_integer,
-                     args: [%IR.Variable{name: :x, version: -1}]
+                     args: [%IR.Variable{name: :x, version: -1}],
+                     line: 2
                    }
                  ],
                  body: %IR.Block{
@@ -4819,7 +4826,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                      %IR.Case{
                        condition: %IR.LocalFunctionCall{
                          function: :impl_for,
-                         args: [%IR.Variable{name: :data, version: 0}]
+                         args: [%IR.Variable{name: :data, version: 0}],
+                         line: 2
                        },
                        clauses: [
                          %IR.Clause{
@@ -4835,7 +4843,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                                    args: [
                                      %IR.Variable{name: :x, version: 1},
                                      %IR.AtomType{value: false}
-                                   ]
+                                   ],
+                                   line: 2
                                  },
                                  %IR.RemoteFunctionCall{
                                    module: %IR.AtomType{value: :erlang},
@@ -4843,9 +4852,11 @@ defmodule Hologram.Compiler.CallGraphTest do
                                    args: [
                                      %IR.Variable{name: :x, version: 1},
                                      %IR.AtomType{value: nil}
-                                   ]
+                                   ],
+                                   line: 2
                                  }
-                               ]
+                               ],
+                               line: 2
                              }
                            ],
                            body: %IR.Block{
@@ -4859,9 +4870,11 @@ defmodule Hologram.Compiler.CallGraphTest do
                                      function: :exception,
                                      args: [
                                        %IR.ListType{data: exception_keyword_data}
-                                     ]
+                                     ],
+                                     line: 2
                                    }
-                                 ]
+                                 ],
+                                 line: 2
                                }
                              ]
                            }

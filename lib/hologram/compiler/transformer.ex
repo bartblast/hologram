@@ -31,10 +31,11 @@ defmodule Hologram.Compiler.Transformer do
   @spec transform(AST.t(), Context.t()) :: IR.t()
   def transform(ast, context)
 
-  def transform({{:., _meta_2, [function]}, _meta_1, args}, context) do
+  def transform({{:., _meta_2, [function]}, meta_1, args}, context) do
     %IR.AnonymousFunctionCall{
       function: transform(function, context),
-      args: transform_list(args, context)
+      args: transform_list(args, context),
+      line: meta_1[:line]
     }
   end
 
@@ -247,7 +248,7 @@ defmodule Hologram.Compiler.Transformer do
         right: transform(right, context)
       }
     else
-      transform_remote_function_call(left, right, [], context)
+      transform_remote_function_call(left, right, [], meta, context)
     end
   end
 
@@ -294,14 +295,15 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Map with cons operator is transformed to Map.merge/2 remote function call.
-  def transform({:%{}, _meta_1, [{:|, _meta_2, [map_1, data_2]}]}, context) do
+  def transform({:%{}, meta_1, [{:|, _meta_2, [map_1, data_2]}]}, context) do
     %IR.RemoteFunctionCall{
       module: %IR.AtomType{value: Map},
       function: :merge,
       args: [
         transform(map_1, context),
         transform({:%{}, [], data_2}, context)
-      ]
+      ],
+      line: meta_1[:line]
     }
   end
 
@@ -366,7 +368,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Struct with cons operator is transformed to nested Map.merge/2 and __struct__/1 remote function calls.
-  def transform({:%, _meta_1, [module, {:%{}, _meta_2, [{:|, _meta_3, [map, data]}]}]}, context) do
+  def transform({:%, meta_1, [module, {:%{}, _meta_2, [{:|, _meta_3, [map, data]}]}]}, context) do
     %IR.RemoteFunctionCall{
       module: %IR.AtomType{value: Map},
       function: :merge,
@@ -375,9 +377,11 @@ defmodule Hologram.Compiler.Transformer do
         %IR.RemoteFunctionCall{
           module: transform(module, context),
           function: :__struct__,
-          args: [transform(data, context)]
+          args: [transform(data, context)],
+          line: meta_1[:line]
         }
-      ]
+      ],
+      line: meta_1[:line]
     }
   end
 
@@ -389,13 +393,14 @@ defmodule Hologram.Compiler.Transformer do
 
   # Struct without cons operator not in a pattern is transformed to __struct__/1 remote function call.
   def transform(
-        {:%, _meta_1, [module, {:%{}, _meta_2, data}]},
+        {:%, meta_1, [module, {:%{}, _meta_2, data}]},
         %Context{pattern?: false} = context
       ) do
     %IR.RemoteFunctionCall{
       module: transform(module, context),
       function: :__struct__,
-      args: [transform(data, context)]
+      args: [transform(data, context)],
+      line: meta_1[:line]
     }
   end
 
@@ -452,8 +457,8 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- PRESERVE ORDER (BEGIN) ---
 
-  def transform({{:., _meta_2, [module, function]}, _meta_1, args}, context) do
-    transform_remote_function_call(module, function, args, context)
+  def transform({{:., _meta_2, [module, function]}, meta_1, args}, context) do
+    transform_remote_function_call(module, function, args, meta_1, context)
   end
 
   # __STACKTRACE__ is a special form available inside rescue/catch clauses.
@@ -467,10 +472,11 @@ defmodule Hologram.Compiler.Transformer do
     transform_variable(name, meta)
   end
 
-  def transform({function, _meta, args}, context) when is_atom(function) and is_list(args) do
+  def transform({function, meta, args}, context) when is_atom(function) and is_list(args) do
     %IR.LocalFunctionCall{
       function: function,
-      args: transform_list(args, context)
+      args: transform_list(args, context),
+      line: meta[:line]
     }
   end
 
@@ -871,11 +877,12 @@ defmodule Hologram.Compiler.Transformer do
     end)
   end
 
-  defp transform_remote_function_call(module, function, args, context) do
+  defp transform_remote_function_call(module, function, args, meta, context) do
     %IR.RemoteFunctionCall{
       module: transform(module, context),
       function: function,
-      args: transform_list(args, context)
+      args: transform_list(args, context),
+      line: meta[:line]
     }
   end
 

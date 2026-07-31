@@ -106,7 +106,8 @@ defmodule Hologram.Compiler.IRTest do
                     args: [
                       %IR.Variable{name: :x, version: 0},
                       %IR.Variable{name: :y, version: 1}
-                    ]
+                    ],
+                    line: 4
                   }
                 ]
               },
@@ -141,7 +142,8 @@ defmodule Hologram.Compiler.IRTest do
                               args: [
                                 %IR.Variable{name: :"$1"},
                                 %IR.Variable{name: :"$2"}
-                              ]
+                              ],
+                              line: 7
                             }
                           ]
                         },

@@ -61,9 +61,12 @@ defmodule Hologram.Compiler.IR do
   defmodule AnonymousFunctionCall do
     @moduledoc false
 
-    defstruct [:function, :args]
+    # line is the call's line in the module's source file, or nil when the AST
+    # metadata carries none. A stacktrace frame reports the line of the call
+    # being made, which is how the BEAM records it.
+    defstruct [:function, :args, :line]
 
-    @type t :: %__MODULE__{function: IR.t(), args: list(IR.t())}
+    @type t :: %__MODULE__{function: IR.t(), args: list(IR.t()), line: integer | nil}
   end
 
   defmodule AnonymousFunctionType do
@@ -272,9 +275,10 @@ defmodule Hologram.Compiler.IR do
   defmodule LocalFunctionCall do
     @moduledoc false
 
-    defstruct [:function, :args]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:function, :args, :line]
 
-    @type t :: %__MODULE__{function: atom, args: list(IR.t())}
+    @type t :: %__MODULE__{function: atom, args: list(IR.t()), line: integer | nil}
   end
 
   defmodule MapType do
@@ -352,9 +356,15 @@ defmodule Hologram.Compiler.IR do
   defmodule RemoteFunctionCall do
     @moduledoc false
 
-    defstruct [:module, :function, :args]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:module, :function, :args, :line]
 
-    @type t :: %__MODULE__{module: IR.t(), function: atom, args: list(IR.t())}
+    @type t :: %__MODULE__{
+            module: IR.t(),
+            function: atom,
+            args: list(IR.t()),
+            line: integer | nil
+          }
   end
 
   defmodule Stacktrace do
