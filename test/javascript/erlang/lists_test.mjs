@@ -550,30 +550,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first arg is an anonymous function with arity different than 1", () => {
-      const anonymousCompareFn = Type.anonymousFunction(
-        2,
-        [
-          {
-            params: (_context) => [
-              Type.variablePattern("x"),
-              Type.variablePattern("y"),
-            ],
-            guards: [],
-            body: (context) => {
-              return Erlang["==/2"](context.vars.x, context.vars.y);
-            },
-          },
-        ],
-        contextFixture(),
-      );
-
       assertBoxedError(
         () => any(funArity2, properList),
         "FunctionClauseError",
-        buildFunctionClauseErrorMsg(":lists.any/2", [
-          anonymousCompareFn,
-          properList,
-        ]),
+        buildFunctionClauseErrorMsg(":lists.any/2", [funArity2, properList]),
       );
     });
 

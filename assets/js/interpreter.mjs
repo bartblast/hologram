@@ -2015,7 +2015,22 @@ export default class Interpreter {
       return `&${term.capturedModule}.${term.capturedFunction}/${term.arity}`;
     }
 
-    return `anonymous function fn/${term.arity}`;
+    const moduleName = Interpreter.moduleExName(term.context.module);
+
+    // The two numbers are the fun's index and the uniq of the code it was
+    // defined in, taken from the same source :erlang.fun_info/1 reports them.
+    const id = `${term.uniq}.${term.uniq}`;
+
+    // A fun defined outside of any function definition carries no name, and is
+    // then shown by its defining module alone.
+    // TODO: quote the definition name when it isn't a valid identifier,
+    // e.g. a fun defined in a test, named "test my example/1"
+    const definition =
+      term.name === null
+        ? ""
+        : "." + term.name.replace(/^-/, "").replace(/-fun-\d+-$/, "");
+
+    return `#Function<${id}/${term.arity} in ${moduleName}${definition}>`;
   }
 
   // TODO: handle correctly atoms which need to be double quoted, e.g. :"1"

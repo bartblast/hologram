@@ -161,13 +161,17 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
   end
 
   describe "inspect" do
-    # Client result for non-capture anonymous function is intentionally different than server result.
+    # The numbers identifying the fun are runtime-specific, so they are matched loosely,
+    # the same way the JavaScript test matches the client's.
     test "anonymous function, non-capture" do
       anon_fun = fn x, y -> x + y * x end
 
-      Kernel.inspect(anon_fun, []) =~
-        ~r'#Function<[0-9]+\.[0-9]/2 in Hologram\.ExJsConsistency\.InterpreterTest\."test inspect/2 anonymous function, non-capture"/1>'
+      assert Kernel.inspect(anon_fun, []) =~
+               ~r'^#Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.InterpreterTest\."test inspect anonymous function, non-capture"/1>$'
     end
+
+    # Case not possible on the server - every fun there is defined inside a function definition.
+    # test "anonymous function, non-capture, defined outside of a function definition"
 
     test "anonymous function, local function capture" do
       assert Kernel.inspect(&my_local_fun/2, []) =~

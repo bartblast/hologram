@@ -4252,11 +4252,30 @@ describe("Interpreter", () => {
       const clauses = ["clause_dummy_1", "clause_dummy_2"];
       const context = contextFixture();
 
-      // Client result for non-capture anonymous function is intentionally different than server result.
+      // The numbers identifying the fun are client-specific, so they are matched loosely,
+      // the same way the Elixir consistency test matches the server's.
       it("non-capture", () => {
+        const anonFun = Type.anonymousFunction(
+          2,
+          clauses,
+          context,
+          "-my_fun/1-fun-0-",
+        );
+
+        assert.match(
+          Interpreter.inspect(anonFun),
+          /^#Function<\d+\.\d+\/2 in MyModule\.my_fun\/1>$/,
+        );
+      });
+
+      // Case not possible on the server - every fun there is defined inside a function definition.
+      it("non-capture, defined outside of a function definition", () => {
         const anonFun = Type.anonymousFunction(2, clauses, context);
 
-        assert.equal(Interpreter.inspect(anonFun), "anonymous function fn/2");
+        assert.match(
+          Interpreter.inspect(anonFun),
+          /^#Function<\d+\.\d+\/2 in MyModule>$/,
+        );
       });
 
       // Case not possible on the client - function captures are always encoded as remote function captures.

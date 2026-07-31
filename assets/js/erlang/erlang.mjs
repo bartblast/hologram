@@ -2067,7 +2067,8 @@ const Erlang = {
       }),
     ]);
 
-    const name = Type.atom(Interpreter.inspect(fun));
+    // A fun defined outside of any function definition carries no name.
+    const name = Type.atom(fun.name ?? "");
     const pid = ERTS.INIT_PID;
 
     return Type.list([

@@ -7610,6 +7610,7 @@ describe("Erlang", () => {
         contextFixture({
           module: "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
         }),
+        "-test fun_info/1 local function, arity 0, empty env/1-fun-0-",
       );
 
       const result = fun_info(fun);
@@ -7632,7 +7633,12 @@ describe("Erlang", () => {
         ]),
         Type.tuple([Type.atom("index"), Type.integer(1)]),
         Type.tuple([Type.atom("uniq"), Type.integer(1)]),
-        Type.tuple([Type.atom("name"), Type.atom("anonymous function fn/0")]),
+        Type.tuple([
+          Type.atom("name"),
+          Type.atom(
+            "-test fun_info/1 local function, arity 0, empty env/1-fun-0-",
+          ),
+        ]),
         Type.tuple([Type.atom("arity"), Type.integer(0)]),
         Type.tuple([Type.atom("env"), Type.list()]),
         Type.tuple([Type.atom("type"), Type.atom("local")]),
@@ -7656,6 +7662,7 @@ describe("Erlang", () => {
           module: "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
           vars: {my_var: Type.integer(123)},
         }),
+        "-test fun_info/1 local function, arity 1, closure reference/1-fun-0-",
       );
 
       const result = fun_info(fun);
@@ -7678,7 +7685,12 @@ describe("Erlang", () => {
         ]),
         Type.tuple([Type.atom("index"), Type.integer(1)]),
         Type.tuple([Type.atom("uniq"), Type.integer(1)]),
-        Type.tuple([Type.atom("name"), Type.atom("anonymous function fn/1")]),
+        Type.tuple([
+          Type.atom("name"),
+          Type.atom(
+            "-test fun_info/1 local function, arity 1, closure reference/1-fun-0-",
+          ),
+        ]),
         Type.tuple([Type.atom("arity"), Type.integer(1)]),
         Type.tuple([Type.atom("env"), Type.list([Type.integer(123)])]),
         Type.tuple([Type.atom("type"), Type.atom("local")]),
@@ -7711,6 +7723,7 @@ describe("Erlang", () => {
           module: "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
           vars: {var_a: Type.integer(10), var_b: Type.integer(20)},
         }),
+        "-test fun_info/1 local function, arity 2, multiple closure references/1-fun-0-",
       );
 
       const result = fun_info(fun);
@@ -7733,7 +7746,12 @@ describe("Erlang", () => {
         ]),
         Type.tuple([Type.atom("index"), Type.integer(1)]),
         Type.tuple([Type.atom("uniq"), Type.integer(1)]),
-        Type.tuple([Type.atom("name"), Type.atom("anonymous function fn/2")]),
+        Type.tuple([
+          Type.atom("name"),
+          Type.atom(
+            "-test fun_info/1 local function, arity 2, multiple closure references/1-fun-0-",
+          ),
+        ]),
         Type.tuple([Type.atom("arity"), Type.integer(2)]),
         Type.tuple([
           Type.atom("env"),
