@@ -312,7 +312,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
 
     # TODO: maps / structs
 
-    assert "PID" do
+    test "PID" do
       result =
         "0.11.222"
         |> pid()
@@ -321,7 +321,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert result == "#PID<0.11.222>"
     end
 
-    assert "port" do
+    test "port" do
       result =
         "0.11"
         |> port()
@@ -330,7 +330,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert result == "#Port<0.11>"
     end
 
-    assert "reference" do
+    test "reference" do
       result =
         "0.1.2.3"
         |> ref()

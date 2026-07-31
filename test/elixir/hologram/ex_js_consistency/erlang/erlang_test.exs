@@ -5332,7 +5332,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "integer_to_binary/1" do
-    assert :erlang.integer_to_binary(123_123) == :erlang.integer_to_binary(123_123, 10)
+    test "delegates to integer_to_binary/2" do
+      assert :erlang.integer_to_binary(123_123) == :erlang.integer_to_binary(123_123, 10)
+    end
 
     test "error frame carries args and error_info" do
       arg = wrap_term(:a)
