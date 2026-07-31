@@ -26,6 +26,14 @@ defmodule Hologram.Template.Parser do
                          and include a markup snippet that will allow us to reproduce the issue.
                          """)
 
+  @dynamic_tag_inside_raw_block_details StringUtils.normalize_newlines("""
+                                        Reason:
+                                        Dynamic tag inside raw block detected.
+
+                                        Hint:
+                                        Remove the parent raw block to use the dynamic tag syntax.
+                                        """)
+
   @unescaped_lt_char_details StringUtils.normalize_newlines("""
                              Reason:
                              Unescaped '<' character inside text node.
@@ -95,7 +103,14 @@ defmodule Hologram.Template.Parser do
             block_name: String.t() | nil,
             delimiter_stack: list(delimiter),
             node_type:
-              :attribute | :block | :dynamic_tag | :public_comment | :spread | :tag | :text,
+              :attribute
+              | :block
+              | :dynamic_end_tag
+              | :dynamic_start_tag
+              | :public_comment
+              | :spread
+              | :tag
+              | :text,
             prev_status: Parser.status() | nil,
             processed_tags: list(Parser.parsed_tag()),
             processed_tokens: list(Tokenizer.token()),
@@ -439,7 +454,23 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse_tokens(
-        %{delimiter_stack: [:expression], node_type: :dynamic_tag} = context,
+        %{delimiter_stack: [:expression], node_type: :dynamic_end_tag} = context,
+        :expression,
+        [{:symbol, "}"} = token | rest]
+      ) do
+    context
+    |> buffer_token(token)
+    |> add_processed_token(token)
+    |> set_expression_tag_name()
+    |> reset_token_buffer()
+    |> pop_delimiter_stack()
+    |> set_prev_status(:expression)
+    |> set_node_type(:text)
+    |> parse_tokens(:end_tag, rest)
+  end
+
+  def parse_tokens(
+        %{delimiter_stack: [:expression], node_type: :dynamic_start_tag} = context,
         :expression,
         [{:symbol, "}"} = token | rest]
       ) do
@@ -909,6 +940,27 @@ defmodule Hologram.Template.Parser do
     parse_text(context, token, rest)
   end
 
+  # Dynamic end tags are recognized in script mode, just like static end tags are.
+  def parse_tokens(%{node_type: :text, raw?: false} = context, :text, [
+        {:symbol, "</"} = token,
+        {:symbol, "{"} = expression_token | rest
+      ]) do
+    parse_dynamic_tag_name(context, :dynamic_end_tag, token, expression_token, rest)
+  end
+
+  def parse_tokens(%{node_type: :text, raw?: true} = context, :text, [
+        {:symbol, "</"} = token,
+        {:symbol, "{"} = expression_token | rest
+      ]) do
+    raise_error(
+      @dynamic_tag_inside_raw_block_details,
+      context,
+      :text,
+      token,
+      [expression_token | rest]
+    )
+  end
+
   def parse_tokens(%{node_type: :text} = context, :text, [{:symbol, "</"} = token | rest]) do
     context
     |> maybe_add_text_tag()
@@ -923,30 +975,20 @@ defmodule Hologram.Template.Parser do
         {:symbol, "<"} = token,
         {:symbol, "{"} = expression_token | rest
       ]) do
-    context
-    |> maybe_add_text_tag()
-    |> reset_token_buffer()
-    |> add_processed_token(token)
-    |> set_prev_status(:text)
-    |> set_node_type(:dynamic_tag)
-    |> push_delimiter_stack(:expression)
-    |> parse_expression(expression_token, rest)
+    parse_dynamic_tag_name(context, :dynamic_start_tag, token, expression_token, rest)
   end
 
   def parse_tokens(%{node_type: :text, raw?: true, script?: false} = context, :text, [
         {:symbol, "<"} = token,
         {:symbol, "{"} = expression_token | rest
       ]) do
-    details =
-      StringUtils.normalize_newlines("""
-      Reason:
-      Dynamic tag inside raw block detected.
-
-      Hint:
-      Remove the parent raw block to use the dynamic tag syntax.
-      """)
-
-    raise_error(details, context, :text, token, [expression_token | rest])
+    raise_error(
+      @dynamic_tag_inside_raw_block_details,
+      context,
+      :text,
+      token,
+      [expression_token | rest]
+    )
   end
 
   def parse_tokens(%{node_type: :text, script?: false} = context, :text, [
@@ -1187,6 +1229,17 @@ defmodule Hologram.Template.Parser do
     |> buffer_token({:symbol, "{"})
     |> set_prev_status(:block_start)
     |> parse_tokens(:expression, rest)
+  end
+
+  defp parse_dynamic_tag_name(context, node_type, token, expression_token, rest) do
+    context
+    |> maybe_add_text_tag()
+    |> reset_token_buffer()
+    |> add_processed_token(token)
+    |> set_prev_status(:text)
+    |> set_node_type(node_type)
+    |> push_delimiter_stack(:expression)
+    |> parse_expression(expression_token, rest)
   end
 
   defp parse_expression(context, token, rest) do

@@ -424,7 +424,7 @@ defmodule Hologram.Template.ParserTest do
              ]
     end
 
-    test "not recognized inside script" do
+    test "start tag not recognized inside script" do
       assert parse_markup("<script><{@module}</script>") == [
                start_tag: {"script", []},
                text: "<",
@@ -433,10 +433,138 @@ defmodule Hologram.Template.ParserTest do
              ]
     end
 
-    test "not recognized inside public comment" do
+    test "start tag not recognized inside public comment" do
       assert parse_markup("<!--<{@module}-->") == [
                :public_comment_start,
                {:text, "<"},
+               {:expression, "{@module}"},
+               :public_comment_end
+             ]
+    end
+
+    test "end tag" do
+      assert parse_markup("</{@module}>") == [end_tag: {:expression, "{@module}"}]
+    end
+
+    test "whitespaces after end tag expression" do
+      assert parse_markup("</{@module} \n\r\t>") == [end_tag: {:expression, "{@module}"}]
+    end
+
+    test "whitespaces in end tag expression" do
+      assert parse_markup("</{ \n\r\t@module \n\r\t}>") == [
+               end_tag: {:expression, "{ \n\r\t@module \n\r\t}"}
+             ]
+    end
+
+    test "nested curly brackets in end tag expression" do
+      assert parse_markup("</{%{my_key: %{my_nested_key: @module}}}>") == [
+               end_tag: {:expression, "{%{my_key: %{my_nested_key: @module}}}"}
+             ]
+    end
+
+    test "curly brackets inside double quotes in end tag expression" do
+      assert parse_markup(~s(</{@modules["{}"]}>)) == [
+               end_tag: {:expression, ~s({@modules["{}"]})}
+             ]
+    end
+
+    test "paired start and end tags" do
+      assert parse_markup("<{@module}></{@module}>") == [
+               start_tag: {{:expression, "{@module}"}, []},
+               end_tag: {:expression, "{@module}"}
+             ]
+    end
+
+    test "with text content" do
+      assert parse_markup("<{@module}>abc</{@module}>") == [
+               start_tag: {{:expression, "{@module}"}, []},
+               text: "abc",
+               end_tag: {:expression, "{@module}"}
+             ]
+    end
+
+    test "with expression content" do
+      assert parse_markup("<{@module}>{@content}</{@module}>") == [
+               start_tag: {{:expression, "{@module}"}, []},
+               expression: "{@content}",
+               end_tag: {:expression, "{@module}"}
+             ]
+    end
+
+    test "with element content" do
+      assert parse_markup("<{@module}><span>abc</span></{@module}>") == [
+               start_tag: {{:expression, "{@module}"}, []},
+               start_tag: {"span", []},
+               text: "abc",
+               end_tag: "span",
+               end_tag: {:expression, "{@module}"}
+             ]
+    end
+
+    test "paired tags nested in element" do
+      assert parse_markup("<div><{@module}>abc</{@module}></div>") == [
+               start_tag: {"div", []},
+               start_tag: {{:expression, "{@module}"}, []},
+               text: "abc",
+               end_tag: {:expression, "{@module}"},
+               end_tag: "div"
+             ]
+    end
+
+    test "nested paired tags" do
+      assert parse_markup(
+               "<{@outer_module}><{@inner_module}></{@inner_module}></{@outer_module}>"
+             ) ==
+               [
+                 start_tag: {{:expression, "{@outer_module}"}, []},
+                 start_tag: {{:expression, "{@inner_module}"}, []},
+                 end_tag: {:expression, "{@inner_module}"},
+                 end_tag: {:expression, "{@outer_module}"}
+               ]
+    end
+
+    test "paired tags inside if block" do
+      assert parse_markup("{%if @flag}<{@module}>abc</{@module}>{/if}") == [
+               block_start: {"if", "{ @flag}"},
+               start_tag: {{:expression, "{@module}"}, []},
+               text: "abc",
+               end_tag: {:expression, "{@module}"},
+               block_end: "if"
+             ]
+    end
+
+    test "paired tags inside for block" do
+      assert parse_markup("{%for module <- @modules}<{module}>abc</{module}>{/for}") == [
+               block_start: {"for", "{ module <- @modules}"},
+               start_tag: {{:expression, "{module}"}, []},
+               text: "abc",
+               end_tag: {:expression, "{module}"},
+               block_end: "for"
+             ]
+    end
+
+    test "end tag recognized inside script, like static end tags are" do
+      assert parse_markup("<script></{@module}></script>") == [
+               start_tag: {"script", []},
+               end_tag: {:expression, "{@module}"},
+               end_tag: "script"
+             ]
+    end
+
+    test "end tag not recognized inside script quoting" do
+      assert parse_markup(~s(<script>"</{@module}>"</script>)) == [
+               start_tag: {"script", []},
+               text: ~s("</),
+               expression: "{@module}",
+               text: ~s(>"),
+               end_tag: "script"
+             ]
+    end
+
+    test "end tag not recognized inside public comment" do
+      assert parse_markup("<!--</{@module}-->") == [
+               :public_comment_start,
+               {:text, "</"},
                {:expression, "{@module}"},
                :public_comment_end
              ]
@@ -2278,7 +2406,39 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("{%if @my_condition", expected_msg)
     end
 
-    test "dynamic tag inside raw block" do
+    test "dynamic end tag inside raw block" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Dynamic tag inside raw block detected.
+
+        Hint:
+        Remove the parent raw block to use the dynamic tag syntax.
+
+        {%raw}</{@module}>{/raw}
+              ^
+        """)
+
+      test_syntax_error_msg("{%raw}</{@module}>{/raw}", expected_msg)
+    end
+
+    test "unclosed dynamic end tag expression" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed expression.
+
+        Hint:
+        Close the expression with '}' character.
+
+        </{@module
+                  ^
+        """)
+
+      test_syntax_error_msg("</{@module", expected_msg)
+    end
+
+    test "dynamic start tag inside raw block" do
       expected_msg =
         normalize_newlines("""
         Reason:
@@ -2294,7 +2454,7 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("{%raw}<{@module}>{/raw}", expected_msg)
     end
 
-    test "unclosed dynamic tag expression" do
+    test "unclosed dynamic start tag expression" do
       expected_msg =
         normalize_newlines("""
         Reason:
