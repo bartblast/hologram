@@ -170,12 +170,13 @@ defmodule Hologram.Compiler.Encoder do
   @spec encode_ir(IR.t(), Context.t()) :: String.t()
   def encode_ir(ir, context)
 
-  def encode_ir(%IR.AnonymousFunctionCall{function: function, args: args}, context) do
+  def encode_ir(%IR.AnonymousFunctionCall{function: function, args: args, line: line}, context) do
     function_js = encode_ir(function, context)
     args_js = encode_as_array(args, context)
     call = "Interpreter.callAnonymousFunction(#{function_js}, #{args_js})"
+    awaited_call = if context.async?, do: "(await #{call})", else: call
 
-    if context.async?, do: "(await #{call})", else: call
+    encode_with_frame_line(awaited_call, line, context)
   end
 
   def encode_ir(
@@ -356,7 +357,7 @@ defmodule Hologram.Compiler.Encoder do
     params_closure = "(context) => #{params_array}"
 
     # Guards are never async — Elixir guards are restricted to a safe subset of functions.
-    guards_context = %{context | async?: false}
+    guards_context = %{context | async?: false, guard?: true}
     guards = encode_as_array(clause.guards, guards_context, &encode_closure/2)
 
     body = encode_closure(clause.body, context)
@@ -386,11 +387,14 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode_ir(
-        %IR.LocalFunctionCall{function: function, args: args},
+        %IR.LocalFunctionCall{function: function, args: args, line: line},
         %{module: module} = context
       ) do
     module_ir = %IR.AtomType{value: module}
-    encode_named_function_call(module_ir, function, args, context)
+
+    module_ir
+    |> encode_named_function_call(function, args, context)
+    |> encode_with_frame_line(line, context)
   end
 
   def encode_ir(%IR.MapType{data: data}, context) do
@@ -491,11 +495,14 @@ defmodule Hologram.Compiler.Encoder do
         %IR.RemoteFunctionCall{
           module: module,
           function: function,
-          args: args
+          args: args,
+          line: line
         },
         context
       ) do
-    encode_named_function_call(module, function, args, context)
+    module
+    |> encode_named_function_call(function, args, context)
+    |> encode_with_frame_line(line, context)
   end
 
   # __STACKTRACE__ - the interpreter binds the boxed trace captured on the
@@ -532,7 +539,8 @@ defmodule Hologram.Compiler.Encoder do
     value_js = encode_ir(ir.value, %{context | pattern?: true})
 
     # Guards are never async - Elixir guards are restricted to a safe subset of functions.
-    guards_js = encode_as_array(ir.guards, %{context | async?: false}, &encode_closure/2)
+    guards_js =
+      encode_as_array(ir.guards, %{context | async?: false, guard?: true}, &encode_closure/2)
 
     body_js = encode_closure(ir.body, context)
 
@@ -592,7 +600,8 @@ defmodule Hologram.Compiler.Encoder do
     match_js = encode_ir(match, %{context | pattern?: true})
 
     # Guards are never async — Elixir guards are restricted to a safe subset of functions.
-    guards_js = encode_as_array(guards, %{context | async?: false}, &encode_closure/2)
+    guards_js =
+      encode_as_array(guards, %{context | async?: false, guard?: true}, &encode_closure/2)
 
     expression_js = encode_closure(expression, context)
 
@@ -810,13 +819,14 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_clause_head(%IR.FunctionClause{} = clause, context) do
     params_array = encode_as_array(clause.params, %{context | pattern?: true})
+    guard_context = %{context | guard?: true}
 
     properties =
       Enum.reject(
         [
           params: "(context) => #{params_array}",
-          guards: encode_as_array(clause.guards, context, &encode_closure/2),
-          blame: encode_clause_blame(clause, context)
+          guards: encode_as_array(clause.guards, guard_context, &encode_closure/2),
+          blame: encode_clause_blame(clause, guard_context)
         ],
         fn {_name, value} -> is_nil(value) end
       )
@@ -836,7 +846,8 @@ defmodule Hologram.Compiler.Encoder do
     match = encode_ir(clause.match, %{context | pattern?: true})
 
     # Guards are never async — Elixir guards are restricted to a safe subset of functions.
-    guards = encode_as_array(clause.guards, %{context | async?: false}, &encode_closure/2)
+    guards =
+      encode_as_array(clause.guards, %{context | async?: false, guard?: true}, &encode_closure/2)
 
     body = encode_closure(clause.body, context)
 
@@ -1016,6 +1027,22 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_var_name(name, version) do
     encode_as_string(name, false) <> "_#{version}"
+  end
+
+  # A stacktrace frame reports the line the function currently running has
+  # reached, so each call records its own line before it is made - the way the
+  # BEAM does it. A call the AST gave no line to records nothing, and the frame
+  # keeps the line it already had.
+  defp encode_with_frame_line(js, nil, _context), do: js
+
+  defp encode_with_frame_line(js, _line, %Context{guard?: true}), do: js
+
+  defp encode_with_frame_line(js, line, _context) do
+    if Hologram.client_stacktraces?() do
+      "(Interpreter.setFrameLine(#{line}), #{js})"
+    else
+      js
+    end
   end
 
   defp escape_non_printable_and_special_chars(str)

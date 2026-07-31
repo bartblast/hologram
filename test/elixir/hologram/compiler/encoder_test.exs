@@ -65,6 +65,16 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir, %Context{async?: true}) ==
                "(await Interpreter.callAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)]))"
     end
+
+    test "records the line it is called on", %{ir: ir} do
+      assert encode_ir(%{ir | line: 123}) ==
+               "(Interpreter.setFrameLine(123), Interpreter.callAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)]))"
+    end
+
+    test "records the line before awaiting an async call", %{ir: ir} do
+      assert encode_ir(%{ir | line: 123}, %Context{async?: true}) ==
+               "(Interpreter.setFrameLine(123), (await Interpreter.callAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)])))"
+    end
   end
 
   describe "anonymous function type" do
@@ -2135,15 +2145,33 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  test "local function call" do
-    # my_fun!(1, 2)
-    ir = %IR.LocalFunctionCall{
-      function: :my_fun!,
-      args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
-    }
+  describe "local function call" do
+    setup do
+      # my_fun!(1, 2)
+      ir = %IR.LocalFunctionCall{
+        function: :my_fun!,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+      }
 
-    assert encode_ir(ir, %Context{module: Aaa.Bbb.Ccc}) ==
-             "Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n))"
+      [ir: ir]
+    end
+
+    test "without a line", %{ir: ir} do
+      assert encode_ir(ir, %Context{module: Aaa.Bbb.Ccc}) ==
+               "Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n))"
+    end
+
+    test "records the line it is called on", %{ir: ir} do
+      assert encode_ir(%{ir | line: 123}, %Context{module: Aaa.Bbb.Ccc}) ==
+               "(Interpreter.setFrameLine(123), Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n)))"
+    end
+
+    test "records no line inside a guard, which never raises", %{ir: ir} do
+      context = %Context{guard?: true, module: Aaa.Bbb.Ccc}
+
+      assert encode_ir(%{ir | line: 123}, context) ==
+               "Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n))"
+    end
   end
 
   describe "map type" do
@@ -2604,6 +2632,35 @@ defmodule Hologram.Compiler.EncoderTest do
         module: %IR.AtomType{value: Aaa.Bbb.Ccc},
         function: :my_fun!,
         args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+      }
+
+      assert encode_ir(ir) ==
+               "Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n))"
+    end
+
+    test "records the line it is called on" do
+      # Aaa.Bbb.Ccc.my_fun!(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb.Ccc},
+        function: :my_fun!,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.setFrameLine(123), Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n)))"
+    end
+
+    test "records no line when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      # Aaa.Bbb.Ccc.my_fun!(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb.Ccc},
+        function: :my_fun!,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+        line: 123
       }
 
       assert encode_ir(ir) ==

@@ -10220,6 +10220,37 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("setFrameLine()", () => {
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    afterEach(() => {
+      CallStack.reset();
+    });
+
+    it("records the line on the frame the call is being made from", () => {
+      CallStack.push({
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      });
+
+      Interpreter.setFrameLine(22);
+
+      assert.equal(CallStack.peek().line, 22);
+    });
+
+    it("records nothing when no frame is being tracked", () => {
+      Interpreter.setFrameLine(22);
+
+      assert.deepStrictEqual(CallStack.snapshot(), []);
+    });
+  });
+
   // Tests here that mirror an Elixir consistency test in test/elixir/hologram/ex_js_consistency/try_test.exs
   // share its exact name; always update both together.
   describe("try()", () => {

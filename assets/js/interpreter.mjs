@@ -1211,6 +1211,18 @@ export default class Interpreter {
     return Bitstring.toText(Elixir_Exception["message/1"](struct));
   }
 
+  // Records where execution has reached in the function currently running, so
+  // its frame reports the line of the call being made rather than the line the
+  // function started at - which is how the BEAM records it. The compiler emits
+  // a call to this before each call it encodes, under the stacktraces flag.
+  static setFrameLine(line) {
+    const frame = CallStack.peek();
+
+    if (frame) {
+      frame.line = line;
+    }
+  }
+
   // SYNC/ASYNC PAIR: When modifying this function, also update asyncTry().
   static try(
     body,
