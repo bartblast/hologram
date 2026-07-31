@@ -5818,6 +5818,37 @@ describe("Renderer", () => {
       ]);
     });
 
+    // Module3 is uninitialized here and declares no props, so its state can only reach the template
+    // through the stateful path, which the cid arriving via the spread is what selects.
+    it("cid supplied through a spread runs init and merges the resulting state into vars", () => {
+      const module3 = Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.Module3",
+      );
+
+      const cid = Type.bitstring("my_component");
+      const propsDom = [spread(Type.map([[Type.atom("cid"), cid]]))];
+
+      assert.deepStrictEqual(renderComponent(module3, propsDom), [
+        vnode("div", {attrs: {}, on: {}}, ["state_a = 11, state_b = 22"]),
+      ]);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: module3,
+              state: Type.map([
+                [Type.atom("a"), Type.integer(11)],
+                [Type.atom("b"), Type.integer(22)],
+              ]),
+            }),
+          ],
+        ]),
+      );
+    });
+
     it("declared default value is applied for a key not supplied by the spread", () => {
       const propsDom = [
         spread(Type.map([[Type.atom("prop_2"), Type.atom("my_value")]])),
