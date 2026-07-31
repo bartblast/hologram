@@ -143,6 +143,31 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the version of each OTP application the given call graph reaches, keyed by application
+  name and sorted by it.
+
+  A stacktrace frame names the application its module belongs to and that application's version,
+  the way the server renders one, and this is where the client reads the version from.
+  """
+  @spec build_app_versions(CallGraph.t()) :: keyword(String.t())
+  def build_app_versions(call_graph) do
+    call_graph
+    |> CallGraph.vertices()
+    |> Enum.map(fn
+      {module, _function, _arity} -> module
+      module -> module
+    end)
+    |> Enum.uniq()
+    |> Enum.map(&Application.get_application/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.map(fn app -> {app, Application.spec(app, :vsn)} end)
+    |> Enum.reject(fn {_app, vsn} -> is_nil(vsn) end)
+    |> Enum.map(fn {app, vsn} -> {app, to_string(vsn)} end)
+    |> Enum.sort()
+  end
+
+  @doc """
   Builds page digest PLT, where the keys represent page modules,
   and the values are hex digests of their corresponding JavaScript bundles.
   """
@@ -243,8 +268,9 @@ defmodule Hologram.Compiler do
   @doc """
   Builds Hologram runtime JavaScript source code.
   """
-  @spec build_runtime_js(list(mfa), PLT.t(), MapSet.t(mfa), T.file_path()) :: String.t()
-  def build_runtime_js(runtime_mfas, ir_plt, async_mfas, js_dir) do
+  @spec build_runtime_js(list(mfa), PLT.t(), MapSet.t(mfa), keyword(String.t()), T.file_path()) ::
+          String.t()
+  def build_runtime_js(runtime_mfas, ir_plt, async_mfas, app_versions, js_dir) do
     erlang_function_defs =
       runtime_mfas
       |> render_erlang_function_defs(Path.join(js_dir, "erlang"))
@@ -276,7 +302,9 @@ defmodule Hologram.Compiler do
 
     const startTime = PerformanceTimer.start();
 
-    globalThis.Hologram.config = #{render_client_config()};#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
+    globalThis.Hologram.config = #{render_client_config()};
+
+    ERTS.appVersions = #{render_app_versions(app_versions)};#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
@@ -420,10 +448,16 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_4/README.md
   """
-  @spec create_runtime_entry_file(list(mfa), PLT.t(), MapSet.t(mfa), T.opts()) :: T.file_path()
-  def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts) do
+  @spec create_runtime_entry_file(
+          list(mfa),
+          PLT.t(),
+          MapSet.t(mfa),
+          keyword(String.t()),
+          T.opts()
+        ) :: T.file_path()
+  def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, app_versions, opts) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, async_mfas, opts[:js_dir])
+    |> build_runtime_js(ir_plt, async_mfas, app_versions, opts[:js_dir])
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
@@ -797,6 +831,19 @@ defmodule Hologram.Compiler do
 
   defp render_client_config do
     ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
+  end
+
+  # Travels with the per-module metadata, which is emitted under the same
+  # setting - a bundle built without client stacktraces names no application
+  # and no version anywhere.
+  defp render_app_versions(app_versions) do
+    if Hologram.client_stacktraces?() do
+      app_versions
+      |> Enum.map_join(", ", fn {app, vsn} -> ~s/#{app}: "#{vsn}"/ end)
+      |> then(&"{#{&1}}")
+    else
+      "{}"
+    end
   end
 
   defp render_elixir_function_defs(mfas, ir_plt, async_mfas) do

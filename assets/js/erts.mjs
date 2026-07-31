@@ -37,6 +37,12 @@ export default class ERTS {
 
   // Shadow call stack backing Elixir stacktraces. Ported Erlang functions reach it through this
   // facade, since their bodies are extracted per-MFA into the bundle and can't carry imports.
+  // Version of each OTP application whose modules the bundle carries, keyed by
+  // application name - what :application.get_key/2 answers :vsn from. Assigned
+  // by the runtime bundle from compiler-emitted data, and empty when client
+  // stacktraces are disabled, which also emits no per-module app metadata.
+  static appVersions = {};
+
   static callStack = CallStack;
 
   static ets = {};

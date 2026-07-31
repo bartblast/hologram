@@ -435,7 +435,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "renders reachable function defs", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
 
       assert String.contains?(
                js,
@@ -463,7 +463,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/Interpreter.defineNotImplementedErlangFunction("application", "get_application", 1/
+               ~s/Interpreter.defineNotImplementedErlangFunction("erlang", "process_info", 2/
              )
     end
 
@@ -471,7 +471,7 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
 
       assert String.contains?(
                js,
@@ -492,7 +492,7 @@ defmodule Hologram.CompilerTest do
       Application.put_env(:hologram, :client_error_overlay, true)
       Application.put_env(:hologram, :client_stacktraces, true)
 
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
 
       assert String.contains?(
                js,
@@ -507,12 +507,41 @@ defmodule Hologram.CompilerTest do
       Application.put_env(:hologram, :client_error_overlay, false)
       Application.put_env(:hologram, :client_stacktraces, false)
 
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
 
       assert String.contains?(
                js,
                "globalThis.Hologram.config = {errorOverlay: false, stacktraces: false};"
              )
+    end
+
+    test "injects the versions of the applications the frames name", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      app_versions = [hologram: "0.1.0", my_app: "9.8.7"]
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), app_versions, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/ERTS.appVersions = {hologram: "0.1.0", my_app: "9.8.7"};/
+             )
+    end
+
+    test "injects no application versions when client stacktraces are disabled", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_stacktraces, false)
+
+      app_versions = [hologram: "0.1.0", my_app: "9.8.7"]
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), app_versions, @js_dir)
+
+      assert String.contains?(js, "ERTS.appVersions = {};")
     end
 
     test "injects the client config when the error overlay is opted out of", %{
@@ -522,7 +551,7 @@ defmodule Hologram.CompilerTest do
       Application.put_env(:hologram, :client_error_overlay, false)
       Application.put_env(:hologram, :client_stacktraces, true)
 
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
 
       assert String.contains?(
                js,
@@ -794,7 +823,7 @@ defmodule Hologram.CompilerTest do
 
     clean_dir(opts[:tmp_dir])
 
-    entry_file_path = create_runtime_entry_file(runtime_mfas, ir_plt, MapSet.new(), opts)
+    entry_file_path = create_runtime_entry_file(runtime_mfas, ir_plt, MapSet.new(), [], opts)
 
     assert entry_file_path == Path.join(opts[:tmp_dir], "runtime.entry.js")
 
