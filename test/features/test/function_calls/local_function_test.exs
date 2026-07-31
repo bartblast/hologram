@@ -56,13 +56,17 @@ defmodule HologramFeatureTests.FunctionCalls.LocalFunctionTest do
     |> assert_text(css("#result"), "{1, 2, {11, 5}}")
   end
 
-  # TODO: client error message for this case is inconsistent with server error message
   feature "no matching clause", %{session: session} do
     assert_client_error session,
                         FunctionClauseError,
                         build_function_clause_error_msg(
                           "HologramFeatureTests.FunctionCalls.LocalFunctionPage.local_fun_4/2",
-                          [4, 5]
+                          [4, 5],
+                          [
+                            "def local_fun_4(-1-, x)",
+                            "def local_fun_4(-2-, x)",
+                            "def local_fun_4(-3-, x)"
+                          ]
                         ),
                         fn ->
                           session

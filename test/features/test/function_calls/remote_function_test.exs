@@ -14,7 +14,6 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
     |> assert_text(css("#result"), ":a")
   end
 
-  # TODO: client error message for this case is inconsistent with server error message
   feature "private function", %{session: session} do
     assert_client_error session,
                         UndefinedFunctionError,
@@ -71,7 +70,6 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
     |> assert_text(css("#result"), "{1, 2, {11, 5}}")
   end
 
-  # TODO: client error message for this case is inconsistent with server error message
   feature "arity invalid, called with no args", %{session: session} do
     assert_client_error session,
                         UndefinedFunctionError,
@@ -86,7 +84,6 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
                         end
   end
 
-  # TODO: client error message for this case is inconsistent with server error message
   feature "arity invalid, called with single arg", %{session: session} do
     assert_client_error session,
                         UndefinedFunctionError,
@@ -101,7 +98,6 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
                         end
   end
 
-  # TODO: client error message for this case is inconsistent with server error message
   feature "arity invalid, called with multiple args", %{session: session} do
     assert_client_error session,
                         UndefinedFunctionError,
@@ -116,13 +112,17 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
                         end
   end
 
-  # TODO: client error message for this case is inconsistent with server error message
   feature "no matching clause", %{session: session} do
     assert_client_error session,
                         FunctionClauseError,
                         build_function_clause_error_msg(
                           "HologramFeatureTests.ModuleFixture2.fun_5/2",
-                          [4, 5]
+                          [4, 5],
+                          [
+                            "def fun_5(-1-, x)",
+                            "def fun_5(-2-, x)",
+                            "def fun_5(-3-, x)"
+                          ]
                         ),
                         fn ->
                           session
