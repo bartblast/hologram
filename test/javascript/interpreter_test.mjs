@@ -4252,8 +4252,6 @@ describe("Interpreter", () => {
       const clauses = ["clause_dummy_1", "clause_dummy_2"];
       const context = contextFixture();
 
-      // The numbers identifying the fun are client-specific, so they are matched loosely,
-      // the same way the Elixir consistency test matches the server's.
       it("non-capture", () => {
         const anonFun = Type.anonymousFunction(
           2,
@@ -4262,9 +4260,9 @@ describe("Interpreter", () => {
           "-my_fun/1-fun-0-",
         );
 
-        assert.match(
+        assert.equal(
           Interpreter.inspect(anonFun),
-          /^#Function<\d+\.\d+\/2 in MyModule\.my_fun\/1>$/,
+          `#Function<${anonFun.uniq}.${anonFun.uniq}/2 in MyModule.my_fun/1>`,
         );
       });
 
@@ -4272,9 +4270,9 @@ describe("Interpreter", () => {
       it("non-capture, defined outside of a function definition", () => {
         const anonFun = Type.anonymousFunction(2, clauses, context);
 
-        assert.match(
+        assert.equal(
           Interpreter.inspect(anonFun),
-          /^#Function<\d+\.\d+\/2 in MyModule>$/,
+          `#Function<${anonFun.uniq}.${anonFun.uniq}/2 in MyModule>`,
         );
       });
 
