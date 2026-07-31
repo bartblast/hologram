@@ -8,6 +8,7 @@ import Debouncer from "./debouncer.mjs";
 import EventListeners from "./event_listeners.mjs";
 import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import HologramRuntimeError from "./errors/runtime_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
@@ -86,6 +87,15 @@ export default class Renderer {
           context,
           slots,
           Type.bitstring("page"),
+          parentTagName,
+        );
+
+      case "dynamic_tag":
+        return Renderer.#renderDynamicTag(
+          dom,
+          context,
+          slots,
+          defaultTarget,
           parentTagName,
         );
 
@@ -754,6 +764,10 @@ export default class Renderer {
       return Renderer.#expandSlotsInComponentNode(dom, slots);
     }
 
+    if (dom.data[0].value === "dynamic_tag") {
+      return Renderer.#expandSlotsInDynamicTagNode(dom, slots);
+    }
+
     if (dom.data[0].value === "element") {
       return Renderer.#expandSlotsInElementNode(dom, slots);
     }
@@ -769,6 +783,18 @@ export default class Renderer {
       nodeType,
       moduleAlias,
       propsDom,
+      Renderer.#expandSlots(childrenDom, slots),
+    ]);
+  }
+
+  // Based on expand_slots/3 (dynamic tag case)
+  static #expandSlotsInDynamicTagNode(dom, slots) {
+    const [nodeType, value, attrsDom, childrenDom] = dom.data;
+
+    return Type.tuple([
+      nodeType,
+      value,
+      attrsDom,
       Renderer.#expandSlots(childrenDom, slots),
     ]);
   }
@@ -977,6 +1003,11 @@ export default class Renderer {
     );
 
     return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
+  }
+
+  // Based on invalid_dynamic_tag_value_message/1
+  static #invalidDynamicTagValueMessage(value) {
+    return `dynamic tag expression must evaluate to a component module or an HTML tag name string, got: ${Interpreter.inspect(value)}`;
   }
 
   static #isControlledValueInputType(inputType) {
@@ -1307,6 +1338,39 @@ export default class Renderer {
         parentTagName,
       );
     }
+  }
+
+  // Based on render_dom/3 (dynamic tag cases)
+  static #renderDynamicTag(dom, context, slots, defaultTarget, parentTagName) {
+    const value = dom.data[1].data[0];
+    const attrsDom = dom.data[2];
+    const childrenDom = dom.data[3];
+
+    if (Type.isBitstring(value)) {
+      return Renderer.renderDom(
+        Type.tuple([Type.atom("element"), value, attrsDom, childrenDom]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+    }
+
+    if (!Type.isAtom(value)) {
+      Interpreter.raiseArgumentError(
+        Renderer.#invalidDynamicTagValueMessage(value),
+      );
+    }
+
+    Renderer.#validateDynamicTagModule(value);
+
+    return Renderer.renderDom(
+      Type.tuple([Type.atom("component"), value, attrsDom, childrenDom]),
+      context,
+      slots,
+      defaultTarget,
+      parentTagName,
+    );
   }
 
   // Based on render_dom/3 (element & slot case)
@@ -1690,6 +1754,31 @@ export default class Renderer {
     }
 
     element.value = newValue;
+  }
+
+  // A component module is recognized by its __props__/0 function, which the compiler bundles for
+  // every component it reaches (a page module carries __params__/0 instead). A module that isn't in
+  // the bundle at all has no proxy: the compiler can follow only module atoms appearing as literals
+  // in client-reachable code, so a module reached any other way never made it into the page bundle.
+  static #validateDynamicTagModule(module) {
+    if (Type.isAlias(module)) {
+      const moduleProxy = Interpreter.moduleProxy(module);
+
+      if (typeof moduleProxy === "undefined") {
+        throw new HologramRuntimeError(
+          `module ${Interpreter.inspect(module)} is not available on the client, because it was not reachable from client code at compile time`,
+        );
+      }
+
+      if ("__props__/0" in moduleProxy) {
+        return;
+      }
+    }
+
+    Interpreter.raiseArgumentError(
+      Renderer.#invalidDynamicTagValueMessage(module) +
+        ", which is not a component module",
+    );
   }
 
   // Based on validate_spread_key/1

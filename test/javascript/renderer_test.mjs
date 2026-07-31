@@ -70,6 +70,7 @@ import {defineModule76Fixture} from "./support/fixtures/renderer/module_76.mjs";
 import {defineModule77Fixture} from "./support/fixtures/renderer/module_77.mjs";
 import {defineModule78Fixture} from "./support/fixtures/renderer/module_78.mjs";
 import {defineModule86Fixture} from "./support/fixtures/renderer/module_86.mjs";
+import {defineModule87Fixture} from "./support/fixtures/renderer/module_87.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
 import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client_only/module_1.mjs";
@@ -79,6 +80,7 @@ import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
+import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Once from "../../assets/js/once.mjs";
@@ -144,6 +146,7 @@ defineModule76Fixture();
 defineModule77Fixture();
 defineModule78Fixture();
 defineModule86Fixture();
+defineModule87Fixture();
 defineModule8Fixture();
 defineModule9Fixture();
 defineClientOnlyModule1Fixture();
@@ -6608,6 +6611,480 @@ describe("Renderer", () => {
       );
 
       assert.deepStrictEqual(result, ["\n  \n"]);
+    });
+  });
+
+  describe("dynamic tag node, element branch", () => {
+    const dynamicTag = (
+      value,
+      attrsDom = Type.list(),
+      childrenDom = Type.list(),
+    ) =>
+      Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([value]),
+        attrsDom,
+        childrenDom,
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    it("without attributes or children", () => {
+      // <{"div"}></{"div"}>
+      const result = render(dynamicTag(Type.bitstring("div")));
+
+      assert.deepStrictEqual(result, vnode("div", {attrs: {}, on: {}}, []));
+    });
+
+    it("with attributes", () => {
+      const attrsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("attr_1"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("aaa")]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("attr_2"),
+          Type.keywordList([
+            [Type.atom("expression"), Type.tuple([Type.integer(123)])],
+          ]),
+        ]),
+      ]);
+
+      const result = render(dynamicTag(Type.bitstring("div"), attrsDom));
+
+      assert.deepStrictEqual(
+        result,
+        vnode("div", {attrs: {attr_1: "aaa", attr_2: "123"}, on: {}}, []),
+      );
+    });
+
+    it("with children", () => {
+      const childrenDom = Type.list([
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring("span"),
+          Type.list(),
+          Type.list([Type.tuple([Type.atom("text"), Type.bitstring("abc")])]),
+        ]),
+        Type.tuple([Type.atom("text"), Type.bitstring("xyz")]),
+      ]);
+
+      const result = render(
+        dynamicTag(Type.bitstring("div"), Type.list(), childrenDom),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        vnode("div", {attrs: {}, on: {}}, [
+          vnode("span", {attrs: {}, on: {}}, ["abc"]),
+          "xyz",
+        ]),
+      );
+    });
+
+    it("void element", () => {
+      const attrsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("attr_1"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("aaa")]]),
+        ]),
+      ]);
+
+      const result = render(dynamicTag(Type.bitstring("img"), attrsDom));
+
+      assert.deepStrictEqual(
+        result,
+        vnode("img", {attrs: {attr_1: "aaa"}, on: {}}, []),
+      );
+    });
+
+    it("custom element", () => {
+      const childrenDom = Type.list([
+        Type.tuple([Type.atom("text"), Type.bitstring("abc")]),
+      ]);
+
+      const result = render(
+        dynamicTag(Type.bitstring("my-widget"), Type.list(), childrenDom),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        vnode("my-widget", {attrs: {}, on: {}}, ["abc"]),
+      );
+    });
+
+    it("cid attribute is rendered as a plain HTML attribute", () => {
+      const attrsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("my_component")],
+          ]),
+        ]),
+      ]);
+
+      const result = render(dynamicTag(Type.bitstring("div"), attrsDom));
+
+      assert.deepStrictEqual(
+        result,
+        vnode("div", {attrs: {cid: "my_component"}, on: {}}, []),
+      );
+    });
+
+    it("event attribute binds an event listener", () => {
+      const actionSpecDom = Type.list([
+        Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+      ]);
+
+      const attrsDom = Type.list([
+        Type.tuple([Type.bitstring("$click"), actionSpecDom]),
+      ]);
+
+      const result = render(dynamicTag(Type.bitstring("button"), attrsDom));
+
+      assert.deepStrictEqual(Object.keys(result.data.on), ["click"]);
+
+      const stub = sinon
+        .stub(Hologram, "handleUiEvent")
+        .callsFake(
+          (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+        );
+
+      result.data.on.click("dummyEvent");
+
+      sinon.assert.calledWith(
+        stub,
+        "dummyEvent",
+        "click",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      Hologram.handleUiEvent.restore();
+    });
+
+    it("with spread", () => {
+      const attrsDom = Type.list([
+        Type.tuple([
+          Type.atom("spread"),
+          Type.tuple([
+            Type.map([
+              [Type.atom("id"), Type.bitstring("my_id")],
+              [Type.atom("class"), Type.bitstring("my_class")],
+            ]),
+          ]),
+        ]),
+      ]);
+
+      const result = render(dynamicTag(Type.bitstring("div"), attrsDom));
+
+      assert.deepStrictEqual(
+        result,
+        vnode("div", {attrs: {class: "my_class", id: "my_id"}, on: {}}, []),
+      );
+    });
+
+    it("with nested stateful component", () => {
+      const childrenDom = Type.list([
+        Type.tuple([
+          Type.atom("component"),
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("cid"),
+              Type.keywordList([[Type.atom("text"), cid]]),
+            ]),
+          ]),
+          Type.list(),
+        ]),
+      ]);
+
+      initComponentRegistryEntry(cid);
+
+      const result = render(
+        dynamicTag(Type.bitstring("div"), Type.list(), childrenDom),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        vnode("div", {attrs: {}, on: {}}, [
+          vnode("div", {attrs: {}, on: {}}, ["abc"]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([[cid, componentRegistryEntryFixture()]]),
+      );
+    });
+  });
+
+  describe("dynamic tag node, component branch", () => {
+    const dynamicTag = (
+      value,
+      attrsDom = Type.list(),
+      childrenDom = Type.list(),
+    ) =>
+      Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([value]),
+        attrsDom,
+        childrenDom,
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    it("stateless component without props", () => {
+      // <{Module1} />
+      const result = render(
+        dynamicTag(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+        ),
+      );
+
+      assert.deepStrictEqual(result, [
+        vnode("div", {attrs: {}, on: {}}, ["abc"]),
+      ]);
+      assert.deepStrictEqual(ComponentRegistry.entries, Type.map());
+    });
+
+    it("stateless component with props", () => {
+      const propsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("a"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("ddd")]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("b"),
+          Type.keywordList([
+            [Type.atom("expression"), Type.tuple([Type.integer(222)])],
+          ]),
+        ]),
+        Type.tuple([
+          Type.bitstring("c"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("fff")],
+            [Type.atom("expression"), Type.tuple([Type.integer(333)])],
+            [Type.atom("text"), Type.bitstring("hhh")],
+          ]),
+        ]),
+      ]);
+
+      const result = render(
+        dynamicTag(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+          propsDom,
+        ),
+      );
+
+      assert.deepStrictEqual(result, [
+        vnode("div", {attrs: {}, on: {}}, [
+          "prop_a = ddd, prop_b = 222, prop_c = fff333hhh",
+        ]),
+      ]);
+    });
+
+    it("stateful component", () => {
+      const propsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([[Type.atom("text"), cid]]),
+        ]),
+      ]);
+
+      initComponentRegistryEntry(cid);
+
+      const result = render(
+        dynamicTag(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+          propsDom,
+        ),
+      );
+
+      assert.deepStrictEqual(result, [
+        vnode("div", {attrs: {}, on: {}}, ["abc"]),
+      ]);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([[cid, componentRegistryEntryFixture()]]),
+      );
+    });
+
+    it("undeclared props are dropped", () => {
+      const propsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("my_undeclared_prop"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("my_value")]]),
+        ]),
+      ]);
+
+      const result = render(
+        dynamicTag(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+          propsDom,
+        ),
+      );
+
+      assert.deepStrictEqual(result, [
+        vnode("div", {attrs: {}, on: {}}, ["abc"]),
+      ]);
+    });
+
+    it("event attributes are not passed as props", () => {
+      const propsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("$click"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("my_action")]]),
+        ]),
+      ]);
+
+      const node = dynamicTag(
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+        propsDom,
+      );
+
+      assertBoxedError(
+        () => render(node),
+        "KeyError",
+        Interpreter.buildKeyErrorMsg(Type.atom("a"), Type.map()),
+      );
+    });
+
+    it("with slot content", () => {
+      const childrenDom = Type.keywordList([
+        [Type.atom("text"), Type.bitstring("123")],
+      ]);
+
+      const result = render(
+        dynamicTag(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module8"),
+          Type.list(),
+          childrenDom,
+        ),
+      );
+
+      assert.deepStrictEqual(result, ["abc123xyz"]);
+    });
+
+    it("with prop spread", () => {
+      const propsDom = Type.list([
+        Type.tuple([
+          Type.atom("spread"),
+          Type.tuple([
+            Type.map([
+              [Type.atom("a"), Type.bitstring("ddd")],
+              [Type.atom("b"), Type.integer(222)],
+              [Type.atom("c"), Type.bitstring("fff")],
+            ]),
+          ]),
+        ]),
+      ]);
+
+      const result = render(
+        dynamicTag(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+          propsDom,
+        ),
+      );
+
+      assert.deepStrictEqual(result, [
+        vnode("div", {attrs: {}, on: {}}, [
+          "prop_a = ddd, prop_b = 222, prop_c = fff",
+        ]),
+      ]);
+    });
+  });
+
+  describe("dynamic tag node, slots", () => {
+    it("slot content is expanded through dynamic tag children", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module87"),
+        Type.list(),
+        Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, [
+        "87a,32a,87b,",
+        vnode("div", {attrs: {}, on: {}}, ["abc"]),
+        ",87x,32z,87z",
+      ]);
+    });
+  });
+
+  describe("dynamic tag node, invalid tag name value", () => {
+    const render = (value) =>
+      Renderer.renderDom(
+        Type.tuple([
+          Type.atom("dynamic_tag"),
+          Type.tuple([value]),
+          Type.list(),
+          Type.list(),
+        ]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+    const assertNotAComponent = (value, inspectedValue) =>
+      assertBoxedError(
+        () => render(value),
+        "ArgumentError",
+        `dynamic tag expression must evaluate to a component module or an HTML tag name string, got: ${inspectedValue}, which is not a component module`,
+      );
+
+    it("non-component atom", () => {
+      assertNotAComponent(Type.atom("div"), ":div");
+    });
+
+    it("page module", () => {
+      assertNotAComponent(
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
+        "Hologram.Test.Fixtures.Template.Renderer.Module14",
+      );
+    });
+
+    it("nil", () => {
+      assertNotAComponent(Type.nil(), "nil");
+    });
+
+    it("integer", () => {
+      assertBoxedError(
+        () => render(Type.integer(123)),
+        "ArgumentError",
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: 123",
+      );
+    });
+
+    it("map", () => {
+      assertBoxedError(
+        () => render(Type.map([[Type.atom("a"), Type.integer(1)]])),
+        "ArgumentError",
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: %{a: 1}",
+      );
+    });
+
+    it("component module missing from the page bundle", () => {
+      assert.throw(
+        () =>
+          render(
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module999"),
+          ),
+        HologramRuntimeError,
+        "module Hologram.Test.Fixtures.Template.Renderer.Module999 is not available on the client, because it was not reachable from client code at compile time",
+      );
     });
   });
 
