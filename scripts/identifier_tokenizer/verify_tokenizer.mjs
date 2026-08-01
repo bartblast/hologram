@@ -22,6 +22,15 @@ import Type from "../../assets/js/type.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// The generators write the oracle files without a trailing newline, so splitting
+// on it yields only real lines. An editor that adds one on save would otherwise
+// feed an empty line to each pass below, which reads as a mismatch of its own.
+const readLines = (file) =>
+  fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .filter((line) => line !== "");
+
 const tokenize = (codepoints) =>
   Elixir_String_Tokenizer["tokenize/1"](
     Type.list(codepoints.map((codepoint) => Type.integer(codepoint))),
@@ -65,9 +74,7 @@ const report = (label, input, expected, actual) => {
 };
 
 // Pass 1: the dumped corpus.
-const corpusLines = fs
-  .readFileSync(__dirname + "/verification_elixir.txt", "utf8")
-  .split("\n");
+const corpusLines = readLines(__dirname + "/verification_elixir.txt");
 
 console.log(`Pass 1: corpus (${corpusLines.length} inputs)...`);
 
@@ -87,9 +94,7 @@ console.log("Pass 2: unusable single codepoints...");
 
 const usable = new Set();
 
-for (const line of fs
-  .readFileSync(__dirname + "/classes_elixir.txt", "utf8")
-  .split("\n")) {
+for (const line of readLines(__dirname + "/classes_elixir.txt")) {
   const [codepoint, start, continues] = line.split(":");
 
   if (!(start === "error" && continues === "0")) {
@@ -118,9 +123,7 @@ const anchors = [
   0x0e01, 0x10d0, 0x0531,
 ];
 
-for (const line of fs
-  .readFileSync(__dirname + "/scriptsets_elixir.txt", "utf8")
-  .split("\n")) {
+for (const line of readLines(__dirname + "/scriptsets_elixir.txt")) {
   const [codepointPart, signature] = line.split(":");
 
   if (signature === "-") {

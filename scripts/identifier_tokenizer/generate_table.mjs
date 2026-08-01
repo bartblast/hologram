@@ -28,6 +28,15 @@ import {dirname} from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// The generators write the oracle files without a trailing newline, so splitting
+// on it yields only real lines. An editor that adds one on save would otherwise
+// feed an empty line to the parsing below, which reads as a codepoint of its own.
+const readLines = (file) =>
+  fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .filter((line) => line !== "");
+
 const sourceFile = __dirname + "/classes_elixir.txt";
 const moduleFile = __dirname + "/../../assets/js/elixir/string/tokenizer.mjs";
 
@@ -51,7 +60,7 @@ console.log(`Reading ${sourceFile}...`);
 
 const classes = [];
 
-for (const line of fs.readFileSync(sourceFile, "utf8").split("\n")) {
+for (const line of readLines(sourceFile)) {
   const [codepoint, start, continues] = line.split(":");
   classes[Number(codepoint)] = classLetter(start, continues);
 }
