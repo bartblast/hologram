@@ -72,8 +72,32 @@ cross_script_pairs =
     variant
   end
 
+name_apps = [:elixir, :ex_unit, :hologram, :kernel, :logger, :stdlib]
+
+# Every application here contributes names to the corpus, so one that isn't
+# loaded would shrink it rather than fail - and the oracle would stop matching
+# the committed one. Loading covers the applications that ship with Elixir,
+# which a bare `elixir` invocation leaves alone; :hologram needs Mix to put its
+# ebin on the code path, so a missing one is reported rather than skipped.
+Enum.each(name_apps, &Application.load/1)
+
+unloaded_apps =
+  Enum.reject(name_apps, &match?({:ok, _modules}, :application.get_key(&1, :modules)))
+
+if unloaded_apps != [] do
+  IO.puts("""
+  Applications not loaded: #{Enum.map_join(unloaded_apps, ", ", &inspect/1)}
+
+  Run the script through Mix, so that the whole corpus is generated:
+
+      mix run --no-start scripts/identifier_tokenizer/generate_verification.exs\
+  """)
+
+  System.halt(1)
+end
+
 app_names =
-  for app <- [:elixir, :ex_unit, :hologram, :kernel, :logger, :stdlib],
+  for app <- name_apps,
       {:ok, modules} = :application.get_key(app, :modules),
       module <- modules,
       match?({:module, _mod}, :code.ensure_loaded(module)),
