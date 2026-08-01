@@ -79,14 +79,13 @@ const Erlang_Math = {
       Interpreter.raiseBifError("badarg", "math", "pow", [base, exponent]);
     }
 
-    const exponentValue = Number(exponent.value);
-    const hasFractionalPart = exponentValue % 1 !== 0;
+    const result = Math.pow(Number(base.value), Number(exponent.value));
 
-    if (base.value < 0 && hasFractionalPart) {
+    if (!Number.isFinite(result)) {
       Interpreter.raiseBifError("badarith", "math", "pow", [base, exponent]);
     }
 
-    return Type.float(Math.pow(Number(base.value), exponentValue));
+    return Type.float(result);
   },
   // End pow/2
   // Deps: []

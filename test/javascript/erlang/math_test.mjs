@@ -588,6 +588,12 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, Type.float(0.5));
     });
 
+    it("returns zero if the result underflows", () => {
+      const result = testedFun(Type.float(1.0e-300), Type.integer(300));
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
     it("raises ArgumentError if the first argument is not a number", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc"), Type.integer(3)),
@@ -607,6 +613,22 @@ describe("Erlang_Math", () => {
     it("raises ArithmeticError if the base is less than zero and exponent has a fractional part", () => {
       assertBoxedError(
         () => testedFun(Type.integer(-7), Type.float(0.5)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+
+    it("raises ArithmeticError if the base is zero and the exponent is negative", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(0), Type.integer(-1)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+
+    it("raises ArithmeticError if the result overflows", () => {
+      assertBoxedError(
+        () => testedFun(Type.float(1.0e300), Type.integer(2)),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -637,6 +659,23 @@ describe("Erlang_Math", () => {
 
       assert.deepStrictEqual(caught.stacktrace, [
         mathErrorFrame("pow", Type.list([Type.integer(-7), Type.float(0.5)])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for an overflow", () => {
+      let caught;
+
+      try {
+        testedFun(Type.float(1.0e300), Type.integer(2));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame(
+          "pow",
+          Type.list([Type.float(1.0e300), Type.integer(2)]),
+        ),
       ]);
     });
 

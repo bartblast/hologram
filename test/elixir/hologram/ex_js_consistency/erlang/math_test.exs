@@ -448,6 +448,10 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert :math.pow(4, -0.5) == 0.5
     end
 
+    test "returns zero if the result underflows" do
+      assert :math.pow(1.0e-300, 300) == 0.0
+    end
+
     test "raises ArgumentError if the first argument is not a number" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a number"),
@@ -464,6 +468,18 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert_error ArithmeticError,
                    "bad argument in arithmetic expression",
                    {:math, :pow, [-7, 0.5]}
+    end
+
+    test "raises ArithmeticError if the base is zero and the exponent is negative" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :pow, [0, -1]}
+    end
+
+    test "raises ArithmeticError if the result overflows" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :pow, [1.0e300, 2]}
     end
 
     test "error frame carries args and error_info" do
@@ -486,6 +502,17 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
         end
 
       assert top_frame == {:math, :pow, [-7, 0.5], [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info for an overflow" do
+      top_frame =
+        try do
+          :math.pow(1.0e300, 2)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:math, :pow, [1.0e300, 2], [error_info: %{module: :erl_stdlib_errors}]}
     end
 
     test "lists all invalid arguments in the message" do
