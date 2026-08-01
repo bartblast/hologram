@@ -3776,6 +3776,7 @@ Enabling it outside of `dev` and `test` has trade-offs worth weighing:
 
 - Argument values appear in stacktrace frames, and can leave the device through screenshots, support tickets, or pasted console output.
 - Source paths and line numbers reveal the project's file layout, on top of the module names already readable in the bundle.
+- Bundles grow, since every expression carries the source line it sits on, every function clause the shape it matches, and every module its source metadata. The compiled Elixir in a bundle is roughly a third larger over the wire.
 
 ##### client_error_overlay
 

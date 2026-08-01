@@ -237,4 +237,5 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 
 - Hologram settings live under `:hologram` in `config/config.exs`, or in an environment-specific file like `config/prod.exs`. They are read while the client bundles compile, so `config/runtime.exs` is too late and changing one requires a recompile, not just a restart.
 - `:client_stacktraces` defaults to `true` in `dev`/`test` and `false` elsewhere. `:client_error_overlay` follows it unless set on its own - set it to `false` to keep the console report without showing an error screen to users.
+- Enabling `:client_stacktraces` outside `dev`/`test` puts argument values, source paths and line numbers in front of users, and makes the compiled Elixir in a bundle roughly a third larger over the wire.
 - `:max_bundle_size` (bytes) fails the build when a generated bundle grows past it. Unset by default.

@@ -45,7 +45,8 @@ defmodule Hologram do
 
   Enabling it outside of `:dev`/`:test` has trade-offs: argument values appear
   in stacktrace frames and can leave the device via screenshots, support tickets
-  or pasted console output, and source paths reveal the project's file layout.
+  or pasted console output, source paths reveal the project's file layout, and
+  the compiled Elixir in a bundle is roughly a third larger over the wire.
 
   The value is read at compile time, so changing it requires recompiling the
   bundles.
