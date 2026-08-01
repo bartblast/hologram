@@ -214,6 +214,13 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
       |> visit(DynamicComponentPage)
       |> assert_has(css("#scenario_3", text: "slot content = value_3"))
     end
+
+    feature "module delivered from a command", %{session: session} do
+      session
+      |> visit(DynamicComponentPage)
+      |> click(css("#scenario_4_button"))
+      |> assert_has(css("#scenario_4", text: "loaded from command"))
+    end
   end
 
   describe "dynamic element" do
