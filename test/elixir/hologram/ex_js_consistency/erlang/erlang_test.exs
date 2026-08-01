@@ -1703,20 +1703,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       test "delegates to atom_to_binary/2" do
         assert :erlang.atom_to_binary(:全息图) == :erlang.atom_to_binary(:全息图, :utf8)
       end
-    end
 
-    test "error frame carries args and error_info" do
-      arg = wrap_term(1)
+      test "error frame carries args and error_info" do
+        arg = wrap_term(1)
 
-      top_frame =
-        try do
-          :erlang.atom_to_binary(arg)
-        rescue
-          _error -> hd(wrap_term(__STACKTRACE__))
-        end
+        top_frame =
+          try do
+            :erlang.atom_to_binary(arg)
+          rescue
+            _error -> hd(wrap_term(__STACKTRACE__))
+          end
 
-      assert top_frame ==
-               {:erlang, :atom_to_binary, [1], [error_info: %{module: :erl_erts_errors}]}
+        assert top_frame == {:erlang, :atom_to_binary, [1], @erts_info}
+      end
     end
   end
 
