@@ -10,26 +10,34 @@
 // leaves the rest of the page usable, and an overlay with no way out would make
 // the app impossible to exercise by hand.
 export default class ErrorOverlay {
-  // What taking an overlay away needs to know: the scrolling the page had
-  // before it was covered, and the Escape handler to unbind. Keyed by overlay
-  // id, and holding an entry only while that overlay is up.
+  // The scrolling the page had before anything covered it. Overlays under
+  // different ids can be up together, so it is taken when the first one goes up
+  // and put back when the last one comes down - taking it per overlay would
+  // save the "hidden" an earlier overlay had already set.
+  static #pageOverflow = null;
+
+  // The Escape handler to unbind when an overlay is taken away, null for one
+  // that isn't dismissable. Keyed by overlay id, and holding an entry only
+  // while that overlay is up.
   static #shown = new Map();
 
   static hide(id) {
-    const entry = $.#shown.get(id);
-
-    if (entry === undefined) {
+    if (!$.#shown.has(id)) {
       return;
     }
+
+    const handleKeydown = $.#shown.get(id);
 
     document.getElementById(id)?.remove();
     $.#shown.delete(id);
 
-    if (entry.handleKeydown !== null) {
-      document.removeEventListener("keydown", entry.handleKeydown);
+    if (handleKeydown !== null) {
+      document.removeEventListener("keydown", handleKeydown);
     }
 
-    document.body.style.overflow = entry.pageOverflow;
+    if ($.#shown.size === 0) {
+      document.body.style.overflow = $.#pageOverflow;
+    }
   }
 
   static show({content, dismissable = false, heading, id}) {
@@ -37,7 +45,10 @@ export default class ErrorOverlay {
     // keeps the ones it replaces.
     $.hide(id);
 
-    const pageOverflow = document.body.style.overflow;
+    if ($.#shown.size === 0) {
+      $.#pageOverflow = document.body.style.overflow;
+    }
+
     document.body.style.overflow = "hidden";
 
     const overlay = document.createElement("div");
@@ -99,7 +110,7 @@ export default class ErrorOverlay {
 
     document.body.appendChild(overlay);
 
-    $.#shown.set(id, {handleKeydown, pageOverflow});
+    $.#shown.set(id, handleKeydown);
   }
 
   static #buildDismissButton(id) {

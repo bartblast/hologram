@@ -79,6 +79,27 @@ describe("ErrorOverlay", () => {
       assert.isNotNull(overlayElement("my_id_2"));
     });
 
+    it("keeps the page's scrolling away while an overlay under a different id is still up", () => {
+      document.body.style.overflow = "scroll";
+
+      show();
+      show({id: "my_id_2"});
+      ErrorOverlay.hide("my_id");
+
+      assert.equal(document.body.style.overflow, "hidden");
+    });
+
+    it("gives the page back its scrolling once the last overlay is hidden", () => {
+      document.body.style.overflow = "scroll";
+
+      show();
+      show({id: "my_id_2"});
+      ErrorOverlay.hide("my_id");
+      ErrorOverlay.hide("my_id_2");
+
+      assert.equal(document.body.style.overflow, "scroll");
+    });
+
     it("does nothing when no overlay is shown", () => {
       document.body.style.overflow = "scroll";
 
