@@ -227,6 +227,17 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result.referenced_components == []
     end
 
+    test "doesn't collect page modules referenced in broadcast caller code" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 2})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, Module14)
+
+      result = broadcast_caller_analysis(graph)
+
+      assert result.referenced_components == []
+    end
+
     test "returns only built-in types and no components when there are no broadcast callers" do
       graph =
         Digraph.new()
@@ -1259,6 +1270,20 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Module15, :template, 0} in result
     end
 
+    test "excludes client MFAs of a page module referenced only in server code", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :init, 3}, Module14)
+        |> add_edge({Module17, :command, 3}, Module14)
+        |> list_page_mfas_with_analysis(Module17)
+
+      refute {Module14, :action, 3} in result
+      refute {Module14, :template, 0} in result
+    end
+
     test "includes client MFAs of a component referenced in a server-referenced component's own server callbacks",
          %{full_call_graph: full_call_graph} do
       result =
@@ -1537,6 +1562,20 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Module38, :template, 0} in result
 
       refute {Module13, :my_fun, 0} in result
+    end
+
+    test "excludes client MFAs of a page module referenced only in broadcast caller code", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> add_edge({Module13, :my_fun, 0}, Module14)
+        |> list_runtime_mfas(Reflection.list_pages())
+
+      refute {Module14, :action, 3} in result
+      refute {Module14, :template, 0} in result
     end
 
     test "includes protocol implementations whose type is created in a broadcast-referenced component's server code",
@@ -2259,6 +2298,14 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "doesn't collect non-component modules referenced in server callbacks" do
       graph = Digraph.add_edge(Digraph.new(), {Module2, :init, 3}, Module5)
+
+      result = server_callback_analysis_by_templatable(graph, [Module2])
+
+      assert result[Module2].server_referenced_components == []
+    end
+
+    test "doesn't collect page modules referenced in server callbacks" do
+      graph = Digraph.add_edge(Digraph.new(), {Module2, :init, 3}, Module14)
 
       result = server_callback_analysis_by_templatable(graph, [Module2])
 
