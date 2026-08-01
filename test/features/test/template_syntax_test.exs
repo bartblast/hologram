@@ -3,6 +3,7 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
 
   alias HologramFeatureTests.TemplateSyntax.AttributeSpreadPage
   alias HologramFeatureTests.TemplateSyntax.ComponentPage
+  alias HologramFeatureTests.TemplateSyntax.DynamicComponentPage
   alias HologramFeatureTests.TemplateSyntax.ForBlockPage
   alias HologramFeatureTests.TemplateSyntax.IfBlockPage
   alias HologramFeatureTests.TemplateSyntax.InterpolationPage
@@ -191,6 +192,26 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
       session
       |> visit(PropSpreadPage)
       |> assert_has(css("#scenario_8[title='value_8']", text: "forwarded"))
+    end
+  end
+
+  describe "dynamic component" do
+    feature "named props", %{session: session} do
+      session
+      |> visit(DynamicComponentPage)
+      |> assert_has(css("#scenario_1", text: "prop_1 = value_1"))
+    end
+
+    feature "spread props", %{session: session} do
+      session
+      |> visit(DynamicComponentPage)
+      |> assert_has(css("#scenario_2", text: "prop_1 = value_2"))
+    end
+
+    feature "slot content", %{session: session} do
+      session
+      |> visit(DynamicComponentPage)
+      |> assert_has(css("#scenario_3", text: "slot content = value_3"))
     end
   end
 end
