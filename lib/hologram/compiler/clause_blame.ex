@@ -173,10 +173,10 @@ defmodule Hologram.Compiler.ClauseBlame do
     Macro.prewalk(ast, fn
       {{:., _dot_meta, [module, function]}, call_meta, args} ->
         case :elixir_rewrite.erl_to_ex(module, function, args) do
-          {Kernel, ex_function, ex_args, _arity} ->
+          {Kernel, ex_function, ex_args, _invert_args} ->
             {ex_function, call_meta, ex_args}
 
-          {ex_module, ex_function, ex_args, _arity} ->
+          {ex_module, ex_function, ex_args, _invert_args} ->
             {{:., [], [ex_module, ex_function]}, call_meta, ex_args}
         end
 
