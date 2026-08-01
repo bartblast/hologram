@@ -42,6 +42,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ApplicationTest do
       assert :application.get_key(:no_such_app, :vsn) == :undefined
     end
 
+    test "vsn of an unknown application named like an Object.prototype member" do
+      assert :application.get_key(:constructor, :vsn) == :undefined
+    end
+
     # The client carries each application's version and nothing else of its
     # specification, so it answers :undefined here, whereas the server answers
     # with the value the application defines.

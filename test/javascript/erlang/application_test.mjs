@@ -96,6 +96,12 @@ describe("Erlang_Application", () => {
       assert.deepStrictEqual(result, Type.atom("undefined"));
     });
 
+    it("vsn of an unknown application named like an Object.prototype member", () => {
+      const result = get_key(Type.atom("constructor"), Type.atom("vsn"));
+
+      assert.deepStrictEqual(result, Type.atom("undefined"));
+    });
+
     // The client carries each application's version and nothing else of its
     // specification, so every other key is undefined - which is what the BEAM
     // answers for a key an application doesn't define.

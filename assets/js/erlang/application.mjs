@@ -44,11 +44,17 @@ const Erlang_Application = {
       return Type.atom("undefined");
     }
 
-    const vsn = ERTS.appVersions[app.value];
+    // The table is keyed by application names taken from atoms, so a lookup goes
+    // through Object.hasOwn - an application named like an Object.prototype
+    // member would otherwise resolve to the inherited value instead of nothing.
+    if (!Object.hasOwn(ERTS.appVersions, app.value)) {
+      return Type.atom("undefined");
+    }
 
-    return typeof vsn === "undefined"
-      ? Type.atom("undefined")
-      : Type.tuple([Type.atom("ok"), Type.charlist(vsn)]);
+    return Type.tuple([
+      Type.atom("ok"),
+      Type.charlist(ERTS.appVersions[app.value]),
+    ]);
   },
   // End get_key/2
   // Deps: []
