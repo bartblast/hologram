@@ -458,7 +458,7 @@ defmodule Hologram.Compiler do
   @doc """
   Creates runtime bundle entry file.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_4/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_5/README.md
   """
   @spec create_runtime_entry_file(
           list(mfa),

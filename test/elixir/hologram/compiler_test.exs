@@ -424,7 +424,7 @@ defmodule Hologram.CompilerTest do
     assert PLT.get_all(plt) == %{MyPage1 => "my-digest-1", MyPage2 => "my-digest-3"}
   end
 
-  describe "build_runtime_js/4" do
+  describe "build_runtime_js/5" do
     setup do
       on_exit(fn ->
         Application.delete_env(:hologram, :client_error_overlay)
@@ -829,10 +829,10 @@ defmodule Hologram.CompilerTest do
     end)
   end
 
-  test "create_runtime_entry_file/4", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+  test "create_runtime_entry_file/5", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     opts = [
       js_dir: @js_dir,
-      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_runtime_entry_file_4"])
+      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_runtime_entry_file_5"])
     ]
 
     clean_dir(opts[:tmp_dir])
