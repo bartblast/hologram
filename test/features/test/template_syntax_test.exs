@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
   alias HologramFeatureTests.TemplateSyntax.AttributeSpreadPage
   alias HologramFeatureTests.TemplateSyntax.ComponentPage
   alias HologramFeatureTests.TemplateSyntax.DynamicComponentPage
+  alias HologramFeatureTests.TemplateSyntax.DynamicElementPage
   alias HologramFeatureTests.TemplateSyntax.ForBlockPage
   alias HologramFeatureTests.TemplateSyntax.IfBlockPage
   alias HologramFeatureTests.TemplateSyntax.InterpolationPage
@@ -212,6 +213,22 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
       session
       |> visit(DynamicComponentPage)
       |> assert_has(css("#scenario_3", text: "slot content = value_3"))
+    end
+  end
+
+  describe "dynamic element" do
+    feature "tag name from state", %{session: session} do
+      session
+      |> visit(DynamicElementPage)
+      |> assert_has(css("h2#scenario_1", text: "value_1"))
+    end
+
+    feature "event binding", %{session: session} do
+      session
+      |> visit(DynamicElementPage)
+      |> assert_has(css("#scenario_2_result", text: "clicked? = false"))
+      |> click(css("#scenario_2"))
+      |> assert_has(css("#scenario_2_result", text: "clicked? = true"))
     end
   end
 end

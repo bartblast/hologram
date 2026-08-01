@@ -19,7 +19,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type server_callback_analysis :: %{
           dispatch_types: MapSet.t(module),
-          reflection_mfas: [mfa]
+          reflection_mfas: [mfa],
+          server_referenced_components: [module]
         }
 
   @type vertex :: module | mfa
@@ -732,8 +733,9 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Returns the sorted list of MFAs that are reachable by the given page.
-  Server dispatch types and reflection MFAs of the page's templatables are
-  looked up in the given precomputed server callback analysis.
+  Server dispatch types, reflection MFAs, and server-referenced components of
+  the page's templatables are looked up in the given precomputed server
+  callback analysis.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_3/README.md
   """
@@ -744,14 +746,22 @@ defmodule Hologram.Compiler.CallGraph do
 
     initial_state = start_reachable_state(graph, entry_mfas, MapSet.new())
     initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
-    templatables = [page_module | extract_uniq_components(initial_mfas)]
+    initial_templatables = [page_module | extract_uniq_components(initial_mfas)]
+
+    {expanded_state, templatables} =
+      expand_reachable_state_with_server_referenced_components(
+        graph,
+        initial_state,
+        initial_templatables,
+        server_callback_analysis_by_templatable
+      )
 
     server_types =
       Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
         MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
       end)
 
-    final_state = expand_reachable_state_with_types(graph, initial_state, server_types)
+    final_state = expand_reachable_state_with_types(graph, expanded_state, server_types)
 
     graph
     |> finalize_reachable_mfas(final_state)
@@ -1035,8 +1045,9 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Returns the server callback analysis of each given templatable module: the
   protocol dispatch types that can appear in its server-executed code (code
-  reachable from its init/3 and command/3 callbacks) and the reflection MFAs
-  reachable from its init/3.
+  reachable from its init/3 and command/3 callbacks), the reflection MFAs
+  reachable from its init/3, and the component modules referenced in its
+  server-executed code.
   Templatables are analyzed sequentially, since spawning a task per templatable
   would copy the whole graph into each task process, which costs far more than
   the traversals themselves.
@@ -1047,9 +1058,20 @@ defmodule Hologram.Compiler.CallGraph do
           %{module => server_callback_analysis}
   def server_callback_analysis_by_templatable(graph, templatables) do
     Map.new(templatables, fn templatable ->
+      # One traversal feeds both the dispatch types and the referenced components,
+      # matching what server_protocol_dispatch_types/2 would traverse for a single
+      # templatable.
+      server_vertices =
+        Digraph.reachable(
+          graph,
+          [{templatable, :command, 3}, {templatable, :init, 3}],
+          opaque_vertex?: &protocol_function_mfa?/1
+        )
+
       analysis = %{
-        dispatch_types: server_protocol_dispatch_types(graph, [templatable]),
-        reflection_mfas: list_reflection_mfas_reachable_from_server_init(templatable, graph)
+        dispatch_types: protocol_dispatch_types(server_vertices),
+        reflection_mfas: list_reflection_mfas_reachable_from_server_init(templatable, graph),
+        server_referenced_components: extract_component_module_vertices(server_vertices)
       }
 
       {templatable, analysis}
@@ -1248,11 +1270,55 @@ defmodule Hologram.Compiler.CallGraph do
     promote_pending_impl_candidates(graph, new_state)
   end
 
+  # A component module referenced in server-executed code can reach the client as a
+  # runtime value - put into state by init/3 or sent in action params by command/3 -
+  # and render as a dynamic tag, so its client code must be included in the page
+  # bundle. Newly included components introduce new templatables (their own server
+  # callbacks and the components statically referenced by their client code), so the
+  # expansion loops until no new components appear.
+  defp expand_reachable_state_with_server_referenced_components(
+         graph,
+         state,
+         templatables,
+         server_callback_analysis_by_templatable
+       ) do
+    new_components =
+      templatables
+      |> Enum.flat_map(&server_callback_analysis_by_templatable[&1].server_referenced_components)
+      |> Enum.uniq()
+      |> Kernel.--(templatables)
+
+    if new_components == [] do
+      {state, templatables}
+    else
+      new_state = expand_reachable_state(graph, state, new_components)
+
+      newly_reached_components =
+        new_state.reached_vertices
+        |> MapSet.difference(state.reached_vertices)
+        |> Enum.filter(&is_tuple/1)
+        |> extract_uniq_components()
+
+      new_templatables = Enum.uniq(templatables ++ new_components ++ newly_reached_components)
+
+      expand_reachable_state_with_server_referenced_components(
+        graph,
+        new_state,
+        new_templatables,
+        server_callback_analysis_by_templatable
+      )
+    end
+  end
+
   # Resumes the fixpoint from the given state with additional dispatch types,
   # reaching exactly the vertices a from-scratch run with those types would reach.
   defp expand_reachable_state_with_types(graph, state, extra_types) do
     new_state = %{state | types: MapSet.union(state.types, extra_types)}
     promote_pending_impl_candidates(graph, new_state)
+  end
+
+  defp extract_component_module_vertices(vertices) do
+    Enum.filter(vertices, &(is_atom(&1) && Reflection.component?(&1)))
   end
 
   # Implementation candidates are read from the dispatch edges added at build time

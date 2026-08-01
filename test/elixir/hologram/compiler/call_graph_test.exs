@@ -1179,6 +1179,83 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {Module13, :my_fun, 0} in result
     end
 
+    test "includes client MFAs of a component referenced only in server init", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :init, 3}, Module15)
+        |> list_page_mfas_with_analysis(Module17)
+
+      assert {Module15, :__props__, 0} in result
+      assert {Module15, :action, 3} in result
+      assert {Module15, :init, 2} in result
+      assert {Module15, :template, 0} in result
+    end
+
+    test "includes client MFAs of a component referenced only in commands", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :command, 3}, Module15)
+        |> list_page_mfas_with_analysis(Module17)
+
+      assert {Module15, :__props__, 0} in result
+      assert {Module15, :action, 3} in result
+      assert {Module15, :init, 2} in result
+      assert {Module15, :template, 0} in result
+    end
+
+    test "includes client MFAs of a component referenced in a server-referenced component's own server callbacks",
+         %{full_call_graph: full_call_graph} do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :init, 3}, Module15)
+        |> add_edge({Module15, :command, 3}, Module4)
+        |> list_page_mfas_with_analysis(Module17)
+
+      assert {Module4, :__props__, 0} in result
+      assert {Module4, :action, 3} in result
+      assert {Module4, :init, 2} in result
+      assert {Module4, :template, 0} in result
+    end
+
+    test "includes protocol implementations whose type is created in a server-referenced component's server code",
+         %{full_call_graph: full_call_graph} do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module17, :init, 3}, Module15)
+        |> add_edge({Module15, :init, 3}, Module12)
+        |> list_page_mfas_with_analysis(Module17)
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "treats components reached from a server-referenced component's client code as templatables",
+         %{full_call_graph: full_call_graph} do
+      # Module17's server init references Module15, whose template statically renders
+      # Module4, whose own server init creates Module12 - so Module12's String.Chars
+      # implementation must follow
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module17, :init, 3}, Module15)
+        |> add_edge({Module15, :template, 0}, Module4)
+        |> add_edge({Module4, :init, 3}, Module12)
+        |> list_page_mfas_with_analysis(Module17)
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
     test "includes reflection MFAs reachable from server inits of components used by the page", %{
       page_module_22_mfas: result
     } do
@@ -2025,6 +2102,37 @@ defmodule Hologram.Compiler.CallGraphTest do
       result = server_callback_analysis_by_templatable(graph, [Module2])
 
       assert result[Module2].reflection_mfas == []
+    end
+
+    test "collects component modules referenced in the templatable's own server callbacks" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, Module15)
+        |> Digraph.add_edge({Module4, :command, 3}, Module3)
+
+      result = server_callback_analysis_by_templatable(graph, [Module2, Module4])
+
+      assert result[Module2].server_referenced_components == [Module15]
+      assert result[Module4].server_referenced_components == [Module3]
+    end
+
+    test "doesn't collect non-component modules referenced in server callbacks" do
+      graph = Digraph.add_edge(Digraph.new(), {Module2, :init, 3}, Module5)
+
+      result = server_callback_analysis_by_templatable(graph, [Module2])
+
+      assert result[Module2].server_referenced_components == []
+    end
+
+    test "doesn't collect component modules reachable only through protocol function vertices" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, {Protocol1, :my_fun, 1})
+        |> Digraph.add_edge({Protocol1, :my_fun, 1}, Module15)
+
+      result = server_callback_analysis_by_templatable(graph, [Module2])
+
+      assert result[Module2].server_referenced_components == []
     end
   end
 
