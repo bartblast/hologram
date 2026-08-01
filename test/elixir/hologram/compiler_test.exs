@@ -541,8 +541,21 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/ERTS.appVersions = {hologram: "0.1.0", my_app: "9.8.7"};/
+               ~s/ERTS.appVersions = {"hologram": "0.1.0", "my_app": "9.8.7"};/
              )
+    end
+
+    test "quotes an application name that isn't a JavaScript identifier", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      app_versions = [{:"my-app", "9.8.7"}]
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), app_versions, @js_dir)
+
+      assert String.contains?(js, ~s/ERTS.appVersions = {"my-app": "9.8.7"};/)
     end
 
     test "injects no application versions when client stacktraces are disabled", %{

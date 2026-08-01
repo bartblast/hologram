@@ -837,7 +837,7 @@ defmodule Hologram.Compiler do
   defp render_app_versions(app_versions) do
     if Hologram.client_stacktraces?() do
       app_versions
-      |> Enum.map_join(", ", fn {app, vsn} -> ~s/#{app}: "#{vsn}"/ end)
+      |> Enum.map_join(", ", fn {app, vsn} -> ~s/"#{app}": "#{vsn}"/ end)
       |> then(&"{#{&1}}")
     else
       "{}"
