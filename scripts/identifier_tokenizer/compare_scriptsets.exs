@@ -11,10 +11,14 @@ js_file = Path.join(__DIR__, "scriptsets_javascript.txt")
 
 IO.puts("Comparing scriptsets_elixir.txt and scriptsets_javascript.txt...\n")
 
+# The generators write the oracle files without a trailing newline, so splitting
+# on it yields only real lines. An editor that adds one on save would otherwise
+# feed an empty line to the destructuring below, which no clause matches.
 parse_file = fn filename ->
   filename
   |> File.read!()
   |> String.split("\n")
+  |> Enum.reject(&(&1 == ""))
   |> Enum.map(fn line ->
     [codepoint, signature] = String.split(line, ":", parts: 2)
     {String.to_integer(codepoint), signature}
