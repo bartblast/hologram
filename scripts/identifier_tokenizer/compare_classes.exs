@@ -74,8 +74,15 @@ range_lines =
       if last - first <= 3 do
         first..last
         |> Enum.map_join("", fn codepoint ->
-          char = <<codepoint::utf8>>
-          if String.printable?(char), do: char, else: "?"
+          # Surrogates have no UTF-8 encoding of their own, so they are shown the
+          # way unprintable characters are rather than crashing the report.
+          case :unicode.characters_to_binary([codepoint]) do
+            char when is_binary(char) ->
+              if String.printable?(char), do: char, else: "?"
+
+            _error ->
+              "?"
+          end
         end)
         |> then(&" (#{&1})")
       else
