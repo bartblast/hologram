@@ -48,15 +48,6 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
     end
 
     feature "reraise re-raises the rescued exception", %{session: session} do
-      # Asserts only the re-raised exception. The matching consistency test
-      # additionally asserts that reraise preserves the original raise-site
-      # stacktrace, which is server-only - the client has no stacktraces yet
-      # (__STACKTRACE__ is []), so there is nothing to preserve here.
-      #
-      # TODO: once client-side stacktraces are supported (see the TODO in
-      # lib/hologram/compiler/transformer.ex), tighten this to also assert that
-      # reraise preserves the original raise-site stacktrace, mirroring the
-      # consistency test.
       assert_client_error session,
                           ArgumentError,
                           "my message",
@@ -104,7 +95,11 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
 
   describe "__STACKTRACE__" do
     # The line `raise "boom"` sits on in app/pages/control_flow/try_page.ex.
-    @raise_line 258
+    @raise_line 274
+
+    # The line `raise "bang"` sits on in app/pages/control_flow/try_page.ex -
+    # the raise site reraise has to preserve, not the clause re-raising it.
+    @reraise_line 196
 
     feature "holds the frame the error was raised in", %{session: session} do
       expected =
@@ -115,6 +110,18 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
       session
       |> visit(TryPage)
       |> click(button("Stacktrace"))
+      |> assert_text(css("#result"), expected)
+    end
+
+    feature "reraise preserves the frame of the original raise site", %{session: session} do
+      expected =
+        "{:reraise_stacktrace, [{#{inspect(TryPage)}, :action, 3, " <>
+          ~s([file: ~c"app/pages/control_flow/try_page.ex", ) <>
+          "line: #{@reraise_line}, error_info: %{module: Exception}]}]}"
+
+      session
+      |> visit(TryPage)
+      |> click(button("Reraise stacktrace"))
       |> assert_text(css("#result"), expected)
     end
   end
