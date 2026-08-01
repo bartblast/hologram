@@ -6,8 +6,12 @@ defmodule HologramFeatureTests.StacktracePage do
 
   alias HologramFeatureTests.StacktraceFixture
 
-  # The scenarios raise on every path, so the functions carrying them never return.
-  @dialyzer {:no_return, action: 3}
+  # The anonymous function the first scenario raises in never returns, and an
+  # anonymous function can't be annotated by name - so the warning is silenced on
+  # the clause holding it. Every action/3 clause here does return.
+  @dialyzer {:nowarn_function, action: 3}
+
+  # StacktraceFixture.raise_error/1 always raises, so local_fun/1 never returns.
   @dialyzer {:no_return, local_fun: 1}
 
   route "/stacktrace"
