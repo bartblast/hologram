@@ -39,7 +39,10 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module35
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module36
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module37
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module38
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module39
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module40
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
@@ -51,6 +54,10 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, as: StringCharsModule12
 
   @tmp_dir Reflection.tmp_dir()
+
+  defp app_protocol_dispatch_types_with_analysis(graph) do
+    app_protocol_dispatch_types(graph, Reflection.list_pages(), broadcast_caller_analysis(graph))
+  end
 
   defp list_page_mfas_with_analysis(call_graph, page_module) do
     graph = CallGraph.get_graph(call_graph)
@@ -118,17 +125,17 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Digraph.vertices(graph) == [:vertex_3]
   end
 
-  describe "app_protocol_dispatch_types/2" do
+  describe "app_protocol_dispatch_types/3" do
     test "includes types reachable from page client code" do
       graph = Digraph.add_edge(Digraph.new(), {Module2, :template, 0}, Struct1)
 
-      assert Struct1 in app_protocol_dispatch_types(graph, Reflection.list_pages())
+      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
     end
 
     test "includes types created in server-executed code of pages" do
       graph = Digraph.add_edge(Digraph.new(), {Module2, :init, 3}, Struct1)
 
-      assert Struct1 in app_protocol_dispatch_types(graph, Reflection.list_pages())
+      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
     end
 
     test "includes types created in server-executed code of components used by pages" do
@@ -137,7 +144,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module2, :template, 0}, {Module4, :template, 0})
         |> Digraph.add_edge({Module4, :init, 3}, Struct1)
 
-      assert Struct1 in app_protocol_dispatch_types(graph, Reflection.list_pages())
+      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
     end
 
     test "includes types reachable from broadcast callers" do
@@ -146,18 +153,27 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> Digraph.add_edge({Module13, :my_fun, 0}, Struct1)
 
-      assert Struct1 in app_protocol_dispatch_types(graph, Reflection.list_pages())
+      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
+    end
+
+    test "includes types created in server-executed code of broadcast-referenced components" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> Digraph.add_edge({Module13, :my_fun, 0}, Module4)
+        |> Digraph.add_edge({Module4, :command, 3}, Struct1)
+
+      assert Struct1 in app_protocol_dispatch_types_with_analysis(graph)
     end
 
     test "returns only built-in types for a graph without app type references" do
       graph = Digraph.add_edge(Digraph.new(), {Module13, :my_fun, 0}, {Module5, :my_fun, 0})
 
-      assert app_protocol_dispatch_types(graph, Reflection.list_pages()) ==
-               protocol_dispatch_types([])
+      assert app_protocol_dispatch_types_with_analysis(graph) == protocol_dispatch_types([])
     end
   end
 
-  describe "broadcast_caller_protocol_dispatch_types/1" do
+  describe "broadcast_caller_analysis/1" do
     test "includes struct types reachable from broadcast_action callers" do
       graph =
         Digraph.new()
@@ -167,10 +183,10 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module6, :my_fun, 0}, {Module7, :my_fun, 0})
         |> Digraph.add_edge({Module7, :my_fun, 0}, Module12)
 
-      result = broadcast_caller_protocol_dispatch_types(graph)
+      result = broadcast_caller_analysis(graph)
 
-      assert Struct1 in result
-      assert Module12 in result
+      assert Struct1 in result.dispatch_types
+      assert Module12 in result.dispatch_types
     end
 
     test "includes struct types reachable from broadcast_action_except callers" do
@@ -181,16 +197,46 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action_except, 4})
         |> Digraph.add_edge({Module6, :my_fun, 0}, Module12)
 
-      result = broadcast_caller_protocol_dispatch_types(graph)
+      result = broadcast_caller_analysis(graph)
 
-      assert Struct1 in result
-      assert Module12 in result
+      assert Struct1 in result.dispatch_types
+      assert Module12 in result.dispatch_types
     end
 
-    test "returns only built-in types when there are no broadcast callers" do
-      graph = Digraph.add_edge(Digraph.new(), {Module5, :my_fun, 0}, Struct1)
+    test "collects component modules referenced in broadcast caller code" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 2})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, Module15)
+        |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action_except, 3})
+        |> Digraph.add_edge({Module6, :my_fun, 0}, Module4)
 
-      assert broadcast_caller_protocol_dispatch_types(graph) == protocol_dispatch_types([])
+      result = broadcast_caller_analysis(graph)
+
+      assert Enum.sort(result.referenced_components) == [Module15, Module4]
+    end
+
+    test "doesn't collect non-component modules referenced in broadcast caller code" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 2})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, Module12)
+
+      result = broadcast_caller_analysis(graph)
+
+      assert result.referenced_components == []
+    end
+
+    test "returns only built-in types and no components when there are no broadcast callers" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
+        |> Digraph.add_edge({Module5, :my_fun, 0}, Module15)
+
+      result = broadcast_caller_analysis(graph)
+
+      assert result.dispatch_types == protocol_dispatch_types([])
+      assert result.referenced_components == []
     end
 
     test "doesn't traverse through protocol function vertices" do
@@ -199,8 +245,12 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> Digraph.add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
         |> Digraph.add_edge({Protocol1, :my_fun, 1}, Struct1)
+        |> Digraph.add_edge({Protocol1, :my_fun, 1}, Module15)
 
-      refute Struct1 in broadcast_caller_protocol_dispatch_types(graph)
+      result = broadcast_caller_analysis(graph)
+
+      refute Struct1 in result.dispatch_types
+      refute Module15 in result.referenced_components
     end
   end
 
@@ -1469,6 +1519,97 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {StringCharsModule12, :to_string, 1} in result
 
       refute {Module13, :my_fun, 0} in result
+    end
+
+    test "includes client MFAs of a component referenced only in broadcast caller code", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> add_edge({Module13, :my_fun, 0}, Module38)
+        |> list_runtime_mfas(Reflection.list_pages())
+
+      assert {Module38, :__props__, 0} in result
+      assert {Module38, :action, 3} in result
+      assert {Module38, :init, 2} in result
+      assert {Module38, :template, 0} in result
+
+      refute {Module13, :my_fun, 0} in result
+    end
+
+    test "includes protocol implementations whose type is created in a broadcast-referenced component's server code",
+         %{full_call_graph: call_graph} do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> add_edge({Module13, :my_fun, 0}, Module38)
+        |> add_edge({Module38, :command, 3}, Module12)
+        |> list_runtime_mfas(Reflection.list_pages())
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+
+      refute {Module38, :command, 3} in result
+    end
+
+    test "includes client MFAs of a component referenced in a broadcast-referenced component's own server callbacks",
+         %{full_call_graph: call_graph} do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> add_edge({Module13, :my_fun, 0}, Module38)
+        |> add_edge({Module38, :command, 3}, Module39)
+        |> list_runtime_mfas(Reflection.list_pages())
+
+      assert {Module39, :__props__, 0} in result
+      assert {Module39, :action, 3} in result
+      assert {Module39, :init, 2} in result
+      assert {Module39, :template, 0} in result
+    end
+
+    test "collects components through a referenced component's client code already at analysis time",
+         %{full_call_graph: call_graph} do
+      # Module13 broadcasts and references Module38, whose template statically renders
+      # Module39, whose own server command creates Module12. The broadcast caller
+      # traversal crosses static client code, so Module39 is collected by the analysis
+      # itself and Module12's String.Chars implementation must follow.
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> add_edge({Module13, :my_fun, 0}, Module38)
+        |> add_edge({Module38, :template, 0}, Module39)
+        |> add_edge({Module39, :command, 3}, Module12)
+        |> list_runtime_mfas(Reflection.list_pages())
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "treats components reached from a broadcast-chained component's client code as templatables",
+         %{full_call_graph: call_graph} do
+      # Module13 broadcasts and references Module38, whose server command references
+      # Module39 (fixpoint hop), whose template statically renders Module40, whose own
+      # server command creates Module12 - so Module12's String.Chars implementation
+      # must follow
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> add_edge({Module13, :my_fun, 0}, Module38)
+        |> add_edge({Module38, :command, 3}, Module39)
+        |> add_edge({Module39, :template, 0}, Module40)
+        |> add_edge({Module40, :command, 3}, Module12)
+        |> list_runtime_mfas(Reflection.list_pages())
+
+      assert {Module40, :template, 0} in result
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
     end
 
     # Guards the type-bounded implementation inclusion in both directions: missing
