@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
   alias HologramFeatureTests.TemplateSyntax.AttributeSpreadPage
   alias HologramFeatureTests.TemplateSyntax.ComponentPage
   alias HologramFeatureTests.TemplateSyntax.DynamicComponentPage
+  alias HologramFeatureTests.TemplateSyntax.DynamicComponentSwapPage
   alias HologramFeatureTests.TemplateSyntax.DynamicElementPage
   alias HologramFeatureTests.TemplateSyntax.ForBlockPage
   alias HologramFeatureTests.TemplateSyntax.IfBlockPage
@@ -220,6 +221,22 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
       |> visit(DynamicComponentPage)
       |> click(css("#scenario_4_button"))
       |> assert_has(css("#scenario_4", text: "loaded from command"))
+    end
+
+    # The counts are incremented before each swap, so a swapped-in component showing
+    # count = 0 proves the previous module's state was discarded rather than reused.
+    feature "module swap under a cid resets state", %{session: session} do
+      session
+      |> visit(DynamicComponentSwapPage)
+      |> assert_has(css("#component_7", text: "component_7 count = 0"))
+      |> click(css("#component_7_button"))
+      |> assert_has(css("#component_7", text: "component_7 count = 1"))
+      |> click(css("#swap_button"))
+      |> assert_has(css("#component_8", text: "component_8 count = 0"))
+      |> click(css("#component_8_button"))
+      |> assert_has(css("#component_8", text: "component_8 count = 1"))
+      |> click(css("#swap_button"))
+      |> assert_has(css("#component_7", text: "component_7 count = 0"))
     end
   end
 
