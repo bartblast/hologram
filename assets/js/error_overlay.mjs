@@ -23,9 +23,12 @@ const STYLE_ELEMENT_ID = "hologram-error-overlay-style";
 
 // Written once into the page rather than onto every element, so the tones stay
 // in one place and each line costs a class name instead of a style attribute.
+//
+// The colours are HOLO's, named as the website names them, so an error reads in
+// the same palette as the code on hologram.page.
 const STYLES = `
   .${CLASS_PREFIX} {
-    background-color: #0f1014;
+    background-color: #0f1014; /* chinese-black */
     box-sizing: border-box;
     color: #c2bbd3;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -57,6 +60,7 @@ const STYLES = `
     top: 20px;
   }
 
+  /* bright-lavender */
   .${CLASS_PREFIX}__heading {
     color: #a78bfa;
     font-size: 36px;
@@ -74,24 +78,28 @@ const STYLES = `
     margin-bottom: 20px;
   }
 
-  /* Warm, where everything else is violet - what broke is told apart by not
-     belonging to the palette the rest of the report reads in, rather than by
-     being the brightest thing on the surface. */
+  /* melon - the tone HOLO highlighting gives a keyword. Warm, where the rest of
+     the report is cool, so what broke is told apart by not belonging to the
+     palette around it rather than by being the brightest thing on screen. */
   .${CLASS_PREFIX}__tone-banner {
-    color: #ff9e80;
+    color: #f7b9ab;
     font-size: 17px;
   }
 
+  /* lavender-gray */
   .${CLASS_PREFIX}__tone-body {
     color: #c2bbd3;
   }
 
+  /* dark-silver - the tone HOLO highlighting gives a comment, which recedes the
+     same way. */
   .${CLASS_PREFIX}__tone-chrome {
-    color: #665e80;
+    color: #6f6f6f;
   }
 
+  /* iceberg */
   .${CLASS_PREFIX}__tone-meta {
-    color: #877ea8;
+    color: #66acd6;
   }
 `;
 
