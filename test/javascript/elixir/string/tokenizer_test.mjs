@@ -43,6 +43,9 @@ const tokenize = (codePoints) =>
     Type.list(codePoints.map((codePoint) => Type.integer(codePoint))),
   );
 
+const tokenizeImproperTerms = (terms) =>
+  Elixir_String_Tokenizer["tokenize/1"](Type.improperList(terms));
+
 const tokenizeTerms = (terms) =>
   Elixir_String_Tokenizer["tokenize/1"](Type.list(terms));
 
@@ -139,6 +142,42 @@ describe("Elixir_String_Tokenizer", () => {
           Type.integer(1),
           Type.boolean(true),
           Type.list([]),
+        ]),
+      );
+    });
+
+    it("identifier stops before the tail of an improper list", () => {
+      assert.deepStrictEqual(
+        tokenizeImproperTerms([
+          Type.integer(97),
+          Type.integer(32),
+          Type.integer(98),
+        ]),
+        Type.tuple([
+          Type.atom("identifier"),
+          charlist("a"),
+          Type.improperList([Type.integer(32), Type.integer(98)]),
+          Type.integer(1),
+          Type.boolean(true),
+          Type.list([]),
+        ]),
+      );
+    });
+
+    it("identifier reads up to the tail of an improper list", () => {
+      assert.deepStrictEqual(
+        tokenizeImproperTerms([
+          Type.integer(97),
+          Type.integer(33),
+          Type.integer(98),
+        ]),
+        Type.tuple([
+          Type.atom("identifier"),
+          charlist("a!"),
+          Type.integer(98),
+          Type.integer(2),
+          Type.boolean(true),
+          Type.list([Type.atom("punctuation")]),
         ]),
       );
     });

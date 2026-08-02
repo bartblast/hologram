@@ -300,8 +300,18 @@ const continueTokens = (
   return {acc, restIndex: index, asciiLetters, scriptSet, special};
 };
 
+// Rebuilds what the server hands back unread: an improper subject yields an
+// improper rest, down to the bare tail once every term before it is read.
+const buildRest = (unread, tail) => {
+  if (tail === null) {
+    return Type.list(unread);
+  }
+
+  return unread.length === 0 ? tail : Type.improperList([...unread, tail]);
+};
+
 // Mirrors validate/2.
-const validate = (state, kind, terms) => {
+const validate = (state, kind, terms, tail) => {
   if (state.error === "unexpected_token") {
     return Type.tuple([
       Type.atom("error"),
@@ -318,7 +328,7 @@ const validate = (state, kind, terms) => {
   const {acc, restIndex, asciiLetters, scriptSet, special} = state;
   const length = restIndex;
 
-  const rest = Type.list(terms.slice(restIndex));
+  const rest = buildRest(terms.slice(restIndex), tail);
 
   let resultAcc = acc;
   const resultSpecial = special;
@@ -379,7 +389,13 @@ const Elixir_String_Tokenizer = {
       ]);
     }
 
-    const terms = subject.data;
+    // An improper list keeps its tail as the last data element. The tokenizer
+    // never reads it - it's what the terms it stops before hang off.
+    // TODO: raise the way the server does when the read runs past the last
+    // term, which calls continue/6 with the tail and matches no clause.
+    const improper = Type.isImproperList(subject);
+    const terms = improper ? subject.data.slice(0, -1) : subject.data;
+    const tail = improper ? subject.data.at(-1) : null;
 
     // A term that isn't a number sorts above every code point in Erlang term
     // order, so it fails the "<= 127" test the way the server's guard does.
@@ -448,7 +464,7 @@ const Elixir_String_Tokenizer = {
       special,
     );
 
-    return validate(state, kind, terms);
+    return validate(state, kind, terms, tail);
   },
 };
 

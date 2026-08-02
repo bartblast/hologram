@@ -57,6 +57,16 @@ defmodule Hologram.ExJsConsistency.Elixir.String.TokenizerTest do
                {:identifier, ~c"a", [1.5, ?c], 1, true, []}
     end
 
+    test "identifier stops before the tail of an improper list" do
+      assert String.Tokenizer.tokenize([?a, ?\s | ?b]) ==
+               {:identifier, ~c"a", [?\s | ?b], 1, true, []}
+    end
+
+    test "identifier reads up to the tail of an improper list" do
+      assert String.Tokenizer.tokenize([?a, ?! | ?b]) ==
+               {:identifier, ~c"a!", ?b, 2, true, [:punctuation]}
+    end
+
     test "Unicode identifier" do
       assert String.Tokenizer.tokenize(~c"héllo") == {:identifier, ~c"héllo", [], 5, false, []}
     end
