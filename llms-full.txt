@@ -419,6 +419,49 @@ Components can be used as custom elements in your templates. They can receive pr
 
 For more information about components and their props, see the Components documentation.
 
+#### Dynamic Nodes
+
+Which node a tag renders doesn't have to be decided literally. A braced Elixir expression in tag-name position is evaluated at render time and its value decides what gets rendered: a component module renders that component, a string renders an HTML element with that tag name, and any other value raises an `ArgumentError`.
+
+Components are the usual reason to reach for this - a widget chosen by a content type, a step in a wizard, a row in a heterogeneous list. The attributes become the component's props and the content between the tags becomes its default slot, exactly as with a statically named component:
+
+```holo
+<{@module} cid="my_component" title="Hello" />
+<{@module} cid="my_component">slot content</{@module}>
+```
+
+A page module won't do, even though a page is a kind of component itself - it's a root one, owning a route, taking its params from the URL and picking a layout, so it only makes sense at the root of a render, never as a node inside another template.
+
+A string value renders an element instead, with the attributes becoming DOM attributes and event bindings - so a heading level or an anchor-versus-button choice can be kept in state. Whatever string arrives is the tag that gets rendered, so tag names must never come from untrusted input:
+
+```holo
+<{@heading_tag} class="heading">{@text}</{@heading_tag}>
+```
+
+The expression is ordinary Elixir compiled in the template's module context, so aliases in scope apply and `@var` resolves to a prop or state value, exactly as anywhere else in a template. Most often it's simply a state value holding a module or a tag name:
+
+```elixir
+put_state(component, module: MyButton, heading_tag: "h2")
+```
+
+Nothing beyond the dispatch is new. Once resolved, a dynamic node behaves exactly like the equivalent static one - `<{MyButton} label="x">` is `<MyButton label="x">` and `<{"div"} class="x">` is `<div class="x">`. All prop, attribute, event, void element, spread and slot semantics carry over unchanged.
+
+Since dispatch happens per render, changing the module under a given `cid` replaces the component: the outgoing one is unmounted and the incoming one initializes its own state from scratch.
+
+##### Closing Tags
+
+A dynamic tag with children is closed with `</{expr}>`, repeating the opening expression verbatim, as in the examples above.
+
+That repetition is a good reason to keep the expression short. Logic written inline - an `if` picking between an anchor and a button, a `case` mapping a content type to a component - gets spelled out twice, once in each tag, and the two copies can drift apart. Keep the value in state or a prop, or compute it with a helper function.
+
+##### Module Reachability
+
+To render a dynamic component on the client, the compiler must know its module at build time. It bundles a component whenever the module atom appears as a literal in code it can see - a template, any client-reachable function, a page's or component's `init/3` or `command/3` server callback, or any code that broadcasts an action - `put_broadcast/3,4` inside a handler, `Hologram.Realtime.broadcast_action/2,3` outside one. So a module put into state by `init/3` or sent back in action params by `command/3` works without any extra declaration.
+
+The search follows calls forward, so functions those callbacks call count too, but their own callers don't - a module picked elsewhere and passed down into a broadcasting helper won't be found. Modules that exist only at runtime don't work at all: ones built with `Module.concat/1`, resolved with `String.to_existing_atom/1`, or read from the database or config without a literal anywhere in the app's code are not bundled, and rendering them on the client raises.
+
+A component referenced in broadcast code goes into the shared runtime bundle rather than a page bundle, so it ships with every page - a broadcast is addressed to a `cid`, and which page has that `cid` mounted is only known at runtime.
+
 #### Elixir Expression Interpolation
 
 You can embed Elixir expressions in your templates using curly braces:
