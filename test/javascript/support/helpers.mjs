@@ -50,6 +50,13 @@ export {h as vnode} from "../../../assets/node_modules/snabbdom/build/index.js";
 export const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
+// What a boxed error names itself: the exception module and what it says about
+// itself. Its message carries the whole report a browser prints for an error
+// nobody caught, so the two parts are put back together here.
+export function boxedErrorMessage(error) {
+  return `(${error.type}) ${error.text}`;
+}
+
 export function assertBoxedError(
   callable,
   expectedErrorType,

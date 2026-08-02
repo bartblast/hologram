@@ -1117,31 +1117,6 @@ describe("Hologram", () => {
       globalThis.Hologram.config.errorOverlay = false;
     });
 
-    // The browser reads the message when it composes its own report, which it
-    // does after this has run - so the report reaches the console by being the
-    // message, rather than by being printed alongside it.
-    it("gives the error the report the server would print as its message", () => {
-      CallStack.push({
-        module: "MyModule",
-        function: "my_fun",
-        arityOrArgs: 1,
-        file: "lib/my_module.ex",
-        line: 11,
-        errorInfo: null,
-      });
-
-      const error = boxedError();
-
-      Hologram.handleUncaughtError(error);
-
-      assert.equal(
-        error.message,
-        "\n\n** (MyError) my message\n" +
-          "    lib/my_module.ex:11: MyModule.my_fun/1\n" +
-          "\nJavaScript stacktrace:",
-      );
-    });
-
     // The overlay reads the frames and the message off the error itself, so
     // it is handed the error rather than the report rendered from it.
     it("renders the error in the page when the overlay is enabled", () => {

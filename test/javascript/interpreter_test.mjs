@@ -5,6 +5,7 @@ import {
   assertBoxedError,
   assertBoxedErrorAsync,
   assertBoxedStrictEqual,
+  boxedErrorMessage,
   buildBadArityErrorMsg,
   buildCaseClauseErrorMsg,
   buildFunctionClauseErrorMsg,
@@ -9663,7 +9664,7 @@ describe("Interpreter", () => {
     );
 
     assert.equal(
-      caught.message,
+      boxedErrorMessage(caught),
       "(BadFunctionError) expected a function, got: :abc",
     );
   });
@@ -9688,7 +9689,7 @@ describe("Interpreter", () => {
     );
 
     assert.equal(
-      caught.message,
+      boxedErrorMessage(caught),
       "(BadMapError) expected a map, got:\n\n    :abc\n",
     );
   });
@@ -9746,7 +9747,7 @@ describe("Interpreter", () => {
       ]);
 
       assert.equal(
-        caught.message,
+        boxedErrorMessage(caught),
         "(BadMapError) expected a map, got:\n\n    :b\n",
       );
     });
@@ -9829,7 +9830,7 @@ describe("Interpreter", () => {
       }
 
       assert.equal(
-        caught.message,
+        boxedErrorMessage(caught),
         "(ArgumentError) errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
       );
     });
@@ -9872,7 +9873,7 @@ describe("Interpreter", () => {
       ]);
 
       assert.equal(
-        caught.message,
+        boxedErrorMessage(caught),
         "(ArgumentError) errors were found at the given arguments:\n\n  * 4th argument: invalid options\n",
       );
     });
@@ -9899,7 +9900,7 @@ describe("Interpreter", () => {
         },
       ]);
 
-      assert.equal(caught.message, "(ArgumentError) argument error");
+      assert.equal(boxedErrorMessage(caught), "(ArgumentError) argument error");
     });
   });
 
@@ -10035,7 +10036,7 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(caught.value, Type.atom("badarg"));
 
       assert.equal(
-        caught.message,
+        boxedErrorMessage(caught),
         "(ArgumentError) construction of binary failed: segment 2 of type 'float': expected one of the supported sizes 16, 32, or 64 but got: 24",
       );
     });
@@ -10061,7 +10062,7 @@ describe("Interpreter", () => {
     );
 
     assert.equal(
-      caught.message,
+      boxedErrorMessage(caught),
       "(CaseClauseError) no case clause matching:\n\n    :abc\n",
     );
   });
@@ -10120,7 +10121,7 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(caught.stacktrace, [callerFrame]);
 
       assert.equal(
-        caught.message,
+        boxedErrorMessage(caught),
         "(BadMapError) expected a map, got:\n\n    :b\n",
       );
     });
@@ -10137,7 +10138,7 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(caught.stacktrace, []);
 
       assert.equal(
-        caught.message,
+        boxedErrorMessage(caught),
         "(BadMapError) expected a map, got:\n\n    :b\n",
       );
     });
@@ -10206,7 +10207,7 @@ describe("Interpreter", () => {
       );
 
       assert.equal(
-        caught.message,
+        boxedErrorMessage(caught),
         "(FunctionClauseError) no function clause matching in :sets.filter/2\n\nThe following arguments were given to :sets.filter/2:\n\n    # 1\n    :a\n\n    # 2\n    :b\n",
       );
     });
@@ -10245,7 +10246,7 @@ describe("Interpreter", () => {
       );
 
       assert.equal(
-        caught.message,
+        boxedErrorMessage(caught),
         "(FunctionClauseError) no function clause matching in :sets.fold/3",
       );
     });
@@ -10424,7 +10425,7 @@ describe("Interpreter", () => {
     );
 
     assert.equal(
-      caught.message,
+      boxedErrorMessage(caught),
       "(MatchError) no match of right hand side value:\n\n    :abc\n",
     );
   });
@@ -10449,7 +10450,7 @@ describe("Interpreter", () => {
     );
 
     assert.equal(
-      caught.message,
+      boxedErrorMessage(caught),
       "(TryClauseError) no try clause matching:\n\n    :abc\n",
     );
   });
@@ -10529,7 +10530,7 @@ describe("Interpreter", () => {
     );
 
     assert.equal(
-      caught.message,
+      boxedErrorMessage(caught),
       "(WithClauseError) no with clause matching:\n\n    :abc\n",
     );
   });

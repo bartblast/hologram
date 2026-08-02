@@ -1,6 +1,11 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals, sinon} from "../support/helpers.mjs";
+import {
+  assert,
+  boxedErrorMessage,
+  defineRuntimeGlobals,
+  sinon,
+} from "../support/helpers.mjs";
 
 import CallStack from "../../../assets/js/erts/call_stack.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
@@ -62,7 +67,25 @@ describe("HologramBoxedError", () => {
       const struct = Type.errorStruct("MyType", "my message");
       const error = new HologramBoxedError(struct);
 
-      assert.equal(error.message, "(MyType) my message");
+      assert.equal(boxedErrorMessage(error), "(MyType) my message");
+    });
+
+    // A browser can read the message when the error is thrown, before any
+    // handler of ours runs - WebKit does - so the report is carried from the
+    // moment the error is built rather than written when it is reported.
+    it("carries the whole report as the message a browser prints", () => {
+      const struct = Type.errorStruct("MyType", "my message");
+
+      CallStack.push(myModuleFrame);
+      const error = new HologramBoxedError(struct);
+      CallStack.pop();
+
+      assert.equal(
+        error.message,
+        "\n\n** (MyType) my message\n" +
+          "    lib/my_module.ex:11: MyModule.my_fun/1\n" +
+          "\nJavaScript stacktrace:",
+      );
     });
 
     it("carries the parts the message is composed of", () => {
@@ -94,7 +117,10 @@ describe("HologramBoxedError", () => {
         Type.errorStruct("MyBlamedType", "my blamed message"),
       );
 
-      assert.equal(error.message, "(MyBlamedType) my blamed message");
+      assert.equal(
+        boxedErrorMessage(error),
+        "(MyBlamedType) my blamed message",
+      );
     });
 
     // Extra enumerable own-properties on a thrown Error blank out the message that
@@ -185,7 +211,7 @@ describe("HologramBoxedError", () => {
       assert.deepStrictEqual(caught.blamedStruct, reason);
 
       assert.equal(
-        caught.message,
+        boxedErrorMessage(caught),
         '(MyRaisedType) %{__exception__: true, message: "my raised message", __struct__: MyRaisedType}',
       );
     });
@@ -203,7 +229,7 @@ describe("HologramBoxedError", () => {
 
       assert.isNull(caught.struct);
       assert.isNull(caught.blamedStruct);
-      assert.equal(caught.message, "(error) :badarg");
+      assert.equal(boxedErrorMessage(caught), "(error) :badarg");
     });
 
     it("carries the raw form parts of a bare reason raised while deriving", () => {
@@ -237,7 +263,7 @@ describe("HologramBoxedError", () => {
       const error = new HologramBoxedError(struct);
 
       assert.deepStrictEqual(error.struct, struct);
-      assert.equal(error.message, "(MyType) my message");
+      assert.equal(boxedErrorMessage(error), "(MyType) my message");
     });
   });
 
@@ -277,7 +303,7 @@ describe("HologramBoxedError", () => {
       );
 
       assert.equal(
-        error.message,
+        boxedErrorMessage(error),
         '(MyType) %{__exception__: true, message: "my message", __struct__: MyType} ' +
           "(message derivation failed: my fault)",
       );
@@ -310,7 +336,7 @@ describe("HologramBoxedError", () => {
       const struct = Type.errorStruct("MyType", "my message");
       const error = new HologramBoxedError(struct);
 
-      assert.equal(error.message, "(MyType) my message");
+      assert.equal(boxedErrorMessage(error), "(MyType) my message");
     });
   });
 
@@ -338,7 +364,7 @@ describe("HologramBoxedError", () => {
       const value = Type.integer(42);
       const error = new HologramBoxedError(value, Type.atom("throw"));
 
-      assert.equal(error.message, "(throw) 42");
+      assert.equal(boxedErrorMessage(error), "(throw) 42");
     });
 
     it("carries the kind and the inspected value as the message parts", () => {
@@ -365,7 +391,7 @@ describe("HologramBoxedError", () => {
       const value = Type.integer(42);
       const error = new HologramBoxedError(value, Type.atom("exit"));
 
-      assert.equal(error.message, "(exit) 42");
+      assert.equal(boxedErrorMessage(error), "(exit) 42");
     });
   });
 });

@@ -83,7 +83,7 @@ export default class HologramBoxedError extends Error {
     } else {
       this.type = kind.value;
       this.text = Interpreter.inspect(value);
-      this.message = `(${this.type}) ${this.text}`;
+      this.message = $.#report(this);
     }
   }
 
@@ -110,7 +110,7 @@ export default class HologramBoxedError extends Error {
       this.type = Interpreter.getErrorType(this);
       this.text = Interpreter.resolveErrorMessage(this.blamedStruct);
 
-      this.message = `(${this.type}) ${this.text}`;
+      this.message = $.#report(this);
     } catch (error) {
       // A boxed error means the derivation raised the way Elixir code does, and it names what is
       // wrong better than this error could - it is carried out, having already taken its raw form
@@ -125,6 +125,27 @@ export default class HologramBoxedError extends Error {
     } finally {
       // Reset even when the derivation raises, so the error carrying that raise out still derives.
       HologramBoxedError.#isDeriving = false;
+    }
+  }
+
+  // What a browser prints when the error goes uncaught: the report the server
+  // would print for it, padded so the name the browser labels it with stands on
+  // its own line and the frames the browser adds below stand apart from the
+  // Elixir ones above them.
+  //
+  // Carried as the message rather than written when the error is reported,
+  // because a browser can read the message when the error is thrown - WebKit
+  // does - which is before any handler of ours runs. That only became
+  // affordable once rendering a stacktrace stopped being a run of interpreted
+  // Elixir: it is a few string joins over frames already in hand.
+  static #report(error) {
+    try {
+      return `\n\n${Interpreter.formatBoxedError(error)}\nJavaScript stacktrace:`;
+    } catch {
+      // Rendering runs the ported Exception and inspects each frame's terms,
+      // either of which can fault on a term that resists it. Naming what was
+      // raised is worth more than saying nothing at all.
+      return `(${error.type}) ${error.text}`;
     }
   }
 
@@ -147,6 +168,8 @@ export default class HologramBoxedError extends Error {
         : ` (message derivation failed: ${derivationError.message})`;
 
     this.text = `${Interpreter.inspect(this.value)}${fault}`;
-    this.message = `(${this.type}) ${this.text}`;
+    this.message = $.#report(this);
   }
 }
+
+const $ = HologramBoxedError;

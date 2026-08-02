@@ -313,19 +313,13 @@ export default class Hologram {
     };
   }
 
-  // Reports an uncaught boxed error the way the server reports one, by giving
-  // the browser's own report the Elixir frames to carry.
+  // Records an uncaught boxed error and puts it in the page.
   //
-  // The browser composes that report after this listener has run, reading the
-  // error's message as it stands then - so replacing the message with the whole
-  // report puts both stacktraces in the one entry the browser was going to
-  // write anyway: the Elixir frames, then the JavaScript stack below them. That
-  // stack stays the structured one the browser holds, which is what lets the
-  // devtools resolve its frames through the bundle's source maps - printing it
-  // as text would report the bundle's own positions instead.
-  //
-  // Reporting nothing here leaves the browser's report as it was, message and
-  // all, so an error still reaches the console if this ever breaks.
+  // Nothing is written to the console here: the error carries the whole report
+  // as its message, so the entry the browser writes for an error nobody caught
+  // holds the Elixir frames and the JavaScript stack below them - one entry,
+  // and its stack stays the structured one the devtools resolve through the
+  // bundle's source maps.
   static handleUncaughtError(error) {
     if (!(error instanceof HologramBoxedError)) {
       return;
@@ -339,18 +333,9 @@ export default class Hologram {
       message: error.text,
     });
 
-    // Rendered before the message is replaced below, since the overlay reads
-    // the message the error was raised with rather than the report it becomes.
     if (globalThis.Hologram.config.errorOverlay) {
       UncaughtErrorOverlay.show(error);
     }
-
-    const report = Interpreter.formatBoxedError(error);
-
-    // Padded so the report starts below the name the browser labels it with,
-    // and closed with a heading for the frames the browser adds under it - two
-    // stacktraces run together otherwise, and only one of them is the page's.
-    error.message = `\n\n${report}\nJavaScript stacktrace:`;
   }
 
   // Made public to make tests easier

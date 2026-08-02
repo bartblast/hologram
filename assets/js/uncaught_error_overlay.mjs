@@ -65,7 +65,11 @@ export default class UncaughtErrorOverlay {
     // The message is one line, newlines and all, so a message running over
     // several of them is set apart from the frames once rather than broken up
     // by the spacing that does it.
-    const message = [{text: `** ${error.message}`, tone: "banner"}];
+    // Built from the parts rather than read off the message, which carries the
+    // whole report for the browser to print.
+    const message = [
+      {text: `** (${error.type}) ${error.text}`, tone: "banner"},
+    ];
 
     const frames = Interpreter.boxStacktrace(error).data.map((frame) =>
       $.#toFrameSegments(frame),

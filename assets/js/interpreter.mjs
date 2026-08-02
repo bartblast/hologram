@@ -611,14 +611,14 @@ export default class Interpreter {
   }
 
   // Renders a boxed error the way the server renders an uncaught one: the
-  // banner naming the exception and its message, then the stacktrace, which
+  // banner naming the exception and what it says about itself, then the stacktrace, which
   // the ported Exception.format_stacktrace/1 renders so the frames read as
   // they do on the server. Both trace shapes an error can carry render the
   // same. A frameless error is its banner alone, as Exception.format/3 leaves
   // the section off for an empty stacktrace.
   // Deps: [Exception.format_stacktrace/1]
   static formatBoxedError(error) {
-    const banner = `** ${error.message}`;
+    const banner = `** (${error.type}) ${error.text}`;
     const boxedStacktrace = $.boxStacktrace(error);
 
     if (boxedStacktrace.data.length === 0) {
