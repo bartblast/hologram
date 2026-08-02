@@ -2,7 +2,10 @@
 
 import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
+import ERTS from "../../assets/js/erts.mjs";
 import ErrorOverlay from "../../assets/js/error_overlay.mjs";
+import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
+import Type from "../../assets/js/type.mjs";
 import UncaughtErrorOverlay from "../../assets/js/uncaught_error_overlay.mjs";
 
 defineRuntimeGlobals();
@@ -23,8 +26,32 @@ describe("UncaughtErrorOverlay", () => {
   describe("show()", () => {
     let showStub;
 
-    const contentOf = (report) => {
-      UncaughtErrorOverlay.show(report);
+    const fileEntry = (path) =>
+      Type.tuple([Type.atom("file"), Type.charlist(path)]);
+
+    const lineEntry = (line) =>
+      Type.tuple([Type.atom("line"), Type.integer(line)]);
+
+    const frame = (moduleTerm, functionName, arity, location) =>
+      Type.tuple([
+        moduleTerm,
+        Type.atom(functionName),
+        Type.integer(arity),
+        Type.list(location),
+      ]);
+
+    const errorWith = (frames, message = "my message") => {
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyError", message),
+      );
+
+      error.stacktrace = Type.list(frames);
+
+      return error;
+    };
+
+    const contentOf = (error) => {
+      UncaughtErrorOverlay.show(error);
 
       return showStub.firstCall.args[0].content;
     };
@@ -34,178 +61,110 @@ describe("UncaughtErrorOverlay", () => {
     });
 
     afterEach(() => {
+      ERTS.appVersions = {};
+      ERTS.moduleMetadata = {};
       showStub.restore();
     });
 
     it("puts up a dismissable overlay under its own id", () => {
-      UncaughtErrorOverlay.show("** (RuntimeError) my error");
+      UncaughtErrorOverlay.show(errorWith([]));
 
       sinon.assert.calledOnceWithExactly(showStub, {
-        content: [[{text: "** (RuntimeError) my error", tone: "banner"}]],
+        content: [[{text: "** (MyError) my message", tone: "banner"}]],
         dismissable: true,
         heading: "Runtime Error",
         id: OVERLAY_ID,
       });
     });
 
-    it("reads a report carrying no frames as the message alone", () => {
-      assert.deepStrictEqual(contentOf("** (RuntimeError) my error"), [
-        [{text: "** (RuntimeError) my error", tone: "banner"}],
+    it("reads an error carrying no frames as the message alone", () => {
+      assert.deepStrictEqual(contentOf(errorWith([])), [
+        [{text: "** (MyError) my message", tone: "banner"}],
       ]);
     });
 
-    it("sets the message apart from the frames", () => {
-      const report = [
-        "** (RuntimeError) my error",
-        "    my_app/page.ex:33: MyApp.Page.my_fun/2",
-      ].join("\n");
-
-      assert.deepStrictEqual(contentOf(report), [
-        [{text: "** (RuntimeError) my error", tone: "banner"}],
-        [
-          {text: "    ", tone: "chrome"},
-          {text: "my_app/page.ex:33: ", tone: "meta"},
-          {text: "MyApp.Page.my_fun/2", tone: "body"},
-        ],
-      ]);
-    });
-
-    // A FunctionClauseError lists the arguments it was given, indenting them
-    // the way a frame is indented.
+    // A FunctionClauseError's message lists the arguments it was given over
+    // several lines, and stays the one thing the frames are set against.
     it("keeps a message running over several lines in one piece", () => {
-      const report = [
-        "** (FunctionClauseError) no function clause matching in MyApp.my_fun/1",
-        "",
-        "The following arguments were given to MyApp.my_fun/1:",
-        "",
-        "    # 1",
-        "    :abc",
-        "",
-        "    my_app/page.ex:3: MyApp.my_fun/1",
-      ].join("\n");
+      const message = "my message\n\n    # 1\n    :not_a_tuple";
 
-      const [message, frame] = contentOf(report);
+      assert.deepStrictEqual(contentOf(errorWith([], message)), [
+        [{text: `** (MyError) ${message}`, tone: "banner"}],
+      ]);
+    });
 
-      assert.deepStrictEqual(message, [
+    it("sets a frame's source location apart from what was running", () => {
+      const frames = [
+        frame(Type.alias("MyModule"), "my_fun", 1, [
+          fileEntry("lib/my_module.ex"),
+          lineEntry(11),
+        ]),
+      ];
+
+      assert.deepStrictEqual(contentOf(errorWith(frames))[1], [
+        {text: "    ", tone: "chrome"},
+        {text: "lib/my_module.ex:11: ", tone: "meta"},
+        {text: "MyModule.my_fun/1", tone: "body"},
+      ]);
+    });
+
+    it("names the application a frame the app owns came from", () => {
+      ERTS.moduleMetadata = {MyModule: {app: "my_app", file: null}};
+      ERTS.appVersions = {my_app: "1.2.3"};
+
+      const frames = [
+        frame(Type.alias("MyModule"), "my_fun", 1, [
+          fileEntry("lib/my_module.ex"),
+          lineEntry(11),
+        ]),
+      ];
+
+      assert.deepStrictEqual(contentOf(errorWith(frames))[1], [
+        {text: "    (my_app 1.2.3) ", tone: "chrome"},
+        {text: "lib/my_module.ex:11: ", tone: "meta"},
+        {text: "MyModule.my_fun/1", tone: "body"},
+      ]);
+    });
+
+    it("reads a frame from outside the app in one tone throughout", () => {
+      ERTS.moduleMetadata = {"Hologram.Runtime": {app: "hologram", file: null}};
+      ERTS.appVersions = {hologram: "0.9.3"};
+
+      const frames = [
+        frame(Type.alias("Hologram.Runtime"), "run", 1, [
+          fileEntry("lib/hologram/runtime.ex"),
+          lineEntry(12),
+        ]),
+      ];
+
+      assert.deepStrictEqual(contentOf(errorWith(frames))[1], [
         {
-          text: [
-            "** (FunctionClauseError) no function clause matching in MyApp.my_fun/1",
-            "",
-            "The following arguments were given to MyApp.my_fun/1:",
-            "",
-            "    # 1",
-            "    :abc",
-          ].join("\n"),
-          tone: "banner",
+          text: "    (hologram 0.9.3) lib/hologram/runtime.ex:12: Hologram.Runtime.run/1",
+          tone: "chrome",
         },
       ]);
+    });
 
-      assert.deepStrictEqual(frame, [
+    it("places a frame naming a file but no line by its file alone", () => {
+      const frames = [
+        frame(Type.alias("MyModule"), "my_fun", 1, [
+          fileEntry("lib/my_module.ex"),
+        ]),
+      ];
+
+      assert.deepStrictEqual(contentOf(errorWith(frames))[1], [
         {text: "    ", tone: "chrome"},
-        {text: "my_app/page.ex:3: ", tone: "meta"},
-        {text: "MyApp.my_fun/1", tone: "body"},
+        {text: "lib/my_module.ex: ", tone: "meta"},
+        {text: "MyModule.my_fun/1", tone: "body"},
       ]);
     });
 
-    // An argument inspected as a map carries a colon of its own, which a frame
-    // carries too.
-    it("keeps an argument holding a colon in the message", () => {
-      const report = [
-        "** (FunctionClauseError) no function clause matching in MyApp.my_fun/1",
-        "",
-        '    %{key: "value"}',
-        "",
-        "    my_app/page.ex:3: MyApp.my_fun/1",
-      ].join("\n");
+    it("reads a frame placing no source as what was running alone", () => {
+      const frames = [frame(Type.alias("MyModule"), "my_fun", 1, [])];
 
-      const [message] = contentOf(report);
-
-      assert.deepStrictEqual(message, [
-        {
-          text: [
-            "** (FunctionClauseError) no function clause matching in MyApp.my_fun/1",
-            "",
-            '    %{key: "value"}',
-          ].join("\n"),
-          tone: "banner",
-        },
-      ]);
-    });
-
-    // A frame raised on entering a function, as a clause mismatch is, names the
-    // file it happened in without a line in it.
-    it("places a frame naming a file but no line", () => {
-      const report = [
-        "** (FunctionClauseError) no function clause matching in MyApp.my_fun/1",
-        "    (my_app 1.2.3) my_app/page.ex: MyApp.my_fun(:abc)",
-      ].join("\n");
-
-      assert.deepStrictEqual(contentOf(report)[1], [
-        {text: "    (my_app 1.2.3) ", tone: "chrome"},
-        {text: "my_app/page.ex: ", tone: "meta"},
-        {text: "MyApp.my_fun(:abc)", tone: "body"},
-      ]);
-    });
-
-    it("splits an app frame into where it came from and what was running", () => {
-      const report = [
-        "** (RuntimeError) my error",
-        "    (my_app 1.2.3) my_app/page.ex:33: MyApp.Page.my_fun/2",
-      ].join("\n");
-
-      assert.deepStrictEqual(contentOf(report)[1], [
-        {text: "    (my_app 1.2.3) ", tone: "chrome"},
-        {text: "my_app/page.ex:33: ", tone: "meta"},
-        {text: "MyApp.Page.my_fun/2", tone: "body"},
-      ]);
-    });
-
-    it("takes a frame naming no app to be the app's own", () => {
-      const report = [
-        "** (RuntimeError) my error",
-        "    my_app/page.ex:33: MyApp.Page.my_fun/2",
-      ].join("\n");
-
-      assert.deepStrictEqual(contentOf(report)[1], [
+      assert.deepStrictEqual(contentOf(errorWith(frames))[1], [
         {text: "    ", tone: "chrome"},
-        {text: "my_app/page.ex:33: ", tone: "meta"},
-        {text: "MyApp.Page.my_fun/2", tone: "body"},
-      ]);
-    });
-
-    it("reads a framework frame in one tone throughout", () => {
-      const report = [
-        "** (RuntimeError) my error",
-        "    (hologram 0.9.3) lib/hologram/runtime.ex:12: Hologram.Runtime.run/1",
-        "    (elixir 1.20.0) lib/enum.ex:1725: Enum.map/2",
-      ].join("\n");
-
-      assert.deepStrictEqual(contentOf(report).slice(1), [
-        [
-          {
-            text: "    (hologram 0.9.3) lib/hologram/runtime.ex:12: Hologram.Runtime.run/1",
-            tone: "chrome",
-          },
-        ],
-        [
-          {
-            text: "    (elixir 1.20.0) lib/enum.ex:1725: Enum.map/2",
-            tone: "chrome",
-          },
-        ],
-      ]);
-    });
-
-    it("reads a frame placing no source as what was running there", () => {
-      const report = [
-        "** (RuntimeError) my error",
-        "    my_app/page.ex:33: MyApp.Page.my_fun/2",
-        "    (my_app 1.2.3) MyApp.Page.other_fun/0",
-      ].join("\n");
-
-      assert.deepStrictEqual(contentOf(report)[2], [
-        {text: "    (my_app 1.2.3) ", tone: "chrome"},
-        {text: "MyApp.Page.other_fun/0", tone: "body"},
+        {text: "MyModule.my_fun/1", tone: "body"},
       ]);
     });
   });

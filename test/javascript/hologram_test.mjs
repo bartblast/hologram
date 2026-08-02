@@ -1142,15 +1142,16 @@ describe("Hologram", () => {
       );
     });
 
+    // The overlay reads the frames and the message off the error itself, so
+    // it is handed the error rather than the report rendered from it.
     it("renders the error in the page when the overlay is enabled", () => {
       globalThis.Hologram.config.errorOverlay = true;
 
-      Hologram.handleUncaughtError(boxedError());
+      const error = boxedError();
 
-      sinon.assert.calledOnceWithExactly(
-        overlayShowStub,
-        "** (MyError) my message",
-      );
+      Hologram.handleUncaughtError(error);
+
+      sinon.assert.calledOnceWithExactly(overlayShowStub, error);
     });
 
     it("keeps the error out of the page when the overlay is disabled", () => {

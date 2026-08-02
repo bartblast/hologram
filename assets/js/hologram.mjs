@@ -339,16 +339,18 @@ export default class Hologram {
       message: error.text,
     });
 
+    // Rendered before the message is replaced below, since the overlay reads
+    // the message the error was raised with rather than the report it becomes.
+    if (globalThis.Hologram.config.errorOverlay) {
+      UncaughtErrorOverlay.show(error);
+    }
+
     const report = Interpreter.formatBoxedError(error);
 
     // Padded so the report starts below the name the browser labels it with,
     // and closed with a heading for the frames the browser adds under it - two
     // stacktraces run together otherwise, and only one of them is the page's.
     error.message = `\n\n${report}\nJavaScript stacktrace:`;
-
-    if (globalThis.Hologram.config.errorOverlay) {
-      UncaughtErrorOverlay.show(report);
-    }
   }
 
   // Made public to make tests easier

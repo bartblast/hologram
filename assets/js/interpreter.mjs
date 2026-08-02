@@ -608,7 +608,7 @@ export default class Interpreter {
   // Deps: [Exception.format_stacktrace/1]
   static formatBoxedError(error) {
     const banner = `** ${error.message}`;
-    const boxedStacktrace = $.#boxStacktrace(error);
+    const boxedStacktrace = $.boxStacktrace(error);
 
     if (boxedStacktrace.data.length === 0) {
       return banner;
@@ -1576,7 +1576,7 @@ export default class Interpreter {
   // clause body's nested closures, while function dispatch builds fresh
   // contexts, so it never leaks into called functions.
   static #bindStacktrace(error, context) {
-    context.stacktrace = $.#boxStacktrace(error);
+    context.stacktrace = $.boxStacktrace(error);
   }
 
   // Recomputes against the actual arguments which parts of a clause head
@@ -1666,7 +1666,10 @@ export default class Interpreter {
 
   // Boxes the stacktrace carried on an error. A trace given to :erlang.raise/3
   // is stored already boxed, while a captured one is an array of frame objects.
-  static #boxStacktrace(error) {
+  // The frames an error carries, boxed. An error raised through
+  // :erlang.raise/3 already carries them boxed, one raised any other way
+  // carries the shadow call stack's own frames.
+  static boxStacktrace(error) {
     return Type.isList(error.stacktrace)
       ? error.stacktrace
       : Type.list(error.stacktrace.map(CallStack.boxFrame));
