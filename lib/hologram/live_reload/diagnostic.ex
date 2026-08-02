@@ -11,6 +11,11 @@ defmodule Hologram.LiveReload.Diagnostic do
   # shown as the characters they are made of.
   @ansi_escapes_regex ~r/\e\[[0-9;]*[a-zA-Z]/
 
+  # A location and what it points at, as in
+  # "  └─ lib/my_app.ex:3:5: MyApp.bar/0" - the marker leading it, where in the
+  # source, and what was being compiled there.
+  @location_regex ~r/^(\s*└─\s*)(\S*\.\w+(?::\d+)*:\s+)?(.*)$/u
+
   # The gutter a source excerpt opens with, holding the line number, as in
   # "  3 │     foo()".
   @source_excerpt_regex ~r/^(\s*\d+\s*│\s?)(.*)$/u
@@ -55,10 +60,25 @@ defmodule Hologram.LiveReload.Diagnostic do
         [segment(:chrome, line)]
 
       String.starts_with?(trimmed, "└─") ->
-        [segment(:meta, line)]
+        to_location_segments(line)
 
       true ->
         to_source_excerpt_segments(line)
+    end
+  end
+
+  # Split the way a stack frame is, so what was being compiled reads apart from
+  # where it is - the same parts, told apart the same way.
+  defp to_location_segments(line) do
+    case Regex.run(@location_regex, line) do
+      [_match, marker, "", compiling] ->
+        [segment(:chrome, marker), segment(:body, compiling)]
+
+      [_match, marker, location, compiling] ->
+        [segment(:chrome, marker), segment(:meta, location), segment(:body, compiling)]
+
+      _fallback ->
+        [segment(:meta, line)]
     end
   end
 

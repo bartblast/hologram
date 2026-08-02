@@ -43,9 +43,34 @@ defmodule Hologram.LiveReload.DiagnosticTest do
              ]
     end
 
-    test "reads a location in the meta tone" do
+    # Split the way a stack frame is, so both reports tell where something is
+    # apart from what was there in the same way.
+    test "sets a location apart from what it points at" do
       assert to_lines("    └─ lib/my_app.ex:3:5: MyApp.bar/0") == [
-               [%{tone: :meta, text: "    └─ lib/my_app.ex:3:5: MyApp.bar/0"}]
+               [
+                 %{tone: :chrome, text: "    └─ "},
+                 %{tone: :meta, text: "lib/my_app.ex:3:5: "},
+                 %{tone: :body, text: "MyApp.bar/0"}
+               ]
+             ]
+    end
+
+    test "sets a location carrying no column apart from what it points at" do
+      assert to_lines("    └─ lib/my_app.ex:3: MyApp.bar/0") == [
+               [
+                 %{tone: :chrome, text: "    └─ "},
+                 %{tone: :meta, text: "lib/my_app.ex:3: "},
+                 %{tone: :body, text: "MyApp.bar/0"}
+               ]
+             ]
+    end
+
+    test "reads a location pointing at no source as what it points at" do
+      assert to_lines("    └─ something else entirely") == [
+               [
+                 %{tone: :chrome, text: "    └─ "},
+                 %{tone: :body, text: "something else entirely"}
+               ]
              ]
     end
 
@@ -77,7 +102,7 @@ defmodule Hologram.LiveReload.DiagnosticTest do
                [%{tone: :chrome}, %{tone: :body}],
                [%{tone: :chrome}],
                [%{tone: :chrome}],
-               [%{tone: :meta}],
+               [%{tone: :chrome}, %{tone: :meta}, %{tone: :body}],
                [%{tone: :body, text: ""}]
              ] = to_lines(output)
     end
