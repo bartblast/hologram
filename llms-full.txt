@@ -430,7 +430,15 @@ Components are the usual reason to reach for this - a widget chosen by a content
 <{@module} cid="my_component">slot content</{@module}>
 ```
 
-A page module won't do, even though a page is a kind of component itself - it's a root one, owning a route, taking its params from the URL and picking a layout, so it only makes sense at the root of a render, never as a node inside another template.
+A page module isn't valid here, even though a page is a kind of component itself - it's a root one, owning a route, taking its params from the URL and picking a layout, so it only makes sense at the root of a render, never as a node inside another template.
+
+A call site that can't name the module statically usually can't name the props either, so dynamic tags pair naturally with the attribute and prop spread described below - both the module and its props come from the data:
+
+```holo
+{%for widget <- @widgets}
+  <{widget.module} ...{widget.props} />
+{/for}
+```
 
 A string value renders an element instead, with the attributes becoming DOM attributes and event bindings - so a heading level or an anchor-versus-button choice can be kept in state. Whatever string arrives is the tag that gets rendered, so tag names must never come from untrusted input:
 
