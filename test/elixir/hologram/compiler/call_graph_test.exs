@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
+  alias Hologram.Component
   alias Hologram.Realtime
   alias Hologram.Reflection
 
@@ -210,6 +211,32 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module5, :my_fun, 0}, Module15)
         |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action_except, 3})
         |> Digraph.add_edge({Module6, :my_fun, 0}, Module4)
+
+      result = broadcast_caller_analysis(graph)
+
+      assert Enum.sort(result.referenced_components) == [Module15, Module4]
+    end
+
+    test "collects component modules referenced in code that queues a broadcast" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :command, 3}, {Component, :put_broadcast, 3})
+        |> Digraph.add_edge({Module5, :command, 3}, Module15)
+        |> Digraph.add_edge({Module6, :command, 3}, {Component, :put_broadcast, 4})
+        |> Digraph.add_edge({Module6, :command, 3}, Module4)
+
+      result = broadcast_caller_analysis(graph)
+
+      assert Enum.sort(result.referenced_components) == [Module15, Module4]
+    end
+
+    test "collects component modules referenced in code that queues a broadcast with exclusions" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :command, 3}, {Component, :put_broadcast_except, 4})
+        |> Digraph.add_edge({Module5, :command, 3}, Module15)
+        |> Digraph.add_edge({Module6, :command, 3}, {Component, :put_broadcast_except, 5})
+        |> Digraph.add_edge({Module6, :command, 3}, Module4)
 
       result = broadcast_caller_analysis(graph)
 
@@ -1562,6 +1589,24 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Module38, :template, 0} in result
 
       refute {Module13, :my_fun, 0} in result
+    end
+
+    test "includes client MFAs of a component referenced only in code that queues a broadcast", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module38, :command, 3}, {Component, :put_broadcast, 4})
+        |> add_edge({Module38, :command, 3}, Module39)
+        |> list_runtime_mfas(Reflection.list_pages())
+
+      assert {Module39, :__props__, 0} in result
+      assert {Module39, :action, 3} in result
+      assert {Module39, :init, 2} in result
+      assert {Module39, :template, 0} in result
+
+      refute {Module38, :command, 3} in result
     end
 
     test "excludes client MFAs of a page module referenced only in broadcast caller code", %{

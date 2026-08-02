@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
+  alias Hologram.Component
   alias Hologram.Realtime
   alias Hologram.Reflection
 
@@ -35,7 +36,14 @@ defmodule Hologram.Compiler.CallGraph do
   @dialyzer {:no_opaque, {:start_reachable_state, 3}}
 
   # Functions that broadcast action params from arbitrary server code to connected clients.
-  @broadcast_action_mfas [
+  # The Component helpers queue a broadcast on the server struct, which the framework
+  # flushes after the handler returns - they reach the same audience as the immediate
+  # Realtime functions, so their callers are analysed the same way.
+  @broadcast_mfas [
+    {Component, :put_broadcast, 3},
+    {Component, :put_broadcast, 4},
+    {Component, :put_broadcast_except, 4},
+    {Component, :put_broadcast_except, 5},
     {Realtime, :broadcast_action, 2},
     {Realtime, :broadcast_action, 3},
     {Realtime, :broadcast_action_except, 3},
@@ -462,20 +470,20 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns the analysis of code reachable from the callers of
-  Hologram.Realtime.broadcast_action/2, broadcast_action/3,
-  broadcast_action_except/3, and broadcast_action_except/4: the protocol
-  dispatch types that can appear in that code and the component modules
-  referenced in it. A broadcast can deliver its payload to any connected
-  client, so referenced components must be available in the runtime bundle and
-  the types count as app-wide dispatch types.
+  Returns the analysis of code reachable from the callers of the functions that
+  broadcast actions: Hologram.Component.put_broadcast/3,4,
+  put_broadcast_except/4,5 and Hologram.Realtime.broadcast_action/2,3,
+  broadcast_action_except/3,4. Returns the protocol dispatch types that can
+  appear in that code and the component modules referenced in it. A broadcast
+  can deliver its payload to any connected client, so referenced components must
+  be available in the runtime bundle and the types count as app-wide dispatch types.
   Protocol function vertices are opaque during the traversal, so consolidated
   dispatch edges don't make every loaded implementation's type count as reachable.
   """
   @spec broadcast_caller_analysis(Digraph.t()) :: broadcast_caller_analysis
   def broadcast_caller_analysis(graph) do
     caller_vertices =
-      for broadcast_mfa <- @broadcast_action_mfas,
+      for broadcast_mfa <- @broadcast_mfas,
           {caller_vertex, _broadcast_mfa} <- Digraph.incoming_edges(graph, broadcast_mfa) do
         caller_vertex
       end
