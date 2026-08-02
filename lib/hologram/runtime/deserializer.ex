@@ -157,6 +157,7 @@ defmodule Hologram.Runtime.Deserializer do
     data
     |> Enum.map(fn [key, value] -> {deserialize(version, key), deserialize(version, value)} end)
     |> Enum.into(%{})
+    |> maybe_recompile_regex()
   end
 
   def deserialize(version, "o" <> data) when version in [3, 2] do
@@ -255,4 +256,15 @@ defmodule Hologram.Runtime.Deserializer do
     |> String.split(",")
     |> Enum.map(&IntegerUtils.parse!/1)
   end
+
+  # A Regex struct's :re_pattern references a compiled pattern that exists
+  # only in the client runtime, so the struct is rebuilt by compiling its
+  # source and options server-side, which also gives it the exact shape the
+  # running Elixir version expects.
+  defp maybe_recompile_regex(%{__struct__: Regex, source: source, opts: opts}) do
+    {:ok, regex} = Regex.compile(source, opts)
+    regex
+  end
+
+  defp maybe_recompile_regex(map), do: map
 end

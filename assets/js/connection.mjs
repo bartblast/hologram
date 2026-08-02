@@ -3,6 +3,7 @@
 import GlobalRegistry from "./global_registry.mjs";
 import LiveReload from "./live_reload.mjs";
 import Serializer from "./serializer.mjs";
+import Utils from "./utils.mjs";
 
 export default class Connection {
   // 1 second
@@ -241,7 +242,7 @@ export default class Connection {
     {onSuccess, onError, onTimeout, timeout = $.REQUEST_TIMEOUT} = {},
   ) {
     return new Promise((resolve, reject) => {
-      const correlationId = crypto.randomUUID();
+      const correlationId = Utils.randomUUID();
 
       const timerId = setTimeout(() => {
         $.pendingRequests.delete(correlationId);

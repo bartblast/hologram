@@ -220,6 +220,16 @@ defmodule Hologram.ReflectionTest do
     assert Enum.sort(list_all_otp_apps()) == Enum.sort(list_all_otp_apps())
   end
 
+  test "list_components/0" do
+    result = list_components()
+
+    assert Hologram.Test.Fixtures.Compiler.CallGraph.Module3 in result
+    assert Module3 in result
+
+    refute Hologram.Compiler.Context in result
+    refute Module2 in result
+  end
+
   describe "list_ebin_modules/1" do
     test "OTP app has ebin dir" do
       result = list_ebin_modules(:websock_adapter)
@@ -234,7 +244,7 @@ defmodule Hologram.ReflectionTest do
     end
 
     test "OTP app doesn't have ebin dir" do
-      assert list_ebin_modules(:ssl) == []
+      assert list_ebin_modules(:nonexistent_otp_app) == []
     end
   end
 
@@ -595,13 +605,23 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  describe "protocol_impl/1" do
+  describe "protocol_implementation/1" do
     test "module that implements a protocol" do
-      assert protocol_impl(Enumerable.Function) == Enumerable
+      assert protocol_implementation(Enumerable.Function) == Enumerable
     end
 
     test "module that does not implement a protocol" do
-      assert protocol_impl(Calendar.ISO) == nil
+      assert protocol_implementation(Calendar.ISO) == nil
+    end
+  end
+
+  describe "protocol_implementation?/1" do
+    test "module that implements a protocol" do
+      assert protocol_implementation?(Enumerable.Function)
+    end
+
+    test "module that does not implement a protocol" do
+      refute protocol_implementation?(Calendar.ISO)
     end
   end
 

@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_ir_plt/0</td>
-    <td style="white-space: nowrap; text-align: right">2.14</td>
-    <td style="white-space: nowrap; text-align: right">466.58 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;1.15%</td>
-    <td style="white-space: nowrap; text-align: right">465.52 ms</td>
-    <td style="white-space: nowrap; text-align: right">478.81 ms</td>
+    <td style="white-space: nowrap; text-align: right">2.11</td>
+    <td style="white-space: nowrap; text-align: right">473.87 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1.43%</td>
+    <td style="white-space: nowrap; text-align: right">471.78 ms</td>
+    <td style="white-space: nowrap; text-align: right">490.38 ms</td>
   </tr>
 
 </table>

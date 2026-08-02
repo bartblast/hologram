@@ -5,6 +5,8 @@ import BinaryPatternRegistry from "./erts/binary_pattern_registry.mjs";
 import NativeObjectRegistry from "./erts/native_object_registry.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import PromiseRegistry from "./erts/promise_registry.mjs";
+import RegexEngine from "./erts/regex/regex_engine.mjs";
+import RegexPatternRegistry from "./erts/regex_pattern_registry.mjs";
 import Sequence from "./common/sequence.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -41,6 +43,14 @@ export default class ERTS {
   // Entries are released via takePromise() when Task.await/1 is called.
   static promiseRegistry = PromiseRegistry;
 
+  // Lazy getter to avoid referencing the class binding while the module
+  // cycle erts -> regex engine -> bitstring -> erts is still initializing.
+  static get regex() {
+    return RegexEngine;
+  }
+
+  static regexPatternRegistry = RegexPatternRegistry;
+
   // Sequence for anonymous function `uniq` field.
   // Used to derive fun_info/1 fields: index, new_index, uniq, new_uniq.
   // In Erlang, index/new_index are per-module indices, and uniq/new_uniq are
@@ -55,6 +65,7 @@ export default class ERTS {
   static referenceSequence = new Sequence();
   static uniqueIntegerSequence = new Sequence();
   static utf8Decoder = new TextDecoder("utf-8", {fatal: true});
+  static utf8Encoder = new TextEncoder();
 
   static registerNativeObject(object) {
     const ref = $.uniqueReference();

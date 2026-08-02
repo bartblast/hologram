@@ -7,12 +7,15 @@ defmodule Hologram.Template.DOM do
   alias Hologram.Template.Parser
   alias Hologram.TemplateSyntaxError
 
+  @type attribute :: {String.t(), t} | {:spread, {any}}
+
   # 'dom_node' name used instead of 'node" because type node/0 is a built-in type and it cannot be redefined.
   @type dom_node ::
-          {:component, module, list({String.t(), t}), t}
-          | {:element, String.t(), list({String.t(), t}), t}
+          {:component, module, list(attribute), t}
+          | {:dynamic_tag, {any}, list(attribute), t}
+          | {:element, String.t(), list(attribute), t}
           | {:expression, {any}}
-          | {:page, module, list({String.t(), t}), []}
+          | {:page, module, list(attribute), []}
           | {:public_comment, t}
           | {:text, String.t()}
 
@@ -82,6 +85,24 @@ defmodule Hologram.Template.DOM do
     |> String.trim()
   end
 
+  # Wraps implicit keyword list.
+  # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
+  defp normalize_implicit_keyword_list(templ_expr) do
+    regex = ~r/^\{\s*(([a-zA-Z_][a-zA-Z0-9_]*[?!]?|"[^"]+"):\s.+)\}$/s
+
+    case Regex.run(regex, templ_expr) do
+      [_full, content, _beginning] ->
+        "{[#{content}]}"
+
+      nil ->
+        templ_expr
+    end
+  end
+
+  defp render_attribute_code({:spread, templ_expr}, _tag_type) do
+    "{:spread, #{normalize_implicit_keyword_list(templ_expr)}}"
+  end
+
   defp render_attribute_code({name, value_parts}, :element) do
     value_code = Enum.map_join(value_parts, ", ", &render_code/1)
 
@@ -137,21 +158,8 @@ defmodule Hologram.Template.DOM do
     "]}"
   end
 
-  # Wraps implicit keyword list.
-  # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
   defp render_code({:expression, templ_expr}) do
-    regex = ~r/^\{(([a-zA-Z][a-zA-Z0-9]*|"[^"]+"): .+)\}$/
-
-    elixir_expr =
-      case Regex.run(regex, templ_expr) do
-        [_full, content, _beginning] ->
-          "{[#{content}]}"
-
-        nil ->
-          templ_expr
-      end
-
-    "{:expression, #{elixir_expr}}"
+    "{:expression, #{normalize_implicit_keyword_list(templ_expr)}}"
   end
 
   defp render_code(:public_comment_end) do
@@ -164,6 +172,15 @@ defmodule Hologram.Template.DOM do
 
   defp render_code({:self_closing_tag, {tag_name, attributes}}) do
     render_code({:start_tag, {tag_name, attributes}}) <> render_code({:end_tag, tag_name})
+  end
+
+  # The tag name expression is already brace-wrapped, so emitting its source produces the one-tuple
+  # holding the runtime value. Attributes use element-style event decomposition, since the element
+  # branch is the only one that can consume events - the component branch filters them out anyway.
+  defp render_code({:start_tag, {{:expression, templ_expr}, attributes}}) do
+    attributes_code = Enum.map_join(attributes, ", ", &render_attribute_code(&1, :element))
+
+    "{:dynamic_tag, #{templ_expr}, [#{attributes_code}], ["
   end
 
   defp render_code({:start_tag, {tag_name, attributes}}) do
@@ -220,12 +237,18 @@ defmodule Hologram.Template.DOM do
   # The <window> and <document> tags bind events to the window or document and nothing else, so each
   # attribute must be an event binding (a "$"-prefixed name). Any other attribute fails the build.
   defp validate_reserved_tag_attributes(tag_name, attributes) do
-    Enum.each(attributes, fn {name, _value_parts} ->
-      unless String.starts_with?(name, "$") do
+    Enum.each(attributes, fn
+      # Spread entries can't carry event bindings, since "$"-prefixed keys are rejected at runtime.
+      {:spread, _templ_expr} ->
         raise TemplateSyntaxError,
-          message:
-            ~s'the <#{tag_name}> tag accepts only event bindings, but got the "#{name}" attribute'
-      end
+          message: ~s'the <#{tag_name}> tag accepts only event bindings, but got a spread'
+
+      {name, _value_parts} ->
+        unless String.starts_with?(name, "$") do
+          raise TemplateSyntaxError,
+            message:
+              ~s'the <#{tag_name}> tag accepts only event bindings, but got the "#{name}" attribute'
+        end
     end)
   end
 end

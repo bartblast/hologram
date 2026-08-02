@@ -38,8 +38,8 @@ This guide will walk you through the installation process step by step.
 
 #### Prerequisites
 
-- `Elixir` version 1.15 or higher
-- `OTP` version 24 or higher
+- `Elixir` version 1.19 or higher
+- `OTP` version 28.1 or higher
 - A working `Phoenix` application (see Phoenix installation guide: https://hexdocs.pm/phoenix/installation.html#phoenix)
 - `Node.js` version 20 or higher and `npm`, if not already installed, you can get them via `asdf`:
 
@@ -345,7 +345,10 @@ Hologram automatically analyzes your code and:
 
 1. Determines which parts should run on the client vs server
 2. Compiles necessary Elixir code to JavaScript for browser execution
-3. Sets up all required client-server communication
+3. Ships only the code and protocol implementations your app can actually reach, keeping client bundles small
+4. Sets up all required client-server communication
+
+Protocol implementations are included by type reachability. A struct's implementations (e.g. `String.Chars`) ship to the browser when the compiler finds the struct type in client-reachable code, in server-executed `init` or command code, or in action broadcasting code - not merely because a dependency defines them. If a type is resolved dynamically at runtime (for example from a string or external data), reference its struct module anywhere in client-reachable code to include its implementations.
 
 #### Client-Side State
 
@@ -416,6 +419,57 @@ Components can be used as custom elements in your templates. They can receive pr
 
 For more information about components and their props, see the Components documentation.
 
+#### Dynamic Nodes
+
+Which node a tag renders doesn't have to be decided literally. A braced Elixir expression in tag-name position is evaluated at render time and its value decides what gets rendered: a component module renders that component, a string renders an HTML element with that tag name, and any other value raises an `ArgumentError`.
+
+Components are the usual reason to reach for this - a widget chosen by a content type, a step in a wizard, a row in a heterogeneous list. The attributes become the component's props and the content between the tags becomes its default slot, exactly as with a statically named component:
+
+```holo
+<{@module} cid="my_component" title="Hello" />
+<{@module} cid="my_component">slot content</{@module}>
+```
+
+A page module isn't valid here, even though a page is a kind of component itself - it's a root one, owning a route, taking its params from the URL and picking a layout, so it only makes sense at the root of a render, never as a node inside another template.
+
+A call site that can't name the module statically usually can't name the props either, so dynamic tags pair naturally with the attribute and prop spread described below - both the module and its props come from the data:
+
+```holo
+{%for widget <- @widgets}
+  <{widget.module} ...{widget.props} />
+{/for}
+```
+
+A string value renders an element instead, with the attributes becoming DOM attributes and event bindings - so a heading level or an anchor-versus-button choice can be kept in state. Whatever string arrives is the tag that gets rendered, so tag names must never come from untrusted input:
+
+```holo
+<{@heading_tag} class="heading">{@text}</{@heading_tag}>
+```
+
+The expression is ordinary Elixir compiled in the template's module context, so aliases in scope apply and `@var` resolves to a prop or state value, exactly as anywhere else in a template. Most often it's simply a state value holding a module or a tag name:
+
+```elixir
+put_state(component, module: MyButton, heading_tag: "h2")
+```
+
+Nothing beyond the dispatch is new. Once resolved, a dynamic node behaves exactly like the equivalent static one - `<{MyButton} label="x">` is `<MyButton label="x">` and `<{"div"} class="x">` is `<div class="x">`. All prop, attribute, event, void element, spread and slot semantics carry over unchanged.
+
+Since dispatch happens per render, changing the module under a given `cid` replaces the component: the outgoing one is unmounted and the incoming one initializes its own state from scratch.
+
+##### Closing Tags
+
+A dynamic tag with children is closed with `</{expr}>`, repeating the opening expression verbatim, as in the examples above.
+
+That repetition is a good reason to keep the expression short. Logic written inline - an `if` picking between an anchor and a button, a `case` mapping a content type to a component - gets spelled out twice, once in each tag, and the two copies can drift apart. Keep the value in state or a prop, or compute it with a helper function.
+
+##### Module Reachability
+
+To render a dynamic component on the client, the compiler must know its module at build time. It bundles a component whenever the module atom appears as a literal in code it can see - a template, any client-reachable function, a page's or component's `init/3` or `command/3` server callback, or any code that broadcasts an action - `put_broadcast/3,4` inside a handler, `Hologram.Realtime.broadcast_action/2,3` outside one. So a module put into state by `init/3` or sent back in action params by `command/3` works without any extra declaration.
+
+The search follows calls forward, so functions those callbacks call count too, but their own callers don't - a module picked elsewhere and passed down into a broadcasting helper won't be found. Modules that exist only at runtime don't work at all: ones built with `Module.concat/1`, resolved with `String.to_existing_atom/1`, or read from the database or config without a literal anywhere in the app's code are not bundled, and rendering them on the client raises.
+
+A component referenced in broadcast code goes into the shared runtime bundle rather than a page bundle, so it ships with every page - a broadcast is addressed to a `cid`, and which page has that `cid` mounted is only known at runtime.
+
 #### Elixir Expression Interpolation
 
 You can embed Elixir expressions in your templates using curly braces:
@@ -468,6 +522,63 @@ For security purposes, all interpolated expressions are automatically HTML-escap
 ```
 
 If `@user_input` contains `"<script>alert('XSS')</script>"`, it will be safely rendered as escaped text rather than executed as JavaScript. This escaping happens automatically for all values interpolated in text content and HTML attributes.
+
+#### Attribute and Prop Spread
+
+A bare braced expression prefixed with `...` injects a map's or keyword list's entries as the tag's attributes (on elements) or props (on components). The `...` marker sits outside the braces, so their content is ordinary Elixir - any expression is allowed:
+
+```holo
+<div class="btn" ...{@html_attrs}>Content</div>
+<MyComponent title="Hello" ...{@props} />
+```
+
+The expression must evaluate to a map or a keyword list - anything else, including `nil`, raises an `ArgumentError`. Bare keyword shorthand works inside the braces, the same convention event bindings already use:
+
+```holo
+<div ...{class: "btn", data: [user_id: @id]}>Content</div>
+```
+
+Spread adds no rules of its own: every entry behaves exactly as if you had written it as a named attribute or prop at that position. On elements, values are stringified and falsy ones drop the attribute, exactly as described above. On components, values stay raw Elixir terms and undeclared keys are silently ignored, just like named props.
+
+##### Attribute Names
+
+On elements, underscores in a key convert to hyphens, whether the key is an atom or a string - `:data_value` and `"data_value"` both render `data-value`. A map or keyword list value nests, composing the name with hyphens at each level, so the example above renders `data-user-id`. Literal markup is never touched, so writing the attribute out by hand remains the exact-name escape hatch.
+
+On components, neither rule applies. A key like `:my_prop` sets the prop declared with exactly that name, with no hyphen conversion, since prop names are Elixir atoms. Values don't nest either - a map value is not expanded into multiple props, it's simply what that one prop receives. The `cid` prop may be supplied through a spread.
+
+Event bindings cannot be set through a spread. A `$`-prefixed key raises an `ArgumentError`, because silently not binding an intended event would be worse than erroring. Write events as literal attributes. They don't need a spread to be conditional anyway - a binding whose operation resolves to `nil` is switched off, as described in the Events documentation.
+
+The entries a single spread expands to render in alphabetical order. Map key order is undefined in Elixir, so sorting is what keeps the output reproducible. Attributes you write out yourself keep their position.
+
+##### Precedence
+
+Multiple spreads are allowed, and they interleave freely with named attributes and props. Names resolve by position, and the last one wins - so a literal before a spread is a default, and a literal after it is forced:
+
+```holo
+<div title="default" ...{@attrs}>Content</div>
+<div ...{@attrs} title="forced">Content</div>
+<div ...{@base} ...{@overrides}>Content</div>
+```
+
+##### Forwarding Wrapper
+
+There is nothing to declare on the receiving component - spread resolves at the call site, so props arrive indistinguishable from named ones and every existing component is already a valid target. To let a wrapper pass arbitrary attributes through to an inner element, declare an ordinary map prop:
+
+```elixir
+prop :html_attrs, :map
+```
+
+and spread it in the wrapper's template:
+
+```holo
+<button class="fancy" ...{@html_attrs}><slot /></button>
+```
+
+Callers then pass the attributes as a single prop:
+
+```holo
+<FancyButton html_attrs={@button_attrs}>Save</FancyButton>
+```
 
 #### Control Flow Blocks
 
@@ -1181,6 +1292,18 @@ The rule covers every expression form: a `nil` whole value like `$click={nil}`, 
 
 Note that `{if @editable, do: :save}` is invalid inside template braces (they are tuple braces, so Elixir requires parentheses or a `do...end` block for the ambiguous call) - use the `do...end` form shown above.
 
+##### Multiple Bindings per Element
+
+An element can carry any number of event bindings, including several for the same event - each `$event` attribute is an independent binding with its own modifiers and its own operation. When the event fires, every binding for it runs through its own modifier pipeline in the order the attributes are written, so one binding can react instantly while another debounces, or several keyboard filters can route different keys to different actions.
+
+The classic use is pairing a plain binding with a debounced one: the plain `$change` keeps state current on every keystroke, while the debounced one triggers only the expensive work once typing settles:
+
+```holo
+<input $change="update_query" $change.debounce(300)="run_search" />
+```
+
+The paired bindings can even differ only in their windows - `$change.debounce(250)` next to `$change.debounce(1000)` stages the work: a quick, cheap search shortly after typing pauses, then the full one.
+
 #### Event Targets
 
 By default, events are handled by the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for handling the event using the `target` parameter:
@@ -1221,7 +1344,7 @@ Combine modifier keys with the key using `+` to match keyboard shortcuts:
 <input $key_down.ctrl+enter="send_message" />
 ```
 
-Filters work on both `$key_down` and `$key_up`, and you can place several filtered bindings on one element - each fires only on its own key or combination. Keys are matched case-insensitively, so `$key_down.k` also matches `Shift`+`K`.
+Filters work on both `$key_down` and `$key_up`, and you can place several filtered bindings on one element - each fires only on its own key or combination, as described in the "Multiple Bindings per Element" section above. Keys are matched case-insensitively, so `$key_down.k` also matches `Shift`+`K`.
 
 A filter matches as long as the keys it lists are pressed - any extra modifiers held at the same time do not prevent it. So `$key_down.ctrl+enter` still fires when `Shift` is also down, and `$key_down.enter` fires whether or not a modifier is held.
 
@@ -1277,7 +1400,13 @@ Used without a value, `debounce` applies a default window of 250 milliseconds - 
 <input $key_down.debounce="handle_key" />
 ```
 
-Debouncing works on any event, not only keyboard events, and it combines with key filters - `$key_down.enter.debounce(300)` debounces only the Enter key. Each binding keeps its own timer, so several debounced bindings on one element never interfere. Like key filters, the window is validated at compile time: a non-positive or non-integer value such as `$change.debounce(0)` fails the build rather than misbehaving in the browser.
+Debouncing works on any event and combines with key filters - `$key_down.enter.debounce(300)` debounces only the Enter key. Each binding keeps its own timer, so several debounced bindings on one element never interfere - including several for the same event, as in the typeahead pattern from the "Multiple Bindings per Element" section above. Like key filters, the window is validated at compile time: a non-positive or non-integer value such as `$change.debounce(0)` fails the build rather than misbehaving in the browser.
+
+##### Lifecycle Boundaries
+
+A pending debounced dispatch resolves early at the boundaries where waiting would leave the app in a stale state. When the bound element loses focus, the pending dispatch fires immediately - the burst is definitively over, so nothing is gained by waiting out the rest of the window. When a form is submitted, pending debounced dispatches inside it fire first, so the submit action observes state that already reflects everything typed - and no trailing dispatch fires after the submit to resurrect a value the submit action may have cleared.
+
+Navigating to another page resolves the opposite way: the page a pending dispatch was meant for no longer exists, so it is dropped without firing. Together these rules make `debounce` a pure timing concern - it changes when the dispatch happens, never what the app observes at a boundary.
 
 ##### Debounce vs Delay
 
@@ -1300,6 +1429,8 @@ Used without a value, `throttle` applies a default window of 100 milliseconds - 
 ```
 
 Throttling works on any event and combines with key filters, and each binding keeps its own window. Like debouncing, the value is validated at compile time. A binding cannot carry both `throttle` and `debounce` - they are opposite strategies, so combining them fails the build.
+
+Like a pending debounced dispatch, a trailing dispatch held inside an open throttle window is dropped when the user navigates to another page - it never fires into a page it was not meant for.
 
 ##### Throttle vs Debounce
 
@@ -3747,7 +3878,7 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 
 **Functions:** Anonymous Function (done), Function Capture (done), Local Function (done), Remote Function (done)
 
-**Operators:** Arithmetic (done), Boolean (done), Comparison (done), List ++/-- (done), String Concatenation <> (done), Pipe |> (done), Match = (done), Pin ^ (done), Range ../..// (done), Membership in (done), Module Attribute @ (done), Capture & (done), Type :: (done), Exponentiation ** (done), Regex Match =~ (in progress, 61%)
+**Operators:** Arithmetic (done), Boolean (done), Comparison (done), List ++/-- (done), String Concatenation <> (done), Pipe |> (done), Match = (done), Pin ^ (done), Range ../..// (done), Membership in (done), Module Attribute @ (done), Capture & (done), Type :: (done), Exponentiation ** (done), Regex Match =~ (done)
 
 **Guards:** Guards in all contexts (done)
 
@@ -3755,7 +3886,7 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 
 **Bitstrings:** Computed-Size Matching (todo), Construction (done), Dynamic-Size Matching (todo), Fixed-Size Matching (done), UTF Matching (todo), UTF16 and UTF32 Encoding (todo)
 
-**Other:** Behaviours (done), Bitwise Module Operators (done), Error Handling (done), Essential Stdlib Functions (done), Processes (deferred), Protocols (done), Regular Expressions (todo)
+**Other:** Behaviours (done), Bitwise Module Operators (done), Error Handling (done), Essential Stdlib Functions (done), Processes (deferred), Protocols (done), Regular Expressions (done)
 
 ### Roadmap
 
@@ -3769,7 +3900,6 @@ Our development roadmap is organized by timeline, with colors representing proxi
 - **Dynamic Components** - Support for dynamically loading and rendering components.
 - **Local-First Support** - Implement local-first architecture with offline-capable local database, auto-sync, and conflict resolution for resilient applications.
 - **Navigate Between Pages from Commands** - Enable navigation to another page from within a command.
-- **Regular Expressions** - Transpile Elixir's PCRE-based regexes to JavaScript runtime and support Regex-related functions such as `=~`.
 - **Standalone Mode** - Enable a standalone mode that operates without Phoenix, with installer, asset pipeline & watchers, code reloader, clustering, and deployment-ready defaults.
 - **Template Engine Error Reporting** - Improve error reporting in the template engine to make debugging template issues more straightforward.
 - **Umbrella Applications** - Support Hologram in umbrella project layouts, resolving dependency and asset paths through Mix and watching source across all child apps for live reload.

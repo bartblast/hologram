@@ -1221,6 +1221,40 @@ describe("Type", () => {
     });
   });
 
+  describe("isRecordTuple()", () => {
+    const term = Type.tuple([
+      Type.atom("re_pattern"),
+      Type.integer(1),
+      Type.integer(2),
+    ]);
+
+    it("returns true for a tuple with the given tag and arity", () => {
+      assert.isTrue(Type.isRecordTuple(term, "re_pattern", 3));
+    });
+
+    it("returns false for a tuple with another tag", () => {
+      assert.isFalse(Type.isRecordTuple(term, "other_tag", 3));
+    });
+
+    it("returns false for a tuple with another arity", () => {
+      assert.isFalse(Type.isRecordTuple(term, "re_pattern", 4));
+    });
+
+    it("returns false for a tuple with a non-atom first element", () => {
+      const untagged = Type.tuple([Type.integer(1), Type.integer(2)]);
+
+      assert.isFalse(Type.isRecordTuple(untagged, "re_pattern", 2));
+    });
+
+    it("returns false for an empty tuple", () => {
+      assert.isFalse(Type.isRecordTuple(Type.tuple([]), "re_pattern", 0));
+    });
+
+    it("returns false for a non-tuple term", () => {
+      assert.isFalse(Type.isRecordTuple(Type.atom("abc"), "re_pattern", 1));
+    });
+  });
+
   describe("isReference()", () => {
     it("returns true if the term is a reference", () => {
       const term = Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [1, 2, 3]);

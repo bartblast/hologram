@@ -571,6 +571,477 @@ defmodule Hologram.Template.DOMTest do
     end)
   end
 
+  describe "build_ast/1, dynamic tag node" do
+    test "without attributes or children" do
+      # <{"div"}></{"div"}>
+      tags = [
+        {:start_tag, {{:expression, ~s({"div"})}, []}},
+        {:end_tag, {:expression, ~s({"div"})}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:dynamic_tag, {:{}, [line: 1], ["div"]}, [], []]}
+             ]
+    end
+
+    test "with module attribute in tag name expression" do
+      # <{@module}></{@module}>
+      tags = [
+        {:start_tag, {{:expression, "{@module}"}, []}},
+        {:end_tag, {:expression, "{@module}"}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1],
+                   [
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :module]},
+                      [no_parens: true, line: 1], []}
+                   ]},
+                  [],
+                  []
+                ]}
+             ]
+    end
+
+    test "with alias in tag name expression" do
+      # <{Aaa.Bbb}></{Aaa.Bbb}>
+      tags = [
+        {:start_tag, {{:expression, "{Aaa.Bbb}"}, []}},
+        {:end_tag, {:expression, "{Aaa.Bbb}"}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], [{:__aliases__, [line: 1], [:Aaa, :Bbb]}]},
+                  [],
+                  []
+                ]}
+             ]
+    end
+
+    test "with function call in tag name expression" do
+      # <{my_fun(1)}></{my_fun(1)}>
+      tags = [
+        {:start_tag, {{:expression, "{my_fun(1)}"}, []}},
+        {:end_tag, {:expression, "{my_fun(1)}"}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], [{:my_fun, [line: 1], [1]}]},
+                  [],
+                  []
+                ]}
+             ]
+    end
+
+    test "with single attribute" do
+      # <{"div"} my_key="my_value"></{"div"}>
+      tags = [
+        {:start_tag, {{:expression, ~s({"div"})}, [{"my_key", [text: "my_value"]}]}},
+        {:end_tag, {:expression, ~s({"div"})}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], ["div"]},
+                  [{"my_key", [text: "my_value"]}],
+                  []
+                ]}
+             ]
+    end
+
+    test "with multiple attributes" do
+      tags = [
+        {:start_tag,
+         {{:expression, ~s({"div"})},
+          [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}]}},
+        {:end_tag, {:expression, ~s({"div"})}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], ["div"]},
+                  [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [text: "my_value_2"]}],
+                  []
+                ]}
+             ]
+    end
+
+    test "with attribute having expression value" do
+      tags = [
+        {:start_tag, {{:expression, ~s({"div"})}, [{"my_key", [expression: "{1 + 2}"]}]}},
+        {:end_tag, {:expression, ~s({"div"})}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], ["div"]},
+                  [{"my_key", [expression: {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]}]}],
+                  []
+                ]}
+             ]
+    end
+
+    test "with event attribute" do
+      tags = [
+        {:start_tag, {{:expression, ~s({"div"})}, [{"$click", [text: "my_action"]}]}},
+        {:end_tag, {:expression, ~s({"div"})}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], ["div"]},
+                  [{"$click", [text: "my_action"]}],
+                  []
+                ]}
+             ]
+    end
+
+    # Event modifiers are decomposed the element way, since the element branch is the only one
+    # that can consume events.
+    test "with event attribute having modifiers" do
+      tags = [
+        {:start_tag,
+         {{:expression, ~s({"div"})}, [{"$click.debounce(500)", [text: "my_action"]}]}},
+        {:end_tag, {:expression, ~s({"div"})}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], ["div"]},
+                  [
+                    {:{}, [line: 1],
+                     ["$click", [text: "my_action"], {:%{}, [line: 1], [debounce: 500]}]}
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with spread" do
+      # <{"div"} ...{@my_var}></{"div"}>
+      tags = [
+        {:start_tag, {{:expression, ~s({"div"})}, [{:spread, "{@my_var}"}]}},
+        {:end_tag, {:expression, ~s({"div"})}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], ["div"]},
+                  [
+                    spread:
+                      {:{}, [line: 1],
+                       [
+                         {{:., [line: 1], [{:vars, [line: 1], nil}, :my_var]},
+                          [no_parens: true, line: 1], []}
+                       ]}
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with text child" do
+      tags = [
+        {:start_tag, {{:expression, ~s({"div"})}, []}},
+        {:text, "abc"},
+        {:end_tag, {:expression, ~s({"div"})}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:dynamic_tag, {:{}, [line: 1], ["div"]}, [], [{:text, "abc"}]]}
+             ]
+    end
+
+    test "with element child" do
+      tags = [
+        {:start_tag, {{:expression, ~s({"div"})}, []}},
+        {:start_tag, {"span", []}},
+        {:end_tag, "span"},
+        {:end_tag, {:expression, ~s({"div"})}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], ["div"]},
+                  [],
+                  [{:{}, [line: 1], [:element, "span", [], []]}]
+                ]}
+             ]
+    end
+
+    test "with dynamic tag child" do
+      tags = [
+        {:start_tag, {{:expression, ~s({"div"})}, []}},
+        {:start_tag, {{:expression, ~s({"span"})}, []}},
+        {:end_tag, {:expression, ~s({"span"})}},
+        {:end_tag, {:expression, ~s({"div"})}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], ["div"]},
+                  [],
+                  [{:{}, [line: 1], [:dynamic_tag, {:{}, [line: 1], ["span"]}, [], []]}]
+                ]}
+             ]
+    end
+
+    test "self-closing, not nested, without siblings" do
+      # <{"div"} my_key="my_value" />
+      tags = [
+        {:self_closing_tag, {{:expression, ~s({"div"})}, [{"my_key", [text: "my_value"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], ["div"]},
+                  [{"my_key", [text: "my_value"]}],
+                  []
+                ]}
+             ]
+    end
+
+    test "self-closing, nested, with siblings" do
+      tags = [
+        {:start_tag, {"div", []}},
+        {:text, "abc"},
+        {:self_closing_tag, {{:expression, ~s({"span"})}, []}},
+        {:text, "xyz"},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [],
+                  [
+                    {:text, "abc"},
+                    {:{}, [line: 1], [:dynamic_tag, {:{}, [line: 1], ["span"]}, [], []]},
+                    {:text, "xyz"}
+                  ]
+                ]}
+             ]
+    end
+
+    test "inside if block" do
+      tags = [
+        {:block_start, {"if", "{ @flag}"}},
+        {:self_closing_tag, {{:expression, ~s({"div"})}, []}},
+        {:block_end, "if"}
+      ]
+
+      assert build_ast(tags) == [
+               {:if, [line: 1],
+                [
+                  {{:., [line: 1], [{:vars, [line: 1], nil}, :flag]}, [no_parens: true, line: 1],
+                   []},
+                  [
+                    do: [
+                      {:{}, [line: 1], [:dynamic_tag, {:{}, [line: 1], ["div"]}, [], []]}
+                    ]
+                  ]
+                ]}
+             ]
+    end
+  end
+
+  describe "build_ast/1, spread" do
+    nodes = [
+      {:element, "attribute", "div", "div"},
+      {:component, "property", "Aaa.Bbb",
+       quote do
+         {:alias!, [line: 1], [{:__aliases__, [line: 1], [:Aaa, :Bbb]}]}
+       end}
+    ]
+
+    Enum.each(nodes, fn {tag_type, attr_or_prop, tag_name, expected_tag_name_ast} ->
+      test "single spread in #{tag_type} node" do
+        # <div ...{@my_var}></div>
+        # or
+        # <Aaa.Bbb ...{@my_var}></Aaa.Bbb>
+        tags = [
+          {:start_tag, {unquote(tag_name), [{:spread, "{@my_var}"}]}},
+          {:end_tag, unquote(tag_name)}
+        ]
+
+        assert build_ast(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    unquote(tag_type),
+                    unquote(expected_tag_name_ast),
+                    [
+                      spread:
+                        {:{}, [line: 1],
+                         [
+                           {{:., [line: 1], [{:vars, [line: 1], nil}, :my_var]},
+                            [no_parens: true, line: 1], []}
+                         ]}
+                    ],
+                    []
+                  ]}
+               ]
+      end
+
+      test "multiple spreads in #{tag_type} node" do
+        tags = [
+          {:start_tag, {unquote(tag_name), [{:spread, "{1 + 2}"}, {:spread, "{3 + 4}"}]}},
+          {:end_tag, unquote(tag_name)}
+        ]
+
+        assert build_ast(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    unquote(tag_type),
+                    unquote(expected_tag_name_ast),
+                    [
+                      spread: {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]},
+                      spread: {:{}, [line: 1], [{:+, [line: 1], [3, 4]}]}
+                    ],
+                    []
+                  ]}
+               ]
+      end
+
+      test "spread interleaved with named #{tag_type} #{attr_or_prop}(s), preserving order" do
+        tags = [
+          {:start_tag,
+           {unquote(tag_name),
+            [
+              {"my_key_1", [text: "my_value_1"]},
+              {:spread, "{1 + 2}"},
+              {"my_key_2", [text: "my_value_2"]}
+            ]}},
+          {:end_tag, unquote(tag_name)}
+        ]
+
+        assert build_ast(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    unquote(tag_type),
+                    unquote(expected_tag_name_ast),
+                    [
+                      {"my_key_1", [text: "my_value_1"]},
+                      {:spread, {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]}},
+                      {"my_key_2", [text: "my_value_2"]}
+                    ],
+                    []
+                  ]}
+               ]
+      end
+
+      test "spread in self-closing #{tag_type} node" do
+        tags = [{:self_closing_tag, {unquote(tag_name), [{:spread, "{1 + 2}"}]}}]
+
+        assert build_ast(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    unquote(tag_type),
+                    unquote(expected_tag_name_ast),
+                    [spread: {:{}, [line: 1], [{:+, [line: 1], [1, 2]}]}],
+                    []
+                  ]}
+               ]
+      end
+
+      test "spread with map expression in #{tag_type} node" do
+        tags = [
+          {:start_tag, {unquote(tag_name), [{:spread, "{%{my_key: 1}}"}]}},
+          {:end_tag, unquote(tag_name)}
+        ]
+
+        assert build_ast(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    unquote(tag_type),
+                    unquote(expected_tag_name_ast),
+                    [spread: {:{}, [line: 1], [{:%{}, [line: 1], [my_key: 1]}]}],
+                    []
+                  ]}
+               ]
+      end
+
+      test "spread with implicit keyword list in #{tag_type} node" do
+        tags = [
+          {:start_tag, {unquote(tag_name), [{:spread, "{my_key_1: 1, my_key_2: 2}"}]}},
+          {:end_tag, unquote(tag_name)}
+        ]
+
+        assert build_ast(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    unquote(tag_type),
+                    unquote(expected_tag_name_ast),
+                    [spread: {:{}, [line: 1], [[my_key_1: 1, my_key_2: 2]]}],
+                    []
+                  ]}
+               ]
+      end
+    end)
+
+    test "spread with implicit keyword list, spanning multiple lines" do
+      tags = [
+        {:start_tag, {"div", [{:spread, "{\n  my_key_1: 1,\n  my_key_2: 2\n}"}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [spread: {:{}, [line: 1], [[my_key_1: 1, my_key_2: 2]]}],
+                  []
+                ]}
+             ]
+    end
+
+    test "spread with implicit keyword list, starting with a key with double quotes" do
+      tags = [
+        {:start_tag, {"div", [{:spread, ~s'{"aaa bbb": 1, c: 2}'}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [spread: {:{}, [line: 1], [["aaa bbb": 1, c: 2]]}],
+                  []
+                ]}
+             ]
+    end
+  end
+
   describe "build_ast/1, element event attribute with modifiers" do
     test "no modifier stays a 2-tuple" do
       # <div $key_down="my_value"></div>
@@ -800,6 +1271,15 @@ defmodule Hologram.Template.DOMTest do
                    ~s'the <window> tag accepts only event bindings, but got the "class" attribute',
                    fn -> build_ast(tags) end
     end
+
+    test "raises for a spread" do
+      # <window ...{@my_var} />
+      tags = [{:self_closing_tag, {"window", [{:spread, "{@my_var}"}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'the <window> tag accepts only event bindings, but got a spread',
+                   fn -> build_ast(tags) end
+    end
   end
 
   describe "build_ast/1, document tag" do
@@ -831,6 +1311,15 @@ defmodule Hologram.Template.DOMTest do
 
       assert_raise Hologram.TemplateSyntaxError,
                    ~s'the <document> tag accepts only event bindings, but got the "class" attribute',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a spread" do
+      # <document ...{@my_var} />
+      tags = [{:self_closing_tag, {"document", [{:spread, "{@my_var}"}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'the <document> tag accepts only event bindings, but got a spread',
                    fn -> build_ast(tags) end
     end
   end
@@ -964,6 +1453,42 @@ defmodule Hologram.Template.DOMTest do
       tags = [{:expression, ~s'{"aaa bbb": 1, c: 2}'}]
 
       assert build_ast(tags) == [expression: {:{}, [line: 1], [["aaa bbb": 1, c: 2]]}]
+    end
+
+    test "with implicit keyword list, starting with a key containing underscores" do
+      tags = [{:expression, "{my_key_1: 1, my_key_2: 2}"}]
+
+      assert build_ast(tags) == [expression: {:{}, [line: 1], [[my_key_1: 1, my_key_2: 2]]}]
+    end
+
+    test "with implicit keyword list, starting with a key with a trailing question mark" do
+      tags = [{:expression, "{my_key?: 1, b: 2}"}]
+
+      assert build_ast(tags) == [expression: {:{}, [line: 1], [[my_key?: 1, b: 2]]}]
+    end
+
+    test "with implicit keyword list, starting with a key with a trailing exclamation mark" do
+      tags = [{:expression, "{my_key!: 1, b: 2}"}]
+
+      assert build_ast(tags) == [expression: {:{}, [line: 1], [[my_key!: 1, b: 2]]}]
+    end
+
+    test "with implicit keyword list, having whitespace after the opening curly bracket" do
+      tags = [{:expression, "{ my_key_1: 1, my_key_2: 2}"}]
+
+      assert build_ast(tags) == [expression: {:{}, [line: 1], [[my_key_1: 1, my_key_2: 2]]}]
+    end
+
+    test "with implicit keyword list, spanning multiple lines" do
+      tags = [{:expression, "{\n  my_key_1: 1,\n  my_key_2: 2\n}"}]
+
+      assert build_ast(tags) == [expression: {:{}, [line: 1], [[my_key_1: 1, my_key_2: 2]]}]
+    end
+
+    test "with implicit keyword list, having a newline after the colon" do
+      tags = [{:expression, "{my_key:\n  1}"}]
+
+      assert build_ast(tags) == [expression: {:{}, [line: 1], [[my_key: 1]]}]
     end
   end
 

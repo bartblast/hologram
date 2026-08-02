@@ -763,7 +763,7 @@ defmodule Hologram.Framework do
 
   defp reachable_erlang_mfas(graph, source_mfa) do
     graph
-    |> CallGraph.reachable_mfas([source_mfa])
+    |> CallGraph.unbounded_reachable_mfas([source_mfa])
     |> Enum.filter(fn {module, _fun, _arity} -> Reflection.erlang_module?(module) end)
   end
 

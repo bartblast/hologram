@@ -997,6 +997,32 @@ describe("Interpreter", () => {
     assert.equal(result, expected);
   });
 
+  describe("buildMultiArgumentErrorMsg()", () => {
+    it("builds a bullet per entry", () => {
+      const result = Interpreter.buildMultiArgumentErrorMsg([
+        [1, "my message 1"],
+        [2, "my message 2"],
+      ]);
+
+      const expected =
+        "errors were found at the given arguments:\n\n  * 1st argument: my message 1\n  * 2nd argument: my message 2\n";
+
+      assert.equal(result, expected);
+    });
+
+    it("skips entries with a nullish message", () => {
+      const result = Interpreter.buildMultiArgumentErrorMsg([
+        [1, null],
+        [2, "my message"],
+      ]);
+
+      const expected =
+        "errors were found at the given arguments:\n\n  * 2nd argument: my message\n";
+
+      assert.equal(result, expected);
+    });
+  });
+
   it("buildTooBigOutputErrorMsg()", () => {
     const result = Interpreter.buildTooBigOutputErrorMsg(
       "{MyModule, :my_fun, 3}",
@@ -1151,6 +1177,116 @@ describe("Interpreter", () => {
       );
 
       assert.equal(result, -1);
+    });
+
+    describe("list type", () => {
+      it("list == list", () => {
+        const result = Interpreter.compareTerms(
+          Type.list([Type.integer(1), Type.integer(2)]),
+          Type.list([Type.integer(1), Type.integer(2)]),
+        );
+
+        assert.equal(result, 0);
+      });
+
+      it("list < list", () => {
+        const result = Interpreter.compareTerms(
+          Type.list([Type.integer(1), Type.integer(2)]),
+          Type.list([Type.integer(1), Type.integer(3)]),
+        );
+
+        assert.equal(result, -1);
+      });
+
+      it("list > list", () => {
+        const result = Interpreter.compareTerms(
+          Type.list([Type.integer(1), Type.integer(3)]),
+          Type.list([Type.integer(1), Type.integer(2)]),
+        );
+
+        assert.equal(result, 1);
+      });
+
+      it("empty list precedes nonempty list", () => {
+        const result = Interpreter.compareTerms(
+          Type.list(),
+          Type.list([Type.integer(1)]),
+        );
+
+        assert.equal(result, -1);
+      });
+
+      it("prefix precedes longer list", () => {
+        const result = Interpreter.compareTerms(
+          Type.list([Type.integer(1), Type.integer(2)]),
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        );
+
+        assert.equal(result, -1);
+      });
+
+      it("element difference beats length", () => {
+        const result = Interpreter.compareTerms(
+          Type.list([Type.integer(1), Type.integer(3)]),
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(9)]),
+        );
+
+        assert.equal(result, 1);
+      });
+
+      it("nested lists compare recursively", () => {
+        const result = Interpreter.compareTerms(
+          Type.list([Type.list([Type.integer(1), Type.integer(2)])]),
+          Type.list([Type.list([Type.integer(1), Type.integer(3)])]),
+        );
+
+        assert.equal(result, -1);
+      });
+
+      it("improper list == improper list", () => {
+        const result = Interpreter.compareTerms(
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+        );
+
+        assert.equal(result, 0);
+      });
+
+      it("improper tails compare", () => {
+        const result = Interpreter.compareTerms(
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+          Type.improperList([Type.integer(1), Type.integer(3)]),
+        );
+
+        assert.equal(result, -1);
+      });
+
+      it("proper list follows improper list with non-list tail", () => {
+        const result = Interpreter.compareTerms(
+          Type.list([Type.integer(1)]),
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+        );
+
+        assert.equal(result, 1);
+      });
+
+      it("integer tail precedes list remainder", () => {
+        const result = Interpreter.compareTerms(
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+          Type.list([Type.integer(1), Type.integer(2)]),
+        );
+
+        assert.equal(result, -1);
+      });
+
+      it("bitstring tail follows list remainder", () => {
+        const result = Interpreter.compareTerms(
+          Type.improperList([Type.integer(1), Type.bitstring("x")]),
+          Type.list([Type.integer(1), Type.integer(2)]),
+        );
+
+        assert.equal(result, 1);
+      });
     });
 
     describe("number types (float or integer)", () => {

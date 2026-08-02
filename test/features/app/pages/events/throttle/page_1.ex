@@ -1,10 +1,10 @@
-defmodule HologramFeatureTests.Events.ThrottlePage do
+defmodule HologramFeatureTests.Events.Throttle.Page1 do
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
-  route "/events/throttle"
+  route "/events/throttle/1"
 
   layout HologramFeatureTests.Components.DefaultLayout
 

@@ -13,7 +13,7 @@ Benchee.run(
     ir_plt = Compiler.build_ir_plt()
     call_graph = Compiler.build_call_graph(ir_plt)
     async_mfas = CallGraph.list_async_mfas(call_graph)
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
 
     opts = [
       js_dir: Path.join([Reflection.root_dir(), "assets", "js"]),

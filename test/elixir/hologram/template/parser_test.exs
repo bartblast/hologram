@@ -251,6 +251,326 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
+  describe "dynamic tags" do
+    test "start tag" do
+      assert parse_markup("<{@module}>") == [start_tag: {{:expression, "{@module}"}, []}]
+    end
+
+    test "self-closed start tag" do
+      assert parse_markup("<{@module} />") == [self_closing_tag: {{:expression, "{@module}"}, []}]
+    end
+
+    test "self-closing marker directly after tag expression" do
+      assert parse_markup("<{@module}/>") == [self_closing_tag: {{:expression, "{@module}"}, []}]
+    end
+
+    test "whitespaces after tag expression" do
+      assert parse_markup("<{@module} \n\r\t>") == [start_tag: {{:expression, "{@module}"}, []}]
+    end
+
+    test "void element name in expression doesn't self-close the tag" do
+      assert parse_markup(~s(<{"br"}>)) == [start_tag: {{:expression, ~s({"br"})}, []}]
+    end
+
+    test "empty expression" do
+      assert parse_markup("<{}>") == [start_tag: {{:expression, "{}"}, []}]
+    end
+
+    test "whitespaces in expression" do
+      assert parse_markup("<{ \n\r\t@module \n\r\t}>") == [
+               start_tag: {{:expression, "{ \n\r\t@module \n\r\t}"}, []}
+             ]
+    end
+
+    test "module alias in expression" do
+      assert parse_markup("<{Aaa.Bbb}>") == [start_tag: {{:expression, "{Aaa.Bbb}"}, []}]
+    end
+
+    test "string in expression" do
+      assert parse_markup(~s(<{"my-widget"}>)) == [
+               start_tag: {{:expression, ~s({"my-widget"})}, []}
+             ]
+    end
+
+    test "function call in expression" do
+      assert parse_markup("<{Map.fetch!(@modules, :my_key)}>") == [
+               start_tag: {{:expression, "{Map.fetch!(@modules, :my_key)}"}, []}
+             ]
+    end
+
+    test "nested curly brackets in expression" do
+      assert parse_markup("<{%{my_key: %{my_nested_key: @module}}}>") == [
+               start_tag: {{:expression, "{%{my_key: %{my_nested_key: @module}}}"}, []}
+             ]
+    end
+
+    test "curly brackets inside double quotes in expression" do
+      assert parse_markup(~s(<{@modules["{}"]}>)) == [
+               start_tag: {{:expression, ~s({@modules["{}"]})}, []}
+             ]
+    end
+
+    test "single quotes in expression" do
+      assert parse_markup("<{@modules['my_key']}>") == [
+               start_tag: {{:expression, "{@modules['my_key']}"}, []}
+             ]
+    end
+
+    test "elixir interpolation in expression" do
+      assert parse_markup("<{\"aaa\#{@tag}bbb\"}>") == [
+               start_tag: {{:expression, "{\"aaa\#{@tag}bbb\"}"}, []}
+             ]
+    end
+
+    test "angle brackets in expression" do
+      assert parse_markup(~s(<{if @a < @b, do: "div", else: "span"}>)) == [
+               start_tag: {{:expression, ~s({if @a < @b, do: "div", else: "span"})}, []}
+             ]
+    end
+
+    test "attribute with text value" do
+      assert parse_markup(~s(<{@module} my_key="my_value">)) == [
+               start_tag: {{:expression, "{@module}"}, [{"my_key", [text: "my_value"]}]}
+             ]
+    end
+
+    test "attribute with expression value" do
+      assert parse_markup("<{@module} my_key={@my_value}>") == [
+               start_tag: {{:expression, "{@module}"}, [{"my_key", [expression: "{@my_value}"]}]}
+             ]
+    end
+
+    test "boolean attribute" do
+      assert parse_markup("<{@module} my_key>") == [
+               start_tag: {{:expression, "{@module}"}, [{"my_key", []}]}
+             ]
+    end
+
+    test "event attribute" do
+      assert parse_markup(~s(<{@module} $click="my_action">)) == [
+               start_tag: {{:expression, "{@module}"}, [{"$click", [text: "my_action"]}]}
+             ]
+    end
+
+    test "multiple attributes" do
+      assert parse_markup(~s(<{@module} my_key_1="my_value_1" my_key_2={@my_value_2} />)) == [
+               self_closing_tag:
+                 {{:expression, "{@module}"},
+                  [
+                    {"my_key_1", [text: "my_value_1"]},
+                    {"my_key_2", [expression: "{@my_value_2}"]}
+                  ]}
+             ]
+    end
+
+    test "spread" do
+      assert parse_markup("<{@module} ...{@spread}>") == [
+               start_tag: {{:expression, "{@module}"}, [spread: "{@spread}"]}
+             ]
+    end
+
+    test "spread interleaved with named attributes, preserving order" do
+      assert parse_markup(~s(<{@module} my_key_1="my_value_1" ...{@spread} my_key_2>)) == [
+               start_tag:
+                 {{:expression, "{@module}"},
+                  [{"my_key_1", [text: "my_value_1"]}, {:spread, "{@spread}"}, {"my_key_2", []}]}
+             ]
+    end
+
+    test "attributes are not carried over from the preceding tag" do
+      assert parse_markup(~s(<div my_key="my_value"><{@module}>)) == [
+               start_tag: {"div", [{"my_key", [text: "my_value"]}]},
+               start_tag: {{:expression, "{@module}"}, []}
+             ]
+    end
+
+    test "nested in element" do
+      assert parse_markup("<div><{@module} /></div>") == [
+               start_tag: {"div", []},
+               self_closing_tag: {{:expression, "{@module}"}, []},
+               end_tag: "div"
+             ]
+    end
+
+    test "with nested element" do
+      assert parse_markup("<{@module}><span>abc</span>") == [
+               start_tag: {{:expression, "{@module}"}, []},
+               start_tag: {"span", []},
+               text: "abc",
+               end_tag: "span"
+             ]
+    end
+
+    test "after text" do
+      assert parse_markup("abc<{@module} />") == [
+               text: "abc",
+               self_closing_tag: {{:expression, "{@module}"}, []}
+             ]
+    end
+
+    test "inside if block" do
+      assert parse_markup("{%if @flag}<{@module} />{/if}") == [
+               block_start: {"if", "{ @flag}"},
+               self_closing_tag: {{:expression, "{@module}"}, []},
+               block_end: "if"
+             ]
+    end
+
+    test "inside for block" do
+      assert parse_markup("{%for module <- @modules}<{module} />{/for}") == [
+               block_start: {"for", "{ module <- @modules}"},
+               self_closing_tag: {{:expression, "{module}"}, []},
+               block_end: "for"
+             ]
+    end
+
+    test "start tag not recognized inside script" do
+      assert parse_markup("<script><{@module}</script>") == [
+               start_tag: {"script", []},
+               text: "<",
+               expression: "{@module}",
+               end_tag: "script"
+             ]
+    end
+
+    test "start tag not recognized inside public comment" do
+      assert parse_markup("<!--<{@module}-->") == [
+               :public_comment_start,
+               {:text, "<"},
+               {:expression, "{@module}"},
+               :public_comment_end
+             ]
+    end
+
+    test "end tag" do
+      assert parse_markup("</{@module}>") == [end_tag: {:expression, "{@module}"}]
+    end
+
+    test "whitespaces after end tag expression" do
+      assert parse_markup("</{@module} \n\r\t>") == [end_tag: {:expression, "{@module}"}]
+    end
+
+    test "whitespaces in end tag expression" do
+      assert parse_markup("</{ \n\r\t@module \n\r\t}>") == [
+               end_tag: {:expression, "{ \n\r\t@module \n\r\t}"}
+             ]
+    end
+
+    test "nested curly brackets in end tag expression" do
+      assert parse_markup("</{%{my_key: %{my_nested_key: @module}}}>") == [
+               end_tag: {:expression, "{%{my_key: %{my_nested_key: @module}}}"}
+             ]
+    end
+
+    test "curly brackets inside double quotes in end tag expression" do
+      assert parse_markup(~s(</{@modules["{}"]}>)) == [
+               end_tag: {:expression, ~s({@modules["{}"]})}
+             ]
+    end
+
+    test "paired start and end tags" do
+      assert parse_markup("<{@module}></{@module}>") == [
+               start_tag: {{:expression, "{@module}"}, []},
+               end_tag: {:expression, "{@module}"}
+             ]
+    end
+
+    test "with text content" do
+      assert parse_markup("<{@module}>abc</{@module}>") == [
+               start_tag: {{:expression, "{@module}"}, []},
+               text: "abc",
+               end_tag: {:expression, "{@module}"}
+             ]
+    end
+
+    test "with expression content" do
+      assert parse_markup("<{@module}>{@content}</{@module}>") == [
+               start_tag: {{:expression, "{@module}"}, []},
+               expression: "{@content}",
+               end_tag: {:expression, "{@module}"}
+             ]
+    end
+
+    test "with element content" do
+      assert parse_markup("<{@module}><span>abc</span></{@module}>") == [
+               start_tag: {{:expression, "{@module}"}, []},
+               start_tag: {"span", []},
+               text: "abc",
+               end_tag: "span",
+               end_tag: {:expression, "{@module}"}
+             ]
+    end
+
+    test "paired tags nested in element" do
+      assert parse_markup("<div><{@module}>abc</{@module}></div>") == [
+               start_tag: {"div", []},
+               start_tag: {{:expression, "{@module}"}, []},
+               text: "abc",
+               end_tag: {:expression, "{@module}"},
+               end_tag: "div"
+             ]
+    end
+
+    test "nested paired tags" do
+      assert parse_markup(
+               "<{@outer_module}><{@inner_module}></{@inner_module}></{@outer_module}>"
+             ) ==
+               [
+                 start_tag: {{:expression, "{@outer_module}"}, []},
+                 start_tag: {{:expression, "{@inner_module}"}, []},
+                 end_tag: {:expression, "{@inner_module}"},
+                 end_tag: {:expression, "{@outer_module}"}
+               ]
+    end
+
+    test "paired tags inside if block" do
+      assert parse_markup("{%if @flag}<{@module}>abc</{@module}>{/if}") == [
+               block_start: {"if", "{ @flag}"},
+               start_tag: {{:expression, "{@module}"}, []},
+               text: "abc",
+               end_tag: {:expression, "{@module}"},
+               block_end: "if"
+             ]
+    end
+
+    test "paired tags inside for block" do
+      assert parse_markup("{%for module <- @modules}<{module}>abc</{module}>{/for}") == [
+               block_start: {"for", "{ module <- @modules}"},
+               start_tag: {{:expression, "{module}"}, []},
+               text: "abc",
+               end_tag: {:expression, "{module}"},
+               block_end: "for"
+             ]
+    end
+
+    test "end tag recognized inside script, like static end tags are" do
+      assert parse_markup("<script></{@module}></script>") == [
+               start_tag: {"script", []},
+               end_tag: {:expression, "{@module}"},
+               end_tag: "script"
+             ]
+    end
+
+    test "end tag not recognized inside script quoting" do
+      assert parse_markup(~s(<script>"</{@module}>"</script>)) == [
+               start_tag: {"script", []},
+               text: ~s("</),
+               expression: "{@module}",
+               text: ~s(>"),
+               end_tag: "script"
+             ]
+    end
+
+    test "end tag not recognized inside public comment" do
+      assert parse_markup("<!--</{@module}-->") == [
+               :public_comment_start,
+               {:text, "</"},
+               {:expression, "{@module}"},
+               :public_comment_end
+             ]
+    end
+  end
+
   describe "expression" do
     test "empty" do
       assert parse_markup("{}") == [expression: "{}"]
@@ -375,6 +695,191 @@ defmodule Hologram.Template.ParserTest do
 
     # TODO: allow dash chars only in attributes
     # test "property with a dash char"
+  end
+
+  describe "spread" do
+    Enum.each(
+      [
+        {"element", "div"},
+        {"component", "Aaa.Bbb"}
+      ],
+      fn {name, tag} ->
+        test "single spread in #{name} start tag" do
+          markup = "<#{unquote(tag)} ...{@spread}>"
+
+          assert parse_markup(markup) == [start_tag: {unquote(tag), [spread: "{@spread}"]}]
+        end
+
+        test "single spread in #{name} self-closing tag" do
+          markup = "<#{unquote(tag)} ...{@spread} />"
+
+          assert parse_markup(markup) == [self_closing_tag: {unquote(tag), [spread: "{@spread}"]}]
+        end
+
+        test "spread directly followed by #{name} self-closing tag end" do
+          markup = "<#{unquote(tag)} ...{@spread}/>"
+
+          assert parse_markup(markup) == [self_closing_tag: {unquote(tag), [spread: "{@spread}"]}]
+        end
+
+        test "multiple spreads in #{name} start tag" do
+          markup = "<#{unquote(tag)} ...{@spread_1} ...{@spread_2}>"
+
+          assert parse_markup(markup) == [
+                   start_tag: {unquote(tag), [spread: "{@spread_1}", spread: "{@spread_2}"]}
+                 ]
+        end
+
+        test "spread interleaved with named #{name} attributes, preserving order" do
+          markup =
+            ~s(<#{unquote(tag)} my_key_1="value_1" ...{@spread_1} my_key_2={@value_2} ...{@spread_2} my_key_3>)
+
+          assert parse_markup(markup) == [
+                   start_tag:
+                     {unquote(tag),
+                      [
+                        {"my_key_1", [text: "value_1"]},
+                        {:spread, "{@spread_1}"},
+                        {"my_key_2", [expression: "{@value_2}"]},
+                        {:spread, "{@spread_2}"},
+                        {"my_key_3", []}
+                      ]}
+                 ]
+        end
+
+        test "spread directly after a quoted #{name} attribute value" do
+          markup = ~s(<#{unquote(tag)} my_key="value"...{@spread}>)
+
+          assert parse_markup(markup) == [
+                   start_tag:
+                     {unquote(tag), [{"my_key", [text: "value"]}, {:spread, "{@spread}"}]}
+                 ]
+        end
+      end
+    )
+
+    test "void element start tag" do
+      assert parse_markup("<br ...{@spread}>") == [
+               self_closing_tag: {"br", [spread: "{@spread}"]}
+             ]
+    end
+
+    test "empty expression" do
+      assert parse_markup("<div ...{}>") == [start_tag: {"div", [spread: "{}"]}]
+    end
+
+    test "whitespaces in expression" do
+      assert parse_markup("<div ...{ \n\r\t@spread \n\r\t}>") == [
+               start_tag: {"div", [spread: "{ \n\r\t@spread \n\r\t}"]}
+             ]
+    end
+
+    test "function call in expression" do
+      assert parse_markup("<div ...{Map.merge(@base, @extra)}>") == [
+               start_tag: {"div", [spread: "{Map.merge(@base, @extra)}"]}
+             ]
+    end
+
+    test "map in expression" do
+      assert parse_markup("<div ...{%{my_key: @value}}>") == [
+               start_tag: {"div", [spread: "{%{my_key: @value}}"]}
+             ]
+    end
+
+    test "nested curly brackets in expression" do
+      assert parse_markup("<div ...{%{my_key: %{my_nested_key: @value}}}>") == [
+               start_tag: {"div", [spread: "{%{my_key: %{my_nested_key: @value}}}"]}
+             ]
+    end
+
+    test "bare keyword list shorthand in expression" do
+      assert parse_markup(~s(<div ...{my_key_1: [my_key_2: "abc"], my_key_3: "xyz"}>)) == [
+               start_tag: {"div", [spread: ~s({my_key_1: [my_key_2: "abc"], my_key_3: "xyz"})]}
+             ]
+    end
+
+    test "double quotes in expression" do
+      assert parse_markup(~s(<div ...{%{my_key: "abc"}}>)) == [
+               start_tag: {"div", [spread: ~s({%{my_key: "abc"}})]}
+             ]
+    end
+
+    test "curly brackets inside double quotes in expression" do
+      assert parse_markup(~s(<div ...{%{my_key: "{}"}}>)) == [
+               start_tag: {"div", [spread: ~s({%{my_key: "{}"}})]}
+             ]
+    end
+
+    test "single quotes in expression" do
+      assert parse_markup("<div ...{%{my_key: 'abc'}}>") == [
+               start_tag: {"div", [spread: "{%{my_key: 'abc'}}"]}
+             ]
+    end
+
+    test "curly brackets inside single quotes in expression" do
+      assert parse_markup("<div ...{%{my_key: '{}'}}>") == [
+               start_tag: {"div", [spread: "{%{my_key: '{}'}}"]}
+             ]
+    end
+
+    test "elixir interpolation in expression" do
+      assert parse_markup("<div ...{%{my_key: \"aaa\#{@value}bbb\"}}>") == [
+               start_tag: {"div", [spread: "{%{my_key: \"aaa\#{@value}bbb\"}}"]}
+             ]
+    end
+
+    test "angle brackets in expression" do
+      assert parse_markup("<div ...{if @a < @b, do: @spread_1, else: @spread_2}>") == [
+               start_tag: {"div", [spread: "{if @a < @b, do: @spread_1, else: @spread_2}"]}
+             ]
+    end
+
+    test "inside if block" do
+      assert parse_markup("{%if @flag}<div ...{@spread}></div>{/if}") == [
+               block_start: {"if", "{ @flag}"},
+               start_tag: {"div", [spread: "{@spread}"]},
+               end_tag: "div",
+               block_end: "if"
+             ]
+    end
+
+    test "inside for block" do
+      assert parse_markup("{%for item <- @items}<div ...{item}></div>{/for}") == [
+               block_start: {"for", "{ item <- @items}"},
+               start_tag: {"div", [spread: "{item}"]},
+               end_tag: "div",
+               block_end: "for"
+             ]
+    end
+
+    test "expression containing a for block end marker" do
+      assert parse_markup(~s(<div ...{%{my_key: "{/for}"}}>)) == [
+               start_tag: {"div", [spread: ~s({%{my_key: "{/for}"}})]}
+             ]
+    end
+
+    test "'...' marker not followed by '{' is parsed as an attribute name" do
+      assert parse_markup("<div ...>") == [start_tag: {"div", [{"...", []}]}]
+    end
+
+    test "'...' marker separated from '{' by whitespace is not a spread" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unexpected '{' character.
+        """)
+
+      test_syntax_error_msg("<div ... {@spread}>", expected_msg)
+    end
+
+    test "text node expression is not affected" do
+      assert parse_markup("<div>...{@spread}</div>") == [
+               start_tag: {"div", []},
+               text: "...",
+               expression: "{@spread}",
+               end_tag: "div"
+             ]
+    end
   end
 
   describe "public comment" do
@@ -1693,6 +2198,54 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("<div", expected_msg)
     end
 
+    test "unclosed end tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed end tag.
+
+        Hint:
+        Close the end tag with '>' character.
+
+        </div
+             ^
+        """)
+
+      test_syntax_error_msg("</div", expected_msg)
+    end
+
+    test "unclosed end tag without a tag name" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed end tag.
+
+        Hint:
+        Close the end tag with '>' character.
+
+        </
+          ^
+        """)
+
+      test_syntax_error_msg("</", expected_msg)
+    end
+
+    test "unclosed dynamic end tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed end tag.
+
+        Hint:
+        Close the end tag with '>' character.
+
+        </{@module}
+                   ^
+        """)
+
+      test_syntax_error_msg("</{@module}", expected_msg)
+    end
+
     test "unclosed public comment" do
       expected_msg =
         normalize_newlines("""
@@ -1771,6 +2324,230 @@ defmodule Hologram.Template.ParserTest do
         """)
 
       test_syntax_error_msg("<div =\"abc\">", expected_msg)
+    end
+
+    test "expression in attribute position" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unexpected '{' character.
+
+        Hint:
+        To spread attributes or properties prefix the expression with the '...' marker, e.g. ...{@attrs}.
+
+        <div {@spread}>
+             ^
+        """)
+
+      test_syntax_error_msg("<div {@spread}>", expected_msg)
+    end
+
+    test "expression in property position" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unexpected '{' character.
+
+        Hint:
+        To spread attributes or properties prefix the expression with the '...' marker, e.g. ...{@attrs}.
+
+        <Aa.Bb {@spread}>
+               ^
+        """)
+
+      test_syntax_error_msg("<Aa.Bb {@spread}>", expected_msg)
+    end
+
+    test "expression in attribute position inside raw block" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unexpected '{' character inside raw block.
+
+        Hint:
+        Remove the parent raw block, then prefix the expression with the '...' marker to spread it, e.g. ...{@attrs}.
+
+        {%raw}<div {@spread}></div>{/raw
+                   ^
+        """)
+
+      test_syntax_error_msg("{%raw}<div {@spread}></div>{/raw}", expected_msg)
+    end
+
+    test "spread inside raw block" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Spread inside raw block detected.
+
+        Hint:
+        Remove the parent raw block to use the spread syntax.
+
+        {%raw}<div ...{@spread}></div>{/ra
+                   ^
+        """)
+
+      test_syntax_error_msg("{%raw}<div ...{@spread}></div>{/raw}", expected_msg)
+    end
+
+    test "unclosed spread expression" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed expression.
+
+        Hint:
+        Close the expression with '}' character.
+
+        <div ...{@spread
+                        ^
+        """)
+
+      test_syntax_error_msg("<div ...{@spread", expected_msg)
+    end
+
+    test "unclosed attribute value expression" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed expression.
+
+        Hint:
+        Close the expression with '}' character.
+
+        iv my_key={@my_value
+                            ^
+        """)
+
+      test_syntax_error_msg("<div my_key={@my_value", expected_msg)
+    end
+
+    test "unclosed expression in text" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed expression.
+
+        Hint:
+        Close the expression with '}' character.
+
+        {@my_value
+                  ^
+        """)
+
+      test_syntax_error_msg("{@my_value", expected_msg)
+    end
+
+    test "unclosed block start tag expression" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed expression.
+
+        Hint:
+        Close the expression with '}' character.
+
+        {%if @my_condition
+                          ^
+        """)
+
+      test_syntax_error_msg("{%if @my_condition", expected_msg)
+    end
+
+    test "dynamic end tag inside raw block" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Dynamic tag inside raw block detected.
+
+        Hint:
+        Remove the parent raw block to use the dynamic tag syntax.
+
+        {%raw}</{@module}>{/raw}
+              ^
+        """)
+
+      test_syntax_error_msg("{%raw}</{@module}>{/raw}", expected_msg)
+    end
+
+    test "unclosed dynamic end tag expression" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed expression.
+
+        Hint:
+        Close the expression with '}' character.
+
+        </{@module
+                  ^
+        """)
+
+      test_syntax_error_msg("</{@module", expected_msg)
+    end
+
+    test "dynamic start tag inside raw block" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Dynamic tag inside raw block detected.
+
+        Hint:
+        Remove the parent raw block to use the dynamic tag syntax.
+
+        {%raw}<{@module}>{/raw}
+              ^
+        """)
+
+      test_syntax_error_msg("{%raw}<{@module}>{/raw}", expected_msg)
+    end
+
+    test "unclosed dynamic start tag expression" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed expression.
+
+        Hint:
+        Close the expression with '}' character.
+
+        <{@module
+                 ^
+        """)
+
+      test_syntax_error_msg("<{@module", expected_msg)
+    end
+
+    test "unclosed dynamic start tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the start tag with '>' character.
+
+        <{@module}
+                  ^
+        """)
+
+      test_syntax_error_msg("<{@module}", expected_msg)
+    end
+
+    test "unclosed start tag containing a spread" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the start tag with '>' character.
+
+        <div ...{@spread}
+                         ^
+        """)
+
+      test_syntax_error_msg("<div ...{@spread}", expected_msg)
     end
   end
 end
