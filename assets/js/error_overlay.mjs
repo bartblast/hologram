@@ -24,8 +24,11 @@ const STYLE_ELEMENT_ID = "hologram-error-overlay-style";
 // Written once into the page rather than onto every element, so the tones stay
 // in one place and each line costs a class name instead of a style attribute.
 //
-// The colours are HOLO's, named as the website names them, so an error reads in
-// the same palette as the code on hologram.page.
+// One hue throughout, HOLO's lavender-gray, in the shades a report needs: what
+// broke reads brightest, the source it happened in next, then where it happened,
+// then the scaffolding placing it. Telling the tones apart by shade rather than
+// by colour keeps an error looking like the rest of Hologram instead of like a
+// legend.
 const STYLES = `
   .${CLASS_PREFIX} {
     background-color: #0f1014; /* chinese-black */
@@ -78,11 +81,9 @@ const STYLES = `
     margin-bottom: 20px;
   }
 
-  /* melon - the tone HOLO highlighting gives a keyword. Warm, where the rest of
-     the report is cool, so what broke is told apart by not belonging to the
-     palette around it rather than by being the brightest thing on screen. */
+  /* brilliant-lavender */
   .${CLASS_PREFIX}__tone-banner {
-    color: #f7b9ab;
+    color: #eabeff;
     font-size: 17px;
   }
 
@@ -91,15 +92,14 @@ const STYLES = `
     color: #c2bbd3;
   }
 
-  /* dark-silver - the tone HOLO highlighting gives a comment, which recedes the
-     same way. */
+  /* lavender-gray, half way to the background */
   .${CLASS_PREFIX}__tone-chrome {
-    color: #6f6f6f;
+    color: #686674;
   }
 
-  /* iceberg */
+  /* lavender-gray, a quarter of the way to the background */
   .${CLASS_PREFIX}__tone-meta {
-    color: #66acd6;
+    color: #95919f;
   }
 `;
 
