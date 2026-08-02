@@ -139,40 +139,109 @@ describe("ErrorOverlay", () => {
       assert.equal(overlay.children[1].textContent, "my content");
     });
 
-    it("covers the page", () => {
+    it("names the overlay, the heading and the content by their classes", () => {
       show();
 
-      const style = overlayElement().style;
+      const overlay = overlayElement();
 
-      assert.equal(style.position, "fixed");
-      assert.equal(style.width, "100vw");
-      assert.equal(style.height, "100vh");
-      assert.equal(style.zIndex, "2147483647");
-      assert.equal(style.backgroundColor, "rgb(15, 16, 20)");
-      assert.equal(style.color, "rgb(194, 187, 211)");
+      assert.equal(overlay.className, "hologram-error-overlay");
+      assert.equal(
+        overlay.children[0].className,
+        "hologram-error-overlay__heading",
+      );
+      assert.equal(
+        overlay.children[1].className,
+        "hologram-error-overlay__content",
+      );
     });
 
-    it("styles the heading", () => {
+    it("puts the tones in the page", () => {
       show();
 
-      const style = overlayElement().children[0].style;
+      const style = document.getElementById("hologram-error-overlay-style");
 
-      assert.equal(style.marginTop, "0px");
-      assert.equal(style.marginBottom, "50px");
-      assert.equal(style.fontSize, "36px");
-      assert.equal(style.fontWeight, "700");
-      assert.equal(style.color, "rgb(167, 139, 250)");
+      assert.isNotNull(style);
+      assert.equal(style.tagName, "STYLE");
+      assert.include(style.textContent, ".hologram-error-overlay__tone-banner");
+      assert.include(style.textContent, ".hologram-error-overlay__tone-body");
+      assert.include(style.textContent, ".hologram-error-overlay__tone-chrome");
+      assert.include(style.textContent, ".hologram-error-overlay__tone-meta");
     });
 
-    it("lays the content out as written", () => {
+    it("puts the tones in the page only once", () => {
+      show();
+      show({id: "my_id_2"});
+
+      const styles = document.querySelectorAll("#hologram-error-overlay-style");
+
+      assert.equal(styles.length, 1);
+    });
+
+    it("lays text content out as written", () => {
       const content = "line 1\nline 2";
 
       show({content});
 
-      const overlay = overlayElement();
+      assert.equal(overlayElement().children[1].textContent, content);
+    });
 
-      assert.equal(overlay.style.whiteSpace, "pre-wrap");
-      assert.equal(overlay.children[1].textContent, content);
+    it("renders toned content a line at a time", () => {
+      show({
+        content: [
+          [{text: "** (RuntimeError) my error", tone: "banner"}],
+          [{text: "my frame", tone: "body"}],
+        ],
+      });
+
+      const lines = overlayElement().children[1].children;
+
+      assert.equal(lines.length, 2);
+      assert.equal(lines[0].textContent, "** (RuntimeError) my error");
+      assert.equal(lines[1].textContent, "my frame");
+    });
+
+    it("reads a line in the tone it opens with", () => {
+      show({
+        content: [
+          [
+            {text: "  3 │ ", tone: "chrome"},
+            {text: "    foo()", tone: "body"},
+          ],
+        ],
+      });
+
+      const line = overlayElement().children[1].children[0];
+
+      assert.equal(
+        line.className,
+        "hologram-error-overlay__line hologram-error-overlay__line--chrome",
+      );
+    });
+
+    it("sets each segment of a line in its own tone", () => {
+      show({
+        content: [
+          [
+            {text: "(hologram 0.9.3) ", tone: "chrome"},
+            {text: "lib/my_app.ex:3: ", tone: "meta"},
+            {text: "MyApp.bar/0", tone: "body"},
+          ],
+        ],
+      });
+
+      const segments = overlayElement().children[1].children[0].children;
+
+      assert.deepStrictEqual(
+        Array.from(segments).map(({className, textContent}) => [
+          className,
+          textContent,
+        ]),
+        [
+          ["hologram-error-overlay__tone-chrome", "(hologram 0.9.3) "],
+          ["hologram-error-overlay__tone-meta", "lib/my_app.ex:3: "],
+          ["hologram-error-overlay__tone-body", "MyApp.bar/0"],
+        ],
+      );
     });
 
     it("takes away the page's scrolling", () => {

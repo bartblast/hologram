@@ -1,7 +1,14 @@
 "use strict";
 
 // The error overlays the runtime puts over the page: a full-screen monospace
-// surface showing a heading and the error text laid out as written.
+// surface showing a heading and the error below it.
+//
+// Content is either plain text, laid out as written, or lines of toned
+// segments - a segment being a run of text and the tone it reads in, the shape
+// Hologram.LiveReload.Diagnostic returns. The tones set what went wrong
+// (`banner`) apart from the source it happened in (`body`), where it happened
+// (`meta`) and the scaffolding holding those apart (`chrome`), so the lines
+// worth reading aren't lost among the ones that only place them.
 //
 // Overlays are told apart by id, so each caller keeps its own and showing one
 // doesn't disturb another. A dismissable overlay closes on its dismiss button
@@ -9,6 +16,82 @@
 // until a successful recompilation reloads it, whereas a runtime error often
 // leaves the rest of the page usable, and an overlay with no way out would make
 // the app impossible to exercise by hand.
+
+const CLASS_PREFIX = "hologram-error-overlay";
+
+const STYLE_ELEMENT_ID = "hologram-error-overlay-style";
+
+// Written once into the page rather than onto every element, so the tones stay
+// in one place and each line costs a class name instead of a style attribute.
+const STYLES = `
+  .${CLASS_PREFIX} {
+    background-color: #0f1014;
+    box-sizing: border-box;
+    color: #c2bbd3;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 14px;
+    inset: 0;
+    line-height: 1.6;
+    overflow: auto;
+    padding: 50px;
+    position: fixed;
+    z-index: 2147483647;
+  }
+
+  .${CLASS_PREFIX}__content {
+    max-width: 120ch;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .${CLASS_PREFIX}__dismiss {
+    background: none;
+    border: none;
+    color: #c2bbd3;
+    cursor: pointer;
+    font-size: 36px;
+    line-height: 1;
+    padding: 10px;
+    position: absolute;
+    right: 20px;
+    top: 20px;
+  }
+
+  .${CLASS_PREFIX}__heading {
+    color: #a78bfa;
+    font-size: 36px;
+    font-weight: 700;
+    margin: 0 0 40px;
+  }
+
+  /* An empty line carries no text to give it height, and the output it came
+     from uses blank lines to hold its parts apart. */
+  .${CLASS_PREFIX}__line {
+    min-height: 1.6em;
+  }
+
+  .${CLASS_PREFIX}__line--banner {
+    margin-bottom: 20px;
+  }
+
+  .${CLASS_PREFIX}__tone-banner {
+    color: #f2eefb;
+    font-size: 17px;
+  }
+
+  .${CLASS_PREFIX}__tone-body {
+    color: #c2bbd3;
+  }
+
+  .${CLASS_PREFIX}__tone-chrome {
+    color: #6f6885;
+  }
+
+  .${CLASS_PREFIX}__tone-meta {
+    color: #9089a6;
+  }
+`;
+
 export default class ErrorOverlay {
   // The scrolling the page had before anything covered it. Overlays under
   // different ids can be up together, so it is taken when the first one goes up
@@ -51,43 +134,14 @@ export default class ErrorOverlay {
 
     document.body.style.overflow = "hidden";
 
+    $.#ensureStyles();
+
     const overlay = document.createElement("div");
+    overlay.className = CLASS_PREFIX;
     overlay.id = id;
 
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background-color: #0F1014;
-      color: #C2BBD3;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-      font-size: 14px;
-      z-index: 2147483647;
-      padding: 50px;
-      box-sizing: border-box;
-      overflow: auto;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-    `;
-
-    const headingElement = document.createElement("h1");
-    headingElement.textContent = heading;
-
-    headingElement.style.cssText = `
-      margin-top: 0;
-      margin-bottom: 50px;
-      font-size: 36px;
-      font-weight: 700;
-      color: #A78BFA;
-    `;
-
-    const contentContainer = document.createElement("div");
-    contentContainer.textContent = content;
-
-    overlay.appendChild(headingElement);
-    overlay.appendChild(contentContainer);
+    overlay.appendChild($.#buildHeading(heading));
+    overlay.appendChild($.#buildContent(content));
 
     let handleKeydown = null;
 
@@ -113,27 +167,68 @@ export default class ErrorOverlay {
     $.#shown.set(id, handleKeydown);
   }
 
+  static #buildContent(content) {
+    const element = document.createElement("div");
+    element.className = `${CLASS_PREFIX}__content`;
+
+    if (typeof content === "string") {
+      element.textContent = content;
+
+      return element;
+    }
+
+    content.forEach((segments) => element.appendChild($.#buildLine(segments)));
+
+    return element;
+  }
+
   static #buildDismissButton(id) {
     const button = document.createElement("button");
+    button.className = `${CLASS_PREFIX}__dismiss`;
     button.textContent = "×";
     button.setAttribute("aria-label", "Dismiss");
-
-    button.style.cssText = `
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      background: none;
-      border: none;
-      color: #C2BBD3;
-      font-size: 36px;
-      line-height: 1;
-      cursor: pointer;
-      padding: 10px;
-    `;
 
     button.addEventListener("click", () => $.hide(id));
 
     return button;
+  }
+
+  static #buildHeading(heading) {
+    const element = document.createElement("h1");
+    element.className = `${CLASS_PREFIX}__heading`;
+    element.textContent = heading;
+
+    return element;
+  }
+
+  // A line reads in the tone of the segment it opens with, which is the whole
+  // line unless a gutter or a frame's provenance comes first.
+  static #buildLine(segments) {
+    const element = document.createElement("div");
+
+    element.className = `${CLASS_PREFIX}__line ${CLASS_PREFIX}__line--${segments[0].tone}`;
+
+    segments.forEach(({text, tone}) => {
+      const span = document.createElement("span");
+      span.className = `${CLASS_PREFIX}__tone-${tone}`;
+      span.textContent = text;
+
+      element.appendChild(span);
+    });
+
+    return element;
+  }
+
+  static #ensureStyles() {
+    if (document.getElementById(STYLE_ELEMENT_ID)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+    style.id = STYLE_ELEMENT_ID;
+    style.textContent = STYLES;
+
+    document.head.appendChild(style);
   }
 }
 
