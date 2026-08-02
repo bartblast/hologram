@@ -52,7 +52,30 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   alias String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, as: StringCharsModule12
 
+  @erlang_js_dir Path.join([Reflection.root_dir(), "assets", "js", "erlang"])
+
   @tmp_dir Reflection.tmp_dir()
+
+  # The Erlang functions each ported module calls, taken from the "Deps" comment
+  # every port carries under its End marker. The comment is what a port author
+  # writes down, so it is the statement the edge table has to answer to.
+  defp list_declared_erlang_deps do
+    [@erlang_js_dir, "*.mjs"]
+    |> Path.join()
+    |> Path.wildcard()
+    |> Enum.flat_map(fn file_path ->
+      basename = Path.basename(file_path, ".mjs")
+
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      module = String.to_atom(basename)
+
+      file_path
+      |> File.read!()
+      |> String.split("\n")
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.flat_map(&parse_declared_erlang_deps(&1, module))
+    end)
+  end
 
   defp list_page_mfas_with_analysis(call_graph, page_module) do
     graph = CallGraph.get_graph(call_graph)
@@ -62,6 +85,35 @@ defmodule Hologram.Compiler.CallGraphTest do
       server_callback_analysis_by_templatable(graph, templatables)
 
     list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
+  end
+
+  # An End marker paired with the Deps comment under it, yielding one
+  # {source, target} per Erlang dependency. Dependencies on Elixir modules are
+  # named without a leading colon and are carried by a different table.
+  defp parse_declared_erlang_deps([end_line, deps_line], module) do
+    with [_match, fun, arity] <- Regex.run(~r{//\s*End\s+(\S+)/(\d+)\s*$}, end_line),
+         [_match, deps] <- Regex.run(~r{//\s*Deps:\s*\[(.*)\]\s*$}, deps_line) do
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      source = {module, String.to_atom(fun), String.to_integer(arity)}
+
+      deps
+      |> String.split(",", trim: true)
+      |> Enum.map(&String.trim/1)
+      |> Enum.filter(&String.starts_with?(&1, ":"))
+      |> Enum.map(&{source, parse_erlang_mfa(&1)})
+    else
+      _no_match -> []
+    end
+  end
+
+  # A name the comment holds may have no edge naming it yet, which is what the
+  # test reports - so the atoms are made rather than looked up, or a stale
+  # declaration would raise here instead of showing up in the diff.
+  # credo:disable-for-lines:5 Credo.Check.Warning.UnsafeToAtom
+  defp parse_erlang_mfa(dep) do
+    [_match, module, fun, arity] = Regex.run(~r{^:(\w+)\.(\S+)/(\d+)$}, dep)
+
+    {String.to_atom(module), String.to_atom(fun), String.to_integer(arity)}
   end
 
   setup_all do
@@ -1120,6 +1172,39 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Enum.count(result) == 2
     assert {:vertex_2, :vertex_3} in result
     assert {:vertex_4, :vertex_5} in result
+  end
+
+  describe "erlang_mfa_edges/0" do
+    test "returns the calls between manually ported Erlang functions" do
+      result = erlang_mfa_edges()
+
+      assert is_list(result)
+      assert {{:binary, :match, 2}, {:binary, :match, 3}} in result
+      assert {{:erlang, :"=<", 2}, {:erlang, :==, 2}} in result
+    end
+
+    # Ported functions are JavaScript, so no IR analysis finds the calls between
+    # them - each port names its callees in a "Deps" comment and the table above
+    # carries the same calls as edges. The two are written by hand and apart, so
+    # this holds them to each other: an edge the comments don't name pulls dead
+    # code into every bundle reaching its source, and a comment no edge names
+    # leaves the callee out of the bundle, which the caller only finds at runtime.
+    test "names exactly what the ported Erlang functions declare" do
+      declared_deps = list_declared_erlang_deps()
+
+      undeclared_deps =
+        Enum.reject(erlang_mfa_edges(), fn {source, target} ->
+          {source, target} in declared_deps
+        end)
+
+      missing_deps =
+        Enum.reject(declared_deps, fn {source, target} ->
+          {source, target} in erlang_mfa_edges()
+        end)
+
+      assert undeclared_deps == []
+      assert missing_deps == []
+    end
   end
 
   test "get_graph/1", %{empty_call_graph: call_graph} do

@@ -291,7 +291,6 @@ defmodule Hologram.Compiler.CallGraph do
     {{:string, :split, 2}, {:string, :split, 3}},
     {{:string, :split, 3}, {:unicode, :characters_to_binary, 1}},
     {{:string, :titlecase, 1}, {:erlang, :error, 1}},
-    {{:string, :titlecase, 1}, {:lists, :flatten, 1}},
     {{:string, :titlecase, 1}, {:unicode_util, :cp, 1}},
     {{:string, :to_graphemes, 1}, {:erlang, :error, 1}},
     {{:string, :to_graphemes, 1}, {:unicode_util, :gc, 1}},
@@ -767,6 +766,13 @@ defmodule Hologram.Compiler.CallGraph do
   def edges(%{pid: pid}) do
     Agent.get(pid, &Digraph.edges/1, :infinity)
   end
+
+  @doc """
+  Returns the calls between manually ported Erlang functions, which no IR
+  analysis can discover, since their bodies are JavaScript.
+  """
+  @spec erlang_mfa_edges :: [{mfa, mfa}]
+  def erlang_mfa_edges, do: @erlang_mfa_edges
 
   @doc """
   Returns the underlying %Digraph{} struct containing vertices and edges data.
