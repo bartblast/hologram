@@ -9,11 +9,13 @@ defmodule HologramFeatureTests.StacktraceTest do
 
   # The lines the pinned frames point at, in app/pages/stacktrace_page.ex and
   # app/stacktrace_fixture.ex.
-  @anonymous_call_line 55
-  @anonymous_raise_line 50
+  @anonymous_call_line 57
+  @anonymous_raise_line 52
   @fixture_raise_line 6
-  @local_call_line 66
-  @remote_call_line 81
+  @local_call_line 68
+  @no_matching_clause_call_line 81
+  @only_tuple_clause_line 100
+  @remote_call_line 96
 
   # The raising frame reports the raise expression's line and carries the
   # error_info naming the exception formatter. Each caller frame below it
@@ -50,6 +52,24 @@ defmodule HologramFeatureTests.StacktraceTest do
     session
     |> visit(StacktracePage)
     |> click(button("Anonymous function"))
+    |> assert_text(css("#result"), expected)
+  end
+
+  # A clause mismatch is raised on entering the function, before any line inside
+  # it has been reached, so the frame reports the first clause - where the
+  # function starts. The raising frame carries the arguments it was given in
+  # place of an arity, and names no exception formatter.
+  feature "a clause mismatch points at the function's first clause", %{session: session} do
+    expected =
+      "{:no_matching_clause_trace, [" <>
+        "{#{inspect(StacktracePage)}, :only_tuple, [:not_a_tuple], " <>
+        "[file: #{@page_file}, line: #{@only_tuple_clause_line}]}, " <>
+        "{#{inspect(StacktracePage)}, :action, 3, " <>
+        "[file: #{@page_file}, line: #{@no_matching_clause_call_line}]}]}"
+
+    session
+    |> visit(StacktracePage)
+    |> click(button("No matching clause"))
     |> assert_text(css("#result"), expected)
   end
 end

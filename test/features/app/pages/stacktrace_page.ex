@@ -2,6 +2,7 @@ defmodule HologramFeatureTests.StacktracePage do
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
+  import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Kernel, except: [inspect: 1]
 
   alias HologramFeatureTests.StacktraceFixture
@@ -32,6 +33,7 @@ defmodule HologramFeatureTests.StacktracePage do
       <strong>Scenarios</strong>
       <button $click="anonymous_function"> Anonymous function </button>
       <button $click="nested_calls"> Nested calls </button>
+      <button $click="no_matching_clause"> No matching clause </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -71,6 +73,19 @@ defmodule HologramFeatureTests.StacktracePage do
     put_state(component, :result, result)
   end
 
+  def action(:no_matching_clause, _params, component) do
+    result =
+      try do
+        # The argument is wrapped so the clause it doesn't match is found at
+        # runtime, which is where a stacktrace is taken.
+        {:wrapped, only_tuple(wrap_term(:not_a_tuple))}
+      rescue
+        _exception -> {:no_matching_clause_trace, __STACKTRACE__}
+      end
+
+    put_state(component, :result, result)
+  end
+
   def action(:reset, _params, component) do
     put_state(component, :result, nil)
   end
@@ -81,4 +96,6 @@ defmodule HologramFeatureTests.StacktracePage do
       StacktraceFixture.raise_error(x)
     }
   end
+
+  defp only_tuple({_first, _second}), do: :ok
 end
