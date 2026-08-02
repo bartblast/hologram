@@ -79,24 +79,16 @@ defmodule Hologram.LiveReload.Diagnostic do
     Regex.replace(@ansi_escapes_regex, text, "")
   end
 
-  defp to_segments(line) do
-    trimmed = String.trim_leading(line)
+  defp to_frame_segments(line) do
+    case Regex.run(@frame_regex, line) do
+      [_match, app, "", running] ->
+        [segment(:chrome, app), segment(:body, running)]
 
-    cond do
-      String.starts_with?(trimmed, ["** (", "error:", "warning:"]) ->
-        [segment(:banner, line)]
+      [_match, app, location, running] ->
+        [segment(:chrome, app), segment(:meta, location), segment(:body, running)]
 
-      String.starts_with?(trimmed, ["== ", "│"]) ->
+      _fallback ->
         [segment(:chrome, line)]
-
-      String.starts_with?(trimmed, "└─") ->
-        to_location_segments(line)
-
-      Regex.match?(@frame_regex, line) ->
-        to_frame_segments(line)
-
-      true ->
-        to_source_excerpt_segments(line)
     end
   end
 
@@ -115,16 +107,24 @@ defmodule Hologram.LiveReload.Diagnostic do
     end
   end
 
-  defp to_frame_segments(line) do
-    case Regex.run(@frame_regex, line) do
-      [_match, app, "", running] ->
-        [segment(:chrome, app), segment(:body, running)]
+  defp to_segments(line) do
+    trimmed = String.trim_leading(line)
 
-      [_match, app, location, running] ->
-        [segment(:chrome, app), segment(:meta, location), segment(:body, running)]
+    cond do
+      String.starts_with?(trimmed, ["** (", "error:", "warning:"]) ->
+        [segment(:banner, line)]
 
-      _fallback ->
+      String.starts_with?(trimmed, ["== ", "│"]) ->
         [segment(:chrome, line)]
+
+      String.starts_with?(trimmed, "└─") ->
+        to_location_segments(line)
+
+      Regex.match?(@frame_regex, line) ->
+        to_frame_segments(line)
+
+      true ->
+        to_source_excerpt_segments(line)
     end
   end
 

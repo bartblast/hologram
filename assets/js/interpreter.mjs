@@ -118,6 +118,17 @@ export default class Interpreter {
     return result.data[0];
   }
 
+  // Boxes the stacktrace carried on an error. A trace given to :erlang.raise/3
+  // is stored already boxed, while a captured one is an array of frame objects.
+  // The frames an error carries, boxed. An error raised through
+  // :erlang.raise/3 already carries them boxed, one raised any other way
+  // carries the shadow call stack's own frames.
+  static boxStacktrace(error) {
+    return Type.isList(error.stacktrace)
+      ? error.stacktrace
+      : Type.list(error.stacktrace.map(CallStack.boxFrame));
+  }
+
   static buildContext(data = {}) {
     const {module, stacktrace, vars} = data;
     const context = {module: null, stacktrace: null, vars: {}};
@@ -711,6 +722,30 @@ export default class Interpreter {
       case "port":
         return `#Port<${term.segments.join(".")}>`;
     }
+  }
+
+  // Renders an atom's name in one of the three formats it takes in source: as a
+  // literal (:foo), as a key (foo:) or as the name of a remote call (foo).
+  // A name that is a plain ASCII identifier renders as it stands, which is what
+  // most atoms are - a map key, a struct field, a function name. Every other
+  // name is rendered by Macro.inspect_atom/3, the code the server renders atoms
+  // with, so what needs quoting is decided there rather than guessed at here.
+  // The fast path is verified against the server for every 1-to-3-character
+  // name, the words Elixir gives meaning to, and the identifiers real
+  // applications use: scripts/inspect_atom/verify_fast_path.exs.
+  // Deps: [Macro.inspect_atom/3]
+  static inspectAtomAs(sourceFormat, name) {
+    if (ATOM_IDENTIFIER_REGEX.test(name)) {
+      return ATOM_FAST_PATHS[sourceFormat](name);
+    }
+
+    return Bitstring.toText(
+      Elixir_Macro["inspect_atom/3"](
+        Type.atom(sourceFormat),
+        Type.atom(name),
+        Type.list(),
+      ),
+    );
   }
 
   static inspectModuleJsName(moduleJsName) {
@@ -1664,17 +1699,6 @@ export default class Interpreter {
     return /^[A-Z]/.test(name) ? Type.alias(name) : Type.atom(name);
   }
 
-  // Boxes the stacktrace carried on an error. A trace given to :erlang.raise/3
-  // is stored already boxed, while a captured one is an array of frame objects.
-  // The frames an error carries, boxed. An error raised through
-  // :erlang.raise/3 already carries them boxed, one raised any other way
-  // carries the shadow call stack's own frames.
-  static boxStacktrace(error) {
-    return Type.isList(error.stacktrace)
-      ? error.stacktrace
-      : Type.list(error.stacktrace.map(CallStack.boxFrame));
-  }
-
   static #buildElixirFunction(
     moduleExName,
     functionName,
@@ -2130,30 +2154,6 @@ export default class Interpreter {
     }
 
     return Interpreter.inspectAtomAs("literal", term.value);
-  }
-
-  // Renders an atom's name in one of the three formats it takes in source: as a
-  // literal (:foo), as a key (foo:) or as the name of a remote call (foo).
-  // A name that is a plain ASCII identifier renders as it stands, which is what
-  // most atoms are - a map key, a struct field, a function name. Every other
-  // name is rendered by Macro.inspect_atom/3, the code the server renders atoms
-  // with, so what needs quoting is decided there rather than guessed at here.
-  // The fast path is verified against the server for every 1-to-3-character
-  // name, the words Elixir gives meaning to, and the identifiers real
-  // applications use: scripts/inspect_atom/verify_fast_path.exs.
-  // Deps: [Macro.inspect_atom/3]
-  static inspectAtomAs(sourceFormat, name) {
-    if (ATOM_IDENTIFIER_REGEX.test(name)) {
-      return ATOM_FAST_PATHS[sourceFormat](name);
-    }
-
-    return Bitstring.toText(
-      Elixir_Macro["inspect_atom/3"](
-        Type.atom(sourceFormat),
-        Type.atom(name),
-        Type.list(),
-      ),
-    );
   }
 
   static #inspectBitstring(term, _opts) {

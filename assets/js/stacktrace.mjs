@@ -13,6 +13,13 @@ import Type from "./type.mjs";
 // where a location ends and what was running begins is exactly what it can't do
 // reliably from text.
 
+// A location's file is a charlist, the way the BEAM writes one.
+function charlistToText(charlist) {
+  const codePoints = charlist.data.map(({value}) => Number(value));
+
+  return String.fromCodePoint(...codePoints);
+}
+
 // The name a generated anonymous function was defined under, and that
 // function's arity, or null when the name isn't one Elixir generated for an
 // anonymous function - it generates others, comprehensions among them, and
@@ -33,13 +40,6 @@ function formatArity(arityOrArgs) {
   }
 
   return `/${arityOrArgs.value}`;
-}
-
-// A location's file is a charlist, the way the BEAM writes one.
-function charlistToText(charlist) {
-  const codePoints = charlist.data.map(({value}) => Number(value));
-
-  return String.fromCodePoint(...codePoints);
 }
 
 // A file and where in it, each dropped once the one before it is missing - a
