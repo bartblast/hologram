@@ -107,6 +107,46 @@ describe("UncaughtErrorOverlay", () => {
       ]);
     });
 
+    // An argument inspected as a map carries a colon of its own, which a frame
+    // carries too.
+    it("keeps an argument holding a colon in the message", () => {
+      const report = [
+        "** (FunctionClauseError) no function clause matching in MyApp.my_fun/1",
+        "",
+        '    %{key: "value"}',
+        "",
+        "    my_app/page.ex:3: MyApp.my_fun/1",
+      ].join("\n");
+
+      const [message] = contentOf(report);
+
+      assert.deepStrictEqual(message, [
+        {
+          text: [
+            "** (FunctionClauseError) no function clause matching in MyApp.my_fun/1",
+            "",
+            '    %{key: "value"}',
+          ].join("\n"),
+          tone: "banner",
+        },
+      ]);
+    });
+
+    // A frame raised on entering a function, as a clause mismatch is, names the
+    // file it happened in without a line in it.
+    it("places a frame naming a file but no line", () => {
+      const report = [
+        "** (FunctionClauseError) no function clause matching in MyApp.my_fun/1",
+        "    (my_app 1.2.3) my_app/page.ex: MyApp.my_fun(:abc)",
+      ].join("\n");
+
+      assert.deepStrictEqual(contentOf(report)[1], [
+        {text: "    (my_app 1.2.3) ", tone: "chrome"},
+        {text: "my_app/page.ex: ", tone: "meta"},
+        {text: "MyApp.my_fun(:abc)", tone: "body"},
+      ]);
+    });
+
     it("splits an app frame into where it came from and what was running", () => {
       const report = [
         "** (RuntimeError) my error",
