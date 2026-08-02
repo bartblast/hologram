@@ -20,6 +20,7 @@ defmodule HologramFeatureTests.ErrorOverlayPage do
       <strong>Scenarios</strong>
       <button $click="no_matching_clause"> No matching clause </button>
       <button $click="raise_error"> Raise error </button>
+      <button $click="raise_in_framework"> Raise in framework </button>
     </p>
     <p>
       Result: <strong id="result"><code>{@result}</code></strong>
@@ -43,6 +44,15 @@ defmodule HologramFeatureTests.ErrorOverlayPage do
   def action(:raise_error, _params, component) do
     outer_fun()
     component
+  end
+
+  # Raising inside Elixir's own code puts a frame from another application on
+  # the trace, which is what the overlay reads back when it sets the page's own
+  # frames apart from the ones under them.
+  def action(:raise_in_framework, _params, component) do
+    empty = wrap_term([])
+
+    put_state(component, :result, Enum.fetch!(empty, 0))
   end
 
   defp inner_fun, do: raise("overlaid error")

@@ -32,6 +32,18 @@ defmodule HologramFeatureTests.ErrorOverlayTest do
     session
   end
 
+  # Raises inside Elixir's own code, so the trace carries a frame from an
+  # application other than the page's.
+  defp raise_in_framework(session) do
+    assert_client_error session, Enum.OutOfBoundsError, ~r/^out of bounds error/, fn ->
+      session
+      |> visit(ErrorOverlayPage)
+      |> click(button("Raise in framework"))
+    end
+
+    session
+  end
+
   # Matches an element the overlay renders in the given tone, holding the given
   # text - which is what says a run of text was read the way it should be.
   defp toned(tone, text) do
@@ -75,11 +87,12 @@ defmodule HologramFeatureTests.ErrorOverlayTest do
   end
 
   # A frame from outside the page reads in one tone throughout, so the page's own
-  # frames stand out of the run rather than having to be found in it.
+  # frames stand out of the run rather than having to be found in it. The page's
+  # own frames name no application, so this needs an error raised where one does.
   feature "reads a frame from outside the page in one tone", %{session: session} do
     session
-    |> raise_error()
-    |> assert_has(toned("chrome", "(hologram "))
+    |> raise_in_framework()
+    |> assert_has(toned("chrome", "(elixir "))
   end
 
   # A FunctionClauseError lists the arguments it was given, indenting them the

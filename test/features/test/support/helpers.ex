@@ -74,8 +74,13 @@ defmodule HologramFeatureTests.Helpers do
     )
   end
 
+  # An uncaught error carries the whole report as its message, so what the
+  # browser prints is the banner, the Elixir frames it came through, and the
+  # heading for the JavaScript stack it adds under them. The message is matched
+  # where the banner names it, and the report is required to run to its end.
   def assert_js_error(session, expected_msg, fun) when is_binary(expected_msg) do
-    regex = ~r/^There was an uncaught JavaScript error:.+: #{Regex.escape(expected_msg)}\n$/su
+    regex =
+      ~r/^There was an uncaught JavaScript error:.+?\*\* #{Regex.escape(expected_msg)}\n.*JavaScript stacktrace:\n$/su
 
     assert_js_error(session, regex, fun)
   end
