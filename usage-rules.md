@@ -238,3 +238,12 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Elixir anonymous functions can be passed as JS callbacks.
 - JS interop only works in action handlers (client-side). It is a no-op during server-side rendering.
 - Prefer `JS.call` over `JS.exec`/`JS.eval`. Isolate JS interop behind facade modules.
+
+## Umbrella Projects
+
+- Only the child app that owns the Phoenix endpoint gets the compiler entry (`compilers: Mix.compilers() ++ [:hologram]`). It also takes the `:hologram` dep, the `Hologram.Router` plug, the `"hologram"` static path and the `/priv/static/hologram/` gitignore entry.
+- Child apps that only define pages and components take the `:hologram` dep alone. **Never** add the compiler entry to them - their pages are discovered and bundled when the endpoint app compiles.
+- Endpoint configuration lives in the umbrella root `config` directory, not in the child app.
+- Run `mix holo` from the umbrella root. Started from inside a child app it watches only that app's sources, so changes in sibling apps do not trigger a live reload.
+- npm packages go in an `assets` directory at the umbrella root, not in a child app.
+- One Hologram endpoint app per running BEAM instance. If several apps in the umbrella have a configured Phoenix endpoint, Hologram raises a descriptive error.
