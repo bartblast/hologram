@@ -5,6 +5,7 @@ import {assert} from "../../../assets/node_modules/chai/index.js";
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../../assets/js/component_registry.mjs";
 import Elixir_Code from "../../../assets/js/elixir/code.mjs";
+import Elixir_Exception from "../../../assets/js/elixir/exception.mjs";
 import Elixir_FunctionClauseError from "../../../assets/js/elixir/function_clause_error.mjs";
 import Elixir_Kernel from "../../../assets/js/elixir/kernel.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
@@ -761,7 +762,12 @@ export function defineRuntimeGlobals() {
     },
   });
 
-  defineGlobalModule("Elixir_Exception", defineElixirExceptionModule());
+  defineGlobalModule("Elixir_Exception", {
+    ...defineElixirExceptionModule(),
+    // The real port, the way Elixir_FunctionClauseError below is the real one -
+    // anything rendering a stacktrace in a test renders it as the client does.
+    "format_stacktrace/1": Elixir_Exception["format_stacktrace/1"],
+  });
 
   defineGlobalModule("Elixir_FunctionClauseError", Elixir_FunctionClauseError);
 

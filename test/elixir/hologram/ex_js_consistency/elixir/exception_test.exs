@@ -1,13 +1,12 @@
-defmodule Hologram.ExJsConsistency.StacktraceTest do
+defmodule Hologram.ExJsConsistency.Elixir.ExceptionTest do
   @moduledoc """
   IMPORTANT!
   Each Elixir test here has a related JavaScript test in
-  test/javascript/interpreter_test.mjs (formatStacktrace() describe block).
+  test/javascript/elixir/exception_test.mjs.
   Always update both together.
 
-  The client renders its own stacktraces rather than running the transpiled
-  Exception.format_stacktrace/1 to do it, which costs milliseconds per frame.
-  That makes the rendering a reproduction of Elixir's, so these render the same
+  Exception.format_stacktrace/1 is manually ported rather than transpiled, so
+  the client's rendering is a reproduction of Elixir's. These render the same
   frames the way Elixir does and pin what it produces - an Elixir release that
   renders a frame differently fails here, next to the JavaScript that has to
   match it.
@@ -106,6 +105,50 @@ defmodule Hologram.ExJsConsistency.StacktraceTest do
       frames = [{:my_module, :+, 2, [file: ~c"my_module.erl", line: 11]}]
 
       assert format(frames) == "    my_module.erl:11: :my_module.+/2\n"
+    end
+
+    test "places a frame by its file alone when the line it names is zero" do
+      frames = [{MyModule, :my_fun, 1, [file: @file_path, line: 0]}]
+
+      assert format(frames) == "    lib/my_module.ex: MyModule.my_fun/1\n"
+    end
+
+    test "names the column a frame reached when it carries one" do
+      frames = [{MyModule, :my_fun, 1, [file: @file_path, line: 11, column: 5]}]
+
+      assert format(frames) == "    lib/my_module.ex:11:5: MyModule.my_fun/1\n"
+    end
+
+    # The entries the compiler generates for a module body and a file body name
+    # what they are rather than a function.
+    test "names a frame generated for a module body" do
+      frames = [{MyModule, :__MODULE__, 1, [file: @file_path, line: 11]}]
+
+      assert format(frames) == "    lib/my_module.ex:11: (module)\n"
+    end
+
+    test "names a frame generated for a file body" do
+      frames = [{MyModule, :__FILE__, 1, [file: @file_path, line: 11]}]
+
+      assert format(frames) == "    lib/my_module.ex:11: (file)\n"
+    end
+
+    test "names the module a frame taken from a macro environment came from" do
+      frames = [{MyModule, :__MODULE__, 0, [file: @file_path, line: 11]}]
+
+      assert format(frames) == "    lib/my_module.ex:11: MyModule (module)\n"
+    end
+
+    # A frame can name an anonymous function rather than a module and a name.
+    test "names a frame carrying a function in place of a module and a name" do
+      fun = fn -> nil end
+      frames = [{fun, 0, [file: @file_path, line: 11]}]
+
+      assert format(frames) == "    lib/my_module.ex:11: #{inspect(fun)}/0\n"
+    end
+
+    test "renders a stacktrace carrying no frames as a line of its own" do
+      assert format([]) == "\n"
     end
   end
 end

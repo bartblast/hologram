@@ -342,6 +342,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Cldr.Validity.U, :encode_key, 2},
     {Code, :ensure_compiled, 1},
     {Code, :ensure_loaded, 1},
+    {Exception, :format_stacktrace, 1},
     {FunctionClauseError, :message, 1},
     {Hologram.JS, :call, 4},
     {Hologram.JS, :delete, 3},

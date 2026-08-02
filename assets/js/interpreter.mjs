@@ -600,10 +600,12 @@ export default class Interpreter {
   }
 
   // Renders a boxed error the way the server renders an uncaught one: the
-  // banner naming the exception and its message, then the stacktrace. Both
-  // trace shapes an error can carry render the same. A frameless error is its
-  // banner alone, as Exception.format/3 leaves the section off for an empty
-  // stacktrace.
+  // banner naming the exception and its message, then the stacktrace, which
+  // the ported Exception.format_stacktrace/1 renders so the frames read as
+  // they do on the server. Both trace shapes an error can carry render the
+  // same. A frameless error is its banner alone, as Exception.format/3 leaves
+  // the section off for an empty stacktrace.
+  // Deps: [Exception.format_stacktrace/1]
   static formatBoxedError(error) {
     const banner = `** ${error.message}`;
     const boxedStacktrace = $.#boxStacktrace(error);
@@ -612,26 +614,11 @@ export default class Interpreter {
       return banner;
     }
 
-    return `${banner}\n${$.formatStacktrace(boxedStacktrace)}`;
-  }
+    const stacktraceText = Bitstring.toText(
+      Elixir_Exception["format_stacktrace/1"](boxedStacktrace),
+    );
 
-  // Renders a boxed stacktrace the way Exception.format_stacktrace/1 does:
-  // every frame indented by four spaces, one per line, the last line ended.
-  //
-  // IMPORTANT!
-  // The rendering is Elixir's, reproduced rather than shared - the server has
-  // Elixir to run and the client doesn't. It is held to Elixir's in
-  // test/elixir/hologram/ex_js_consistency/stacktrace_test.exs, which renders
-  // the same frames both ways and compares them. Always update both together.
-  //
-  // Reproduced rather than delegated to the transpiled Exception because that
-  // costs milliseconds per frame - a frame is a handful of interpolations, and
-  // each one is a String.Chars dispatch several interpreted calls deep. What is
-  // rendered here is a few string joins over data already in hand.
-  static formatStacktrace(boxedStacktrace) {
-    return boxedStacktrace.data
-      .map((frame) => `    ${$.#formatStacktraceEntry(frame)}\n`)
-      .join("");
+    return `${banner}\n${stacktraceText}`;
   }
 
   // Returns the registered clause heads of the given function, or null when it
@@ -2031,105 +2018,6 @@ export default class Interpreter {
     }
   }
 
-  // The name a generated anonymous function was defined under, and that
-  // function's arity, or null when the name isn't one Elixir generated for an
-  // anonymous function. Elixir generates others - comprehensions among them -
-  // whose names carry no such parent, and those keep the name they have.
-  static #extractAnonymousFunParent(name) {
-    const match = /^-(.+)\/(\d+)-fun-\d+-$/.exec(name);
-
-    return match === null ? null : {arity: match[2], name: match[1]};
-  }
-
-  // The application a module's code was compiled into, named ahead of a frame's
-  // location. A module the bundle carries no metadata for names none, the way
-  // :application.get_application/1 answers :undefined for one it doesn't know.
-  static #formatApplication(moduleTerm) {
-    // An Elixir module is keyed by the name without its Elixir prefix, an
-    // Erlang one by the atom it is - the way each is keyed when its metadata
-    // is emitted.
-    const key = Type.isAlias(moduleTerm)
-      ? $.moduleExName(moduleTerm)
-      : moduleTerm.value;
-
-    const app = ERTS.moduleMetadata[key]?.app;
-
-    if (!app) {
-      return "";
-    }
-
-    const version = ERTS.appVersions[app];
-
-    return version ? `(${app} ${version}) ` : `(${app}) `;
-  }
-
-  // What a frame says was passed: the arity when that is all it kept, and the
-  // arguments themselves when it kept those.
-  static #formatArity(arityOrArgs) {
-    if (Type.isList(arityOrArgs)) {
-      const args = arityOrArgs.data.map((arg) => $.inspect(arg));
-
-      return `(${args.join(", ")})`;
-    }
-
-    return `/${arityOrArgs.value}`;
-  }
-
-  // Where a frame happened, as far as it knows: the file it is in and the line
-  // within it, each named only when the frame carries it.
-  static #formatLocation(location) {
-    const entry = (key) =>
-      location.data.find(
-        (tuple) => Type.isTuple(tuple) && tuple.data[0].value === key,
-      )?.data[1];
-
-    const file = entry("file");
-
-    if (file === undefined) {
-      return "";
-    }
-
-    const line = entry("line");
-    const fileText = file.data.map(({value}) => Number(value));
-
-    const path = String.fromCodePoint(...fileText);
-
-    return line === undefined ? `${path}: ` : `${path}:${line.value}: `;
-  }
-
-  // What was running in a frame. An anonymous function is named after the one
-  // it was defined in, since that is the name anybody reading the frame knows
-  // it by - and the arity it reports is its own, not that function's.
-  static #formatMfa(moduleTerm, functionTerm, arityOrArgs) {
-    const moduleText = $.inspect(moduleTerm);
-    const parent = $.#extractAnonymousFunParent(functionTerm.value);
-
-    if (parent !== null) {
-      const parentName = $.#inspectAtomAs("remote_call", parent.name);
-
-      return (
-        `anonymous fn${$.#formatArity(arityOrArgs)} in ` +
-        `${moduleText}.${parentName}/${parent.arity}`
-      );
-    }
-
-    const name = $.#inspectAtomAs("remote_call", functionTerm.value);
-
-    return `${moduleText}.${name}${$.#formatArity(arityOrArgs)}`;
-  }
-
-  // A single frame, in the parts Exception renders it in: the application it
-  // came from, where in the source it was, and what was running there.
-  static #formatStacktraceEntry(frame) {
-    const [moduleTerm, functionTerm, arityOrArgs, location] = frame.data;
-
-    return (
-      $.#formatApplication(moduleTerm) +
-      $.#formatLocation(location) +
-      $.#formatMfa(moduleTerm, functionTerm, arityOrArgs)
-    );
-  }
-
   static #handleMatchFail(right, raiseMatchError) {
     if (raiseMatchError) {
       $.raiseMatchError(right);
@@ -2216,7 +2104,7 @@ export default class Interpreter {
       const parentName = source.slice(0, slashIndex);
       const parentArity = source.slice(slashIndex + 1);
 
-      definition = `.${Interpreter.#inspectAtomAs("remote_call", parentName)}/${parentArity}`;
+      definition = `.${Interpreter.inspectAtomAs("remote_call", parentName)}/${parentArity}`;
     }
 
     return `#Function<${id}/${term.arity} in ${moduleName}${definition}>`;
@@ -2238,7 +2126,7 @@ export default class Interpreter {
       return isElixirItself ? term.value : $.moduleExName(term);
     }
 
-    return Interpreter.#inspectAtomAs("literal", term.value);
+    return Interpreter.inspectAtomAs("literal", term.value);
   }
 
   // Renders an atom's name in one of the three formats it takes in source: as a
@@ -2251,7 +2139,7 @@ export default class Interpreter {
   // name, the words Elixir gives meaning to, and the identifiers real
   // applications use: scripts/inspect_atom/verify_fast_path.exs.
   // Deps: [Macro.inspect_atom/3]
-  static #inspectAtomAs(sourceFormat, name) {
+  static inspectAtomAs(sourceFormat, name) {
     if (ATOM_IDENTIFIER_REGEX.test(name)) {
       return ATOM_FAST_PATHS[sourceFormat](name);
     }
@@ -2381,7 +2269,7 @@ export default class Interpreter {
       itemsStr = Object.values(term.data)
         .map(
           ([key, value]) =>
-            `${Interpreter.#inspectAtomAs("key", key.value)} ${Interpreter.inspect(value, opts)}`,
+            `${Interpreter.inspectAtomAs("key", key.value)} ${Interpreter.inspect(value, opts)}`,
         )
         .join(", ");
     } else {
