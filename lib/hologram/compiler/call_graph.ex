@@ -409,7 +409,6 @@ defmodule Hologram.Compiler.CallGraph do
       {Enum, :into, 2},
       {Enum, :to_list, 1},
       {Exception, :blame, 3},
-      {Exception, :format_stacktrace, 1},
       {Exception, :message, 1},
       {Exception, :normalize, 3},
       {Macro, :inspect_atom, 3},
