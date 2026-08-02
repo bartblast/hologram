@@ -1136,19 +1136,10 @@ describe("Hologram", () => {
 
       assert.equal(
         error.message,
-        "\n\n** (MyError) my message\n    lib/my_module.ex:11: MyModule.my_fun/1\n\n",
+        "\n\n** (MyError) my message\n" +
+          "    lib/my_module.ex:11: MyModule.my_fun/1\n" +
+          "\nJavaScript stacktrace:",
       );
-    });
-
-    // The name the browser labels the report with sits on its own line, and the
-    // frames the browser adds below stand apart from the Elixir ones.
-    it("pads the message so each part stands on its own", () => {
-      const error = boxedError();
-
-      Hologram.handleUncaughtError(error);
-
-      assert.isTrue(error.message.startsWith("\n\n"));
-      assert.isTrue(error.message.endsWith("\n"));
     });
 
     it("renders the error in the page when the overlay is enabled", () => {

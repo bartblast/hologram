@@ -341,8 +341,9 @@ export default class Hologram {
     const report = Interpreter.formatBoxedError(error);
 
     // Padded so the report starts below the name the browser labels it with,
-    // and so the frames the browser adds stand apart from the Elixir ones.
-    error.message = `\n\n${report}\n`;
+    // and closed with a heading for the frames the browser adds under it - two
+    // stacktraces run together otherwise, and only one of them is the page's.
+    error.message = `\n\n${report}\nJavaScript stacktrace:`;
 
     if (globalThis.Hologram.config.errorOverlay) {
       UncaughtErrorOverlay.show(report);
