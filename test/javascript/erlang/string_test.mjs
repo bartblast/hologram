@@ -593,6 +593,57 @@ describe("Erlang_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // The server joins as H ++ lists:append([Sep ++ X || X <- T]), so an element
+    // that isn't a list becomes the tail of the concatenation it is part of -
+    // and the last one has nothing following it to fail against.
+    it("an element that isn't a list ends the result when it is the last one", () => {
+      const list = Type.list([Type.charlist("a"), Type.atom("bad")]);
+
+      assert.deepStrictEqual(
+        join(list, Type.charlist("-")),
+        Type.improperList([
+          Type.integer(97),
+          Type.integer(45),
+          Type.atom("bad"),
+        ]),
+      );
+    });
+
+    it("an element that isn't a list fails the concatenation that follows it", () => {
+      const list = Type.list([
+        Type.charlist("a"),
+        Type.atom("bad"),
+        Type.charlist("c"),
+      ]);
+
+      assertBoxedError(
+        () => join(list, Type.charlist("-")),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("error frame carries args and error_info for a non-list first element", () => {
+      const list = Type.list([Type.atom("bad"), Type.charlist("a")]);
+
+      let caught;
+
+      try {
+        join(list, Type.charlist("-"));
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "erlang",
+          "++",
+          Type.list([Type.atom("bad"), Type.charlist("-a")]),
+          ertsErrorInfo(),
+        ),
+      ]);
+    });
+
     it("raises FunctionClauseError if the first argument is not a list", () => {
       const list = Type.atom("not_a_list");
       const separator = Type.charlist(", ");

@@ -215,35 +215,56 @@ const Erlang_String = {
       return element;
     }
 
-    // Multiple elements - validate separator is a list (for concatenation)
+    // The server joins as H ++ lists:append([Sep ++ X || X <- T]), so a
+    // separator or an element that isn't a list fails inside one of those
+    // concatenations rather than in join/2 itself - which is the identity and
+    // the arguments its badarg reports.
+    const [head, ...tail] = list.data;
+
     if (!Type.isList(separator)) {
-      // The server fails concatenating the separator with the second
-      // element, so its badarg reports :erlang.++/2.
-      Interpreter.raiseBifError("badarg", "erlang", "++", [
-        separator,
-        list.data[1],
-      ]);
+      // The first concatenation the comprehension makes is Sep ++ hd(T).
+      Interpreter.raiseBifError("badarg", "erlang", "++", [separator, tail[0]]);
     }
 
-    // Join the strings with separator
-    const result = [];
-
-    for (let i = 0; i < list.data.length; i++) {
-      const element = list.data[i];
-
-      // Each element must be a list (for concatenation)
-      if (!Type.isList(element)) {
-        Erlang["error/1"](Type.atom("badarg"));
+    // Sep ++ X keeps X as the tail when X isn't a list, giving an improper
+    // list rather than an error.
+    const concat = (leftData, right) => {
+      if (leftData.length === 0) {
+        return right;
       }
 
-      if (i > 0) {
-        result.push(...separator.data);
+      if (!Type.isList(right)) {
+        return Type.improperList([...leftData, right]);
       }
 
-      result.push(...element.data);
+      const data = [...leftData, ...right.data];
+
+      return right.isProper ? Type.list(data) : Type.improperList(data);
+    };
+
+    const pieces = tail.map((element) => concat(separator.data, element));
+
+    // lists:append/1 concatenates from the right, so a piece ending in a term
+    // instead of an empty list fails the concatenation that follows it - and
+    // the last piece has nothing following it, which is how an element that
+    // isn't a list ends up as the joined result's tail.
+    let appended = pieces.at(-1);
+
+    for (let index = pieces.length - 2; index >= 0; index--) {
+      const piece = pieces[index];
+
+      if (!Type.isProperList(piece)) {
+        Interpreter.raiseBifError("badarg", "erlang", "++", [piece, appended]);
+      }
+
+      appended = concat(piece.data, appended);
     }
 
-    return Type.list(result);
+    if (!Type.isList(head)) {
+      Interpreter.raiseBifError("badarg", "erlang", "++", [head, appended]);
+    }
+
+    return concat(head.data, appended);
   },
   // End join/2
   // Deps: [:erlang.error/1]

@@ -271,6 +271,33 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert :string.join([[:a, :b], [:c, :d]], ~c"abc") == [:a, :b, 97, 98, 99, :c, :d]
     end
 
+    # The server joins as H ++ lists:append([Sep ++ X || X <- T]), so an element
+    # that isn't a list becomes the tail of the concatenation it is part of -
+    # and the last one has nothing following it to fail against.
+    test "an element that isn't a list ends the result when it is the last one" do
+      assert :string.join([~c"a", :bad], ~c"-") == [97, 45 | :bad]
+    end
+
+    test "an element that isn't a list fails the concatenation that follows it" do
+      assert_error ArgumentError,
+                   "argument error",
+                   {:erlang, :++, [[45 | :bad], ~c"-c"]}
+    end
+
+    test "error frame carries args and error_info for a non-list first element" do
+      elements = wrap_term([:bad, ~c"a"])
+
+      top_frame =
+        try do
+          :string.join(elements, ~c"-")
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:erlang, :++, [:bad, ~c"-a"], [error_info: %{module: :erl_erts_errors}]}
+    end
+
     test "raises FunctionClauseError if the first argument is not a list" do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":string.join/2", [:not_a_list, ~c", "]),
