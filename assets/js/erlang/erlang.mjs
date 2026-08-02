@@ -2102,10 +2102,25 @@ const Erlang = {
       "uniq",
     ]);
 
-    const info = Erlang["fun_info/1"](fun);
-
+    // Both raises name the same pair of arguments, and the message blames the
+    // first one whenever it isn't a fun - so reading the item first still
+    // reports a bad fun the way the BEAM does, without building the info list.
     if (!Type.isAtom(item) || !validItems.has(item.value)) {
       Interpreter.raiseBifError("badarg", "erlang", "fun_info", [fun, item]);
+    }
+
+    let info;
+
+    try {
+      info = Erlang["fun_info/1"](fun);
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError("badarg", "erlang", "fun_info", [fun, item]);
+      }
+
+      throw error;
     }
 
     const result = info.data.find(

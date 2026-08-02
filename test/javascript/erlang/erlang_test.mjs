@@ -7906,6 +7906,31 @@ describe("Erlang", () => {
         buildArgumentErrorMsg(2, "invalid item"),
       );
     });
+
+    it("blames the first arg when neither arg is valid", () => {
+      assertBoxedError(
+        () => fun_info(Type.atom("abc"), Type.atom("invalid_item")),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not a fun"),
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun_info(Type.atom("abc"), Type.atom("arity"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "fun_info",
+          Type.list([Type.atom("abc"), Type.atom("arity")]),
+        ),
+      ]);
+    });
   });
 
   describe("function_exported/3", () => {

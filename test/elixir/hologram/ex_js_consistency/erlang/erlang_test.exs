@@ -5130,6 +5130,25 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(2, "invalid item"),
                    {:erlang, :fun_info, [fun, :invalid_item]}
     end
+
+    test "blames the first arg when neither arg is valid" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a fun"),
+                   {:erlang, :fun_info, [:abc, :invalid_item]}
+    end
+
+    test "error frame carries args and error_info" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :erlang.fun_info(arg, :arity)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :fun_info, [:abc, :arity], @erts_info}
+    end
   end
 
   describe "function_exported/3" do
