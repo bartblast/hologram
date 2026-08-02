@@ -1,6 +1,15 @@
 defmodule Hologram.LiveReload.Diagnostic do
   @moduledoc false
 
+  # Every shape read below is Elixir's rather than Hologram's, so an Elixir
+  # release rendering a diagnostic differently is read wrongly here. The tests
+  # run a diagnostic the compiler really produced through this, so such a change
+  # fails there rather than going unnoticed until somebody sees the overlay.
+  #
+  # TODO: when live reload compiles without Phoenix, the compiler's diagnostics
+  # arrive as structs and none of this reading is needed - see the TODO in
+  # Hologram.LiveReload.reload_code/1.
+
   @typedoc """
   A run of text and the tone it reads in.
   """
@@ -11,10 +20,19 @@ defmodule Hologram.LiveReload.Diagnostic do
   # shown as the characters they are made of.
   @ansi_escapes_regex ~r/\e\[[0-9;]*[a-zA-Z]/
 
+  # A stack frame, which the compiler prints below a diagnostic raised while
+  # compiling, as in
+  # "  (hologram 0.10.1) lib/hologram/template.ex:40: Hologram.Template.build/1".
+  # The app it came from opens it, which is what tells a frame from the rest of
+  # the output - the file it names is optional, since a frame expanding a macro
+  # says that instead.
+  @frame_regex ~r/^(\s*\([^)]*\)\s+)(\S[^:]*(?::\d+)*:\s+)?(.*)$/u
+
   # A location and what it points at, as in
   # "  └─ lib/my_app.ex:3:5: MyApp.bar/0" - the marker leading it, where in the
-  # source, and what was being compiled there.
-  @location_regex ~r/^(\s*└─\s*)(\S*\.\w+(?::\d+)*:\s+)?(.*)$/u
+  # source, and what was being compiled there, which a location raised outside
+  # any function doesn't name.
+  @location_regex ~r/^(\s*└─\s*)(\S+:\s+)?(.*)$/u
 
   # The gutter a source excerpt opens with, holding the line number, as in
   # "  3 │     foo()".
@@ -62,6 +80,9 @@ defmodule Hologram.LiveReload.Diagnostic do
       String.starts_with?(trimmed, "└─") ->
         to_location_segments(line)
 
+      Regex.match?(@frame_regex, line) ->
+        to_frame_segments(line)
+
       true ->
         to_source_excerpt_segments(line)
     end
@@ -71,8 +92,8 @@ defmodule Hologram.LiveReload.Diagnostic do
   # where it is - the same parts, told apart the same way.
   defp to_location_segments(line) do
     case Regex.run(@location_regex, line) do
-      [_match, marker, "", compiling] ->
-        [segment(:chrome, marker), segment(:body, compiling)]
+      [_match, marker, "", location] ->
+        [segment(:chrome, marker), segment(:meta, location)]
 
       [_match, marker, location, compiling] ->
         [segment(:chrome, marker), segment(:meta, location), segment(:body, compiling)]
@@ -82,10 +103,23 @@ defmodule Hologram.LiveReload.Diagnostic do
     end
   end
 
+  defp to_frame_segments(line) do
+    case Regex.run(@frame_regex, line) do
+      [_match, app, "", running] ->
+        [segment(:chrome, app), segment(:body, running)]
+
+      [_match, app, location, running] ->
+        [segment(:chrome, app), segment(:meta, location), segment(:body, running)]
+
+      _fallback ->
+        [segment(:chrome, line)]
+    end
+  end
+
   defp to_source_excerpt_segments(line) do
     case Regex.run(@source_excerpt_regex, line) do
       [_match, gutter, source] -> [segment(:chrome, gutter), segment(:body, source)]
-      nil -> [segment(:body, line)]
+      nil -> [segment(:chrome, line)]
     end
   end
 end

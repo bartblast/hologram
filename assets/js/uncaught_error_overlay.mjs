@@ -44,6 +44,17 @@ const FRAME_START_REGEX = new RegExp(
 // The overlay reporting an uncaught client error in the page. Dismissable,
 // since a runtime error often leaves the rest of the page usable.
 //
+// The shapes read below are Elixir's rather than Hologram's, so a release
+// rendering a report differently is read wrongly here. The shapes are pinned in
+// test/elixir/hologram/ex_js_consistency/error_report_test.exs against a report
+// Elixir really produced, so such a change fails there rather than going
+// unnoticed until somebody sees the overlay.
+//
+// TODO: the frames are already in hand as data on the error's own stacktrace -
+// reading them from there instead of from the rendered report would leave only
+// the message needing to be read by shape. What kept them being read from the
+// text is the app each frame names, which the transpiled formatter derives.
+//
 // The report is the one the console gets, read into the tones the overlay
 // renders: what was raised, then a frame at a time, each split into where it
 // came from and what was running there.
