@@ -12,6 +12,7 @@ defmodule Hologram.Template.DOM do
   # 'dom_node' name used instead of 'node" because type node/0 is a built-in type and it cannot be redefined.
   @type dom_node ::
           {:component, module, list(attribute), t}
+          | {:dynamic_tag, {any}, list(attribute), t}
           | {:element, String.t(), list(attribute), t}
           | {:expression, {any}}
           | {:page, module, list(attribute), []}
@@ -171,6 +172,15 @@ defmodule Hologram.Template.DOM do
 
   defp render_code({:self_closing_tag, {tag_name, attributes}}) do
     render_code({:start_tag, {tag_name, attributes}}) <> render_code({:end_tag, tag_name})
+  end
+
+  # The tag name expression is already brace-wrapped, so emitting its source produces the one-tuple
+  # holding the runtime value. Attributes use element-style event decomposition, since the element
+  # branch is the only one that can consume events - the component branch filters them out anyway.
+  defp render_code({:start_tag, {{:expression, templ_expr}, attributes}}) do
+    attributes_code = Enum.map_join(attributes, ", ", &render_attribute_code(&1, :element))
+
+    "{:dynamic_tag, #{templ_expr}, [#{attributes_code}], ["
   end
 
   defp render_code({:start_tag, {tag_name, attributes}}) do

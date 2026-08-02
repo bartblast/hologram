@@ -32,6 +32,12 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Access props and state with `@var` syntax: `{@name}`, `{@count}`.
 - Interpolate Elixir expressions with curly braces: `{expression}`. **Not** `<%= expression %>`.
 - Component nodes use module names: `<MyComponent prop="value" />`. **Not** `<.my_component>`.
+- Tag names can be dynamic: `<{@module} cid="my_id" title="Hello" />` renders a component when the expression yields a component module, `<{@tag} class="heading">` renders an HTML element when it yields a string, anything else raises `ArgumentError`.
+- Pair a dynamic tag with a spread when the props are data too: `<{widget.module} ...{widget.props} />`.
+- Close a dynamic tag by repeating the opening expression: `<{@module}>content</{@module}>`.
+- Page modules are not valid dynamic tags - a page is a root component, renderable only as the root of a page.
+- Changing the module rendered under a given `cid` discards the old component's state and initializes the new one.
+- A dynamic component's module must appear as a literal in code the compiler can see - a template, a client-reachable function, `init/3`, `command/3`, or code that broadcasts an action. Modules conjured at runtime (`Module.concat/1`, `String.to_existing_atom/1`, values from the database or config) are not bundled and raise on the client.
 - Conditional rendering uses `{%if condition}...{/if}` and `{%if condition}...{%else}...{/if}`. **Not** `:if` attribute.
 - Iteration uses `{%for item <- @items}...{/for}`. **Not** `:for` attribute.
 - Escape curly braces with backslash: `\{literal\}`.

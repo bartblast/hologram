@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
+  alias Hologram.Component
   alias Hologram.Realtime
   alias Hologram.Reflection
 
@@ -15,11 +16,17 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type t :: %CallGraph{pid: pid}
 
+  @type broadcast_caller_analysis :: %{
+          dispatch_types: MapSet.t(module),
+          referenced_components: [module]
+        }
+
   @type edge :: {vertex, vertex}
 
   @type server_callback_analysis :: %{
           dispatch_types: MapSet.t(module),
-          reflection_mfas: [mfa]
+          reflection_mfas: [mfa],
+          server_referenced_components: [module]
         }
 
   @type vertex :: module | mfa
@@ -29,7 +36,14 @@ defmodule Hologram.Compiler.CallGraph do
   @dialyzer {:no_opaque, {:start_reachable_state, 3}}
 
   # Functions that broadcast action params from arbitrary server code to connected clients.
-  @broadcast_action_mfas [
+  # The Component helpers queue a broadcast on the server struct, which the framework
+  # flushes after the handler returns - they reach the same audience as the immediate
+  # Realtime functions, so their callers are analysed the same way.
+  @broadcast_mfas [
+    {Component, :put_broadcast, 3},
+    {Component, :put_broadcast, 4},
+    {Component, :put_broadcast_except, 4},
+    {Component, :put_broadcast_except, 5},
     {Realtime, :broadcast_action, 2},
     {Realtime, :broadcast_action, 3},
     {Realtime, :broadcast_action_except, 3},
@@ -513,14 +527,13 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Returns the set of types that can appear at protocol dispatch anywhere in an
   app with the given pages: types reachable from the client code of the pages,
-  types created in server-executed code of the pages and their components, and
-  types reachable from action broadcasting code.
+  types created in server-executed code of the pages, their components, and the
+  broadcast-referenced components, and types reachable from action broadcasting
+  code (taken from the given precomputed broadcast caller analysis).
   """
-  @spec app_protocol_dispatch_types(Digraph.t(), [module]) :: MapSet.t(module)
-  def app_protocol_dispatch_types(graph, pages) do
-    # Independent of the client and server traversal chain below, so it runs concurrently.
-    broadcast_types_task = Task.async(fn -> broadcast_caller_protocol_dispatch_types(graph) end)
-
+  @spec app_protocol_dispatch_types(Digraph.t(), [module], broadcast_caller_analysis) ::
+          MapSet.t(module)
+  def app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis) do
     page_entry_mfas = Enum.flat_map(pages, &list_page_entry_mfas/1)
 
     page_vertices =
@@ -531,34 +544,46 @@ defmodule Hologram.Compiler.CallGraph do
       |> Enum.filter(&match?({_module, _function, _arity}, &1))
       |> extract_uniq_components()
 
+    # A broadcast-referenced component executes its server callbacks like any other
+    # rendered component (e.g. command/3 triggered while it is mounted), so its
+    # server-created types count as app types.
+    templatables =
+      Enum.uniq(pages ++ components ++ broadcast_caller_analysis.referenced_components)
+
     client_types = protocol_dispatch_types(page_vertices)
-    server_types = server_protocol_dispatch_types(graph, pages ++ components)
-    broadcast_types = Task.await(broadcast_types_task, :infinity)
+    server_types = server_protocol_dispatch_types(graph, templatables)
 
     client_types
     |> MapSet.union(server_types)
-    |> MapSet.union(broadcast_types)
+    |> MapSet.union(broadcast_caller_analysis.dispatch_types)
   end
 
   @doc """
-  Returns the set of types that can appear at protocol dispatch in code of
-  functions that broadcast actions to connected clients, i.e. code reachable
-  from the callers of Hologram.Realtime.broadcast_action/2, broadcast_action/3,
-  broadcast_action_except/3, and broadcast_action_except/4.
+  Returns the analysis of code reachable from the callers of the functions that
+  broadcast actions: Hologram.Component.put_broadcast/3,4,
+  put_broadcast_except/4,5 and Hologram.Realtime.broadcast_action/2,3,
+  broadcast_action_except/3,4. Returns the protocol dispatch types that can
+  appear in that code and the component modules referenced in it. A broadcast
+  can deliver its payload to any connected client, so referenced components must
+  be available in the runtime bundle and the types count as app-wide dispatch types.
   Protocol function vertices are opaque during the traversal, so consolidated
   dispatch edges don't make every loaded implementation's type count as reachable.
   """
-  @spec broadcast_caller_protocol_dispatch_types(Digraph.t()) :: MapSet.t(module)
-  def broadcast_caller_protocol_dispatch_types(graph) do
+  @spec broadcast_caller_analysis(Digraph.t()) :: broadcast_caller_analysis
+  def broadcast_caller_analysis(graph) do
     caller_vertices =
-      for broadcast_mfa <- @broadcast_action_mfas,
+      for broadcast_mfa <- @broadcast_mfas,
           {caller_vertex, _broadcast_mfa} <- Digraph.incoming_edges(graph, broadcast_mfa) do
         caller_vertex
       end
 
-    graph
-    |> Digraph.reachable(caller_vertices, opaque_vertex?: &protocol_function_mfa?/1)
-    |> protocol_dispatch_types()
+    broadcast_vertices =
+      Digraph.reachable(graph, caller_vertices, opaque_vertex?: &protocol_function_mfa?/1)
+
+    %{
+      dispatch_types: protocol_dispatch_types(broadcast_vertices),
+      referenced_components: extract_component_module_vertices(broadcast_vertices)
+    }
   end
 
   @doc """
@@ -851,8 +876,9 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Returns the sorted list of MFAs that are reachable by the given page.
-  Server dispatch types and reflection MFAs of the page's templatables are
-  looked up in the given precomputed server callback analysis.
+  Server dispatch types, reflection MFAs, and server-referenced components of
+  the page's templatables are looked up in the given precomputed server
+  callback analysis.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_3/README.md
   """
@@ -863,14 +889,22 @@ defmodule Hologram.Compiler.CallGraph do
 
     initial_state = start_reachable_state(graph, entry_mfas, MapSet.new())
     initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
-    templatables = [page_module | extract_uniq_components(initial_mfas)]
+    initial_templatables = [page_module | extract_uniq_components(initial_mfas)]
+
+    {expanded_state, templatables, server_callback_analysis_by_templatable} =
+      expand_reachable_state_with_server_referenced_components(
+        graph,
+        initial_state,
+        initial_templatables,
+        server_callback_analysis_by_templatable
+      )
 
     server_types =
       Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
         MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
       end)
 
-    final_state = expand_reachable_state_with_types(graph, initial_state, server_types)
+    final_state = expand_reachable_state_with_types(graph, expanded_state, server_types)
 
     graph
     |> finalize_reachable_mfas(final_state)
@@ -899,7 +933,8 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Lists MFAs required by the runtime JS script of an app with the given pages.
+  Lists MFAs required by the runtime JS script of an app with the given pages,
+  including the client MFAs of components referenced in broadcast caller code.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_runtime_mfas_2/README.md
   """
@@ -908,10 +943,43 @@ defmodule Hologram.Compiler.CallGraph do
     entry_mfas = list_runtime_entry_mfas()
     graph = get_graph(call_graph)
 
-    app_types = app_protocol_dispatch_types(graph, pages)
+    # A component module referenced in broadcast caller code can be delivered to any
+    # connected page as a runtime value (e.g. in broadcast action params) and render
+    # as a dynamic tag there, so its client code goes into the runtime bundle, which
+    # every page loads.
+    broadcast_caller_analysis = broadcast_caller_analysis(graph)
+    app_types = app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis)
+
+    entry_vertices = entry_mfas ++ broadcast_caller_analysis.referenced_components
+    initial_state = start_reachable_state(graph, entry_vertices, app_types)
+    initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
+
+    initial_templatables =
+      Enum.uniq(
+        broadcast_caller_analysis.referenced_components ++ extract_uniq_components(initial_mfas)
+      )
+
+    # The same server-referenced component expansion as in list_page_mfas/3, so chains
+    # like a broadcast-referenced component whose own server callbacks reference
+    # further components end up in the runtime bundle too. Analyses are computed on
+    # demand from an empty map, since the runtime bundle has no precomputed analysis.
+    {expanded_state, templatables, server_callback_analysis_by_templatable} =
+      expand_reachable_state_with_server_referenced_components(
+        graph,
+        initial_state,
+        initial_templatables,
+        %{}
+      )
+
+    server_types =
+      Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
+        MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
+      end)
+
+    final_state = expand_reachable_state_with_types(graph, expanded_state, server_types)
 
     graph
-    |> reachable_mfas(entry_mfas, app_types)
+    |> finalize_reachable_mfas(final_state)
     |> reject_hex_mfas()
     |> Enum.sort()
   end
@@ -1154,8 +1222,9 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Returns the server callback analysis of each given templatable module: the
   protocol dispatch types that can appear in its server-executed code (code
-  reachable from its init/3 and command/3 callbacks) and the reflection MFAs
-  reachable from its init/3.
+  reachable from its init/3 and command/3 callbacks), the reflection MFAs
+  reachable from its init/3, and the component modules referenced in its
+  server-executed code.
   Templatables are analyzed sequentially, since spawning a task per templatable
   would copy the whole graph into each task process, which costs far more than
   the traversals themselves.
@@ -1166,9 +1235,20 @@ defmodule Hologram.Compiler.CallGraph do
           %{module => server_callback_analysis}
   def server_callback_analysis_by_templatable(graph, templatables) do
     Map.new(templatables, fn templatable ->
+      # One traversal feeds both the dispatch types and the referenced components,
+      # matching what server_protocol_dispatch_types/2 would traverse for a single
+      # templatable.
+      server_vertices =
+        Digraph.reachable(
+          graph,
+          [{templatable, :command, 3}, {templatable, :init, 3}],
+          opaque_vertex?: &protocol_function_mfa?/1
+        )
+
       analysis = %{
-        dispatch_types: server_protocol_dispatch_types(graph, [templatable]),
-        reflection_mfas: list_reflection_mfas_reachable_from_server_init(templatable, graph)
+        dispatch_types: protocol_dispatch_types(server_vertices),
+        reflection_mfas: list_reflection_mfas_reachable_from_server_init(templatable, graph),
+        server_referenced_components: extract_component_module_vertices(server_vertices)
       }
 
       {templatable, analysis}
@@ -1367,11 +1447,67 @@ defmodule Hologram.Compiler.CallGraph do
     promote_pending_impl_candidates(graph, new_state)
   end
 
+  # A component module referenced in server-executed code can reach the client as a
+  # runtime value - put into state by init/3 or sent in action params by command/3 -
+  # and render as a dynamic tag, so its client code must be included in the page
+  # bundle. Newly included components introduce new templatables (their own server
+  # callbacks and the components statically referenced by their client code), so the
+  # expansion loops until no new components appear.
+  defp expand_reachable_state_with_server_referenced_components(
+         graph,
+         state,
+         templatables,
+         server_callback_analysis_by_templatable
+       ) do
+    # The page path passes a complete analysis map, but the runtime-bundle path
+    # discovers templatables lazily, so analyses missing from the map are computed
+    # on demand.
+    missing_templatables =
+      Enum.reject(templatables, &Map.has_key?(server_callback_analysis_by_templatable, &1))
+
+    server_callback_analysis_by_templatable =
+      Map.merge(
+        server_callback_analysis_by_templatable,
+        server_callback_analysis_by_templatable(graph, missing_templatables)
+      )
+
+    new_components =
+      templatables
+      |> Enum.flat_map(&server_callback_analysis_by_templatable[&1].server_referenced_components)
+      |> Enum.uniq()
+      |> Kernel.--(templatables)
+
+    if new_components == [] do
+      {state, templatables, server_callback_analysis_by_templatable}
+    else
+      new_state = expand_reachable_state(graph, state, new_components)
+
+      newly_reached_components =
+        new_state.reached_vertices
+        |> MapSet.difference(state.reached_vertices)
+        |> Enum.filter(&is_tuple/1)
+        |> extract_uniq_components()
+
+      new_templatables = Enum.uniq(templatables ++ new_components ++ newly_reached_components)
+
+      expand_reachable_state_with_server_referenced_components(
+        graph,
+        new_state,
+        new_templatables,
+        server_callback_analysis_by_templatable
+      )
+    end
+  end
+
   # Resumes the fixpoint from the given state with additional dispatch types,
   # reaching exactly the vertices a from-scratch run with those types would reach.
   defp expand_reachable_state_with_types(graph, state, extra_types) do
     new_state = %{state | types: MapSet.union(state.types, extra_types)}
     promote_pending_impl_candidates(graph, new_state)
+  end
+
+  defp extract_component_module_vertices(vertices) do
+    Enum.filter(vertices, &(is_atom(&1) && Reflection.component?(&1)))
   end
 
   # Implementation candidates are read from the dispatch edges added at build time

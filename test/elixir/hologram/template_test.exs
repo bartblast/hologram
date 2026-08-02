@@ -129,6 +129,65 @@ defmodule Hologram.TemplateTest do
              ]
     end
 
+    test "dynamic tag with module value" do
+      template = ~HOLO"<{@module} />"
+
+      assert template.(%{module: Aaa.Bbb.Ccc}) == [{:dynamic_tag, {Aaa.Bbb.Ccc}, [], []}]
+    end
+
+    test "dynamic tag with element name value" do
+      template = ~HOLO"<{@tag} />"
+
+      assert template.(%{tag: "div"}) == [{:dynamic_tag, {"div"}, [], []}]
+    end
+
+    test "dynamic tag with alias in tag name expression" do
+      alias Aaa.Bbb.Ccc
+      template = ~HOLO"<{Ccc} />"
+
+      assert template.(%{}) == [{:dynamic_tag, {Aaa.Bbb.Ccc}, [], []}]
+    end
+
+    test "dynamic tag with conditional tag name expression" do
+      template = ~HOLO"""
+      <{if @flag do "a" else "button" end} />
+      """
+
+      assert template.(%{flag: true}) == [{:dynamic_tag, {"a"}, [], []}]
+      assert template.(%{flag: false}) == [{:dynamic_tag, {"button"}, [], []}]
+    end
+
+    test "dynamic tag with attributes" do
+      template = ~HOLO"""
+      <{@tag} my_key_1="my_value_1" my_key_2={@my_value_2} />
+      """
+
+      assert template.(%{tag: "div", my_value_2: 123}) == [
+               {:dynamic_tag, {"div"},
+                [{"my_key_1", [text: "my_value_1"]}, {"my_key_2", [expression: {123}]}], []}
+             ]
+    end
+
+    test "dynamic tag with spread" do
+      template = ~HOLO"""
+      <{@tag} ...{@my_var} />
+      """
+
+      assert template.(%{tag: "div", my_var: %{id: "my_id"}}) == [
+               {:dynamic_tag, {"div"}, [spread: {%{id: "my_id"}}], []}
+             ]
+    end
+
+    test "dynamic tag with children" do
+      template = ~HOLO"""
+      <{@tag}>abc{@my_value}</{@tag}>
+      """
+
+      assert template.(%{tag: "div", my_value: 123}) == [
+               {:dynamic_tag, {"div"}, [], [text: "abc", expression: {123}]}
+             ]
+    end
+
     test "compiler correctly detects alias used in template" do
       assert Module1.template().(%{}) == [
                text: "Remote function call result = ",
