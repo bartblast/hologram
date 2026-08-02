@@ -157,20 +157,18 @@ describe("ErrorOverlay", () => {
       );
     });
 
-    it("puts the tones in the page", () => {
+    it("puts the styles in the page", () => {
       show();
 
       const style = document.getElementById("hologram-error-overlay-style");
 
       assert.isNotNull(style);
       assert.equal(style.tagName, "STYLE");
-      assert.include(style.textContent, ".hologram-error-overlay__tone-banner");
-      assert.include(style.textContent, ".hologram-error-overlay__tone-body");
-      assert.include(style.textContent, ".hologram-error-overlay__tone-chrome");
-      assert.include(style.textContent, ".hologram-error-overlay__tone-meta");
+      assert.include(style.textContent, ".hologram-error-overlay {");
+      assert.include(style.textContent, ".hologram-error-overlay__heading {");
     });
 
-    it("puts the tones in the page only once", () => {
+    it("puts the styles in the page only once", () => {
       show();
       show({id: "my_id_2"});
 

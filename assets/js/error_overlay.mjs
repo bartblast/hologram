@@ -24,14 +24,13 @@ const STYLE_ELEMENT_ID = "hologram-error-overlay-style";
 // Written once into the page rather than onto every element, so the tones stay
 // in one place and each line costs a class name instead of a style attribute.
 //
-// One hue throughout, HOLO's lavender-gray, in the shades a report needs: what
-// broke reads brightest, the source it happened in next, then where it happened,
-// then the scaffolding placing it. Telling the tones apart by shade rather than
-// by colour keeps an error looking like the rest of Hologram instead of like a
-// legend.
+// One colour throughout. A report is set apart by the size and spacing of its
+// parts rather than by colouring them, so it reads as one piece of text. The
+// tone classes carry no colour of their own - they mark what each run of text
+// is, leaving how it looks to the rules below.
 const STYLES = `
   .${CLASS_PREFIX} {
-    background-color: #0f1014; /* chinese-black */
+    background-color: #0f1014;
     box-sizing: border-box;
     color: #c2bbd3;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -63,7 +62,6 @@ const STYLES = `
     top: 20px;
   }
 
-  /* bright-lavender */
   .${CLASS_PREFIX}__heading {
     color: #a78bfa;
     font-size: 36px;
@@ -81,25 +79,8 @@ const STYLES = `
     margin-bottom: 20px;
   }
 
-  /* brilliant-lavender */
   .${CLASS_PREFIX}__tone-banner {
-    color: #eabeff;
     font-size: 17px;
-  }
-
-  /* lavender-gray */
-  .${CLASS_PREFIX}__tone-body {
-    color: #c2bbd3;
-  }
-
-  /* lavender-gray, half way to the background */
-  .${CLASS_PREFIX}__tone-chrome {
-    color: #686674;
-  }
-
-  /* lavender-gray, a quarter of the way to the background */
-  .${CLASS_PREFIX}__tone-meta {
-    color: #95919f;
   }
 `;
 
