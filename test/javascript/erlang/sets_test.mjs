@@ -1000,6 +1000,17 @@ describe("Erlang_Sets", () => {
       assertBoxedError(() => new_1(opts), "FunctionClauseError", expectedMsg);
     });
 
+    // The options are read one at a time and answered as soon as the version is
+    // found, so a tail that isn't a list is never reached.
+    it("creates a new set when an improper list carries the version", () => {
+      const opts = Type.improperList([
+        Type.tuple([Type.atom("version"), integer2]),
+        Type.atom("bad_tail"),
+      ]);
+
+      assert.deepStrictEqual(new_1(opts), Type.map());
+    });
+
     it("raises CaseClauseError for invalid versions", () => {
       const opts = Type.keywordList([[Type.atom("version"), atomAbc]]);
 

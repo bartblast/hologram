@@ -687,6 +687,12 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       end
     end
 
+    # The options are read one at a time and answered as soon as the version is
+    # found, so a tail that isn't a list is never reached.
+    test "creates a new set when an improper list carries the version" do
+      assert :sets.new([{:version, 2} | :bad_tail]) == %{}
+    end
+
     test "raises CaseClauseError for invalid versions" do
       assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :sets.new(version: :abc)

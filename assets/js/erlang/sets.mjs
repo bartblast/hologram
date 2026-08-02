@@ -24,21 +24,28 @@ const Erlang_Sets = {
       ]);
     }
 
-    if (Type.isImproperList(opts)) {
-      // The server recurses through the pairs, so the failed call's second
-      // arg is the improper tail.
+    // The server reads the pairs one at a time and answers as soon as it finds
+    // the option, so an improper list only fails when the read runs past the
+    // last pair without having found one - which is where its recursion is
+    // handed the tail in place of a list. Options carrying the version are
+    // answered before the tail is ever reached.
+    const improper = Type.isImproperList(opts);
+    const pairs = improper ? Type.list(opts.data.slice(0, -1)) : opts;
+
+    const versionOptTuple = Erlang_Lists["keyfind/3"](
+      Type.atom("version"),
+      Type.integer(1),
+      pairs,
+    );
+
+    if (improper && Type.isFalse(versionOptTuple)) {
+      // The failed call's second arg is the tail the recursion reached.
       Interpreter.raiseFunctionClauseError("proplists", "get_value", 3, [
         Type.atom("version"),
         opts.data.at(-1),
         Type.integer(2),
       ]);
     }
-
-    const versionOptTuple = Erlang_Lists["keyfind/3"](
-      Type.atom("version"),
-      Type.integer(1),
-      opts,
-    );
 
     if (Type.isFalse(versionOptTuple)) {
       throw new HologramInterpreterError(
