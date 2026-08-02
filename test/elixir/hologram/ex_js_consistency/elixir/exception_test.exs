@@ -34,6 +34,14 @@ defmodule Hologram.ExJsConsistency.Elixir.ExceptionTest do
                  "    lib/my_module.ex:22: MyModule.my_other_fun/2\n"
     end
 
+    test "renders a stacktrace carrying no frames as a line of its own" do
+      assert format([]) == "\n"
+    end
+
+    # The only case whose values differ from its JavaScript twin: a module can
+    # only be shown here if it really belongs to an application, whereas the
+    # client is told which one owns it. The shape being pinned is the same.
+    #
     # The version is taken from the application rather than written out, since
     # the suite runs against more than one Elixir.
     test "names the application a module was compiled into" do
@@ -44,21 +52,10 @@ defmodule Hologram.ExJsConsistency.Elixir.ExceptionTest do
                "    (elixir #{vsn}) lib/enum.ex:11: Enum.map/2\n"
     end
 
-    # An application carrying no version has no test here: every application the
-    # server knows of carries one, and the shape only arises on the client, where
-    # a bundle can hold a module whose application version it doesn't. The
-    # JavaScript test covers it alone.
-
     test "names an Erlang module as the atom it is" do
       frames = [{:my_module, :my_fun, 2, [file: ~c"my_module.erl", line: 11]}]
 
       assert format(frames) == "    my_module.erl:11: :my_module.my_fun/2\n"
-    end
-
-    test "names the arguments a frame kept in place of its arity" do
-      frames = [{MyModule, :my_fun, [:abc, 1], [file: @file_path, line: 11]}]
-
-      assert format(frames) == "    lib/my_module.ex:11: MyModule.my_fun(:abc, 1)\n"
     end
 
     test "places a frame carrying a file but no line by its file alone" do
@@ -67,10 +64,28 @@ defmodule Hologram.ExJsConsistency.Elixir.ExceptionTest do
       assert format(frames) == "    lib/my_module.ex: MyModule.my_fun/1\n"
     end
 
+    test "places a frame by its file alone when the line it names is zero" do
+      frames = [{MyModule, :my_fun, 1, [file: @file_path, line: 0]}]
+
+      assert format(frames) == "    lib/my_module.ex: MyModule.my_fun/1\n"
+    end
+
+    test "names the column a frame reached when it carries one" do
+      frames = [{MyModule, :my_fun, 1, [file: @file_path, line: 11, column: 5]}]
+
+      assert format(frames) == "    lib/my_module.ex:11:5: MyModule.my_fun/1\n"
+    end
+
     test "places a frame carrying no location by what was running alone" do
       frames = [{MyModule, :my_fun, 1, []}]
 
       assert format(frames) == "    MyModule.my_fun/1\n"
+    end
+
+    test "names the arguments a frame kept in place of its arity" do
+      frames = [{MyModule, :my_fun, [:abc, 1], [file: @file_path, line: 11]}]
+
+      assert format(frames) == "    lib/my_module.ex:11: MyModule.my_fun(:abc, 1)\n"
     end
 
     test "names an anonymous function after the one it was defined in" do
@@ -107,18 +122,6 @@ defmodule Hologram.ExJsConsistency.Elixir.ExceptionTest do
       assert format(frames) == "    my_module.erl:11: :my_module.+/2\n"
     end
 
-    test "places a frame by its file alone when the line it names is zero" do
-      frames = [{MyModule, :my_fun, 1, [file: @file_path, line: 0]}]
-
-      assert format(frames) == "    lib/my_module.ex: MyModule.my_fun/1\n"
-    end
-
-    test "names the column a frame reached when it carries one" do
-      frames = [{MyModule, :my_fun, 1, [file: @file_path, line: 11, column: 5]}]
-
-      assert format(frames) == "    lib/my_module.ex:11:5: MyModule.my_fun/1\n"
-    end
-
     # The entries the compiler generates for a module body and a file body name
     # what they are rather than a function.
     test "names a frame generated for a module body" do
@@ -145,10 +148,6 @@ defmodule Hologram.ExJsConsistency.Elixir.ExceptionTest do
       frames = [{fun, 0, [file: @file_path, line: 11]}]
 
       assert format(frames) == "    lib/my_module.ex:11: #{inspect(fun)}/0\n"
-    end
-
-    test "renders a stacktrace carrying no frames as a line of its own" do
-      assert format([]) == "\n"
     end
   end
 end

@@ -67,6 +67,13 @@ describe("Elixir_Exception", () => {
       );
     });
 
+    it("renders a stacktrace carrying no frames as a line of its own", () => {
+      assert.equal(render(), "\n");
+    });
+
+    // The only case whose values differ from its Elixir twin: a module here is
+    // told which application owns it, whereas the server can only be shown a
+    // module that really belongs to one. The shape being pinned is the same.
     it("names the application a module was compiled into", () => {
       ERTS.moduleMetadata = {MyModule: {app: "my_app", file: null}};
       ERTS.appVersions = {my_app: "1.2.3"};
@@ -111,6 +118,47 @@ describe("Elixir_Exception", () => {
       assert.equal(result, "    my_module.erl:11: :my_module.my_fun/2\n");
     });
 
+    it("places a frame carrying a file but no line by its file alone", () => {
+      const result = render(
+        frame(Type.alias("MyModule"), "my_fun", Type.integer(1), [
+          fileEntry("lib/my_module.ex"),
+        ]),
+      );
+
+      assert.equal(result, "    lib/my_module.ex: MyModule.my_fun/1\n");
+    });
+
+    it("places a frame by its file alone when the line it names is zero", () => {
+      const result = render(
+        frame(Type.alias("MyModule"), "my_fun", Type.integer(1), [
+          fileEntry("lib/my_module.ex"),
+          lineEntry(0),
+        ]),
+      );
+
+      assert.equal(result, "    lib/my_module.ex: MyModule.my_fun/1\n");
+    });
+
+    it("names the column a frame reached when it carries one", () => {
+      const result = render(
+        frame(Type.alias("MyModule"), "my_fun", Type.integer(1), [
+          fileEntry("lib/my_module.ex"),
+          lineEntry(11),
+          Type.tuple([Type.atom("column"), Type.integer(5)]),
+        ]),
+      );
+
+      assert.equal(result, "    lib/my_module.ex:11:5: MyModule.my_fun/1\n");
+    });
+
+    it("places a frame carrying no location by what was running alone", () => {
+      const result = render(
+        frame(Type.alias("MyModule"), "my_fun", Type.integer(1), []),
+      );
+
+      assert.equal(result, "    MyModule.my_fun/1\n");
+    });
+
     it("names the arguments a frame kept in place of its arity", () => {
       const result = render(
         frame(
@@ -125,24 +173,6 @@ describe("Elixir_Exception", () => {
         result,
         "    lib/my_module.ex:11: MyModule.my_fun(:abc, 1)\n",
       );
-    });
-
-    it("places a frame carrying a file but no line by its file alone", () => {
-      const result = render(
-        frame(Type.alias("MyModule"), "my_fun", Type.integer(1), [
-          fileEntry("lib/my_module.ex"),
-        ]),
-      );
-
-      assert.equal(result, "    lib/my_module.ex: MyModule.my_fun/1\n");
-    });
-
-    it("places a frame carrying no location by what was running alone", () => {
-      const result = render(
-        frame(Type.alias("MyModule"), "my_fun", Type.integer(1), []),
-      );
-
-      assert.equal(result, "    MyModule.my_fun/1\n");
     });
 
     it("names an anonymous function after the one it was defined in", () => {
@@ -177,27 +207,15 @@ describe("Elixir_Exception", () => {
       );
     });
 
-    it("places a frame by its file alone when the line it names is zero", () => {
+    it("writes a function name that could not be written as it stands quoted", () => {
       const result = render(
-        frame(Type.alias("MyModule"), "my_fun", Type.integer(1), [
-          fileEntry("lib/my_module.ex"),
-          lineEntry(0),
-        ]),
-      );
-
-      assert.equal(result, "    lib/my_module.ex: MyModule.my_fun/1\n");
-    });
-
-    it("names the column a frame reached when it carries one", () => {
-      const result = render(
-        frame(Type.alias("MyModule"), "my_fun", Type.integer(1), [
+        frame(Type.alias("MyModule"), "my fun", Type.integer(1), [
           fileEntry("lib/my_module.ex"),
           lineEntry(11),
-          Type.tuple([Type.atom("column"), Type.integer(5)]),
         ]),
       );
 
-      assert.equal(result, "    lib/my_module.ex:11:5: MyModule.my_fun/1\n");
+      assert.equal(result, '    lib/my_module.ex:11: MyModule."my fun"/1\n');
     });
 
     // The entries the compiler generates for a module body and a file body name
@@ -251,21 +269,6 @@ describe("Elixir_Exception", () => {
         result,
         `    lib/my_module.ex:11: ${Interpreter.inspect(fun)}/0\n`,
       );
-    });
-
-    it("renders a stacktrace carrying no frames as a line of its own", () => {
-      assert.equal(render(), "\n");
-    });
-
-    it("writes a function name that could not be written as it stands quoted", () => {
-      const result = render(
-        frame(Type.alias("MyModule"), "my fun", Type.integer(1), [
-          fileEntry("lib/my_module.ex"),
-          lineEntry(11),
-        ]),
-      );
-
-      assert.equal(result, '    lib/my_module.ex:11: MyModule."my fun"/1\n');
     });
   });
 });
