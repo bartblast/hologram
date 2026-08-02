@@ -90,6 +90,27 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
+  # A dynamic tag decides between the element and the component branch at render time, then behaves
+  # exactly like the equivalent static tag would.
+  def render_dom({:dynamic_tag, {tag_name}, attrs_dom, children_dom}, env, server_struct)
+      when is_binary(tag_name) do
+    render_dom({:element, tag_name, attrs_dom, children_dom}, env, server_struct)
+  end
+
+  def render_dom({:dynamic_tag, {module}, props_dom, children_dom}, env, server_struct)
+      when is_atom(module) do
+    if Reflection.component?(module) do
+      render_dom({:component, module, props_dom, children_dom}, env, server_struct)
+    else
+      raise ArgumentError,
+        message: invalid_dynamic_tag_value_message(module) <> ", which is not a component module"
+    end
+  end
+
+  def render_dom({:dynamic_tag, {value}, _attrs_dom, _children_dom}, _env, _server_struct) do
+    raise ArgumentError, message: invalid_dynamic_tag_value_message(value)
+  end
+
   def render_dom({:doctype, content}, _env, server_struct) do
     {"<!DOCTYPE #{content}>", %{}, server_struct}
   end
@@ -365,6 +386,10 @@ defmodule Hologram.Template.Renderer do
     {:component, module, props_dom, expand_slots(children_dom, slots)}
   end
 
+  defp expand_slots({:dynamic_tag, {value}, attrs_dom, children_dom}, slots) do
+    {:dynamic_tag, {value}, attrs_dom, expand_slots(children_dom, slots)}
+  end
+
   defp expand_slots({:element, "slot", _attrs_dom, []}, slots) do
     slots[:default]
   end
@@ -484,6 +509,10 @@ defmodule Hologram.Template.Renderer do
   defp interpolate_page_params_js(html, page_params) do
     page_params_js = Encoder.encode_term!(page_params)
     String.replace(html, "$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
+  end
+
+  defp invalid_dynamic_tag_value_message(value) do
+    "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: #{inspect(value)}"
   end
 
   defp maybe_put_csrf_token_context(page_component_struct, opts, true) do

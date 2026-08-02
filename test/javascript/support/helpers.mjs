@@ -367,8 +367,8 @@ export function freeze(obj) {
   return Object.freeze(obj);
 }
 
-export function initComponentRegistryEntry(cid) {
-  const entry = componentRegistryEntryFixture();
+export function initComponentRegistryEntry(cid, module) {
+  const entry = componentRegistryEntryFixture({module});
   ComponentRegistry.putEntry(cid, entry);
 }
 
