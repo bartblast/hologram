@@ -66,7 +66,12 @@ const Erlang_Maps = {
 
   // Start from_list/1
   "from_list/1": (list) => {
-    if (!Type.isProperList(list)) {
+    const isPair = (elem) => Type.isTuple(elem) && elem.data.length === 2;
+
+    // An element that isn't a pair derives the bare "argument error", since the
+    // fragment the message is built from names only what is wrong with the
+    // argument as a whole - which is a list, whatever it holds.
+    if (!Type.isProperList(list) || !list.data.every(isPair)) {
       Interpreter.raiseBifError("badarg", "maps", "from_list", [list]);
     }
 

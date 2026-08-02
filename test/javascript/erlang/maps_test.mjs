@@ -331,6 +331,39 @@ describe("Erlang_Maps", () => {
       );
     });
 
+    it("raises ArgumentError if the argument is an improper list", () => {
+      const list = Type.improperList([Type.tuple([atomA, integer1]), atomB]);
+
+      assertBoxedError(
+        () => from_list(list),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+
+    it("raises ArgumentError if an element is not a tuple", () => {
+      const list = Type.list([Type.tuple([atomA, integer1]), atomB]);
+
+      assertBoxedError(
+        () => from_list(list),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError if an element is a tuple with arity other than 2", () => {
+      const list = Type.list([
+        Type.tuple([atomA, integer1]),
+        Type.tuple([atomB]),
+      ]);
+
+      assertBoxedError(
+        () => from_list(list),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
     it("error frame carries args and error_info", () => {
       let caught;
 

@@ -176,6 +176,26 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
                    end
     end
 
+    test "raises ArgumentError if the argument is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a proper list"),
+                   fn ->
+                     :maps.from_list([{:a, 1} | :b])
+                   end
+    end
+
+    test "raises ArgumentError if an element is not a tuple" do
+      assert_error ArgumentError, "argument error", fn ->
+        :maps.from_list([{:a, 1}, :b])
+      end
+    end
+
+    test "raises ArgumentError if an element is a tuple with arity other than 2" do
+      assert_error ArgumentError, "argument error", fn ->
+        :maps.from_list([{:a, 1}, {:b}])
+      end
+    end
+
     test "error frame carries args and error_info" do
       top_frame =
         try do
