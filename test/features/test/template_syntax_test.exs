@@ -3,6 +3,8 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
 
   alias HologramFeatureTests.TemplateSyntax.AttributeSpreadPage
   alias HologramFeatureTests.TemplateSyntax.ComponentPage
+  alias HologramFeatureTests.TemplateSyntax.DynamicComponentBroadcastReceiverPage
+  alias HologramFeatureTests.TemplateSyntax.DynamicComponentBroadcastSenderPage
   alias HologramFeatureTests.TemplateSyntax.DynamicComponentPage
   alias HologramFeatureTests.TemplateSyntax.DynamicComponentSwapPage
   alias HologramFeatureTests.TemplateSyntax.DynamicElementPage
@@ -13,6 +15,8 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
   alias HologramFeatureTests.TemplateSyntax.PublicCommentPage
   alias HologramFeatureTests.TemplateSyntax.RawBlockPage
   alias HologramFeatureTests.TemplateSyntax.TextAndElementPage
+
+  @broadcast_channel :template_syntax_dynamic_component
 
   describe "nodes" do
     feature "text and element", %{session: session} do
@@ -221,6 +225,22 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
       |> visit(DynamicComponentPage)
       |> click(css("#scenario_4_button"))
       |> assert_has(css("#scenario_4", text: "loaded from command"))
+    end
+
+    # The component is referenced only in the sender page's command/3, so the receiver
+    # page can render it only if broadcast-referenced components reach the runtime bundle.
+    @sessions 2
+    feature "module delivered from a broadcast to another page", %{
+      sessions: [session_1, session_2]
+    } do
+      session_2 = visit(session_2, DynamicComponentBroadcastReceiverPage)
+      wait_for_subscription(session_2, @broadcast_channel)
+
+      session_1
+      |> visit(DynamicComponentBroadcastSenderPage)
+      |> click(css("#broadcast_button"))
+
+      assert_has(session_2, css("#scenario_5", text: "delivered from broadcast"))
     end
 
     # The counts are incremented before each swap, so a swapped-in component showing
