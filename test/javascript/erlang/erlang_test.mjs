@@ -530,6 +530,32 @@ describe("Erlang", () => {
       );
     });
 
+    // Removing from a list means walking it to the end, and an improper one has
+    // no end to reach.
+    it("first arg is an improper list", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+            Type.list([Type.integer(1)]),
+          ),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("second arg is an improper list", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.list([Type.integer(1)]),
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+          ),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -8871,6 +8897,16 @@ describe("Erlang", () => {
     it("raises ArgumentError if the argument is not a list", () => {
       assertBoxedError(
         () => length(Type.atom("abc")),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    // A list has no length until it is walked to the end, and an improper one
+    // has no end to reach.
+    it("raises ArgumentError if the argument is an improper list", () => {
+      assertBoxedError(
+        () => length(Type.improperList([Type.integer(1), Type.integer(2)])),
         "ArgumentError",
         buildArgumentErrorMsg(1, "not a list"),
       );

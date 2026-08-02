@@ -155,7 +155,7 @@ const Erlang = {
   // where m = Enum.count(left), n = Enum.count(right).
   // Start --/2
   "--/2": (left, right) => {
-    if (!Type.isList(left) || !Type.isList(right)) {
+    if (!Type.isProperList(left) || !Type.isProperList(right)) {
       Interpreter.raiseBifError("badarg", "erlang", "--", [left, right]);
     }
 
@@ -2434,7 +2434,7 @@ const Erlang = {
 
   // Start length/1
   "length/1": (list) => {
-    if (!Type.isList(list)) {
+    if (!Type.isProperList(list)) {
       Interpreter.raiseBifError("badarg", "erlang", "length", [list]);
     }
 

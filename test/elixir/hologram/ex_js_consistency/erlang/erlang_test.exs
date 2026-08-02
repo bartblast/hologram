@@ -314,6 +314,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :--, [[1, 2], :abc]}
     end
 
+    # Removing from a list means walking it to the end, and an improper one has
+    # no end to reach.
+    test "first arg is an improper list" do
+      assert_error ArgumentError,
+                   "argument error",
+                   {:erlang, :--, [[1 | 2], [1]]}
+    end
+
+    test "second arg is an improper list" do
+      assert_error ArgumentError,
+                   "argument error",
+                   {:erlang, :--, [[1], [1 | 2]]}
+    end
+
     test "error frame carries args and error_info" do
       arg = wrap_term(:abc)
 
@@ -5741,6 +5755,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a list"),
                    {:erlang, :length, [:abc]}
+    end
+
+    # A list has no length until it is walked to the end, and an improper one
+    # has no end to reach.
+    test "raises ArgumentError if the argument is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :length, [[1 | 2]]}
     end
 
     test "error frame carries args and error_info" do
