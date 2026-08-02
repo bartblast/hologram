@@ -59,6 +59,10 @@ const TEXT_ESCAPES = {
 // the interpolation opener, matched as a pair since a "#" alone stands for
 // itself.
 const TEXT_ESCAPE_REGEX =
+  // The control characters are matched on purpose, and every codepoint below
+  // is written as an escape - so the pair the character class rule reads as one
+  // combined character is two that the text really holds.
+  // eslint-disable-next-line no-control-regex, no-misleading-character-class
   /#\{|[\x07-\x0D\x1B"\\\x7F\u00A0\u034F\u061C\u2000-\u200F\u2028-\u202E\u205F-\u2064\u2066-\u2069\uFEFF\uFFF9-\uFFFC]/g;
 
 export default class Interpreter {
