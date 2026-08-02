@@ -831,7 +831,7 @@ export default class Interpreter {
     }
 
     if (Interpreter.#hasUnresolvedVariablePattern(right)) {
-      return {type: "match_pattern", left: left, right: right};
+      return Type.matchPattern(left, right);
     }
 
     if (left.type === "match_pattern") {

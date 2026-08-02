@@ -52,7 +52,7 @@ defmodule HologramFeatureTests.ErrorOverlayPage do
   def action(:raise_in_framework, _params, component) do
     empty = wrap_term([])
 
-    put_state(component, :result, Enum.random(empty))
+    put_state(component, :result, Enum.fetch!(empty, 0))
   end
 
   defp inner_fun, do: raise("overlaid error")

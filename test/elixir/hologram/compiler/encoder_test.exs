@@ -1166,6 +1166,64 @@ defmodule Hologram.Compiler.EncoderTest do
                "{match: Type.variablePattern(\"x\"), guards: [(context) => context.vars.y, (context) => context.vars.z], body: (context) => {\nreturn Type.integer(1n);\n}}"
     end
 
+    # In a param both sides of a match are patterns, so neither is a value the
+    # other is matched against - the argument is matched against each of them.
+    test "with match operator in param, variable on the left" do
+      # (x = %{a: 1}) do
+      #  :ok
+      ir = %IR.FunctionClause{
+        params: [
+          %IR.MatchOperator{
+            left: %IR.Variable{name: :x},
+            right: %IR.MapType{
+              data: [{%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}}]
+            }
+          }
+        ],
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.matchPattern(Type.variablePattern("x"), Type.map([[Type.atom("a"), Type.integer(1n)]]))], guards: [], body: (context) => {
+        return Type.atom("ok");
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with match operator in param, variable on the right" do
+      # (%{a: 1} = x) do
+      #  :ok
+      ir = %IR.FunctionClause{
+        params: [
+          %IR.MatchOperator{
+            left: %IR.MapType{
+              data: [{%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}}]
+            },
+            right: %IR.Variable{name: :x}
+          }
+        ],
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.matchPattern(Type.map([[Type.atom("a"), Type.integer(1n)]]), Type.variablePattern("x"))], guards: [], body: (context) => {
+        return Type.atom("ok");
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
     test "async — guards stay sync, body becomes async" do
       ir = %IR.Clause{
         match: %IR.Variable{name: :x},
@@ -2011,7 +2069,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
       expected =
         normalize_newlines("""
-        {params: (context) => [Interpreter.matchOperator(Interpreter.matchOperator(Type.variablePattern("y"), Type.integer(1n), context), Type.variablePattern("x"), context)], guards: [], body: (context) => {
+        {params: (context) => [Type.matchPattern(Type.variablePattern("x"), Type.matchPattern(Type.integer(1n), Type.variablePattern("y")))], guards: [], body: (context) => {
         return Type.atom("ok");
         }}\
         """)
@@ -2444,7 +2502,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.tuple([Type.integer(1n), Type.integer(2n), Interpreter.matchOperator(context.vars.f, Type.variablePattern("e"), context)]), Type.tuple([Type.integer(1n), Interpreter.matchOperator(Type.variablePattern("d"), Type.variablePattern("c"), context), Type.integer(3n)]), context), Type.tuple([Interpreter.matchOperator(Type.variablePattern("b"), Type.variablePattern("a"), context), Type.integer(2n), Type.integer(3n)]), context)/
+               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.tuple([Type.integer(1n), Type.integer(2n), Interpreter.matchOperator(context.vars.f, Type.variablePattern("e"), context)]), Type.tuple([Type.integer(1n), Type.matchPattern(Type.variablePattern("c"), Type.variablePattern("d")), Type.integer(3n)]), context), Type.tuple([Type.matchPattern(Type.variablePattern("a"), Type.variablePattern("b")), Type.integer(2n), Type.integer(3n)]), context)/
     end
   end
 

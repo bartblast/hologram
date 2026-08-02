@@ -7871,6 +7871,65 @@ describe("Interpreter", () => {
       });
     });
 
+    // A match inside a pattern constrains the term from both sides, so a
+    // variable on either side binds to the term rather than to what stands
+    // opposite it.
+    describe("match pattern", () => {
+      const term = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const constraint = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+      // %{a: 1} = x = %{a: 1, b: 2}
+      it("binds a variable standing on the right of the match", () => {
+        const pattern = Type.matchPattern(
+          constraint,
+          Type.variablePattern("x"),
+        );
+
+        const result = Interpreter.matchOperator(term, pattern, context);
+
+        assert.deepStrictEqual(result, term);
+
+        assert.deepStrictEqual(context.vars, {
+          a: Type.integer(9),
+          __matched__: {x: term},
+        });
+      });
+
+      // x = %{a: 1} = %{a: 1, b: 2}
+      it("binds a variable standing on the left of the match", () => {
+        const pattern = Type.matchPattern(
+          Type.variablePattern("x"),
+          constraint,
+        );
+
+        const result = Interpreter.matchOperator(term, pattern, context);
+
+        assert.deepStrictEqual(result, term);
+
+        assert.deepStrictEqual(context.vars, {
+          a: Type.integer(9),
+          __matched__: {x: term},
+        });
+      });
+
+      // %{a: 3} = x = %{a: 1, b: 2}
+      it("raises when the term fails the constraint standing beside it", () => {
+        const pattern = Type.matchPattern(
+          Type.map([[Type.atom("a"), Type.integer(3)]]),
+          Type.variablePattern("x"),
+        );
+
+        assertBoxedError(
+          () => Interpreter.matchOperator(term, pattern, context),
+          "MatchError",
+          buildMatchErrorMsg(term),
+        );
+      });
+    });
     describe("match placeholder", () => {
       it("on the left", () => {
         // _placeholder = 2

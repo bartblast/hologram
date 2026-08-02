@@ -404,6 +404,17 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("Type.map([", "])")
   end
 
+  # Inside a pattern neither side is a value to match the other against - both
+  # constrain the term being matched, and a variable on either side binds to
+  # that term. So the match is carried into the pattern, to be matched against
+  # each of its sides in turn.
+  def encode_ir(%IR.MatchOperator{left: left, right: right}, %{pattern?: true} = context) do
+    left_js = encode_ir(left, context)
+    right_js = encode_ir(right, context)
+
+    "Type.matchPattern(#{left_js}, #{right_js})"
+  end
+
   def encode_ir(
         %IR.MatchOperator{left: left, right: right, line: line},
         %{match_operator?: true} = context
