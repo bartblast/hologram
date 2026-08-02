@@ -139,7 +139,7 @@ const Erlang_Binary = {
     }
 
     return (
-      Type.isList(pattern) &&
+      Type.isProperList(pattern) &&
       pattern.data.length > 0 &&
       pattern.data.every(isNonEmptyBinary)
     );
@@ -338,7 +338,7 @@ const Erlang_Binary = {
     if (Type.isBinary(pattern)) {
       return compileBoyerMoorePattern(pattern);
     } else if (
-      Type.isList(pattern) &&
+      Type.isProperList(pattern) &&
       pattern.data.length > 0 &&
       pattern.data.every((i) => Type.isBinary(i))
     ) {

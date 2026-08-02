@@ -153,6 +153,12 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    fn -> :binary.compile_pattern([]) end
     end
 
+    test "raises ArgumentError when pattern is improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a valid pattern"),
+                   fn -> :binary.compile_pattern(["Hello" | "World"]) end
+    end
+
     # Errors with list containing invalid item
 
     test "raises ArgumentError when pattern is list containing non-bitstring" do
@@ -1411,6 +1417,12 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not a valid pattern"),
                    fn -> :binary.split("test", [], []) end
+    end
+
+    test "raises ArgumentError when pattern is improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("test", ["a" | "b"], []) end
     end
 
     test "raises ArgumentError when pattern is list with non-bitstring" do

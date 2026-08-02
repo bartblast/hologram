@@ -212,6 +212,17 @@ describe("Erlang_Binary", () => {
           buildArgumentErrorMsg(1, "not a valid pattern"),
         );
       });
+
+      it("raises ArgumentError when pattern is improper list", () => {
+        assertBoxedError(
+          () =>
+            compilePattern(
+              Type.improperList([patternHello, Bitstring.fromText("World")]),
+            ),
+          "ArgumentError",
+          buildArgumentErrorMsg(1, "not a valid pattern"),
+        );
+      });
     });
 
     describe("errors with list containing invalid item", () => {
@@ -3116,6 +3127,23 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError when pattern is empty list", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Type.list();
+        const options = Type.list();
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is improper list", () => {
+        const subject = Bitstring.fromText("test");
+
+        const pattern = Type.improperList([
+          Bitstring.fromText("a"),
+          Bitstring.fromText("b"),
+        ]);
+
         const options = Type.list();
 
         assertBoxedError(
