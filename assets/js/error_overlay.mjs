@@ -74,8 +74,11 @@ const STYLES = `
     margin-bottom: 20px;
   }
 
+  /* Warm, where everything else is violet - what broke is told apart by not
+     belonging to the palette the rest of the report reads in, rather than by
+     being the brightest thing on the surface. */
   .${CLASS_PREFIX}__tone-banner {
-    color: #f2eefb;
+    color: #ff9e80;
     font-size: 17px;
   }
 
@@ -84,11 +87,11 @@ const STYLES = `
   }
 
   .${CLASS_PREFIX}__tone-chrome {
-    color: #6f6885;
+    color: #665e80;
   }
 
   .${CLASS_PREFIX}__tone-meta {
-    color: #9089a6;
+    color: #877ea8;
   }
 `;
 
