@@ -43,8 +43,12 @@ const STYLES = `
     z-index: 2147483647;
   }
 
+  /* A frame is laid out as written and left to run its full length. Holding it
+     to a reading measure would wrap whichever frames happened to overrun it,
+     which reads as arbitrary among frames that are otherwise alike. Breaking
+     inside a word is the last resort when the window is too narrow to fit one
+     at all. */
   .${CLASS_PREFIX}__content {
-    max-width: 120ch;
     white-space: pre-wrap;
     word-wrap: break-word;
   }
