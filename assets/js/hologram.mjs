@@ -312,11 +312,19 @@ export default class Hologram {
     };
   }
 
-  // Reports an uncaught boxed error the way the server reports one, alongside
-  // the browser's own report: this one carries the Elixir frames, the browser's
-  // carries the JavaScript stack - and stays the one witness if this reporting
-  // itself ever breaks. The console gets the report in every environment, and
-  // the page does too where the error overlay is enabled.
+  // Reports an uncaught boxed error the way the server reports one, by giving
+  // the browser's own report the Elixir frames to carry.
+  //
+  // The browser composes that report after this listener has run, reading the
+  // error's message as it stands then - so replacing the message with the whole
+  // report puts both stacktraces in the one entry the browser was going to
+  // write anyway: the Elixir frames, then the JavaScript stack below them. That
+  // stack stays the structured one the browser holds, which is what lets the
+  // devtools resolve its frames through the bundle's source maps - printing it
+  // as text would report the bundle's own positions instead.
+  //
+  // Reporting nothing here leaves the browser's report as it was, message and
+  // all, so an error still reaches the console if this ever breaks.
   static handleUncaughtError(error) {
     if (!(error instanceof HologramBoxedError)) {
       return;
@@ -332,9 +340,9 @@ export default class Hologram {
 
     const report = Interpreter.formatBoxedError(error);
 
-    // Written before the overlay renders, so an overlay that fails to render
-    // still leaves the error recorded.
-    console.error(report);
+    // Padded so the report starts below the name the browser labels it with,
+    // and so the frames the browser adds stand apart from the Elixir ones.
+    error.message = `\n\n${report}\n`;
 
     if (globalThis.Hologram.config.errorOverlay) {
       UncaughtErrorOverlay.show(report);

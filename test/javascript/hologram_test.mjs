@@ -1101,7 +1101,6 @@ describe("Hologram", () => {
   });
 
   describe("handleUncaughtError()", () => {
-    let consoleErrorStub;
     let overlayShowStub;
 
     const boxedError = () =>
@@ -1109,18 +1108,19 @@ describe("Hologram", () => {
 
     beforeEach(() => {
       CallStack.reset();
-      consoleErrorStub = sinon.stub(console, "error");
       overlayShowStub = sinon.stub(UncaughtErrorOverlay, "show");
       globalThis.Hologram.config.errorOverlay = false;
     });
 
     afterEach(() => {
-      consoleErrorStub.restore();
       overlayShowStub.restore();
       globalThis.Hologram.config.errorOverlay = false;
     });
 
-    it("prints the error the way the server prints an uncaught one", () => {
+    // The browser reads the message when it composes its own report, which it
+    // does after this has run - so the report reaches the console by being the
+    // message, rather than by being printed alongside it.
+    it("gives the error the report the server would print as its message", () => {
       CallStack.push({
         module: "MyModule",
         function: "my_fun",
@@ -1130,12 +1130,25 @@ describe("Hologram", () => {
         errorInfo: null,
       });
 
-      Hologram.handleUncaughtError(boxedError());
+      const error = boxedError();
 
-      sinon.assert.calledWith(
-        consoleErrorStub,
-        "** (MyError) my message\n    lib/my_module.ex:11: MyModule.my_fun/1\n",
+      Hologram.handleUncaughtError(error);
+
+      assert.equal(
+        error.message,
+        "\n\n** (MyError) my message\n    lib/my_module.ex:11: MyModule.my_fun/1\n\n",
       );
+    });
+
+    // The name the browser labels the report with sits on its own line, and the
+    // frames the browser adds below stand apart from the Elixir ones.
+    it("pads the message so each part stands on its own", () => {
+      const error = boxedError();
+
+      Hologram.handleUncaughtError(error);
+
+      assert.isTrue(error.message.startsWith("\n\n"));
+      assert.isTrue(error.message.endsWith("\n"));
     });
 
     it("renders the error in the page when the overlay is enabled", () => {
@@ -1153,14 +1166,6 @@ describe("Hologram", () => {
       Hologram.handleUncaughtError(boxedError());
 
       sinon.assert.notCalled(overlayShowStub);
-    });
-
-    it("prints the error before rendering it, so a failed render still logs", () => {
-      globalThis.Hologram.config.errorOverlay = true;
-
-      Hologram.handleUncaughtError(boxedError());
-
-      sinon.assert.callOrder(consoleErrorStub, overlayShowStub);
     });
 
     it("records the error for the feature test helpers", () => {
@@ -1196,9 +1201,11 @@ describe("Hologram", () => {
     it("ignores an error raised outside the runtime", () => {
       globalThis.Hologram.config.errorOverlay = true;
 
-      Hologram.handleUncaughtError(new Error("my message"));
+      const error = new Error("my message");
 
-      sinon.assert.notCalled(consoleErrorStub);
+      Hologram.handleUncaughtError(error);
+
+      assert.equal(error.message, "my message");
       sinon.assert.notCalled(overlayShowStub);
     });
   });
