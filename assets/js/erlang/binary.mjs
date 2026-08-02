@@ -693,7 +693,7 @@ const Erlang_Binary = {
     return Type.list(results);
   },
   // End matches/3
-  // Deps: [:binary._is_valid_pattern/1, :binary._parse_search_opts/1, :binary.compile_pattern/1, :binary.match/3]
+  // Deps: [:binary._parse_search_opts/1, :binary.compile_pattern/1, :binary.match/3]
 
   // Start replace/3
   "replace/3": (subject, pattern, replacement) => {

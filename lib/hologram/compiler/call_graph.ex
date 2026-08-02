@@ -221,6 +221,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :time_offset, 1}, {:erlang, :_is_valid_time_unit, 1}},
     {{:erlang, :time_offset, 1}, {:erlang, :convert_time_unit, 3}},
     {{:erlang, :time_offset, 1}, {:erlang, :time_offset, 0}},
+    {{:erlang, :unique_integer, 1}, {:erlang, :unique_integer, 0}},
     {{:filelib, :safe_relative_path, 2}, {:filename, :join, 1}},
     {{:filelib, :safe_relative_path, 2}, {:filename, :split, 1}},
     {{:filename, :_do_flatten, 2}, {:erlang, :atom_to_list, 1}},
