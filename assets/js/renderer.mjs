@@ -1362,7 +1362,8 @@ export default class Renderer {
     const attrsDom = dom.data[2];
     const childrenDom = dom.data[3];
 
-    if (Type.isBitstring(value)) {
+    // Mirrors the server's is_binary/1 guard - a non-binary bitstring is not a tag name.
+    if (Type.isBinary(value)) {
       return Renderer.renderDom(
         Type.tuple([Type.atom("element"), value, attrsDom, childrenDom]),
         context,

@@ -1425,6 +1425,17 @@ defmodule Hologram.Template.RendererTest do
       end
     end
 
+    test "non-binary bitstring" do
+      node = {:dynamic_tag, {<<3::2>>}, [], []}
+
+      expected_msg =
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: <<3::size(2)>>"
+
+      assert_raise ArgumentError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
     test "map" do
       node = {:dynamic_tag, {%{a: 1}}, [], []}
 

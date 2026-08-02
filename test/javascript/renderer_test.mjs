@@ -7327,6 +7327,14 @@ describe("Renderer", () => {
       );
     });
 
+    it("non-binary bitstring", () => {
+      assertBoxedError(
+        () => render(Type.bitstring([1, 1])),
+        "ArgumentError",
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: <<3::size(2)>>",
+      );
+    });
+
     it("map", () => {
       assertBoxedError(
         () => render(Type.map([[Type.atom("a"), Type.integer(1)]])),
