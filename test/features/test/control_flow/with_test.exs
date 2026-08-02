@@ -84,13 +84,14 @@ defmodule HologramFeatureTests.ControlFlow.WithTest do
     feature "raises a MatchError when a bare clause fails to match", %{
       session: session
     } do
-      assert_js_error session,
-                      "(MatchError) no match of right hand side value:\n\n    :ok",
-                      fn ->
-                        session
-                        |> visit(WithPage)
-                        |> click(button("Bare clause MatchError"))
-                      end
+      assert_client_error session,
+                          MatchError,
+                          "no match of right hand side value:\n\n    :ok\n",
+                          fn ->
+                            session
+                            |> visit(WithPage)
+                            |> click(button("Bare clause MatchError"))
+                          end
     end
   end
 
@@ -130,13 +131,14 @@ defmodule HologramFeatureTests.ControlFlow.WithTest do
     feature "raises WithClauseError when no else clause matches", %{
       session: session
     } do
-      assert_js_error session,
-                      "(WithClauseError) no with clause matching:\n\n    :ok",
-                      fn ->
-                        session
-                        |> visit(WithPage)
-                        |> click(button("No matching else clause"))
-                      end
+      assert_client_error session,
+                          WithClauseError,
+                          "no with clause matching:\n\n    :ok\n",
+                          fn ->
+                            session
+                            |> visit(WithPage)
+                            |> click(button("No matching else clause"))
+                          end
     end
   end
 

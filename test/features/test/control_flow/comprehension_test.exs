@@ -159,13 +159,14 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionTest do
     end
 
     feature "raises CaseClauseError when no clause matches the accumulator", %{session: session} do
-      assert_js_error session,
-                      "(CaseClauseError) no case clause matching:\n\n    0",
-                      fn ->
-                        session
-                        |> visit(ComprehensionPage)
-                        |> click(button("Reducer with unmatched accumulator"))
-                      end
+      assert_client_error session,
+                          CaseClauseError,
+                          "no case clause matching:\n\n    0\n",
+                          fn ->
+                            session
+                            |> visit(ComprehensionPage)
+                            |> click(button("Reducer with unmatched accumulator"))
+                          end
     end
   end
 end

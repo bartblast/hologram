@@ -46,32 +46,35 @@ defmodule HologramFeatureTests.ControlFlow.CondTest do
   end
 
   feature "no matching clause", %{session: session} do
-    assert_js_error session,
-                    "(CondClauseError) no cond clause evaluated to a truthy value",
-                    fn ->
-                      session
-                      |> visit(CondPage)
-                      |> click(button("No matching clause"))
-                    end
+    assert_client_error session,
+                        CondClauseError,
+                        "no cond clause evaluated to a truthy value",
+                        fn ->
+                          session
+                          |> visit(CondPage)
+                          |> click(button("No matching clause"))
+                        end
   end
 
   feature "error in clause condition", %{session: session} do
-    assert_js_error session,
-                    "(RuntimeError) my message",
-                    fn ->
-                      session
-                      |> visit(CondPage)
-                      |> click(button("Error in clause condition"))
-                    end
+    assert_client_error session,
+                        RuntimeError,
+                        "my message",
+                        fn ->
+                          session
+                          |> visit(CondPage)
+                          |> click(button("Error in clause condition"))
+                        end
   end
 
   feature "error in clause body", %{session: session} do
-    assert_js_error session,
-                    "(ArgumentError) my message",
-                    fn ->
-                      session
-                      |> visit(CondPage)
-                      |> click(button("Error in clause body"))
-                    end
+    assert_client_error session,
+                        ArgumentError,
+                        "my message",
+                        fn ->
+                          session
+                          |> visit(CondPage)
+                          |> click(button("Error in clause body"))
+                        end
   end
 end

@@ -35,7 +35,7 @@ defmodule HologramFeatureTests.ErrorOverlayTest do
   # Raises inside Elixir's own code, so the trace carries a frame from an
   # application other than the page's.
   defp raise_in_framework(session) do
-    assert_client_error session, Enum.OutOfBoundsError, ~r/^out of bounds error/, fn ->
+    assert_client_error session, Enum.EmptyError, "empty error", fn ->
       session
       |> visit(ErrorOverlayPage)
       |> click(button("Raise in framework"))

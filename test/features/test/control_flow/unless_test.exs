@@ -60,32 +60,35 @@ defmodule HologramFeatureTests.ControlFlow.UnlessTest do
   end
 
   feature "error in condition", %{session: session} do
-    assert_js_error session,
-                    "(RuntimeError) my message",
-                    fn ->
-                      session
-                      |> visit(UnlessPage)
-                      |> click(button("Error in condition"))
-                    end
+    assert_client_error session,
+                        RuntimeError,
+                        "my message",
+                        fn ->
+                          session
+                          |> visit(UnlessPage)
+                          |> click(button("Error in condition"))
+                        end
   end
 
   feature "error in unless body", %{session: session} do
-    assert_js_error session,
-                    "(ArgumentError) my message",
-                    fn ->
-                      session
-                      |> visit(UnlessPage)
-                      |> click(button("Error in unless body"))
-                    end
+    assert_client_error session,
+                        ArgumentError,
+                        "my message",
+                        fn ->
+                          session
+                          |> visit(UnlessPage)
+                          |> click(button("Error in unless body"))
+                        end
   end
 
   feature "error in else body", %{session: session} do
-    assert_js_error session,
-                    "(ArgumentError) my message",
-                    fn ->
-                      session
-                      |> visit(UnlessPage)
-                      |> click(button("Error in else body"))
-                    end
+    assert_client_error session,
+                        ArgumentError,
+                        "my message",
+                        fn ->
+                          session
+                          |> visit(UnlessPage)
+                          |> click(button("Error in else body"))
+                        end
   end
 end
