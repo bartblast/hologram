@@ -27,31 +27,31 @@ defmodule Hologram.LiveReload.DiagnosticTest do
              ]
     end
 
-    test "reads a section rule in the dimmest tone" do
-      assert to_lines("== Compilation error in file lib/my_app.ex ==") == [
-               [%{tone: :dimmest, text: "== Compilation error in file lib/my_app.ex =="}]
+    test "reads a line in no known shape in the body tone" do
+      assert to_lines("something else entirely") == [
+               [%{tone: :body, text: "something else entirely"}]
              ]
     end
 
-    test "reads a caret line in the dimmest tone" do
-      assert to_lines("    │     ^^^") == [[%{tone: :dimmest, text: "    │     ^^^"}]]
+    test "reads a caret line in the chrome tone" do
+      assert to_lines("    │     ^^^") == [[%{tone: :chrome, text: "    │     ^^^"}]]
     end
 
-    test "reads a location in the dim tone" do
+    test "reads a section rule in the chrome tone" do
+      assert to_lines("== Compilation error in file lib/my_app.ex ==") == [
+               [%{tone: :chrome, text: "== Compilation error in file lib/my_app.ex =="}]
+             ]
+    end
+
+    test "reads a location in the meta tone" do
       assert to_lines("    └─ lib/my_app.ex:3:5: MyApp.bar/0") == [
-               [%{tone: :dim, text: "    └─ lib/my_app.ex:3:5: MyApp.bar/0"}]
+               [%{tone: :meta, text: "    └─ lib/my_app.ex:3:5: MyApp.bar/0"}]
              ]
     end
 
     test "sets a source excerpt's gutter apart from its source" do
       assert to_lines("  3 │     foo()") == [
-               [%{tone: :dimmest, text: "  3 │ "}, %{tone: :foreground, text: "    foo()"}]
-             ]
-    end
-
-    test "reads a line in no known shape in the foreground tone" do
-      assert to_lines("something else entirely") == [
-               [%{tone: :foreground, text: "something else entirely"}]
+               [%{tone: :chrome, text: "  3 │ "}, %{tone: :body, text: "    foo()"}]
              ]
     end
 
@@ -73,12 +73,12 @@ defmodule Hologram.LiveReload.DiagnosticTest do
 
       assert [
                [%{tone: :banner}],
-               [%{tone: :dimmest}],
-               [%{tone: :dimmest}, %{tone: :foreground}],
-               [%{tone: :dimmest}],
-               [%{tone: :dimmest}],
-               [%{tone: :dim}],
-               [%{tone: :foreground, text: ""}]
+               [%{tone: :chrome}],
+               [%{tone: :chrome}, %{tone: :body}],
+               [%{tone: :chrome}],
+               [%{tone: :chrome}],
+               [%{tone: :meta}],
+               [%{tone: :body, text: ""}]
              ] = to_lines(output)
     end
   end

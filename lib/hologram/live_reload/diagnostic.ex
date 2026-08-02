@@ -22,12 +22,12 @@ defmodule Hologram.LiveReload.Diagnostic do
 
     * `:banner` - what went wrong, as in `** (CompileError) ...`, `error: ...`
       and `warning: ...`
-    * `:foreground` - the source the diagnostic points at
-    * `:dim` - where it points, as in `└─ lib/my_app.ex:3:5: MyApp.bar/0`
-    * `:dimmest` - the scaffolding holding the rest apart: line-number gutters,
+    * `:body` - the source the diagnostic points at
+    * `:chrome` - the scaffolding holding the rest apart: line-number gutters,
       carets and section rules
+    * `:meta` - where it points, as in `└─ lib/my_app.ex:3:5: MyApp.bar/0`
 
-  A line matching none of them reads in `:foreground`, so output in a shape
+  A line matching none of them reads in `:body`, so output in a shape
   this doesn't know is still shown as it was written.
   """
   @spec to_lines(String.t()) :: [[segment]]
@@ -52,10 +52,10 @@ defmodule Hologram.LiveReload.Diagnostic do
         [segment(:banner, line)]
 
       String.starts_with?(trimmed, ["== ", "│"]) ->
-        [segment(:dimmest, line)]
+        [segment(:chrome, line)]
 
       String.starts_with?(trimmed, "└─") ->
-        [segment(:dim, line)]
+        [segment(:meta, line)]
 
       true ->
         to_source_excerpt_segments(line)
@@ -64,8 +64,8 @@ defmodule Hologram.LiveReload.Diagnostic do
 
   defp to_source_excerpt_segments(line) do
     case Regex.run(@source_excerpt_regex, line) do
-      [_match, gutter, source] -> [segment(:dimmest, gutter), segment(:foreground, source)]
-      nil -> [segment(:foreground, line)]
+      [_match, gutter, source] -> [segment(:chrome, gutter), segment(:body, source)]
+      nil -> [segment(:body, line)]
     end
   end
 end
