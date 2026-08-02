@@ -24,16 +24,15 @@ const STYLE_ELEMENT_ID = "hologram-error-overlay-style";
 // Written once into the page rather than onto every element, so the tones stay
 // in one place and each line costs a class name instead of a style attribute.
 //
-// One colour throughout, the white HOLO highlighting gives a name. A report is
-// set apart by weight, size and spacing rather than by colouring its parts, so
-// it reads as one piece of text. What was running in a frame is the part worth
-// finding, so it is the part carrying weight - a frame from outside the app has
-// none, since there is nothing in it to look for.
+// What was raised reads as plain white text. Where it came from reads in HOLO's
+// lavender-gray below it, and within that, what was running in each frame is
+// the part worth finding, so it is the part carrying weight - a frame from
+// outside the app has none, since there is nothing in it to look for.
 const STYLES = `
   .${CLASS_PREFIX} {
     background-color: #0f1014;
     box-sizing: border-box;
-    color: #ffffff;
+    color: #c2bbd3;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 14px;
     inset: 0;
@@ -81,8 +80,7 @@ const STYLES = `
   }
 
   .${CLASS_PREFIX}__tone-banner {
-    font-size: 17px;
-    font-weight: 700;
+    color: #ffffff;
   }
 
   .${CLASS_PREFIX}__tone-body {
