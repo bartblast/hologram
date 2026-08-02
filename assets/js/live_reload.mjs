@@ -11,11 +11,15 @@ export default class LiveReload {
     document.location.reload();
   }
 
+  // The diagnostic arrives already read into lines of toned segments. The
+  // server has the compiler's output in hand, so it works out how the lines
+  // read and nothing here has to make sense of them.
+  //
   // Not dismissable: a compilation error leaves the page meaningless, and the
   // overlay goes away when a successful recompilation reloads the page.
-  static showErrorOverlay(content) {
+  static showErrorOverlay(lines) {
     ErrorOverlay.show({
-      content,
+      content: lines,
       heading: "Compilation Error",
       id: OVERLAY_ID,
     });

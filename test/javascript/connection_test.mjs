@@ -376,14 +376,21 @@ describe("Connection", () => {
     describe("compilation_error message", () => {
       it("handles compilation_error message", () => {
         const showErrorOverlaySpy = sinon.stub(LiveReload, "showErrorOverlay");
-        const errorOutput = "Compilation error details";
 
-        const message = `["compilation_error","${errorOutput}"]`;
+        const lines = [
+          [{text: "error: undefined function foo/0", tone: "banner"}],
+          [
+            {text: "  3 │ ", tone: "chrome"},
+            {text: "    foo()", tone: "body"},
+          ],
+        ];
+
+        const message = JSON.stringify(["compilation_error", lines]);
         const event = {data: message};
 
         Connection.handleMessage(event);
 
-        sinon.assert.calledOnceWithExactly(showErrorOverlaySpy, errorOutput);
+        sinon.assert.calledOnceWithExactly(showErrorOverlaySpy, lines);
 
         showErrorOverlaySpy.restore();
       });

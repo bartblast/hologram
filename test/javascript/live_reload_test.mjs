@@ -26,10 +26,18 @@ describe("LiveReload", () => {
   it("showErrorOverlay()", () => {
     const showStub = sinon.stub(ErrorOverlay, "show");
 
-    LiveReload.showErrorOverlay("my content");
+    const lines = [
+      [{text: "** (CompileError) cannot compile module MyApp", tone: "banner"}],
+      [
+        {text: "  3 │ ", tone: "chrome"},
+        {text: "    foo()", tone: "body"},
+      ],
+    ];
+
+    LiveReload.showErrorOverlay(lines);
 
     sinon.assert.calledOnceWithExactly(showStub, {
-      content: "my content",
+      content: lines,
       heading: "Compilation Error",
       id: OVERLAY_ID,
     });

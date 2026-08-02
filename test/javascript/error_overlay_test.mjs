@@ -145,10 +145,12 @@ describe("ErrorOverlay", () => {
       const overlay = overlayElement();
 
       assert.equal(overlay.className, "hologram-error-overlay");
+
       assert.equal(
         overlay.children[0].className,
         "hologram-error-overlay__heading",
       );
+
       assert.equal(
         overlay.children[1].className,
         "hologram-error-overlay__content",
