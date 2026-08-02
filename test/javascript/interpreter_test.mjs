@@ -4382,13 +4382,13 @@ describe("Interpreter", () => {
 
     it("names an Erlang module as the atom it is", () => {
       const result = render(
-        frame(Type.atom("lists"), "foreach", Type.integer(2), [
-          fileEntry("lists.erl"),
-          lineEntry(1594),
+        frame(Type.atom("my_module"), "my_fun", Type.integer(2), [
+          fileEntry("my_module.erl"),
+          lineEntry(11),
         ]),
       );
 
-      assert.equal(result, "    lists.erl:1594: :lists.foreach/2\n");
+      assert.equal(result, "    my_module.erl:11: :my_module.my_fun/2\n");
     });
 
     it("names the arguments a frame kept in place of its arity", () => {
@@ -4443,15 +4443,17 @@ describe("Interpreter", () => {
     // ones it generated for those name the function they came from.
     it("keeps a generated name that names no function it came from", () => {
       const result = render(
-        frame(Type.alias("Enum"), "-map/2-lists^map/1-1-", Type.integer(2), [
-          fileEntry("lib/enum.ex"),
-          lineEntry(1725),
-        ]),
+        frame(
+          Type.alias("MyModule"),
+          "-map/2-lists^map/1-1-",
+          Type.integer(2),
+          [fileEntry("lib/my_module.ex"), lineEntry(11)],
+        ),
       );
 
       assert.equal(
         result,
-        '    lib/enum.ex:1725: Enum."-map/2-lists^map/1-1-"/2\n',
+        '    lib/my_module.ex:11: MyModule."-map/2-lists^map/1-1-"/2\n',
       );
     });
 
