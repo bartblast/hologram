@@ -22,6 +22,7 @@ defmodule Hologram.ExJsConsistency.ErrorReportTest do
   # actually reads.
   @frame_start_regex ~r/^ {4}(?:\([^)]*\) )?\S*\.\w+:(?:\d+:)? /
 
+  @spec only_tuple({any, any}) :: :ok
   def only_tuple({_first, _second}), do: :ok
 
   defp format(error, stacktrace) do

@@ -166,7 +166,10 @@ defmodule Hologram.LiveReload.DiagnosticTest do
 
     test "reads the header naming what went wrong in the banner tone", %{lines: lines} do
       assert [%{tone: :banner, text: text}] = hd(lines)
-      assert String.starts_with?(String.trim_leading(text), "error:")
+
+      trimmed = String.trim_leading(text)
+
+      assert String.starts_with?(trimmed, "error:")
     end
 
     test "sets the location apart from what it points at", %{lines: lines} do
