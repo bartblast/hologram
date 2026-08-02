@@ -61,6 +61,9 @@ const CLAUSE_LIMIT = 10;
 // Kernel's and/or precedences, which decide where the rendering parenthesizes.
 const PRECEDENCES = {and: 130, or: 120};
 
+// Mirrors the padding Elixir applies to each listed argument. Nothing inspect
+// renders holds a newline of its own - every one it could show is escaped - so
+// this only takes effect if inspect ever breaks a wide term across lines.
 function indent(text) {
   return text.replaceAll("\n", "\n    ");
 }

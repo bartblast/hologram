@@ -4368,6 +4368,37 @@ describe("Interpreter", () => {
           assert.equal(result, '"全息图"');
         });
 
+        it("characters shown as escape sequences", () => {
+          const result = Interpreter.inspect(
+            Type.bitstring("\x07\x08\x09\x0A\x0B\x0C\x0D\x1B\x7F"),
+          );
+
+          assert.equal(result, '"\\a\\b\\t\\n\\v\\f\\r\\e\\d"');
+        });
+
+        it("quote and backslash", () => {
+          const result = Interpreter.inspect(Type.bitstring('"\\'));
+          assert.equal(result, '"\\"\\\\"');
+        });
+
+        it("invisible characters shown as unicode escapes", () => {
+          const result = Interpreter.inspect(
+            Type.bitstring("\u00A0\u200B\uFEFF"),
+          );
+
+          assert.equal(result, '"\\u00A0\\u200B\\uFEFF"');
+        });
+
+        it("an interpolation opener is escaped", () => {
+          const result = Interpreter.inspect(Type.bitstring("#{"));
+          assert.equal(result, '"\\#{"');
+        });
+
+        it("a hash that doesn't open an interpolation is not escaped", () => {
+          const result = Interpreter.inspect(Type.bitstring("a#b"));
+          assert.equal(result, '"a#b"');
+        });
+
         it("non-printable", () => {
           const result = Interpreter.inspect(Type.bitstring("a\x01b"));
           assert.equal(result, "<<97, 1, 98>>");

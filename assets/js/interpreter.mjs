@@ -35,8 +35,11 @@ const ATOM_FAST_PATHS = {
   remote_call: (name) => name,
 };
 
-// The characters a charlist shows as an escape sequence instead of itself.
-const CHARLIST_ESCAPES = {
+// The characters printable text shows as an escape sequence instead of itself:
+// the control characters that have a letter escape, and the quote and backslash
+// that would otherwise close or escape the literal. Anything the regex below
+// matches without an entry here is invisible and renders as \uXXXX.
+const TEXT_ESCAPES = {
   7: "\\a",
   8: "\\b",
   9: "\\t",
@@ -47,7 +50,16 @@ const CHARLIST_ESCAPES = {
   27: "\\e",
   34: '\\"',
   92: "\\\\",
+  127: "\\d",
 };
+
+// What printable text doesn't spell as itself: the characters above, the
+// invisible codepoints - spaces other than the plain one, joiners, direction
+// marks and annotation controls, which String.printable?/2 still accepts - and
+// the interpolation opener, matched as a pair since a "#" alone stands for
+// itself.
+const TEXT_ESCAPE_REGEX =
+  /#\{|[\x07-\x0D\x1B"\\\x7F\u00A0\u034F\u061C\u2000-\u200F\u2028-\u202E\u205F-\u2064\u2066-\u2069\uFEFF\uFFF9-\uFFFC]/g;
 
 export default class Interpreter {
   // Clause heads of manually ported functions, keyed by "Module.function/arity".
@@ -1854,6 +1866,23 @@ export default class Interpreter {
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update #asyncEvaluateCatchClauses().
+  // Spells printable text the way a string or charlist literal does: the
+  // characters that stand for themselves as they are, the rest as escapes.
+  static #escapeText(text) {
+    return text.replace(TEXT_ESCAPE_REGEX, (match) => {
+      if (match === "#{") {
+        return "\\#{";
+      }
+
+      const codePoint = match.codePointAt(0);
+
+      return (
+        TEXT_ESCAPES[codePoint] ??
+        `\\u${codePoint.toString(16).toUpperCase().padStart(4, "0")}`
+      );
+    });
+  }
+
   static #evaluateCatchClauses(clauses, error, context) {
     for (const clause of clauses) {
       const contextClone = Interpreter.cloneContext(context);
@@ -2110,7 +2139,7 @@ export default class Interpreter {
 
   static #inspectBitstring(term, _opts) {
     if (Bitstring.isPrintableText(term)) {
-      return '"' + term.text.replace(/"/g, '\\"') + '"';
+      return `"${Interpreter.#escapeText(term.text)}"`;
     }
 
     Bitstring.maybeSetBytesFromText(term);
@@ -2156,15 +2185,11 @@ export default class Interpreter {
 
   static #inspectList(term, opts) {
     if (Interpreter.#isPrintableCharlist(term)) {
-      const chars = term.data.map(
-        ({value}) =>
-          CHARLIST_ESCAPES[value] ?? String.fromCodePoint(Number(value)),
-      );
+      const text = term.data
+        .map(({value}) => String.fromCodePoint(Number(value)))
+        .join("");
 
-      // A "#" is escaped only where it opens an interpolation, which a
-      // per-character table can't tell. None of the escapes above contain "#"
-      // or "{", so a pair in the joined text is one the charlist itself holds.
-      return `~c"${chars.join("").replaceAll("#{", "\\#{")}"`;
+      return `~c"${Interpreter.#escapeText(text)}"`;
     }
 
     if (term.data.length !== 0 && Type.isKeywordList(term)) {

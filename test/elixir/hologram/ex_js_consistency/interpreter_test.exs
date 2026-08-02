@@ -229,6 +229,26 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert Kernel.inspect("全息图", []) == ~s'"全息图"'
     end
 
+    test "bitstring, text, characters shown as escape sequences" do
+      assert Kernel.inspect("\a\b\t\n\v\f\r\e\d", []) == ~S'"\a\b\t\n\v\f\r\e\d"'
+    end
+
+    test "bitstring, text, quote and backslash" do
+      assert Kernel.inspect("\"\\", []) == ~S'"\"\\"'
+    end
+
+    test "bitstring, text, invisible characters shown as unicode escapes" do
+      assert Kernel.inspect("\u00A0\u200B\uFEFF", []) == ~S'"\u00A0\u200B\uFEFF"'
+    end
+
+    test "bitstring, text, an interpolation opener is escaped" do
+      assert Kernel.inspect("\#{", []) == ~S'"\#{"'
+    end
+
+    test "bitstring, text, a hash that doesn't open an interpolation is not escaped" do
+      assert Kernel.inspect("a#b", []) == ~s'"a#b"'
+    end
+
     test "bitstring, text, non-printable" do
       assert Kernel.inspect("a\x01b") == "<<97, 1, 98>>"
     end
