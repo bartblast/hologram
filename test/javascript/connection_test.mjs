@@ -193,6 +193,7 @@ describe("Connection", () => {
         globalThis.WebSocket,
         "/hologram/websocket",
       );
+
       assert.equal(Connection.status, "connecting");
       assert.equal(Connection.websocket, mockWebSocket);
       assert.isFunction(mockWebSocket.onopen);
@@ -324,6 +325,7 @@ describe("Connection", () => {
         consoleErrorStub,
         "Hologram: server connection timeout",
       );
+
       assert.equal(Connection.status, "error");
     });
 
@@ -646,6 +648,7 @@ describe("Connection", () => {
         payload,
         correlationId,
       );
+
       sinon.assert.calledOnceWithExactly(
         mockWebSocket.send,
         expectedEncodedMessage,
