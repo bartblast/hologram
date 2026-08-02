@@ -1069,6 +1069,49 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(CallStack.snapshot(), []);
     });
 
+    // A line is recorded when a clause matches, so a call matching none would
+    // otherwise report the function without saying where it is.
+    it("reports the first clause when no clause matches", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.integer(1)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+            line: 11,
+          },
+          {
+            params: (_context) => [Type.integer(2)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+            line: 22,
+          },
+        ],
+        context,
+        "-my_fun/0-fun-0-",
+      );
+
+      let error;
+
+      try {
+        Interpreter.callAnonymousFunction(fun, [Type.integer(3)]);
+      } catch (thrownError) {
+        error = thrownError;
+      }
+
+      assert.deepStrictEqual(error.stacktrace, [
+        {
+          module: "Aaa.Bbb",
+          function: "-my_fun/0-fun-0-",
+          arityOrArgs: Type.list([Type.integer(3)]),
+          file: null,
+          line: 11,
+          errorInfo: null,
+        },
+      ]);
+    });
+
     it("names no function when the function carries no name", () => {
       const fun = Type.anonymousFunction(
         1,
@@ -3640,6 +3683,44 @@ describe("Interpreter", () => {
         );
 
         assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
+
+      // A line is recorded when a clause matches, so a call matching none would
+      // otherwise report the function without saying where it is.
+      it("reports the first clause when no clause matches", () => {
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 1, "public", [
+          {
+            params: (_context) => [Type.integer(1)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+            line: 11,
+          },
+          {
+            params: (_context) => [Type.integer(2)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+            line: 22,
+          },
+        ]);
+
+        let error;
+
+        try {
+          globalThis.Elixir_Aaa_Bbb["my_fun_g/1"](Type.integer(3));
+        } catch (thrownError) {
+          error = thrownError;
+        }
+
+        assert.deepStrictEqual(error.stacktrace, [
+          {
+            module: "Aaa.Bbb",
+            function: "my_fun_g",
+            arityOrArgs: Type.list([Type.integer(3)]),
+            file: null,
+            line: 11,
+            errorInfo: null,
+          },
+        ]);
       });
 
       it("an error raised in the body captures the frame on its stacktrace", () => {

@@ -216,6 +216,12 @@ export default class Interpreter {
         }
       }
 
+      // No clause matched, so the loop above never recorded a line. The BEAM
+      // reports the first clause, which is where the function starts.
+      if (frame) {
+        frame.line = fun.clauses[0]?.line ?? null;
+      }
+
       Interpreter.raiseFunctionClauseError(
         fun.context.module
           ? Interpreter.moduleExName(fun.context.module)
@@ -1722,6 +1728,12 @@ export default class Interpreter {
               return result;
             }
           }
+        }
+
+        // No clause matched, so the loop above never recorded a line. The BEAM
+        // reports the first clause, which is where the function starts.
+        if (globalThis.Hologram.config.stacktraces) {
+          CallStack.peek().line = clauses[0]?.line ?? null;
         }
 
         Interpreter.raiseFunctionClauseError(
