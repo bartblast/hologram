@@ -271,6 +271,14 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert Kernel.inspect([34, 92], []) == ~S'~c"\"\\"'
     end
 
+    test "list, charlist, an interpolation opener is escaped" do
+      assert Kernel.inspect([35, 123], []) == ~S'~c"\#{"'
+    end
+
+    test "list, charlist, a hash that doesn't open an interpolation is not escaped" do
+      assert Kernel.inspect([97, 35, 98], []) == ~S'~c"a#b"'
+    end
+
     test "list, charlist, a non-printable character keeps the list form" do
       assert Kernel.inspect([104, 105, 0], []) == "[104, 105, 0]"
     end

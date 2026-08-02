@@ -4482,6 +4482,18 @@ describe("Interpreter", () => {
           assert.equal(Interpreter.inspect(term), '~c"\\"\\\\"');
         });
 
+        it("an interpolation opener is escaped", () => {
+          const term = Type.list([35, 123].map(Type.integer));
+
+          assert.equal(Interpreter.inspect(term), '~c"\\#{"');
+        });
+
+        it("a hash that doesn't open an interpolation is not escaped", () => {
+          const term = Type.list([97, 35, 98].map(Type.integer));
+
+          assert.equal(Interpreter.inspect(term), '~c"a#b"');
+        });
+
         it("a non-printable character keeps the list form", () => {
           const term = Type.list([104, 105, 0].map(Type.integer));
 

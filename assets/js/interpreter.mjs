@@ -2161,7 +2161,10 @@ export default class Interpreter {
           CHARLIST_ESCAPES[value] ?? String.fromCodePoint(Number(value)),
       );
 
-      return `~c"${chars.join("")}"`;
+      // A "#" is escaped only where it opens an interpolation, which a
+      // per-character table can't tell. None of the escapes above contain "#"
+      // or "{", so a pair in the joined text is one the charlist itself holds.
+      return `~c"${chars.join("").replaceAll("#{", "\\#{")}"`;
     }
 
     if (term.data.length !== 0 && Type.isKeywordList(term)) {
