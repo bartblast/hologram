@@ -6,6 +6,7 @@ defmodule Hologram.LiveReload do
   alias Hologram.Assets.ManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
+  alias Hologram.LiveReload.Diagnostic
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
 
@@ -125,10 +126,12 @@ defmodule Hologram.LiveReload do
   end
 
   defp broadcast_compilation_error(output) do
+    lines = Diagnostic.to_lines(output)
+
     Phoenix.PubSub.broadcast(
       Hologram.PubSub,
       "hologram_live_reload",
-      {:compilation_error, output}
+      {:compilation_error, lines}
     )
   end
 
