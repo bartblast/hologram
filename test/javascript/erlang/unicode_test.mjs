@@ -48,6 +48,70 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // Bytes that don't decode aren't characters: the server names what it read
+    // before the break and what was left over, rather than handing the bytes
+    // back.
+    it("answers what it read and what was left when the bytes don't decode", () => {
+      const input = Bitstring.fromBytes([0xff, 0xfe]);
+
+      const result = Erlang_Unicode["characters_to_binary/1"](input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring(""),
+        Bitstring.fromBytes([0xff, 0xfe]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("answers incomplete when the bytes break off mid-character", () => {
+      const input = Bitstring.fromBytes([0x61, 0x62, 0x63, 0xc3]);
+
+      const result = Erlang_Unicode["characters_to_binary/1"](input);
+
+      const expected = Type.tuple([
+        Type.atom("incomplete"),
+        Type.bitstring("abc"),
+        Bitstring.fromBytes([0xc3]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("leaves the chardata it hadn't read in the rest", () => {
+      const invalid = Bitstring.fromBytes([0xff]);
+      const rest = Type.bitstring("rest");
+      const input = Type.list([invalid, rest]);
+
+      const result = Erlang_Unicode["characters_to_binary/1"](input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring(""),
+        Type.list([invalid, rest]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    // A list holding nothing but the bytes that broke is answered as those
+    // bytes, where a longer one keeps its list form.
+    it("answers a list holding only the broken bytes as those bytes", () => {
+      const invalid = Bitstring.fromBytes([0xff]);
+
+      const result = Erlang_Unicode["characters_to_binary/1"](
+        Type.list([invalid]),
+      );
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring(""),
+        invalid,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
     it("error frame carries args and error_info", () => {
       let caught;
 

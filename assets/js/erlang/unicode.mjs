@@ -67,10 +67,39 @@ const Erlang_Unicode = {
       ]);
     }
 
-    return result;
+    // Bytes that don't decode aren't characters. The server answers a tuple
+    // naming what it read before the break and what was left over, rather than
+    // handing back the bytes it couldn't read - which is what this used to do.
+    if (Bitstring.toText(result) !== false) {
+      return result;
+    }
+
+    // characters_to_list/1 walks the same chardata and breaks in the same
+    // place, so what it read and what it left are what this answers too - as a
+    // binary rather than as code points.
+    const [tag, codePoints, rest] =
+      Erlang_Unicode["characters_to_list/1"](input).data;
+
+    const text = codePoints.data
+      .map(({value}) => String.fromCodePoint(Number(value)))
+      .join("");
+
+    // A list holding nothing but the bytes that broke is answered as those
+    // bytes, where a longer one keeps its list form - observed of the BEAM
+    // rather than derived from anything, and only where it read nothing first.
+    const unwrapsRest =
+      Type.isList(input) &&
+      input.data.length === 1 &&
+      Type.isBinary(input.data[0]);
+
+    return Type.tuple([
+      tag,
+      Bitstring.fromText(text),
+      unwrapsRest ? input.data[0] : rest,
+    ]);
   },
   // End characters_to_binary/1
-  // Deps: [:unicode._chardata_to_utf8_binary/1]
+  // Deps: [:unicode._chardata_to_utf8_binary/1, :unicode.characters_to_list/1]
 
   // Start characters_to_binary/3
   "characters_to_binary/3": (input, inputEncoding, outputEncoding) => {
@@ -100,10 +129,39 @@ const Erlang_Unicode = {
       ]);
     }
 
-    return result;
+    // Bytes that don't decode aren't characters. The server answers a tuple
+    // naming what it read before the break and what was left over, rather than
+    // handing back the bytes it couldn't read - which is what this used to do.
+    if (Bitstring.toText(result) !== false) {
+      return result;
+    }
+
+    // characters_to_list/1 walks the same chardata and breaks in the same
+    // place, so what it read and what it left are what this answers too - as a
+    // binary rather than as code points.
+    const [tag, codePoints, rest] =
+      Erlang_Unicode["characters_to_list/1"](input).data;
+
+    const text = codePoints.data
+      .map(({value}) => String.fromCodePoint(Number(value)))
+      .join("");
+
+    // A list holding nothing but the bytes that broke is answered as those
+    // bytes, where a longer one keeps its list form - observed of the BEAM
+    // rather than derived from anything, and only where it read nothing first.
+    const unwrapsRest =
+      Type.isList(input) &&
+      input.data.length === 1 &&
+      Type.isBinary(input.data[0]);
+
+    return Type.tuple([
+      tag,
+      Bitstring.fromText(text),
+      unwrapsRest ? input.data[0] : rest,
+    ]);
   },
   // End characters_to_binary/3
-  // Deps: [:unicode._chardata_to_utf8_binary/1]
+  // Deps: [:unicode._chardata_to_utf8_binary/1, :unicode.characters_to_list/1]
 
   // Start characters_to_list/1
   "characters_to_list/1": (data) => {
@@ -229,7 +287,11 @@ const Erlang_Unicode = {
 
     // Handles invalid UTF-8 errors from list input. Returns error or incomplete tuple.
     // For error tuples, the rest is wrapped in a list. For incomplete tuples, it's the binary directly.
-    const handleInvalidUtf8FromList = (chunks, invalidBinary) => {
+    const handleInvalidUtf8FromList = (
+      chunks,
+      invalidBinary,
+      remainingElems,
+    ) => {
       // Convert all valid chunks to codepoints
       const codepoints =
         chunks.length > 0
@@ -246,8 +308,9 @@ const Erlang_Unicode = {
         return createIncompleteTuple(codepoints, invalidBinary);
       }
 
-      // Error: wrap the original invalid binary in a list, matching Erlang behavior
-      const restList = Type.list([invalidBinary]);
+      // Error: the rest is what was left to read - the binary that broke and
+      // everything after it, the way an invalid code point's rest is built.
+      const restList = Type.list([invalidBinary, ...remainingElems]);
 
       return createErrorTuple(codepoints, restList);
     };
@@ -284,7 +347,10 @@ const Erlang_Unicode = {
         const text = Bitstring.toText(elem);
 
         return text === false
-          ? {type: "utf8error", data: handleInvalidUtf8FromList(chunks, elem)}
+          ? {
+              type: "utf8error",
+              data: handleInvalidUtf8FromList(chunks, elem, remainingElems),
+            }
           : {type: "valid", data: elem};
       }
 

@@ -16,6 +16,28 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
                :unicode.characters_to_binary("全息图", :utf8, :utf8)
     end
 
+    # Bytes that don't decode aren't characters: the server names what it read
+    # before the break and what was left over, rather than handing the bytes
+    # back.
+    test "answers what it read and what was left when the bytes don't decode" do
+      assert :unicode.characters_to_binary(<<0xFF, 0xFE>>) == {:error, "", <<255, 254>>}
+    end
+
+    test "answers incomplete when the bytes break off mid-character" do
+      assert :unicode.characters_to_binary(<<"abc", 0xC3>>) == {:incomplete, "abc", <<195>>}
+    end
+
+    test "leaves the chardata it hadn't read in the rest" do
+      assert :unicode.characters_to_binary([<<0xFF>>, "rest"]) ==
+               {:error, "", [<<255>>, "rest"]}
+    end
+
+    # A list holding nothing but the bytes that broke is answered as those
+    # bytes, where a longer one keeps its list form.
+    test "answers a list holding only the broken bytes as those bytes" do
+      assert :unicode.characters_to_binary([<<0xFF>>]) == {:error, "", <<255>>}
+    end
+
     test "error frame carries args and error_info" do
       chardata = wrap_term(:abc)
 
