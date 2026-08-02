@@ -24,6 +24,12 @@ const STYLE_ELEMENT_ID = "hologram-error-overlay-style";
 // Written once into the page rather than onto every element, so the tones stay
 // in one place and each line costs a class name instead of a style attribute.
 //
+// IMPORTANT!
+// The tones are named by whoever classifies a report - by the server in
+// Hologram.LiveReload.Diagnostic for a compiler diagnostic, and by
+// uncaught_error_overlay.mjs for an uncaught error. A tone named there with no
+// rule here renders unstyled. Always update them together.
+//
 // What was raised reads as plain white text. Where it came from reads in HOLO's
 // lavender-gray below it, and within that, what was running in each frame is
 // the part worth finding, so it is the part carrying weight - a frame from

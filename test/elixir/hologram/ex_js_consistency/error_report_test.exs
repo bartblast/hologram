@@ -15,8 +15,11 @@ defmodule Hologram.ExJsConsistency.ErrorReportTest do
 
   @moduletag :consistency
 
-  # Mirrors FRAME_START_REGEX in assets/js/uncaught_error_overlay.mjs - what the
-  # client keys on to find where a report's message ends and its frames begin.
+  # IMPORTANT!
+  # A copy of FRAME_START_REGEX in assets/js/uncaught_error_overlay.mjs - what
+  # the client keys on to find where a report's message ends and its frames
+  # begin. Always update both together, or this stops pinning what the client
+  # actually reads.
   @frame_start_regex ~r/^ {4}(?:\([^)]*\) )?\S*\.\w+:(?:\d+:)? /
 
   def only_tuple({_first, _second}), do: :ok

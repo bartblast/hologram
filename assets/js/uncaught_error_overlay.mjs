@@ -17,6 +17,17 @@ const FRAMEWORK_APPS = new Set([
   "stdlib",
 ]);
 
+// IMPORTANT!
+// The patterns below read shapes Elixir writes, not Hologram's own. They are
+// pinned against a report Elixir really produced in
+// test/elixir/hologram/ex_js_consistency/error_report_test.exs, which carries
+// its own copy of FRAME_START_REGEX. Always update both together.
+//
+// A frame is read the same way on the server, in Hologram.LiveReload.Diagnostic
+// - a compiler diagnostic carries a stacktrace too, and the two overlays are
+// meant to render one alike. The rules differ because what surrounds a frame
+// does. Always change both together, or the overlays drift apart.
+
 // Where a frame places what was running: a source file, and the line in it
 // when the frame carries one - a frame raised on entering a function, as a
 // clause mismatch is, names the file alone.

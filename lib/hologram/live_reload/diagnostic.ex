@@ -20,6 +20,14 @@ defmodule Hologram.LiveReload.Diagnostic do
   # shown as the characters they are made of.
   @ansi_escapes_regex ~r/\e\[[0-9;]*[a-zA-Z]/
 
+  # IMPORTANT!
+  # A stack frame is read the same way on the client, in
+  # assets/js/uncaught_error_overlay.mjs - an error report and a compiler
+  # diagnostic both carry frames, and the two overlays are meant to render one
+  # alike. The rules differ because what surrounds a frame does: here every
+  # frame names an app, whereas there a message can hold a colon of its own.
+  # Always change both together, or the overlays drift apart.
+  #
   # A stack frame, which the compiler prints below a diagnostic raised while
   # compiling, as in
   # "  (hologram 0.10.1) lib/hologram/template.ex:40: Hologram.Template.build/1".
@@ -40,6 +48,10 @@ defmodule Hologram.LiveReload.Diagnostic do
 
   @doc """
   Returns the compiler's output as lines, each a list of segments.
+
+  IMPORTANT!
+  Each tone names a class the overlay styles, in assets/js/error_overlay.mjs.
+  A tone with no class there renders unstyled - always update both together.
 
   Every line reads in one of four tones:
 
