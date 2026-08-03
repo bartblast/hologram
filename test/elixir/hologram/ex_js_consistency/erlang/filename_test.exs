@@ -96,6 +96,23 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
                    build_function_clause_error_msg(":filename.do_flatten/2", [arg, []]),
                    fn -> :filename.basename(arg) end
     end
+
+    test "error frame carries the flatten args" do
+      arg = wrap_term(123)
+
+      top_frame =
+        try do
+          :filename.basename(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside filename.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:filename, :do_flatten, [123, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "basename/2" do
@@ -705,6 +722,23 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
                    build_function_clause_error_msg(":filename.join/1", [[123]]),
                    fn -> :filename.join([123]) end
     end
+
+    test "error frame carries args" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :filename.join(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside filename.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:filename, :join, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "join/2" do
@@ -808,6 +842,23 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":filename.join/2", ["usr", 123]),
                    fn -> :filename.join("usr", 123) end
+    end
+
+    test "error frame carries args" do
+      arg = wrap_term(1)
+
+      top_frame =
+        try do
+          :filename.join("a", arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside filename.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:filename, :join, ["a", 1], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 

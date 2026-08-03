@@ -35,10 +35,15 @@ Benchee.run(
     CallGraph.remove_manually_ported_mfas(call_graph)
 
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
+
+    # Derived before the graph is split into runtime and page parts, so that the
+    # applications reached from pages are named as well.
+    app_versions = Compiler.build_app_versions(call_graph)
+
     call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
 
     runtime_entry_file_path =
-      Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts)
+      Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, app_versions, opts)
 
     page_entry_files_info =
       Reflection.list_pages()

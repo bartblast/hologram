@@ -397,6 +397,23 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
         :unicode_util.cp([3.14])
       end
     end
+
+    test "error frame carries args" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode_util.cp(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode_util.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:unicode_util, :cp, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "gc/1" do

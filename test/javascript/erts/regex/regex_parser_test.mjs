@@ -3,12 +3,12 @@
 import {
   assert,
   assertRegexParseError,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "../../support/helpers.mjs";
 
 import RegexParser from "../../../../assets/js/erts/regex/regex_parser.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // Factories for common AST nodes, keeping expected trees compact.
 // Assertions about code point values keep raw node objects instead.

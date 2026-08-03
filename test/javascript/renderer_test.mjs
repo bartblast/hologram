@@ -5,9 +5,10 @@
 import {
   assert,
   assertBoxedError,
+  buildKeyErrorMsg,
   componentRegistryEntryFixture,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   initComponentRegistryEntry,
   sinon,
   vnode,
@@ -87,7 +88,7 @@ import Once from "../../assets/js/once.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 defineLayoutFixture();
 defineModule1Fixture();
@@ -5589,7 +5590,7 @@ describe("Renderer", () => {
             parentTagName,
           ),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(Type.atom("aaa"), Type.map()),
+        buildKeyErrorMsg(Type.atom("aaa"), Type.map()),
       );
     });
 
@@ -6069,7 +6070,7 @@ describe("Renderer", () => {
             parentTagName,
           ),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(
+        buildKeyErrorMsg(
           Type.atom("b"),
           Type.map([[Type.atom("a"), Type.bitstring("111")]]),
         ),
@@ -6419,7 +6420,7 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid, entry);
 
-      const expectedMessage = Interpreter.buildKeyErrorMsg(
+      const expectedMessage = buildKeyErrorMsg(
         Type.atom("c"),
         Type.map([
           [Type.atom("a"), Type.bitstring("111")],
@@ -7208,7 +7209,7 @@ describe("Renderer", () => {
       assertBoxedError(
         () => render(node),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(Type.atom("a"), Type.map()),
+        buildKeyErrorMsg(Type.atom("a"), Type.map()),
       );
     });
 

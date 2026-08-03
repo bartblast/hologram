@@ -6,6 +6,7 @@ defmodule Hologram.LiveReload do
   alias Hologram.Assets.ManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
+  alias Hologram.LiveReload.Diagnostic
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
 
@@ -150,10 +151,12 @@ defmodule Hologram.LiveReload do
   end
 
   defp broadcast_compilation_error(output) do
+    lines = Diagnostic.to_lines(output)
+
     Phoenix.PubSub.broadcast(
       Hologram.PubSub,
       "hologram_live_reload",
-      {:compilation_error, output}
+      {:compilation_error, lines}
     )
   end
 
@@ -177,6 +180,14 @@ defmodule Hologram.LiveReload do
     # Code.put_compiler_option(:ignore_module_conflict, true)
     # Kernel.ParallelCompiler.compile_to_path([file_path], Mix.Project.compile_path())
     # Code.put_compiler_option(:ignore_module_conflict, false)
+    #
+    # TODO: compiling here rather than through Phoenix would hand back the
+    # compiler's diagnostics as structs, which Phoenix flattens to a string
+    # before returning them. Broadcasting those instead of text would leave
+    # Hologram.LiveReload.Diagnostic with nothing to read by shape - severity,
+    # location and the stacktrace would all arrive as data. What the overlay
+    # would take on in exchange is drawing the source excerpt itself, since
+    # Elixir prints that rather than returning it.
   end
 
   defp reload_runtime do

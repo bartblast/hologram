@@ -66,7 +66,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
   end
 
   describe "contains?/2, error cases" do
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError when subject is not a bitstring" do
       expected_msg =
         build_function_clause_error_msg("String.contains?/2", [:hello, "test"], [
@@ -81,7 +83,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError when subject is a non-binary bitstring" do
       subject = <<1::1, 0::1, 1::1, 0::1>>
 
@@ -127,6 +131,57 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         String.contains?("hello world", patterns)
       end
     end
+
+    test "error frame carries args" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          String.contains?(arg, "a")
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside string.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {String, :contains?, [:abc, "a"], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args and error_info for a non-bitstring pattern element" do
+      arg = wrap_term([1])
+
+      top_frame =
+        try do
+          String.contains?("abc", arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code that sizes each pattern in the byte_size BIF, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:erlang, :byte_size, [1], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_erts_errors}
+    end
+
+    test "error frame carries args and error_info for an invalid pattern type" do
+      arg = wrap_term(1)
+
+      top_frame =
+        try do
+          String.contains?("abc", arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code that searches with binary:match/2, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:binary, :match, ["abc", 1], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
   end
 
   describe "downcase/1" do
@@ -144,7 +199,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       assert String.downcase("ŹRÓDŁO", :default) == "źródło"
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the first arg is not a bitstring" do
       expected_msg =
         build_function_clause_error_msg("String.downcase/2", [:abc, :default], [
@@ -161,7 +218,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the first arg is a non-binary bitstring" do
       arg_1 = <<1::1, 0::1, 1::1, 0::1>>
 
@@ -180,7 +239,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the second arg is not an atom" do
       expected_msg =
         build_function_clause_error_msg("String.downcase/2", ["HoLoGrAm", 123], [
@@ -195,7 +256,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the second arg is an atom, but is not a valid mode" do
       expected_msg =
         build_function_clause_error_msg("String.downcase/2", ["HoLoGrAm", :abc], [
@@ -208,6 +271,23 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         String.downcase("HoLoGrAm", :abc)
       end
+    end
+
+    test "error frame carries args" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          String.downcase(arg, :default)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside string.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {String, :downcase, [:abc, :default], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -228,7 +308,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       assert String.replace("é", "e", "o") == "é"
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "non-binary subject arg" do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg("String.replace/4", [:abc, "ab", "xy", []], [
@@ -239,6 +321,23 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
                      |> wrap_term()
                      |> String.replace("ab", "xy")
                    end
+    end
+
+    test "error frame carries args" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          String.replace(arg, "a", "b")
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside string.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {String, :replace, [:abc, "a", "b", []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -251,7 +350,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       assert String.trim("  \n\tabc\t\n  ") == "abc"
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the arg is a non-binary bitstring" do
       bitstring = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
 
@@ -267,7 +368,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the arg is not a bitstring" do
       expected_msg =
         build_function_clause_error_msg("String.trim/1", [:abc], [
@@ -279,6 +382,23 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         |> wrap_term()
         |> String.trim()
       end
+    end
+
+    test "error frame carries args" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          String.trim(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside string.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {String, :trim, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -297,7 +417,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       assert String.upcase("źródło", :default) == "ŹRÓDŁO"
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the first arg is not a bitstring" do
       expected_msg =
         build_function_clause_error_msg("String.upcase/2", [:abc, :default], [
@@ -314,7 +436,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the first arg is a non-binary bitstring" do
       arg_1 = <<1::1, 0::1, 1::1, 0::1>>
 
@@ -333,7 +457,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the second arg is not an atom" do
       expected_msg =
         build_function_clause_error_msg("String.upcase/2", ["HoLoGrAm", 123], [
@@ -348,7 +474,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the second arg is an atom, but is not a valid mode" do
       expected_msg =
         build_function_clause_error_msg("String.upcase/2", ["HoLoGrAm", :abc], [
@@ -361,6 +489,23 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         String.upcase("HoLoGrAm", :abc)
       end
+    end
+
+    test "error frame carries args" do
+      arg = wrap_term(:abc)
+
+      top_frame =
+        try do
+          String.upcase(arg, :default)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside string.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {String, :upcase, [:abc, :default], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 end

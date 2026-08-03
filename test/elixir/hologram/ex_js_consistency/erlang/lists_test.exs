@@ -69,6 +69,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.all(fun, [1, 2 | 3])
       end
     end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.all(fun, [1])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :all, [:abc, [1]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the improper tail in args" do
+      fun = wrap_term(fn _elem -> true end)
+
+      top_frame =
+        try do
+          :lists.all(fun, [1, 2 | 3])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :all_1, [^fun, 3], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "any/2" do
@@ -133,6 +167,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.any(fun, [1, 2 | 3])
       end
     end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.any(fun, [1])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :any, [:abc, [1]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the improper tail in args" do
+      fun = wrap_term(fn _elem -> false end)
+
+      top_frame =
+        try do
+          :lists.any(fun, [1, 2 | 3])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :any_1, [^fun, 3], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "duplicate/2" do
@@ -162,6 +230,23 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.duplicate(-1, :b)
       end
+    end
+
+    test "error frame carries args" do
+      n = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.duplicate(n, :x)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :duplicate, [:abc, :x], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -221,6 +306,23 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error ErlangError, build_erlang_error_msg("{:bad_filter, 4}"), fn ->
         :lists.filter(fn elem -> 2 * elem end, [2, 3, 4])
       end
+    end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.filter(fun, [1])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :filter, [:abc, [1]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -302,6 +404,70 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.flatmap(fn x -> x * 10 end, [1, 2, 3])
       end
     end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.flatmap(fun, [1])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :flatmap, [:abc, [1]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args for a non-list second argument", %{fun: fun} do
+      list = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.flatmap(fun, list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :flatmap_1, [^fun, :abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the improper tail in args", %{fun: fun} do
+      list = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.flatmap(fun, list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :flatmap_1, [^fun, 3], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the concat operands and error_info for a bad mapper result" do
+      fun = wrap_term(fn _x -> :abc end)
+
+      top_frame =
+        try do
+          :lists.flatmap(fun, [1])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :++, [:abc, []], [error_info: %{module: :erl_erts_errors}]}
+    end
   end
 
   describe "flatten/1" do
@@ -325,7 +491,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       end
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the argument is an improper list" do
       expected_msg = build_function_clause_error_msg(":lists.do_flatten/2", [5, []])
 
@@ -336,7 +501,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    end
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the argument contains a nested improper list" do
       expected_msg = build_function_clause_error_msg(":lists.do_flatten/2", [4, [5]])
 
@@ -345,6 +509,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    fn ->
                      :lists.flatten([1, [2, 3 | 4], 5])
                    end
+    end
+
+    test "error frame carries args" do
+      list = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.flatten(list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :flatten, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the continuation in args" do
+      list = wrap_term([[2, 3 | 4], 5])
+
+      top_frame =
+        try do
+          :lists.flatten(list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :do_flatten, [4, [5]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -407,6 +605,23 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.flatten([1, 2], :abc)
       end
+    end
+
+    test "error frame carries the continuation in args" do
+      list = wrap_term([1 | 2])
+
+      top_frame =
+        try do
+          :lists.flatten(list, [3])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :do_flatten, [2, [3]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -479,6 +694,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    fn ->
                      :lists.foldl(fun, [], [1, 2 | 3])
                    end
+    end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.foldl(fun, [], [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :foldl, [:abc, [], []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the folded accumulator and the improper tail in args", %{fun: fun} do
+      list = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.foldl(fun, [], list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :foldl_1, [^fun, [2, 1], 3], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -567,6 +816,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                      :lists.foldr(fun, [], [1, 2 | 3])
                    end
     end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.foldr(fun, [], [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :foldr, [:abc, [], []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the improper tail in args", %{fun: fun} do
+      list = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.foldr(fun, [], list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :foldr_1, [^fun, [], 3], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "foreach/2" do
@@ -653,6 +936,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.foreach(fun, [1, 2 | 3])
       end
     end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.foreach(fun, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :foreach, [:abc, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the improper tail in args", %{fun: fun} do
+      list = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.foreach(fun, list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :foreach_1, [^fun, 3], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "keydelete/3" do
@@ -735,6 +1052,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.keydelete(:a, 1, [{:b}, {:c} | {:d}])
       end
     end
+
+    test "error frame carries args" do
+      index = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.keydelete(:a, index, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :keydelete, [:a, :abc, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args for a non-list third argument" do
+      tuples = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.keydelete(:a, 1, tuples)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :keydelete3, [:a, 1, :abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "keyfind/3" do
@@ -777,6 +1128,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                      :lists.keyfind(7, 4, [1, 2 | 3])
                    end
     end
+
+    test "error frame carries args and error_info" do
+      index = wrap_term(:xyz)
+
+      top_frame =
+        try do
+          :lists.keyfind(:abc, index, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:lists, :keyfind, [:abc, :xyz, []], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "keymember/3" do
@@ -818,6 +1183,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    fn ->
                      :lists.keymember(7, 4, [1, 2 | 3])
                    end
+    end
+
+    test "error frame carries args and error_info" do
+      index = wrap_term(:xyz)
+
+      top_frame =
+        try do
+          :lists.keymember(:abc, index, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:lists, :keymember, [:abc, :xyz, []], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
@@ -909,6 +1288,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.keyreplace(:a, 1, [], :x)
       end
+    end
+
+    test "error frame carries args" do
+      index = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.keyreplace(:a, index, [], {})
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :keyreplace, [:a, :abc, [], {}], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args for a non-list third argument" do
+      tuples = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.keyreplace(:a, 1, tuples, {})
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :keyreplace3, [:a, 1, :abc, {}], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -1013,6 +1426,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "out of range"),
                    fn -> :lists.keysort(1, [{:a}, {}]) end
+    end
+
+    test "error frame carries args" do
+      index = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.keysort(index, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :keysort, [:abc, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args and error_info for a non-tuple element" do
+      tuples = wrap_term([{:a}, :x | 3])
+
+      top_frame =
+        try do
+          :lists.keysort(1, tuples)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :element, [1, :x], [error_info: %{module: :erl_erts_errors}]}
     end
   end
 
@@ -1122,6 +1565,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.keystore(:a, 1, [], :x)
       end
     end
+
+    test "error frame carries args" do
+      index = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.keystore(:a, index, [], {})
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :keystore, [:a, :abc, [], {}], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args for a non-list third argument" do
+      tuples = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.keystore(:a, 1, tuples, {})
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :keystore2, [:a, 1, :abc, {}], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "keytake/3" do
@@ -1218,6 +1695,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.keytake(:a, 1, [{:b}, {:c} | {:d}])
       end
     end
+
+    test "error frame carries args" do
+      index = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.keytake(:a, index, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :keytake, [:a, :abc, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the visited tuples in args for an improper list" do
+      tuples = wrap_term([{:b}, {:c} | {:d}])
+
+      top_frame =
+        try do
+          :lists.keytake(:a, 1, tuples)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :keytake, [:a, 1, {:d}, [{:c}, {:b}]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "map/2" do
@@ -1281,6 +1792,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.map(fun, [1, 2 | 3])
       end
+    end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.map(fun, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :map, [:abc, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the improper tail in args", %{fun: fun} do
+      list = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.map(fun, list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :map_1, [^fun, 3], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -1362,6 +1907,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.mapfoldl(fn elem, acc -> elem + acc end, 0, [1])
       end
     end
+
+    test "error frame carries args" do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.mapfoldl(fun, 0, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :mapfoldl, [:abc, 0, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the folded accumulator and the improper tail in args", %{fun: fun} do
+      list = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.mapfoldl(fun, 0, list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :mapfoldl_1, [^fun, 3, 3], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "max/1" do
@@ -1394,29 +1973,61 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises FunctionClauseError if the argument is not a list" do
-      expected_msg = build_function_clause_error_msg(":lists.max/1")
+      expected_msg = build_function_clause_error_msg(":lists.max/1", [:abc])
 
-      assert_raise FunctionClauseError, expected_msg, fn ->
+      assert_error FunctionClauseError, expected_msg, fn ->
         :lists.max(:abc)
       end
     end
 
     test "raises FunctionClauseError if the argument is an improper list" do
-      # Notice that the error message says :lists.max/2 (not :lists.max/1)
-      # :lists.max/2 is (probably) a private Erlang function that get's called by :lists.max/1
-      expected_msg = build_function_clause_error_msg(":lists.max/2")
+      expected_msg = build_function_clause_error_msg(":lists.max/2", [3, 2])
 
-      assert_raise FunctionClauseError, expected_msg, fn ->
+      assert_error FunctionClauseError, expected_msg, fn ->
         :lists.max([1, 2 | 3])
       end
     end
 
     test "raises FunctionClauseError if the argument is an empty list" do
-      expected_msg = build_function_clause_error_msg(":lists.max/1")
+      expected_msg = build_function_clause_error_msg(":lists.max/1", [[]])
 
-      assert_raise FunctionClauseError, expected_msg, fn ->
+      assert_error FunctionClauseError, expected_msg, fn ->
         :lists.max([])
       end
+    end
+
+    test "error frame carries args" do
+      list = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.max(list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :max, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the running maximum and the improper tail in args" do
+      list = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.max(list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :max, [3, 2], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -1456,6 +2067,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                      :lists.member(2, wrap_term(:abc))
                    end
     end
+
+    test "error frame carries args and error_info" do
+      list = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.member(2, list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:lists, :member, [2, :abc], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "min/1" do
@@ -1488,29 +2113,61 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises FunctionClauseError if the argument is not a list" do
-      expected_msg = build_function_clause_error_msg(":lists.min/1")
+      expected_msg = build_function_clause_error_msg(":lists.min/1", [:abc])
 
-      assert_raise FunctionClauseError, expected_msg, fn ->
+      assert_error FunctionClauseError, expected_msg, fn ->
         :lists.min(:abc)
       end
     end
 
     test "raises FunctionClauseError if the argument is an improper list" do
-      # Notice that the error message says :lists.min/2 (not :lists.min/1)
-      # :lists.min/2 is (probably) a private Erlang function that get's called by :lists.min/1
-      expected_msg = build_function_clause_error_msg(":lists.min/2")
+      expected_msg = build_function_clause_error_msg(":lists.min/2", [3, 1])
 
-      assert_raise FunctionClauseError, expected_msg, fn ->
+      assert_error FunctionClauseError, expected_msg, fn ->
         :lists.min([1, 2 | 3])
       end
     end
 
     test "raises FunctionClauseError if the argument is an empty list" do
-      expected_msg = build_function_clause_error_msg(":lists.min/1")
+      expected_msg = build_function_clause_error_msg(":lists.min/1", [[]])
 
-      assert_raise FunctionClauseError, expected_msg, fn ->
+      assert_error FunctionClauseError, expected_msg, fn ->
         :lists.min([])
       end
+    end
+
+    test "error frame carries args" do
+      list = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.min(list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :min, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the running minimum and the improper tail in args" do
+      list = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.min(list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :min, [3, 1], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -1606,6 +2263,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    build_function_clause_error_msg(":lists.prefix/2", [3, [3 | 4]]),
                    {:lists, :prefix, [[1, 2 | 3], [1, 2, 3 | 4]]}
     end
+
+    test "error frame carries args" do
+      list1 = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.prefix(list1, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :prefix, [:abc, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the walked tails in args for an improper list" do
+      list1 = wrap_term([1 | 2])
+
+      top_frame =
+        try do
+          :lists.prefix(list1, [1, 2, 3])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :prefix, [2, [2, 3]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "reverse/1" do
@@ -1621,12 +2312,60 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       end
     end
 
+    test "raises FunctionClauseError if the argument is a single-element improper list" do
+      expected_msg = build_function_clause_error_msg(":lists.reverse/1", [[1 | 2]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.reverse([1 | 2])
+      end
+    end
+
     test "raises ArgumentError if the argument is not a proper list" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a list"),
                    fn ->
                      :lists.reverse([1, 2 | 3])
                    end
+    end
+
+    test "raises ArgumentError if the argument is a longer improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a proper list"),
+                   fn ->
+                     :lists.reverse([1, 2, 3, 4 | :x])
+                   end
+    end
+
+    test "error frame carries args for a non-list argument" do
+      list = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.reverse(list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :reverse, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the reversal state and error_info for an improper list" do
+      list = wrap_term([1, 2, 3, 4 | :x])
+
+      top_frame =
+        try do
+          :lists.reverse(list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:lists, :reverse, [[3, 4 | :x], [2, 1]],
+                [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
@@ -1674,6 +2413,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.reverse(5, [3, 4])
       end
     end
+
+    test "error frame carries args and error_info" do
+      list = wrap_term(5)
+
+      top_frame =
+        try do
+          :lists.reverse(list, [3, 4])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:lists, :reverse, [5, [3, 4]], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "seq/2" do
@@ -1703,6 +2456,23 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.seq(10, 5)
       end
+    end
+
+    test "error frame carries args" do
+      from = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.seq(from, 5)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :seq, [:abc, 5], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -1798,6 +2568,23 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                      :lists.seq(1, 5, 0)
                    end
     end
+
+    test "error frame carries args and error_info" do
+      incr = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.seq(1, 5, incr)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :seq, [1, 5, :abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
   end
 
   describe "sort/1" do
@@ -1813,13 +2600,54 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       end
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the argument is an improper list" do
       expected_msg = build_function_clause_error_msg(":lists.split_1/5", [1, 2, 3, [], []])
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.sort([1, 2 | 3])
       end
+    end
+
+    test "raises FunctionClauseError in split_2 if the first comparison is false" do
+      expected_msg = build_function_clause_error_msg(":lists.split_2/5", [2, 1, :x, [], []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.sort([2, 1 | :x])
+      end
+    end
+
+    test "error frame carries args" do
+      list = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.sort(list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :sort, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the split state in args for a two-element improper list" do
+      list = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.sort(list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :split_1, [1, 2, 3, [], []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -1897,6 +2725,50 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.sort(fun, [1, 2 | 3])
       end
     end
+
+    test "raises FunctionClauseError in fsplit_2 if the first comparison is false", %{fun: fun} do
+      expected_msg = build_function_clause_error_msg(":lists.fsplit_2/6", [1, 2, fun, :x, [], []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.sort(fun, [2, 1 | :x])
+      end
+    end
+
+    test "error frame carries args", %{fun: fun} do
+      list = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.sort(fun, list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :sort, [^fun, :abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the split state in args for a two-element improper list", %{
+      fun: fun
+    } do
+      list = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.sort(fun, list)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside lists.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:lists, :fsplit_1, [2, 1, ^fun, 3, [], []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "suffix/2" do
@@ -1958,6 +2830,33 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a list"),
                    {:lists, :suffix, [[1, 2], [1, 2 | 3]]}
+    end
+
+    test "error frame carries args and error_info for a non-list first argument" do
+      list1 = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :lists.suffix(list1, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:erlang, :length, [:abc], [error_info: %{module: :erl_erts_errors}]}
+    end
+
+    test "error frame carries args and error_info for an improper second argument" do
+      list2 = wrap_term([1, 2 | 3])
+
+      top_frame =
+        try do
+          :lists.suffix([], list2)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:erlang, :length, [[1, 2 | 3]], [error_info: %{module: :erl_erts_errors}]}
     end
   end
 end

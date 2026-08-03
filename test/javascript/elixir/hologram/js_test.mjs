@@ -2,7 +2,7 @@
 
 import {
   assert,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   registerWebApis,
 } from "../../support/helpers.mjs";
 
@@ -17,7 +17,7 @@ import ERTS from "../../../../assets/js/erts.mjs";
 import Interpreter from "../../../../assets/js/interpreter.mjs";
 import Type from "../../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 registerWebApis();
 
 describe("box()", () => {

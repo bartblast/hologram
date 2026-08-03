@@ -2,16 +2,40 @@
 
 import {
   assert,
-  defineGlobalErlangAndElixirModules,
+  boxedErrorMessage,
+  defineRuntimeGlobals,
+  sinon,
 } from "../support/helpers.mjs";
 
+import CallStack from "../../../assets/js/erts/call_stack.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
+
+const myModuleFrame = {
+  module: "MyModule",
+  function: "my_fun",
+  arityOrArgs: 1,
+  file: "lib/my_module.ex",
+  line: 11,
+  errorInfo: null,
+};
 
 describe("HologramBoxedError", () => {
+  beforeEach(() => {
+    CallStack.reset();
+  });
+
   describe("error kind (default)", () => {
+    // A test that stands a module up for derivation to find has to take it back
+    // down whatever the outcome, since defineRuntimeGlobals() only fills gaps
+    // and would leave a stray one standing for every test that follows.
+    afterEach(() => {
+      delete globalThis.Elixir_MyBlamedType;
+    });
+
     it("defaults the kind to :error", () => {
       const struct = Type.errorStruct("MyType", "my message");
       const error = new HologramBoxedError(struct);
@@ -36,34 +60,98 @@ describe("HologramBoxedError", () => {
       assert.isTrue(Type.isStruct(error.struct));
     });
 
+    it("captures a call stack snapshot at construction time", () => {
+      const struct = Type.errorStruct("MyType", "my message");
+
+      CallStack.push(myModuleFrame);
+      const error = new HologramBoxedError(struct);
+      CallStack.pop();
+
+      assert.deepStrictEqual(error.stacktrace, [myModuleFrame]);
+    });
+
     it("renders the message from the exception type and message", () => {
       const struct = Type.errorStruct("MyType", "my message");
       const error = new HologramBoxedError(struct);
 
-      assert.equal(error.message, "(MyType) my message");
+      assert.equal(boxedErrorMessage(error), "(MyType) my message");
+    });
+
+    // A browser can read the message when the error is thrown, before any
+    // handler of ours runs - WebKit does - so the report is carried from the
+    // moment the error is built rather than written when it is reported.
+    it("carries the whole report as the message a browser prints", () => {
+      const struct = Type.errorStruct("MyType", "my message");
+
+      CallStack.push(myModuleFrame);
+      const error = new HologramBoxedError(struct);
+      CallStack.pop();
+
+      assert.equal(
+        error.message,
+        "\n\n** (MyType) my message\n" +
+          "    lib/my_module.ex:11: MyModule.my_fun/1\n" +
+          "\nJavaScript stacktrace:",
+      );
+    });
+
+    it("carries the parts the message is composed of", () => {
+      const struct = Type.errorStruct("MyType", "my message");
+      const error = new HologramBoxedError(struct);
+
+      assert.equal(error.type, "MyType");
+      assert.equal(error.text, "my message");
+    });
+
+    it("renders the message from the blamed struct, which struct doesn't mirror", () => {
+      globalThis.Elixir_MyBlamedType = {
+        "blame/2": (_struct, stacktrace) =>
+          Type.tuple([
+            Type.errorStruct("MyBlamedType", "my blamed message"),
+            stacktrace,
+          ]),
+      };
+
+      const struct = Type.errorStruct("MyBlamedType", "my message");
+      const error = new HologramBoxedError(struct);
+
+      assert.deepStrictEqual(error.struct, struct);
+
+      assert.deepStrictEqual(
+        error.blamedStruct,
+        Type.errorStruct("MyBlamedType", "my blamed message"),
+      );
+
+      assert.equal(
+        boxedErrorMessage(error),
+        "(MyBlamedType) my blamed message",
+      );
     });
 
     // Extra enumerable own-properties on a thrown Error blank out the message that
     // the browser's uncaught-error reporting surfaces, so the internal carriers
     // must stay non-enumerable.
-    it("defines kind, value and struct as non-enumerable", () => {
+    it("defines the internal carriers as non-enumerable", () => {
       const struct = Type.errorStruct("MyType", "my message");
       const error = new HologramBoxedError(struct);
 
-      assert.equal(
-        Object.getOwnPropertyDescriptor(error, "kind").enumerable,
-        false,
-      );
+      const carriers = [
+        "blamedStruct",
+        "kind",
+        "stacktrace",
+        "struct",
+        "text",
+        "type",
+        "value",
+      ];
 
-      assert.equal(
-        Object.getOwnPropertyDescriptor(error, "value").enumerable,
-        false,
-      );
-
-      assert.equal(
-        Object.getOwnPropertyDescriptor(error, "struct").enumerable,
-        false,
-      );
+      for (const carrier of carriers) {
+        assert.equal(
+          Object.getOwnPropertyDescriptor(error, carrier).enumerable,
+          false,
+          `${carrier} must be non-enumerable`,
+        );
+      }
     });
 
     it("can throw and catch", () => {
@@ -78,6 +166,185 @@ describe("HologramBoxedError", () => {
     });
   });
 
+  describe("error raised while another error derives", () => {
+    let normalizeErrorStub;
+
+    // Mirrors a derivation that raises - a port missing from the bundle, a formatter failing on
+    // the term it is given - by raising a boxed error out of the first thing derivation calls.
+    const deriveByRaising = (reason) => {
+      normalizeErrorStub = sinon
+        .stub(Interpreter, "normalizeError")
+        .callsFake(() => {
+          throw new HologramBoxedError(reason);
+        });
+    };
+
+    afterEach(() => {
+      normalizeErrorStub?.restore();
+      normalizeErrorStub = null;
+    });
+
+    it("carries the raised error out instead of exhausting the stack", () => {
+      const reason = Type.errorStruct("MyRaisedType", "my raised message");
+      deriveByRaising(reason);
+
+      let caught;
+
+      try {
+        new HologramBoxedError(Type.errorStruct("MyType", "my message"));
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.instanceOf(caught, HologramBoxedError);
+      assert.deepStrictEqual(caught.value, reason);
+    });
+
+    it("leaves the raised error in the raw form it arrived in", () => {
+      const reason = Type.errorStruct("MyRaisedType", "my raised message");
+      deriveByRaising(reason);
+
+      let caught;
+
+      try {
+        new HologramBoxedError(Type.errorStruct("MyType", "my message"));
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.deepStrictEqual(caught.struct, reason);
+      assert.deepStrictEqual(caught.blamedStruct, reason);
+
+      assert.equal(
+        boxedErrorMessage(caught),
+        '(MyRaisedType) %{__exception__: true, message: "my raised message", __struct__: MyRaisedType}',
+      );
+    });
+
+    it("names no struct for a bare reason raised while deriving", () => {
+      deriveByRaising(Type.atom("badarg"));
+
+      let caught;
+
+      try {
+        new HologramBoxedError(Type.errorStruct("MyType", "my message"));
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.isNull(caught.struct);
+      assert.isNull(caught.blamedStruct);
+      assert.equal(boxedErrorMessage(caught), "(error) :badarg");
+    });
+
+    it("carries the raw form parts of a bare reason raised while deriving", () => {
+      deriveByRaising(Type.atom("badarg"));
+
+      let caught;
+
+      try {
+        new HologramBoxedError(Type.errorStruct("MyType", "my message"));
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught.type, "error");
+      assert.equal(caught.text, ":badarg");
+    });
+
+    it("derives the next error normally once the raise has unwound", () => {
+      deriveByRaising(Type.atom("badarg"));
+
+      try {
+        new HologramBoxedError(Type.errorStruct("MyType", "my message"));
+      } catch {
+        // The raise is the point - what matters is the state it leaves behind.
+      }
+
+      normalizeErrorStub.restore();
+      normalizeErrorStub = null;
+
+      const struct = Type.errorStruct("MyType", "my message");
+      const error = new HologramBoxedError(struct);
+
+      assert.deepStrictEqual(error.struct, struct);
+      assert.equal(boxedErrorMessage(error), "(MyType) my message");
+    });
+  });
+
+  describe("failure in the derivation itself", () => {
+    let normalizeErrorStub;
+
+    // Mirrors the derivation machinery faulting rather than raising the Elixir way - a helper
+    // reading a shape it doesn't handle, say - which arrives as a plain JavaScript error.
+    const deriveByFaulting = () => {
+      normalizeErrorStub = sinon
+        .stub(Interpreter, "normalizeError")
+        .callsFake(() => {
+          throw new TypeError("my fault");
+        });
+    };
+
+    afterEach(() => {
+      normalizeErrorStub?.restore();
+      normalizeErrorStub = null;
+    });
+
+    it("keeps the error the caller raised", () => {
+      deriveByFaulting();
+
+      const struct = Type.errorStruct("MyType", "my message");
+      const error = new HologramBoxedError(struct);
+
+      assert.deepStrictEqual(error.value, struct);
+      assert.deepStrictEqual(error.struct, struct);
+    });
+
+    it("names the fault alongside the raw form", () => {
+      deriveByFaulting();
+
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyType", "my message"),
+      );
+
+      assert.equal(
+        boxedErrorMessage(error),
+        '(MyType) %{__exception__: true, message: "my message", __struct__: MyType} ' +
+          "(message derivation failed: my fault)",
+      );
+    });
+
+    it("carries the raw form parts, the fault among them", () => {
+      deriveByFaulting();
+
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyType", "my message"),
+      );
+
+      assert.equal(error.type, "MyType");
+
+      assert.equal(
+        error.text,
+        '%{__exception__: true, message: "my message", __struct__: MyType} ' +
+          "(message derivation failed: my fault)",
+      );
+    });
+
+    it("derives the next error normally", () => {
+      deriveByFaulting();
+
+      new HologramBoxedError(Type.errorStruct("MyType", "my message"));
+
+      normalizeErrorStub.restore();
+      normalizeErrorStub = null;
+
+      const struct = Type.errorStruct("MyType", "my message");
+      const error = new HologramBoxedError(struct);
+
+      assert.equal(boxedErrorMessage(error), "(MyType) my message");
+    });
+  });
+
   describe("throw kind", () => {
     it("sets kind and value", () => {
       const value = Type.integer(42);
@@ -87,11 +354,32 @@ describe("HologramBoxedError", () => {
       assert.deepStrictEqual(error.value, value);
     });
 
+    it("captures a call stack snapshot at construction time", () => {
+      CallStack.push(myModuleFrame);
+      const error = new HologramBoxedError(
+        Type.integer(42),
+        Type.atom("throw"),
+      );
+      CallStack.pop();
+
+      assert.deepStrictEqual(error.stacktrace, [myModuleFrame]);
+    });
+
     it("renders the message from the inspected value", () => {
       const value = Type.integer(42);
       const error = new HologramBoxedError(value, Type.atom("throw"));
 
-      assert.equal(error.message, "(throw) 42");
+      assert.equal(boxedErrorMessage(error), "(throw) 42");
+    });
+
+    it("carries the kind and the inspected value as the message parts", () => {
+      const error = new HologramBoxedError(
+        Type.integer(42),
+        Type.atom("throw"),
+      );
+
+      assert.equal(error.type, "throw");
+      assert.equal(error.text, "42");
     });
   });
 
@@ -108,7 +396,7 @@ describe("HologramBoxedError", () => {
       const value = Type.integer(42);
       const error = new HologramBoxedError(value, Type.atom("exit"));
 
-      assert.equal(error.message, "(exit) 42");
+      assert.equal(boxedErrorMessage(error), "(exit) 42");
     });
   });
 });

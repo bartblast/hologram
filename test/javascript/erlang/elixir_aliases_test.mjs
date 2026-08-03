@@ -3,14 +3,14 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  buildFunctionClauseErrorMsg,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Erlang_Elixir_Aliases from "../../../assets/js/erlang/elixir_aliases.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/elixir_aliases_test.exs
@@ -100,7 +100,7 @@ describe("Erlang_Elixir_Aliases", () => {
       assertBoxedError(
         () => concat(Type.atom("abc")),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
+        buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
           Type.atom("abc"),
           Type.bitstring("Elixir"),
         ]),
@@ -124,7 +124,7 @@ describe("Erlang_Elixir_Aliases", () => {
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
+        buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
           Type.list([bitstringSize2, Type.bitstring("Ccc")]),
           Type.bitstring("Elixir.Aaa"),
         ]),
@@ -141,7 +141,7 @@ describe("Erlang_Elixir_Aliases", () => {
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
+        buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
           Type.list([Type.integer(123), Type.bitstring("Ccc")]),
           Type.bitstring("Elixir.Aaa"),
         ]),
@@ -159,7 +159,7 @@ describe("Erlang_Elixir_Aliases", () => {
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
+        buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
           Type.list([Type.integer(123), Type.bitstring("Ccc")]),
           Type.bitstring("Elixir.Aaa"),
         ]),
@@ -172,11 +172,64 @@ describe("Erlang_Elixir_Aliases", () => {
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
+        buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
           Type.list([Type.integer(123), Type.bitstring("Ccc")]),
           Type.bitstring("Elixir"),
         ]),
       );
+    });
+
+    it("error frame carries the do_concat args for a non-list argument", () => {
+      const segments = Type.atom("abc");
+
+      let caught;
+
+      try {
+        concat(segments);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "elixir_aliases",
+          function: "do_concat",
+          arityOrArgs: Type.list([segments, Type.bitstring("Elixir")]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+    });
+
+    it("error frame carries the do_concat args for an invalid segment", () => {
+      const segments = Type.list([
+        Type.bitstring("Aaa"),
+        Type.bitstring("Bbb"),
+        Type.integer(123),
+      ]);
+
+      let caught;
+
+      try {
+        concat(segments);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "elixir_aliases",
+          function: "do_concat",
+          arityOrArgs: Type.list([
+            Type.list([Type.integer(123)]),
+            Type.bitstring("Elixir.Aaa.Bbb"),
+          ]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 

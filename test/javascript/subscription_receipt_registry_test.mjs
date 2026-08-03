@@ -2,14 +2,14 @@
 
 import {
   assert,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   encodedSubscriptionReceiptKey,
 } from "./support/helpers.mjs";
 
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("SubscriptionReceiptRegistry", () => {
   const receipt = (channel, cid, token) =>

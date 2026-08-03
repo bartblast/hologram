@@ -1,7 +1,6 @@
 defmodule HologramFeatureTests.Helpers do
   import ExUnit.Assertions, only: [assert: 2, assert_raise: 3]
   import Hologram.Commons.Guards, only: [is_regex: 1]
-  import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Hologram.Test.FeatureHelpers, only: [visit: 2, visit: 3]
 
   alias Hologram.Realtime.SubscriptionRegistry
@@ -24,22 +23,24 @@ defmodule HologramFeatureTests.Helpers do
         assert result["module"] == inspect(expected_module),
                "Expected exception #{inspect(expected_module)} but got #{result["module"]} (#{result["message"]})"
 
-        message = fn expected_module, expected_msg, actual_msg ->
+        message = fn expected_display, actual_msg ->
           """
           Wrong message for #{inspect(expected_module)}
           expected:
-            "#{expected_msg}"
+            "#{expected_display}"
           actual:
             "#{actual_msg}"\
           """
         end
 
-        if is_binary(expected_msg) do
-          assert result["message"] == expected_msg,
-                 message.(expected_module, expected_msg, result["message"])
-        else
+        # A regex is matched rather than compared, and shows as its source - it has no
+        # string form to interpolate.
+        if is_regex(expected_msg) do
           assert result["message"] =~ expected_msg,
-                 message.(expected_module, wrap_term(expected_msg), result["message"])
+                 message.(Regex.source(expected_msg), result["message"])
+        else
+          assert result["message"] == expected_msg,
+                 message.(expected_msg, result["message"])
         end
       end)
   end
@@ -73,8 +74,13 @@ defmodule HologramFeatureTests.Helpers do
     )
   end
 
+  # The console entry the browser writes for an uncaught error is capped in
+  # length, and it elides the middle of anything longer, so only the message is
+  # matched here and only where it starts. An error naming the exception it
+  # raised is read from the page instead, by assert_client_error/4, which sees
+  # the whole of it.
   def assert_js_error(session, expected_msg, fun) when is_binary(expected_msg) do
-    regex = ~r/^There was an uncaught JavaScript error:.+: #{Regex.escape(expected_msg)}\n$/su
+    regex = ~r/^There was an uncaught JavaScript error:.+?#{Regex.escape(expected_msg)}/su
 
     assert_js_error(session, regex, fun)
   end

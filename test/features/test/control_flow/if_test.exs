@@ -67,32 +67,35 @@ defmodule HologramFeatureTests.ControlFlow.IfTest do
   end
 
   feature "error in condition", %{session: session} do
-    assert_js_error session,
-                    "(RuntimeError) my message",
-                    fn ->
-                      session
-                      |> visit(IfPage)
-                      |> click(button("Error in condition"))
-                    end
+    assert_client_error session,
+                        RuntimeError,
+                        "my message",
+                        fn ->
+                          session
+                          |> visit(IfPage)
+                          |> click(button("Error in condition"))
+                        end
   end
 
   feature "error in if body", %{session: session} do
-    assert_js_error session,
-                    "(ArgumentError) my message",
-                    fn ->
-                      session
-                      |> visit(IfPage)
-                      |> click(button("Error in if body"))
-                    end
+    assert_client_error session,
+                        ArgumentError,
+                        "my message",
+                        fn ->
+                          session
+                          |> visit(IfPage)
+                          |> click(button("Error in if body"))
+                        end
   end
 
   feature "error in else body", %{session: session} do
-    assert_js_error session,
-                    "(ArgumentError) my message",
-                    fn ->
-                      session
-                      |> visit(IfPage)
-                      |> click(button("Error in else body"))
-                    end
+    assert_client_error session,
+                        ArgumentError,
+                        "my message",
+                        fn ->
+                          session
+                          |> visit(IfPage)
+                          |> click(button("Error in else body"))
+                        end
   end
 end

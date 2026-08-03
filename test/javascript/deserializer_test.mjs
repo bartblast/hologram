@@ -3,7 +3,7 @@
 import {
   assert,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "./support/helpers.mjs";
 
 import Deserializer from "../../assets/js/deserializer.mjs";
@@ -13,7 +13,7 @@ import Interpreter from "../../assets/js/interpreter.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const deserialize = Deserializer.deserialize;
 const serialize = Serializer.serialize;

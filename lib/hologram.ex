@@ -2,6 +2,61 @@ defmodule Hologram do
   alias Hologram.Reflection
 
   @doc """
+  Returns `true` when the client-side runtime error overlay is enabled, `false`
+  otherwise.
+
+  Controlled by the `:client_error_overlay` application environment key, which
+  defaults to whatever `client_stacktraces?/0` returns, so turning client
+  diagnostics on turns both on:
+
+      config :hologram, client_error_overlay: false
+
+  When enabled, an uncaught client error renders in the page as well as in the
+  browser console. Uncaught errors reach the console in every environment - this
+  setting only decides whether they are also shown in the page.
+
+  Setting it to `false` alongside enabled stacktraces leaves the report in the
+  console without putting an error screen in front of the app's users. The two
+  reach different people: console output is read by whoever opens the devtools,
+  whereas the overlay is shown to everyone who hits the error.
+
+  The value is read at compile time, so changing it requires recompiling the
+  bundles.
+  """
+  @spec client_error_overlay?() :: boolean
+  def client_error_overlay? do
+    Application.get_env(:hologram, :client_error_overlay, client_stacktraces?())
+  end
+
+  @doc """
+  Returns `true` when client-side stacktraces are enabled, `false` otherwise.
+
+  Controlled by the `:client_stacktraces` application environment key, which
+  defaults to `true` in the `:dev` and `:test` environments and `false`
+  elsewhere:
+
+      config :hologram, client_stacktraces: true
+
+  When enabled, the compiler emits source metadata into the client bundle and
+  the interpreter tracks a call stack, so errors raised on the client carry the
+  same stacktraces as errors raised on the server. Error messages and rescue
+  semantics are unaffected by this setting - they are identical in every
+  environment.
+
+  Enabling it outside of `:dev`/`:test` has trade-offs: argument values appear
+  in stacktrace frames and can leave the device via screenshots, support tickets
+  or pasted console output, source paths reveal the project's file layout, and
+  the compiled Elixir in a bundle is roughly a third larger over the wire.
+
+  The value is read at compile time, so changing it requires recompiling the
+  bundles.
+  """
+  @spec client_stacktraces?() :: boolean
+  def client_stacktraces? do
+    Application.get_env(:hologram, :client_stacktraces, env() in [:dev, :test])
+  end
+
+  @doc """
   Returns `true` when Hologram's runtime is enabled, `false` otherwise.
 
   Hologram is always enabled outside of the `:dev` and `:test` environments. In
@@ -32,9 +87,10 @@ defmodule Hologram do
   @doc """
   Returns the secret key base.
 
-  Uses the `SECRET_KEY_BASE` env var when set. In :dev/:test, falls back to the
-  Phoenix endpoint's configured `:secret_key_base`. In all other environments the
-  env var is required.
+  Uses the `SECRET_KEY_BASE` env var when set. In embedded mode, `:dev` and
+  `:test` fall back to the Phoenix endpoint's configured `:secret_key_base` -
+  standalone mode has no endpoint to read it from. Everywhere else the env var
+  is required.
   """
   @spec secret_key_base() :: String.t()
   def secret_key_base do

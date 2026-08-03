@@ -123,8 +123,18 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime, page_modules)
 
+      # Derived before the graph is split into runtime and page parts, so that the
+      # applications reached from pages are named as well.
+      app_versions = Compiler.build_app_versions(call_graph_for_runtime)
+
       runtime_entry_file_path =
-        Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts)
+        Compiler.create_runtime_entry_file(
+          runtime_mfas,
+          ir_plt,
+          async_mfas,
+          app_versions,
+          opts
+        )
 
       call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
 

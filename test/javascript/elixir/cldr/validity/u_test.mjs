@@ -1,13 +1,10 @@
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "../../../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../../../support/helpers.mjs";
 
 import Elixir_Cldr_Validity_U from "../../../../../assets/js/elixir/cldr/validity/u.mjs";
 import HologramInterpreterError from "../../../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../../../assets/js/interpreter.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("Elixir_Cldr_Validity_U", () => {
   it("encode_key/2", () => {

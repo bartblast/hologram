@@ -33,6 +33,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
                    build_argument_error_msg(1, "not an iodata term"),
                    fn -> :re.compile(:abc) end
     end
+
+    test "error frame carries args and error_info" do
+      pattern = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :re.compile(pattern)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:re, :compile, [:abc], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "compile/2" do
@@ -351,6 +364,65 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
 
       assert_error ArgumentError, expected_msg, fn -> :re.compile(:abc, [:bad]) end
     end
+
+    test "raises ArgumentError with both bullets on parse-error pattern and invalid options" do
+      expected_msg =
+        build_multi_argument_error_msg([
+          {1, "could not parse regular expression\nmissing closing parenthesis on character 2"},
+          {2, "invalid options"}
+        ])
+
+      assert_error ArgumentError, expected_msg, fn -> :re.compile("a(", [:bad]) end
+    end
+
+    test "error frame carries args on a char data failure in unicode mode" do
+      pattern = wrap_term([0xD800])
+      options = [:unicode]
+
+      top_frame =
+        try do
+          :re.compile(pattern, options)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside re.erl, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:re, :compile, [[0xD800], [:unicode]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args and error_info with badopt cause on invalid options" do
+      pattern = wrap_term("abc")
+      options = [:bad]
+
+      top_frame =
+        try do
+          :re.compile(pattern, options)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:re, :compile, ["abc", [:bad]],
+                [error_info: %{cause: :badopt, module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info on a non-iodata pattern" do
+      pattern = wrap_term(:abc)
+      options = []
+
+      top_frame =
+        try do
+          :re.compile(pattern, options)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:re, :compile, [:abc, []], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "import/1" do
@@ -422,6 +494,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
                    build_argument_error_msg(1, "not an exported regular expression"),
                    fn -> :re.import(tampered) end
     end
+
+    test "error frame carries args and error_info" do
+      exported_pattern = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :re.import(exported_pattern)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:re, :import, [:abc], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "inspect/2" do
@@ -476,6 +561,22 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
                    build_argument_error_msg(1, "not a compiled regular expression"),
                    fn -> :re.inspect(:foo, :bar) end
     end
+
+    test "error frame carries args and error_info" do
+      {:ok, compiled_pattern} = :re.compile("ab")
+      item = wrap_term(:foo)
+
+      top_frame =
+        try do
+          :re.inspect(compiled_pattern, item)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:re, :inspect, [compiled_pattern, :foo],
+                [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "run/2" do
@@ -485,6 +586,53 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
 
     test "returns nomatch without a match" do
       assert :re.run("x", "b+") == :nomatch
+    end
+
+    test "error frame carries run/3 args on a char data failure with a unicode compiled pattern" do
+      {:ok, compiled_pattern} = :re.compile("a", [:unicode])
+      subject = wrap_term([0xD800])
+
+      top_frame =
+        try do
+          :re.run(subject, compiled_pattern)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside re.erl, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:re, :run, [[0xD800], ^compiled_pattern, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries run/2 args and error_info on a non-iodata subject" do
+      subject = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :re.run(subject, "a")
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:re, :run, [:abc, "a"], [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries run/2 args and error_info on an invalid UTF-8 binary subject with a unicode compiled pattern" do
+      {:ok, compiled_pattern} = :re.compile("a", [:unicode])
+      subject = wrap_term(<<255>>)
+
+      top_frame =
+        try do
+          :re.run(subject, compiled_pattern)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:re, :run, [<<255>>, compiled_pattern],
+                [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
@@ -1576,6 +1724,116 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert_error ArgumentError,
                    build_argument_error_msg(3, "invalid options"),
                    fn -> :re.run("a", compiled, [{:newline, :bogus}]) end
+    end
+
+    test "error frame carries args on a non-chardata subject with the unicode option" do
+      subject = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :re.run(subject, "a", [:unicode])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside re.erl, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:re, :run, [:abc, "a", [:unicode]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args on a surrogate pattern code point with the unicode option" do
+      pattern = wrap_term([0xD800])
+
+      top_frame =
+        try do
+          :re.run("abc", pattern, [:unicode])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside re.erl, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:re, :run, ["abc", [0xD800], [:unicode]], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args and error_info on an invalid UTF-8 binary subject with a unicode compiled pattern" do
+      {:ok, compiled_pattern} = :re.compile("a", [:unicode])
+      subject = wrap_term(<<255>>)
+
+      top_frame =
+        try do
+          :re.run(subject, compiled_pattern, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:re, :run, [<<255>>, compiled_pattern, []],
+                [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info on an invalid UTF-8 binary pattern with the unicode option" do
+      pattern = wrap_term(<<255, ?a>>)
+
+      top_frame =
+        try do
+          :re.run("abc", pattern, [:unicode])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:re, :run, ["abc", <<255, ?a>>, [:unicode]],
+                [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info with badopt cause on invalid options" do
+      options = wrap_term([:bad])
+
+      top_frame =
+        try do
+          :re.run("x", "a", options)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:re, :run, ["x", "a", [:bad]],
+                [error_info: %{cause: :badopt, module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info on an invalid capture spec" do
+      options = wrap_term(capture: :bad_kind)
+
+      top_frame =
+        try do
+          :re.run("abc", "a", options)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:re, :run, ["abc", "a", [capture: :bad_kind]],
+                [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info on an offset beyond the subject" do
+      options = wrap_term(offset: 10)
+
+      top_frame =
+        try do
+          :re.run("abc", "a", options)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:re, :run, ["abc", "a", [offset: 10]],
+                [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 

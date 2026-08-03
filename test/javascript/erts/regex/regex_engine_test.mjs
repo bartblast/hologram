@@ -1,16 +1,12 @@
 "use strict";
 
-import {
-  assert,
-  assertBoxedError,
-  defineGlobalErlangAndElixirModules,
-} from "../../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../../support/helpers.mjs";
 
 import Bitstring from "../../../../assets/js/bitstring.mjs";
 import RegexEngine from "../../../../assets/js/erts/regex/regex_engine.mjs";
 import Type from "../../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const match = (source, subject, opts = {}, runOpts = {}) =>
   RegexEngine.match(RegexEngine.compile(source, opts), subject, runOpts);
@@ -65,28 +61,18 @@ describe("RegexEngine", () => {
       assert.equal(RegexEngine.charDataToText(charData), "aébc");
     });
 
-    it("raises ArgumentError on an invalid code point", () => {
-      assertBoxedError(
-        () => RegexEngine.charDataToText(Type.list([Type.integer(0x110000)])),
-        "ArgumentError",
-        "argument error",
+    it("returns null on an invalid code point", () => {
+      assert.isNull(
+        RegexEngine.charDataToText(Type.list([Type.integer(0x110000)])),
       );
     });
 
-    it("raises ArgumentError on a non-UTF-8 binary", () => {
-      assertBoxedError(
-        () => RegexEngine.charDataToText(Bitstring.fromBytes([255])),
-        "ArgumentError",
-        "argument error",
-      );
+    it("returns null on a non-UTF-8 binary", () => {
+      assert.isNull(RegexEngine.charDataToText(Bitstring.fromBytes([255])));
     });
 
-    it("raises ArgumentError on a term that is not char data", () => {
-      assertBoxedError(
-        () => RegexEngine.charDataToText(Type.atom("abc")),
-        "ArgumentError",
-        "argument error",
-      );
+    it("returns null on a term that is not char data", () => {
+      assert.isNull(RegexEngine.charDataToText(Type.atom("abc")));
     });
   });
 

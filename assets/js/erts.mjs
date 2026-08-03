@@ -2,6 +2,7 @@
 
 import ApplicationEnv from "./erts/application_env.mjs";
 import BinaryPatternRegistry from "./erts/binary_pattern_registry.mjs";
+import CallStack from "./erts/call_stack.mjs";
 import NativeObjectRegistry from "./erts/native_object_registry.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import PromiseRegistry from "./erts/promise_registry.mjs";
@@ -31,8 +32,20 @@ export default class ERTS {
     return $.#initPid;
   }
 
+  // Version of each OTP application whose modules the bundle carries, keyed by
+  // application name - what :application.get_key/2 answers :vsn from. Assigned
+  // by the runtime bundle from compiler-emitted data, and empty when client
+  // stacktraces are disabled, which also emits no per-module app metadata.
+  static appVersions = {};
+
   static applicationEnv = ApplicationEnv;
+
   static binaryPatternRegistry = BinaryPatternRegistry;
+
+  // Shadow call stack backing Elixir stacktraces. Ported Erlang functions reach it through this
+  // facade, since their bodies are extracted per-MFA into the bundle and can't carry imports.
+  static callStack = CallStack;
+
   static ets = {};
 
   // TODO: add scoped lifecycle / GC for native object registry.
@@ -61,11 +74,59 @@ export default class ERTS {
     granularity: "grapheme",
   });
 
+  // Where each module's code lives, keyed by module name - the application that
+  // owns it and its source file, which stacktrace frames render. Filled per
+  // bundle, so the runtime and each page contribute their own modules, and left
+  // empty when client stacktraces are disabled.
+  static moduleMetadata = {};
+
   static nodeTable = NodeTable;
   static referenceSequence = new Sequence();
   static uniqueIntegerSequence = new Sequence();
   static utf8Decoder = new TextDecoder("utf-8", {fatal: true});
   static utf8Encoder = new TextEncoder();
+
+  // Mirrors the format_error_map/3 that erl_erts_errors, erl_kernel_errors and erl_stdlib_errors
+  // each define identically: fragments name argument positions in order starting at the given
+  // number, an "" fragment leaves its position unnamed, and a {general: fragment} fragment names
+  // the call as a whole instead of an argument. Fragments are expanded by the calling module's own
+  // expand_error/1, which is the only part the three OTP copies differ in. The entries accumulate
+  // into the given boxed map.
+  static formatErrorMap(fragments, argumentNumber, map, expandError) {
+    const result = Type.cloneMap(map);
+    let currentArgumentNumber = argumentNumber;
+
+    for (const fragment of fragments) {
+      if (fragment === "") {
+        ++currentArgumentNumber;
+        continue;
+      }
+
+      if (typeof fragment === "object" && "general" in fragment) {
+        const generalKey = Type.atom("general");
+
+        result.data[Type.encodeMapKey(generalKey)] = [
+          generalKey,
+          expandError(fragment.general),
+        ];
+
+        continue;
+      }
+
+      const key = Type.integer(currentArgumentNumber);
+      result.data[Type.encodeMapKey(key)] = [key, expandError(fragment)];
+
+      ++currentArgumentNumber;
+    }
+
+    return result;
+  }
+
+  // Takes in the modules of one bundle. Each bundle registers its own, so the
+  // runtime's modules and every page's modules end up in the same table.
+  static registerModuleMetadata(entries) {
+    Object.assign($.moduleMetadata, entries);
+  }
 
   static registerNativeObject(object) {
     const ref = $.uniqueReference();

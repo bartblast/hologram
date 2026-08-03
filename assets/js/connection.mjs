@@ -154,7 +154,7 @@ export default class Connection {
     }
 
     if (encodedMessage === '"reload"') {
-      document.location.reload();
+      LiveReload.reload();
       return;
     }
 

@@ -1,9 +1,6 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import Operation from "../../assets/js/operation.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -11,7 +8,7 @@ import Type from "../../assets/js/type.mjs";
 const defaultTarget = Type.bitstring("my_default_target");
 const eventParam = "my_event_param";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("Operation", () => {
   describe("fromSpecDom()", () => {

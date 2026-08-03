@@ -1,16 +1,22 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("GlobalRegistry", () => {
-  beforeEach(() => delete globalThis[GlobalRegistry.rootKey]);
+  let originalHologram;
+
+  beforeEach(() => {
+    originalHologram = globalThis[GlobalRegistry.rootKey];
+    delete globalThis[GlobalRegistry.rootKey];
+  });
+
+  afterEach(() => {
+    globalThis[GlobalRegistry.rootKey] = originalHologram;
+  });
 
   describe("append()", () => {
     it("key is not set", () => {

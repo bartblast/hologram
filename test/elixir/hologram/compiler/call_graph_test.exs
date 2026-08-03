@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Context
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Component
@@ -44,6 +45,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module39
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module40
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module41
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
@@ -54,10 +56,33 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   alias String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, as: StringCharsModule12
 
+  @erlang_js_dir Path.join([Reflection.root_dir(), "assets", "js", "erlang"])
+
   @tmp_dir Reflection.tmp_dir()
 
   defp app_protocol_dispatch_types_with_analysis(graph) do
     app_protocol_dispatch_types(graph, Reflection.list_pages(), broadcast_caller_analysis(graph))
+  end
+
+  # The Erlang functions each ported module calls, taken from the "Deps" comment
+  # every port carries under its End marker. The comment is what a port author
+  # writes down, so it is the statement the edge table has to answer to.
+  defp list_declared_erlang_deps do
+    [@erlang_js_dir, "*.mjs"]
+    |> Path.join()
+    |> Path.wildcard()
+    |> Enum.flat_map(fn file_path ->
+      basename = Path.basename(file_path, ".mjs")
+
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      module = String.to_atom(basename)
+
+      file_path
+      |> File.read!()
+      |> String.split("\n")
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.flat_map(&parse_declared_erlang_deps(&1, module))
+    end)
   end
 
   defp list_page_mfas_with_analysis(call_graph, page_module) do
@@ -68,6 +93,35 @@ defmodule Hologram.Compiler.CallGraphTest do
       server_callback_analysis_by_templatable(graph, templatables)
 
     list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
+  end
+
+  # An End marker paired with the Deps comment under it, yielding one
+  # {source, target} per Erlang dependency. Dependencies on Elixir modules are
+  # named without a leading colon and are carried by a different table.
+  defp parse_declared_erlang_deps([end_line, deps_line], module) do
+    with [_match, fun, arity] <- Regex.run(~r{//\s*End\s+(\S+)/(\d+)\s*$}, end_line),
+         [_match, deps] <- Regex.run(~r{//\s*Deps:\s*\[(.*)\]\s*$}, deps_line) do
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      source = {module, String.to_atom(fun), String.to_integer(arity)}
+
+      deps
+      |> String.split(",", trim: true)
+      |> Enum.map(&String.trim/1)
+      |> Enum.filter(&String.starts_with?(&1, ":"))
+      |> Enum.map(&{source, parse_erlang_mfa(&1)})
+    else
+      _no_match -> []
+    end
+  end
+
+  # A name the comment holds may have no edge naming it yet, which is what the
+  # test reports - so the atoms are made rather than looked up, or a stale
+  # declaration would raise here instead of showing up in the diff.
+  # credo:disable-for-lines:5 Credo.Check.Warning.UnsafeToAtom
+  defp parse_erlang_mfa(dep) do
+    [_match, module, fun, arity] = Regex.run(~r{^:(\w+)\.(\S+)/(\d+)$}, dep)
+
+    {String.to_atom(module), String.to_atom(fun), String.to_integer(arity)}
   end
 
   setup_all do
@@ -656,6 +710,18 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module21, {Module21, :__schema__, 2})
     end
 
+    test "module definition IR, exception module adds exception-specific edges", %{
+      empty_call_graph: call_graph
+    } do
+      argument_error_ir = IR.for_module(ArgumentError)
+      result = build(call_graph, argument_error_ir)
+
+      assert result == call_graph
+
+      assert has_vertex?(call_graph, {ArgumentError, :message, 1})
+      assert has_edge?(call_graph, ArgumentError, {ArgumentError, :message, 1})
+    end
+
     test "module definition IR, protocol module adds protocol-specific edges", %{
       empty_call_graph: call_graph
     } do
@@ -874,6 +940,231 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    test "remote function call using :erlang.error/3, error_info with module key", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.AtomType{value: :badarg},
+          %IR.ListType{data: [%IR.AtomType{value: :a}]},
+          %IR.ListType{
+            data: [
+              %IR.TupleType{
+                data: [
+                  %IR.AtomType{value: :error_info},
+                  %IR.MapType{
+                    data: [{%IR.AtomType{value: :module}, %IR.AtomType{value: Module2}}]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module2,
+               {Module1, :my_fun_1, 4},
+               {Module2, :format_error, 2},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, Module2},
+               {{Module1, :my_fun_1, 4}, {Module2, :format_error, 2}},
+               {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
+             ]
+    end
+
+    test "remote function call using :erlang.error/3, error_info with module and function keys",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.AtomType{value: :badarg},
+          %IR.ListType{data: [%IR.AtomType{value: :a}]},
+          %IR.ListType{
+            data: [
+              %IR.TupleType{
+                data: [
+                  %IR.AtomType{value: :error_info},
+                  %IR.MapType{
+                    data: [
+                      {%IR.AtomType{value: :module}, %IR.AtomType{value: Module2}},
+                      {%IR.AtomType{value: :function}, %IR.AtomType{value: :my_format_error}}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module2,
+               {Module1, :my_fun_1, 4},
+               {Module2, :my_format_error, 2},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, Module2},
+               {{Module1, :my_fun_1, 4}, {Module2, :my_format_error, 2}},
+               {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
+             ]
+    end
+
+    test "remote function call using :erlang.error/3, error_info without module key defaults to the enclosing module",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.AtomType{value: :badarg},
+          %IR.ListType{data: [%IR.AtomType{value: :a}]},
+          %IR.ListType{
+            data: [
+              %IR.TupleType{
+                data: [
+                  %IR.AtomType{value: :error_info},
+                  %IR.MapType{data: []}
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Module1, :format_error, 2},
+               {Module1, :my_fun_1, 4},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, {Module1, :format_error, 2}},
+               {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
+             ]
+    end
+
+    test "remote function call using :erlang.error/3, error_info with a dynamic module value", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.AtomType{value: :badarg},
+          %IR.ListType{data: [%IR.AtomType{value: :a}]},
+          %IR.ListType{
+            data: [
+              %IR.TupleType{
+                data: [
+                  %IR.AtomType{value: :error_info},
+                  %IR.MapType{
+                    data: [{%IR.AtomType{value: :module}, %IR.Variable{name: :module}}]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Module1, :my_fun_1, 4},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
+             ]
+    end
+
+    test "remote function call using :erlang.error/3, options without error_info", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.AtomType{value: :badarg},
+          %IR.ListType{data: [%IR.AtomType{value: :a}]},
+          %IR.ListType{
+            data: [
+              %IR.TupleType{
+                data: [%IR.AtomType{value: :other_option}, %IR.AtomType{value: :abc}]
+              }
+            ]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Module1, :my_fun_1, 4},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
+             ]
+    end
+
+    test "remote function call using :erlang.error/3, dynamic options", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.AtomType{value: :badarg},
+          %IR.ListType{data: [%IR.AtomType{value: :a}]},
+          %IR.Variable{name: :options}
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Module1, :my_fun_1, 4},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, {:erlang, :error, 3}}
+             ]
+    end
+
     test "tuple", %{empty_call_graph: call_graph} do
       tuple = {%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}}
       result = build(call_graph, tuple, :vertex_1)
@@ -969,6 +1260,39 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Enum.count(result) == 2
     assert {:vertex_2, :vertex_3} in result
     assert {:vertex_4, :vertex_5} in result
+  end
+
+  describe "erlang_mfa_edges/0" do
+    test "returns the calls between manually ported Erlang functions" do
+      result = erlang_mfa_edges()
+
+      assert is_list(result)
+      assert {{:binary, :match, 2}, {:binary, :match, 3}} in result
+      assert {{:erlang, :"=<", 2}, {:erlang, :==, 2}} in result
+    end
+
+    # Ported functions are JavaScript, so no IR analysis finds the calls between
+    # them - each port names its callees in a "Deps" comment and the table above
+    # carries the same calls as edges. The two are written by hand and apart, so
+    # this holds them to each other: an edge the comments don't name pulls dead
+    # code into every bundle reaching its source, and a comment no edge names
+    # leaves the callee out of the bundle, which the caller only finds at runtime.
+    test "names exactly what the ported Erlang functions declare" do
+      declared_deps = list_declared_erlang_deps()
+
+      undeclared_deps =
+        Enum.reject(erlang_mfa_edges(), fn {source, target} ->
+          {source, target} in declared_deps
+        end)
+
+      missing_deps =
+        Enum.reject(declared_deps, fn {source, target} ->
+          {source, target} in erlang_mfa_edges()
+        end)
+
+      assert undeclared_deps == []
+      assert missing_deps == []
+    end
   end
 
   test "get_graph/1", %{empty_call_graph: call_graph} do
@@ -2537,15 +2861,49 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert :vertex_5 in result
   end
 
-  # Consistency tests verifying that the Elixir stdlib IR patterns
+  # Consistency tests verifying that the Elixir IR patterns
   # assumed by the call graph still hold. If these fail after an
   # Elixir upgrade, the corresponding call graph code needs updating.
-  describe "Elixir stdlib IR pattern assumptions" do
+  describe "Elixir IR pattern assumptions" do
     defp find_fun_defs(ir_plt, module, name, arity) do
       %IR.ModuleDefinition{body: %IR.Block{expressions: expressions}} =
         PLT.get!(ir_plt, module)
 
       Enum.filter(expressions, &match?(%IR.FunctionDefinition{name: ^name, arity: ^arity}, &1))
+    end
+
+    # EEP-54 formatter resolution assumption: a raise site passing a literal
+    # error_info option compiles to a keyword list of tuples whose error_info
+    # value is a map with literal atom keys and values.
+    test ":erlang.error/3 with a literal error_info option compiles to the IR shape the formatter resolution matches" do
+      code =
+        ~s/:erlang.error(:badarg, [:a], error_info: %{module: MyFormatter, function: :my_format_error})/
+
+      assert IR.for_code(code, %Context{}) == %IR.RemoteFunctionCall{
+               line: 1,
+               module: %IR.AtomType{value: :erlang},
+               function: :error,
+               args: [
+                 %IR.AtomType{value: :badarg},
+                 %IR.ListType{data: [%IR.AtomType{value: :a}]},
+                 %IR.ListType{
+                   data: [
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :error_info},
+                         %IR.MapType{
+                           data: [
+                             {%IR.AtomType{value: :module}, %IR.AtomType{value: MyFormatter}},
+                             {%IR.AtomType{value: :function},
+                              %IR.AtomType{value: :my_format_error}}
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               ]
+             }
     end
 
     # Dynamic dispatch assumption: Date.day_of_era/1 extracts calendar from the struct
@@ -2776,6 +3134,13 @@ defmodule Hologram.Compiler.CallGraphTest do
          %{ir_plt: ir_plt} do
       assert [fun_def] = find_fun_defs(ir_plt, Date, :new, 3)
 
+      # The clause and the call in its body point into Elixir's own source, so
+      # their lines depend on the Elixir version - neutralize them before the
+      # exact comparison.
+      [call] = fun_def.clause.body.expressions
+      body = %{fun_def.clause.body | expressions: [%{call | line: nil}]}
+      fun_def = %{fun_def | clause: %{fun_def.clause | line: nil, body: body}}
+
       assert fun_def == %IR.FunctionDefinition{
                name: :new,
                arity: 3,
@@ -2799,7 +3164,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                        ]
                      }
                    ]
-                 }
+                 },
+                 blame: %{params: ["x0", "x1", "x2"], guards: []}
                }
              }
     end
@@ -4580,7 +4946,9 @@ defmodule Hologram.Compiler.CallGraphTest do
                      guards: [],
                      body: %IR.Block{
                        expressions: [%IR.AtomType{value: Protocol1.Integer}]
-                     }
+                     },
+                     line: 2,
+                     blame: %{params: [":target"], guards: []}
                    }
                  }
 
@@ -4596,7 +4964,9 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: Integer}]
-                 }
+                 },
+                 line: 2,
+                 blame: %{params: [":for"], guards: []}
                }
              }
 
@@ -4609,7 +4979,9 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: Protocol1}]
-                 }
+                 },
+                 line: 2,
+                 blame: %{params: [":protocol"], guards: []}
                }
              }
     end
@@ -4639,7 +5011,9 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: Protocol1}]
-                 }
+                 },
+                 line: 2,
+                 blame: %{params: [":module"], guards: []}
                }
              }
 
@@ -4663,7 +5037,9 @@ defmodule Hologram.Compiler.CallGraphTest do
                        ]
                      }
                    ]
-                 }
+                 },
+                 line: 2,
+                 blame: %{params: [":functions"], guards: []}
                }
              }
 
@@ -4676,7 +5052,9 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: true}]
-                 }
+                 },
+                 line: 2,
+                 blame: %{params: [":consolidated?"], guards: []}
                }
              }
 
@@ -4701,7 +5079,9 @@ defmodule Hologram.Compiler.CallGraphTest do
                        ]
                      }
                    ]
-                 }
+                 },
+                 line: 2,
+                 blame: %{params: [":impls"], guards: []}
                }
              }
     end
@@ -4738,17 +5118,20 @@ defmodule Hologram.Compiler.CallGraphTest do
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :is_atom,
-                     args: [%IR.Variable{name: :x, version: -1}]
+                     args: [%IR.Variable{name: :x, version: -1}],
+                     line: 2
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
                      %IR.LocalFunctionCall{
                        function: :struct_impl_for,
-                       args: [%IR.Variable{name: :x, version: -1}]
+                       args: [%IR.Variable{name: :x, version: -1}],
+                       line: 2
                      }
                    ]
-                 }
+                 },
+                 line: 2
                }
              }
 
@@ -4762,14 +5145,16 @@ defmodule Hologram.Compiler.CallGraphTest do
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :is_integer,
-                     args: [%IR.Variable{name: :x, version: -1}]
+                     args: [%IR.Variable{name: :x, version: -1}],
+                     line: 2
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
                      %IR.AtomType{value: Protocol1.Integer}
                    ]
-                 }
+                 },
+                 line: 2
                }
              }
 
@@ -4782,7 +5167,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: nil}]
-                 }
+                 },
+                 line: 2
                }
              }
     end
@@ -4864,9 +5250,11 @@ defmodule Hologram.Compiler.CallGraphTest do
                  body: %IR.Block{
                    expressions: [
                      %IR.Case{
+                       line: 2,
                        condition: %IR.LocalFunctionCall{
                          function: :impl_for,
-                         args: [%IR.Variable{name: :data, version: 0}]
+                         args: [%IR.Variable{name: :data, version: 0}],
+                         line: 2
                        },
                        clauses: [
                          %IR.Clause{
@@ -4882,7 +5270,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                                    args: [
                                      %IR.Variable{name: :x, version: 1},
                                      %IR.AtomType{value: false}
-                                   ]
+                                   ],
+                                   line: 2
                                  },
                                  %IR.RemoteFunctionCall{
                                    module: %IR.AtomType{value: :erlang},
@@ -4890,9 +5279,11 @@ defmodule Hologram.Compiler.CallGraphTest do
                                    args: [
                                      %IR.Variable{name: :x, version: 1},
                                      %IR.AtomType{value: nil}
-                                   ]
+                                   ],
+                                   line: 2
                                  }
-                               ]
+                               ],
+                               line: 2
                              }
                            ],
                            body: %IR.Block{
@@ -4906,9 +5297,11 @@ defmodule Hologram.Compiler.CallGraphTest do
                                      function: :exception,
                                      args: [
                                        %IR.ListType{data: exception_keyword_data}
-                                     ]
+                                     ],
+                                     line: 2
                                    }
-                                 ]
+                                 ],
+                                 line: 2
                                }
                              ]
                            }
@@ -4923,9 +5316,88 @@ defmodule Hologram.Compiler.CallGraphTest do
                        ]
                      }
                    ]
-                 }
+                 },
+                 line: 2
                }
              }
+    end
+
+    # Kernel.raise with a compile-time-known exception module expands to
+    # :erlang.error/1, without any error_info option, so no formatter edge
+    # is derived from such raise sites.
+    #
+    # Original source:
+    #   raise ArgumentError, "my message"
+    test "raise with a known exception module expands to :erlang.error/1 without error_info",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Module41, :my_fun_1, 0)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :error,
+                       args: [
+                         %IR.RemoteFunctionCall{
+                           module: %IR.AtomType{value: ArgumentError},
+                           function: :exception,
+                           args: [%IR.StringType{value: "my message"}]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Kernel.raise with a message expands to :erlang.error/3 whose error_info
+    # option names Exception as the format module, so the EEP-54 resolution
+    # derives an Exception.format_error/2 formatter edge from such raise sites.
+    #
+    # Original source:
+    #   raise "my message"
+    test "raise with a message expands to :erlang.error/3 with the Exception formatter error_info",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Module41, :my_fun_2, 0)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :error,
+                       args: [
+                         %IR.RemoteFunctionCall{
+                           module: %IR.AtomType{value: RuntimeError},
+                           function: :exception,
+                           args: [%IR.StringType{value: "my message"}]
+                         },
+                         %IR.AtomType{value: :none},
+                         %IR.ListType{
+                           data: [
+                             %IR.TupleType{
+                               data: [
+                                 %IR.AtomType{value: :error_info},
+                                 %IR.MapType{
+                                   data: [
+                                     {%IR.AtomType{value: :module},
+                                      %IR.AtomType{value: Exception}}
+                                   ]
+                                 }
+                               ]
+                             }
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
     end
 
     # Original source:
@@ -4953,7 +5425,9 @@ defmodule Hologram.Compiler.CallGraphTest do
                    expressions: [
                      %IR.AtomType{value: Module.safe_concat(Protocol1, Struct1)}
                    ]
-                 }
+                 },
+                 line: 2,
+                 blame: %{params: [inspect(Struct1)], guards: []}
                }
              }
 
@@ -4966,7 +5440,11 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: nil}]
-                 }
+                 },
+                 line: 2,
+                 # Consolidation gives the catch-all param a context that Macro
+                 # walking rejects, so its clause head can't be rendered.
+                 blame: nil
                }
              }
     end

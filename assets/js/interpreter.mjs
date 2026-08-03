@@ -1,6 +1,8 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import CallStack from "./erts/call_stack.mjs";
+import ERTS from "./erts.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import NodeTable from "./erts/node_table.mjs";
@@ -15,7 +17,58 @@ import uniqWith from "lodash/uniqWith.js";
 // term (nil/false) is never mistaken for "no clause matched".
 const NO_MATCH = Symbol("NO_MATCH");
 
+// The OTP application a module belongs to decides which formatter its BIF errors name: erts
+// modules name erl_erts_errors, kernel modules name erl_kernel_errors, and the rest are stdlib
+// modules naming erl_stdlib_errors. Only the modules that depart from the stdlib default are
+// listed - a raise site whose module names a different formatter states it at the site.
+const BIF_FORMAT_MODULES = {erlang: "erl_erts_errors", os: "erl_kernel_errors"};
+
+// Atoms whose names match render without asking Elixir how to - see #inspectAtomAs().
+// ALIAS_REGEX mirrors Macro's valid_alias?/1: "Elixir" followed by dot-separated segments,
+// each starting with an uppercase letter.
+const ALIAS_REGEX = /^Elixir(\.[A-Z][a-zA-Z0-9_]*)*$/;
+const ATOM_IDENTIFIER_REGEX = /^[a-z_][a-zA-Z0-9_]*[?!]?$/;
+
+const ATOM_FAST_PATHS = {
+  key: (name) => `${name}:`,
+  literal: (name) => `:${name}`,
+  remote_call: (name) => name,
+};
+
+// The characters printable text shows as an escape sequence instead of itself:
+// the control characters that have a letter escape, and the quote and backslash
+// that would otherwise close or escape the literal. Anything the regex below
+// matches without an entry here is invisible and renders as \uXXXX.
+const TEXT_ESCAPES = {
+  7: "\\a",
+  8: "\\b",
+  9: "\\t",
+  10: "\\n",
+  11: "\\v",
+  12: "\\f",
+  13: "\\r",
+  27: "\\e",
+  34: '\\"',
+  92: "\\\\",
+  127: "\\d",
+};
+
+// What printable text doesn't spell as itself: the characters above, the
+// invisible codepoints - spaces other than the plain one, joiners, direction
+// marks and annotation controls, which String.printable?/2 still accepts - and
+// the interpolation opener, matched as a pair since a "#" alone stands for
+// itself.
+const TEXT_ESCAPE_REGEX =
+  // The control characters are matched on purpose, and every codepoint below
+  // is written as an escape - so the pair the character class rule reads as one
+  // combined character is two that the text really holds.
+  // eslint-disable-next-line no-control-regex, no-misleading-character-class
+  /#\{|[\x07-\x0D\x1B"\\\x7F\u00A0\u034F\u061C\u2000-\u200F\u2028-\u202E\u205F-\u2064\u2066-\u2069\uFEFF\uFFF9-\uFFFC]/g;
+
 export default class Interpreter {
+  // Clause heads of manually ported functions, keyed by "Module.function/arity".
+  static #functionClauseHeads = {};
+
   // Deps: [:lists.keyfind/3]
   static accessKeywordListElement(keywordList, key, defaultValue = null) {
     const keyfindRes = Erlang_Lists["keyfind/3"](
@@ -48,31 +101,44 @@ export default class Interpreter {
     }
   }
 
-  static buildArgumentErrorMsg(argumentIndex, message) {
-    return $.buildMultiArgumentErrorMsg([[argumentIndex, message]]);
+  // Turns an :error reason into the exception struct in its display form,
+  // mirroring Elixir's Exception.blame/3: the reason is normalized and the
+  // exception module's blame/2 callback refines the struct against the
+  // stacktrace (e.g. ArithmeticError appending the failed operation). Only
+  // the struct is taken from the returned pair - the client keeps reporting
+  // the raw trace, the way rescue clauses see it.
+  // Deps: [Exception.blame/3]
+  static blameError(reason, stacktrace = Type.list()) {
+    const result = Elixir_Exception["blame/3"](
+      Type.atom("error"),
+      reason,
+      stacktrace,
+    );
+
+    return result.data[0];
   }
 
-  // Keep this message in sync with build_bad_function_error_msg in Hologram.Commons.TestUtils.
-  static buildBadFunctionErrorMsg(term) {
-    return "expected a function, got: " + $.inspect(term);
-  }
-
-  // Keep this message in sync with build_bad_map_error_msg in Hologram.Commons.TestUtils.
-  static buildBadMapErrorMsg(arg) {
-    return "expected a map, got:\n\n    " + Interpreter.inspect(arg) + "\n";
-  }
-
-  // Keep this message in sync with build_case_clause_error_msg in Hologram.Commons.TestUtils.
-  static buildCaseClauseErrorMsg(arg) {
-    return "no case clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
+  // Boxes the stacktrace carried on an error. A trace given to :erlang.raise/3
+  // is stored already boxed, while a captured one is an array of frame objects.
+  // The frames an error carries, boxed. An error raised through
+  // :erlang.raise/3 already carries them boxed, one raised any other way
+  // carries the shadow call stack's own frames.
+  static boxStacktrace(error) {
+    return Type.isList(error.stacktrace)
+      ? error.stacktrace
+      : Type.list(error.stacktrace.map(CallStack.boxFrame));
   }
 
   static buildContext(data = {}) {
-    const {module, vars} = data;
-    const context = {module: null, vars: {}};
+    const {module, stacktrace, vars} = data;
+    const context = {module: null, stacktrace: null, vars: {}};
 
     if (module) {
       context.module = Type.isAlias(module) ? module : Type.alias(module);
+    }
+
+    if (stacktrace) {
+      context.stacktrace = stacktrace;
     }
 
     if (vars) {
@@ -80,63 +146,6 @@ export default class Interpreter {
     }
 
     return context;
-  }
-
-  // Keep this message in sync with build_erlang_error_msg in Hologram.Commons.TestUtils.
-  static buildErlangErrorMsg(message) {
-    return `Erlang error: ${message}`;
-  }
-
-  // TODO: include attempted function clauses info
-  // Keep this message in sync with build_function_clause_error_msg in Hologram.Commons.TestUtils.
-  static buildFunctionClauseErrorMsg(funName, args = null) {
-    let argsInfo = "";
-
-    if (args && args.length > 0) {
-      argsInfo = Array.from(args).reduce(
-        (acc, arg, idx) =>
-          `${acc}\n    # ${idx + 1}\n    ${Interpreter.inspect(arg)}\n`,
-        `\n\nThe following arguments were given to ${funName}:\n`,
-      );
-    }
-
-    return `no function clause matching in ${funName}${argsInfo}`;
-  }
-
-  // Keep this message in sync with build_key_error_msg in Hologram.Commons.TestUtils.
-  static buildKeyErrorMsg(key, map) {
-    const opts = Type.keywordList([
-      [
-        Type.atom("custom_options"),
-        Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
-      ],
-    ]);
-
-    return `key ${Interpreter.inspect(key)} not found in:\n\n    ${Interpreter.inspect(map, opts)}\n`;
-  }
-
-  // Keep this message in sync with build_match_error_msg in Hologram.Commons.TestUtils.
-  static buildMatchErrorMsg(right) {
-    return (
-      "no match of right hand side value:\n\n    " +
-      Interpreter.inspect(right) +
-      "\n"
-    );
-  }
-
-  // Builds the message for errors at multiple arguments from [index, message]
-  // entries. Entries with a nullish message are skipped.
-  // Keep this message in sync with build_multi_argument_error_msg in Hologram.Commons.TestUtils.
-  static buildMultiArgumentErrorMsg(entries) {
-    const bullets = entries
-      .filter(([_index, message]) => message != null)
-      .map(
-        ([index, message]) =>
-          `  * ${Utils.ordinal(index)} argument: ${message}\n`,
-      )
-      .join("");
-
-    return `errors were found at the given arguments:\n\n${bullets}`;
   }
 
   // Hologram-specific, no server-side equivalent.
@@ -147,33 +156,8 @@ export default class Interpreter {
     );
   }
 
-  // Keep this message in sync with build_try_clause_error_msg in Hologram.Commons.TestUtils.
-  static buildTryClauseErrorMsg(arg) {
-    return "no try clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
-  }
-
-  // Keep this message in sync with build_undefined_function_error_msg in Hologram.Commons.TestUtils.
-  static buildUndefinedFunctionErrorMsg(
-    module,
-    functionName,
-    arity,
-    isModuleAvailable = true,
-  ) {
-    const moduleName = Interpreter.inspect(module);
-
-    if (isModuleAvailable) {
-      return `function ${moduleName}.${functionName}/${arity} is undefined or private`;
-    }
-
-    return `function ${moduleName}.${functionName}/${arity} is undefined (module ${moduleName} is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)`;
-  }
-
-  // Keep this message in sync with build_with_clause_error_msg in Hologram.Commons.TestUtils.
-  static buildWithClauseErrorMsg(arg) {
-    return "no with clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
-  }
-
-  // callAnonymousFunction() has no unit tests in interpreter_test.mjs, only:
+  // Apart from the frame tracking unit tests, callAnonymousFunction() has no
+  // unit tests in interpreter_test.mjs, only:
   // * feature tests in test/features/test/function_calls/anonymous_function_test.exs,
   // * feature tests in test/features/test/function_calls/function_capture_test.exs,
   // * consistency tests in test/elixir/hologram/ex_js_consistency/interpreter_test.exs (call anonymous function section).
@@ -182,30 +166,86 @@ export default class Interpreter {
   // each time Hologram.Compiler.Encoder's implementation changes.
   static callAnonymousFunction(fun, argsArray) {
     if (argsArray.length !== fun.arity) {
-      Interpreter.raiseBadArityError(fun.arity, argsArray);
+      Interpreter.raiseBadArityError(fun, argsArray);
     }
 
-    const args = Type.list(argsArray);
+    // A capture of a named function pushes no frame of its own - the call
+    // delegates to the named function, whose own dispatch wrapper pushes the
+    // frame, matching the BEAM where such a capture IS the named function.
+    let popsFrameOnExit =
+      globalThis.Hologram.config.stacktraces && fun.capturedModule === null;
 
-    for (const clause of fun.clauses) {
-      const contextClone = Interpreter.cloneContext(fun.context);
-      const pattern = Type.list(clause.params(contextClone));
+    let frame = null;
 
-      if (Interpreter.isMatched(pattern, args, contextClone)) {
-        Interpreter.updateVarsToMatchedValues(contextClone);
+    if (popsFrameOnExit) {
+      const definingModule = fun.context.module
+        ? Interpreter.moduleExName(fun.context.module)
+        : null;
 
-        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
-          return clause.body(contextClone);
+      frame = {
+        module: definingModule,
+        function: fun.name,
+        arityOrArgs: fun.arity,
+        file: ERTS.moduleMetadata[definingModule]?.file ?? null,
+        line: null,
+        errorInfo: null,
+      };
+
+      CallStack.push(frame);
+    }
+
+    try {
+      const args = Type.list(argsArray);
+
+      for (const clause of fun.clauses) {
+        const contextClone = Interpreter.cloneContext(fun.context);
+        const pattern = Type.list(clause.params(contextClone));
+
+        if (Interpreter.isMatched(pattern, args, contextClone)) {
+          Interpreter.updateVarsToMatchedValues(contextClone);
+
+          if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
+            // The frame is pushed before clause dispatch, so which line it
+            // points at is known only now, once a clause has matched.
+            if (frame) {
+              frame.line = clause.line ?? null;
+            }
+
+            const result = clause.body(contextClone);
+
+            // An async body is still executing when it returns its promise,
+            // so the frame pops when the promise settles instead of on
+            // return - otherwise every frame below an await would be gone by
+            // the time an error is raised there.
+            if (popsFrameOnExit && result instanceof Promise) {
+              popsFrameOnExit = false;
+              return result.finally(() => CallStack.pop());
+            }
+
+            return result;
+          }
         }
       }
-    }
 
-    Interpreter.raiseFunctionClauseError(
-      Interpreter.buildFunctionClauseErrorMsg(
-        `anonymous fn/${fun.arity}`,
+      // No clause matched, so the loop above never recorded a line. The BEAM
+      // reports the first clause, which is where the function starts.
+      if (frame) {
+        frame.line = fun.clauses[0]?.line ?? null;
+      }
+
+      Interpreter.raiseFunctionClauseError(
+        fun.context.module
+          ? Interpreter.moduleExName(fun.context.module)
+          : null,
+        fun.name,
+        fun.arity,
         argsArray,
-      ),
-    );
+      );
+    } finally {
+      if (popsFrameOnExit) {
+        CallStack.pop();
+      }
+    }
   }
 
   // callNamedFunction() has no unit tests in interpreter_test.mjs, only:
@@ -222,12 +262,10 @@ export default class Interpreter {
 
     if (typeof moduleProxy === "undefined") {
       Interpreter.raiseUndefinedFunctionError(
-        Interpreter.buildUndefinedFunctionErrorMsg(
-          module,
-          functionName.value,
-          arity,
-          false,
-        ),
+        module,
+        functionName.value,
+        arity,
+        false,
       );
     }
 
@@ -237,11 +275,9 @@ export default class Interpreter {
       !Interpreter.isEqual(module, context.module)
     ) {
       Interpreter.raiseUndefinedFunctionError(
-        Interpreter.buildUndefinedFunctionErrorMsg(
-          module,
-          functionName.value,
-          arity,
-        ),
+        module,
+        functionName.value,
+        arity,
       );
     }
 
@@ -274,7 +310,11 @@ export default class Interpreter {
   static cloneContext(context) {
     // Use {...obj} instead of Object.assign({}, obj) for shallow copying,
     // see benchmarks here: https://thecodebarbarian.com/object-assign-vs-object-spread.html
-    return {module: context.module, vars: {...context.vars}};
+    return {
+      module: context.module,
+      stacktrace: context.stacktrace,
+      vars: {...context.vars},
+    };
   }
 
   // Implements structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
@@ -454,7 +494,9 @@ export default class Interpreter {
         moduleExName,
         functionName,
         arity,
+        visibility,
         clauses,
+        ERTS.moduleMetadata[moduleExName]?.file ?? null,
       );
 
     if (visibility === "public") {
@@ -468,8 +510,32 @@ export default class Interpreter {
 
     Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName, "erlang");
 
-    globalThis[moduleJsName][functionArityStr] = jsFunction;
+    globalThis[moduleJsName][functionArityStr] =
+      Interpreter.#buildFrameTrackingWrapper(
+        moduleExName,
+        functionName,
+        arity,
+        null,
+        jsFunction,
+      );
+
     globalThis[moduleJsName].__exports__.add(functionArityStr);
+  }
+
+  // Registers the clause heads a manually ported function stands in for, so its
+  // raise sites can report attempted clauses. Ported functions have no encoded
+  // clauses of their own - only the JavaScript implementation - so the heads
+  // arrive separately, without bodies.
+  static defineFunctionClauseHeads(
+    moduleExName,
+    functionName,
+    arity,
+    visibility,
+    clauseHeads,
+  ) {
+    const key = `${moduleExName}.${functionName}/${arity}`;
+
+    Interpreter.#functionClauseHeads[key] = {visibility, clauses: clauseHeads};
   }
 
   static defineManuallyPortedFunction(
@@ -480,9 +546,22 @@ export default class Interpreter {
   ) {
     const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
 
+    // The arity separator is the last slash - operator function names such as
+    // "..//" contain slashes of their own.
+    const separatorIndex = functionArityStr.lastIndexOf("/");
+    const functionName = functionArityStr.slice(0, separatorIndex);
+    const arity = Number(functionArityStr.slice(separatorIndex + 1));
+
     Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName);
 
-    globalThis[moduleJsName][functionArityStr] = fun;
+    globalThis[moduleJsName][functionArityStr] =
+      Interpreter.#buildFrameTrackingWrapper(
+        moduleExName,
+        functionName,
+        arity,
+        null,
+        fun,
+      );
 
     if (visibility === "public") {
       globalThis[moduleJsName].__exports__.add(functionArityStr);
@@ -531,9 +610,42 @@ export default class Interpreter {
     return Interpreter.evaluateJavaScriptCode(`return (${expr});`);
   }
 
+  // Renders a boxed error the way the server renders an uncaught one: the
+  // banner naming the exception and what it says about itself, then the stacktrace, which
+  // the ported Exception.format_stacktrace/1 renders so the frames read as
+  // they do on the server. Both trace shapes an error can carry render the
+  // same. A frameless error is its banner alone, as Exception.format/3 leaves
+  // the section off for an empty stacktrace.
+  // Deps: [Exception.format_stacktrace/1]
+  static formatBoxedError(error) {
+    const banner = `** (${error.type}) ${error.text}`;
+    const boxedStacktrace = $.boxStacktrace(error);
+
+    if (boxedStacktrace.data.length === 0) {
+      return banner;
+    }
+
+    const stacktraceText = Bitstring.toText(
+      Elixir_Exception["format_stacktrace/1"](boxedStacktrace),
+    );
+
+    return `${banner}\n${stacktraceText}`;
+  }
+
+  // Returns the registered clause heads of the given function, or null when it
+  // has none.
+  static functionClauseHeads(moduleExName, functionName, arity) {
+    const key = `${moduleExName}.${functionName}/${arity}`;
+
+    return Interpreter.#functionClauseHeads[key] ?? null;
+  }
+
+  // Renders the exception struct's module the way the server renders it in
+  // an error banner: inspect(exception.__struct__).
   static getErrorType(jsError) {
-    // TODO: use transpiled Elixir code
-    return jsError.struct.data["atom(__struct__)"][1].value.substring(7);
+    const structModule = jsError.struct.data["atom(__struct__)"][1];
+
+    return Interpreter.inspect(structModule);
   }
 
   // See type ordering spec: https://hexdocs.pm/elixir/main/Kernel.html#module-term-ordering
@@ -610,6 +722,30 @@ export default class Interpreter {
       case "port":
         return `#Port<${term.segments.join(".")}>`;
     }
+  }
+
+  // Renders an atom's name in one of the three formats it takes in source: as a
+  // literal (:foo), as a key (foo:) or as the name of a remote call (foo).
+  // A name that is a plain ASCII identifier renders as it stands, which is what
+  // most atoms are - a map key, a struct field, a function name. Every other
+  // name is rendered by Macro.inspect_atom/3, the code the server renders atoms
+  // with, so what needs quoting is decided there rather than guessed at here.
+  // The fast path is verified against the server for every 1-to-3-character
+  // name, the words Elixir gives meaning to, and the identifiers real
+  // applications use: scripts/inspect_atom/verify_fast_path.exs.
+  // Deps: [Macro.inspect_atom/3]
+  static inspectAtomAs(sourceFormat, name) {
+    if (ATOM_IDENTIFIER_REGEX.test(name)) {
+      return ATOM_FAST_PATHS[sourceFormat](name);
+    }
+
+    return Bitstring.toText(
+      Elixir_Macro["inspect_atom/3"](
+        Type.atom(sourceFormat),
+        Type.atom(name),
+        Type.list(),
+      ),
+    );
   }
 
   static inspectModuleJsName(moduleJsName) {
@@ -695,11 +831,23 @@ export default class Interpreter {
     }
 
     if (Interpreter.#hasUnresolvedVariablePattern(right)) {
-      return {type: "match_pattern", left: left, right: right};
+      return Type.matchPattern(left, right);
     }
 
     if (left.type === "match_pattern") {
-      Interpreter.matchOperator(right, left.right, context, raiseMatchError);
+      // The term has to hold against both sides, so a side that doesn't hold
+      // fails the whole match, even where failing is answered rather than raised.
+      const result = Interpreter.matchOperator(
+        right,
+        left.right,
+        context,
+        raiseMatchError,
+      );
+
+      if (result === false) {
+        return false;
+      }
+
       return Interpreter.matchOperator(
         right,
         left.left,
@@ -782,11 +930,9 @@ export default class Interpreter {
           const [functionName, arity] = functionArityStr.split("/");
 
           Interpreter.raiseUndefinedFunctionError(
-            Interpreter.buildUndefinedFunctionErrorMsg(
-              target.__exModule__,
-              functionName,
-              arity,
-            ),
+            target.__exModule__,
+            functionName,
+            Number(arity),
           );
         },
       };
@@ -832,66 +978,147 @@ export default class Interpreter {
   }
 
   // Turns an :error reason into its exception struct, mirroring Elixir's
-  // Exception.normalize/2: a struct passes through unchanged, while a bare term
-  // (e.g. :badarg) becomes an ArgumentError/ErlangError/... struct.
-  // Deps: [Exception.normalize/2]
-  static normalizeError(reason) {
-    return Elixir_Exception["normalize/2"](Type.atom("error"), reason);
+  // Exception.normalize/3: a struct passes through unchanged, while a bare
+  // term (e.g. :badarg) becomes an ArgumentError/ErlangError/... struct. The
+  // boxed stacktrace feeds error_info-based message derivation, which reads
+  // the raising frame's args and error_info.
+  // Deps: [Exception.normalize/3]
+  static normalizeError(reason, stacktrace = Type.list()) {
+    return Elixir_Exception["normalize/3"](
+      Type.atom("error"),
+      reason,
+      stacktrace,
+    );
   }
 
   static raiseArgumentError(message) {
     Interpreter.raiseError("ArgumentError", message);
   }
 
-  static raiseArithmeticError(blame = null) {
-    Interpreter.raiseError(
-      "ArithmeticError",
-      `bad argument in arithmetic expression${blame ? `: ${blame}` : ""}`,
-    );
-  }
-
-  static raiseBadArityError(arity, args) {
-    const numArgs = args.length === 0 ? "no" : args.length;
-
-    const argumentNounPluralized = Utils.naiveNounPlural(
-      "argument",
-      args.length,
-    );
-
-    const inspectedArgs = args.map((arg) => Interpreter.inspect(arg));
-
-    let maybeInspectedArgs = "";
-    if (args.length > 0) {
-      maybeInspectedArgs = ` (${inspectedArgs.join(", ")})`;
-    }
-
-    Interpreter.raiseError(
-      "BadArityError",
-      `anonymous function with arity ${arity} called with ${numArgs} ${argumentNounPluralized}${maybeInspectedArgs}`,
-    );
+  static raiseBadArityError(fun, args) {
+    Interpreter.#raiseFieldBearingError("BadArityError", [
+      [Type.atom("args"), Type.list(args)],
+      [Type.atom("function"), fun],
+    ]);
   }
 
   static raiseBadFunctionError(term) {
-    $.raiseError("BadFunctionError", $.buildBadFunctionErrorMsg(term));
+    Interpreter.#raiseFieldBearingError("BadFunctionError", [
+      [Type.atom("term"), term],
+    ]);
   }
 
-  static raiseBadMapError(arg) {
-    Interpreter.raiseError("BadMapError", Interpreter.buildBadMapErrorMsg(arg));
+  static raiseBadMapError(term) {
+    Interpreter.#raiseFieldBearingError("BadMapError", [
+      [Type.atom("term"), term],
+    ]);
   }
 
-  static raiseCaseClauseError(arg) {
-    Interpreter.raiseError(
-      "CaseClauseError",
-      Interpreter.buildCaseClauseErrorMsg(arg),
-    );
+  // Raises the reason attributed the way OTP BIFs report it: the raising
+  // frame carries the given identity, the boxed args, and an error_info
+  // entry naming the format module. The identity is supplied statically at
+  // the raise site, so the frame is present in every environment. It stands
+  // in place of the port function's own dispatch frame - the BEAM shows the
+  // BIF frame, not both - which also lets it carry a different identity
+  // (e.g. :maps.get/2 reporting as :erlang.map_get/2).
+  // To keep raise sites small, the reason is given unboxed and args is a
+  // plain array of boxed terms. A non-null cause is an unboxed atom planted
+  // as the error_info map's cause entry, refining the formatter's diagnosis
+  // the way OTP raise sites do (e.g. :binary.replace/4 planting :badopt).
+  // The format module defaults to the one the raising module's OTP
+  // application defines, so a raise site states it only to depart from that.
+  // A null format module omits the error_info entry entirely, for raising
+  // identities whose format module isn't carried by the client runtime.
+  static raiseBifError(
+    reason,
+    module,
+    functionName,
+    args,
+    formatModule = BIF_FORMAT_MODULES[module] ?? "erl_stdlib_errors",
+    cause = null,
+  ) {
+    let errorInfo = null;
+
+    if (formatModule !== null) {
+      const errorInfoData = [[Type.atom("module"), Type.atom(formatModule)]];
+
+      if (cause !== null) {
+        errorInfoData.push([Type.atom("cause"), Type.atom(cause)]);
+      }
+
+      errorInfo = Type.map(errorInfoData);
+    }
+
+    const raisingFrame = {
+      module,
+      function: functionName,
+      arityOrArgs: Type.list(args),
+      file: null,
+      line: null,
+      errorInfo,
+    };
+
+    const error = new HologramBoxedError(Interpreter.#boxErrorReason(reason));
+
+    error.stacktrace = [raisingFrame, ...error.stacktrace.slice(1)];
+    error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
+
+    throw error;
+  }
+
+  // Raises the badarg attributed the way the BEAM reports a failed bitstring
+  // construction: no frame of its own is added, since the construction runs
+  // inline in the enclosing function's body - instead that function's frame
+  // gains an error_info entry naming :erl_erts_errors.format_bs_fail/2 and
+  // carrying the {segment, type, error, value} cause tuple the formatter
+  // diagnoses. When frame tracking is disabled the error_info stands on a
+  // frame of its own, so the message still derives.
+  static raiseBitstringConstructionError(index, segmentType, errorTag, value) {
+    const errorInfo = Type.map([
+      [
+        Type.atom("cause"),
+        Type.tuple([
+          Type.integer(index),
+          Type.atom(segmentType),
+          Type.atom(errorTag),
+          value,
+        ]),
+      ],
+      [Type.atom("function"), Type.atom("format_bs_fail")],
+      [Type.atom("module"), Type.atom("erl_erts_errors")],
+    ]);
+
+    const error = new HologramBoxedError(Type.atom("badarg"));
+    const [enclosingFrame, ...outerFrames] = error.stacktrace;
+
+    // The captured frames are shared with the live call stack, so the
+    // decoration goes onto a copy - decorating in place would leak the
+    // error_info into every later trace taken through that frame.
+    const raisingFrame = enclosingFrame
+      ? {...enclosingFrame, errorInfo}
+      : {
+          module: null,
+          function: null,
+          arityOrArgs: 0,
+          file: null,
+          line: null,
+          errorInfo,
+        };
+
+    error.stacktrace = [raisingFrame, ...outerFrames];
+    error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
+
+    throw error;
+  }
+
+  static raiseCaseClauseError(term) {
+    Interpreter.#raiseFieldBearingError("CaseClauseError", [
+      [Type.atom("term"), term],
+    ]);
   }
 
   static raiseCompileError(message) {
     Interpreter.raiseError("CompileError", message);
-  }
-
-  static raiseErlangError(message) {
-    Interpreter.raiseError("ErlangError", message);
   }
 
   // Deps: [:erlang.error/1]
@@ -900,34 +1127,131 @@ export default class Interpreter {
     Erlang["error/1"](errorStruct);
   }
 
-  static raiseFunctionClauseError(message) {
+  // Raises the reason attributed to the caller: the port function's own
+  // dispatch frame is dropped from the trace, mirroring the BIFs that the
+  // BEAM reports without a frame of their own (e.g. maps:get/3).
+  // The reason is given unboxed, as in raiseBifError.
+  static raiseFramelessError(reason) {
+    const error = new HologramBoxedError(Interpreter.#boxErrorReason(reason));
+
+    error.stacktrace = error.stacktrace.slice(1);
+    error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
+
+    throw error;
+  }
+
+  // Raises a FunctionClauseError attributed the way the BEAM reports a
+  // clause mismatch in a ported stdlib function: the raising frame carries
+  // the given identity with the args (the BEAM puts the failed call's args
+  // in the raising frame), or the bare arity when the server-side args are
+  // not representable on the client. The struct carries the same identity
+  // as semantic fields, so its transpiled message/1 callback derives the
+  // text, including the argument listing. The raising frame stands in place
+  // of the port function's own dispatch frame, which also lets it carry a
+  // different identity (e.g. :sets.union/2 reporting :sets.size/1). A
+  // capitalized module names an Elixir module and becomes an alias, like in
+  // CallStack.boxFrame().
+  static raiseFunctionClauseError(
+    module,
+    functionName,
+    arity,
+    args = null,
+    clauseHeads = null,
+  ) {
+    const moduleTerm = Interpreter.#boxFrameIdentity(module);
+    const functionTerm = Interpreter.#boxFrameIdentity(functionName);
+
+    const heads =
+      args === null
+        ? null
+        : (clauseHeads ??
+          Interpreter.functionClauseHeads(module, functionName, arity));
+
+    const clauses = heads
+      ? Interpreter.#blameClauseHeads(heads.clauses, args)
+      : null;
+
+    const kind = heads?.visibility === "private" ? "defp" : "def";
+
+    const struct = Type.struct("FunctionClauseError", [
+      [Type.atom("__exception__"), Type.boolean(true)],
+      [Type.atom("args"), args === null ? Type.nil() : Type.list(args)],
+      [Type.atom("arity"), Type.integer(arity)],
+      [Type.atom("clauses"), clauses ?? Type.nil()],
+      [Type.atom("function"), functionTerm],
+      [Type.atom("kind"), clauses ? Type.atom(kind) : Type.nil()],
+      [Type.atom("module"), moduleTerm],
+    ]);
+
+    const error = new HologramBoxedError(struct);
+    const ownFrame = error.stacktrace[0];
+
+    // A raise from the function's own dispatch keeps its file and line - the
+    // BEAM reports those for an Elixir-implemented function, and only the args
+    // take the arity's place. A port reporting another identity has neither.
+    const keepsLocation =
+      ownFrame?.module === module && ownFrame?.function === functionName;
+
+    const raisingFrame = {
+      module,
+      function: functionName,
+      arityOrArgs: args === null ? arity : Type.list(args),
+      file: keepsLocation ? ownFrame.file : null,
+      line: keepsLocation ? ownFrame.line : null,
+      errorInfo: null,
+    };
+
+    error.stacktrace = [raisingFrame, ...error.stacktrace.slice(1)];
+    error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
+
+    throw error;
+  }
+
+  // TODO: delete once every raise site builds a field-bearing struct instead
+  // of an eager message.
+  static raiseFunctionClauseErrorMsg(message) {
     Interpreter.raiseError("FunctionClauseError", message);
   }
 
-  static raiseKeyError(message) {
-    Interpreter.raiseError("KeyError", message);
+  static raiseMatchError(term) {
+    Interpreter.#raiseFieldBearingError("MatchError", [
+      [Type.atom("term"), term],
+    ]);
   }
 
-  static raiseMatchError(message) {
-    Interpreter.raiseError("MatchError", message);
+  static raiseTryClauseError(term) {
+    Interpreter.#raiseFieldBearingError("TryClauseError", [
+      [Type.atom("term"), term],
+    ]);
   }
 
-  static raiseTryClauseError(arg) {
-    Interpreter.raiseError(
-      "TryClauseError",
-      Interpreter.buildTryClauseErrorMsg(arg),
-    );
+  // Raises the way the BEAM reports a call to a function that isn't there. The
+  // reason is stated rather than left for the struct's message/1 callback to
+  // work out, since the callback asks the module whether it exports
+  // module_info/0, which a client module proxy never does.
+  static raiseUndefinedFunctionError(
+    module,
+    functionName,
+    arity,
+    isModuleAvailable = true,
+  ) {
+    const reason = isModuleAvailable
+      ? "function not exported"
+      : "module could not be loaded";
+
+    Interpreter.#raiseFieldBearingError("UndefinedFunctionError", [
+      [Type.atom("arity"), Type.integer(arity)],
+      [Type.atom("function"), Type.atom(functionName)],
+      [Type.atom("message"), Type.nil()],
+      [Type.atom("module"), module],
+      [Type.atom("reason"), Type.atom(reason)],
+    ]);
   }
 
-  static raiseUndefinedFunctionError(message) {
-    Interpreter.raiseError("UndefinedFunctionError", message);
-  }
-
-  static raiseWithClauseError(arg) {
-    Interpreter.raiseError(
-      "WithClauseError",
-      Interpreter.buildWithClauseErrorMsg(arg),
-    );
+  static raiseWithClauseError(term) {
+    Interpreter.#raiseFieldBearingError("WithClauseError", [
+      [Type.atom("term"), term],
+    ]);
   }
 
   static registerJsBindings(bindingsMap) {
@@ -943,15 +1267,24 @@ export default class Interpreter {
     }
   }
 
-  // TODO: consider when porting Elixir error handling
+  // Derives the error message through the transpiled Exception.message/1 -
+  // the same code the server runs - so exceptions with derived messages
+  // (message/1 callbacks) produce identical text on both sides.
+  // Deps: [Exception.message/1]
   static resolveErrorMessage(struct) {
-    const messageEntry = struct.data["atom(message)"];
+    return Bitstring.toText(Elixir_Exception["message/1"](struct));
+  }
 
-    if (messageEntry !== undefined) {
-      return Bitstring.toText(messageEntry[1]);
+  // Records where execution has reached in the function currently running, so
+  // its frame reports the line of the call being made rather than the line the
+  // function started at - which is how the BEAM records it. The compiler emits
+  // a call to this before each call it encodes, under the stacktraces flag.
+  static setFrameLine(line) {
+    const frame = CallStack.peek();
+
+    if (frame) {
+      frame.line = line;
     }
-
-    return $.inspect(struct);
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update asyncTry().
@@ -1284,49 +1617,221 @@ export default class Interpreter {
     );
   }
 
-  static #buildElixirFunction(moduleExName, functionName, arity, clauses) {
-    return function () {
-      let startTime;
+  // Binds the boxed form of the stacktrace captured on the error to the
+  // stacktrace field of the clause's context - __STACKTRACE__ in rescue/catch
+  // clause scope reads it. The field propagates through cloneContext into the
+  // clause body's nested closures, while function dispatch builds fresh
+  // contexts, so it never leaks into called functions.
+  static #bindStacktrace(error, context) {
+    context.stacktrace = $.boxStacktrace(error);
+  }
 
-      if (globalThis.Hologram.isProfilingEnabled) {
-        startTime = performance.now();
+  // Recomputes against the actual arguments which parts of a clause head
+  // matched - the marking the server's blame does, which no build-time
+  // rendering can carry, since it depends on the call.
+  static #blameClauseHead(clauseHead, args) {
+    const context = Interpreter.buildContext();
+    const patterns = clauseHead.params(context);
+
+    const params = clauseHead.blame.params.map((source, index) => {
+      const matched = Interpreter.isMatched(
+        patterns[index],
+        args[index],
+        context,
+      );
+
+      if (matched) {
+        // What a param binds is visible to the params and guards after it,
+        // the way the BEAM matches a clause head.
+        Interpreter.updateVarsToMatchedValues(context);
       }
 
-      const mfa = `${moduleExName}.${functionName}/${arity}`;
+      return Interpreter.#blameNode(matched, source);
+    });
 
-      // TODO: remove on release
-      // Interpreter.#logFunctionCall(mfa, arguments);
+    const guards = clauseHead.blame.guards.map((guard) =>
+      Interpreter.#blameGuard(guard, context),
+    );
 
-      const args = Type.list([...arguments]);
+    return Type.tuple([Type.list(params), Type.list(guards)]);
+  }
 
-      for (const clause of clauses) {
-        const context = Interpreter.buildContext({module: moduleExName});
-        const pattern = Type.list(clause.params(context));
+  // Returns null when the clause heads carry no rendered sources, which is
+  // how they arrive with client stacktraces disabled.
+  static #blameClauseHeads(clauseHeads, args) {
+    if (clauseHeads.length === 0 || !clauseHeads[0].blame) {
+      return null;
+    }
 
-        if (Interpreter.isMatched(pattern, args, context)) {
-          Interpreter.updateVarsToMatchedValues(context);
+    return Type.list(
+      clauseHeads.map((clauseHead) =>
+        Interpreter.#blameClauseHead(clauseHead, args),
+      ),
+    );
+  }
 
-          if (Interpreter.#evaluateGuards(clause.guards, context)) {
-            const result = clause.body(context);
+  static #blameGuard(guard, context) {
+    if (guard.source !== undefined) {
+      return Interpreter.#blameNode(
+        Interpreter.#evaluatesToTrue(guard.test, context),
+        guard.source,
+      );
+    }
 
-            // TODO: remove on release
-            // Interpreter.#logFunctionResult(mfa, result);
+    return Type.tuple([
+      Type.atom(guard.operator),
+      Interpreter.#blameGuard(guard.left, context),
+      Interpreter.#blameGuard(guard.right, context),
+    ]);
+  }
 
-            if (globalThis.Hologram.isProfilingEnabled) {
-              console.log(
-                `Hologram: function ${mfa} executed in`,
-                PerformanceTimer.diff(startTime),
-              );
+  static #blameNode(match, source) {
+    return Type.map([
+      [Type.atom("match?"), Type.boolean(match)],
+      [Type.atom("source"), Type.bitstring(source)],
+    ]);
+  }
+
+  // Boxes the unboxed reason shorthand the raise helpers accept: a string for
+  // an atom reason or a [tag, term] array for a tagged tuple reason.
+  static #boxErrorReason(reason) {
+    return typeof reason === "string"
+      ? Type.atom(reason)
+      : Type.tuple([Type.atom(reason[0]), ...reason.slice(1)]);
+  }
+
+  // Boxes an identity a frame reports: a capitalized name is an Elixir module
+  // alias, an absent one is nil - the way the BEAM reports a function it can't
+  // name.
+  static #boxFrameIdentity(name) {
+    if (name === null) {
+      return Type.nil();
+    }
+
+    return /^[A-Z]/.test(name) ? Type.alias(name) : Type.atom(name);
+  }
+
+  static #buildElixirFunction(
+    moduleExName,
+    functionName,
+    arity,
+    visibility,
+    clauses,
+    file,
+  ) {
+    return Interpreter.#buildFrameTrackingWrapper(
+      moduleExName,
+      functionName,
+      arity,
+      file,
+      function () {
+        let startTime;
+
+        if (globalThis.Hologram.isProfilingEnabled) {
+          startTime = performance.now();
+        }
+
+        const mfa = `${moduleExName}.${functionName}/${arity}`;
+
+        // TODO: remove on release
+        // Interpreter.#logFunctionCall(mfa, arguments);
+
+        const args = Type.list([...arguments]);
+
+        for (const clause of clauses) {
+          const context = Interpreter.buildContext({module: moduleExName});
+          const pattern = Type.list(clause.params(context));
+
+          if (Interpreter.isMatched(pattern, args, context)) {
+            Interpreter.updateVarsToMatchedValues(context);
+
+            if (Interpreter.#evaluateGuards(clause.guards, context)) {
+              // The frame is pushed before clause dispatch, so which line it
+              // points at is known only now, once a clause has matched.
+              if (globalThis.Hologram.config.stacktraces) {
+                CallStack.peek().line = clause.line ?? null;
+              }
+
+              const result = clause.body(context);
+
+              // TODO: remove on release
+              // Interpreter.#logFunctionResult(mfa, result);
+
+              if (globalThis.Hologram.isProfilingEnabled) {
+                console.log(
+                  `Hologram: function ${mfa} executed in`,
+                  PerformanceTimer.diff(startTime),
+                );
+              }
+
+              return result;
             }
-
-            return result;
           }
         }
+
+        // No clause matched, so the loop above never recorded a line. The BEAM
+        // reports the first clause, which is where the function starts.
+        if (globalThis.Hologram.config.stacktraces) {
+          CallStack.peek().line = clauses[0]?.line ?? null;
+        }
+
+        Interpreter.raiseFunctionClauseError(
+          moduleExName,
+          functionName,
+          arity,
+          [...arguments],
+          {visibility, clauses},
+        );
+      },
+    );
+  }
+
+  // Wraps a function so each invocation pushes its frame onto the shadow call
+  // stack and pops it when the invocation exits, on every exit path - return,
+  // raise, or async settlement.
+  static #buildFrameTrackingWrapper(
+    module,
+    functionName,
+    arityOrArgs,
+    file,
+    fn,
+  ) {
+    return function () {
+      // Frame tracking is flag-gated: with client stacktraces off, the only
+      // frame an error carries is the raising one, attached at the raise site.
+      // The config object is set before any dispatch can run - by the runtime
+      // bundle bootstrap in the browser and by the test helpers in tests.
+      let popsFrameOnExit = globalThis.Hologram.config.stacktraces;
+
+      if (popsFrameOnExit) {
+        CallStack.push({
+          module,
+          function: functionName,
+          arityOrArgs,
+          file,
+          line: null,
+          errorInfo: null,
+        });
       }
 
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
-      );
+      try {
+        const result = fn(...arguments);
+
+        // An async function is still executing when it returns its promise,
+        // so the frame pops when the promise settles instead of on return -
+        // otherwise every frame below an await would be gone by the time an
+        // error is raised there.
+        if (popsFrameOnExit && result instanceof Promise) {
+          popsFrameOnExit = false;
+          return result.finally(() => CallStack.pop());
+        }
+
+        return result;
+      } finally {
+        if (popsFrameOnExit) {
+          CallStack.pop();
+        }
+      }
     };
   }
 
@@ -1416,6 +1921,23 @@ export default class Interpreter {
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update #asyncEvaluateCatchClauses().
+  // Spells printable text the way a string or charlist literal does: the
+  // characters that stand for themselves as they are, the rest as escapes.
+  static #escapeText(text) {
+    return text.replace(TEXT_ESCAPE_REGEX, (match) => {
+      if (match === "#{") {
+        return "\\#{";
+      }
+
+      const codePoint = match.codePointAt(0);
+
+      return (
+        TEXT_ESCAPES[codePoint] ??
+        `\\u${codePoint.toString(16).toUpperCase().padStart(4, "0")}`
+      );
+    });
+  }
+
   static #evaluateCatchClauses(clauses, error, context) {
     for (const clause of clauses) {
       const contextClone = Interpreter.cloneContext(context);
@@ -1526,9 +2048,18 @@ export default class Interpreter {
     return NO_MATCH;
   }
 
+  static #evaluatesToTrue(test, context) {
+    try {
+      return Type.isTrue(test(context));
+    } catch {
+      // A guard that raises is a guard that didn't hold, as on the BEAM.
+      return false;
+    }
+  }
+
   static #handleMatchFail(right, raiseMatchError) {
     if (raiseMatchError) {
-      $.raiseMatchError($.buildMatchErrorMsg(right));
+      $.raiseMatchError(right);
     }
 
     return false;
@@ -1591,25 +2122,55 @@ export default class Interpreter {
       return `&${term.capturedModule}.${term.capturedFunction}/${term.arity}`;
     }
 
-    return `anonymous function fn/${term.arity}`;
+    const moduleName = Interpreter.moduleExName(term.context.module);
+
+    // The two numbers are the fun's index and the uniq of the code it was
+    // defined in, taken from the same source :erlang.fun_info/1 reports them.
+    const id = `${term.uniq}.${term.uniq}`;
+
+    // A fun defined outside of any function definition carries no name, and is
+    // then shown by its defining module alone. The name of the definition it
+    // does come from is rendered the way a remote call's is, so one that isn't
+    // a valid identifier - a fun defined in a test, say - comes out quoted.
+    let definition = "";
+
+    if (term.name !== null) {
+      const source = term.name.replace(/^-/, "").replace(/-fun-\d+-$/, "");
+
+      // The arity follows the last slash - what precedes it is the name, which
+      // may hold slashes of its own when it needed quoting to be defined.
+      const slashIndex = source.lastIndexOf("/");
+      const parentName = source.slice(0, slashIndex);
+      const parentArity = source.slice(slashIndex + 1);
+
+      definition = `.${Interpreter.inspectAtomAs("remote_call", parentName)}/${parentArity}`;
+    }
+
+    return `#Function<${id}/${term.arity} in ${moduleName}${definition}>`;
   }
 
-  // TODO: handle correctly atoms which need to be double quoted, e.g. :"1"
   static #inspectAtom(term, _opts) {
     if (Type.isBoolean(term) || Type.isNil(term)) {
       return term.value;
     }
 
-    if (Type.isAlias(term)) {
-      return $.moduleExName(term);
+    // An alias drops its "Elixir." prefix, unless what follows is Elixir
+    // itself - the prefix is then what tells :"Elixir.Elixir" from :Elixir.
+    if (ALIAS_REGEX.test(term.value)) {
+      const isElixirItself =
+        term.value === "Elixir" ||
+        term.value === "Elixir.Elixir" ||
+        term.value.startsWith("Elixir.Elixir.");
+
+      return isElixirItself ? term.value : $.moduleExName(term);
     }
 
-    return ":" + term.value;
+    return Interpreter.inspectAtomAs("literal", term.value);
   }
 
   static #inspectBitstring(term, _opts) {
     if (Bitstring.isPrintableText(term)) {
-      return '"' + term.text.replace(/"/g, '\\"') + '"';
+      return `"${Interpreter.#escapeText(term.text)}"`;
     }
 
     Bitstring.maybeSetBytesFromText(term);
@@ -1654,6 +2215,14 @@ export default class Interpreter {
   }
 
   static #inspectList(term, opts) {
+    if (Interpreter.#isPrintableCharlist(term)) {
+      const text = term.data
+        .map(({value}) => String.fromCodePoint(Number(value)))
+        .join("");
+
+      return `~c"${Interpreter.#escapeText(text)}"`;
+    }
+
     if (term.data.length !== 0 && Type.isKeywordList(term)) {
       return Interpreter.#inspectKeywordList(term, opts);
     }
@@ -1703,8 +2272,10 @@ export default class Interpreter {
       );
     }
 
-    const isAtomKeyMap = Object.values(term.data).every(([key, _value]) =>
-      Type.isAtom(key),
+    // Mirrors Inspect.List.keyword?/1: an alias key keeps the whole map in the
+    // "key => value" form, since Foo: would read as the atom :Foo, not Foo.
+    const isAtomKeyMap = Object.values(term.data).every(
+      ([key, _value]) => Type.isAtom(key) && !Type.isAlias(key),
     );
 
     let itemsStr = "";
@@ -1712,7 +2283,8 @@ export default class Interpreter {
     if (isAtomKeyMap) {
       itemsStr = Object.values(term.data)
         .map(
-          ([key, value]) => `${key.value}: ${Interpreter.inspect(value, opts)}`,
+          ([key, value]) =>
+            `${Interpreter.inspectAtomAs("key", key.value)} ${Interpreter.inspect(value, opts)}`,
         )
         .join(", ");
     } else {
@@ -1759,6 +2331,23 @@ export default class Interpreter {
     );
   }
 
+  // Mirrors List.ascii_printable?/1 on a proper, nonempty list: 7..13 are the
+  // characters "\a\b\t\n\v\f\r", 27 is "\e", and 32..126 are the printable
+  // ASCII ones. Such a list is what Elixir shows as a charlist.
+  static #isPrintableCharlist(term) {
+    if (!term.isProper || term.data.length === 0) {
+      return false;
+    }
+
+    return term.data.every(
+      (item) =>
+        item.type === "integer" &&
+        ((item.value >= 7n && item.value <= 13n) ||
+          item.value === 27n ||
+          (item.value >= 32n && item.value <= 126n)),
+    );
+  }
+
   // Returns the nonempty list formed by the list's items from the given
   // index on, preserving an improper tail.
   static #listRemainder(list, fromIndex) {
@@ -1800,22 +2389,27 @@ export default class Interpreter {
       const segmentType = segment.type;
       const isLastSegment = i === left.segments.length - 1;
 
-      if (
-        segmentType === "utf8" ||
-        segmentType === "utf16" ||
-        segmentType === "utf32"
-      ) {
+      if (segmentType === "utf16" || segmentType === "utf32") {
         const message =
-          "Pattern matching on bitstring segments with utf* type modifiers is not yet implemented in Hologram";
+          "Pattern matching on bitstring segments with utf16 and utf32 type modifiers is not yet implemented in Hologram";
 
         throw new HologramInterpreterError(message);
       }
 
       let chunkBitCount;
 
-      // Special case: last segment with binary or bitstring type and no explicit size
-      // should consume all remaining bits
-      if (
+      // A utf8 segment is as wide as the sequence it matches, so what it
+      // consumes is known only by reading that sequence. Anything that isn't
+      // one code point there is a failed match, as on the BEAM.
+      if (segmentType === "utf8") {
+        chunkBitCount = Bitstring.utf8SegmentBitCount(right, chunkOffset);
+
+        if (chunkBitCount === null) {
+          return $.#handleMatchFail(right, raiseMatchError);
+        }
+      } else if (
+        // Special case: last segment with binary or bitstring type and no explicit size
+        // should consume all remaining bits
         isLastSegment &&
         (segmentType === "binary" || segmentType === "bitstring") &&
         segment.size === null
@@ -1883,7 +2477,10 @@ export default class Interpreter {
     ) {
       Interpreter.updateVarsToMatchedValues(context);
 
-      return Interpreter.#evaluateGuards(clause.guards, context);
+      if (Interpreter.#evaluateGuards(clause.guards, context)) {
+        Interpreter.#bindStacktrace(error, context);
+        return true;
+      }
     }
 
     return false;
@@ -1950,11 +2547,20 @@ export default class Interpreter {
 
   // Deps: [:maps.get/2]
   static #matchRescueClause(clause, error, context) {
-    // rescue only catches :error-kind failures. By this point error.struct is
-    // always a normalized exception struct - a bare reason like :badarg or a
-    // non-exception struct has already become an ArgumentError/ErlangError/...
-    // via Exception.normalize/2 - so its __struct__ alone decides matching.
+    // rescue only catches :error-kind failures. An error normally carries its
+    // reason's normalized exception form - a bare reason like :badarg has
+    // become an ArgumentError/ErlangError/... via Exception.normalize/3 - so
+    // its __struct__ alone decides matching.
     if (error.kind.value !== "error") {
+      return false;
+    }
+
+    // An error that arrived while another one was deriving, or whose derivation
+    // faulted, has no normalized form (see HologramBoxedError). Which exception
+    // it is was never established, so no clause claims it: it keeps travelling,
+    // carrying the fault named in its message, rather than being rescued into a
+    // shape no clause body could read.
+    if (error.struct === null) {
       return false;
     }
 
@@ -1981,6 +2587,8 @@ export default class Interpreter {
       Interpreter.updateVarsToMatchedValues(context);
     }
 
+    Interpreter.#bindStacktrace(error, context);
+
     return true;
   }
 
@@ -1999,10 +2607,20 @@ export default class Interpreter {
   }
 
   static #raiseCondClauseError() {
-    Interpreter.raiseError(
-      "CondClauseError",
-      "no cond clause evaluated to a truthy value",
-    );
+    Interpreter.#raiseFieldBearingError("CondClauseError", []);
+  }
+
+  // Raises an exception struct carrying semantic fields and no :message -
+  // the message text derives at format time through the exception module's
+  // transpiled message/1 callback, the same code the server runs.
+  // Deps: [:erlang.error/1]
+  static #raiseFieldBearingError(aliasStr, fields) {
+    const struct = Type.struct(aliasStr, [
+      [Type.atom("__exception__"), Type.boolean(true)],
+      ...fields,
+    ]);
+
+    Erlang["error/1"](struct);
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update #asyncWalkComprehension().
@@ -2027,11 +2645,7 @@ export default class Interpreter {
       const source = qualifier.body(context);
 
       if (!Type.isBitstring(source)) {
-        Interpreter.raiseErlangError(
-          Interpreter.buildErlangErrorMsg(
-            `{:bad_generator, ${Interpreter.inspect(source)}}`,
-          ),
-        );
+        Erlang["error/1"](Type.tuple([Type.atom("bad_generator"), source]));
       }
 
       // Appending a rest segment makes the exact-match bitstring pattern machinery
@@ -2122,11 +2736,7 @@ export default class Interpreter {
       const source = await qualifier.body(context);
 
       if (!Type.isBitstring(source)) {
-        Interpreter.raiseErlangError(
-          Interpreter.buildErlangErrorMsg(
-            `{:bad_generator, ${Interpreter.inspect(source)}}`,
-          ),
-        );
+        Erlang["error/1"](Type.tuple([Type.atom("bad_generator"), source]));
       }
 
       // Appending a rest segment makes the exact-match bitstring pattern machinery

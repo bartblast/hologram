@@ -25,6 +25,19 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     test "raises BadMapError if the second argument is not a map" do
       assert_error BadMapError, build_bad_map_error_msg(1), {:maps, :find, ["a", 1]}
     end
+
+    test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
+      top_frame =
+        try do
+          :maps.find(:a, map)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:maps, :find, [:a, :b], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "fold/3" do
@@ -63,6 +76,38 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         :maps.fold(fun, 10, :abc)
       end
     end
+
+    test "error frame carries args and error_info" do
+      valid_fun = fn x, _y, _z -> x end
+
+      top_frame =
+        try do
+          :maps.fold(valid_fun, 0, :b)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside maps.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:maps, :fold, [^valid_fun, 0, :b], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
+
+    test "lists all invalid arguments in the message" do
+      expected_message = """
+      errors were found at the given arguments:
+
+        * 1st argument: not a fun that takes three arguments
+        * 3rd argument: not a map or an iterator
+      """
+
+      invalid_fun = wrap_term(fn x -> x end)
+
+      assert_error ArgumentError, expected_message, fn ->
+        :maps.fold(invalid_fun, 0, :b)
+      end
+    end
   end
 
   describe "from_keys/2" do
@@ -88,6 +133,20 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a proper list"),
                    {:maps, :from_keys, [[:a | :b], 1]}
+    end
+
+    test "error frame carries args and error_info" do
+      improper_list = wrap_term([1 | 2])
+
+      top_frame =
+        try do
+          :maps.from_keys(improper_list, :a)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:maps, :from_keys, [[1 | 2], :a], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
@@ -116,6 +175,37 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
                      :maps.from_list(123)
                    end
     end
+
+    test "raises ArgumentError if the argument is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a proper list"),
+                   fn ->
+                     :maps.from_list([{:a, 1} | :b])
+                   end
+    end
+
+    test "raises ArgumentError if an element is not a tuple" do
+      assert_error ArgumentError, "argument error", fn ->
+        :maps.from_list([{:a, 1}, :b])
+      end
+    end
+
+    test "raises ArgumentError if an element is a tuple with arity other than 2" do
+      assert_error ArgumentError, "argument error", fn ->
+        :maps.from_list([{:a, 1}, {:b}])
+      end
+    end
+
+    test "error frame carries args and error_info" do
+      top_frame =
+        try do
+          :maps.from_list(:a)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:maps, :from_list, [:a], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "get/2" do
@@ -129,6 +219,34 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "raises KeyError if the map doesn't contain the given key" do
       assert_error KeyError, build_key_error_msg(:a, %{}), {:maps, :get, [:a, %{}]}
+    end
+
+    test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
+      top_frame =
+        try do
+          :maps.get(:a, map)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:erlang, :map_get, [:a, :b], [error_info: %{module: :erl_erts_errors}]}
+    end
+
+    test "error frame carries args and error_info for a missing key" do
+      map = wrap_term(%{b: 2})
+
+      top_frame =
+        try do
+          :maps.get(:a, map)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:erlang, :map_get, [:a, %{b: 2}], [error_info: %{module: :erl_erts_errors}]}
     end
   end
 
@@ -145,6 +263,17 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "returns the default value if the map doesn't contain the given key" do
       assert :maps.get(:a, %{}, :default_value) == :default_value
+    end
+
+    test "the error is attributed to the caller" do
+      top_frame =
+        try do
+          :maps.get(:a, :b, :default_value)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert elem(top_frame, 0) == __MODULE__
     end
   end
 
@@ -192,6 +321,21 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       assert_error BadMapError, build_bad_map_error_msg(:abc), fn ->
         :maps.intersect(%{}, :abc)
       end
+    end
+
+    test "error frame carries args and error_info" do
+      top_frame =
+        try do
+          :maps.intersect(:a, :b)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside maps.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:maps, :intersect, [:a, :b], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -256,6 +400,65 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         :maps.intersect_with(combiner, %{}, :abc)
       end
     end
+
+    test "error frame carries args and error_info" do
+      valid_fun = fn x, _y, _z -> x end
+
+      top_frame =
+        try do
+          :maps.intersect_with(valid_fun, :a, :b)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside maps.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:maps, :intersect_with, [^valid_fun, :a, :b], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
+
+    test "lists all invalid arguments in the message" do
+      expected_message = """
+      errors were found at the given arguments:
+
+        * 1st argument: not a fun that takes three arguments
+        * 2nd argument: not a map
+        * 3rd argument: not a map
+      """
+
+      invalid_fun = wrap_term(fn x -> x end)
+
+      assert_error ArgumentError, expected_message, fn ->
+        :maps.intersect_with(invalid_fun, :a, :b)
+      end
+    end
+  end
+
+  describe "is_iterator_valid/1" do
+    test "returns true for a path iterator" do
+      assert :maps.is_iterator_valid([0 | %{a: 1}]) == true
+    end
+
+    test "returns true for the :none atom" do
+      assert :maps.is_iterator_valid(:none) == true
+    end
+
+    test "returns true for a key-value tuple chain ending in a valid iterator" do
+      assert :maps.is_iterator_valid({:a, 1, {:b, 2, [0 | %{}]}}) == true
+    end
+
+    test "returns false for a key-value tuple chain ending in an invalid term" do
+      assert :maps.is_iterator_valid({1, 2, 3}) == false
+    end
+
+    test "returns false for a term that is not an iterator" do
+      assert :maps.is_iterator_valid(:abc) == false
+    end
+
+    test "returns false for an improper list that is not a path iterator" do
+      assert :maps.is_iterator_valid([1 | 2]) == false
+    end
   end
 
   describe "is_key/2" do
@@ -269,6 +472,20 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "raises BadMapError if the second argument is not a map" do
       assert_error BadMapError, build_bad_map_error_msg(:abc), {:maps, :is_key, [:x, :abc]}
+    end
+
+    test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
+      top_frame =
+        try do
+          :maps.is_key(:a, map)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:erlang, :is_map_key, [:a, :b], [error_info: %{module: :erl_erts_errors}]}
     end
   end
 
@@ -285,6 +502,21 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       assert_error BadMapError, build_bad_map_error_msg(:abc), fn ->
         :maps.iterator(:abc)
       end
+    end
+
+    test "error frame carries args and error_info" do
+      top_frame =
+        try do
+          :maps.iterator(:a)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside maps.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:maps, :iterator, [:a], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -308,6 +540,19 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         |> wrap_term()
         |> :maps.keys()
       end
+    end
+
+    test "error frame carries args and error_info" do
+      map = wrap_term(:a)
+
+      top_frame =
+        try do
+          :maps.keys(map)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:maps, :keys, [:a], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
@@ -345,6 +590,38 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         :maps.map(fun, :abc)
       end
     end
+
+    test "error frame carries args and error_info" do
+      valid_fun = fn x, _y -> x end
+
+      top_frame =
+        try do
+          :maps.map(valid_fun, :b)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside maps.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:maps, :map, [^valid_fun, :b], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
+
+    test "lists all invalid arguments in the message" do
+      expected_message = """
+      errors were found at the given arguments:
+
+        * 1st argument: not a fun that takes two arguments
+        * 2nd argument: not a map or an iterator
+      """
+
+      invalid_fun = wrap_term(fn x -> x end)
+
+      assert_error ArgumentError, expected_message, fn ->
+        :maps.map(invalid_fun, :b)
+      end
+    end
   end
 
   describe "merge/2" do
@@ -370,6 +647,19 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       assert_error BadMapError, build_bad_map_error_msg(123), fn ->
         :maps.merge(%{a: 1}, 123)
       end
+    end
+
+    test "error frame carries args and error_info" do
+      map1 = wrap_term(:a)
+
+      top_frame =
+        try do
+          :maps.merge(map1, :b)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:maps, :merge, [:a, :b], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
@@ -457,6 +747,39 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         :maps.merge_with(combiner, %{a: 1}, 123)
       end
     end
+
+    test "error frame carries args and error_info" do
+      valid_fun = fn x, _y, _z -> x end
+
+      top_frame =
+        try do
+          :maps.merge_with(valid_fun, :a, :b)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside maps.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:maps, :merge_with, [^valid_fun, :a, :b], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
+
+    test "lists all invalid arguments in the message" do
+      expected_message = """
+      errors were found at the given arguments:
+
+        * 1st argument: not a fun that takes three arguments
+        * 2nd argument: not a map
+        * 3rd argument: not a map
+      """
+
+      invalid_fun = wrap_term(fn x -> x end)
+
+      assert_error ArgumentError, expected_message, fn ->
+        :maps.merge_with(invalid_fun, :a, :b)
+      end
+    end
   end
 
   describe "next/1" do
@@ -508,10 +831,41 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       assert :maps.next(iter) == iter
     end
 
+    test "returns a key-value tuple without validating its tail" do
+      iter = wrap_term({1, 2, 3})
+
+      assert :maps.next(iter) == {1, 2, 3}
+    end
+
     test "not an iterator" do
       assert_error ArgumentError, build_argument_error_msg(1, "not a valid iterator"), fn ->
         :maps.next(123)
       end
+    end
+
+    test "raises ArgumentError for an improper list that is not a path iterator" do
+      iter = wrap_term([1 | 2])
+
+      assert_error ArgumentError, build_argument_error_msg(1, "not a valid iterator"), fn ->
+        :maps.next(iter)
+      end
+    end
+
+    test "error frame carries args and error_info" do
+      iter = wrap_term(:a)
+
+      top_frame =
+        try do
+          :maps.next(iter)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside maps.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:maps, :next, [:a], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -532,6 +886,19 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       map = %{a: 1, b: 2}
       :maps.put(:c, 3, map)
       assert map == %{a: 1, b: 2}
+    end
+
+    test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
+      top_frame =
+        try do
+          :maps.put(:a, 1, map)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:maps, :put, [:a, 1, :b], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
@@ -554,6 +921,19 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       map = %{a: 1, b: 2}
       :maps.remove(:b, map)
       assert map == %{a: 1, b: 2}
+    end
+
+    test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
+      top_frame =
+        try do
+          :maps.remove(:a, map)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:maps, :remove, [:a, :b], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
@@ -590,6 +970,19 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         :maps.take(:a, wrap_term(123))
       end
     end
+
+    test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
+      top_frame =
+        try do
+          :maps.take(:a, map)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:maps, :take, [:a, :b], [error_info: %{module: :erl_stdlib_errors}]}
+    end
   end
 
   describe "to_list/1" do
@@ -613,6 +1006,23 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         |> :maps.to_list()
       end
     end
+
+    test "error frame carries args and error_info" do
+      map = wrap_term(:a)
+
+      top_frame =
+        try do
+          :maps.to_list(map)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside maps.erl, so
+      # its frame location also carries the OTP-internal file and line, which
+      # the client doesn't mirror.
+      assert {:maps, :to_list, [:a], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
   end
 
   describe "update/3" do
@@ -630,6 +1040,34 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       assert_error BadMapError, build_bad_map_error_msg(:abc), fn ->
         :maps.update(:a, 1, wrap_term(:abc))
       end
+    end
+
+    test "error frame carries args and error_info" do
+      map = wrap_term(:b)
+
+      top_frame =
+        try do
+          :maps.update(:a, 1, map)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:maps, :update, [:a, 1, :b], [error_info: %{module: :erl_stdlib_errors}]}
+    end
+
+    test "error frame carries args and error_info for a missing key" do
+      map = wrap_term(%{b: 2})
+
+      top_frame =
+        try do
+          :maps.update(:a, 1, map)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:maps, :update, [:a, 1, %{b: 2}], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 
@@ -653,6 +1091,19 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         |> wrap_term()
         |> :maps.values()
       end
+    end
+
+    test "error frame carries args and error_info" do
+      map = wrap_term(:a)
+
+      top_frame =
+        try do
+          :maps.values(map)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame == {:maps, :values, [:a], [error_info: %{module: :erl_stdlib_errors}]}
     end
   end
 end

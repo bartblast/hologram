@@ -3,14 +3,14 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  buildFunctionClauseErrorMsg,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Erlang_Code from "../../../assets/js/erlang/code.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/code_test.exs
@@ -40,10 +40,31 @@ describe("Erlang_Code", () => {
       assertBoxedError(
         () => ensure_loaded(Type.integer(1)),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":code.ensure_loaded/1", [
-          Type.integer(1),
-        ]),
+        buildFunctionClauseErrorMsg(":code.ensure_loaded/1", [Type.integer(1)]),
       );
+    });
+
+    it("error frame carries args", () => {
+      const module = Type.integer(1);
+
+      let caught;
+
+      try {
+        ensure_loaded(module);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "code",
+          function: "ensure_loaded",
+          arityOrArgs: Type.list([module]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 });

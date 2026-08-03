@@ -65,6 +65,16 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir, %Context{async?: true}) ==
                "(await Interpreter.callAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)]))"
     end
+
+    test "records the line it is called on", %{ir: ir} do
+      assert encode_ir(%{ir | line: 123}) ==
+               "(Interpreter.setFrameLine(123), Interpreter.callAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)]))"
+    end
+
+    test "records the line before awaiting an async call", %{ir: ir} do
+      assert encode_ir(%{ir | line: 123}, %Context{async?: true}) ==
+               "(Interpreter.setFrameLine(123), (await Interpreter.callAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)])))"
+    end
   end
 
   describe "anonymous function type" do
@@ -504,6 +514,44 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, context) == expected
     end
+
+    test "names the function after the definition it is encoded in" do
+      # fn x -> x end
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_function: nil,
+        captured_module: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{expressions: [%IR.Variable{name: :x}]}
+          }
+        ]
+      }
+
+      context = %Context{arity: 2, function: :my_fun, module: Aaa.Bbb}
+
+      assert encode_ir(ir, context) =~ ~s/, context, "-my_fun\/2-fun-0-")/
+    end
+
+    test "leaves the function unnamed outside a definition" do
+      # fn x -> x end
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_function: nil,
+        captured_module: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{expressions: [%IR.Variable{name: :x}]}
+          }
+        ]
+      }
+
+      assert encode_ir(ir, %Context{module: Aaa.Bbb}) =~ ", context)"
+    end
   end
 
   describe "atom type" do
@@ -623,6 +671,28 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, @context) ==
                ~s/Type.bitstring([Type.bitstringSegment(Type.integer(1n), {type: "integer"}), Type.bitstringSegment(Type.integer(2n), {type: "integer"})])/
+    end
+
+    test "records the line the bitstring is built on" do
+      # <<1>>
+      ir = %IR.BitstringType{
+        segments: [%IR.BitstringSegment{value: %IR.IntegerType{value: 1}, modifiers: []}],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.setFrameLine(123), Type.bitstring([Type.bitstringSegment(Type.integer(1n), {})]))"
+    end
+
+    test "records no line for a bitstring pattern, which builds nothing" do
+      # <<1>>
+      ir = %IR.BitstringType{
+        segments: [%IR.BitstringSegment{value: %IR.IntegerType{value: 1}, modifiers: []}],
+        line: 123
+      }
+
+      assert encode_ir(ir, %Context{pattern?: true}) ==
+               "Type.bitstringPattern([Type.bitstringSegment(Type.integer(1n), {})])"
     end
   end
 
@@ -1021,6 +1091,30 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, %Context{async?: true}) == expected
     end
+
+    test "records the line the case is on" do
+      # case my_var do
+      #   x -> x
+      # end
+      ir = %IR.Case{
+        condition: %IR.Variable{name: :my_var},
+        clauses: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [],
+            body: %IR.Block{expressions: [%IR.Variable{name: :x}]}
+          }
+        ],
+        line: 123
+      }
+
+      result = encode_ir(ir)
+
+      assert String.starts_with?(
+               result,
+               "(Interpreter.setFrameLine(123), Interpreter.case(context.vars.my_var, "
+             )
+    end
   end
 
   describe "clause" do
@@ -1070,6 +1164,64 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) ==
                "{match: Type.variablePattern(\"x\"), guards: [(context) => context.vars.y, (context) => context.vars.z], body: (context) => {\nreturn Type.integer(1n);\n}}"
+    end
+
+    # In a param both sides of a match are patterns, so neither is a value the
+    # other is matched against - the argument is matched against each of them.
+    test "with match operator in param, variable on the left" do
+      # (x = %{a: 1}) do
+      #  :ok
+      ir = %IR.FunctionClause{
+        params: [
+          %IR.MatchOperator{
+            left: %IR.Variable{name: :x},
+            right: %IR.MapType{
+              data: [{%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}}]
+            }
+          }
+        ],
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.matchPattern(Type.variablePattern("x"), Type.map([[Type.atom("a"), Type.integer(1n)]]))], guards: [], body: (context) => {
+        return Type.atom("ok");
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with match operator in param, variable on the right" do
+      # (%{a: 1} = x) do
+      #  :ok
+      ir = %IR.FunctionClause{
+        params: [
+          %IR.MatchOperator{
+            left: %IR.MapType{
+              data: [{%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}}]
+            },
+            right: %IR.Variable{name: :x}
+          }
+        ],
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.matchPattern(Type.map([[Type.atom("a"), Type.integer(1n)]]), Type.variablePattern("x"))], guards: [], body: (context) => {
+        return Type.atom("ok");
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "async — guards stay sync, body becomes async" do
@@ -1318,6 +1470,24 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir, %Context{async?: true}) ==
                "(await Interpreter.asyncComprehensionReduce([{type: \"generator\", match: Type.variablePattern(\"x\"), guards: [], body: async (context) => Type.list([Type.integer(1n), Type.integer(2n)])}], Type.integer(0n), [{match: Type.variablePattern(\"acc\"), guards: [], body: async (context) => {\nreturn Erlang[\"+/2\"](context.vars.acc, context.vars.x);\n}}], context))"
     end
+
+    test "records the line the comprehension is on" do
+      ir = %IR.Comprehension{
+        qualifiers: [],
+        collectable: %IR.ListType{data: []},
+        unique: %IR.AtomType{value: false},
+        mapper: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+        reducer: nil,
+        line: 123
+      }
+
+      result = encode_ir(ir)
+
+      assert String.starts_with?(
+               result,
+               "(Interpreter.setFrameLine(123), Interpreter.comprehension("
+             )
+    end
   end
 
   test "comprehension generator" do
@@ -1423,6 +1593,21 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, %Context{async?: true}) == expected
     end
+
+    test "records the line the last clause is on, which is where the BEAM reports it" do
+      ir = %IR.Cond{
+        clauses: [
+          %IR.CondClause{
+            condition: %IR.Variable{name: :x},
+            body: %IR.Block{expressions: [%IR.IntegerType{value: 1}]}
+          }
+        ],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.setFrameLine(123), Interpreter.cond([{condition: (context) => context.vars.x, body: (context) => {\nreturn Type.integer(1n);\n}}], context))"
+    end
   end
 
   test "cond clause" do
@@ -1475,15 +1660,26 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  test "dot operator" do
-    # my_module.my_key
-    ir = %IR.DotOperator{
-      left: %IR.Variable{name: :my_module},
-      right: %IR.AtomType{value: :my_key}
-    }
+  describe "dot operator" do
+    setup do
+      # my_module.my_key
+      ir = %IR.DotOperator{
+        left: %IR.Variable{name: :my_module},
+        right: %IR.AtomType{value: :my_key}
+      }
 
-    assert encode_ir(ir) ==
-             "Interpreter.dotOperator(context.vars.my_module, Type.atom(\"my_key\"))"
+      [ir: ir]
+    end
+
+    test "without a line", %{ir: ir} do
+      assert encode_ir(ir) ==
+               "Interpreter.dotOperator(context.vars.my_module, Type.atom(\"my_key\"))"
+    end
+
+    test "records the line the key is read on", %{ir: ir} do
+      assert encode_ir(%{ir | line: 123}) ==
+               "(Interpreter.setFrameLine(123), Interpreter.dotOperator(context.vars.my_module, Type.atom(\"my_key\")))"
+    end
   end
 
   describe "encode_closure/2 (private, tested indirectly)" do
@@ -1651,6 +1847,82 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "encode_module_metadata_registration/1" do
+    setup do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+      :ok
+    end
+
+    test "registers the metadata of each module the bundle defines" do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      assert encode_module_metadata_registration([Hologram.Reflection]) ==
+               ~s/ERTS.registerModuleMetadata({"Hologram.Reflection": {app: "hologram", file: "lib\/hologram\/reflection.ex"}});/
+    end
+
+    test "registers nothing when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+
+      assert encode_module_metadata_registration([Hologram.Reflection]) == ""
+    end
+
+    test "registers nothing for a module that can't be loaded" do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      assert encode_module_metadata_registration([Aaa.Bbb]) == ""
+    end
+  end
+
+  describe "encode_elixir_function_clause_heads/6" do
+    test "encodes the clause heads without their bodies" do
+      # (x) when :erlang.is_integer(x) do
+      #  :expr_1
+      clause = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_integer,
+            args: [%IR.Variable{name: :x}]
+          }
+        ],
+        body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]},
+        line: 3,
+        blame: %{params: ["x"], guards: [{:leaf, "is_integer(x)"}]}
+      }
+
+      result =
+        encode_elixir_function_clause_heads("Aaa.Bbb", :my_fun, 1, :public, [clause], %Context{
+          module: Aaa.Bbb
+        })
+
+      assert result ==
+               ~s/Interpreter.defineFunctionClauseHeads("Aaa.Bbb", "my_fun", 1, "public", [{params: (context) => [Type.variablePattern("x")], guards: [(context) => Erlang["is_integer\/1"](context.vars.x)], blame: {params: ["x"], guards: [{source: "is_integer(x)", test: (context) => Erlang["is_integer\/1"](context.vars.x)}]}}]);/
+    end
+
+    test "omits the blame metadata when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      # (x) do
+      #  :expr_1
+      clause = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [],
+        body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]},
+        blame: %{params: ["x"], guards: []}
+      }
+
+      result =
+        encode_elixir_function_clause_heads("Aaa.Bbb", :my_fun, 1, :public, [clause], %Context{
+          module: Aaa.Bbb
+        })
+
+      assert result ==
+               ~s/Interpreter.defineFunctionClauseHeads("Aaa.Bbb", "my_fun", 1, "public", [{params: (context) => [Type.variablePattern("x")], guards: []}]);/
+    end
+  end
+
   describe "encode_erlang_function/4" do
     test "when function is implemented" do
       result = encode_erlang_function(:erlang, :+, 2, @erlang_js_dir)
@@ -1659,8 +1931,7 @@ defmodule Hologram.Compiler.EncoderTest do
         normalize_newlines("""
         Interpreter.defineErlangFunction("erlang", "+", 2, (left, right) => {
             if (!Type.isNumber(left) || !Type.isNumber(right)) {
-              const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(right)}`;
-              Interpreter.raiseArithmeticError(blame);
+              Interpreter.raiseBifError("badarith", "erlang", "+", [left, right]);
             }
 
             const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
@@ -1798,7 +2069,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
       expected =
         normalize_newlines("""
-        {params: (context) => [Interpreter.matchOperator(Interpreter.matchOperator(Type.variablePattern("y"), Type.integer(1n), context), Type.variablePattern("x"), context)], guards: [], body: (context) => {
+        {params: (context) => [Type.matchPattern(Type.variablePattern("x"), Type.matchPattern(Type.integer(1n), Type.variablePattern("y")))], guards: [], body: (context) => {
         return Type.atom("ok");
         }}\
         """)
@@ -1830,6 +2101,165 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, %Context{async?: true}) == expected
     end
+
+    test "with line metadata" do
+      # (x) do
+      #  :expr_1
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        line: 3
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
+        return Type.atom("expr_1");
+        }, line: 3}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "without line metadata when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      # (x) do
+      #  :expr_1
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        line: 3
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
+        return Type.atom("expr_1");
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with blame metadata for a clause without guards" do
+      # (x) do
+      #  :expr_1
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{params: ["x"], guards: []}
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
+        return Type.atom("expr_1");
+        }, blame: {params: ["x"], guards: []}}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with blame metadata for a clause with a guard" do
+      # (x) when :erlang.is_integer(x) do
+      #  :expr_1
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_integer,
+            args: [%IR.Variable{name: :x}]
+          }
+        ],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{params: ["x"], guards: [{:leaf, "is_integer(x)"}]}
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x")], guards: [(context) => Erlang["is_integer/1"](context.vars.x)], body: (context) => {
+        return Type.atom("expr_1");
+        }, blame: {params: ["x"], guards: [{source: "is_integer(x)", test: (context) => Erlang["is_integer/1"](context.vars.x)}]}}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with blame metadata for a guard split at its and/or operators" do
+      # (x) when :erlang.is_integer(x) andalso :erlang.>(x, 1) do
+      #  :expr_1
+      left_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :is_integer,
+        args: [%IR.Variable{name: :x}]
+      }
+
+      right_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :>,
+        args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}]
+      }
+
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :andalso,
+            args: [left_ir, right_ir]
+          }
+        ],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{
+          params: ["x"],
+          guards: [{:and, {:leaf, "is_integer(x)"}, {:leaf, "x > 1"}}]
+        }
+      }
+
+      assert encode_ir(ir) =~
+               ~s/blame: {params: ["x"], guards: [{operator: "and", left: {source: "is_integer(x)", test: (context) => Erlang["is_integer\/1"](context.vars.x)}, right: {source: "x > 1", test: (context) => Erlang[">\/2"](context.vars.x, Type.integer(1n))}}]}}/
+    end
+
+    test "without blame metadata when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      # (x) do
+      #  :expr_1
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_1}]
+        },
+        blame: %{params: ["x"], guards: []}
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
+        return Type.atom("expr_1");
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
   end
 
   test "integer type" do
@@ -1856,15 +2286,33 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  test "local function call" do
-    # my_fun!(1, 2)
-    ir = %IR.LocalFunctionCall{
-      function: :my_fun!,
-      args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
-    }
+  describe "local function call" do
+    setup do
+      # my_fun!(1, 2)
+      ir = %IR.LocalFunctionCall{
+        function: :my_fun!,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+      }
 
-    assert encode_ir(ir, %Context{module: Aaa.Bbb.Ccc}) ==
-             "Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n))"
+      [ir: ir]
+    end
+
+    test "without a line", %{ir: ir} do
+      assert encode_ir(ir, %Context{module: Aaa.Bbb.Ccc}) ==
+               "Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n))"
+    end
+
+    test "records the line it is called on", %{ir: ir} do
+      assert encode_ir(%{ir | line: 123}, %Context{module: Aaa.Bbb.Ccc}) ==
+               "(Interpreter.setFrameLine(123), Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n)))"
+    end
+
+    test "records no line inside a guard, which never raises", %{ir: ir} do
+      context = %Context{guard?: true, module: Aaa.Bbb.Ccc}
+
+      assert encode_ir(%{ir | line: 123}, context) ==
+               "Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n))"
+    end
   end
 
   describe "map type" do
@@ -1937,6 +2385,30 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) ==
                ~s/Interpreter.matchOperator(Type.integer(2n), Type.variablePattern("x"), context)/
+    end
+
+    test "records the line the match is made on" do
+      # x = 2
+      ir = %IR.MatchOperator{
+        left: %IR.Variable{name: :x},
+        right: %IR.IntegerType{value: 2},
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               ~s/(Interpreter.setFrameLine(123), Interpreter.matchOperator(Type.integer(2n), Type.variablePattern("x"), context))/
+    end
+
+    test "records the line of a match nested in another match" do
+      # y = x = 2
+      ir = %IR.MatchOperator{
+        left: %IR.Variable{name: :x},
+        right: %IR.IntegerType{value: 2},
+        line: 123
+      }
+
+      assert encode_ir(ir, %Context{match_operator?: true}) ==
+               ~s/(Interpreter.setFrameLine(123), Interpreter.matchOperator(Type.integer(2n), Type.variablePattern("x"), context))/
     end
 
     test "variable in expression" do
@@ -2030,7 +2502,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.tuple([Type.integer(1n), Type.integer(2n), Interpreter.matchOperator(context.vars.f, Type.variablePattern("e"), context)]), Type.tuple([Type.integer(1n), Interpreter.matchOperator(Type.variablePattern("d"), Type.variablePattern("c"), context), Type.integer(3n)]), context), Type.tuple([Interpreter.matchOperator(Type.variablePattern("b"), Type.variablePattern("a"), context), Type.integer(2n), Type.integer(3n)]), context)/
+               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.tuple([Type.integer(1n), Type.integer(2n), Interpreter.matchOperator(context.vars.f, Type.variablePattern("e"), context)]), Type.tuple([Type.integer(1n), Type.matchPattern(Type.variablePattern("c"), Type.variablePattern("d")), Type.integer(3n)]), context), Type.tuple([Type.matchPattern(Type.variablePattern("a"), Type.variablePattern("b")), Type.integer(2n), Type.integer(3n)]), context)/
     end
   end
 
@@ -2331,6 +2803,35 @@ defmodule Hologram.Compiler.EncoderTest do
                "Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n))"
     end
 
+    test "records the line it is called on" do
+      # Aaa.Bbb.Ccc.my_fun!(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb.Ccc},
+        function: :my_fun!,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               "(Interpreter.setFrameLine(123), Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n)))"
+    end
+
+    test "records no line when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      # Aaa.Bbb.Ccc.my_fun!(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb.Ccc},
+        function: :my_fun!,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               "Elixir_Aaa_Bbb_Ccc[\"my_fun!/2\"](Type.integer(1n), Type.integer(2n))"
+    end
+
     test "called on variable" do
       # x.my_fun!(1, 2)
       ir = %IR.RemoteFunctionCall{
@@ -2515,6 +3016,15 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, %Context{async?: true}) ==
                ~s'(await Interpreter.callNamedFunction(Type.atom("Elixir.MyModule"), Type.atom("my_fun"), Type.list([Type.integer(1n), Type.integer(2n)]), context))'
+    end
+  end
+
+  describe "stacktrace" do
+    test "encodes as the context's stacktrace field" do
+      # __STACKTRACE__
+      ir = %IR.Stacktrace{}
+
+      assert encode_ir(ir) == "context.stacktrace"
     end
   end
 
@@ -3116,6 +3626,21 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, %Context{async?: true}) ==
                "{kind: Type.atom(\"throw\"), value: Type.variablePattern(\"value\"), guards: [(context) => context.vars.guard], body: async (context) => {\nreturn Type.atom(\"caught\");\n}}"
+    end
+
+    test "records the line the try is on" do
+      ir = %IR.Try{
+        body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+        rescue_clauses: [],
+        catch_clauses: [],
+        else_clauses: [],
+        after_block: nil,
+        line: 123
+      }
+
+      result = encode_ir(ir)
+
+      assert String.starts_with?(result, "(Interpreter.setFrameLine(123), Interpreter.try(")
     end
   end
 
@@ -3738,6 +4263,19 @@ defmodule Hologram.Compiler.EncoderTest do
         """)
 
       assert encode_ir(ir, %Context{async?: true}) == expected
+    end
+
+    test "records the line the with is on" do
+      ir = %IR.With{
+        clauses: [%IR.WithBareClause{expression: %IR.AtomType{value: :ok}}],
+        else_clauses: [],
+        body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+        line: 123
+      }
+
+      result = encode_ir(ir)
+
+      assert String.starts_with?(result, "(Interpreter.setFrameLine(123), Interpreter.with(")
     end
   end
 

@@ -2,7 +2,7 @@
 
 import {
   assert,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   initComponentRegistryEntry,
   sinon,
 } from "./support/helpers.mjs";
@@ -17,7 +17,7 @@ import Sse from "../../assets/js/sse.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("Sse", () => {
   let fetchStub;

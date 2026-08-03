@@ -27,6 +27,10 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     <<wrap_term(value)::bitstring>>
   end
 
+  defp build_from_value_with_float_type_and_size_modifier(value, size) do
+    <<wrap_term(value)::float-size(size)>>
+  end
+
   defp build_from_value_with_float_type_modifier(value) do
     <<wrap_term(value)::float>>
   end
@@ -213,6 +217,26 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
       # See the defaults test for string value.
       assert <<"全息图"::binary>> == <<"全息图">>
     end
+
+    test "error frame carries the failure cause in its error_info" do
+      top_frame =
+        try do
+          build_from_value_with_binary_type_modifier(170)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The construction runs inline in the enclosing function's body, so the
+      # error_info decorates that function's own frame, whose location also
+      # carries the file and line the client doesn't mirror.
+      assert {_module, _function, _args_or_arity, location} = top_frame
+
+      assert location[:error_info] == %{
+               cause: {1, :binary, :type, 170},
+               function: :format_bs_fail,
+               module: :erl_erts_errors
+             }
+    end
   end
 
   describe "bitstring type modifier" do
@@ -249,6 +273,12 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "with float value" do
       # See the defaults test for float value.
       assert <<123.45::float>> == <<123.45>>
+    end
+
+    test "with float value when size doesn't result in 16, 32 or 64" do
+      assert_error ArgumentError,
+                   "construction of binary failed: segment 1 of type 'float': expected one of the supported sizes 16, 32, or 64 but got: 24",
+                   fn -> build_from_value_with_float_type_and_size_modifier(123.45, 24) end
     end
 
     test "with integer value" do

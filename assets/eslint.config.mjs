@@ -28,6 +28,7 @@ export default [
         Elixir_Exception: "readonly",
         Elixir_Hologram_Router_Helpers: "readonly",
         Elixir_Kernel: "readonly",
+        Elixir_Macro: "readonly",
         Elixir_Map: "readonly",
         Elixir_String_Chars: "readonly",
         Erlang: "readonly",

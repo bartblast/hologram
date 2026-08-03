@@ -4,9 +4,9 @@ import Renderer from "../../../../../assets/js/renderer.mjs";
 import Type from "../../../../../assets/js/type.mjs";
 
 import {benchmark} from "../../../support/helpers.mjs";
-import {defineGlobalErlangAndElixirModules} from "../../../../../test/javascript/support/helpers.mjs";
+import {defineRuntimeGlobals} from "../../../../../test/javascript/support/helpers.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const context = Type.map();
 const defaultTarget = Type.bitstring("my_default_target");

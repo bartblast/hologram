@@ -2,7 +2,6 @@
 
 import Bitstring from "../../bitstring.mjs";
 import ERTS from "../../erts.mjs";
-import Interpreter from "../../interpreter.mjs";
 import RegexAnalyzer from "./regex_analyzer.mjs";
 import RegexInterpreter from "./regex_interpreter.mjs";
 
@@ -55,12 +54,13 @@ export default class RegexEngine {
 
   // Converts char data (a binary or a possibly nested list of code points
   // and binaries, with an improper binary tail allowed) to a JS string,
-  // decoding binaries from UTF-8. Raises Erlang ArgumentError on any failure.
+  // decoding binaries from UTF-8. Returns null on any failure, leaving the
+  // raise (with the caller's own identity) to the caller.
   static charDataToText(charData) {
     if (Type.isBitstring(charData)) return $.#textFromBinaryCharData(charData);
     if (Type.isList(charData)) return $.#textFromListCharData(charData);
 
-    Interpreter.raiseArgumentError("argument error");
+    return null;
   }
 
   // Compares two JS strings by the byte order of their UTF-8 encodings,
@@ -586,18 +586,14 @@ export default class RegexEngine {
 
   static #textFromBinaryCharData(binary) {
     if (!Type.isBinary(binary)) {
-      Interpreter.raiseArgumentError("argument error");
+      return null;
     }
 
     Bitstring.maybeSetBytesFromText(binary);
 
     const decoded = $.decodeUtf8(binary.bytes);
 
-    if (decoded.error) {
-      Interpreter.raiseArgumentError("argument error");
-    }
-
-    return decoded.text;
+    return decoded.error ? null : decoded.text;
   }
 
   static #textFromListCharData(list) {
@@ -616,16 +612,28 @@ export default class RegexEngine {
           codePoint > 0x10ffff ||
           (codePoint >= 0xd800 && codePoint <= 0xdfff)
         ) {
-          Interpreter.raiseArgumentError("argument error");
+          return null;
         }
 
         text += String.fromCodePoint(codePoint);
       } else if (Type.isBitstring(element)) {
-        text += $.#textFromBinaryCharData(element);
+        const elementText = $.#textFromBinaryCharData(element);
+
+        if (elementText === null) {
+          return null;
+        }
+
+        text += elementText;
       } else if (Type.isList(element)) {
-        text += $.#textFromListCharData(element);
+        const elementText = $.#textFromListCharData(element);
+
+        if (elementText === null) {
+          return null;
+        }
+
+        text += elementText;
       } else {
-        Interpreter.raiseArgumentError("argument error");
+        return null;
       }
     }
 
@@ -633,10 +641,16 @@ export default class RegexEngine {
       const tail = list.data[list.data.length - 1];
 
       if (!Type.isBitstring(tail)) {
-        Interpreter.raiseArgumentError("argument error");
+        return null;
       }
 
-      text += $.#textFromBinaryCharData(tail);
+      const tailText = $.#textFromBinaryCharData(tail);
+
+      if (tailText === null) {
+        return null;
+      }
+
+      text += tailText;
     }
 
     return text;

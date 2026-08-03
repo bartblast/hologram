@@ -13,7 +13,19 @@ import Type from "../type.mjs";
 
 const Erlang_Re = {
   // Start compile/1
-  "compile/1": (pattern) => Erlang_Re["compile/2"](pattern, Type.list()),
+  "compile/1": (pattern) => {
+    try {
+      return Erlang_Re["compile/2"](pattern, Type.list());
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError("badarg", "re", "compile", [pattern]);
+      }
+
+      throw error;
+    }
+  },
   // End compile/1
   // Deps: [:re.compile/2]
 
@@ -49,19 +61,13 @@ const Erlang_Re = {
     const parsedOptions = parseOptions();
 
     if (parsedOptions === null) {
-      let patternIsIodata = true;
-
-      try {
-        Erlang["iolist_to_binary/1"](pattern);
-      } catch {
-        patternIsIodata = false;
-      }
-
-      Interpreter.raiseArgumentError(
-        Interpreter.buildMultiArgumentErrorMsg([
-          [1, patternIsIodata ? null : "not an iodata term"],
-          [2, "invalid options"],
-        ]),
+      Interpreter.raiseBifError(
+        "badarg",
+        "re",
+        "compile",
+        [pattern, options],
+        "erl_stdlib_errors",
+        "badopt",
       );
     }
 
@@ -76,15 +82,28 @@ const Erlang_Re = {
 
       if (Type.isBitstring(pattern)) {
         if (!Type.isBinary(pattern)) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
-          );
+          Interpreter.raiseBifError("badarg", "re", "compile", [
+            pattern,
+            options,
+          ]);
         }
 
         Bitstring.maybeSetBytesFromText(pattern);
         patternBytes = pattern.bytes;
       } else {
         patternText = ERTS.regex.charDataToText(pattern);
+
+        // The server raise carries no error_info here - the frame comes
+        // from OTP's ucompile wrapper, not from a BIF.
+        if (patternText === null) {
+          Interpreter.raiseBifError(
+            "badarg",
+            "re",
+            "compile",
+            [pattern, options],
+            null,
+          );
+        }
       }
 
       // The option clash beats UTF-8 validation of a binary pattern
@@ -98,7 +117,22 @@ const Erlang_Re = {
         result = ERTS.regex.compileText(patternText, engineOpts);
       }
     } else {
-      const binary = Erlang["iolist_to_binary/1"](pattern);
+      let binary;
+
+      try {
+        binary = Erlang["iolist_to_binary/1"](pattern);
+      } catch (error) {
+        if (error.struct) {
+          // Re-raise with this function's own identity - the BEAM reports
+          // the BIF's frame, not the conversion's.
+          Interpreter.raiseBifError("badarg", "re", "compile", [
+            pattern,
+            options,
+          ]);
+        }
+
+        throw error;
+      }
 
       Bitstring.maybeSetBytesFromText(binary);
       result = ERTS.regex.compileBytes(binary.bytes, engineOpts);
@@ -137,12 +171,7 @@ const Erlang_Re = {
   // Start import/1
   "import/1": (exportedPattern) => {
     const raiseNotExported = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not an exported regular expression",
-        ),
-      );
+      Interpreter.raiseBifError("badarg", "re", "import", [exportedPattern]);
     };
 
     const hasMagicPrefix = (binary, magic) => {
@@ -204,22 +233,22 @@ const Erlang_Re = {
 
   // Start inspect/2
   "inspect/2": (compiledPattern, item) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "re", "inspect", [
+        compiledPattern,
+        item,
+      ]);
+    };
+
     const registryEntry =
       ERTS.regexPatternRegistry.lookupByTerm(compiledPattern);
 
     if (registryEntry === null) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a compiled regular expression",
-        ),
-      );
+      raiseBadarg();
     }
 
     if (!Interpreter.isStrictlyEqual(item, Type.atom("namelist"))) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a valid item"),
-      );
+      raiseBadarg();
     }
 
     // PCRE2 stores the name table sorted by the byte order of the names
@@ -236,8 +265,22 @@ const Erlang_Re = {
   // Deps: []
 
   // Start run/2
-  "run/2": (subject, pattern) =>
-    Erlang_Re["run/3"](subject, pattern, Type.list()),
+  "run/2": (subject, pattern) => {
+    try {
+      return Erlang_Re["run/3"](subject, pattern, Type.list());
+    } catch (error) {
+      // Errors with error_info re-raise with this function's own identity -
+      // the BEAM reports the called BIF's frame with the caller's args.
+      // Char data conversion failures without error_info pass through
+      // unchanged: on the server they raise from OTP's urun wrapper, which
+      // keeps the run/3 frame with the defaulted options.
+      if (error.struct && error.stacktrace[0]?.errorInfo) {
+        Interpreter.raiseBifError("badarg", "re", "run", [subject, pattern]);
+      }
+
+      throw error;
+    }
+  },
   // End run/2
   // Deps: [:re.run/3]
 
@@ -252,9 +295,6 @@ const Erlang_Re = {
     ]);
 
     const CAPTURE_TYPE_ATOMS = new Set(["binary", "index", "list"]);
-
-    const INVALID_PATTERN_BULLET =
-      "neither an iodata term nor a compiled regular expression";
 
     // Limit tuple option tags mapped to engine run option names.
     const LIMIT_TUPLE_KEYS = {
@@ -277,9 +317,6 @@ const Erlang_Re = {
     // Run-only option atoms not yet supported.
     // TODO: implement the report_errors run option.
     const RUN_ONLY_ATOMS = new Set(["report_errors"]);
-
-    const buildParseErrorBullet = (message, position) =>
-      `could not parse regular expression\n${message} on character ${position}`;
 
     const buildPatternEntry = (compiled) => ({
       anchored: acc.anchored,
@@ -343,7 +380,11 @@ const Erlang_Re = {
             }
 
             if (Type.isList(element)) {
-              return {name: ERTS.regex.charDataToText(element)};
+              const name = ERTS.regex.charDataToText(element);
+
+              if (name === null) raiseArgumentError();
+
+              return {name};
             }
 
             raiseArgumentError();
@@ -490,8 +531,29 @@ const Erlang_Re = {
       };
     };
 
+    // Used where validation has already passed for the subject and pattern
+    // and no badopt cause applies, so the formatter derives no bullets and
+    // the message stays the plain "argument error".
     const raiseArgumentError = () => {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseBifError("badarg", "re", "run", [
+        subject,
+        pattern,
+        options,
+      ]);
+    };
+
+    // Char data conversion failures mirror the server's split: a binary
+    // term fails inside the BIF, which raises with stdlib error_info,
+    // while any other term fails inside OTP's urun wrapper, whose frame
+    // carries no error_info.
+    const raiseCharDataError = (term) => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "re",
+        "run",
+        [subject, pattern, options],
+        Type.isBitstring(term) ? "erl_stdlib_errors" : null,
+      );
     };
 
     const raiseNotImplemented = (option) => {
@@ -710,7 +772,7 @@ const Erlang_Re = {
     const registryEntry = ERTS.regexPatternRegistry.lookupByTerm(pattern);
 
     let entry = null;
-    let patternBullet = null;
+    let patternInvalid = false;
     let patternRaisesArgumentError = false;
 
     if (registryEntry !== null) {
@@ -718,9 +780,9 @@ const Erlang_Re = {
     } else if (acc.unicodeOption) {
       // In unicode mode only the pattern term shape is validated here.
       // The pattern resolves later, as char data conversion failures raise
-      // plain ArgumentError instead of contributing a bullet.
+      // from the resolution phase instead of contributing a bullet.
       if (!Type.isBinary(pattern) && !Type.isList(pattern)) {
-        patternBullet = INVALID_PATTERN_BULLET;
+        patternInvalid = true;
       }
     } else {
       // In byte mode the pattern resolves during validation
@@ -729,7 +791,7 @@ const Erlang_Re = {
       try {
         patternBinary = Erlang["iolist_to_binary/1"](pattern);
       } catch {
-        patternBullet = INVALID_PATTERN_BULLET;
+        patternInvalid = true;
       }
 
       if (patternBinary !== null) {
@@ -746,10 +808,7 @@ const Erlang_Re = {
           ) {
             patternRaisesArgumentError = true;
           } else {
-            patternBullet = buildParseErrorBullet(
-              result.error.message,
-              result.error.position,
-            );
+            patternInvalid = true;
           }
         } else {
           entry = buildPatternEntry(result);
@@ -765,25 +824,28 @@ const Erlang_Re = {
       !acc.unicodeOption && !(registryEntry !== null && registryEntry.unicode);
 
     let subjectBinary = null;
-    let subjectBullet = null;
+    let subjectInvalid = false;
 
     if (byteModeSubject) {
       try {
         subjectBinary = Erlang["iolist_to_binary/1"](subject);
       } catch {
-        subjectBullet = "not an iodata term";
+        subjectInvalid = true;
       }
     }
 
     // --- Combined validation errors ---
 
-    if (subjectBullet !== null || patternBullet !== null || !optionsValid) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildMultiArgumentErrorMsg([
-          [1, subjectBullet],
-          [2, patternBullet],
-          [3, optionsValid ? null : "invalid options"],
-        ]),
+    // The formatter recomputes the per-argument bullets from the frame
+    // args, like the server's must_be_iodata and must_be_regexp probes do.
+    if (subjectInvalid || patternInvalid || !optionsValid) {
+      Interpreter.raiseBifError(
+        "badarg",
+        "re",
+        "run",
+        [subject, pattern, options],
+        "erl_stdlib_errors",
+        optionsValid ? null : "badopt",
       );
     }
 
@@ -808,20 +870,26 @@ const Erlang_Re = {
       // The subject char data converts before the pattern compiles
       subjectText = ERTS.regex.charDataToText(subject);
 
+      if (subjectText === null) raiseCharDataError(subject);
+
       const patternText = ERTS.regex.charDataToText(pattern);
+
+      if (patternText === null) raiseCharDataError(pattern);
 
       // The option clash raises instead of returning a compile error tuple
       if (acc.engineOpts.never_utf) raiseArgumentError();
 
       const result = ERTS.regex.compileText(patternText, acc.engineOpts);
 
+      // The formatter recomputes the parse-error bullet by compiling the
+      // pattern with default options, like the server's must_be_regexp
+      // probe does.
       if (result.error) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            buildParseErrorBullet(result.error.message, result.error.position),
-          ),
-        );
+        Interpreter.raiseBifError("badarg", "re", "run", [
+          subject,
+          pattern,
+          options,
+        ]);
       }
 
       entry = buildPatternEntry(result);
@@ -844,6 +912,8 @@ const Erlang_Re = {
     if (subjectText === null) {
       if (entry.unicode) {
         subjectText = ERTS.regex.charDataToText(subject);
+
+        if (subjectText === null) raiseCharDataError(subject);
       } else {
         Bitstring.maybeSetBytesFromText(subjectBinary);
         subjectText = ERTS.regex.textFromLatin1Bytes(subjectBinary.bytes);

@@ -38,8 +38,8 @@ MFAs for sorting:
 */
 
 const Erlang = {
-  // Start _validate_time_unit/2
-  "_validate_time_unit/2": (unit, argumentIndex) => {
+  // Start _is_valid_time_unit/1
+  "_is_valid_time_unit/1": (unit) => {
     const validAtomUnits = [
       "nanosecond",
       "nano_seconds",
@@ -53,23 +53,18 @@ const Erlang = {
       "perf_counter",
     ];
 
-    if (
-      !(Type.isAtom(unit) && validAtomUnits.includes(unit.value)) &&
-      !(Type.isInteger(unit) && unit.value > 0n)
-    ) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(argumentIndex, "invalid time unit"),
-      );
-    }
+    return (
+      (Type.isAtom(unit) && validAtomUnits.includes(unit.value)) ||
+      (Type.isInteger(unit) && unit.value > 0n)
+    );
   },
-  // End _validate_time_unit/2
+  // End _is_valid_time_unit/1
   // Deps: []
 
   // Start */2
   "*/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      const blame = `${Interpreter.inspect(left)} * ${Interpreter.inspect(right)}`;
-      Interpreter.raiseArithmeticError(blame);
+      Interpreter.raiseBifError("badarith", "erlang", "*", [left, right]);
     }
 
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
@@ -87,8 +82,7 @@ const Erlang = {
   // Start +/2
   "+/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(right)}`;
-      Interpreter.raiseArithmeticError(blame);
+      Interpreter.raiseBifError("badarith", "erlang", "+", [left, right]);
     }
 
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
@@ -106,8 +100,7 @@ const Erlang = {
   // Start +/1
   "+/1": (number) => {
     if (!Type.isNumber(number)) {
-      const blame = `+(${Interpreter.inspect(number)})`;
-      Interpreter.raiseArithmeticError(blame);
+      Interpreter.raiseBifError("badarith", "erlang", "+", [number]);
     }
 
     return number;
@@ -118,7 +111,7 @@ const Erlang = {
   // Start ++/2
   "++/2": (left, right) => {
     if (!Type.isProperList(left)) {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseBifError("badarg", "erlang", "++", [left, right]);
     }
 
     const data = left.data.concat(Type.isList(right) ? right.data : [right]);
@@ -131,8 +124,7 @@ const Erlang = {
   // Start -/1
   "-/1": (number) => {
     if (!Type.isNumber(number)) {
-      const blame = `-(${Interpreter.inspect(number)})`;
-      Interpreter.raiseArithmeticError(blame);
+      Interpreter.raiseBifError("badarith", "erlang", "-", [number]);
     }
 
     return number.value == 0 ? number : Type[number.type](-number.value);
@@ -143,8 +135,7 @@ const Erlang = {
   // Start -/2
   "-/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      const blame = `${Interpreter.inspect(left)} - ${Interpreter.inspect(right)}`;
-      Interpreter.raiseArithmeticError(blame);
+      Interpreter.raiseBifError("badarith", "erlang", "-", [left, right]);
     }
 
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
@@ -164,8 +155,8 @@ const Erlang = {
   // where m = Enum.count(left), n = Enum.count(right).
   // Start --/2
   "--/2": (left, right) => {
-    if (!Type.isList(left) || !Type.isList(right)) {
-      Interpreter.raiseArgumentError("argument error");
+    if (!Type.isProperList(left) || !Type.isProperList(right)) {
+      Interpreter.raiseBifError("badarg", "erlang", "--", [left, right]);
     }
 
     const result = Utils.shallowCloneArray(left.data);
@@ -187,8 +178,7 @@ const Erlang = {
   // Start //2
   "//2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right) || right.value == 0) {
-      const blame = `${Interpreter.inspect(left)} / ${Interpreter.inspect(right)}`;
-      Interpreter.raiseArithmeticError(blame);
+      Interpreter.raiseBifError("badarith", "erlang", "/", [left, right]);
     }
 
     return Type.float(Number(left.value) / Number(right.value));
@@ -275,9 +265,7 @@ const Erlang = {
       return Type.integer(value < 0n ? -value : value);
     }
 
-    Interpreter.raiseArgumentError(
-      Interpreter.buildArgumentErrorMsg(1, "not a number"),
-    );
+    Interpreter.raiseBifError("badarg", "erlang", "abs", [number]);
   },
   // End abs/1
   // Deps: []
@@ -287,9 +275,7 @@ const Erlang = {
     const left = leftFun(context);
 
     if (!Type.isBoolean(left)) {
-      Interpreter.raiseArgumentError(
-        `argument error: ${Interpreter.inspect(left)}`,
-      );
+      Interpreter.raiseFramelessError(["badarg", left]);
     }
 
     return Type.isTrue(left) ? rightFun(context) : left;
@@ -300,9 +286,10 @@ const Erlang = {
   // Start append_element/2
   "append_element/2": (tuple, term) => {
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "append_element", [
+        tuple,
+        term,
+      ]);
     }
 
     return Type.tuple([...tuple.data, term]);
@@ -317,7 +304,7 @@ const Erlang = {
     }
 
     if (!Type.isProperList(args)) {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseBifError("badarg", "erlang", "apply", [fun, args]);
     }
 
     return Interpreter.callAnonymousFunction(fun, args.data);
@@ -329,28 +316,12 @@ const Erlang = {
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
   // Start apply/3
   "apply/3": (module, fun, args) => {
-    if (!Type.isAtom(module)) {
-      Interpreter.raiseArgumentError(
-        `you attempted to apply a function named ${Interpreter.inspect(fun)} on ${Interpreter.inspect(module)}. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module`,
-      );
-    }
-
-    if (!Type.isAtom(fun)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
-      );
-    }
-
-    if (!Type.isList(args)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not a list"),
-      );
-    }
-
-    if (!Type.isProperList(args)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
-      );
+    if (!Type.isAtom(module) || !Type.isAtom(fun) || !Type.isProperList(args)) {
+      Interpreter.raiseBifError("badarg", "erlang", "apply", [
+        module,
+        fun,
+        args,
+      ]);
     }
 
     const context = Interpreter.buildContext({module: Type.nil()});
@@ -362,7 +333,17 @@ const Erlang = {
 
   // Start atom_to_binary/1
   "atom_to_binary/1": (atom) => {
-    return Erlang["atom_to_binary/2"](atom, Type.atom("utf8"));
+    try {
+      return Erlang["atom_to_binary/2"](atom, Type.atom("utf8"));
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError("badarg", "erlang", "atom_to_binary", [atom]);
+      }
+
+      throw error;
+    }
   },
   // End atom_to_binary/1
   // Deps: [:erlang.atom_to_binary/2]
@@ -370,9 +351,10 @@ const Erlang = {
   // Start atom_to_binary/2
   "atom_to_binary/2": (atom, encoding) => {
     if (!Type.isAtom(atom)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "atom_to_binary", [
+        atom,
+        encoding,
+      ]);
     }
 
     // TODO: implement encoding argument validation
@@ -392,9 +374,7 @@ const Erlang = {
   // Start atom_to_list/1
   "atom_to_list/1": (atom) => {
     if (!Type.isAtom(atom)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "atom_to_list", [atom]);
     }
 
     return Bitstring.toCodepoints(Type.bitstring(atom.value));
@@ -405,10 +385,10 @@ const Erlang = {
   // Start band/2
   "band/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
-      const arg1 = Interpreter.inspect(integer1);
-      const arg2 = Interpreter.inspect(integer2);
-
-      Interpreter.raiseArithmeticError(`Bitwise.band(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError("badarith", "erlang", "band", [
+        integer1,
+        integer2,
+      ]);
     }
 
     return Type.integer(integer1.value & integer2.value);
@@ -418,30 +398,30 @@ const Erlang = {
 
   // Start binary_part/3
   "binary_part/3": (subject, start, length) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "binary_part", [
+        subject,
+        start,
+        length,
+      ]);
+    };
+
     if (!Type.isBinary(subject)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isInteger(start)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isInteger(length)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     const totalBytes = Bitstring.calculateBitCount(subject) / 8;
 
     if (start.value < 0n || start.value > totalBytes) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
+      raiseBadarg();
     }
 
     const isReverse = length.value < 0n;
@@ -452,9 +432,7 @@ const Erlang = {
     const outOfRangeReverse = isReverse && start.value + length.value < 0n;
 
     if (outOfRangeForward || outOfRangeReverse) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
-      );
+      raiseBadarg();
     }
 
     const actualStart = isReverse ? start.value + length.value : start.value;
@@ -471,7 +449,19 @@ const Erlang = {
 
   // Start binary_to_atom/1
   "binary_to_atom/1": (binary) => {
-    return Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
+    try {
+      return Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError("badarg", "erlang", "binary_to_atom", [
+          binary,
+        ]);
+      }
+
+      throw error;
+    }
   },
   // End binary_to_atom/1
   // Deps: [:erlang.binary_to_atom/2]
@@ -479,9 +469,10 @@ const Erlang = {
   // Start binary_to_atom/2
   "binary_to_atom/2": (binary, encoding) => {
     if (!Type.isBinary(binary)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "binary_to_atom", [
+        binary,
+        encoding,
+      ]);
     }
 
     // TODO: implement encoding argument validation
@@ -502,7 +493,22 @@ const Erlang = {
   // The client version works exactly the same as binary_to_atom/1.
   // Start binary_to_existing_atom/1
   "binary_to_existing_atom/1": (binary) => {
-    return Erlang["binary_to_atom/1"](binary);
+    try {
+      return Erlang["binary_to_atom/1"](binary);
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError(
+          "badarg",
+          "erlang",
+          "binary_to_existing_atom",
+          [binary],
+        );
+      }
+
+      throw error;
+    }
   },
   // End binary_to_existing_atom/1
   // Deps: [:erlang.binary_to_atom/1]
@@ -511,17 +517,36 @@ const Erlang = {
   // The client version works exactly the same as binary_to_atom/2.
   // Start binary_to_existing_atom/2
   "binary_to_existing_atom/2": (binary, encoding) => {
-    return Erlang["binary_to_atom/2"](binary, encoding);
+    try {
+      return Erlang["binary_to_atom/2"](binary, encoding);
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError(
+          "badarg",
+          "erlang",
+          "binary_to_existing_atom",
+          [binary, encoding],
+        );
+      }
+
+      throw error;
+    }
   },
   // End binary_to_existing_atom/2
   // Deps: [:erlang.binary_to_atom/2]
 
   // Start binary_to_float/1
   "binary_to_float/1": (binary) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "binary_to_float", [
+        binary,
+      ]);
+    };
+
     if (!Type.isBinary(binary)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
-      );
+      raiseBadarg();
     }
 
     const text = Bitstring.toText(binary);
@@ -529,12 +554,7 @@ const Erlang = {
     const floatRegex = /^[+-]?\d+\.\d+([eE][+-]?\d+)?$/;
 
     if (!floatRegex.test(text)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
-      );
+      raiseBadarg();
     }
 
     return Type.float(Number(text));
@@ -544,26 +564,38 @@ const Erlang = {
 
   // Start binary_to_integer/1
   "binary_to_integer/1": (binary) => {
-    return Erlang["binary_to_integer/2"](binary, Type.integer(10));
+    try {
+      return Erlang["binary_to_integer/2"](binary, Type.integer(10));
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError("badarg", "erlang", "binary_to_integer", [
+          binary,
+        ]);
+      }
+
+      throw error;
+    }
   },
   // End binary_to_integer/1
   // Deps: [:erlang.binary_to_integer/2]
 
   // Start binary_to_integer/2
   "binary_to_integer/2": (binary, base) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "binary_to_integer", [
+        binary,
+        base,
+      ]);
+    };
+
     if (!Type.isBinary(binary)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isInteger(base) || base.value < 2n || base.value > 36n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
-      );
+      raiseBadarg();
     }
 
     const text = Bitstring.toText(binary);
@@ -581,12 +613,7 @@ const Erlang = {
     }
 
     if (!validPattern.test(text)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
-      );
+      raiseBadarg();
     }
 
     // For base 10, use BigInt directly to avoid precision loss
@@ -602,9 +629,7 @@ const Erlang = {
   // Start binary_to_list/1
   "binary_to_list/1": (binary) => {
     if (!Type.isBinary(binary)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "binary_to_list", [binary]);
     }
 
     Bitstring.maybeSetBytesFromText(binary);
@@ -616,10 +641,12 @@ const Erlang = {
 
   // Start binary_to_term/1
   "binary_to_term/1": async (binary) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "binary_to_term", [binary]);
+    };
+
     if (!Type.isBinary(binary)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
-      );
+      raiseBadarg();
     }
 
     // ETF version byte (precedes every top-level term).
@@ -655,13 +682,7 @@ const Erlang = {
     const SMALL_ATOM_UTF8_EXT = 119;
     const V4_PORT_EXT = 120;
 
-    const raiseInvalid = () =>
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "invalid external representation of a term",
-        ),
-      );
+    const raiseInvalid = raiseBadarg;
 
     // Decompresses zlib-compressed data using native DecompressionStream API.
     // Returns a Promise that resolves to a Uint8Array; throws on failure.
@@ -1427,9 +1448,7 @@ const Erlang = {
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "bit_size", [term]);
     }
 
     return Type.integer(Bitstring.calculateBitCount(term));
@@ -1440,8 +1459,7 @@ const Erlang = {
   // Start bnot/1
   "bnot/1": (integer) => {
     if (!Type.isInteger(integer)) {
-      const arg = Interpreter.inspect(integer);
-      Interpreter.raiseArithmeticError(`Bitwise.bnot(${arg})`);
+      Interpreter.raiseBifError("badarith", "erlang", "bnot", [integer]);
     }
 
     return Type.integer(~integer.value);
@@ -1452,10 +1470,10 @@ const Erlang = {
   // Start bor/2
   "bor/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
-      const arg1 = Interpreter.inspect(integer1);
-      const arg2 = Interpreter.inspect(integer2);
-
-      Interpreter.raiseArithmeticError(`Bitwise.bor(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError("badarith", "erlang", "bor", [
+        integer1,
+        integer2,
+      ]);
     }
 
     return Type.integer(integer1.value | integer2.value);
@@ -1466,10 +1484,7 @@ const Erlang = {
   // Start bsl/2
   "bsl/2": (integer, shift) => {
     if (!Type.isInteger(integer) || !Type.isInteger(shift)) {
-      const arg1 = Interpreter.inspect(integer);
-      const arg2 = Interpreter.inspect(shift);
-
-      Interpreter.raiseArithmeticError(`Bitwise.bsl(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError("badarith", "erlang", "bsl", [integer, shift]);
     }
 
     const integerValue = integer.value;
@@ -1488,10 +1503,7 @@ const Erlang = {
   // Start bsr/2
   "bsr/2": (integer, shift) => {
     if (!Type.isInteger(integer) || !Type.isInteger(shift)) {
-      const arg1 = Interpreter.inspect(integer);
-      const arg2 = Interpreter.inspect(shift);
-
-      Interpreter.raiseArithmeticError(`Bitwise.bsr(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError("badarith", "erlang", "bsr", [integer, shift]);
     }
 
     const integerValue = integer.value;
@@ -1510,10 +1522,10 @@ const Erlang = {
   // Start bxor/2
   "bxor/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
-      const arg1 = Interpreter.inspect(integer1);
-      const arg2 = Interpreter.inspect(integer2);
-
-      Interpreter.raiseArithmeticError(`Bitwise.bxor(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError("badarith", "erlang", "bxor", [
+        integer1,
+        integer2,
+      ]);
     }
 
     return Type.integer(integer1.value ^ integer2.value);
@@ -1524,9 +1536,7 @@ const Erlang = {
   // Start byte_size/1
   "byte_size/1": (bitstring) => {
     if (!Type.isBitstring(bitstring)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "byte_size", [bitstring]);
     }
 
     Bitstring.maybeSetBytesFromText(bitstring);
@@ -1539,9 +1549,7 @@ const Erlang = {
   // Start ceil/1
   "ceil/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "ceil", [number]);
     }
 
     if (Type.isInteger(number)) {
@@ -1593,14 +1601,17 @@ const Erlang = {
       }
     };
 
-    if (!Type.isInteger(time)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
+    if (
+      !Type.isInteger(time) ||
+      !Erlang["_is_valid_time_unit/1"](fromUnit) ||
+      !Erlang["_is_valid_time_unit/1"](toUnit)
+    ) {
+      Interpreter.raiseBifError("badarg", "erlang", "convert_time_unit", [
+        time,
+        fromUnit,
+        toUnit,
+      ]);
     }
-
-    Erlang["_validate_time_unit/2"](fromUnit, 2);
-    Erlang["_validate_time_unit/2"](toUnit, 3);
 
     const fromUnitValue = resolveTimeUnit(fromUnit);
     const toUnitValue = resolveTimeUnit(toUnit);
@@ -1614,26 +1625,27 @@ const Erlang = {
     return Type.integer(result);
   },
   // End convert_time_unit/3
-  // Deps: [:erlang._validate_time_unit/2]
+  // Deps: [:erlang._is_valid_time_unit/1]
 
   // Start delete_element/2
   "delete_element/2": (index, tuple) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "delete_element", [
+        index,
+        tuple,
+      ]);
+    };
+
     if (!Type.isInteger(index)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
-      );
+      raiseBadarg();
     }
 
     if (index.value > tuple.data.length || index.value < 1) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
-      );
+      raiseBadarg();
     }
 
     const data = tuple.data.toSpliced(Number(index.value) - 1, 1);
@@ -1650,10 +1662,10 @@ const Erlang = {
       !Type.isInteger(integer2) ||
       integer2.value === 0n
     ) {
-      const arg1 = Interpreter.inspect(integer1);
-      const arg2 = Interpreter.inspect(integer2);
-
-      Interpreter.raiseArithmeticError(`div(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError("badarith", "erlang", "div", [
+        integer1,
+        integer2,
+      ]);
     }
 
     // TODO: support integers outside Number range
@@ -1666,22 +1678,20 @@ const Erlang = {
 
   // Start element/2
   "element/2": (index, tuple) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "element", [index, tuple]);
+    };
+
     if (!Type.isInteger(index)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
-      );
+      raiseBadarg();
     }
 
     if (index.value > tuple.data.length || index.value < 1) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
-      );
+      raiseBadarg();
     }
 
     return tuple.data[Number(index.value) - 1];
@@ -1689,30 +1699,84 @@ const Erlang = {
   // End element/2
   // Deps: []
 
-  // TODO: review this function after error reporting is implemented (and implement Elixir & JS consistency tests).
   // Start error/1
   "error/1": (reason) => {
-    Erlang["error/2"](reason, Type.atom("none"));
+    Erlang["error/3"](reason, Type.atom("none"), Type.list());
   },
   // End error/1
-  // Deps: [:erlang.error/2]
+  // Deps: [:erlang.error/3]
 
-  // TODO: review this function after error reporting is implemented (and implement Elixir & JS consistency tests).
-  // TODO: maybe use args param
   // Start error/2
-  "error/2": (reason, _args) => {
-    throw new HologramBoxedError(reason);
+  "error/2": (reason, args) => {
+    Erlang["error/3"](reason, args, Type.list());
   },
   // End error/2
-  // Deps: []
+  // Deps: [:erlang.error/3]
 
-  // TODO: the third argument carries error_info options used for richer error reporting on BEAM; it is currently accepted and ignored.
   // Start error/3
-  "error/3": (reason, args, _options) => {
-    Erlang["error/2"](reason, args);
+  "error/3": (reason, args, options) => {
+    // Options that are not a list and options other than {:error_info, map}
+    // are ignored, mirroring the BEAM.
+    let errorInfo = null;
+
+    if (Type.isList(options)) {
+      for (const option of options.data) {
+        if (
+          Type.isTuple(option) &&
+          option.data.length === 2 &&
+          Type.isAtom(option.data[0]) &&
+          option.data[0].value === "error_info"
+        ) {
+          errorInfo = option.data[1];
+        }
+      }
+    }
+
+    const error = new HologramBoxedError(reason);
+
+    // The constructor snapshot still contains the dispatch frames of
+    // :erlang.error itself - the BEAM never shows erlang:error in a trace.
+    const frames = error.stacktrace;
+
+    let callerIndex = 0;
+
+    while (
+      callerIndex < frames.length &&
+      frames[callerIndex].module === "erlang" &&
+      frames[callerIndex].function === "error"
+    ) {
+      ++callerIndex;
+    }
+
+    const callerFrame = frames[callerIndex] ?? null;
+
+    // The raising frame is attached unconditionally - message derivation
+    // reads args and error_info from it in every environment. It is a copy,
+    // because the caller's live frame must not be mutated: the caller may
+    // rescue this error and keep executing.
+    const raisingFrame = {
+      module: callerFrame?.module ?? null,
+      function: callerFrame?.function ?? null,
+      // A list (proper or improper) replaces the caller's arity, any other
+      // term (including :none) keeps it, mirroring the BEAM.
+      arityOrArgs: Type.isList(args)
+        ? args
+        : (callerFrame?.arityOrArgs ?? null),
+      file: callerFrame?.file ?? null,
+      line: callerFrame?.line ?? null,
+      errorInfo,
+    };
+
+    error.stacktrace = [raisingFrame, ...frames.slice(callerIndex + 1)];
+
+    // Message derivation may read args and error_info from the raising
+    // frame, so the struct and message re-derive against the fixed trace.
+    error.rederive(Type.list(error.stacktrace.map(ERTS.callStack.boxFrame)));
+
+    throw error;
   },
   // End error/3
-  // Deps: [:erlang.error/2]
+  // Deps: []
 
   // Start exit/1
   "exit/1": (reason) => {
@@ -1729,40 +1793,50 @@ const Erlang = {
       return number;
     }
 
-    Interpreter.raiseArgumentError(
-      Interpreter.buildArgumentErrorMsg(1, "not a number"),
-    );
+    Interpreter.raiseBifError("badarg", "erlang", "float", [number]);
   },
   // End float/1
   // Deps: []
 
   // Start float_to_list/2
   "float_to_list/2": (float, opts) => {
-    const binary = Erlang["float_to_binary/2"](float, opts);
+    try {
+      return Bitstring.toCodepoints(Erlang["float_to_binary/2"](float, opts));
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError("badarg", "erlang", "float_to_list", [
+          float,
+          opts,
+        ]);
+      }
 
-    return Bitstring.toCodepoints(binary);
+      throw error;
+    }
   },
   // End float_to_list/2
   // Deps: [:erlang.float_to_binary/2]
 
   // Start float_to_binary/2
   "float_to_binary/2": (float, opts) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "float_to_binary", [
+        float,
+        opts,
+      ]);
+    };
+
     if (!Type.isFloat(float)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a float"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isList(opts)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a list"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isProperList(opts)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
-      );
+      raiseBadarg();
     }
 
     const SHORT_EXPONENTIAL_THRESHOLD = 9_007_199_254_740_992.0; // 2^53 - Erlang always uses exponential notation at this boundary
@@ -1791,9 +1865,7 @@ const Erlang = {
       }
 
       if (!Type.isTuple(opt) || opt.data.length !== 2) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
-        );
+        raiseBadarg();
       }
 
       const [key, value] = opt.data;
@@ -1814,9 +1886,7 @@ const Erlang = {
         scientific = Number(value.value);
         lastOpt = "scientific";
       } else {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
-        );
+        raiseBadarg();
       }
     }
 
@@ -1919,9 +1989,7 @@ const Erlang = {
 
     // Erlang enforces a 256-byte buffer limit for the result
     if (result.length >= ERLANG_BUFFER_LIMIT) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
-      );
+      raiseBadarg();
     }
 
     return Type.bitstring(result);
@@ -1932,9 +2000,7 @@ const Erlang = {
   // Start floor/1
   "floor/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "floor", [number]);
     }
 
     if (Type.isInteger(number)) {
@@ -1949,9 +2015,7 @@ const Erlang = {
   // Start fun_info/1
   "fun_info/1": (fun) => {
     if (!Type.isAnonymousFunction(fun)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a fun"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "fun_info", [fun]);
     }
 
     const arity = Type.integer(fun.arity);
@@ -2003,7 +2067,8 @@ const Erlang = {
       }),
     ]);
 
-    const name = Type.atom(Interpreter.inspect(fun));
+    // A fun defined outside of any function definition carries no name.
+    const name = Type.atom(fun.name ?? "");
     const pid = ERTS.INIT_PID;
 
     return Type.list([
@@ -2037,12 +2102,25 @@ const Erlang = {
       "uniq",
     ]);
 
-    const info = Erlang["fun_info/1"](fun);
-
+    // Both raises name the same pair of arguments, and the message blames the
+    // first one whenever it isn't a fun - so reading the item first still
+    // reports a bad fun the way the BEAM does, without building the info list.
     if (!Type.isAtom(item) || !validItems.has(item.value)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "fun_info", [fun, item]);
+    }
+
+    let info;
+
+    try {
+      info = Erlang["fun_info/1"](fun);
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError("badarg", "erlang", "fun_info", [fun, item]);
+      }
+
+      throw error;
     }
 
     const result = info.data.find(
@@ -2060,22 +2138,24 @@ const Erlang = {
 
   // Start function_exported/3
   "function_exported/3": (module, functionName, arity) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "function_exported", [
+        module,
+        functionName,
+        arity,
+      ]);
+    };
+
     if (!Type.isAtom(module)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isAtom(functionName)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isInteger(arity)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     const moduleProxy = Interpreter.moduleProxy(module);
@@ -2094,9 +2174,7 @@ const Erlang = {
   // Start hd/1
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "hd", [list]);
     }
 
     return list.data[0];
@@ -2106,22 +2184,24 @@ const Erlang = {
 
   // Start insert_element/3
   "insert_element/3": (index, tuple, value) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "insert_element", [
+        index,
+        tuple,
+        value,
+      ]);
+    };
+
     if (!Type.isInteger(index)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
-      );
+      raiseBadarg();
     }
 
     if (index.value <= 0n || index.value > tuple.data.length + 1) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
-      );
+      raiseBadarg();
     }
 
     // The tuple index is one-based, so we need to compensate
@@ -2133,26 +2213,35 @@ const Erlang = {
 
   // Start integer_to_binary/1
   "integer_to_binary/1": (integer) => {
-    return Erlang["integer_to_binary/2"](integer, Type.integer(10));
+    try {
+      return Erlang["integer_to_binary/2"](integer, Type.integer(10));
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError("badarg", "erlang", "integer_to_binary", [
+          integer,
+        ]);
+      }
+
+      throw error;
+    }
   },
   // End integer_to_binary/1
   // Deps: [:erlang.integer_to_binary/2]
 
   // Start integer_to_binary/2
   "integer_to_binary/2": (integer, base) => {
-    if (!Type.isInteger(integer)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
-    }
-
-    if (!Type.isInteger(base) || base.value < 2 || base.value > 36) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
-      );
+    if (
+      !Type.isInteger(integer) ||
+      !Type.isInteger(base) ||
+      base.value < 2n ||
+      base.value > 36n
+    ) {
+      Interpreter.raiseBifError("badarg", "erlang", "integer_to_binary", [
+        integer,
+        base,
+      ]);
     }
 
     const str = integer.value.toString(Number(base.value)).toUpperCase();
@@ -2164,26 +2253,35 @@ const Erlang = {
 
   // Start integer_to_list/1
   "integer_to_list/1": (integer) => {
-    return Erlang["integer_to_list/2"](integer, Type.integer(10));
+    try {
+      return Erlang["integer_to_list/2"](integer, Type.integer(10));
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError("badarg", "erlang", "integer_to_list", [
+          integer,
+        ]);
+      }
+
+      throw error;
+    }
   },
   // End integer_to_list/1
   // Deps: [:erlang.integer_to_list/2]
 
   // Start integer_to_list/2
   "integer_to_list/2": (integer, base) => {
-    if (!Type.isInteger(integer)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
-    }
-
-    if (!Type.isInteger(base) || base.value < 2n || base.value > 36n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
-      );
+    if (
+      !Type.isInteger(integer) ||
+      !Type.isInteger(base) ||
+      base.value < 2n ||
+      base.value > 36n
+    ) {
+      Interpreter.raiseBifError("badarg", "erlang", "integer_to_list", [
+        integer,
+        base,
+      ]);
     }
 
     const text = integer.value.toString(Number(base.value)).toUpperCase();
@@ -2195,14 +2293,18 @@ const Erlang = {
 
   // Start iolist_to_binary/1
   "iolist_to_binary/1": (ioListOrBinary) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "iolist_to_binary", [
+        ioListOrBinary,
+      ]);
+    };
+
     if (Type.isBinary(ioListOrBinary)) {
       return ioListOrBinary;
     }
 
     if (!Type.isList(ioListOrBinary)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
-      );
+      raiseBadarg();
     }
 
     // :erlang.list_to_binary/1 raises ArgumentError "not an iolist term" on invalid input.
@@ -2210,9 +2312,7 @@ const Erlang = {
     try {
       return Erlang["list_to_binary/1"](ioListOrBinary);
     } catch {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
-      );
+      raiseBadarg();
     }
   },
   // End iolist_to_binary/1
@@ -2334,10 +2434,8 @@ const Erlang = {
 
   // Start length/1
   "length/1": (list) => {
-    if (!Type.isList(list)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
-      );
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseBifError("badarg", "erlang", "length", [list]);
     }
 
     return Type.integer(list.data.length);
@@ -2347,16 +2445,18 @@ const Erlang = {
 
   // Start list_to_atom/1
   "list_to_atom/1": (codePoints) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_atom", [
+        codePoints,
+      ]);
+    };
+
     if (!Type.isList(codePoints)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isProperList(codePoints)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
-      );
+      raiseBadarg();
     }
 
     const areCodePointsValid = codePoints.data.every(
@@ -2364,9 +2464,7 @@ const Erlang = {
     );
 
     if (!areCodePointsValid) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
-      );
+      raiseBadarg();
     }
 
     const text = String.fromCodePoint(
@@ -2380,10 +2478,12 @@ const Erlang = {
 
   // Start list_to_binary/1
   "list_to_binary/1": (ioList) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_binary", [ioList]);
+    };
+
     if (!Type.isList(ioList)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
-      );
+      raiseBadarg();
     }
 
     const chunks = [];
@@ -2398,9 +2498,7 @@ const Erlang = {
 
         if (Type.isInteger(item)) {
           if (item.value < 0n || item.value > 255n) {
-            Interpreter.raiseArgumentError(
-              Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
-            );
+            raiseBadarg();
           }
 
           const segment = Type.bitstringSegment(item, {
@@ -2416,9 +2514,7 @@ const Erlang = {
         } else if (Type.isList(item)) {
           collect(item);
         } else {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
-          );
+          raiseBadarg();
         }
       }
 
@@ -2430,9 +2526,7 @@ const Erlang = {
         } else if (Type.isList(tail)) {
           collect(tail);
         } else {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
-          );
+          raiseBadarg();
         }
       }
     };
@@ -2448,29 +2542,38 @@ const Erlang = {
   // The client version works exactly the same as list_to_atom/1.
   // Start list_to_existing_atom/1
   "list_to_existing_atom/1": (codePoints) => {
-    return Erlang["list_to_atom/1"](codePoints);
+    try {
+      return Erlang["list_to_atom/1"](codePoints);
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError("badarg", "erlang", "list_to_existing_atom", [
+          codePoints,
+        ]);
+      }
+
+      throw error;
+    }
   },
   // End list_to_existing_atom/1
   // Deps: [:erlang.list_to_atom/1]
 
   // Start list_to_float/1
   "list_to_float/1": (list) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_float", [list]);
+    };
+
     if (!Type.isProperList(list)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
-      );
+      raiseBadarg();
     }
 
     const codes = [];
 
     for (const code of list.data) {
       if (!Type.isInteger(code)) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not a textual representation of a float",
-          ),
-        );
+        raiseBadarg();
       }
 
       codes.push(Number(code.value));
@@ -2480,12 +2583,7 @@ const Erlang = {
     const floatRegex = /^[+-]?\d+\.\d+([eE][+-]?\d+)?$/;
 
     if (!floatRegex.test(text)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
-      );
+      raiseBadarg();
     }
 
     return Type.float(Number(text));
@@ -2495,41 +2593,46 @@ const Erlang = {
 
   // Start list_to_integer/1
   "list_to_integer/1": (list) => {
-    return Erlang["list_to_integer/2"](list, Type.integer(10n));
+    try {
+      return Erlang["list_to_integer/2"](list, Type.integer(10n));
+    } catch (error) {
+      if (error.struct) {
+        // Re-raise with this function's own identity - the BEAM reports the
+        // called function's frame, not the delegate's.
+        Interpreter.raiseBifError("badarg", "erlang", "list_to_integer", [
+          list,
+        ]);
+      }
+
+      throw error;
+    }
   },
   // End list_to_integer/1
   // Deps: [:erlang.list_to_integer/2]
 
   // Start list_to_integer/2
   "list_to_integer/2": (list, base) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_integer", [
+        list,
+        base,
+      ]);
+    };
+
     if (!Type.isList(list)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isProperList(list)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isInteger(base) || base.value < 2n || base.value > 36n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
-      );
+      raiseBadarg();
     }
 
     if (list.data.length === 0) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
-      );
+      raiseBadarg();
     }
 
     const codes = [];
@@ -2537,12 +2640,7 @@ const Erlang = {
     // TODO: consider - use isCharlist() helper instead when it's implemented
     for (const code of list.data) {
       if (!Type.isInteger(code)) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not a textual representation of an integer",
-          ),
-        );
+        raiseBadarg();
       }
 
       codes.push(Number(code.value));
@@ -2562,12 +2660,7 @@ const Erlang = {
     }
 
     if (!validPattern.test(strLower)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
-      );
+      raiseBadarg();
     }
 
     // Parse the string to BigInt manually to avoid precision loss with parseInt
@@ -2601,10 +2694,14 @@ const Erlang = {
 
   // Start list_to_pid/1
   "list_to_pid/1": (codePoints) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_pid", [
+        codePoints,
+      ]);
+    };
+
     if (!Type.isList(codePoints)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
-      );
+      raiseBadarg();
     }
 
     const areCodePointsValid = codePoints.data.every(
@@ -2612,12 +2709,7 @@ const Erlang = {
     );
 
     if (!areCodePointsValid) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a pid",
-        ),
-      );
+      raiseBadarg();
     }
 
     const segments = codePoints.data.map((codePoint) =>
@@ -2628,12 +2720,7 @@ const Erlang = {
     const matches = Bitstring.toText(Type.bitstring(segments)).match(regex);
 
     if (matches === null) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a pid",
-        ),
-      );
+      raiseBadarg();
     }
 
     return Type.pid(
@@ -2647,10 +2734,14 @@ const Erlang = {
 
   // Start list_to_ref/1
   "list_to_ref/1": (codePoints) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_ref", [
+        codePoints,
+      ]);
+    };
+
     if (!Type.isProperList(codePoints)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
-      );
+      raiseBadarg();
     }
 
     const areCodePointsValid = codePoints.data.every(
@@ -2658,12 +2749,7 @@ const Erlang = {
     );
 
     if (!areCodePointsValid) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a reference",
-        ),
-      );
+      raiseBadarg();
     }
 
     const segments = codePoints.data.map((codePoint) =>
@@ -2674,12 +2760,7 @@ const Erlang = {
     const matches = Bitstring.toText(Type.bitstring(segments)).match(regex);
 
     if (matches === null) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a reference",
-        ),
-      );
+      raiseBadarg();
     }
 
     const localIncarnationId = Number(matches[1]);
@@ -2694,12 +2775,7 @@ const Erlang = {
     const refInfo = ERTS.nodeTable.getNodeAndCreation(localIncarnationId);
 
     if (refInfo === null) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a reference",
-        ),
-      );
+      raiseBadarg();
     }
 
     return Type.reference(refInfo.node, refInfo.creation, idWords);
@@ -2710,9 +2786,7 @@ const Erlang = {
   // Start list_to_tuple/1
   "list_to_tuple/1": (list) => {
     if (!Type.isProperList(list)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "list_to_tuple", [list]);
     }
     return Type.tuple(list.data);
   },
@@ -2751,32 +2825,32 @@ const Erlang = {
 
   // Start make_fun/3
   "make_fun/3": (module, functionName, arity) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "make_fun", [
+        module,
+        functionName,
+        arity,
+      ]);
+    };
+
     if (!Type.isAtom(module)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isAtom(functionName)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isInteger(arity)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     if (arity.value < 0n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
-      );
+      raiseBadarg();
     }
 
     if (arity.value > 255n) {
-      Interpreter.raiseArgumentError("argument error");
+      raiseBadarg();
     }
 
     const arityValue = Number(arity.value);
@@ -2833,9 +2907,10 @@ const Erlang = {
   "make_tuple/2": (arity, value) => {
     // The Erlang implementation says that the index is out of range even when it is not an integer
     if (!Type.isInteger(arity) || arity.value < 0n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "make_tuple", [
+        arity,
+        value,
+      ]);
     }
 
     const data = Array(Number(arity.value)).fill(value);
@@ -2930,13 +3005,15 @@ const Erlang = {
   "monotonic_time/1": (unit) => {
     // TODO: unit is validated twice - here (for correct arg index in error message)
     // and in convert_time_unit/3. This could be optimized in the future.
-    Erlang["_validate_time_unit/2"](unit, 1);
+    if (!Erlang["_is_valid_time_unit/1"](unit)) {
+      Interpreter.raiseBifError("badarg", "erlang", "monotonic_time", [unit]);
+    }
     const nativeTime = Erlang["monotonic_time/0"]();
 
     return Erlang["convert_time_unit/3"](nativeTime, Type.atom("native"), unit);
   },
   // End monotonic_time/1
-  // Deps: [:erlang._validate_time_unit/2, :erlang.convert_time_unit/3, :erlang.monotonic_time/0]
+  // Deps: [:erlang._is_valid_time_unit/1, :erlang.convert_time_unit/3, :erlang.monotonic_time/0]
 
   // Start node/0
   "node/0": () => {
@@ -2948,7 +3025,7 @@ const Erlang = {
   // Start not/1
   "not/1": (term) => {
     if (!Type.isBoolean(term)) {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseBifError("badarg", "erlang", "not", [term]);
     }
 
     return Type.boolean(term.value == "true" ? false : true);
@@ -2961,9 +3038,7 @@ const Erlang = {
     const left = leftFun(context);
 
     if (!Type.isBoolean(left)) {
-      Interpreter.raiseArgumentError(
-        `argument error: ${Interpreter.inspect(left)}`,
-      );
+      Interpreter.raiseFramelessError(["badarg", left]);
     }
 
     return Type.isTrue(left) ? left : rightFun(context);
@@ -2974,9 +3049,7 @@ const Erlang = {
   // Start pid_to_list/1
   "pid_to_list/1": (pid) => {
     if (!Type.isPid(pid)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "pid_to_list", [pid]);
     }
 
     const pidText = `<${pid.segments.join(".")}>`;
@@ -2986,9 +3059,8 @@ const Erlang = {
   // End pid_to_list/1
   // Deps: []
 
-  // TODO: support stacktraces; the stacktrace argument is currently accepted and ignored.
   // Start raise/3
-  "raise/3": (kind, reason, _stacktrace) => {
+  "raise/3": (kind, reason, stacktrace) => {
     if (
       !Type.isAtom(kind) ||
       !["error", "exit", "throw"].includes(kind.value)
@@ -2996,7 +3068,46 @@ const Erlang = {
       return Type.atom("badarg");
     }
 
-    throw new HologramBoxedError(reason, kind);
+    // A stacktrace entry is either {module, function, arity_or_args, location}
+    // with atom module and function, or {fun, arity_or_args, location}. Only
+    // these shapes are validated - the arity_or_args slot and the location's
+    // content are accepted as given, mirroring the BEAM.
+    const isValidEntry = (entry) => {
+      if (!Type.isTuple(entry)) {
+        return false;
+      }
+
+      const elems = entry.data;
+
+      if (elems.length === 4) {
+        return (
+          Type.isAtom(elems[0]) &&
+          Type.isAtom(elems[1]) &&
+          Type.isList(elems[3])
+        );
+      }
+
+      if (elems.length === 3) {
+        return Type.isAnonymousFunction(elems[0]) && Type.isList(elems[2]);
+      }
+
+      return false;
+    };
+
+    if (
+      !Type.isProperList(stacktrace) ||
+      !stacktrace.data.every(isValidEntry)
+    ) {
+      return Type.atom("badarg");
+    }
+
+    const error = new HologramBoxedError(reason, kind);
+
+    // The given boxed trace replaces the construction-time snapshot verbatim,
+    // matching the BEAM - this is what makes reraise preserve traces.
+    error.stacktrace = stacktrace;
+
+    throw error;
   },
   // End raise/3
   // Deps: []
@@ -3004,9 +3115,7 @@ const Erlang = {
   // Start ref_to_list/1
   "ref_to_list/1": (reference) => {
     if (!Type.isReference(reference)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "ref_to_list", [reference]);
     }
 
     const localIncarnationId = ERTS.nodeTable.getLocalIncarnationId(
@@ -3028,10 +3137,10 @@ const Erlang = {
       !Type.isInteger(integer2) ||
       integer2.value === 0n
     ) {
-      const arg1 = Interpreter.inspect(integer1);
-      const arg2 = Interpreter.inspect(integer2);
-
-      Interpreter.raiseArithmeticError(`rem(${arg1}, ${arg2})`);
+      Interpreter.raiseBifError("badarith", "erlang", "rem", [
+        integer1,
+        integer2,
+      ]);
     }
 
     // JavaScript's % operator on BigInt has the same sign behavior as Erlang's rem
@@ -3044,9 +3153,7 @@ const Erlang = {
   // Start round/1
   "round/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "round", [number]);
     }
 
     if (Type.isInteger(number)) {
@@ -3065,22 +3172,24 @@ const Erlang = {
 
   // Start setelement/3
   "setelement/3": (index, tuple, value) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "setelement", [
+        index,
+        tuple,
+        value,
+      ]);
+    };
+
     if (!Type.isInteger(index)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
-      );
+      raiseBadarg();
     }
 
     if (index.value <= 0n || index.value > tuple.data.length) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
-      );
+      raiseBadarg();
     }
 
     const data = [...tuple.data];
@@ -3094,31 +3203,30 @@ const Erlang = {
 
   // Start split_binary/2
   "split_binary/2": (binary, position) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "split_binary", [
+        binary,
+        position,
+      ]);
+    };
+
     if (!Type.isBinary(binary)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isInteger(position)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
+      raiseBadarg();
     }
 
     if (position.value < 0n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
+      raiseBadarg();
     }
 
     const pos = Number(position.value);
     const totalBytes = Number(Erlang["byte_size/1"](binary).value);
 
     if (pos > totalBytes) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
+      raiseBadarg();
     }
 
     // If position is 0, first part is empty binary
@@ -3166,9 +3274,7 @@ const Erlang = {
       );
     }
 
-    Interpreter.raiseArgumentError(
-      Interpreter.buildArgumentErrorMsg(1, "invalid system info item"),
-    );
+    Interpreter.raiseBifError("badarg", "erlang", "system_info", [item]);
   },
   // End system_info/1
   // Deps: []
@@ -3219,20 +3325,20 @@ const Erlang = {
   "time_offset/1": (unit) => {
     // TODO: unit is validated twice - here (for correct arg index in error message)
     // and in convert_time_unit/3. This could be optimized in the future.
-    Erlang["_validate_time_unit/2"](unit, 1);
+    if (!Erlang["_is_valid_time_unit/1"](unit)) {
+      Interpreter.raiseBifError("badarg", "erlang", "time_offset", [unit]);
+    }
     const nativeTime = Erlang["time_offset/0"]();
 
     return Erlang["convert_time_unit/3"](nativeTime, Type.atom("native"), unit);
   },
   // End time_offset/1
-  // Deps: [:erlang._validate_time_unit/2, :erlang.convert_time_unit/3, :erlang.time_offset/0]
+  // Deps: [:erlang._is_valid_time_unit/1, :erlang.convert_time_unit/3, :erlang.time_offset/0]
 
   // Start tl/1
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "tl", [list]);
     }
 
     const length = list.data.length;
@@ -3257,9 +3363,7 @@ const Erlang = {
   // Start trunc/1
   "trunc/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "trunc", [number]);
     }
 
     if (Type.isFloat(number)) {
@@ -3275,9 +3379,7 @@ const Erlang = {
   // Start tuple_size/1
   "tuple_size/1": (tuple) => {
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "tuple_size", [tuple]);
     }
 
     return Type.integer(tuple.data.length);
@@ -3288,9 +3390,7 @@ const Erlang = {
   // Start tuple_to_list/1
   "tuple_to_list/1": (tuple) => {
     if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
-      );
+      Interpreter.raiseBifError("badarg", "erlang", "tuple_to_list", [tuple]);
     }
 
     return Type.list(tuple.data);
@@ -3308,25 +3408,25 @@ const Erlang = {
   // Start unique_integer/1
   // Simplified: always returns monotonic, positive integers regardless of modifiers.
   "unique_integer/1": (modifierList) => {
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "erlang", "unique_integer", [
+        modifierList,
+      ]);
+    };
+
     if (!Type.isList(modifierList)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
-      );
+      raiseBadarg();
     }
 
     if (!Type.isProperList(modifierList)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
-      );
+      raiseBadarg();
     }
 
     const validModifiers = ["monotonic", "positive"];
 
     for (const modifier of modifierList.data) {
       if (!Type.isAtom(modifier) || !validModifiers.includes(modifier.value)) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
-        );
+        raiseBadarg();
       }
     }
 
@@ -3338,7 +3438,7 @@ const Erlang = {
   // Start xor/2
   "xor/2": (left, right) => {
     if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseBifError("badarg", "erlang", "xor", [left, right]);
     }
 
     return Type.boolean(left.value != right.value);

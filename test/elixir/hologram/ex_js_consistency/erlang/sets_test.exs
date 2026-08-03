@@ -63,6 +63,23 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
         :sets.add_element(:elem, :not_a_set)
       end
     end
+
+    test "error frame carries args" do
+      element = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :sets.add_element(element, :not_a_set)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside sets.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:sets, :add_element, [:abc, :not_a_set], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "del_element/2" do
@@ -100,6 +117,23 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.del_element(:elem, :not_a_set)
       end
+    end
+
+    test "error frame carries args" do
+      element = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :sets.del_element(element, :not_a_set)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside sets.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:sets, :del_element, [:abc, :not_a_set], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -169,6 +203,23 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
         :sets.filter(fn _elem -> :not_a_boolean end, set)
       end
     end
+
+    test "error frame carries args", %{set: set} do
+      fun = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :sets.filter(fun, set)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside sets.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:sets, :filter, [:abc, ^set], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "fold/3" do
@@ -227,6 +278,24 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
         :sets.fold(fun, 0, :abc)
       end
     end
+
+    test "error frame carries args", %{opts: opts} do
+      fun = wrap_term(:abc)
+      set = :sets.from_list([1, 2, 3], opts)
+
+      top_frame =
+        try do
+          :sets.fold(fun, 0, set)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside sets.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:sets, :fold, [:abc, 0, ^set], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "from_list/2" do
@@ -277,7 +346,6 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       end
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the second argument is an a improper list" do
       expected_msg = build_function_clause_error_msg(":proplists.get_value/3", [:version, 2, 2])
 
@@ -355,6 +423,23 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
         :sets.intersection(set_123, :abc)
       end
     end
+
+    test "error frame carries args", %{set_123: set_123} do
+      set1 = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :sets.intersection(set1, set_123)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside sets.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:sets, :size, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "is_disjoint/2" do
@@ -417,6 +502,23 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
         :sets.is_disjoint(set_123, :abc)
       end
     end
+
+    test "error frame carries args", %{set_123: set_123} do
+      set1 = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :sets.is_disjoint(set1, set_123)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside sets.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:sets, :size, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "is_element/2" do
@@ -446,6 +548,23 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.is_element(:elem, :not_a_set)
       end
+    end
+
+    test "error frame carries args" do
+      element = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :sets.is_element(element, :not_a_set)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside sets.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:sets, :is_element, [:abc, :not_a_set], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -519,6 +638,23 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
         :sets.is_subset(set_123, :abc)
       end
     end
+
+    test "error frame carries args for a non-set second argument", %{set_123: set_123} do
+      set2 = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :sets.is_subset(set_123, set2)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside sets.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:sets, :is_element, [1, :abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "new/1" do
@@ -543,7 +679,6 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       end
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the first argument is an a improper list" do
       expected_msg = build_function_clause_error_msg(":proplists.get_value/3", [:version, 2, 2])
 
@@ -552,10 +687,52 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       end
     end
 
+    # The options are read one at a time and answered as soon as the version is
+    # found, so a tail that isn't a list is never reached.
+    test "creates a new set when an improper list carries the version" do
+      assert :sets.new([{:version, 2} | :bad_tail]) == %{}
+    end
+
     test "raises CaseClauseError for invalid versions" do
       assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :sets.new(version: :abc)
       end
+    end
+
+    test "error frame carries args" do
+      opts = wrap_term(:invalid)
+
+      top_frame =
+        try do
+          :sets.new(opts)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside
+      # proplists.erl, so its frame location also carries the OTP-internal
+      # file and line, which the client doesn't mirror.
+      assert {:proplists, :get_value, [:version, :invalid, 2], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries the improper tail in args" do
+      # The tail is told apart from the default version, so a frame carrying the
+      # default in its place doesn't read as one carrying the tail.
+      opts = wrap_term([1 | 3])
+
+      top_frame =
+        try do
+          :sets.new(opts)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside
+      # proplists.erl, so its frame location also carries the OTP-internal
+      # file and line, which the client doesn't mirror.
+      assert {:proplists, :get_value, [:version, 3, 2], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -578,6 +755,23 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.size(:abc)
       end
+    end
+
+    test "error frame carries args" do
+      set = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :sets.size(set)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside sets.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:sets, :size, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -653,6 +847,23 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
         :sets.subtract(set_123, :abc)
       end
     end
+
+    test "error frame carries args for a non-set second argument", %{set_123: set_123} do
+      set2 = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :sets.subtract(set_123, set2)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside sets.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:sets, :is_element, [1, :abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
   end
 
   describe "to_list/1" do
@@ -678,6 +889,23 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.to_list(:abc)
       end
+    end
+
+    test "error frame carries args" do
+      set = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :sets.to_list(set)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside sets.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:sets, :to_list, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 
@@ -742,6 +970,23 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.union(set_123, :abc)
       end
+    end
+
+    test "error frame carries args", %{set_123: set_123} do
+      set1 = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :sets.union(set1, set_123)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside sets.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:sets, :size, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 end

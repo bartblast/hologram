@@ -3,7 +3,7 @@
 import {
   assert,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "./support/helpers.mjs";
 
 import ERTS from "../../assets/js/erts.mjs";
@@ -11,7 +11,7 @@ import HologramInterpreterError from "../../assets/js/errors/interpreter_error.m
 import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("Type", () => {
   describe("actionStruct()", () => {
@@ -81,6 +81,7 @@ describe("Type", () => {
       capturedModule: null,
       clauses: clauses,
       context: context,
+      name: null,
       uniq: 1,
     };
 
@@ -566,6 +567,7 @@ describe("Type", () => {
       capturedModule: capturedModule,
       clauses: clauses,
       context: contextFixture({module: "Aaa.Bbb", vars: {}}),
+      name: null,
       uniq: 1,
     };
 
@@ -930,69 +932,6 @@ describe("Type", () => {
     it("returns false for values of types other than boxed integer", () => {
       const result = Type.isInteger(Type.atom("abc"));
       assert.isFalse(result);
-    });
-  });
-
-  describe("isIterator()", () => {
-    const map = Type.map([
-      [Type.atom("a"), Type.integer(1)],
-      [Type.atom("b"), Type.integer(2)],
-    ]);
-
-    it("returns true for a tuple with 3 elements", () => {
-      const term = Type.tuple([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
-
-      assert.isTrue(Type.isIterator(term));
-    });
-
-    it("returns false for a tuple with less than 3 elements", () => {
-      const term = Type.tuple([Type.integer(1), Type.integer(2)]);
-      assert.isFalse(Type.isIterator(term));
-    });
-
-    it("returns false for a tuple with more than 3 elements", () => {
-      const term = Type.tuple([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-        Type.integer(4),
-      ]);
-
-      assert.isFalse(Type.isIterator(term));
-    });
-
-    it("returns true for an improper list with specific structure", () => {
-      const term = Type.improperList([Type.integer(0), map]);
-      assert.isTrue(Type.isIterator(term));
-    });
-
-    it("returns false for an improper list with incorrect structure", () => {
-      const term = Type.improperList([Type.atom("key"), Type.integer(123)]);
-      assert.isFalse(Type.isIterator(term));
-    });
-
-    it("returns false for a proper list", () => {
-      const term = Type.list([Type.integer(0), map]);
-      assert.isFalse(Type.isIterator(term));
-    });
-
-    it("returns true for atom 'none'", () => {
-      const term = Type.atom("none");
-      assert.isTrue(Type.isIterator(term));
-    });
-
-    it("returns false for a non-iterator atom", () => {
-      const term = Type.atom("not_none");
-      assert.isFalse(Type.isIterator(term));
-    });
-
-    it("returns false for a term that is not a tuple, a list or an atom", () => {
-      const term = Type.integer(123);
-      assert.isFalse(Type.isIterator(term));
     });
   });
 

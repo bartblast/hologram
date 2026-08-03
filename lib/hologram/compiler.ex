@@ -68,6 +68,33 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the version of each OTP application the given call graph reaches, keyed by application
+  name and sorted by it.
+
+  A stacktrace frame names the application its module belongs to and that application's version,
+  the way the server renders one, and this is where the client reads the version from.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_app_versions_1/README.md
+  """
+  @spec build_app_versions(CallGraph.t()) :: keyword(String.t())
+  def build_app_versions(call_graph) do
+    call_graph
+    |> CallGraph.vertices()
+    |> Enum.map(fn
+      {module, _function, _arity} -> module
+      module -> module
+    end)
+    |> Enum.uniq()
+    |> Enum.map(&Application.get_application/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.map(fn app -> {app, Application.spec(app, :vsn)} end)
+    |> Enum.reject(fn {_app, vsn} -> is_nil(vsn) end)
+    |> Enum.map(fn {app, vsn} -> {app, to_string(vsn)} end)
+    |> Enum.sort()
+  end
+
+  @doc """
   Builds the call graph of all modules in the project.
   """
   @spec build_call_graph :: CallGraph.t()
@@ -213,6 +240,11 @@ defmodule Hologram.Compiler do
       |> render_elixir_function_defs(ir_plt, async_mfas)
       |> render_block()
 
+    module_metadata_registration =
+      mfas
+      |> render_module_metadata_registration()
+      |> render_block()
+
     """
     "use strict";
 
@@ -230,7 +262,7 @@ defmodule Hologram.Compiler do
         MemoryStorage,
         Type,
         Utils,
-      } = deps;#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}
+      } = deps;#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}
     }
 
     globalThis.Hologram.pageScriptLoaded = true;
@@ -243,8 +275,9 @@ defmodule Hologram.Compiler do
   @doc """
   Builds Hologram runtime JavaScript source code.
   """
-  @spec build_runtime_js(list(mfa), PLT.t(), MapSet.t(mfa), T.file_path()) :: String.t()
-  def build_runtime_js(runtime_mfas, ir_plt, async_mfas, js_dir) do
+  @spec build_runtime_js(list(mfa), PLT.t(), MapSet.t(mfa), keyword(String.t()), T.file_path()) ::
+          String.t()
+  def build_runtime_js(runtime_mfas, ir_plt, async_mfas, app_versions, js_dir) do
     erlang_function_defs =
       runtime_mfas
       |> render_erlang_function_defs(Path.join(js_dir, "erlang"))
@@ -253,6 +286,16 @@ defmodule Hologram.Compiler do
     elixir_function_defs =
       runtime_mfas
       |> render_elixir_function_defs(ir_plt, async_mfas)
+      |> render_block()
+
+    module_metadata_registration =
+      runtime_mfas
+      |> render_module_metadata_registration()
+      |> render_block()
+
+    manually_ported_clause_heads =
+      ir_plt
+      |> render_manually_ported_clause_heads()
       |> render_block()
 
     """
@@ -269,7 +312,11 @@ defmodule Hologram.Compiler do
     import Type from "#{js_dir}/type.mjs";
     import Utils from "#{js_dir}/utils.mjs";
 
-    const startTime = PerformanceTimer.start();#{erlang_function_defs}#{elixir_function_defs}
+    const startTime = PerformanceTimer.start();
+
+    globalThis.Hologram.config = #{render_client_config()};
+
+    ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
@@ -417,12 +464,18 @@ defmodule Hologram.Compiler do
   @doc """
   Creates runtime bundle entry file.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_4/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_5/README.md
   """
-  @spec create_runtime_entry_file(list(mfa), PLT.t(), MapSet.t(mfa), T.opts()) :: T.file_path()
-  def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts) do
+  @spec create_runtime_entry_file(
+          list(mfa),
+          PLT.t(),
+          MapSet.t(mfa),
+          keyword(String.t()),
+          T.opts()
+        ) :: T.file_path()
+  def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, app_versions, opts) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, async_mfas, opts[:js_dir])
+    |> build_runtime_js(ir_plt, async_mfas, app_versions, opts[:js_dir])
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
@@ -784,6 +837,19 @@ defmodule Hologram.Compiler do
     end
   end
 
+  # Travels with the per-module metadata, which is emitted under the same
+  # setting - a bundle built without client stacktraces names no application
+  # and no version anywhere.
+  defp render_app_versions(app_versions) do
+    if Hologram.client_stacktraces?() do
+      app_versions
+      |> Enum.map_join(", ", fn {app, vsn} -> ~s/"#{app}": "#{vsn}"/ end)
+      |> then(&"{#{&1}}")
+    else
+      "{}"
+    end
+  end
+
   defp render_block(str) do
     str = String.trim(str)
 
@@ -792,6 +858,10 @@ defmodule Hologram.Compiler do
     else
       ""
     end
+  end
+
+  defp render_client_config do
+    ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
   end
 
   defp render_elixir_function_defs(mfas, ir_plt, async_mfas) do
@@ -807,6 +877,56 @@ defmodule Hologram.Compiler do
     end)
     |> Task.await_many(:infinity)
     |> Enum.join("\n\n")
+  end
+
+  # A manually ported function's clauses aren't encoded, so its raise sites have
+  # no attempted clauses to report. Their heads are registered separately, from
+  # the IR of the Elixir function the port stands in for.
+  defp render_manually_ported_clause_heads(ir_plt) do
+    CallGraph.manually_ported_elixir_mfas()
+    |> Enum.map(fn {module, function, _arity} -> {module, function} end)
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.flat_map(fn {module, function} ->
+      render_manually_ported_clause_heads(ir_plt, module, function)
+    end)
+    |> Enum.join("\n")
+  end
+
+  # A raise reports the arity the function was defined with, which a default
+  # argument makes differ from the arity the port replaces - Task.await/1 is
+  # ported, but its clause is await/2 - so every arity is registered.
+  defp render_manually_ported_clause_heads(ir_plt, module, function) do
+    module_name = Reflection.module_name(module)
+
+    case PLT.get(ir_plt, module) do
+      {:ok, module_def} ->
+        module_def
+        |> IR.aggregate_module_funs()
+        |> Enum.filter(fn {{name, _arity}, _fun} -> name == function end)
+        |> Enum.sort()
+        |> Enum.map(fn {{name, arity}, {visibility, clauses}} ->
+          Encoder.encode_elixir_function_clause_heads(
+            module_name,
+            name,
+            arity,
+            visibility,
+            clauses,
+            %Context{module: module}
+          )
+        end)
+
+      :error ->
+        []
+    end
+  end
+
+  defp render_module_metadata_registration(mfas) do
+    mfas
+    |> filter_elixir_mfas()
+    |> Enum.map(fn {module, _function, _arity} -> module end)
+    |> Enum.uniq()
+    |> Encoder.encode_module_metadata_registration()
   end
 
   defp render_erlang_function_defs(mfas, erlang_js_dir) do

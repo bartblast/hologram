@@ -4,15 +4,15 @@ import {
   assert,
   assertBoxedError,
   assertBoxedStrictEqual,
-  defineGlobalErlangAndElixirModules,
+  buildFunctionClauseErrorMsg,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Filelib from "../../../assets/js/erlang/filelib.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/filelib_test.exs
@@ -299,7 +299,7 @@ describe("Erlang_Filelib", () => {
       assertBoxedError(
         () => safeRelativePath(filename, cwd),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           filename,
           Type.list(),
         ]),
@@ -314,9 +314,7 @@ describe("Erlang_Filelib", () => {
       assertBoxedError(
         () => safeRelativePath(filename, cwd),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [
-          Type.list([cwd]),
-        ]),
+        buildFunctionClauseErrorMsg(":filename.join/1", [Type.list([cwd])]),
       );
     });
   });

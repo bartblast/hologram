@@ -1,14 +1,11 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "../../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../../support/helpers.mjs";
 
 import RegexInterpreter from "../../../../assets/js/erts/regex/regex_interpreter.mjs";
 import RegexParser from "../../../../assets/js/erts/regex/regex_parser.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const match = (source, subject, opts = {}) => {
   const result = matchFull(source, subject, opts);

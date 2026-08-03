@@ -7,13 +7,21 @@ import {
   assertBoxedFalse,
   assertBoxedStrictEqual,
   assertBoxedTrue,
+  buildArgumentErrorMsg,
+  buildBadArityErrorMsg,
+  buildBadFunctionErrorMsg,
+  buildBadMapErrorMsg,
+  buildKeyErrorMsg,
+  buildUndefinedFunctionErrorMsg,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
+import {defineModule3Fixture as defineErlangModule3Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_3.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
+import CallStack from "../../../assets/js/erts/call_stack.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Erlang_Os from "../../../assets/js/erlang/os.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
@@ -22,8 +30,9 @@ import HologramInterpreterError from "../../../assets/js/errors/interpreter_erro
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 defineErlangModule1Fixture();
+defineErlangModule3Fixture();
 
 const atomA = Type.atom("a");
 const atomAbc = Type.atom("abc");
@@ -60,9 +69,34 @@ const pid2 = Type.pid("my_node@my_host", [0, 11, 112]);
 const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
 const tuple3 = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
+// Returns a fresh caller frame for :erlang.error/1,2,3 raising-frame tests -
+// fresh, because the tested code copies and augments frames and the tests
+// assert the original is left untouched.
+function buildCallerFrame() {
+  return {
+    module: "MyModule",
+    function: "my_fun",
+    arityOrArgs: 2,
+    file: "lib/my_module.ex",
+    line: 11,
+    errorInfo: null,
+  };
+}
+
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/erlang_test.exs
 // Always update both together.
+
+function ertsErrorFrame(functionName, args) {
+  return {
+    module: "erlang",
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo: Type.map([[Type.atom("module"), Type.atom("erl_erts_errors")]]),
+  };
+}
 
 describe("Erlang", () => {
   describe("*/2", () => {
@@ -98,6 +132,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: 1 * :a",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(atomA, integer1);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("*", Type.list([atomA, integer1])),
+      ]);
     });
   });
 
@@ -135,6 +183,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: +(:abc)",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("+", Type.list([atomAbc])),
+      ]);
+    });
   });
 
   describe("+/2", () => {
@@ -170,6 +232,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: 1 + :a",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(atomA, integer1);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("+", Type.list([atomA, integer1])),
+      ]);
     });
   });
 
@@ -262,6 +338,20 @@ describe("Erlang", () => {
         "argument error",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["++/2"](Type.atom("abc"), Type.list());
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("++", Type.list([Type.atom("abc"), Type.list()])),
+      ]);
+    });
   });
 
   describe("-/1", () => {
@@ -298,6 +388,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: -(:abc)",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(atomAbc);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("-", Type.list([atomAbc])),
+      ]);
+    });
   });
 
   describe("-/2", () => {
@@ -333,6 +437,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: 1 - :a",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(atomA, integer1);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("-", Type.list([atomA, integer1])),
+      ]);
     });
   });
 
@@ -411,6 +529,46 @@ describe("Erlang", () => {
         "argument error",
       );
     });
+
+    // Removing from a list means walking it to the end, and an improper one has
+    // no end to reach.
+    it("first arg is an improper list", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+            Type.list([Type.integer(1)]),
+          ),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("second arg is an improper list", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.list([Type.integer(1)]),
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+          ),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["--/2"](Type.atom("abc"), Type.list());
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("--", Type.list([Type.atom("abc"), Type.list()])),
+      ]);
+    });
   });
 
   describe("//2", () => {
@@ -460,6 +618,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: 1 / 0",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.atom("abc"), Type.integer(3));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("/", Type.list([Type.atom("abc"), Type.integer(3)])),
+      ]);
     });
   });
 
@@ -1460,8 +1632,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["abs/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("abs", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -1524,6 +1710,26 @@ describe("Erlang", () => {
         "argument error: nil",
       );
     });
+
+    it("the error is attributed to the caller", () => {
+      const context = contextFixture({
+        vars: {left: Type.nil(), right: Type.boolean(true)},
+      });
+
+      let caught;
+
+      try {
+        andalso(
+          (context) => context.vars.left,
+          (context) => context.vars.right,
+          context,
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, []);
+    });
   });
 
   describe("append_element/2", () => {
@@ -1563,8 +1769,25 @@ describe("Erlang", () => {
       assertBoxedError(
         () => append_element(Type.atom("abc"), Type.integer(1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+        buildArgumentErrorMsg(1, "not a tuple"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["append_element/2"](Type.atom("abc"), Type.atom("x"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "append_element",
+          Type.list([Type.atom("abc"), Type.atom("x")]),
+        ),
+      ]);
     });
   });
 
@@ -1637,7 +1860,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(fun, Type.list()),
         "BadFunctionError",
-        Interpreter.buildBadFunctionErrorMsg(fun),
+        buildBadFunctionErrorMsg(fun),
       );
     });
 
@@ -1665,7 +1888,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(funMultipleArgs, args),
         "BadArityError",
-        "anonymous function with arity 2 called with 1 argument (1)",
+        buildBadArityErrorMsg(funMultipleArgs, args.data),
       );
     });
   });
@@ -1718,13 +1941,67 @@ describe("Erlang", () => {
       );
     });
 
+    it("raises ArgumentError if the first argument is not an atom and the args list is not empty", () => {
+      const module = Type.integer(123);
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+
+      const expectedMessage =
+        "you attempted to apply a function on 123. Modules (the first argument of apply) must always be an atom";
+
+      assertBoxedError(
+        () => apply(module, fun, args),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    it("raises ArgumentError if the first argument is a map with an anonymous function under the function name", () => {
+      const anonFun = Type.anonymousFunction(
+        0,
+        [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => Type.integer(123),
+          },
+        ],
+        contextFixture(),
+      );
+
+      const module = Type.map([[Type.atom("my_fun"), anonFun]]);
+      const fun = Type.atom("my_fun");
+
+      const expectedMessage =
+        "you attempted to apply a function named :my_fun on a map/struct. If you are using Kernel.apply/3, make sure the module is an atom. If you are trying to invoke an anonymous function in a map/struct, add a dot between the function name and the parenthesis: map.my_fun.()";
+
+      assertBoxedError(
+        () => apply(module, fun, args),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    it("raises ArgumentError if the first argument is a map with a non-function value under the function name", () => {
+      const module = Type.map([[Type.atom("my_fun"), Type.integer(123)]]);
+      const fun = Type.atom("my_fun");
+
+      const expectedMessage =
+        "you attempted to apply a function named :my_fun on a map/struct. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, ensure there are no parentheses after the field name, such as map.my_fun";
+
+      assertBoxedError(
+        () => apply(module, fun, args),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
     it("raises ArgumentError if the second argument is not an atom", () => {
       const fun = Type.integer(123);
 
       assertBoxedError(
         () => apply(module, fun, args),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+        buildArgumentErrorMsg(2, "not an atom"),
       );
     });
 
@@ -1734,7 +2011,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+        buildArgumentErrorMsg(3, "not a list"),
       );
     });
 
@@ -1745,7 +2022,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+        buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
 
@@ -1757,7 +2034,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(module, "fun_2", 2, false),
+        buildUndefinedFunctionErrorMsg(module, "fun_2", 2, false),
       );
     });
 
@@ -1768,12 +2045,25 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(
-          module,
-          "nonexistent_fun",
-          2,
-        ),
+        buildUndefinedFunctionErrorMsg(module, "nonexistent_fun", 2),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["apply/3"](Type.atom("m"), Type.atom("f"), Type.atom("bad"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "apply",
+          Type.list([Type.atom("m"), Type.atom("f"), Type.atom("bad")]),
+        ),
+      ]);
     });
   });
 
@@ -1784,6 +2074,20 @@ describe("Erlang", () => {
       const expected = Erlang["atom_to_binary/2"](atom, Type.atom("utf8"));
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["atom_to_binary/1"](Type.integer(1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("atom_to_binary", Type.list([Type.integer(1)])),
+      ]);
     });
   });
 
@@ -1802,7 +2106,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(123), encoding),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+        buildArgumentErrorMsg(1, "not an atom"),
       );
     });
 
@@ -1813,6 +2117,23 @@ describe("Erlang", () => {
         HologramInterpreterError,
         "encodings other than utf8 are not yet implemented in Hologram",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["atom_to_binary/2"](Type.integer(1), Type.atom("utf8"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "atom_to_binary",
+          Type.list([Type.integer(1), Type.atom("utf8")]),
+        ),
+      ]);
     });
   });
 
@@ -1850,8 +2171,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => atom_to_list(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+        buildArgumentErrorMsg(1, "not an atom"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["atom_to_list/1"](Type.integer(1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("atom_to_list", Type.list([Type.integer(1)])),
+      ]);
     });
   });
 
@@ -1942,6 +2277,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: Bitwise.band(5, 3.0)",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.float(5.0), Type.integer(3));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("band", Type.list([Type.float(5.0), Type.integer(3)])),
+      ]);
     });
   });
 
@@ -2041,7 +2390,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_part(Type.atom("abc"), Type.integer(1), Type.integer(2)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2054,7 +2403,7 @@ describe("Erlang", () => {
             Type.integer(2),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2067,7 +2416,7 @@ describe("Erlang", () => {
             Type.integer(2),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+        buildArgumentErrorMsg(2, "not an integer"),
       );
     });
 
@@ -2080,7 +2429,7 @@ describe("Erlang", () => {
             Type.integer(2),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -2093,7 +2442,7 @@ describe("Erlang", () => {
             Type.integer(2),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -2106,7 +2455,7 @@ describe("Erlang", () => {
             Type.integer(9),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+        buildArgumentErrorMsg(3, "out of range"),
       );
     });
 
@@ -2119,7 +2468,7 @@ describe("Erlang", () => {
             Type.float(2.0),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+        buildArgumentErrorMsg(3, "not an integer"),
       );
     });
 
@@ -2132,7 +2481,7 @@ describe("Erlang", () => {
             Type.integer(8),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+        buildArgumentErrorMsg(3, "out of range"),
       );
     });
 
@@ -2145,8 +2494,29 @@ describe("Erlang", () => {
             Type.integer(-5),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+        buildArgumentErrorMsg(3, "out of range"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["binary_part/3"](
+          Type.bitstring("abc"),
+          Type.atom("a"),
+          Type.integer(1),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "binary_part",
+          Type.list([Type.bitstring("abc"), Type.atom("a"), Type.integer(1)]),
+        ),
+      ]);
     });
   });
 
@@ -2183,7 +2553,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_atom(Type.bitstring([1, 0, 1]), encoding),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2191,8 +2561,25 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_atom(Type.atom("abc"), encoding),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["binary_to_atom/2"](Type.integer(1), Type.atom("utf8"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "binary_to_atom",
+          Type.list([Type.integer(1), Type.atom("utf8")]),
+        ),
+      ]);
     });
   });
 
@@ -2307,10 +2694,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2320,10 +2704,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2333,10 +2714,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2367,7 +2745,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2377,7 +2755,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2387,10 +2765,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2400,10 +2775,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2413,10 +2785,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2426,10 +2795,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2439,10 +2805,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2452,10 +2815,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2465,10 +2825,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2478,10 +2835,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2491,10 +2845,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2504,10 +2855,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2517,10 +2865,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2530,10 +2875,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2543,10 +2885,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -2556,11 +2895,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["binary_to_float/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("binary_to_float", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -2573,6 +2923,20 @@ describe("Erlang", () => {
       const expected = Erlang["binary_to_integer/2"](binary, Type.integer(10));
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["binary_to_integer/1"](Type.bitstring("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("binary_to_integer", Type.list([Type.bitstring("abc")])),
+      ]);
     });
   });
 
@@ -2715,7 +3079,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.atom("abc"), Type.integer(10)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -2723,7 +3087,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring([1, 0, 1]), Type.integer(10)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -2731,7 +3095,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring(""), Type.integer(10)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
+          buildArgumentErrorMsg(
             1,
             "not a textual representation of an integer",
           ),
@@ -2742,7 +3106,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring("123"), Type.integer(2)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
+          buildArgumentErrorMsg(
             1,
             "not a textual representation of an integer",
           ),
@@ -2753,10 +3117,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring("123"), Type.atom("abc")),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
 
@@ -2764,10 +3125,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring("123"), Type.integer(1)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
 
@@ -2775,12 +3133,26 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring("123"), Type.integer(37)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["binary_to_integer/2"](Type.bitstring("abc"), Type.integer(50));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "binary_to_integer",
+          Type.list([Type.bitstring("abc"), Type.integer(50)]),
+        ),
+      ]);
     });
   });
 
@@ -2834,7 +3206,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_list(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2842,8 +3214,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_list(Type.bitstring([1, 0, 1])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["binary_to_list/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("binary_to_list", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -2954,10 +3340,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -2968,10 +3351,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -2982,10 +3362,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3179,10 +3556,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3193,10 +3567,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3207,10 +3578,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3221,10 +3589,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3244,10 +3609,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3270,10 +3632,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3359,10 +3718,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -3456,10 +3812,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3471,10 +3824,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3485,10 +3835,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -3590,10 +3937,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3604,10 +3948,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -3646,10 +3987,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3663,10 +4001,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -3732,10 +4067,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3746,10 +4078,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3763,10 +4092,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3779,10 +4105,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3795,10 +4118,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3819,10 +4139,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -3863,10 +4180,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3880,10 +4194,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -3895,10 +4206,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4054,10 +4362,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4072,10 +4377,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4090,10 +4392,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4231,10 +4530,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4248,10 +4544,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4265,10 +4558,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4389,10 +4679,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4413,10 +4700,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4444,10 +4728,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4464,10 +4745,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4477,7 +4755,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(Type.atom("test")),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -4487,7 +4765,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(bits),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+          buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -4497,10 +4775,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4510,10 +4785,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4535,10 +4807,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
 
@@ -4555,10 +4824,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
+          buildArgumentErrorMsg(1, "invalid external representation of a term"),
         );
       });
     });
@@ -4586,8 +4852,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => bit_size(myAtom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+        buildArgumentErrorMsg(1, "not a bitstring"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["bit_size/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("bit_size", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -4635,6 +4915,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: Bitwise.bnot(2.0)",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.float(2.0));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("bnot", Type.list([Type.float(2.0)])),
+      ]);
     });
   });
 
@@ -4738,6 +5032,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: Bitwise.bor(1, 2.0)",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        bor(Type.float(1.0), Type.integer(2));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("bor", Type.list([Type.float(1.0), Type.integer(2)])),
+      ]);
+    });
   });
 
   describe("bsl/2", () => {
@@ -4826,6 +5134,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: Bitwise.bsl(1, 2.0)",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.float(1.0), Type.integer(2));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("bsl", Type.list([Type.float(1.0), Type.integer(2)])),
+      ]);
+    });
   });
 
   describe("bsr/2", () => {
@@ -4913,6 +5235,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.float(1.0), Type.integer(2));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("bsr", Type.list([Type.float(1.0), Type.integer(2)])),
+      ]);
     });
   });
 
@@ -5020,6 +5356,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: Bitwise.bxor(5, 3.0)",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.float(5.0), Type.integer(3));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("bxor", Type.list([Type.float(5.0), Type.integer(3)])),
+      ]);
+    });
   });
 
   describe("byte_size/1", () => {
@@ -5052,8 +5402,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => byte_size(atom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+        buildArgumentErrorMsg(1, "not a bitstring"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["byte_size/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("byte_size", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -5127,8 +5491,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["ceil/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("ceil", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -5286,7 +5664,7 @@ describe("Erlang", () => {
         () =>
           testedFun(Type.float(1.0), Type.atom("second"), Type.atom("second")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -5295,7 +5673,7 @@ describe("Erlang", () => {
         () =>
           testedFun(Type.integer(1), Type.atom("banana"), Type.atom("second")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+        buildArgumentErrorMsg(2, "invalid time unit"),
       );
     });
 
@@ -5303,7 +5681,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), Type.atom("second"), integer0),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid time unit"),
+        buildArgumentErrorMsg(3, "invalid time unit"),
       );
     });
 
@@ -5311,7 +5689,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), Type.integer(-1), Type.atom("second")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+        buildArgumentErrorMsg(2, "invalid time unit"),
       );
     });
 
@@ -5319,7 +5697,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), integer0, Type.atom("second")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+        buildArgumentErrorMsg(2, "invalid time unit"),
       );
     });
 
@@ -5327,7 +5705,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), Type.atom("second"), Type.float(1.5)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid time unit"),
+        buildArgumentErrorMsg(3, "invalid time unit"),
       );
     });
 
@@ -5340,8 +5718,29 @@ describe("Erlang", () => {
             Type.atom("second"),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+        buildArgumentErrorMsg(2, "invalid time unit"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["convert_time_unit/3"](
+          Type.atom("a"),
+          Type.atom("second"),
+          Type.atom("second"),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "convert_time_unit",
+          Type.list([Type.atom("a"), Type.atom("second"), Type.atom("second")]),
+        ),
+      ]);
     });
   });
 
@@ -5412,7 +5811,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => delete_element(Type.atom("abc"), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -5420,7 +5819,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => delete_element(Type.integer(1), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -5434,7 +5833,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => delete_element(Type.integer(10), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -5448,7 +5847,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => delete_element(Type.integer(0), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -5462,8 +5861,25 @@ describe("Erlang", () => {
       assertBoxedError(
         () => delete_element(Type.integer(-1), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["delete_element/2"](Type.atom("a"), Type.atom("b"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "delete_element",
+          Type.list([Type.atom("a"), Type.atom("b")]),
+        ),
+      ]);
     });
   });
 
@@ -5569,6 +5985,20 @@ describe("Erlang", () => {
         "bad argument in arithmetic expression: div(5, :abc)",
       );
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.integer(5), Type.integer(0));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("div", Type.list([Type.integer(5), Type.integer(0)])),
+      ]);
+    });
   });
 
   describe("element/2", () => {
@@ -5589,7 +6019,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.atom("abc"), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -5597,7 +6027,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.integer(1), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -5605,7 +6035,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.integer(10), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -5613,21 +6043,39 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.integer(0), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["element/2"](Type.atom("a"), Type.atom("b"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("element", Type.list([Type.atom("a"), Type.atom("b")])),
+      ]);
     });
   });
 
   describe("error/1", () => {
     const error = Erlang["error/1"];
 
-    it("raises the given reason", () => {
-      const reason = Type.errorStruct("MyError", "my message");
-
-      assertBoxedError(() => error(reason), "MyError", "my message");
+    beforeEach(() => {
+      CallStack.reset();
     });
 
-    it("normalizes a bare reason into a boxed exception struct", () => {
+    it("raises the given reason", () => {
+      const reason = Type.errorStruct("RuntimeError", "my message");
+
+      assertBoxedError(() => error(reason), "RuntimeError", "my message");
+    });
+
+    it("normalizes a bare reason into an exception struct", () => {
       const reason = Type.atom("badarg");
 
       let caught;
@@ -5642,31 +6090,300 @@ describe("Erlang", () => {
       assert.deepStrictEqual(caught.value, reason);
       assert.isTrue(Type.isStruct(caught.struct));
     });
+
+    it("keeps the caller's arity on the raising frame", () => {
+      CallStack.push(buildCallerFrame());
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [buildCallerFrame()]);
+    });
   });
 
-  it("error/2", () => {
+  describe("error/2", () => {
     const error = Erlang["error/2"];
-    const reason = Type.errorStruct("MyError", "my message");
-    const args = Type.list([Type.integer(1, Type.integer(2))]);
 
-    assertBoxedError(() => error(reason, args), "MyError", "my message");
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    it("raises the given reason", () => {
+      const reason = Type.errorStruct("RuntimeError", "my message");
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedError(() => error(reason, args), "RuntimeError", "my message");
+    });
+
+    it("replaces the caller's arity with the given args on the raising frame", () => {
+      CallStack.push(buildCallerFrame());
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), args);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {...buildCallerFrame(), arityOrArgs: args},
+      ]);
+    });
   });
 
   describe("error/3", () => {
     const error = Erlang["error/3"];
 
-    // TODO: args and error_info affect the BEAM stacktrace and error reporting,
-    // which the client does not model yet. Assert their effect once it does.
+    const emptyOptions = Type.list();
+    const noArgs = Type.atom("none");
+
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
     it("raises the given reason", () => {
-      const reason = Type.errorStruct("MyError", "my message");
+      const reason = Type.errorStruct("RuntimeError", "my message");
       const args = Type.list([Type.integer(1), Type.integer(2)]);
-      const options = Type.list();
 
       assertBoxedError(
-        () => error(reason, args, options),
-        "MyError",
+        () => error(reason, args, emptyOptions),
+        "RuntimeError",
         "my message",
       );
+    });
+
+    it("copies the caller frame into the raising frame", () => {
+      const callerFrame = buildCallerFrame();
+      CallStack.push(callerFrame);
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [buildCallerFrame()]);
+      assert.notStrictEqual(caught.stacktrace[0], callerFrame);
+    });
+
+    it("replaces the caller's arity with args given as a proper list", () => {
+      const callerFrame = buildCallerFrame();
+      CallStack.push(callerFrame);
+
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), args, emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {...buildCallerFrame(), arityOrArgs: args},
+      ]);
+
+      // The caller's live frame is not mutated.
+      assert.equal(callerFrame.arityOrArgs, 2);
+    });
+
+    it("replaces the caller's arity with args given as an improper list", () => {
+      CallStack.push(buildCallerFrame());
+      const args = Type.improperList([Type.integer(1), Type.integer(2)]);
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), args, emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {...buildCallerFrame(), arityOrArgs: args},
+      ]);
+    });
+
+    it("keeps the caller's arity when args is not a list", () => {
+      CallStack.push(buildCallerFrame());
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), Type.atom("my_args"), emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [buildCallerFrame()]);
+    });
+
+    it("attaches error_info from options to the raising frame", () => {
+      CallStack.push(buildCallerFrame());
+
+      const errorInfo = Type.map([
+        [Type.atom("module"), Type.atom("my_format_module")],
+      ]);
+
+      const options = Type.list([
+        Type.tuple([Type.atom("error_info"), errorInfo]),
+      ]);
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {...buildCallerFrame(), errorInfo},
+      ]);
+    });
+
+    it("ignores options other than error_info", () => {
+      CallStack.push(buildCallerFrame());
+      const options = Type.list([Type.atom("my_option")]);
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [buildCallerFrame()]);
+    });
+
+    it("ignores options that are not a list", () => {
+      CallStack.push(buildCallerFrame());
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, Type.atom("my_options"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [buildCallerFrame()]);
+    });
+
+    it("excludes :erlang.error dispatch frames from the trace", () => {
+      CallStack.push(buildCallerFrame());
+
+      CallStack.push({
+        module: "erlang",
+        function: "error",
+        arityOrArgs: 3,
+        file: null,
+        line: null,
+        errorInfo: null,
+      });
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [buildCallerFrame()]);
+    });
+
+    it("keeps the frames below the caller in the trace", () => {
+      const outerFrame = {
+        module: "MyOuterModule",
+        function: "my_outer_fun",
+        arityOrArgs: 0,
+        file: "lib/my_outer_module.ex",
+        line: 21,
+        errorInfo: null,
+      };
+
+      CallStack.push(outerFrame);
+      CallStack.push(buildCallerFrame());
+
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        buildCallerFrame(),
+        outerFrame,
+      ]);
+    });
+
+    it("derives the message from error_info at normalize time", () => {
+      const args = Type.list([Type.atom("a"), Type.atom("b")]);
+
+      const errorInfoMap = Type.map([
+        [
+          Type.atom("module"),
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module3"),
+        ],
+      ]);
+
+      const options = Type.list([
+        Type.tuple([Type.atom("error_info"), errorInfoMap]),
+      ]);
+
+      let caught;
+
+      try {
+        error(Type.atom("badarg"), args, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(
+        caught.struct,
+        Type.errorStruct(
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 2nd argument: not a map\n",
+        ),
+      );
+    });
+
+    // Client-only test with no Elixir consistency twin - a server stacktrace
+    // is never empty, while the client call stack is empty whenever frame
+    // tracking is disabled.
+    it("attaches an all-null raising frame when the call stack is empty", () => {
+      let caught;
+
+      try {
+        error(Type.atom("my_reason"), noArgs, emptyOptions);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: null,
+          function: null,
+          arityOrArgs: null,
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 
@@ -5709,8 +6426,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => float(atomAbc),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["float/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("float", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -5916,7 +6647,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
 
@@ -5928,7 +6659,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
 
@@ -5940,7 +6671,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
     });
@@ -6145,7 +6876,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
 
@@ -6157,7 +6888,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
     });
@@ -6598,7 +7329,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => float_to_binary(Type.float(10.0), opts),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        buildArgumentErrorMsg(2, "invalid option in list"),
       );
     });
 
@@ -6609,7 +7340,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(integer123, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a float"),
+          buildArgumentErrorMsg(1, "not a float"),
         );
       });
 
@@ -6617,7 +7348,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, integer123),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a list"),
+          buildArgumentErrorMsg(2, "not a list"),
         );
       });
 
@@ -6630,7 +7361,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
+          buildArgumentErrorMsg(2, "not a proper list"),
         );
       });
 
@@ -6638,9 +7369,29 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, Type.list([atomAbc])),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["float_to_binary/2"](
+          Type.float(1.0),
+          Type.list([Type.atom("bad")]),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "float_to_binary",
+          Type.list([Type.float(1.0), Type.list([Type.atom("bad")])]),
+        ),
+      ]);
     });
   });
 
@@ -6660,6 +7411,23 @@ describe("Erlang", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["float_to_list/2"](Type.integer(1), Type.list());
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "float_to_list",
+          Type.list([Type.integer(1), Type.list()]),
+        ),
+      ]);
     });
   });
 
@@ -6733,8 +7501,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["floor/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("floor", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -6855,6 +7637,7 @@ describe("Erlang", () => {
         contextFixture({
           module: "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
         }),
+        "-test fun_info/1 local function, arity 0, empty env/1-fun-0-",
       );
 
       const result = fun_info(fun);
@@ -6877,7 +7660,12 @@ describe("Erlang", () => {
         ]),
         Type.tuple([Type.atom("index"), Type.integer(1)]),
         Type.tuple([Type.atom("uniq"), Type.integer(1)]),
-        Type.tuple([Type.atom("name"), Type.atom("anonymous function fn/0")]),
+        Type.tuple([
+          Type.atom("name"),
+          Type.atom(
+            "-test fun_info/1 local function, arity 0, empty env/1-fun-0-",
+          ),
+        ]),
         Type.tuple([Type.atom("arity"), Type.integer(0)]),
         Type.tuple([Type.atom("env"), Type.list()]),
         Type.tuple([Type.atom("type"), Type.atom("local")]),
@@ -6901,6 +7689,7 @@ describe("Erlang", () => {
           module: "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
           vars: {my_var: Type.integer(123)},
         }),
+        "-test fun_info/1 local function, arity 1, closure reference/1-fun-0-",
       );
 
       const result = fun_info(fun);
@@ -6923,7 +7712,12 @@ describe("Erlang", () => {
         ]),
         Type.tuple([Type.atom("index"), Type.integer(1)]),
         Type.tuple([Type.atom("uniq"), Type.integer(1)]),
-        Type.tuple([Type.atom("name"), Type.atom("anonymous function fn/1")]),
+        Type.tuple([
+          Type.atom("name"),
+          Type.atom(
+            "-test fun_info/1 local function, arity 1, closure reference/1-fun-0-",
+          ),
+        ]),
         Type.tuple([Type.atom("arity"), Type.integer(1)]),
         Type.tuple([Type.atom("env"), Type.list([Type.integer(123)])]),
         Type.tuple([Type.atom("type"), Type.atom("local")]),
@@ -6956,6 +7750,7 @@ describe("Erlang", () => {
           module: "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
           vars: {var_a: Type.integer(10), var_b: Type.integer(20)},
         }),
+        "-test fun_info/1 local function, arity 2, multiple closure references/1-fun-0-",
       );
 
       const result = fun_info(fun);
@@ -6978,7 +7773,12 @@ describe("Erlang", () => {
         ]),
         Type.tuple([Type.atom("index"), Type.integer(1)]),
         Type.tuple([Type.atom("uniq"), Type.integer(1)]),
-        Type.tuple([Type.atom("name"), Type.atom("anonymous function fn/2")]),
+        Type.tuple([
+          Type.atom("name"),
+          Type.atom(
+            "-test fun_info/1 local function, arity 2, multiple closure references/1-fun-0-",
+          ),
+        ]),
         Type.tuple([Type.atom("arity"), Type.integer(2)]),
         Type.tuple([
           Type.atom("env"),
@@ -6994,8 +7794,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun_info(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a fun"),
+        buildArgumentErrorMsg(1, "not a fun"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["fun_info/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("fun_info", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -7059,7 +7873,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun_info(Type.atom("abc"), Type.atom("arity")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a fun"),
+        buildArgumentErrorMsg(1, "not a fun"),
       );
     });
 
@@ -7075,7 +7889,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun_info(fun, Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+        buildArgumentErrorMsg(2, "invalid item"),
       );
     });
 
@@ -7091,7 +7905,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun_info(fun, Type.atom("invalid_item")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+        buildArgumentErrorMsg(2, "invalid item"),
       );
     });
 
@@ -7115,8 +7929,33 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun_info(fun, Type.atom("invalid_item")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+        buildArgumentErrorMsg(2, "invalid item"),
       );
+    });
+
+    it("blames the first arg when neither arg is valid", () => {
+      assertBoxedError(
+        () => fun_info(Type.atom("abc"), Type.atom("invalid_item")),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not a fun"),
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun_info(Type.atom("abc"), Type.atom("arity"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "fun_info",
+          Type.list([Type.atom("abc"), Type.atom("arity")]),
+        ),
+      ]);
     });
   });
 
@@ -7315,7 +8154,7 @@ describe("Erlang", () => {
               Type.integer(1),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+          buildArgumentErrorMsg(1, "not an atom"),
         );
       });
 
@@ -7328,7 +8167,7 @@ describe("Erlang", () => {
               Type.integer(1),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+          buildArgumentErrorMsg(2, "not an atom"),
         );
       });
 
@@ -7341,9 +8180,30 @@ describe("Erlang", () => {
               Type.float(2.0),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+          buildArgumentErrorMsg(3, "not an integer"),
         );
       });
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["function_exported/3"](
+          Type.integer(1),
+          Type.atom("f"),
+          Type.integer(1),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "function_exported",
+          Type.list([Type.integer(1), Type.atom("f"), Type.integer(1)]),
+        ),
+      ]);
     });
   });
 
@@ -7366,7 +8226,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => hd(Type.list()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
+        buildArgumentErrorMsg(1, "not a nonempty list"),
       );
     });
 
@@ -7374,8 +8234,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => hd(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
+        buildArgumentErrorMsg(1, "not a nonempty list"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["hd/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("hd", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -7422,7 +8296,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => insert_element(atomB, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -7430,7 +8304,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => insert_element(integer1, atomB, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -7438,7 +8312,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => insert_element(integer4, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -7446,8 +8320,29 @@ describe("Erlang", () => {
       assertBoxedError(
         () => insert_element(integer0, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["insert_element/3"](
+          Type.atom("a"),
+          Type.atom("b"),
+          Type.atom("c"),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "insert_element",
+          Type.list([Type.atom("a"), Type.atom("b"), Type.atom("c")]),
+        ),
+      ]);
     });
   });
 
@@ -7459,6 +8354,20 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["integer_to_binary/1"](Type.atom("a"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("integer_to_binary", Type.list([Type.atom("a")])),
+      ]);
+    });
   });
 
   describe("integer_to_binary/2", () => {
@@ -7469,10 +8378,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_binary(Type.integer(123123), Type.integer(1)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
 
@@ -7506,10 +8412,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_binary(Type.integer(123123), Type.integer(37)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
     });
@@ -7526,7 +8429,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => integer_to_binary(Type.atom("abc"), Type.integer(16)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -7534,11 +8437,25 @@ describe("Erlang", () => {
       assertBoxedError(
         () => integer_to_binary(Type.integer(123123), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
+        buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["integer_to_binary/2"](Type.atom("a"), Type.integer(10));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "integer_to_binary",
+          Type.list([Type.atom("a"), Type.integer(10)]),
+        ),
+      ]);
     });
   });
 
@@ -7551,6 +8468,20 @@ describe("Erlang", () => {
       const expected = integer_to_list_2(integer123, integer10);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["integer_to_list/1"](Type.atom("a"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("integer_to_list", Type.list([Type.atom("a")])),
+      ]);
     });
   });
 
@@ -7607,7 +8538,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_list_2(Type.float(3.14), integer10),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+          buildArgumentErrorMsg(1, "not an integer"),
         );
       });
 
@@ -7615,10 +8546,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_list_2(integer123, Type.float(3.14)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
 
@@ -7626,10 +8554,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_list_2(integer123, integer1),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
 
@@ -7637,12 +8562,26 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_list_2(integer123, Type.integer(37)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            2,
-            "not an integer in the range 2 through 36",
-          ),
+          buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
         );
       });
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["integer_to_list/2"](Type.atom("a"), Type.integer(50));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "integer_to_list",
+          Type.list([Type.atom("a"), Type.integer(50)]),
+        ),
+      ]);
     });
   });
 
@@ -7681,7 +8620,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => iolist_to_binary(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        buildArgumentErrorMsg(1, "not an iodata term"),
       );
     });
 
@@ -7696,8 +8635,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => iolist_to_binary(Type.list([nonBinary])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+        buildArgumentErrorMsg(1, "not an iodata term"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["iolist_to_binary/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("iolist_to_binary", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -7860,7 +8813,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => is_map_key(atomA, atomAbc),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(atomAbc),
+        buildBadMapErrorMsg(atomAbc),
       );
     });
   });
@@ -7945,8 +8898,32 @@ describe("Erlang", () => {
       assertBoxedError(
         () => length(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
+    });
+
+    // A list has no length until it is walked to the end, and an improper one
+    // has no end to reach.
+    it("raises ArgumentError if the argument is an improper list", () => {
+      assertBoxedError(
+        () => length(Type.improperList([Type.integer(1), Type.integer(2)])),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["length/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("length", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -8001,7 +8978,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_atom(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -8010,7 +8987,7 @@ describe("Erlang", () => {
         () =>
           list_to_atom(Type.improperList([Type.integer(97), Type.integer(98)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+        buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
 
@@ -8021,7 +8998,7 @@ describe("Erlang", () => {
             Type.list([Type.integer(97), Type.atom("x"), Type.integer(99)]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
+        buildArgumentErrorMsg(1, "not a list of characters"),
       );
     });
 
@@ -8029,7 +9006,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_atom(Type.list([Type.integer(-1)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
+        buildArgumentErrorMsg(1, "not a list of characters"),
       );
     });
 
@@ -8037,7 +9014,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_atom(Type.bitstring("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -8051,7 +9028,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
+        buildArgumentErrorMsg(1, "not a list of characters"),
       );
     });
 
@@ -8059,8 +9036,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_atom(Type.list([Type.integer(97), Type.bitstring("bc")])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
+        buildArgumentErrorMsg(1, "not a list of characters"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_atom/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("list_to_atom", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -8187,7 +9178,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_binary(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -8195,7 +9186,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_binary(Type.bitstring("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -8203,7 +9194,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_binary(Type.list([Type.atom("abc")])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -8211,7 +9202,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_binary(Type.list([Type.float(1.0)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -8219,7 +9210,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_binary(Type.list([Type.integer(256)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -8227,7 +9218,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_binary(Type.list([Type.integer(-1)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -8242,7 +9233,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
 
@@ -8260,8 +9251,22 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+        buildArgumentErrorMsg(1, "not an iolist term"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_binary/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("list_to_binary", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -8514,7 +9519,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -8529,7 +9534,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -8540,10 +9545,7 @@ describe("Erlang", () => {
             Type.list([Type.integer(49), Type.atom("abc"), Type.integer(51)]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8555,10 +9557,7 @@ describe("Erlang", () => {
             Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8575,10 +9574,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8587,10 +9583,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.list([Type.integer(48)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8610,10 +9603,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8632,10 +9622,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8647,10 +9634,7 @@ describe("Erlang", () => {
             Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8658,10 +9642,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.list()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8670,10 +9651,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.list([Type.integer(46)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8682,10 +9660,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.list([Type.integer(46), Type.integer(53)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8694,10 +9669,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.list([Type.integer(53), Type.integer(46)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8714,10 +9686,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8726,10 +9695,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_float(Type.list([Type.integer(50), Type.integer(101)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8747,10 +9713,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8768,10 +9731,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8789,10 +9749,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8813,10 +9770,7 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
     });
 
@@ -8836,11 +9790,22 @@ describe("Erlang", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a float",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a float"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_float/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("list_to_float", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -8858,6 +9823,20 @@ describe("Erlang", () => {
       const expected = Erlang["list_to_integer/2"](list, Type.integer(10));
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_integer/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("list_to_integer", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -9076,7 +10055,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_integer(Type.atom("abc"), Type.integer(10)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -9092,7 +10071,7 @@ describe("Erlang", () => {
             Type.integer(10),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+        buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
 
@@ -9100,10 +10079,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_integer(Type.list(), Type.integer(10)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -9115,10 +10091,7 @@ describe("Erlang", () => {
             Type.integer(10),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -9126,10 +10099,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_integer(Type.list([Type.integer(50)]), Type.integer(2)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -9146,10 +10116,7 @@ describe("Erlang", () => {
             Type.integer(10),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -9167,10 +10134,7 @@ describe("Erlang", () => {
             Type.integer(10),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -9178,10 +10142,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_integer(Type.list([Type.integer(45)]), Type.integer(10)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -9189,10 +10150,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_integer(Type.list([Type.integer(43)]), Type.integer(10)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of an integer"),
       );
     });
 
@@ -9200,10 +10158,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_integer(Type.list([Type.integer(49)]), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
+        buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
       );
     });
 
@@ -9215,10 +10170,7 @@ describe("Erlang", () => {
             Type.integer(1),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
+        buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
       );
     });
 
@@ -9230,11 +10182,25 @@ describe("Erlang", () => {
             Type.integer(37),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
+        buildArgumentErrorMsg(2, "not an integer in the range 2 through 36"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_integer/2"](Type.atom("abc"), Type.integer(10));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "list_to_integer",
+          Type.list([Type.atom("abc"), Type.integer(10)]),
+        ),
+      ]);
     });
   });
 
@@ -9276,10 +10242,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a pid",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a pid"),
       );
     });
 
@@ -9287,7 +10250,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -9301,10 +10264,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a pid",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a pid"),
       );
     });
 
@@ -9318,11 +10278,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a pid",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a pid"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_pid/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("list_to_pid", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -9410,10 +10381,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a reference",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a reference"),
       );
     });
 
@@ -9441,10 +10409,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a reference",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a reference"),
       );
     });
 
@@ -9452,7 +10417,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -9462,7 +10427,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(arg),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -9476,10 +10441,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a reference",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a reference"),
       );
     });
 
@@ -9494,10 +10456,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of a reference",
-        ),
+        buildArgumentErrorMsg(1, "not a textual representation of a reference"),
       );
     });
   });
@@ -9525,7 +10484,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_tuple(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -9539,8 +10498,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_tuple(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["list_to_tuple/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("list_to_tuple", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -9700,7 +10673,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_fun(integer123, Type.atom("fun_0"), integer0),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+        buildArgumentErrorMsg(1, "not an atom"),
       );
     });
 
@@ -9708,7 +10681,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_fun(module, integer123, integer0),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+        buildArgumentErrorMsg(2, "not an atom"),
       );
     });
 
@@ -9716,7 +10689,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_fun(module, Type.atom("fun_0"), float2),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+        buildArgumentErrorMsg(3, "not an integer"),
       );
     });
 
@@ -9724,7 +10697,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_fun(module, Type.atom("fun_0"), Type.integer(-1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+        buildArgumentErrorMsg(3, "out of range"),
       );
     });
 
@@ -9734,6 +10707,23 @@ describe("Erlang", () => {
         "ArgumentError",
         "argument error",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["make_fun/3"](Type.integer(1), Type.atom("f"), Type.integer(-1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "make_fun",
+          Type.list([Type.integer(1), Type.atom("f"), Type.integer(-1)]),
+        ),
+      ]);
     });
   });
 
@@ -9767,7 +10757,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_tuple(Type.integer(-1), atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -9775,8 +10765,25 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_tuple(float2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["make_tuple/2"](Type.atom("a"), Type.atom("x"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "make_tuple",
+          Type.list([Type.atom("a"), Type.atom("x")]),
+        ),
+      ]);
     });
   });
 
@@ -9799,7 +10806,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => map_get(Type.atom("a"), Type.integer(1)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
+        buildBadMapErrorMsg(Type.integer(1)),
       );
     });
 
@@ -9810,7 +10817,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => map_get(key, map),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(key, map),
+        buildKeyErrorMsg(key, map),
       );
     });
   });
@@ -9831,7 +10838,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => map_size(Type.atom("abc")),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+        buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
   });
@@ -9922,7 +10929,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => monotonic_time(Type.float(1.0)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -9930,7 +10937,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => monotonic_time(Type.atom("invalid")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -9938,7 +10945,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => monotonic_time(Type.integer(0)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -9946,8 +10953,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => monotonic_time(Type.integer(-1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["monotonic_time/1"](Type.atom("bad"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("monotonic_time", Type.list([Type.atom("bad")])),
+      ]);
     });
   });
 
@@ -9975,6 +10996,20 @@ describe("Erlang", () => {
 
     it("not boolean", () => {
       assertBoxedError(() => not(atomAbc), "ArgumentError", "argument error");
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["not/1"](Type.integer(1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("not", Type.list([Type.integer(1)])),
+      ]);
     });
   });
 
@@ -10037,6 +11072,26 @@ describe("Erlang", () => {
         "argument error: nil",
       );
     });
+
+    it("the error is attributed to the caller", () => {
+      const context = contextFixture({
+        vars: {left: Type.nil(), right: Type.boolean(true)},
+      });
+
+      let caught;
+
+      try {
+        orelse(
+          (context) => context.vars.left,
+          (context) => context.vars.right,
+          context,
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, []);
+    });
   });
 
   describe("pid_to_list/1", () => {
@@ -10085,8 +11140,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+        buildArgumentErrorMsg(1, "not a pid"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["pid_to_list/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("pid_to_list", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -10109,7 +11178,7 @@ describe("Erlang", () => {
       assert.deepStrictEqual(error.value, reason);
     });
 
-    it("normalizes a bare :error reason into a boxed exception struct", () => {
+    it("normalizes a bare :error reason into an exception struct", () => {
       const reason = Type.atom("badarg");
 
       let caught;
@@ -10126,11 +11195,215 @@ describe("Erlang", () => {
       assert.isTrue(Type.isStruct(caught.struct));
     });
 
+    it("preserves the given stacktrace", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.atom("my_mod"),
+          Type.atom("my_fun"),
+          Type.integer(2),
+          Type.list([
+            Type.tuple([Type.atom("file"), Type.charlist("my_file.ex")]),
+            Type.tuple([Type.atom("line"), Type.integer(7)]),
+          ]),
+        ]),
+      ]);
+
+      let caught;
+
+      try {
+        raise(Type.atom("error"), Type.atom("my_reason"), stacktrace);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.equal(caught.stacktrace, stacktrace);
+    });
+
+    it("preserves a stacktrace entry with args in place of arity", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.atom("my_mod"),
+          Type.atom("my_fun"),
+          Type.list([Type.integer(1), Type.integer(2)]),
+          Type.list(),
+        ]),
+      ]);
+
+      let caught;
+
+      try {
+        raise(Type.atom("error"), Type.atom("my_reason"), stacktrace);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.equal(caught.stacktrace, stacktrace);
+    });
+
+    it("preserves a fun stacktrace entry", () => {
+      const fun = Type.anonymousFunction(0, [], contextFixture());
+
+      const stacktrace = Type.list([
+        Type.tuple([fun, Type.integer(0), Type.list()]),
+      ]);
+
+      let caught;
+
+      try {
+        raise(Type.atom("error"), Type.atom("my_reason"), stacktrace);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.equal(caught.stacktrace, stacktrace);
+    });
+
+    it("preserves an empty stacktrace", () => {
+      const stacktrace = Type.list();
+
+      let caught;
+
+      try {
+        raise(Type.atom("error"), Type.atom("my_reason"), stacktrace);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.equal(caught.stacktrace, stacktrace);
+    });
+
     it("returns :badarg when the kind is not a valid exception class", () => {
       const result = raise(
         Type.atom("not_a_kind"),
         Type.atom("my_reason"),
         Type.list(),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when the stacktrace is not a list", () => {
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        Type.atom("not_a_list"),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when the stacktrace is an improper list", () => {
+      const stacktrace = Type.improperList([
+        Type.tuple([
+          Type.atom("my_mod"),
+          Type.atom("my_fun"),
+          Type.integer(0),
+          Type.list(),
+        ]),
+        Type.atom("tail"),
+      ]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when a stacktrace entry is not a tuple", () => {
+      const stacktrace = Type.list([Type.atom("not_a_tuple")]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when a stacktrace entry's module is not an atom", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.integer(123),
+          Type.atom("my_fun"),
+          Type.integer(0),
+          Type.list(),
+        ]),
+      ]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when a stacktrace entry's function is not an atom", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.atom("my_mod"),
+          Type.integer(123),
+          Type.integer(0),
+          Type.list(),
+        ]),
+      ]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when a stacktrace entry's location is not a list", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.atom("my_mod"),
+          Type.atom("my_fun"),
+          Type.integer(0),
+          Type.atom("bad_location"),
+        ]),
+      ]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when a stacktrace entry has an invalid size", () => {
+      const stacktrace = Type.list([
+        Type.tuple([Type.atom("my_mod"), Type.atom("my_fun")]),
+      ]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+
+    it("returns :badarg when a 3-element stacktrace entry's first element is not a fun", () => {
+      const stacktrace = Type.list([
+        Type.tuple([Type.atom("my_mod"), Type.integer(0), Type.list()]),
+      ]);
+
+      const result = raise(
+        Type.atom("error"),
+        Type.atom("my_reason"),
+        stacktrace,
       );
 
       assert.deepStrictEqual(result, Type.atom("badarg"));
@@ -10161,8 +11434,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => ref_to_list(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+        buildArgumentErrorMsg(1, "not a reference"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["ref_to_list/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("ref_to_list", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -10255,6 +11542,20 @@ describe("Erlang", () => {
         "ArithmeticError",
         "bad argument in arithmetic expression: rem(5, :abc)",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.integer(5), Type.integer(0));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("rem", Type.list([Type.integer(5), Type.integer(0)])),
+      ]);
     });
   });
 
@@ -10394,8 +11695,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["round/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("round", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -10424,7 +11739,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(atomB, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -10432,7 +11747,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(integer1, atomB, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -10440,7 +11755,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(integer3, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -10448,8 +11763,33 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(integer0, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+        buildArgumentErrorMsg(1, "out of range"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["setelement/3"](
+          Type.integer(0),
+          Type.tuple([Type.atom("a")]),
+          Type.atom("x"),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "setelement",
+          Type.list([
+            Type.integer(0),
+            Type.tuple([Type.atom("a")]),
+            Type.atom("x"),
+          ]),
+        ),
+      ]);
     });
   });
 
@@ -10531,7 +11871,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.atom("abc"), Type.integer(1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -10539,7 +11879,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.bitstring([1, 0, 1]), Type.integer(1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -10547,7 +11887,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.bitstring("abc"), Type.atom("invalid")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+        buildArgumentErrorMsg(2, "not an integer"),
       );
     });
 
@@ -10555,7 +11895,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.bitstring("abc"), Type.integer(-1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -10563,8 +11903,25 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.bitstring("abc"), Type.integer(4)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        buildArgumentErrorMsg(2, "out of range"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["split_binary/2"](Type.atom("a"), Type.integer(1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame(
+          "split_binary",
+          Type.list([Type.atom("a"), Type.integer(1)]),
+        ),
+      ]);
     });
   });
 
@@ -10587,8 +11944,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => system_info(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid system info item"),
+        buildArgumentErrorMsg(1, "invalid system info item"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["system_info/1"](Type.integer(1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("system_info", Type.list([Type.integer(1)])),
+      ]);
     });
   });
 
@@ -10701,7 +12072,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => time_offset(Type.float(1.0)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -10709,7 +12080,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => time_offset(Type.atom("invalid")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -10717,7 +12088,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => time_offset(Type.integer(0)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -10725,8 +12096,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => time_offset(Type.integer(-1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["time_offset/1"](Type.atom("bad"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("time_offset", Type.list([Type.atom("bad")])),
+      ]);
     });
   });
 
@@ -10792,7 +12177,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => tl(Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
+          buildArgumentErrorMsg(1, "not a nonempty list"),
         );
       });
 
@@ -10800,9 +12185,23 @@ describe("Erlang", () => {
         assertBoxedError(
           () => tl(Type.integer(123)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
+          buildArgumentErrorMsg(1, "not a nonempty list"),
         );
       });
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["tl/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("tl", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -10872,8 +12271,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["trunc/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("trunc", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -10898,8 +12311,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => tuple_size(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+        buildArgumentErrorMsg(1, "not a tuple"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["tuple_size/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("tuple_size", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -10920,8 +12347,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => tuple_to_list(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+        buildArgumentErrorMsg(1, "not a tuple"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["tuple_to_list/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("tuple_to_list", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -10993,7 +12434,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => unique_integer(atomAbc),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -11002,7 +12443,7 @@ describe("Erlang", () => {
         () =>
           unique_integer(Type.improperList([Type.atom("positive"), atomAbc])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+        buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
 
@@ -11010,7 +12451,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => unique_integer(Type.list([Type.integer(123)])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
+        buildArgumentErrorMsg(1, "invalid modifier"),
       );
     });
 
@@ -11018,8 +12459,22 @@ describe("Erlang", () => {
       assertBoxedError(
         () => unique_integer(Type.list([Type.atom("invalid")])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
+        buildArgumentErrorMsg(1, "invalid modifier"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["unique_integer/1"](Type.atom("bad"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("unique_integer", Type.list([Type.atom("bad")])),
+      ]);
     });
   });
 
@@ -11056,6 +12511,20 @@ describe("Erlang", () => {
         "ArgumentError",
         "argument error",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang["xor/2"](Type.integer(1), Type.boolean(true));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("xor", Type.list([Type.integer(1), Type.boolean(true)])),
+      ]);
     });
   });
 });

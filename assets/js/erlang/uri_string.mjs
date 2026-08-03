@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang_Unicode from "../erlang/unicode.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -71,39 +72,24 @@ const Erlang_Uri_String = {
       return Type.map(listResult);
     };
 
-    // TODO: use generic helper
-    // Validates and decodes an Erlang charlist into a JavaScript string; raises on invalid input.
+    // The server converts chardata with unicode:characters_to_binary/1 and hands
+    // whatever that answers to the parser as it stands, so a badarg reports that
+    // identity and anything other than a binary lands in parse_scheme_start/2.
     const decodeListToString = (list) => {
-      let text = "";
+      const result = Erlang_Unicode["characters_to_binary/1"](list);
 
-      for (const item of list.data) {
-        if (!Type.isInteger(item)) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(
-              1,
-              "not valid character data (an iodata term)",
-            ),
-          );
-        }
-
-        const codepoint = Number(item.value);
-
-        if (codepoint < 0 || codepoint > 1114111) {
-          Interpreter.raiseFunctionClauseError(
-            Interpreter.buildFunctionClauseErrorMsg(
-              ":uri_string.parse_scheme_start/2",
-              [
-                Type.tuple([Type.atom("error"), Type.bitstring(""), list]),
-                Type.map(),
-              ],
-            ),
-          );
-        }
-
-        text += String.fromCodePoint(codepoint);
+      if (!Type.isBinary(result)) {
+        Interpreter.raiseFunctionClauseError(
+          "uri_string",
+          "parse_scheme_start",
+          2,
+          [result, Type.map()],
+        );
       }
 
-      return text;
+      Bitstring.maybeSetTextFromBytes(result);
+
+      return result.text;
     };
 
     // Ensures a binary is valid UTF-8; otherwise raises FunctionClauseError.
@@ -112,10 +98,10 @@ const Erlang_Uri_String = {
 
       if (binary.text === false) {
         Interpreter.raiseFunctionClauseError(
-          Interpreter.buildFunctionClauseErrorMsg(
-            ":uri_string.parse_scheme_start/2",
-            [binary, Type.map()],
-          ),
+          "uri_string",
+          "parse_scheme_start",
+          2,
+          [binary, Type.map()],
         );
       }
 
@@ -318,14 +304,10 @@ const Erlang_Uri_String = {
       return convertBinaryFieldsToLists(result);
     }
 
-    Interpreter.raiseFunctionClauseError(
-      Interpreter.buildFunctionClauseErrorMsg(":uri_string.parse/1", [
-        uriString,
-      ]),
-    );
+    Interpreter.raiseFunctionClauseError("uri_string", "parse", 1, [uriString]);
   },
   // End parse/1
-  // Deps: []
+  // Deps: [:unicode.characters_to_binary/1]
 };
 
 export default Erlang_Uri_String;

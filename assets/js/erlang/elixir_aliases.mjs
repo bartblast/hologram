@@ -10,14 +10,12 @@ import Type from "../type.mjs";
 
 const Erlang_Elixir_Aliases = {
   // Start concat/1
-  "concat/1": function (segments) {
+  "concat/1": (segments) => {
     if (!Type.isList(segments)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
-          arguments[0],
-          Type.bitstring("Elixir"),
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("elixir_aliases", "do_concat", 2, [
+        segments,
+        Type.bitstring("Elixir"),
+      ]);
     }
 
     const normalizedSegments = segments.data.reduce((acc, segment, index) => {
@@ -26,15 +24,10 @@ const Erlang_Elixir_Aliases = {
           acc.unshift("Elixir");
         }
 
-        Interpreter.raiseFunctionClauseError(
-          Interpreter.buildFunctionClauseErrorMsg(
-            ":elixir_aliases.do_concat/2",
-            [
-              Type.list(segments.data.slice(index)),
-              Type.bitstring(acc.join(".")),
-            ],
-          ),
-        );
+        Interpreter.raiseFunctionClauseError("elixir_aliases", "do_concat", 2, [
+          Type.list(segments.data.slice(index)),
+          Type.bitstring(acc.join(".")),
+        ]);
       }
 
       if (Type.isNil(segment)) {

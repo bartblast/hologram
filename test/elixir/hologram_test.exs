@@ -5,6 +5,76 @@ defmodule HologramTest do
 
   alias Hologram.Test.Fixtures.PhoenixEndpoint
 
+  describe "client_error_overlay?/0" do
+    setup do
+      on_exit(fn ->
+        Application.delete_env(:hologram, :client_error_overlay)
+        Application.delete_env(:hologram, :client_stacktraces)
+      end)
+
+      :ok
+    end
+
+    test "follows enabled stacktraces when the config key is not set" do
+      Application.delete_env(:hologram, :client_error_overlay)
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      assert client_error_overlay?()
+    end
+
+    test "follows disabled stacktraces when the config key is not set" do
+      Application.delete_env(:hologram, :client_error_overlay)
+      Application.put_env(:hologram, :client_stacktraces, false)
+
+      refute client_error_overlay?()
+    end
+
+    test "is true when the config key is set to true" do
+      Application.put_env(:hologram, :client_error_overlay, true)
+
+      assert client_error_overlay?()
+    end
+
+    test "is false when the config key is set to false" do
+      Application.put_env(:hologram, :client_error_overlay, false)
+
+      refute client_error_overlay?()
+    end
+
+    test "is false with stacktraces enabled when the config key is set to false" do
+      Application.put_env(:hologram, :client_error_overlay, false)
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      refute client_error_overlay?()
+    end
+  end
+
+  describe "client_stacktraces?/0" do
+    setup do
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      :ok
+    end
+
+    test "defaults to true in dev/test when the config key is not set" do
+      Application.delete_env(:hologram, :client_stacktraces)
+
+      assert client_stacktraces?()
+    end
+
+    test "is true when the config key is set to true" do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      assert client_stacktraces?()
+    end
+
+    test "is false when the config key is set to false" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+
+      refute client_stacktraces?()
+    end
+  end
+
   describe "enabled?/0" do
     setup do
       original = System.get_env("HOLOGRAM_START")

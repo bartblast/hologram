@@ -18,7 +18,28 @@ defmodule Hologram.Commons.TestUtils do
     build_multi_argument_error_msg([{arg_idx, blame}])
   end
 
-  # Keep this message in sync with Interpreter.buildBadFunctionErrorMsg in assets/js/interpreter.mjs.
+  # Keep this message in sync with buildBadArityErrorMsg in test/javascript/support/helpers.mjs.
+  @doc """
+  Builds an error message for BadArityError.
+  """
+  @spec build_bad_arity_error_msg(fun, list) :: String.t()
+  def build_bad_arity_error_msg(fun, args) do
+    {:arity, arity} = Function.info(fun, :arity)
+
+    count =
+      if Enum.empty?(args) do
+        "no arguments"
+      else
+        inspected_args = Enum.map_join(args, ", ", &KernelUtils.inspect/1)
+        noun = if length(args) == 1, do: "argument", else: "arguments"
+
+        "#{length(args)} #{noun} (#{inspected_args})"
+      end
+
+    "#{KernelUtils.inspect(fun)} with arity #{arity} called with #{count}"
+  end
+
+  # Keep this message in sync with buildBadFunctionErrorMsg in test/javascript/support/helpers.mjs.
   @doc """
   Builds an error message for BadFunctionError.
   """
@@ -27,7 +48,7 @@ defmodule Hologram.Commons.TestUtils do
     "expected a function, got: " <> KernelUtils.inspect(term)
   end
 
-  # Keep this message in sync with Interpreter.buildBadMapErrorMsg in assets/js/interpreter.mjs.
+  # Keep this message in sync with buildBadMapErrorMsg in test/javascript/support/helpers.mjs.
   @doc """
   Builds an error message for BadMapError.
   """
@@ -36,7 +57,7 @@ defmodule Hologram.Commons.TestUtils do
     build_value_error_msg("expected a map, got", term)
   end
 
-  # Keep this message in sync with Interpreter.buildCaseClauseErrorMsg in assets/js/interpreter.mjs.
+  # Keep this message in sync with buildCaseClauseErrorMsg in test/javascript/support/helpers.mjs.
   @doc """
   Builds an error message for CaseClauseError.
   """
@@ -45,7 +66,7 @@ defmodule Hologram.Commons.TestUtils do
     build_value_error_msg("no case clause matching", term)
   end
 
-  # Keep this message in sync with Interpreter.buildErlangErrorMsg in assets/js/interpreter.mjs.
+  # Keep this message in sync with buildErlangErrorMsg in test/javascript/support/helpers.mjs.
   @doc """
   Builds an error message for ErlangError.
   """
@@ -54,7 +75,7 @@ defmodule Hologram.Commons.TestUtils do
     "Erlang error: #{blame}"
   end
 
-  # Keep this message in sync with Interpreter.buildFunctionClauseErrorMsg in assets/js/interpreter.mjs.
+  # Keep this message in sync with buildFunctionClauseErrorMsg in test/javascript/support/helpers.mjs.
   @doc """
   Builds an error message for FunctionClauseError.
   """
@@ -101,7 +122,7 @@ defmodule Hologram.Commons.TestUtils do
     """)
   end
 
-  # Keep this message in sync with Interpreter.buildKeyErrorMsg in assets/js/interpreter.mjs.
+  # Keep this message in sync with buildKeyErrorMsg in test/javascript/support/helpers.mjs.
   @doc """
   Builds an error message for KeyError.
 
@@ -120,7 +141,7 @@ defmodule Hologram.Commons.TestUtils do
     end
   end
 
-  # Keep this message in sync with Interpreter.buildMatchErrorMsg in assets/js/interpreter.mjs.
+  # Keep this message in sync with buildMatchErrorMsg in test/javascript/support/helpers.mjs.
   @doc """
   Builds an error message for MatchError.
   """
@@ -133,7 +154,7 @@ defmodule Hologram.Commons.TestUtils do
     "function #{module_name}.#{fun}/#{arity} is undefined (module #{module_name} is not available)"
   end
 
-  # Keep this message in sync with Interpreter.buildMultiArgumentErrorMsg in assets/js/interpreter.mjs.
+  # Keep this message in sync with buildMultiArgumentErrorMsg in test/javascript/support/helpers.mjs.
   @doc """
   Builds an error message for ArgumentError with a bullet per erroneous argument.
   """
@@ -151,7 +172,7 @@ defmodule Hologram.Commons.TestUtils do
     """)
   end
 
-  # Keep this message in sync with Interpreter.buildTryClauseErrorMsg in assets/js/interpreter.mjs.
+  # Keep this message in sync with buildTryClauseErrorMsg in test/javascript/support/helpers.mjs.
   @doc """
   Builds an error message for TryClauseError.
   """
@@ -160,7 +181,7 @@ defmodule Hologram.Commons.TestUtils do
     build_value_error_msg("no try clause matching", term)
   end
 
-  # Keep this message in sync with Interpreter.buildUndefinedFunctionErrorMsg in assets/js/interpreter.mjs.
+  # Keep this message in sync with buildUndefinedFunctionErrorMsg in test/javascript/support/helpers.mjs.
   @doc """
   Builds an error message for UndefinedFunctionError.
   """
@@ -213,7 +234,7 @@ defmodule Hologram.Commons.TestUtils do
     end
   end
 
-  # Keep this message in sync with Interpreter.buildWithClauseErrorMsg in assets/js/interpreter.mjs.
+  # Keep this message in sync with buildWithClauseErrorMsg in test/javascript/support/helpers.mjs.
   @doc """
   Builds an error message for WithClauseError.
   """
