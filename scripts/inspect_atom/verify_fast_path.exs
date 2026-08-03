@@ -105,8 +105,8 @@ Enum.each(Enum.take(mismatches, 20), fn {name, format, expected, actual} ->
 end)
 
 # The client renders an alias without asking Elixir either, dropping the "Elixir." prefix unless
-# what follows is Elixir itself. The names checked here cover both, the segments that make a name
-# an alias at all, and the ones that only look like it.
+# what follows is Elixir itself. The names checked here cover the segments that make a name an
+# alias at all.
 alias_names =
   [
     "Elixir",
@@ -118,30 +118,35 @@ alias_names =
     "Elixir.Foo.Bar.Baz",
     "Elixir.F",
     "Elixir.Foo1",
-    "Elixir.Foo_Bar",
-    "Elixir.Foo?",
-    "Elixir.foo",
-    "Elixir.",
-    "Elixir.Foo.",
-    "Elixir.Foo.bar",
-    "ElixirFoo",
-    "Elixir Foo"
+    "Elixir.Foo_Bar"
   ] ++ Enum.map(["String", "Kernel", "Hologram.Component"], &("Elixir." <> &1))
 
-alias_mismatches =
-  Enum.flat_map(Enum.uniq(alias_names), fn name ->
-    is_alias = Regex.match?(~r/^Elixir(\.[A-Z][a-zA-Z0-9_]*)*$/, name)
+# Names that only look like an alias, so the client leaves the prefix where it is. The rendering
+# is written out rather than derived, since deriving it would compare Macro with itself and pass
+# whatever the client did - what these pin is that the prefix survives.
+non_alias_names = [
+  {"Elixir.foo", ~s(:"Elixir.foo")},
+  {"Elixir.", ~s(:"Elixir.")},
+  {"Elixir.Foo?", ~s(:"Elixir.Foo?")},
+  {"Elixir.Foo.", ~s(:"Elixir.Foo.")},
+  {"Elixir.Foo.bar", ~s(:"Elixir.Foo.bar")},
+  {"ElixirFoo", ":ElixirFoo"},
+  {"Elixir Foo", ~s(:"Elixir Foo")}
+]
 
+expected_alias_names =
+  Enum.map(Enum.uniq(alias_names), fn name ->
     is_elixir_itself =
       name in ["Elixir", "Elixir.Elixir"] or String.starts_with?(name, "Elixir.Elixir.")
 
     expected_output =
-      cond do
-        not is_alias -> Macro.inspect_atom(:literal, String.to_atom(name))
-        is_elixir_itself -> name
-        true -> String.replace_prefix(name, "Elixir.", "")
-      end
+      if is_elixir_itself, do: name, else: String.replace_prefix(name, "Elixir.", "")
 
+    {name, expected_output}
+  end)
+
+alias_mismatches =
+  Enum.flat_map(expected_alias_names ++ non_alias_names, fn {name, expected_output} ->
     actual_output = Macro.inspect_atom(:literal, String.to_atom(name))
 
     if actual_output == expected_output do
@@ -155,7 +160,9 @@ Enum.each(alias_mismatches, fn {name, format, expected, actual} ->
   IO.puts("MISMATCH #{inspect(name)} as #{format}: expected #{expected}, got #{actual}")
 end)
 
-IO.puts("Checked #{length(Enum.uniq(alias_names))} alias-shaped names.")
+IO.puts(
+  "Checked #{length(expected_alias_names)} aliases and #{length(non_alias_names)} names that only look like one."
+)
 
 if mismatches == [] and alias_mismatches == [] do
   IO.puts("OK: the fast paths match the server on every name")
