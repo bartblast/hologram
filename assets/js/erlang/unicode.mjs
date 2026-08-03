@@ -35,7 +35,7 @@ const Erlang_Unicode = {
       if (Type.isBinary(elem)) {
         chunks.push(elem);
       } else if (Type.isInteger(elem)) {
-        if (Bitstring.validateCodePoint(elem.value)) {
+        if (Bitstring.isUnicodeScalarValue(elem.value)) {
           const segment = Type.bitstringSegment(elem, {type: "utf8"});
           chunks.push(Bitstring.fromSegments([segment]));
         } else {
@@ -355,7 +355,7 @@ const Erlang_Unicode = {
       }
 
       // Process integer elements (guaranteed integer at this point)
-      const isValidCodepoint = Bitstring.validateCodePoint(elem.value);
+      const isValidCodepoint = Bitstring.isUnicodeScalarValue(elem.value);
       if (!isValidCodepoint) {
         return {
           type: "codepointerror",

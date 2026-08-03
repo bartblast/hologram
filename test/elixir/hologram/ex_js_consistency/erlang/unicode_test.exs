@@ -201,6 +201,19 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
     end
 
+    test "input contains a UTF-16 surrogate code point" do
+      input = [
+        ?a,
+        <<"bcd">>,
+        0xD800,
+        <<"efg">>
+      ]
+
+      expected = {:error, <<"abcd">>, [0xD800, <<"efg">>]}
+
+      assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
+    end
+
     test "error frame carries args and error_info" do
       chardata = wrap_term(:abc)
 
@@ -333,6 +346,14 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       input = ["a", invalid_binary]
 
       expected = {:error, ~c"a", [invalid_binary]}
+
+      assert :unicode.characters_to_list(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate range in list" do
+      input = ["a", 0xD800]
+
+      expected = {:error, ~c"a", [0xD800]}
 
       assert :unicode.characters_to_list(input) == expected
     end

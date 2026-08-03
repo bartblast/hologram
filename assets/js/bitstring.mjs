@@ -613,6 +613,20 @@ export default class Bitstring {
     return bitstring.text !== false;
   }
 
+  // A Unicode scalar value is any code point other than a UTF-16 surrogate,
+  // which is what UTF-8 can encode. String.fromCodePoint takes lone surrogates,
+  // so validateCodePoint alone lets them through.
+  static isUnicodeScalarValue(codePoint) {
+    const value = typeof codePoint === "bigint" ? Number(codePoint) : codePoint;
+
+    // 0xD800 = 55296, 0xDFFF = 57343
+    if (value >= 0xd800 && value <= 0xdfff) {
+      return false;
+    }
+
+    return $.validateCodePoint(value);
+  }
+
   static maybeResolveHex(bitstring) {
     if (bitstring.hex === null) {
       $.maybeSetBytesFromText(bitstring);

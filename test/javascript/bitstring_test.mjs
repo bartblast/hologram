@@ -5305,6 +5305,42 @@ describe("Bitstring", () => {
     });
   });
 
+  describe("isUnicodeScalarValue()", () => {
+    it("integer that is a scalar value", () => {
+      // a = 97
+      assert.isTrue(Bitstring.isUnicodeScalarValue(97));
+    });
+
+    it("integer below the surrogate range", () => {
+      assert.isTrue(Bitstring.isUnicodeScalarValue(0xd7ff));
+    });
+
+    it("integer at the start of the surrogate range", () => {
+      assert.isFalse(Bitstring.isUnicodeScalarValue(0xd800));
+    });
+
+    it("integer at the end of the surrogate range", () => {
+      assert.isFalse(Bitstring.isUnicodeScalarValue(0xdfff));
+    });
+
+    it("integer above the surrogate range", () => {
+      assert.isTrue(Bitstring.isUnicodeScalarValue(0xe000));
+    });
+
+    it("bigint in the surrogate range", () => {
+      assert.isFalse(Bitstring.isUnicodeScalarValue(0xd800n));
+    });
+
+    it("integer that is not a valid code point", () => {
+      // Max Unicode code point value is 1,114,112
+      assert.isFalse(Bitstring.isUnicodeScalarValue(1114113));
+    });
+
+    it("not an integer or a bigint", () => {
+      assert.isFalse(Bitstring.isUnicodeScalarValue("abc"));
+    });
+  });
+
   describe("maybeResolveHex()", () => {
     it("when hex field is already set", () => {
       const bitstring = Type.bitstring("Hologram");

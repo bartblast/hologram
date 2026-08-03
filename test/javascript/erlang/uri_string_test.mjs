@@ -70,6 +70,29 @@ describe("Erlang_Uri_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("full URI with all components (nested chardata)", () => {
+      const uri = Type.list([
+        Type.bitstring("foo://user@ex"),
+        Type.charlist("ample.com:8042"),
+        Type.list([Type.charlist("/over/there?name=ferret")]),
+        Type.bitstring("#nose"),
+      ]);
+
+      const result = parse(uri);
+
+      const expected = Type.map([
+        [Type.atom("fragment"), Type.charlist("nose")],
+        [Type.atom("host"), Type.charlist("example.com")],
+        [Type.atom("path"), Type.charlist("/over/there")],
+        [Type.atom("port"), Type.integer(8042)],
+        [Type.atom("query"), Type.charlist("name=ferret")],
+        [Type.atom("scheme"), Type.charlist("foo")],
+        [Type.atom("userinfo"), Type.charlist("user")],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("invalid URI with list input returns error tuple", () => {
       const uri = Type.charlist("http://[::1");
       const result = parse(uri);
@@ -635,6 +658,40 @@ describe("Erlang_Uri_String", () => {
         "FunctionClauseError",
         buildFunctionClauseErrorMsg(":uri_string.parse_scheme_start/2", [
           Type.tuple([Type.atom("error"), Type.bitstring(""), arg]),
+          Type.map(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is a list containing a surrogate code point", () => {
+      const arg = Type.list([Type.integer(0xd800)]);
+
+      assertBoxedError(
+        () => parse(arg),
+        "FunctionClauseError",
+        buildFunctionClauseErrorMsg(":uri_string.parse_scheme_start/2", [
+          Type.tuple([Type.atom("error"), Type.bitstring(""), arg]),
+          Type.map(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is a list with an invalid code point after valid characters", () => {
+      const arg = Type.list([
+        Type.integer(97),
+        Type.integer(0xd800),
+        Type.integer(98),
+      ]);
+
+      assertBoxedError(
+        () => parse(arg),
+        "FunctionClauseError",
+        buildFunctionClauseErrorMsg(":uri_string.parse_scheme_start/2", [
+          Type.tuple([
+            Type.atom("error"),
+            Type.bitstring("a"),
+            Type.list([Type.integer(0xd800), Type.integer(98)]),
+          ]),
           Type.map(),
         ]),
       );

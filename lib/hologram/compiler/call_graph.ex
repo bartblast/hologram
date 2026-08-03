@@ -343,7 +343,8 @@ defmodule Hologram.Compiler.CallGraph do
     {{:unicode_util, :_cpl_cont3, 2}, {:unicode_util, :_is_cp, 1}},
     {{:unicode_util, :cp, 1}, {:unicode_util, :_cpl, 2}},
     {{:unicode_util, :cp, 1}, {:unicode_util, :_is_cp, 1}},
-    {{:unicode_util, :gc, 1}, {:unicode_util, :cp, 1}}
+    {{:unicode_util, :gc, 1}, {:unicode_util, :cp, 1}},
+    {{:uri_string, :parse, 1}, {:unicode, :characters_to_binary, 1}}
   ]
 
   # These functions are transpiled manually for at least one of the following reasons:

@@ -289,6 +289,25 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("input contains a UTF-16 surrogate code point", () => {
+      const input = Type.list([
+        Type.integer(97), // a
+        Type.bitstring("bcd"),
+        Type.integer(0xd800),
+        Type.bitstring("efg"),
+      ]);
+
+      const result = characters_to_binary(input, utf8Atom, utf8Atom);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("abcd"),
+        Type.list([Type.integer(0xd800), Type.bitstring("efg")]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     // This is temporary, until the related TODO is implemented.
     it("input encoding is different than :utf8", () => {
       assert.throw(
@@ -576,6 +595,20 @@ describe("Erlang_Unicode", () => {
         Type.atom("error"),
         Type.list([Type.integer(97)]),
         Type.list([expectedRest]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects UTF-16 surrogate range in list", () => {
+      const input = Type.list([Type.bitstring("a"), Type.integer(0xd800)]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list([Type.integer(97)]),
+        Type.list([Type.integer(0xd800)]),
       ]);
 
       assert.deepStrictEqual(result, expected);
