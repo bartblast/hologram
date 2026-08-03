@@ -49,8 +49,10 @@ defmodule Mix.Tasks.Compile.Hologram do
         true -> compile_with_lock(opts)
       end
 
+    # TODO: Remove this block together with refresh_umbrella_app_manifests/0
+    # (see the removal note there), and inline the cond above back into the
+    # function body - the result binding exists only to run this afterwards.
     if not language_server_build?(opts) do
-      # See refresh_umbrella_app_manifests/0 - remove this call together with it.
       refresh_umbrella_app_manifests()
     end
 
@@ -263,8 +265,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # Lists all apps of the enclosing umbrella project, whether the compiler runs in
   # the umbrella root context or in a child app context. Empty in single-app projects.
-  # Used only by refresh_umbrella_app_manifests/0 - remove together with it,
-  # umbrella_sibling_apps/0 included.
+  # TODO: Remove together with refresh_umbrella_app_manifests/0 (see the removal
+  # note there), which is its only caller.
   defp umbrella_apps do
     case Mix.Project.apps_paths() do
       nil ->
@@ -278,6 +280,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
+  # TODO: Remove together with refresh_umbrella_app_manifests/0 (see the removal
+  # note there) - umbrella_apps/0 is its only caller.
   defp umbrella_sibling_apps do
     Mix.Dep.cached()
     |> Enum.filter(& &1.opts[:in_umbrella])
