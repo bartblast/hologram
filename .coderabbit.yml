@@ -4,6 +4,9 @@ reviews:
     base_branches: [".*"]
     drafts: true
   path_filters:
-    - "!benchmarks/**"
-    - "!test/javascript/**"
+    - "!assets/js/**"
+    - "!lib/hologram/**"
+    - "!test/elixir/**"
+    - "!test/features/**"
+    - "!scripts/identifier_tokenizer/**"
   poem: false
