@@ -146,6 +146,7 @@ A few umbrella-specific details:
 
 - Endpoint configuration lives in the umbrella root `config` directory, as it does for any umbrella app.
 - Run `mix holo` from the umbrella root. Started from inside the endpoint app it watches only that app's sources, so changes in sibling apps will not trigger a live reload.
+- Add `listeners: [Phoenix.CodeReloader]` to the `project` config in the umbrella root `mix.exs`. Mix reads listeners from the project it runs as, so the entry Phoenix generates in the endpoint app is not seen when `mix holo` runs from the root, and every reload logs a missing-listener warning.
 - npm packages go in an `assets` directory at the umbrella root, and are resolved from there for every child app.
 - Hologram supports one endpoint app per running BEAM instance. If several apps in the umbrella have a configured Phoenix endpoint, Hologram raises a descriptive error.
 
