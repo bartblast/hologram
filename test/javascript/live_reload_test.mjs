@@ -10,8 +10,16 @@ defineRuntimeGlobals();
 const OVERLAY_ID = "hologram-live-reload-error-overlay";
 
 describe("LiveReload", () => {
+  const originalDocument = globalThis.document;
+
+  // Undone here rather than at the end of each test, since a failed assertion
+  // would otherwise leave the document replaced for every suite that follows.
+  afterEach(() => {
+    globalThis.document = originalDocument;
+    sinon.restore();
+  });
+
   it("reload()", () => {
-    const originalDocument = globalThis.document;
     const reloadSpy = sinon.spy();
 
     globalThis.document = {location: {reload: reloadSpy}};
@@ -19,8 +27,6 @@ describe("LiveReload", () => {
     LiveReload.reload();
 
     sinon.assert.calledOnce(reloadSpy);
-
-    globalThis.document = originalDocument;
   });
 
   it("showErrorOverlay()", () => {
@@ -41,7 +47,5 @@ describe("LiveReload", () => {
       heading: "Compilation Error",
       id: OVERLAY_ID,
     });
-
-    showStub.restore();
   });
 });
