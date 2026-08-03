@@ -1,10 +1,10 @@
 Total codepoints: 1114112
-Divergent codepoints: 85194
-Divergent ranges: 2489
+Divergent codepoints: 85119
+Divergent ranges: 2487
 
 By class pair:
 
-  elixir=error:0 js=identifier:1 -> 83009 codepoints
+  elixir=error:0 js=identifier:1 -> 82934 codepoints
   elixir=error:0 js=error:1 -> 1190 codepoints
   elixir=error:0 js=atom:1 -> 991 codepoints
   elixir=error:1 js=error:0 -> 3 codepoints
@@ -812,9 +812,7 @@ Ranges:
 12443-12444      | elixir=error:0 | js=identifier:1 (゛゜)
 12447-12447      | elixir=error:0 | js=identifier:1 (ゟ)
 12543-12543      | elixir=error:0 | js=identifier:1 (ヿ)
-12549-12591      | elixir=error:0 | js=identifier:1
 12593-12686      | elixir=error:0 | js=identifier:1
-12704-12735      | elixir=error:0 | js=identifier:1
 12784-12799      | elixir=error:0 | js=identifier:1
 13312-13382      | elixir=error:0 | js=identifier:1
 13384-13426      | elixir=error:0 | js=identifier:1

@@ -6,7 +6,7 @@
 // The comparison (compare_classes.exs) shows the native properties CANNOT serve as the base the
 // runtime derives from: Elixir restricts identifiers to codepoints typed Recommended or Inclusion
 // in UTS 39's IdentifierType.txt, a property JavaScript regexes don't expose, leaving ~85k
-// codepoints (2,489 ranges) that the closest native approximation accepts and the BEAM rejects.
+// codepoints (2,487 ranges) that the closest native approximation accepts and the BEAM rejects.
 // The runtime therefore carries the accept set itself, generated from classes_elixir.txt - this
 // script and the comparison stay as the evidence for that decision, and to requantify the gap
 // when either side upgrades its Unicode version.
@@ -42,14 +42,15 @@ console.log(
   `Generating identifier classes for codepoints 0 to ${maxCodepoint}...`,
 );
 
-// UTS 39 Table 5 (recommended scripts), plus Common and Inherited.
+// UTS 39 Table 5 (recommended scripts), plus Common and Inherited. The revision to
+// follow is the one the BEAM implements, since what it accepts is the side being
+// measured against - Bopomofo, for one, moved to Limited Use in Unicode 17.
 const recommendedScripts = [
   "Zyyy",
   "Zinh",
   "Arab",
   "Armn",
   "Beng",
-  "Bopo",
   "Cyrl",
   "Deva",
   "Ethi",
