@@ -26,8 +26,12 @@ const Erlang_String = {
 
     try {
       stringBinary = Erlang_Unicode["characters_to_binary/1"](string);
-    } catch {
-      Interpreter.raiseMatchError(string);
+    } catch (error) {
+      if (error.struct) {
+        Interpreter.raiseMatchError(string);
+      }
+
+      throw error;
     }
 
     if (Type.isTuple(stringBinary)) {
@@ -366,8 +370,12 @@ const Erlang_String = {
     // Convert string to binary - re-throw as MatchError (Erlang raises MatchError for invalid string)
     try {
       stringBinary = Erlang_Unicode["characters_to_binary/1"](string);
-    } catch {
-      Interpreter.raiseMatchError(string);
+    } catch (error) {
+      if (error.struct) {
+        Interpreter.raiseMatchError(string);
+      }
+
+      throw error;
     }
 
     if (Type.isTuple(stringBinary)) {
@@ -458,8 +466,12 @@ const Erlang_String = {
     let subjectBinary;
     try {
       subjectBinary = Erlang_Unicode["characters_to_binary/1"](subject);
-    } catch {
-      Interpreter.raiseMatchError(subject);
+    } catch (error) {
+      if (error.struct) {
+        Interpreter.raiseMatchError(subject);
+      }
+
+      throw error;
     }
 
     if (Type.isTuple(subjectBinary)) {
