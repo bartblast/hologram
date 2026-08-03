@@ -835,7 +835,19 @@ export default class Interpreter {
     }
 
     if (left.type === "match_pattern") {
-      Interpreter.matchOperator(right, left.right, context, raiseMatchError);
+      // The term has to hold against both sides, so a side that doesn't hold
+      // fails the whole match, even where failing is answered rather than raised.
+      const result = Interpreter.matchOperator(
+        right,
+        left.right,
+        context,
+        raiseMatchError,
+      );
+
+      if (result === false) {
+        return false;
+      }
+
       return Interpreter.matchOperator(
         right,
         left.left,

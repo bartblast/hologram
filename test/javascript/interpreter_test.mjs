@@ -7916,6 +7916,30 @@ describe("Interpreter", () => {
         });
       });
 
+      // x = %{a: 3}, matched against %{a: 1, b: 2} without raising
+      it("fails on a constraint standing on the right of the match", () => {
+        const pattern = Type.matchPattern(
+          Type.variablePattern("x"),
+          Type.map([[Type.atom("a"), Type.integer(3)]]),
+        );
+
+        const result = Interpreter.matchOperator(term, pattern, context, false);
+
+        assert.isFalse(result);
+      });
+
+      // %{a: 3} = x, matched against %{a: 1, b: 2} without raising
+      it("fails on a constraint standing on the left of the match", () => {
+        const pattern = Type.matchPattern(
+          Type.map([[Type.atom("a"), Type.integer(3)]]),
+          Type.variablePattern("x"),
+        );
+
+        const result = Interpreter.matchOperator(term, pattern, context, false);
+
+        assert.isFalse(result);
+      });
+
       // %{a: 3} = x = %{a: 1, b: 2}
       it("raises when the term fails the constraint standing beside it", () => {
         const pattern = Type.matchPattern(
@@ -7930,6 +7954,7 @@ describe("Interpreter", () => {
         );
       });
     });
+
     describe("match placeholder", () => {
       it("on the left", () => {
         // _placeholder = 2
