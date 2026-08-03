@@ -341,8 +341,12 @@ jobs:
         # The wrapper allowlists exactly those two IDs, so the audit still fails on every other
         # advisory and on any retired package.
         run: |
-          output="$(mix hex.audit 2>&1)" && exit 0
+          status=0
+          output="$(mix hex.audit 2>&1)" || status=$?
           printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
           if printf '%s\n' "$output" | grep -qiE 'retired'; then
             echo "::error::hex.audit reported a retired package"
             exit 1
@@ -352,6 +356,10 @@ jobs:
             echo "::error::hex.audit reported advisories beyond the allowlisted cowlib CVEs"
             printf '%s\n' "$unexpected"
             exit 1
+          fi
+          if ! printf '%s\n' "$output" | grep -qE 'EEF-CVE-2026-4396[69]'; then
+            echo "::error::hex.audit failed without a recognized allowlisted advisory"
+            exit "$status"
           fi
           echo "Only the allowlisted cowlib advisories present - passing."
 
@@ -527,8 +535,12 @@ jobs:
         # The wrapper allowlists exactly those two IDs, so the audit still fails on every other
         # advisory and on any retired package.
         run: |
-          output="$(mix hex.audit 2>&1)" && exit 0
+          status=0
+          output="$(mix hex.audit 2>&1)" || status=$?
           printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
           if printf '%s\n' "$output" | grep -qiE 'retired'; then
             echo "::error::hex.audit reported a retired package"
             exit 1
@@ -538,6 +550,10 @@ jobs:
             echo "::error::hex.audit reported advisories beyond the allowlisted cowlib CVEs"
             printf '%s\n' "$unexpected"
             exit 1
+          fi
+          if ! printf '%s\n' "$output" | grep -qE 'EEF-CVE-2026-4396[69]'; then
+            echo "::error::hex.audit failed without a recognized allowlisted advisory"
+            exit "$status"
           fi
           echo "Only the allowlisted cowlib advisories present - passing."
 
