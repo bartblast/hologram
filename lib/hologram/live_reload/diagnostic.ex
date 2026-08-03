@@ -62,7 +62,7 @@ defmodule Hologram.LiveReload.Diagnostic do
       carets and section rules
     * `:meta` - where it points, as in `└─ lib/my_app.ex:3:5: MyApp.bar/0`
 
-  A line matching none of them reads in `:body`, so output in a shape
+  A line matching none of them reads in `:chrome`, so output in a shape
   this doesn't know is still shown as it was written.
   """
   @spec to_lines(String.t()) :: [[segment]]
