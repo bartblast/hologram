@@ -1063,7 +1063,9 @@ describe("Erlang_Sets", () => {
       let caught;
 
       try {
-        new_1(Type.improperList([integer1, integer2]));
+        // The tail is told apart from the default version, so a frame carrying
+        // the default in its place doesn't read as one carrying the tail.
+        new_1(Type.improperList([integer1, integer3]));
       } catch (e) {
         caught = e;
       }
@@ -1072,7 +1074,7 @@ describe("Erlang_Sets", () => {
         errorFrame(
           "proplists",
           "get_value",
-          Type.list([Type.atom("version"), integer2, integer2]),
+          Type.list([Type.atom("version"), integer3, integer2]),
         ),
       ]);
     });

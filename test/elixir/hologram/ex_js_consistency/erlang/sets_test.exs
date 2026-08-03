@@ -717,7 +717,9 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
 
     test "error frame carries the improper tail in args" do
-      opts = wrap_term([1 | 2])
+      # The tail is told apart from the default version, so a frame carrying the
+      # default in its place doesn't read as one carrying the tail.
+      opts = wrap_term([1 | 3])
 
       top_frame =
         try do
@@ -729,7 +731,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       # The server implements this function in Erlang code inside
       # proplists.erl, so its frame location also carries the OTP-internal
       # file and line, which the client doesn't mirror.
-      assert {:proplists, :get_value, [:version, 2, 2], location} = wrap_term(top_frame)
+      assert {:proplists, :get_value, [:version, 3, 2], location} = wrap_term(top_frame)
       assert location[:error_info] == nil
     end
   end
