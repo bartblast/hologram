@@ -4,5 +4,6 @@ reviews:
     base_branches: [".*"]
     drafts: true
   path_filters:
+    - "!benchmarks/**"
     - "!test/javascript/**"
   poem: false
