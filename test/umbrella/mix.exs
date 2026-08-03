@@ -18,6 +18,9 @@ defmodule HologramUmbrellaTests.MixProject do
         plt_local_path: "priv/plts/project.plt"
       ],
       elixir: "~> 1.0",
+      # Mix reads :listeners from the project it runs as, which is the umbrella root -
+      # declaring it in the endpoint app alone leaves Phoenix's code reloader unregistered.
+      listeners: [Phoenix.CodeReloader],
       start_permanent: Mix.env() == :prod,
       version: "0.1.0"
     ]
