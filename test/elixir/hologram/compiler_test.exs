@@ -24,6 +24,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module23
   alias Hologram.Test.Fixtures.Compiler.Module24
   alias Hologram.Test.Fixtures.Compiler.Module25
+  alias Hologram.Test.Fixtures.Compiler.Module26
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module8
@@ -1282,6 +1283,44 @@ defmodule Hologram.CompilerTest do
     test "doesn't change entries of unchanged modules", %{ir_plt: ir_plt} do
       assert PLT.get(ir_plt, :module_6) == {:ok, :ir_6}
       assert PLT.get(ir_plt, :module_8) == {:ok, :ir_8}
+    end
+
+    # Reproduces the state Phoenix's code reloader leaves behind in an umbrella:
+    # it compiles with --purge-consolidation-path-if-stale, which removes the
+    # umbrella root consolidated dir while the protocol modules stay loaded from
+    # it. Resolving such a module through :code.which/1 alone raises, which is
+    # what the single-app path would do here - see the removal note on
+    # Hologram.Compiler.resolve_beam_source/2.
+    # TODO: Remove when resolve_beam_source/2 goes (see the removal note there).
+    test "umbrella project, module loaded from a purged consolidated beam" do
+      module = Module26
+      {^module, bytecode, _beam_path} = :code.get_object_code(module)
+
+      # The module's own beam stays on the code path - only the consolidated copy
+      # it gets reloaded from below is gone.
+      {:module, ^module} =
+        :code.load_binary(module, ~c"/removed/consolidated/#{module}.beam", bytecode)
+
+      on_exit(fn ->
+        :code.purge(module)
+        {:module, ^module} = :code.load_file(module)
+      end)
+
+      ir_plt = PLT.start()
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+
+      module_digests_diff = %{
+        added_modules: [module],
+        removed_modules: [],
+        edited_modules: []
+      }
+
+      Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+        patch_ir_plt!(ir_plt, module_digests_diff)
+      end)
+
+      assert {:ok, %IR.ModuleDefinition{module: %IR.AtomType{value: ^module}}} =
+               PLT.get(ir_plt, module)
     end
   end
 

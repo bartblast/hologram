@@ -834,8 +834,11 @@ defmodule Hologram.Compiler do
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
   defp rebuild_ir_plt_entry!(ir_plt, module, umbrella?) do
-    beam_source = resolve_beam_source(module, umbrella?)
-    PLT.put(ir_plt, module, IR.for_module(module, beam_source))
+    # A nil beam source must not reach IR.for_module/2 - it resolves a nil one
+    # with :code.which/1, which is exactly the stale path that yielded nil here.
+    if beam_source = resolve_beam_source(module, umbrella?) do
+      PLT.put(ir_plt, module, IR.for_module(module, beam_source))
+    end
   end
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
