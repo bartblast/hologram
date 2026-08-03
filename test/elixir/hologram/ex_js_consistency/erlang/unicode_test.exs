@@ -34,6 +34,12 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
     # A list holding nothing but the bytes that broke is answered as those
     # bytes, where a longer one keeps its list form.
+    # An element that breaks partway through is read up to the break, so the
+    # bytes before it belong with what came before rather than with the rest.
+    test "reads a binary element up to the byte that breaks it" do
+      assert :unicode.characters_to_binary([<<"a", 0xFF>>]) == {:error, "a", <<0xFF>>}
+    end
+
     test "answers a list holding only the broken bytes as those bytes" do
       assert :unicode.characters_to_binary([<<0xFF>>]) == {:error, "", <<255>>}
     end
@@ -333,6 +339,15 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
                ?l,
                ?d
              ]
+    end
+
+    # An element that breaks partway through is read up to the break, so the
+    # bytes before it belong with what came before rather than with the rest.
+    test "reads a binary element up to the byte that breaks it" do
+      input = [<<"a", 0xFF>>]
+      expected = {:error, ~c"a", [<<0xFF>>]}
+
+      assert :unicode.characters_to_list(input) == expected
     end
 
     test "returns error tuple on invalid UTF-8 in binary" do

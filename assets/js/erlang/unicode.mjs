@@ -117,18 +117,17 @@ const Erlang_Unicode = {
       .map(({value}) => String.fromCodePoint(Number(value)))
       .join("");
 
-    // A list holding nothing but the bytes that broke is answered as those
-    // bytes, where a longer one keeps its list form - observed of the BEAM
-    // rather than derived from anything, and only where it read nothing first.
+    // A rest holding nothing but the bytes that broke is answered as those
+    // bytes, where a longer one keeps its list form.
     const unwrapsRest =
-      Type.isList(input) &&
-      input.data.length === 1 &&
-      Type.isBinary(input.data[0]);
+      Type.isList(rest) &&
+      rest.data.length === 1 &&
+      Type.isBinary(rest.data[0]);
 
     return Type.tuple([
       tag,
       Bitstring.fromText(text),
-      unwrapsRest ? input.data[0] : rest,
+      unwrapsRest ? rest.data[0] : rest,
     ]);
   },
   // End characters_to_binary/1
@@ -179,18 +178,17 @@ const Erlang_Unicode = {
       .map(({value}) => String.fromCodePoint(Number(value)))
       .join("");
 
-    // A list holding nothing but the bytes that broke is answered as those
-    // bytes, where a longer one keeps its list form - observed of the BEAM
-    // rather than derived from anything, and only where it read nothing first.
+    // A rest holding nothing but the bytes that broke is answered as those
+    // bytes, where a longer one keeps its list form.
     const unwrapsRest =
-      Type.isList(input) &&
-      input.data.length === 1 &&
-      Type.isBinary(input.data[0]);
+      Type.isList(rest) &&
+      rest.data.length === 1 &&
+      Type.isBinary(rest.data[0]);
 
     return Type.tuple([
       tag,
       Bitstring.fromText(text),
-      unwrapsRest ? input.data[0] : rest,
+      unwrapsRest ? rest.data[0] : rest,
     ]);
   },
   // End characters_to_binary/3
@@ -325,25 +323,36 @@ const Erlang_Unicode = {
       invalidBinary,
       remainingElems,
     ) => {
-      // Convert all valid chunks to codepoints
-      const codepoints =
-        chunks.length > 0
-          ? convertBinaryToCodepoints(Bitstring.concat(chunks))
-          : [];
-
-      // Check if it's a truncated sequence
       Bitstring.maybeSetBytesFromText(invalidBinary);
       const bytes = invalidBinary.bytes ?? new Uint8Array(0);
-      const {isTruncated} = findValidUtf8Length(bytes);
+      const {validLength, isTruncated} = findValidUtf8Length(bytes);
+
+      // The element breaks partway through, so the bytes before the break were
+      // read and belong with the elements before it rather than with the rest.
+      const readChunks =
+        validLength > 0
+          ? [...chunks, Bitstring.fromBytes(bytes.slice(0, validLength))]
+          : chunks;
+
+      const codepoints =
+        readChunks.length > 0
+          ? convertBinaryToCodepoints(Bitstring.concat(readChunks))
+          : [];
+
+      // Nothing was read from the element, so the whole of it is what was left.
+      const invalidRest =
+        validLength === 0
+          ? invalidBinary
+          : Bitstring.fromBytes(bytes.slice(validLength));
 
       if (isTruncated) {
         // Incomplete: rest is the binary directly (not wrapped in list)
-        return createIncompleteTuple(codepoints, invalidBinary);
+        return createIncompleteTuple(codepoints, invalidRest);
       }
 
-      // Error: the rest is what was left to read - the binary that broke and
-      // everything after it, the way an invalid code point's rest is built.
-      const restList = Type.list([invalidBinary, ...remainingElems]);
+      // Error: the rest is what was left to read - the bytes that broke and
+      // everything after them, the way an invalid code point's rest is built.
+      const restList = Type.list([invalidRest, ...remainingElems]);
 
       return createErrorTuple(codepoints, restList);
     };

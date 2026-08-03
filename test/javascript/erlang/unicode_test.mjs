@@ -97,6 +97,23 @@ describe("Erlang_Unicode", () => {
 
     // A list holding nothing but the bytes that broke is answered as those
     // bytes, where a longer one keeps its list form.
+    // An element that breaks partway through is read up to the break, so the
+    // bytes before it belong with what came before rather than with the rest.
+    it("reads a binary element up to the byte that breaks it", () => {
+      const input = Type.list([Bitstring.fromBytes([97, 255])]);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        Bitstring.fromBytes([255]),
+      ]);
+
+      assert.deepStrictEqual(
+        Erlang_Unicode["characters_to_binary/1"](input),
+        expected,
+      );
+    });
+
     it("answers a list holding only the broken bytes as those bytes", () => {
       const invalid = Bitstring.fromBytes([0xff]);
 
@@ -555,6 +572,20 @@ describe("Erlang_Unicode", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    // An element that breaks partway through is read up to the break, so the
+    // bytes before it belong with what came before rather than with the rest.
+    it("reads a binary element up to the byte that breaks it", () => {
+      const input = Type.list([Bitstring.fromBytes([97, 255])]);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list([Type.integer(97)]),
+        Type.list([Bitstring.fromBytes([255])]),
+      ]);
+
+      assert.deepStrictEqual(fun(input), expected);
     });
 
     it("returns error tuple on invalid UTF-8 in binary", () => {
