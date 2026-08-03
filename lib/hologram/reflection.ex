@@ -194,6 +194,15 @@ defmodule Hologram.Reflection do
   def erlang_module?(_term), do: false
 
   @doc """
+  Returns true if the given term is an exception module, or false otherwise.
+  """
+  @spec exception?(any) :: boolean
+  def exception?(term) do
+    elixir_module?(term) && has_function?(term, :exception, 1) &&
+      has_function?(term, :message, 1)
+  end
+
+  @doc """
   Returns true if module contains a public function with the given arity, otherwise false.
 
   Kernel.function_exported?/3 does not load the module in case it is not loaded
@@ -504,6 +513,40 @@ defmodule Hologram.Reflection do
   @spec protocol_implementation?(module) :: boolean
   def protocol_implementation?(module) do
     has_function?(module, :__impl__, 1)
+  end
+
+  @doc """
+  Returns the given module's source file path in the form stacktraces render:
+  relative to the root of the code that compiled it. Project modules are
+  relative to the project root, dep modules to their dep's root, and Elixir
+  standard library modules to Elixir's own source root. When no source root
+  is recognized, the file name alone is returned, so absolute build-machine
+  paths are never exposed.
+  """
+  @spec relative_source_path(module) :: String.t()
+  def relative_source_path(module) do
+    source_path = source_path(module)
+    root_prefix = root_dir() <> "/"
+    deps_prefix = root_prefix <> "deps/"
+
+    cond do
+      String.starts_with?(source_path, deps_prefix) ->
+        source_path
+        |> String.replace_prefix(deps_prefix, "")
+        |> String.split("/", parts: 2)
+        |> List.last()
+
+      String.starts_with?(source_path, root_prefix) ->
+        String.replace_prefix(source_path, root_prefix, "")
+
+      String.contains?(source_path, "/lib/elixir/") ->
+        source_path
+        |> String.split("/lib/elixir/", parts: 2)
+        |> List.last()
+
+      true ->
+        Path.basename(source_path)
+    end
   end
 
   @doc """

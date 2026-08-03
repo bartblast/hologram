@@ -1,14 +1,11 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../support/helpers.mjs";
 
 import SelectEvent from "../../../assets/js/events/select_event.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("SelectEvent", () => {
   const event = {

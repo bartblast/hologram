@@ -977,6 +977,101 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
+  # IMPORTANT!
+  # Each test here has a related JavaScript test in test/javascript/interpreter_test.mjs
+  # ("utf8 type modifier" section).
+  describe "utf8 type modifier" do
+    test "one-byte code point" do
+      <<x::utf8, rest::binary>> = wrap_term("abc")
+
+      assert x == 97
+      assert rest == "bc"
+    end
+
+    test "two-byte code point" do
+      <<x::utf8, rest::binary>> = wrap_term("élo")
+
+      assert x == 233
+      assert rest == "lo"
+    end
+
+    test "three-byte code point" do
+      <<x::utf8, rest::binary>> = wrap_term("日本")
+
+      assert x == 26_085
+      assert rest == "本"
+    end
+
+    test "four-byte code point" do
+      <<x::utf8, rest::binary>> = wrap_term("😀a")
+
+      assert x == 128_512
+      assert rest == "a"
+    end
+
+    test "multiple utf8 segments" do
+      <<x::utf8, y::utf8, rest::binary>> = wrap_term("héllo")
+
+      assert x == 104
+      assert y == 233
+      assert rest == "llo"
+    end
+
+    test "literal code point that matches" do
+      <<?a::utf8, rest::binary>> = wrap_term("abc")
+
+      assert rest == "bc"
+    end
+
+    test "a sequence needs no byte alignment" do
+      <<1::1, x::utf8, _rest::bitstring>> = wrap_term(<<1::1, "a">>)
+
+      assert x == 97
+    end
+
+    test "literal code point that doesn't match" do
+      assert_error MatchError, build_match_error_msg("abc"), fn ->
+        <<?z::utf8, _rest::binary>> = wrap_term("abc")
+      end
+    end
+
+    test "invalid utf8 bytes" do
+      assert_error MatchError, build_match_error_msg(<<0xFF, 0xFE>>), fn ->
+        <<_x::utf8, _rest::binary>> = wrap_term(<<0xFF, 0xFE>>)
+      end
+    end
+
+    test "empty bitstring" do
+      assert_error MatchError, build_match_error_msg(""), fn ->
+        <<_x::utf8, _rest::binary>> = wrap_term("")
+      end
+    end
+
+    test "truncated sequence" do
+      assert_error MatchError, build_match_error_msg(<<0xC3>>), fn ->
+        <<_x::utf8, _rest::binary>> = wrap_term(<<0xC3>>)
+      end
+    end
+
+    test "surrogate is invalid" do
+      assert_error MatchError, build_match_error_msg(<<0xED, 0xA0, 0x80>>), fn ->
+        <<_x::utf8, _rest::binary>> = wrap_term(<<0xED, 0xA0, 0x80>>)
+      end
+    end
+
+    test "overlong encoding is invalid" do
+      assert_error MatchError, build_match_error_msg(<<0xC0, 0xAF>>), fn ->
+        <<_x::utf8, _rest::binary>> = wrap_term(<<0xC0, 0xAF>>)
+      end
+    end
+
+    test "leftover bits after the sequence" do
+      assert_error MatchError, build_match_error_msg("ab"), fn ->
+        <<_x::utf8>> = wrap_term("ab")
+      end
+    end
+  end
+
   describe "named function params" do
     test "(a = 1)" do
       assert Module1.test_a(1) == %{a: 1}

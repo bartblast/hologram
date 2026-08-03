@@ -106,10 +106,13 @@ defmodule Hologram.Compiler.IRTest do
                     args: [
                       %IR.Variable{name: :x, version: 0},
                       %IR.Variable{name: :y, version: 1}
-                    ]
+                    ],
+                    line: 4
                   }
                 ]
-              }
+              },
+              line: 3,
+              blame: %{params: ["x", "y"], guards: []}
             }
           },
           %IR.FunctionDefinition{
@@ -139,15 +142,19 @@ defmodule Hologram.Compiler.IRTest do
                               args: [
                                 %IR.Variable{name: :"$1"},
                                 %IR.Variable{name: :"$2"}
-                              ]
+                              ],
+                              line: 7
                             }
                           ]
-                        }
+                        },
+                        line: 7
                       }
                     ]
                   }
                 ]
-              }
+              },
+              line: 7,
+              blame: %{params: [], guards: []}
             }
           }
         ]

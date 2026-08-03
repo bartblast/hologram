@@ -1,9 +1,6 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "../../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../../support/helpers.mjs";
 
 import RegexAnalyzer, {
   resolveGroupNumbers,
@@ -12,7 +9,7 @@ import RegexAnalyzer, {
 
 import RegexParser from "../../../../assets/js/erts/regex/regex_parser.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const buildGroupMap = (source, opts = {}) =>
   RegexAnalyzer.buildGroupMap(RegexParser.parse(source, opts));

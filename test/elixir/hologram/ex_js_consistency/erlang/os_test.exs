@@ -62,6 +62,20 @@ defmodule Hologram.ExJsConsistency.Erlang.OsTest do
                    build_argument_error_msg(1, "invalid time unit"),
                    {:os, :system_time, [-1]}
     end
+
+    test "error frame carries args and error_info" do
+      unit = wrap_term(:invalid)
+
+      top_frame =
+        try do
+          :os.system_time(unit)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      assert top_frame ==
+               {:os, :system_time, [:invalid], [error_info: %{module: :erl_kernel_errors}]}
+    end
   end
 
   describe "type/0" do

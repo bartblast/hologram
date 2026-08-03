@@ -1,7 +1,6 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
-import Erlang_Lists from "./lists.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -11,13 +10,128 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Unicode = {
+  // Converts chardata to a UTF-8 binary the way characters_to_binary/3 does
+  // for utf8 encodings, but signals invalid chardata by returning JS null
+  // instead of raising. This lets each public arity raise with its own
+  // identity - the BEAM reports the called function's frame, not the
+  // internal conversion's.
+  // Start _chardata_to_utf8_binary/1
+  "_chardata_to_utf8_binary/1": (input) => {
+    if (Type.isBinary(input)) {
+      return input;
+    }
+
+    if (!Type.isList(input)) {
+      return null;
+    }
+
+    const flatInput = Erlang_Unicode["_flatten_chardata/1"](input);
+
+    if (flatInput === null) {
+      return null;
+    }
+
+    const chunks = [];
+
+    for (let i = 0; i < flatInput.data.length; ++i) {
+      const elem = flatInput.data[i];
+
+      if (Type.isBinary(elem)) {
+        chunks.push(elem);
+      } else if (Type.isInteger(elem)) {
+        if (Bitstring.isUnicodeScalarValue(elem.value)) {
+          const segment = Type.bitstringSegment(elem, {type: "utf8"});
+          chunks.push(Bitstring.fromSegments([segment]));
+        } else {
+          const remainingElems = flatInput.data.slice(i);
+
+          return Type.tuple([
+            Type.atom("error"),
+            Bitstring.concat(chunks),
+            Type.list(remainingElems),
+          ]);
+        }
+      } else {
+        return null;
+      }
+    }
+
+    return Bitstring.concat(chunks);
+  },
+  // End _chardata_to_utf8_binary/1
+  // Deps: [:unicode._flatten_chardata/1]
+
+  // Collects the elements of chardata into a flat list, answering JS null where
+  // the structure isn't chardata at all. Chardata admits a binary as the tail of
+  // an improper list, which is why lists:flatten/1 can't do this - it turns down
+  // every improper list, including the ones the BEAM reads happily.
+  // Start _flatten_chardata/1
+  "_flatten_chardata/1": (chardata) => {
+    const elems = [];
+
+    const collect = (list) => {
+      for (const elem of list.data) {
+        if (Type.isList(elem)) {
+          if (!collect(elem)) {
+            return false;
+          }
+        } else {
+          elems.push(elem);
+        }
+      }
+
+      // The tail of an improper list is its last element, so it has already
+      // been collected by the time its type is what decides the answer.
+      return list.isProper || Type.isBinary(list.data.at(-1));
+    };
+
+    return collect(chardata) ? Type.list(elems) : null;
+  },
+  // End _flatten_chardata/1
+  // Deps: []
+
   // Start characters_to_binary/1
   "characters_to_binary/1": (input) => {
-    const encoding = Type.atom("utf8");
-    return Erlang_Unicode["characters_to_binary/3"](input, encoding, encoding);
+    const result = Erlang_Unicode["_chardata_to_utf8_binary/1"](input);
+
+    if (result === null) {
+      Interpreter.raiseBifError("badarg", "unicode", "characters_to_binary", [
+        input,
+      ]);
+    }
+
+    // Bytes that don't decode aren't characters. The server answers a tuple
+    // naming what it read before the break and what was left over, rather than
+    // handing back the bytes it couldn't read - which is what this used to do.
+    if (Bitstring.toText(result) !== false) {
+      return result;
+    }
+
+    // characters_to_list/1 walks the same chardata and breaks in the same
+    // place, so what it read and what it left are what this answers too - as a
+    // binary rather than as code points.
+    const [tag, codePoints, rest] =
+      Erlang_Unicode["characters_to_list/1"](input).data;
+
+    const text = codePoints.data
+      .map(({value}) => String.fromCodePoint(Number(value)))
+      .join("");
+
+    // A rest holding nothing but the bytes that broke is answered as those
+    // bytes, where a longer one keeps its list form.
+    const unwrapsRest =
+      Type.isList(rest) &&
+      rest.data.length === 1 &&
+      Type.isBinary(rest.data[0]);
+
+    return Type.tuple([
+      tag,
+      Bitstring.fromText(text),
+      unwrapsRest ? rest.data[0] : rest,
+    ]);
   },
   // End characters_to_binary/1
-  // Deps: [:unicode.characters_to_binary/3]
+  // Deps: [:unicode._chardata_to_utf8_binary/1, :unicode.characters_to_list/1]
 
   // Start characters_to_binary/3
   "characters_to_binary/3": (input, inputEncoding, outputEncoding) => {
@@ -37,54 +151,48 @@ const Erlang_Unicode = {
       );
     }
 
-    if (Type.isBinary(input)) {
-      return input;
+    const result = Erlang_Unicode["_chardata_to_utf8_binary/1"](input);
+
+    if (result === null) {
+      Interpreter.raiseBifError("badarg", "unicode", "characters_to_binary", [
+        input,
+        inputEncoding,
+        outputEncoding,
+      ]);
     }
 
-    if (!Type.isList(input)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
+    // Bytes that don't decode aren't characters. The server answers a tuple
+    // naming what it read before the break and what was left over, rather than
+    // handing back the bytes it couldn't read - which is what this used to do.
+    if (Bitstring.toText(result) !== false) {
+      return result;
     }
 
-    const flatInput = Erlang_Lists["flatten/1"](input);
-    const chunks = [];
+    // characters_to_list/1 walks the same chardata and breaks in the same
+    // place, so what it read and what it left are what this answers too - as a
+    // binary rather than as code points.
+    const [tag, codePoints, rest] =
+      Erlang_Unicode["characters_to_list/1"](input).data;
 
-    for (let i = 0; i < flatInput.data.length; ++i) {
-      const elem = flatInput.data[i];
+    const text = codePoints.data
+      .map(({value}) => String.fromCodePoint(Number(value)))
+      .join("");
 
-      if (Type.isBinary(elem)) {
-        chunks.push(elem);
-      } else if (Type.isInteger(elem)) {
-        if (Bitstring.validateCodePoint(elem.value)) {
-          const segment = Type.bitstringSegment(elem, {type: "utf8"});
-          chunks.push(Bitstring.fromSegments([segment]));
-        } else {
-          const remainingElems = flatInput.data.slice(i);
+    // A rest holding nothing but the bytes that broke is answered as those
+    // bytes, where a longer one keeps its list form.
+    const unwrapsRest =
+      Type.isList(rest) &&
+      rest.data.length === 1 &&
+      Type.isBinary(rest.data[0]);
 
-          return Type.tuple([
-            Type.atom("error"),
-            Bitstring.concat(chunks),
-            Type.list(remainingElems),
-          ]);
-        }
-      } else {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
-        );
-      }
-    }
-
-    return Bitstring.concat(chunks);
+    return Type.tuple([
+      tag,
+      Bitstring.fromText(text),
+      unwrapsRest ? rest.data[0] : rest,
+    ]);
   },
   // End characters_to_binary/3
-  // Deps: [:lists.flatten/1]
+  // Deps: [:unicode._chardata_to_utf8_binary/1, :unicode.characters_to_list/1]
 
   // Start characters_to_list/1
   "characters_to_list/1": (data) => {
@@ -210,25 +318,41 @@ const Erlang_Unicode = {
 
     // Handles invalid UTF-8 errors from list input. Returns error or incomplete tuple.
     // For error tuples, the rest is wrapped in a list. For incomplete tuples, it's the binary directly.
-    const handleInvalidUtf8FromList = (chunks, invalidBinary) => {
-      // Convert all valid chunks to codepoints
-      const codepoints =
-        chunks.length > 0
-          ? convertBinaryToCodepoints(Bitstring.concat(chunks))
-          : [];
-
-      // Check if it's a truncated sequence
+    const handleInvalidUtf8FromList = (
+      chunks,
+      invalidBinary,
+      remainingElems,
+    ) => {
       Bitstring.maybeSetBytesFromText(invalidBinary);
       const bytes = invalidBinary.bytes ?? new Uint8Array(0);
-      const {isTruncated} = findValidUtf8Length(bytes);
+      const {validLength, isTruncated} = findValidUtf8Length(bytes);
+
+      // The element breaks partway through, so the bytes before the break were
+      // read and belong with the elements before it rather than with the rest.
+      const readChunks =
+        validLength > 0
+          ? [...chunks, Bitstring.fromBytes(bytes.slice(0, validLength))]
+          : chunks;
+
+      const codepoints =
+        readChunks.length > 0
+          ? convertBinaryToCodepoints(Bitstring.concat(readChunks))
+          : [];
+
+      // Nothing was read from the element, so the whole of it is what was left.
+      const invalidRest =
+        validLength === 0
+          ? invalidBinary
+          : Bitstring.fromBytes(bytes.slice(validLength));
 
       if (isTruncated) {
         // Incomplete: rest is the binary directly (not wrapped in list)
-        return createIncompleteTuple(codepoints, invalidBinary);
+        return createIncompleteTuple(codepoints, invalidRest);
       }
 
-      // Error: wrap the original invalid binary in a list, matching Erlang behavior
-      const restList = Type.list([invalidBinary]);
+      // Error: the rest is what was left to read - the bytes that broke and
+      // everything after them, the way an invalid code point's rest is built.
+      const restList = Type.list([invalidRest, ...remainingElems]);
 
       return createErrorTuple(codepoints, restList);
     };
@@ -265,12 +389,15 @@ const Erlang_Unicode = {
         const text = Bitstring.toText(elem);
 
         return text === false
-          ? {type: "utf8error", data: handleInvalidUtf8FromList(chunks, elem)}
+          ? {
+              type: "utf8error",
+              data: handleInvalidUtf8FromList(chunks, elem, remainingElems),
+            }
           : {type: "valid", data: elem};
       }
 
       // Process integer elements (guaranteed integer at this point)
-      const isValidCodepoint = Bitstring.validateCodePoint(elem.value);
+      const isValidCodepoint = Bitstring.isUnicodeScalarValue(elem.value);
       if (!isValidCodepoint) {
         return {
           type: "codepointerror",
@@ -282,12 +409,9 @@ const Erlang_Unicode = {
     };
 
     const raiseInvalidChardataError = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
+      Interpreter.raiseBifError("badarg", "unicode", "characters_to_list", [
+        data,
+      ]);
     };
 
     // Main logic
@@ -314,7 +438,13 @@ const Erlang_Unicode = {
     }
 
     // List path (guaranteed to be list at this point)
-    const flatData = Erlang_Lists["flatten/1"](data).data;
+    const flatInput = Erlang_Unicode["_flatten_chardata/1"](data);
+
+    if (flatInput === null) {
+      raiseInvalidChardataError();
+    }
+
+    const flatData = flatInput.data;
     const chunks = [];
 
     // Process elements: concatenate all valid data first, then convert to codepoints.
@@ -345,7 +475,7 @@ const Erlang_Unicode = {
     return Type.list(codepoints);
   },
   // End characters_to_list/1
-  // Deps: [:lists.flatten/1]
+  // Deps: [:unicode._flatten_chardata/1]
 
   // Start characters_to_nfc_binary/1
   "characters_to_nfc_binary/1": (data) => {
@@ -410,16 +540,16 @@ const Erlang_Unicode = {
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
       if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+        Interpreter.raiseBifError(
+          "badarg",
+          "unicode",
+          "characters_to_nfc_binary",
+          [data],
         );
       }
     };
 
-    // Handles error tuples from characters_to_binary/3.
+    // Handles error tuples from the chardata conversion.
     // Distinguishes between invalid codepoints (raises ArgumentError) and
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
@@ -455,15 +585,18 @@ const Erlang_Unicode = {
 
     // Main logic
 
-    const utf8 = Type.atom("utf8");
+    const converted = Erlang_Unicode["_chardata_to_utf8_binary/1"](data);
 
-    const converted = Erlang_Unicode["characters_to_binary/3"](
-      data,
-      utf8,
-      utf8,
-    );
+    if (converted === null) {
+      Interpreter.raiseBifError(
+        "badarg",
+        "unicode",
+        "characters_to_nfc_binary",
+        [data],
+      );
+    }
 
-    // characters_to_binary/3 returns either a binary (success) or error tuple
+    // The conversion returns either a binary (success) or an error tuple
     if (Type.isTuple(converted)) {
       return handleConversionError(
         converted.data[0],
@@ -485,7 +618,7 @@ const Erlang_Unicode = {
     return Type.bitstring(normalized);
   },
   // End characters_to_nfc_binary/1
-  // Deps: [:unicode.characters_to_binary/3]
+  // Deps: [:unicode._chardata_to_utf8_binary/1]
 
   // Start characters_to_nfc_list/1
   "characters_to_nfc_list/1": (chardata) => {
@@ -565,12 +698,9 @@ const Erlang_Unicode = {
     };
 
     const raiseInvalidChardataError = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
+      Interpreter.raiseBifError("badarg", "unicode", "characters_to_nfc_list", [
+        chardata,
+      ]);
     };
 
     // Main logic
@@ -606,7 +736,13 @@ const Erlang_Unicode = {
     }
 
     // List path (guaranteed to be list at this point)
-    const flatData = Erlang_Lists["flatten/1"](chardata).data;
+    const flatInput = Erlang_Unicode["_flatten_chardata/1"](chardata);
+
+    if (flatInput === null) {
+      raiseInvalidChardataError();
+    }
+
+    const flatData = flatInput.data;
     const chunks = [];
 
     // Process elements: concatenate all valid data first (combining characters
@@ -633,7 +769,7 @@ const Erlang_Unicode = {
     return Type.list(codepoints);
   },
   // End characters_to_nfc_list/1
-  // Deps: [:lists.flatten/1, :unicode.characters_to_nfc_binary/1]
+  // Deps: [:unicode._flatten_chardata/1, :unicode.characters_to_nfc_binary/1]
 
   // Start characters_to_nfd_binary/1
   "characters_to_nfd_binary/1": (data) => {
@@ -697,16 +833,16 @@ const Erlang_Unicode = {
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
       if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+        Interpreter.raiseBifError(
+          "badarg",
+          "unicode",
+          "characters_to_nfd_binary",
+          [data],
         );
       }
     };
 
-    // Handles error tuples from characters_to_binary/3.
+    // Handles error tuples from the chardata conversion.
     // Distinguishes between invalid codepoints (raises ArgumentError) and
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
@@ -743,15 +879,18 @@ const Erlang_Unicode = {
 
     // Main logic
 
-    const utf8 = Type.atom("utf8");
+    const converted = Erlang_Unicode["_chardata_to_utf8_binary/1"](data);
 
-    const converted = Erlang_Unicode["characters_to_binary/3"](
-      data,
-      utf8,
-      utf8,
-    );
+    if (converted === null) {
+      Interpreter.raiseBifError(
+        "badarg",
+        "unicode",
+        "characters_to_nfd_binary",
+        [data],
+      );
+    }
 
-    // characters_to_binary/3 returns either a binary (success) or error tuple
+    // The conversion returns either a binary (success) or an error tuple
     if (Type.isTuple(converted)) {
       return handleConversionError(
         converted.data[0],
@@ -773,7 +912,7 @@ const Erlang_Unicode = {
     return Type.bitstring(normalized);
   },
   // End characters_to_nfd_binary/1
-  // Deps: [:unicode.characters_to_binary/3]
+  // Deps: [:unicode._chardata_to_utf8_binary/1]
 
   // Start characters_to_nfkc_binary/1
   "characters_to_nfkc_binary/1": (data) => {
@@ -836,16 +975,16 @@ const Erlang_Unicode = {
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
       if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+        Interpreter.raiseBifError(
+          "badarg",
+          "unicode",
+          "characters_to_nfkc_binary",
+          [data],
         );
       }
     };
 
-    // Handles error tuples from characters_to_binary/3.
+    // Handles error tuples from the chardata conversion.
     // Distinguishes between invalid codepoints (raises ArgumentError) and
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
@@ -881,15 +1020,18 @@ const Erlang_Unicode = {
 
     // Main logic
 
-    const utf8 = Type.atom("utf8");
+    const converted = Erlang_Unicode["_chardata_to_utf8_binary/1"](data);
 
-    const converted = Erlang_Unicode["characters_to_binary/3"](
-      data,
-      utf8,
-      utf8,
-    );
+    if (converted === null) {
+      Interpreter.raiseBifError(
+        "badarg",
+        "unicode",
+        "characters_to_nfkc_binary",
+        [data],
+      );
+    }
 
-    // characters_to_binary/3 returns either a binary (success) or error tuple
+    // The conversion returns either a binary (success) or an error tuple
     if (Type.isTuple(converted)) {
       return handleConversionError(
         converted.data[0],
@@ -911,7 +1053,7 @@ const Erlang_Unicode = {
     return Type.bitstring(normalized);
   },
   // End characters_to_nfkc_binary/1
-  // Deps: [:unicode.characters_to_binary/3]
+  // Deps: [:unicode._chardata_to_utf8_binary/1]
 
   // Start characters_to_nfkd_binary/1
   "characters_to_nfkd_binary/1": (data) => {
@@ -977,16 +1119,16 @@ const Erlang_Unicode = {
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
       if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+        Interpreter.raiseBifError(
+          "badarg",
+          "unicode",
+          "characters_to_nfkd_binary",
+          [data],
         );
       }
     };
 
-    // Handles error tuples from characters_to_binary/3.
+    // Handles error tuples from the chardata conversion.
     // Distinguishes between invalid codepoints (raises ArgumentError) and
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
@@ -1022,15 +1164,18 @@ const Erlang_Unicode = {
 
     // Main logic
 
-    const utf8 = Type.atom("utf8");
+    const converted = Erlang_Unicode["_chardata_to_utf8_binary/1"](data);
 
-    const converted = Erlang_Unicode["characters_to_binary/3"](
-      data,
-      utf8,
-      utf8,
-    );
+    if (converted === null) {
+      Interpreter.raiseBifError(
+        "badarg",
+        "unicode",
+        "characters_to_nfkd_binary",
+        [data],
+      );
+    }
 
-    // characters_to_binary/3 returns either a binary (success) or error tuple
+    // The conversion returns either a binary (success) or an error tuple
     if (Type.isTuple(converted)) {
       return handleConversionError(
         converted.data[0],
@@ -1051,7 +1196,7 @@ const Erlang_Unicode = {
     return Type.bitstring(normalized);
   },
   // End characters_to_nfkd_binary/1
-  // Deps: [:unicode.characters_to_binary/3]
+  // Deps: [:unicode._chardata_to_utf8_binary/1]
 };
 
 export default Erlang_Unicode;

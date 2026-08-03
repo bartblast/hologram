@@ -2,7 +2,7 @@
 
 import {
   assert,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   registerWebApis,
   sinon,
 } from "./support/helpers.mjs";
@@ -13,7 +13,7 @@ import LiveReload from "../../assets/js/live_reload.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 registerWebApis();
 
 describe("Connection", () => {
@@ -193,6 +193,7 @@ describe("Connection", () => {
         globalThis.WebSocket,
         "/hologram/websocket",
       );
+
       assert.equal(Connection.status, "connecting");
       assert.equal(Connection.websocket, mockWebSocket);
       assert.isFunction(mockWebSocket.onopen);
@@ -324,6 +325,7 @@ describe("Connection", () => {
         consoleErrorStub,
         "Hologram: server connection timeout",
       );
+
       assert.equal(Connection.status, "error");
     });
 
@@ -376,14 +378,21 @@ describe("Connection", () => {
     describe("compilation_error message", () => {
       it("handles compilation_error message", () => {
         const showErrorOverlaySpy = sinon.stub(LiveReload, "showErrorOverlay");
-        const errorOutput = "Compilation error details";
 
-        const message = `["compilation_error","${errorOutput}"]`;
+        const lines = [
+          [{text: "error: undefined function foo/0", tone: "banner"}],
+          [
+            {text: "  3 │ ", tone: "chrome"},
+            {text: "    foo()", tone: "body"},
+          ],
+        ];
+
+        const message = JSON.stringify(["compilation_error", lines]);
         const event = {data: message};
 
         Connection.handleMessage(event);
 
-        sinon.assert.calledOnceWithExactly(showErrorOverlaySpy, errorOutput);
+        sinon.assert.calledOnceWithExactly(showErrorOverlaySpy, lines);
 
         showErrorOverlaySpy.restore();
       });
@@ -402,21 +411,14 @@ describe("Connection", () => {
 
     describe("reload message", () => {
       it("handles reload message", () => {
-        const originalDocument = globalThis.document;
-        const reloadSpy = sinon.spy();
-
-        globalThis.document = {
-          location: {
-            reload: reloadSpy,
-          },
-        };
+        const reloadStub = sinon.stub(LiveReload, "reload");
 
         const event = {data: '"reload"'};
         Connection.handleMessage(event);
 
-        sinon.assert.calledOnce(reloadSpy);
+        sinon.assert.calledOnce(reloadStub);
 
-        globalThis.document = originalDocument;
+        reloadStub.restore();
       });
     });
 
@@ -646,6 +648,7 @@ describe("Connection", () => {
         payload,
         correlationId,
       );
+
       sinon.assert.calledOnceWithExactly(
         mockWebSocket.send,
         expectedEncodedMessage,

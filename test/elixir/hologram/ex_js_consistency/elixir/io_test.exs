@@ -52,7 +52,9 @@ defmodule Hologram.ExJsConsistency.Elixir.IOTest do
       assert output == "%{a: 1, b: 2}\n"
     end
 
-    # Client error message is intentionally different than server error message.
+    # The attempted function clauses come from the clause heads the runtime script
+    # registers at bundle load, which unit tests don't run, so the JavaScript twin
+    # asserts the message without them.
     test "raises FunctionClauseError if the first arg is not an atom or a pid" do
       expected_msg =
         build_function_clause_error_msg("IO.inspect/3", [123, :abc, []], [
@@ -65,6 +67,24 @@ defmodule Hologram.ExJsConsistency.Elixir.IOTest do
         # credo:disable-for-next-line Credo.Check.Warning.IoInspect
         |> IO.inspect(:abc, [])
       end
+    end
+
+    test "error frame carries args" do
+      device = wrap_term(123)
+
+      top_frame =
+        try do
+          # credo:disable-for-next-line Credo.Check.Warning.IoInspect
+          IO.inspect(device, :abc, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Elixir code inside io.ex, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {IO, :inspect, [123, :abc, []], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
     end
   end
 

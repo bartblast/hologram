@@ -1,14 +1,11 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../support/helpers.mjs";
 
 import ClickOutsideEvent from "../../../assets/js/events/click_outside_event.mjs";
 import PointerEvent from "../../../assets/js/events/pointer_event.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("ClickOutsideEvent", () => {
   it("buildOperationParam()", () => {

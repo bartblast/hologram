@@ -66,7 +66,9 @@ defmodule Hologram.Compiler.CallGraph do
     Tuple
   ]
 
-  # These edges can't be discovered from static IR analysis.
+  # Edges for dynamic dispatch: the caller reads the callee module from data
+  # (e.g. a struct's calendar field), so static IR analysis can't see the
+  # target. Each edge points at the known implementation.
   @dynamic_dispatch_edges [
     {{Date, :day_of_era, 1}, {Calendar.ISO, :day_of_era, 3}},
     {{Date, :day_of_week, 2}, {Calendar.ISO, :day_of_week, 4}},
@@ -113,16 +115,36 @@ defmodule Hologram.Compiler.CallGraph do
     {{Time, :to_string, 1}, {Calendar.ISO, :time_to_string, 4}}
   ]
 
+  # Each group names the client-runtime mechanism that needs its edges.
+  # They can't be discovered from static IR analysis, because the target
+  # module is read from data planted by manually ported JavaScript code -
+  # e.g. the error_info entry that maps.mjs raise sites put on the raising
+  # stacktrace frame, which ErlangError.normalize/2 applies at format time.
+  # Deps annotations can't carry these either: the raise sites reference the
+  # format module only as data, and the format function name is implicit
+  # (the :format_error default), so the MFA is not visible in the JS code.
+  # Exception.blame/3 dispatches the same way, on the module of the exception
+  # struct it is given.
+  @edges_used_by_client_runtime [
+    error_message_derivation: [
+      {{ErlangError, :normalize, 2}, {:erl_erts_errors, :format_bs_fail, 2}},
+      {{ErlangError, :normalize, 2}, {:erl_erts_errors, :format_error, 2}},
+      {{ErlangError, :normalize, 2}, {:erl_kernel_errors, :format_error, 2}},
+      {{ErlangError, :normalize, 2}, {:erl_stdlib_errors, :format_error, 2}},
+      {{Exception, :blame, 3}, {ArithmeticError, :blame, 2}}
+    ]
+  ]
+
   # TODO: Determine automatically based on deps annotations next to function implementations
   @erlang_mfa_edges [
     {{:binary, :compile_pattern, 1}, {:erlang, :make_ref, 0}},
     {{:binary, :match, 2}, {:binary, :match, 3}},
     {{:binary, :match, 3}, {:binary, :_aho_corasick_search, 3}},
     {{:binary, :match, 3}, {:binary, :_boyer_moore_search, 4}},
-    {{:binary, :match, 3}, {:binary, :_parse_search_opts, 2}},
+    {{:binary, :match, 3}, {:binary, :_parse_search_opts, 1}},
     {{:binary, :match, 3}, {:binary, :compile_pattern, 1}},
     {{:binary, :matches, 2}, {:binary, :matches, 3}},
-    {{:binary, :matches, 3}, {:binary, :_parse_search_opts, 2}},
+    {{:binary, :matches, 3}, {:binary, :_parse_search_opts, 1}},
     {{:binary, :matches, 3}, {:binary, :compile_pattern, 1}},
     {{:binary, :matches, 3}, {:binary, :match, 3}},
     {{:binary, :replace, 3}, {:binary, :replace, 4}},
@@ -131,12 +153,56 @@ defmodule Hologram.Compiler.CallGraph do
     {{:binary, :replace, 4}, {:binary, :split, 3}},
     {{:binary, :replace, 4}, {:erlang, :iolist_to_binary, 1}},
     {{:binary, :split, 2}, {:binary, :split, 3}},
-    {{:binary, :split, 3}, {:binary, :_parse_search_opts, 2}},
+    {{:binary, :split, 3}, {:binary, :_is_valid_pattern, 1}},
+    {{:binary, :split, 3}, {:binary, :_parse_search_opts, 1}},
     {{:binary, :split, 3}, {:binary, :compile_pattern, 1}},
     {{:binary, :split, 3}, {:binary, :match, 3}},
     {{:elixir_aliases, :safe_concat, 1}, {:elixir_aliases, :concat, 1}},
     {{:elixir_locals, :yank, 2}, {:maps, :remove, 2}},
     {{:elixir_utils, :jaro_similarity, 2}, {:unicode_util, :cp, 1}},
+    {{:erl_erts_errors, :_format_erlang_error, 3}, {:erlang, :_is_valid_time_unit, 1}},
+    {{:erl_erts_errors, :_format_error_map, 3}, {:erl_erts_errors, :_expand_error, 1}},
+    {{:erl_erts_errors, :format_error, 2}, {:erl_erts_errors, :_format_erlang_error, 3}},
+    {{:erl_erts_errors, :format_error, 2}, {:erl_erts_errors, :_format_error_map, 3}},
+    {{:erl_kernel_errors, :_format_error_map, 3}, {:erl_kernel_errors, :_expand_error, 1}},
+    {{:erl_kernel_errors, :format_error, 2}, {:erl_kernel_errors, :_format_error_map, 3}},
+    {{:erl_kernel_errors, :format_error, 2}, {:erl_kernel_errors, :_format_os_error, 3}},
+    {{:erl_stdlib_errors, :_format_binary_error, 3}, {:erl_stdlib_errors, :_must_be_binary, 1}},
+    {{:erl_stdlib_errors, :_format_binary_error, 3},
+     {:erl_stdlib_errors, :_must_be_binary_replacement, 1}},
+    {{:erl_stdlib_errors, :_format_binary_error, 3},
+     {:erl_stdlib_errors, :_must_be_non_neg_integer, 1}},
+    {{:erl_stdlib_errors, :_format_binary_error, 3}, {:erl_stdlib_errors, :_must_be_pattern, 1}},
+    {{:erl_stdlib_errors, :_format_binary_error, 3}, {:erl_stdlib_errors, :_must_be_position, 1}},
+    {{:erl_stdlib_errors, :_format_error_map, 3}, {:erl_stdlib_errors, :_expand_error, 1}},
+    {{:erl_stdlib_errors, :_format_lists_error, 2}, {:erl_stdlib_errors, :_must_be_list, 1}},
+    {{:erl_stdlib_errors, :_format_maps_error, 2}, {:erl_stdlib_errors, :_must_be_fun, 2}},
+    {{:erl_stdlib_errors, :_format_maps_error, 2}, {:erl_stdlib_errors, :_must_be_list, 1}},
+    {{:erl_stdlib_errors, :_format_maps_error, 2}, {:erl_stdlib_errors, :_must_be_map, 1}},
+    {{:erl_stdlib_errors, :_format_maps_error, 2},
+     {:erl_stdlib_errors, :_must_be_map_or_iter, 1}},
+    {{:erl_stdlib_errors, :_format_math_error, 2}, {:erl_stdlib_errors, :_must_be_number, 1}},
+    {{:erl_stdlib_errors, :_format_re_error, 3}, {:erl_stdlib_errors, :_must_be_iodata, 1}},
+    {{:erl_stdlib_errors, :_format_re_error, 3}, {:erl_stdlib_errors, :_must_be_regexp, 1}},
+    {{:erl_stdlib_errors, :_format_re_error, 3}, {:erl_stdlib_errors, :_re_compile_error, 1}},
+    {{:erl_stdlib_errors, :_format_unicode_error, 2},
+     {:erl_stdlib_errors, :_unicode_char_data, 1}},
+    {{:erl_stdlib_errors, :_format_unicode_error, 2},
+     {:erl_stdlib_errors, :_unicode_encoding, 1}},
+    {{:erl_stdlib_errors, :_must_be_iodata, 1}, {:erl_stdlib_errors, :_is_iodata, 1}},
+    {{:erl_stdlib_errors, :_must_be_map_or_iter, 1}, {:maps, :is_iterator_valid, 1}},
+    {{:erl_stdlib_errors, :_must_be_pattern, 1}, {:binary, :_is_valid_pattern, 1}},
+    {{:erl_stdlib_errors, :_must_be_regexp, 1}, {:erl_stdlib_errors, :_re_compile_error, 1}},
+    {{:erl_stdlib_errors, :_re_compile_error, 1}, {:erl_stdlib_errors, :_is_iodata, 1}},
+    {{:erl_stdlib_errors, :_re_compile_error, 1}, {:erlang, :iolist_to_binary, 1}},
+    {{:erl_stdlib_errors, :_unicode_char_data, 1}, {:unicode, :_chardata_to_utf8_binary, 1}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_binary_error, 3}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_error_map, 3}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_lists_error, 2}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_maps_error, 2}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_math_error, 2}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_re_error, 3}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_unicode_error, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
     {{:erlang, :>=, 2}, {:erlang, :==, 2}},
@@ -146,8 +212,9 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :binary_to_existing_atom, 1}, {:erlang, :binary_to_atom, 1}},
     {{:erlang, :binary_to_existing_atom, 2}, {:erlang, :binary_to_atom, 2}},
     {{:erlang, :binary_to_integer, 1}, {:erlang, :binary_to_integer, 2}},
-    {{:erlang, :convert_time_unit, 3}, {:erlang, :_validate_time_unit, 2}},
-    {{:erlang, :error, 1}, {:erlang, :error, 2}},
+    {{:erlang, :convert_time_unit, 3}, {:erlang, :_is_valid_time_unit, 1}},
+    {{:erlang, :error, 1}, {:erlang, :error, 3}},
+    {{:erlang, :error, 2}, {:erlang, :error, 3}},
     {{:erlang, :float_to_list, 2}, {:erlang, :float_to_binary, 2}},
     {{:erlang, :fun_info, 2}, {:erlang, :fun_info, 1}},
     {{:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2}},
@@ -157,7 +224,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :list_to_existing_atom, 1}, {:erlang, :list_to_atom, 1}},
     {{:erlang, :list_to_integer, 1}, {:erlang, :list_to_integer, 2}},
     {{:erlang, :map_get, 2}, {:maps, :get, 2}},
-    {{:erlang, :monotonic_time, 1}, {:erlang, :_validate_time_unit, 2}},
+    {{:erlang, :monotonic_time, 1}, {:erlang, :_is_valid_time_unit, 1}},
     {{:erlang, :monotonic_time, 1}, {:erlang, :convert_time_unit, 3}},
     {{:erlang, :monotonic_time, 1}, {:erlang, :monotonic_time, 0}},
     {{:erlang, :split_binary, 2}, {:erlang, :byte_size, 1}},
@@ -165,9 +232,10 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :system_time, 1}, {:os, :system_time, 1}},
     {{:erlang, :time_offset, 0}, {:erlang, :monotonic_time, 0}},
     {{:erlang, :time_offset, 0}, {:os, :system_time, 0}},
-    {{:erlang, :time_offset, 1}, {:erlang, :_validate_time_unit, 2}},
+    {{:erlang, :time_offset, 1}, {:erlang, :_is_valid_time_unit, 1}},
     {{:erlang, :time_offset, 1}, {:erlang, :convert_time_unit, 3}},
     {{:erlang, :time_offset, 1}, {:erlang, :time_offset, 0}},
+    {{:erlang, :unique_integer, 1}, {:erlang, :unique_integer, 0}},
     {{:filelib, :safe_relative_path, 2}, {:filename, :join, 1}},
     {{:filelib, :safe_relative_path, 2}, {:filename, :split, 1}},
     {{:filename, :_do_flatten, 2}, {:erlang, :atom_to_list, 1}},
@@ -193,16 +261,17 @@ defmodule Hologram.Compiler.CallGraph do
     {{:filename, :rootname, 2}, {:filename, :flatten, 1}},
     {{:filename, :split, 1}, {:erlang, :iolist_to_binary, 1}},
     {{:filename, :split, 1}, {:filename, :flatten, 1}},
-    {{:lists, :flatten, 2}, {:lists, :flatten, 1}},
-    {{:lists, :seq, 2}, {:lists, :seq, 3}},
+    {{:lists, :filter, 2}, {:erlang, :error, 1}},
+    {{:lists, :flatten, 1}, {:lists, :_do_flatten, 2}},
+    {{:lists, :flatten, 2}, {:lists, :_do_flatten, 2}},
     {{:lists, :keymember, 3}, {:lists, :keyfind, 3}},
     {{:lists, :keysort, 2}, {:erlang, :element, 2}},
-    {{:maps, :get, 2}, {:maps, :get, 3}},
+    {{:lists, :seq, 2}, {:lists, :seq, 3}},
     {{:maps, :take, 2}, {:maps, :get, 3}},
     {{:maps, :take, 2}, {:maps, :remove, 2}},
     {{:maps, :update, 3}, {:maps, :is_key, 2}},
     {{:maps, :update, 3}, {:maps, :put, 3}},
-    {{:os, :system_time, 1}, {:erlang, :_validate_time_unit, 2}},
+    {{:os, :system_time, 1}, {:erlang, :_is_valid_time_unit, 1}},
     {{:os, :system_time, 1}, {:erlang, :convert_time_unit, 3}},
     {{:os, :system_time, 1}, {:os, :system_time, 0}},
     {{:re, :compile, 1}, {:re, :compile, 2}},
@@ -214,6 +283,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:sets, :_validate_opts, 1}, {:lists, :keyfind, 3}},
     {{:sets, :add_element, 2}, {:maps, :put, 3}},
     {{:sets, :del_element, 2}, {:maps, :remove, 2}},
+    {{:sets, :filter, 2}, {:erlang, :error, 1}},
     {{:sets, :fold, 3}, {:maps, :keys, 1}},
     {{:sets, :from_list, 2}, {:maps, :from_keys, 2}},
     {{:sets, :from_list, 2}, {:sets, :_validate_opts, 1}},
@@ -226,24 +296,30 @@ defmodule Hologram.Compiler.CallGraph do
     {{:string, :find, 2}, {:string, :find, 3}},
     {{:string, :find, 3}, {:unicode, :characters_to_binary, 1}},
     {{:string, :jaro_similarity, 2}, {:string, :to_graphemes, 1}},
+    {{:string, :join, 2}, {:erlang, :error, 1}},
+    {{:string, :length, 1}, {:erlang, :error, 1}},
     {{:string, :length, 1}, {:unicode, :characters_to_binary, 1}},
     {{:string, :length, 1}, {:unicode_util, :gc, 1}},
     {{:string, :replace, 3}, {:string, :replace, 4}},
     {{:string, :replace, 4}, {:unicode, :characters_to_binary, 1}},
     {{:string, :split, 2}, {:string, :split, 3}},
     {{:string, :split, 3}, {:unicode, :characters_to_binary, 1}},
-    {{:string, :titlecase, 1}, {:lists, :flatten, 1}},
+    {{:string, :titlecase, 1}, {:erlang, :error, 1}},
     {{:string, :titlecase, 1}, {:unicode_util, :cp, 1}},
+    {{:string, :to_graphemes, 1}, {:erlang, :error, 1}},
     {{:string, :to_graphemes, 1}, {:unicode_util, :gc, 1}},
-    {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},
-    {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}},
-    {{:unicode, :characters_to_list, 1}, {:lists, :flatten, 1}},
-    {{:unicode, :characters_to_nfc_binary, 1}, {:unicode, :characters_to_binary, 3}},
+    {{:unicode, :_chardata_to_utf8_binary, 1}, {:unicode, :_flatten_chardata, 1}},
+    {{:unicode, :characters_to_binary, 1}, {:unicode, :_chardata_to_utf8_binary, 1}},
+    {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_list, 1}},
+    {{:unicode, :characters_to_binary, 3}, {:unicode, :_chardata_to_utf8_binary, 1}},
+    {{:unicode, :characters_to_binary, 3}, {:unicode, :characters_to_list, 1}},
+    {{:unicode, :characters_to_list, 1}, {:unicode, :_flatten_chardata, 1}},
+    {{:unicode, :characters_to_nfc_binary, 1}, {:unicode, :_chardata_to_utf8_binary, 1}},
     {{:unicode, :characters_to_nfc_list, 1}, {:unicode, :characters_to_nfc_binary, 1}},
-    {{:unicode, :characters_to_nfc_list, 1}, {:lists, :flatten, 1}},
-    {{:unicode, :characters_to_nfd_binary, 1}, {:unicode, :characters_to_binary, 3}},
-    {{:unicode, :characters_to_nfkc_binary, 1}, {:unicode, :characters_to_binary, 3}},
-    {{:unicode, :characters_to_nfkd_binary, 1}, {:unicode, :characters_to_binary, 3}},
+    {{:unicode, :characters_to_nfc_list, 1}, {:unicode, :_flatten_chardata, 1}},
+    {{:unicode, :characters_to_nfd_binary, 1}, {:unicode, :_chardata_to_utf8_binary, 1}},
+    {{:unicode, :characters_to_nfkc_binary, 1}, {:unicode, :_chardata_to_utf8_binary, 1}},
+    {{:unicode, :characters_to_nfkd_binary, 1}, {:unicode, :_chardata_to_utf8_binary, 1}},
     {{:unicode_util, :_cpl, 2}, {:unicode_util, :_cpl_1_cont, 1}},
     {{:unicode_util, :_cpl, 2}, {:unicode_util, :_cpl_cont, 2}},
     {{:unicode_util, :_cpl, 2}, {:unicode_util, :_is_cp, 1}},
@@ -267,7 +343,8 @@ defmodule Hologram.Compiler.CallGraph do
     {{:unicode_util, :_cpl_cont3, 2}, {:unicode_util, :_is_cp, 1}},
     {{:unicode_util, :cp, 1}, {:unicode_util, :_cpl, 2}},
     {{:unicode_util, :cp, 1}, {:unicode_util, :_is_cp, 1}},
-    {{:unicode_util, :gc, 1}, {:unicode_util, :cp, 1}}
+    {{:unicode_util, :gc, 1}, {:unicode_util, :cp, 1}},
+    {{:uri_string, :parse, 1}, {:unicode, :characters_to_binary, 1}}
   ]
 
   # These functions are transpiled manually for at least one of the following reasons:
@@ -280,7 +357,10 @@ defmodule Hologram.Compiler.CallGraph do
     {Application, :get_env, 3},
     {Cldr.Locale, :language_data, 0},
     {Cldr.Validity.U, :encode_key, 2},
+    {Code, :ensure_compiled, 1},
     {Code, :ensure_loaded, 1},
+    {Exception, :format_stacktrace, 1},
+    {FunctionClauseError, :message, 1},
     {Hologram.JS, :call, 4},
     {Hologram.JS, :delete, 3},
     {Hologram.JS, :dispatch_event, 5},
@@ -307,6 +387,7 @@ defmodule Hologram.Compiler.CallGraph do
     {String, :trim, 1},
     {String, :upcase, 1},
     {String, :upcase, 2},
+    {String.Tokenizer, :tokenize, 1},
     {Task, :await, 1},
     {URI, :encode, 2}
   ]
@@ -345,7 +426,10 @@ defmodule Hologram.Compiler.CallGraph do
     interpreter_class: [
       {Enum, :into, 2},
       {Enum, :to_list, 1},
-      {Exception, :normalize, 2},
+      {Exception, :blame, 3},
+      {Exception, :message, 1},
+      {Exception, :normalize, 3},
+      {Macro, :inspect_atom, 3},
       {:erlang, :error, 1},
       {:erlang, :hd, 1},
       {:erlang, :tl, 1},
@@ -356,6 +440,9 @@ defmodule Hologram.Compiler.CallGraph do
     ],
     manually_ported_code_module: [
       {:code, :ensure_loaded, 1}
+    ],
+    manually_ported_function_clause_error_module: [
+      {Exception, :format_mfa, 3}
     ],
     manually_ported_io_module: [
       {:erlang, :iolist_to_binary, 1}
@@ -412,15 +499,20 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Adds call graph edges that can't be discovered from static IR analysis:
-  Erlang functions depending on other Erlang functions, and dynamic dispatch
-  patterns in Elixir stdlib (e.g. behaviour callbacks called via variable with known default).
+  Erlang functions depending on other Erlang functions, dynamic dispatch
+  where the callee module is read from data (e.g. a struct's calendar field),
+  and edges needed by client-runtime mechanisms (e.g. error message derivation).
   """
   @spec add_non_discoverable_edges(t) :: t
   def add_non_discoverable_edges(%{pid: pid} = call_graph) do
+    client_runtime_edges =
+      Enum.flat_map(@edges_used_by_client_runtime, fn {_mechanism, edges} -> edges end)
+
     Agent.cast(pid, fn graph ->
       graph
-      |> Digraph.add_edges(@erlang_mfa_edges)
+      |> Digraph.add_edges(client_runtime_edges)
       |> Digraph.add_edges(@dynamic_dispatch_edges)
+      |> Digraph.add_edges(@erlang_mfa_edges)
     end)
 
     call_graph
@@ -545,6 +637,7 @@ defmodule Hologram.Compiler.CallGraph do
     |> maybe_add_protocol_call_graph_edges(module)
     |> maybe_add_struct_call_graph_edges(module)
     |> maybe_add_ecto_schema_call_graph_edges(module)
+    |> maybe_add_exception_call_graph_edges(module)
     |> build(body, module)
   end
 
@@ -583,6 +676,28 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
     |> build(module, from_vertex)
     |> build(function, from_vertex)
+    |> build(args, from_vertex)
+  end
+
+  # An :erlang.error/3 raise site with an error_info option makes the runtime
+  # call the named format module when deriving the error message, as specified
+  # by EEP-54 (Erlang Enhancement Proposal 54, "Provide more information about
+  # errors"). That call never appears in the code - it's resolved from the
+  # error_info map at runtime. Mirror the resolution here, honoring its
+  # defaults (the raising module and :format_error), so the formatter reaches
+  # the bundle.
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :error,
+          args: [_reason, _args, options] = args
+        },
+        from_vertex
+      ) do
+    call_graph
+    |> add_edge(from_vertex, {:erlang, :error, 3})
+    |> maybe_add_error_info_formatter_edge(options, from_vertex)
     |> build(args, from_vertex)
   end
 
@@ -679,6 +794,13 @@ defmodule Hologram.Compiler.CallGraph do
   def edges(%{pid: pid}) do
     Agent.get(pid, &Digraph.edges/1, :infinity)
   end
+
+  @doc """
+  Returns the calls between manually ported Erlang functions, which no IR
+  analysis can discover, since their bodies are JavaScript.
+  """
+  @spec erlang_mfa_edges :: [{mfa, mfa}]
+  def erlang_mfa_edges, do: @erlang_mfa_edges
 
   @doc """
   Returns the underlying %Digraph{} struct containing vertices and edges data.
@@ -1459,9 +1581,55 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
+  defp maybe_add_error_info_formatter_edge(
+         call_graph,
+         %IR.ListType{data: options},
+         from_vertex
+       ) do
+    error_info_pairs =
+      Enum.find_value(options, fn
+        %IR.TupleType{
+          data: [%IR.AtomType{value: :error_info}, %IR.MapType{data: pairs}]
+        } ->
+          {:ok, pairs}
+
+        _option ->
+          nil
+      end)
+
+    default_module =
+      case from_vertex do
+        {module, _function, _arity} -> module
+        module when is_atom(module) -> module
+      end
+
+    with {:ok, pairs} <- error_info_pairs,
+         {:ok, format_module} <- resolve_error_info_key(pairs, :module, default_module),
+         {:ok, format_function} <- resolve_error_info_key(pairs, :function, :format_error) do
+      add_edge(call_graph, from_vertex, {format_module, format_function, 2})
+    else
+      _fallback -> call_graph
+    end
+  end
+
+  defp maybe_add_error_info_formatter_edge(call_graph, _options, _from_vertex) do
+    call_graph
+  end
+
   defp maybe_add_protocol_call_graph_edges(call_graph, module) do
     if Reflection.protocol?(module) do
       add_protocol_call_graph_edges(call_graph, module)
+    end
+
+    call_graph
+  end
+
+  # Exception.message/1 dispatches on the module of the struct it is given, so
+  # the callback isn't reachable from any call site - a reached exception
+  # module brings its own.
+  defp maybe_add_exception_call_graph_edges(call_graph, module) do
+    if Reflection.exception?(module) do
+      add_edge(call_graph, module, {module, :message, 1})
     end
 
     call_graph
@@ -1594,6 +1762,20 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp remove_module_vertices(call_graph, module) do
     remove_vertices(call_graph, module_vertices(call_graph, module))
+  end
+
+  # Resolves an error_info map key to an atom: an absent key resolves to the
+  # default, a literal atom value resolves to itself, and anything dynamic
+  # (or a nil default) makes the resolution fail.
+  defp resolve_error_info_key(pairs, key, default) do
+    found = Enum.find(pairs, fn {k, _v} -> match?(%IR.AtomType{value: ^key}, k) end)
+
+    case found do
+      {_key_ir, %IR.AtomType{value: value}} -> {:ok, value}
+      nil when is_nil(default) -> :error
+      nil -> {:ok, default}
+      _fallback -> :error
+    end
   end
 
   # Runs the protocol-aware fixpoint from the given entry vertices and returns the

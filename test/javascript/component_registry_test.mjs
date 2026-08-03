@@ -2,14 +2,14 @@
 
 import {
   assert,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   initComponentRegistryEntry,
 } from "./support/helpers.mjs";
 
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const cid1 = Type.bitstring("my_component_1");
 const cid2 = Type.bitstring("my_component_2");

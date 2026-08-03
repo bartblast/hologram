@@ -5,8 +5,15 @@ import {
   assertBoxedError,
   assertBoxedErrorAsync,
   assertBoxedStrictEqual,
+  boxedErrorMessage,
+  buildBadArityErrorMsg,
+  buildCaseClauseErrorMsg,
+  buildFunctionClauseErrorMsg,
+  buildMatchErrorMsg,
+  buildUndefinedFunctionErrorMsg,
+  buildWithClauseErrorMsg,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   sinon,
 } from "./support/helpers.mjs";
 
@@ -14,6 +21,8 @@ import {defineModule1Fixture as defineInterpreterModule1Fixture} from "./support
 import {defineModule1Fixture as defineMatchOperatorModule1Fixture} from "./support/fixtures/ex_js_consistency/match_operator/module_1.mjs";
 
 import Bitstring from "../../assets/js/bitstring.mjs";
+import CallStack from "../../assets/js/erts/call_stack.mjs";
+import ERTS from "../../assets/js/erts.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
@@ -21,7 +30,7 @@ import Interpreter from "../../assets/js/interpreter.mjs";
 import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 defineInterpreterModule1Fixture();
 defineMatchOperatorModule1Fixture();
 
@@ -860,52 +869,100 @@ describe("Interpreter", () => {
     });
   });
 
-  it("buildArgumentErrorMsg()", () => {
-    const result = Interpreter.buildArgumentErrorMsg(2, "my message");
+  describe("blameError()", () => {
+    it("normalizes a bare reason", () => {
+      const result = Interpreter.blameError(Type.atom("badarg"));
 
-    const expected =
-      "errors were found at the given arguments:\n\n  * 2nd argument: my message\n";
+      assert.deepStrictEqual(
+        result,
+        Type.errorStruct("ArgumentError", "argument error"),
+      );
+    });
 
-    assert.equal(result, expected);
-  });
+    it("applies the exception module's blame/2 callback", () => {
+      globalThis.Elixir_MyBlamedType = {
+        "blame/2": (_struct, stacktrace) =>
+          Type.tuple([
+            Type.errorStruct("MyBlamedType", "my blamed message"),
+            stacktrace,
+          ]),
+      };
 
-  it("buildBadFunctionErrorMsg()", () => {
-    const term = Type.map([
-      [Type.atom("a"), Type.integer(1)],
-      [Type.atom("b"), Type.integer(2)],
-    ]);
+      const struct = Type.errorStruct("MyBlamedType", "my message");
+      const result = Interpreter.blameError(struct);
 
-    const result = Interpreter.buildBadFunctionErrorMsg(term);
-    const expected = "expected a function, got: %{a: 1, b: 2}";
+      delete globalThis.Elixir_MyBlamedType;
 
-    assert.equal(result, expected);
+      assert.deepStrictEqual(
+        result,
+        Type.errorStruct("MyBlamedType", "my blamed message"),
+      );
+    });
+
+    it("returns the struct unchanged when the exception module has no blame/2 callback", () => {
+      const struct = Type.errorStruct("MyType", "my message");
+      const result = Interpreter.blameError(struct);
+
+      assert.deepStrictEqual(result, struct);
+    });
   });
 
   describe("buildContext()", () => {
     it("module undefined, vars undefined", () => {
       const result = Interpreter.buildContext();
-      const expected = {module: null, vars: {}};
+      const expected = {module: null, stacktrace: null, vars: {}};
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("module defined, string", () => {
       const result = Interpreter.buildContext({module: "MyModule"});
-      const expected = {module: Type.atom("Elixir.MyModule"), vars: {}};
+
+      const expected = {
+        module: Type.atom("Elixir.MyModule"),
+        stacktrace: null,
+        vars: {},
+      };
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("module defined, boxed alias", () => {
       const result = Interpreter.buildContext({module: Type.alias("MyModule")});
-      const expected = {module: Type.atom("Elixir.MyModule"), vars: {}};
+
+      const expected = {
+        module: Type.atom("Elixir.MyModule"),
+        stacktrace: null,
+        vars: {},
+      };
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("module defined, null", () => {
       const result = Interpreter.buildContext({module: null});
-      const expected = {module: null, vars: {}};
+      const expected = {module: null, stacktrace: null, vars: {}};
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("stacktrace defined", () => {
+      const stacktrace = Type.list([
+        Type.tuple([
+          Type.alias("MyModule"),
+          Type.atom("my_fun"),
+          Type.integer(2),
+          Type.list(),
+        ]),
+      ]);
+
+      const result = Interpreter.buildContext({stacktrace});
+
+      const expected = {
+        module: null,
+        stacktrace,
+        vars: {},
+      };
 
       assert.deepStrictEqual(result, expected);
     });
@@ -917,109 +974,11 @@ describe("Interpreter", () => {
 
       const expected = {
         module: null,
+        stacktrace: null,
         vars: {a: Type.integer(1), b: Type.integer(2)},
       };
 
       assert.deepStrictEqual(result, expected);
-    });
-  });
-
-  it("buildErlangErrorMsg()", () => {
-    const result = Interpreter.buildErlangErrorMsg("my message");
-
-    assert.equal(result, "Erlang error: my message");
-  });
-
-  describe("buildFunctionClauseErrorMsg()", () => {
-    it("no args param given", () => {
-      const result =
-        Interpreter.buildFunctionClauseErrorMsg("MyModule.my_fun/2");
-
-      const expected = "no function clause matching in MyModule.my_fun/2";
-
-      assert.equal(result, expected);
-    });
-
-    it("0 args", () => {
-      const result = Interpreter.buildFunctionClauseErrorMsg(
-        "MyModule.my_fun/2",
-        [],
-      );
-
-      const expected = "no function clause matching in MyModule.my_fun/2";
-
-      assert.equal(result, expected);
-    });
-
-    it("1 arg", () => {
-      const result = Interpreter.buildFunctionClauseErrorMsg(
-        "MyModule.my_fun/2",
-        [Type.integer(123)],
-      );
-
-      const expected =
-        "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n";
-
-      assert.equal(result, expected);
-    });
-
-    it("2 args", () => {
-      const result = Interpreter.buildFunctionClauseErrorMsg(
-        "MyModule.my_fun/2",
-        [Type.integer(123), Type.atom("abc")],
-      );
-
-      const expected =
-        "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n\n    # 2\n    :abc\n";
-
-      assert.equal(result, expected);
-    });
-  });
-
-  it("buildKeyErrorMsg()", () => {
-    const key = Type.atom("c");
-
-    const map = Type.map([
-      [Type.atom("b"), Type.integer(2)],
-      [Type.atom("a"), Type.integer(1)],
-    ]);
-
-    const result = Interpreter.buildKeyErrorMsg(key, map);
-    const expected = "key :c not found in:\n\n    %{a: 1, b: 2}\n";
-
-    assert.equal(result, expected);
-  });
-
-  it("buildMatchErrorMsg()", () => {
-    const result = Interpreter.buildMatchErrorMsg(Type.atom("abc"));
-    const expected = "no match of right hand side value:\n\n    :abc\n";
-
-    assert.equal(result, expected);
-  });
-
-  describe("buildMultiArgumentErrorMsg()", () => {
-    it("builds a bullet per entry", () => {
-      const result = Interpreter.buildMultiArgumentErrorMsg([
-        [1, "my message 1"],
-        [2, "my message 2"],
-      ]);
-
-      const expected =
-        "errors were found at the given arguments:\n\n  * 1st argument: my message 1\n  * 2nd argument: my message 2\n";
-
-      assert.equal(result, expected);
-    });
-
-    it("skips entries with a nullish message", () => {
-      const result = Interpreter.buildMultiArgumentErrorMsg([
-        [1, null],
-        [2, "my message"],
-      ]);
-
-      const expected =
-        "errors were found at the given arguments:\n\n  * 2nd argument: my message\n";
-
-      assert.equal(result, expected);
     });
   });
 
@@ -1035,46 +994,235 @@ describe("Interpreter", () => {
     assert.equal(result, expected);
   });
 
-  it("buildTryClauseErrorMsg()", () => {
-    const result = Interpreter.buildTryClauseErrorMsg(Type.atom("abc"));
-    const expected = "no try clause matching:\n\n    :abc\n";
+  // Only frame tracking is unit-tested here - clause dispatch behavior is
+  // covered by feature and consistency tests, because its unit tests would
+  // need updating each time Hologram.Compiler.Encoder's implementation
+  // changes.
+  describe("callAnonymousFunction() frame tracking", () => {
+    const context = contextFixture({module: "Aaa.Bbb"});
 
-    assert.equal(result, expected);
-  });
+    const okClauses = (onCall) => [
+      {
+        params: (_context) => [Type.variablePattern("x")],
+        guards: [],
+        body: (_context) => {
+          onCall();
+          return Type.atom("ok");
+        },
+      },
+    ];
 
-  describe("buildUndefinedFunctionErrorMsg", () => {
-    const module = Type.alias("Aaa.Bbb");
-
-    it("module is available", () => {
-      const result = Interpreter.buildUndefinedFunctionErrorMsg(
-        module,
-        "my_fun",
-        2,
-      );
-
-      const expected = "function Aaa.Bbb.my_fun/2 is undefined or private";
-
-      assert.equal(result, expected);
+    beforeEach(() => {
+      CallStack.reset();
+      globalThis.Hologram.config = {stacktraces: true};
     });
 
-    it("module is not available", () => {
-      const result = Interpreter.buildUndefinedFunctionErrorMsg(
-        module,
-        "my_fun",
-        2,
-        false,
+    afterEach(() => {
+      ERTS.moduleMetadata = {};
+      globalThis.Hologram.config = {stacktraces: false};
+    });
+
+    it("pushes the fun's frame for the duration of the call", () => {
+      let framesDuringCall;
+
+      const fun = Type.anonymousFunction(
+        1,
+        okClauses(() => (framesDuringCall = CallStack.snapshot())),
+        context,
       );
 
-      const expected =
-        "function Aaa.Bbb.my_fun/2 is undefined (module Aaa.Bbb is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)";
+      Interpreter.callAnonymousFunction(fun, [Type.integer(1)]);
 
-      assert.equal(result, expected);
+      assert.deepStrictEqual(framesDuringCall, [
+        {
+          module: "Aaa.Bbb",
+          function: null,
+          arityOrArgs: 1,
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+
+      assert.deepStrictEqual(CallStack.snapshot(), []);
+    });
+
+    it("pops the frame when no clause matches", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.integer(1)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+          },
+        ],
+        context,
+        "-my_fun/0-fun-0-",
+      );
+
+      assertBoxedError(
+        () => Interpreter.callAnonymousFunction(fun, [Type.integer(2)]),
+        "FunctionClauseError",
+        "no function clause matching in anonymous fn/1 in Aaa.Bbb.my_fun/0\n\nThe following arguments were given to anonymous fn/1 in Aaa.Bbb.my_fun/0:\n\n    # 1\n    2\n",
+      );
+
+      assert.deepStrictEqual(CallStack.snapshot(), []);
+    });
+
+    // A line is recorded when a clause matches, so a call matching none would
+    // otherwise report the function without saying where it is.
+    it("reports the first clause when no clause matches", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.integer(1)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+            line: 11,
+          },
+          {
+            params: (_context) => [Type.integer(2)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+            line: 22,
+          },
+        ],
+        context,
+        "-my_fun/0-fun-0-",
+      );
+
+      let error;
+
+      try {
+        Interpreter.callAnonymousFunction(fun, [Type.integer(3)]);
+      } catch (thrownError) {
+        error = thrownError;
+      }
+
+      assert.deepStrictEqual(error.stacktrace, [
+        {
+          module: "Aaa.Bbb",
+          function: "-my_fun/0-fun-0-",
+          arityOrArgs: Type.list([Type.integer(3)]),
+          file: null,
+          line: 11,
+          errorInfo: null,
+        },
+      ]);
+    });
+
+    it("names no function when the function carries no name", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.integer(1)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+          },
+        ],
+        context,
+      );
+
+      // Every anonymous function in transpiled code is named by the compiler,
+      // so only one built by the client runtime itself lands here.
+      assertBoxedError(
+        () => Interpreter.callAnonymousFunction(fun, [Type.integer(2)]),
+        "FunctionClauseError",
+        "no function clause matches",
+      );
+    });
+
+    it("the frame carries the file the module registered", () => {
+      let framesDuringCall;
+
+      ERTS.registerModuleMetadata({
+        "Iii.Jjj": {app: "my_app", file: "lib/iii/jjj.ex"},
+      });
+
+      const fun = Type.anonymousFunction(
+        1,
+        okClauses(() => (framesDuringCall = CallStack.snapshot())),
+        contextFixture({module: "Iii.Jjj"}),
+      );
+
+      Interpreter.callAnonymousFunction(fun, [Type.integer(1)]);
+
+      assert.equal(framesDuringCall[0].file, "lib/iii/jjj.ex");
+
+      // cleanup
+      delete globalThis.Elixir_Iii_Jjj;
+    });
+
+    it("the frame carries the matched clause's line", () => {
+      let framesDuringCall;
+
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.atom("a")],
+            guards: [],
+            body: (_context) => Type.atom("expr_a"),
+            line: 3,
+          },
+          {
+            params: (_context) => [Type.atom("b")],
+            guards: [],
+            body: (_context) => {
+              framesDuringCall = CallStack.snapshot();
+              return Type.atom("expr_b");
+            },
+            line: 5,
+          },
+        ],
+        context,
+      );
+
+      Interpreter.callAnonymousFunction(fun, [Type.atom("b")]);
+
+      assert.equal(framesDuringCall[0].line, 5);
+    });
+
+    it("doesn't push a frame for a capture of a named function", () => {
+      let framesDuringCall;
+
+      const capture = Type.functionCapture(
+        "Ccc.Ddd",
+        "my_fun",
+        1,
+        okClauses(() => (framesDuringCall = CallStack.snapshot())),
+        context,
+      );
+
+      Interpreter.callAnonymousFunction(capture, [Type.integer(1)]);
+
+      assert.deepStrictEqual(framesDuringCall, []);
+    });
+
+    it("doesn't track frames when client stacktraces are disabled", () => {
+      globalThis.Hologram.config = {stacktraces: false};
+
+      let framesDuringCall;
+
+      const fun = Type.anonymousFunction(
+        1,
+        okClauses(() => (framesDuringCall = CallStack.snapshot())),
+        context,
+      );
+
+      Interpreter.callAnonymousFunction(fun, [Type.integer(1)]);
+
+      assert.deepStrictEqual(framesDuringCall, []);
     });
   });
 
   it("cloneContext()", () => {
     const context = {
       module: Type.atom("MyModule1"),
+      stacktrace: null,
       vars: {
         a: Type.integer(1),
         b: Type.integer(2),
@@ -1085,6 +1233,7 @@ describe("Interpreter", () => {
 
     assert.deepStrictEqual(clone, {
       module: Type.atom("MyModule1"),
+      stacktrace: null,
       vars: {
         a: Type.integer(1),
         b: Type.integer(2),
@@ -1096,6 +1245,7 @@ describe("Interpreter", () => {
 
     assert.deepStrictEqual(context, {
       module: Type.atom("MyModule1"),
+      stacktrace: null,
       vars: {
         a: Type.integer(1),
         b: Type.integer(2),
@@ -1104,6 +1254,7 @@ describe("Interpreter", () => {
 
     assert.deepStrictEqual(clone, {
       module: Type.atom("MyModule2"),
+      stacktrace: null,
       vars: {
         a: Type.integer(1),
         b: Type.integer(20),
@@ -2148,6 +2299,40 @@ describe("Interpreter", () => {
           "Erlang error: {:bad_generator, [1, 2]}",
         );
       });
+
+      it("the raised error carries the source it couldn't generate from", () => {
+        const context = contextFixture();
+
+        const generator = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("x"), {type: "integer"}),
+          ]),
+          body: (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+        };
+
+        let caught;
+
+        try {
+          Interpreter.comprehension(
+            [generator],
+            Type.list(),
+            false,
+            (context) => context.vars.x,
+            context,
+          );
+        } catch (e) {
+          caught = e;
+        }
+
+        assert.deepStrictEqual(
+          caught.value,
+          Type.tuple([
+            Type.atom("bad_generator"),
+            Type.list([Type.integer(1), Type.integer(2)]),
+          ]),
+        );
+      });
     });
 
     describe("guards", () => {
@@ -3019,7 +3204,7 @@ describe("Interpreter", () => {
             context,
           ),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(Type.integer(0)),
+        buildCaseClauseErrorMsg(Type.integer(0)),
       );
     });
   });
@@ -3059,6 +3244,10 @@ describe("Interpreter", () => {
   });
 
   describe("defineElixirFunction()", () => {
+    afterEach(() => {
+      ERTS.moduleMetadata = {};
+    });
+
     beforeEach(() => {
       // def my_fun_a(1), do: :expr_1
       // def my_fun_a(2), do: :expr_2
@@ -3219,9 +3408,7 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => globalThis.Elixir_Aaa_Bbb["my_fun_b/1"](Type.integer(3)),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_b/1", [
-          Type.integer(3),
-        ]),
+        buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_b/1", [Type.integer(3)]),
       );
     });
 
@@ -3258,10 +3445,79 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(3)),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_a/1", [
-          Type.integer(3),
-        ]),
+        buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_a/1", [Type.integer(3)]),
       );
+    });
+
+    it("raises FunctionClauseError blaming the clause heads that carry rendered sources", () => {
+      // def my_fun_f(1), do: :expr_1
+      // def my_fun_f(x) when is_atom(x), do: :expr_2
+      Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_f", 1, "public", [
+        {
+          params: (_context) => [Type.integer(1)],
+          guards: [],
+          body: (_context) => Type.atom("expr_1"),
+          blame: {params: ["1"], guards: []},
+        },
+        {
+          params: (_context) => [Type.variablePattern("x")],
+          guards: [(context) => Erlang["is_atom/1"](context.vars.x)],
+          body: (_context) => Type.atom("expr_2"),
+          blame: {
+            params: ["x"],
+            guards: [
+              {
+                source: "is_atom(x)",
+                test: (context) => Erlang["is_atom/1"](context.vars.x),
+              },
+            ],
+          },
+        },
+      ]);
+
+      assertBoxedError(
+        () => globalThis.Elixir_Aaa_Bbb["my_fun_f/1"](Type.integer(3)),
+        "FunctionClauseError",
+        "no function clause matching in Aaa.Bbb.my_fun_f/1\n\nThe following arguments were given to Aaa.Bbb.my_fun_f/1:\n\n    # 1\n    3\n\nAttempted function clauses (showing 2 out of 2):\n\n    def my_fun_f(-1-)\n    def my_fun_f(x) when -is_atom(x)-\n",
+      );
+    });
+
+    it("the error frame carries the args in place of the arity, keeping the file", () => {
+      ERTS.registerModuleMetadata({"Aaa.Bbb": {file: "lib/aaa/bbb.ex"}});
+
+      // def my_fun_g(1), do: :ok
+      Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 1, "public", [
+        {
+          params: (_context) => [Type.integer(1)],
+          guards: [],
+          body: (_context) => Type.atom("ok"),
+        },
+      ]);
+
+      CallStack.reset();
+      globalThis.Hologram.config.stacktraces = true;
+
+      let caught;
+
+      try {
+        globalThis.Elixir_Aaa_Bbb["my_fun_g/1"](Type.integer(3));
+      } catch (e) {
+        caught = e;
+      } finally {
+        globalThis.Hologram.config.stacktraces = false;
+        CallStack.reset();
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "Aaa.Bbb",
+          function: "my_fun_g",
+          arityOrArgs: Type.list([Type.integer(3)]),
+          file: "lib/aaa/bbb.ex",
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
 
     it("defines a function which has match operator in params", () => {
@@ -3358,15 +3614,238 @@ describe("Interpreter", () => {
       );
     });
 
+    describe("frame tracking", () => {
+      const myFunGFrame = {
+        module: "Aaa.Bbb",
+        function: "my_fun_g",
+        arityOrArgs: 0,
+        file: null,
+        line: null,
+        errorInfo: null,
+      };
+
+      beforeEach(() => {
+        CallStack.reset();
+        globalThis.Hologram.config = {stacktraces: true};
+      });
+
+      afterEach(() => {
+        globalThis.Hologram.config = {stacktraces: false};
+      });
+
+      it("pushes the function's frame for the duration of the call", () => {
+        let framesDuringCall;
+
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 0, "public", [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => {
+              framesDuringCall = CallStack.snapshot();
+              return Type.atom("ok");
+            },
+          },
+        ]);
+
+        globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
+
+        assert.deepStrictEqual(framesDuringCall, [myFunGFrame]);
+      });
+
+      it("pops the frame when the function returns", () => {
+        globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(1));
+
+        assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
+
+      it("pops the frame when the function raises", () => {
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 0, "public", [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => Interpreter.raiseArgumentError("my message"),
+          },
+        ]);
+
+        assertBoxedError(
+          () => globalThis.Elixir_Aaa_Bbb["my_fun_g/0"](),
+          "ArgumentError",
+          "my message",
+        );
+
+        assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
+
+      it("pops the frame when no clause matches", () => {
+        assertBoxedError(
+          () => globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(3)),
+          "FunctionClauseError",
+          buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_a/1", [Type.integer(3)]),
+        );
+
+        assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
+
+      // A line is recorded when a clause matches, so a call matching none would
+      // otherwise report the function without saying where it is.
+      it("reports the first clause when no clause matches", () => {
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 1, "public", [
+          {
+            params: (_context) => [Type.integer(1)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+            line: 11,
+          },
+          {
+            params: (_context) => [Type.integer(2)],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+            line: 22,
+          },
+        ]);
+
+        let error;
+
+        try {
+          globalThis.Elixir_Aaa_Bbb["my_fun_g/1"](Type.integer(3));
+        } catch (thrownError) {
+          error = thrownError;
+        }
+
+        assert.deepStrictEqual(error.stacktrace, [
+          {
+            module: "Aaa.Bbb",
+            function: "my_fun_g",
+            arityOrArgs: Type.list([Type.integer(3)]),
+            file: null,
+            line: 11,
+            errorInfo: null,
+          },
+        ]);
+      });
+
+      it("an error raised in the body captures the frame on its stacktrace", () => {
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 0, "public", [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => Interpreter.raiseArgumentError("my message"),
+          },
+        ]);
+
+        let error;
+
+        try {
+          globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
+        } catch (thrownError) {
+          error = thrownError;
+        }
+
+        assert.instanceOf(error, HologramBoxedError);
+        assert.deepStrictEqual(error.stacktrace, [myFunGFrame]);
+      });
+
+      it("keeps the frame until an async body settles", async () => {
+        let framesAfterAwait;
+
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 0, "public", [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: async (_context) => {
+              await Promise.resolve();
+              framesAfterAwait = CallStack.snapshot();
+              return Type.atom("ok");
+            },
+          },
+        ]);
+
+        const resultPromise = globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
+
+        assert.deepStrictEqual(CallStack.snapshot(), [myFunGFrame]);
+
+        await resultPromise;
+
+        assert.deepStrictEqual(framesAfterAwait, [myFunGFrame]);
+        assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
+
+      it("the frame carries the file the module registered", () => {
+        let framesDuringCall;
+
+        ERTS.registerModuleMetadata({
+          "Aaa.Bbb": {app: "my_app", file: "lib/aaa/bbb.ex"},
+        });
+
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 0, "public", [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => {
+              framesDuringCall = CallStack.snapshot();
+              return Type.atom("ok");
+            },
+          },
+        ]);
+
+        globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
+
+        assert.equal(framesDuringCall[0].file, "lib/aaa/bbb.ex");
+      });
+
+      it("the frame carries the matched clause's line", () => {
+        let framesDuringCall;
+
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 1, "public", [
+          {
+            params: (_context) => [Type.atom("a")],
+            guards: [],
+            body: (_context) => Type.atom("expr_a"),
+            line: 3,
+          },
+          {
+            params: (_context) => [Type.atom("b")],
+            guards: [],
+            body: (_context) => {
+              framesDuringCall = CallStack.snapshot();
+              return Type.atom("expr_b");
+            },
+            line: 5,
+          },
+        ]);
+
+        globalThis.Elixir_Aaa_Bbb["my_fun_g/1"](Type.atom("b"));
+
+        assert.equal(framesDuringCall[0].line, 5);
+      });
+
+      it("doesn't track frames when client stacktraces are disabled", () => {
+        globalThis.Hologram.config = {stacktraces: false};
+
+        let framesDuringCall;
+
+        Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_g", 0, "public", [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => {
+              framesDuringCall = CallStack.snapshot();
+              return Type.atom("ok");
+            },
+          },
+        ]);
+
+        globalThis.Elixir_Aaa_Bbb["my_fun_g/0"]();
+
+        assert.deepStrictEqual(framesDuringCall, []);
+      });
+    });
+
     it("raises UndefinedFunctionError when undefined Elixir/Erlang function is being called", () => {
       assertBoxedError(
         () => globalThis.Elixir_Aaa_Bbb["my_fun_x/5"],
         "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(
-          Type.alias("Aaa.Bbb"),
-          "my_fun_x",
-          5,
-        ),
+        buildUndefinedFunctionErrorMsg(Type.alias("Aaa.Bbb"), "my_fun_x", 5),
       );
     });
   });
@@ -3414,6 +3893,88 @@ describe("Interpreter", () => {
       const result = globalThis.Erlang_Aaa_Bbb["my_fun_a/2"](Type.integer(1));
       assert.deepStrictEqual(result, Type.atom("expr_a"));
     });
+
+    describe("frame tracking", () => {
+      beforeEach(() => {
+        CallStack.reset();
+        globalThis.Hologram.config = {stacktraces: true};
+      });
+
+      afterEach(() => {
+        globalThis.Hologram.config = {stacktraces: false};
+      });
+
+      it("pushes the function's frame for the duration of the call", () => {
+        let framesDuringCall;
+
+        Interpreter.defineErlangFunction("aaa_bbb", "my_fun_b", 2, () => {
+          framesDuringCall = CallStack.snapshot();
+          return Type.atom("ok");
+        });
+
+        globalThis.Erlang_Aaa_Bbb["my_fun_b/2"](
+          Type.integer(1),
+          Type.integer(2),
+        );
+
+        assert.deepStrictEqual(framesDuringCall, [
+          {
+            module: "aaa_bbb",
+            function: "my_fun_b",
+            arityOrArgs: 2,
+            file: null,
+            line: null,
+            errorInfo: null,
+          },
+        ]);
+
+        assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
+    });
+  });
+
+  describe("defineFunctionClauseHeads()", () => {
+    const clauseHeads = [
+      {
+        params: (_context) => [Type.variablePattern("module_0")],
+        guards: [(_context) => Type.boolean(true)],
+        blame: {params: ["module"], guards: [{source: "is_atom(module)"}]},
+      },
+    ];
+
+    it("registers the clause heads under the function's identity", () => {
+      Interpreter.defineFunctionClauseHeads(
+        "MyModuleExName",
+        "my_fun",
+        1,
+        "public",
+        clauseHeads,
+      );
+
+      assert.deepStrictEqual(
+        Interpreter.functionClauseHeads("MyModuleExName", "my_fun", 1),
+        {visibility: "public", clauses: clauseHeads},
+      );
+    });
+
+    it("registers each arity separately", () => {
+      Interpreter.defineFunctionClauseHeads(
+        "MyModuleExName",
+        "my_other_fun",
+        2,
+        "private",
+        clauseHeads,
+      );
+
+      assert.isNull(
+        Interpreter.functionClauseHeads("MyModuleExName", "my_other_fun", 1),
+      );
+
+      assert.deepStrictEqual(
+        Interpreter.functionClauseHeads("MyModuleExName", "my_other_fun", 2),
+        {visibility: "private", clauses: clauseHeads},
+      );
+    });
   });
 
   describe("defineManuallyPortedFunction()", () => {
@@ -3430,7 +3991,7 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => globalThis.Elixir_MyModuleExName["my_undefined_fun/3"],
         "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(
+        buildUndefinedFunctionErrorMsg(
           Type.alias("MyModuleExName"),
           "my_undefined_fun",
           3,
@@ -3478,6 +4039,46 @@ describe("Interpreter", () => {
         globalThis.Elixir_MyModuleExName.__exports__,
         new Set([]),
       );
+    });
+
+    describe("frame tracking", () => {
+      beforeEach(() => {
+        CallStack.reset();
+        globalThis.Hologram.config = {stacktraces: true};
+      });
+
+      afterEach(() => {
+        globalThis.Hologram.config = {stacktraces: false};
+      });
+
+      it("pushes the function's frame for the duration of the call", () => {
+        let framesDuringCall;
+
+        Interpreter.defineManuallyPortedFunction(
+          "MyModuleExName",
+          "my_defined_fun/3",
+          "public",
+          () => {
+            framesDuringCall = CallStack.snapshot();
+            return "my_defined_fun/3 result";
+          },
+        );
+
+        globalThis.Elixir_MyModuleExName["my_defined_fun/3"]();
+
+        assert.deepStrictEqual(framesDuringCall, [
+          {
+            module: "MyModuleExName",
+            function: "my_defined_fun",
+            arityOrArgs: 3,
+            file: null,
+            line: null,
+            errorInfo: null,
+          },
+        ]);
+
+        assert.deepStrictEqual(CallStack.snapshot(), []);
+      });
     });
   });
 
@@ -3624,6 +4225,79 @@ describe("Interpreter", () => {
     assert.deepStrictEqual(result, Type.integer(1));
   });
 
+  describe("formatBoxedError()", () => {
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    it("renders the banner and the stacktrace", () => {
+      CallStack.push({
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      });
+
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyError", "my message"),
+      );
+
+      assert.equal(
+        Interpreter.formatBoxedError(error),
+        "** (MyError) my message\n    lib/my_module.ex:11: MyModule.my_fun/1\n",
+      );
+    });
+
+    it("renders the banner and an already boxed stacktrace", () => {
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyError", "my message"),
+      );
+
+      error.stacktrace = Type.list([
+        Type.tuple([
+          Type.alias("MyModule"),
+          Type.atom("my_fun"),
+          Type.integer(1),
+          Type.list([
+            Type.tuple([Type.atom("file"), Type.charlist("lib/my_module.ex")]),
+            Type.tuple([Type.atom("line"), Type.integer(11)]),
+          ]),
+        ]),
+      ]);
+
+      assert.equal(
+        Interpreter.formatBoxedError(error),
+        "** (MyError) my message\n    lib/my_module.ex:11: MyModule.my_fun/1\n",
+      );
+    });
+
+    it("renders the banner alone when the error has no frames", () => {
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyError", "my message"),
+      );
+
+      assert.equal(
+        Interpreter.formatBoxedError(error),
+        "** (MyError) my message",
+      );
+    });
+
+    it("renders the banner alone when the already boxed stacktrace is empty", () => {
+      const error = new HologramBoxedError(
+        Type.errorStruct("MyError", "my message"),
+      );
+
+      error.stacktrace = Type.list();
+
+      assert.equal(
+        Interpreter.formatBoxedError(error),
+        "** (MyError) my message",
+      );
+    });
+  });
+
   it("getErrorType()", () => {
     const errorStruct = Type.errorStruct("MyError", "my message");
     const jsError = new HologramBoxedError(errorStruct);
@@ -3664,11 +4338,42 @@ describe("Interpreter", () => {
       const clauses = ["clause_dummy_1", "clause_dummy_2"];
       const context = contextFixture();
 
-      // Client result for non-capture anonymous function is intentionally different than server result.
       it("non-capture", () => {
+        const anonFun = Type.anonymousFunction(
+          2,
+          clauses,
+          context,
+          "-my_fun/1-fun-0-",
+        );
+
+        assert.equal(
+          Interpreter.inspect(anonFun),
+          `#Function<${anonFun.uniq}.${anonFun.uniq}/2 in MyModule.my_fun/1>`,
+        );
+      });
+
+      it("non-capture, defined in a definition whose name isn't a valid identifier", () => {
+        const anonFun = Type.anonymousFunction(
+          2,
+          clauses,
+          context,
+          "-my fun/1-fun-0-",
+        );
+
+        assert.equal(
+          Interpreter.inspect(anonFun),
+          `#Function<${anonFun.uniq}.${anonFun.uniq}/2 in MyModule."my fun"/1>`,
+        );
+      });
+
+      // Case not possible on the server - every fun there is defined inside a function definition.
+      it("non-capture, defined outside of a function definition", () => {
         const anonFun = Type.anonymousFunction(2, clauses, context);
 
-        assert.equal(Interpreter.inspect(anonFun), "anonymous function fn/2");
+        assert.equal(
+          Interpreter.inspect(anonFun),
+          `#Function<${anonFun.uniq}.${anonFun.uniq}/2 in MyModule>`,
+        );
       });
 
       // Case not possible on the client - function captures are always encoded as remote function captures.
@@ -3708,10 +4413,24 @@ describe("Interpreter", () => {
         assert.equal(result, "Aaa.Bbb");
       });
 
+      it("module alias naming Elixir itself", () => {
+        const result = Interpreter.inspect(Type.alias("Elixir.Aaa"));
+        assert.equal(result, "Elixir.Elixir.Aaa");
+      });
+
       it("non-boolean and non-nil", () => {
         const result = Interpreter.inspect(Type.atom("abc"));
         assert.equal(result, ":abc");
       });
+
+      it("name that isn't a valid identifier", () => {
+        const result = Interpreter.inspect(Type.atom("aaa bbb"));
+        assert.equal(result, ':"aaa bbb"');
+      });
+
+      // The client classifies operators through the transpiled Macro.inspect_atom/3, which the
+      // stand-in here doesn't carry the operator tables for - the Elixir consistency test pins them.
+      // it("operator")
     });
 
     describe("bitstring", () => {
@@ -3729,6 +4448,37 @@ describe("Interpreter", () => {
         it("Unicode", () => {
           const result = Interpreter.inspect(Type.bitstring("全息图"));
           assert.equal(result, '"全息图"');
+        });
+
+        it("characters shown as escape sequences", () => {
+          const result = Interpreter.inspect(
+            Type.bitstring("\x07\x08\x09\x0A\x0B\x0C\x0D\x1B\x7F"),
+          );
+
+          assert.equal(result, '"\\a\\b\\t\\n\\v\\f\\r\\e\\d"');
+        });
+
+        it("quote and backslash", () => {
+          const result = Interpreter.inspect(Type.bitstring('"\\'));
+          assert.equal(result, '"\\"\\\\"');
+        });
+
+        it("invisible characters shown as unicode escapes", () => {
+          const result = Interpreter.inspect(
+            Type.bitstring("\u00A0\u200B\uFEFF"),
+          );
+
+          assert.equal(result, '"\\u00A0\\u200B\\uFEFF"');
+        });
+
+        it("an interpolation opener is escaped", () => {
+          const result = Interpreter.inspect(Type.bitstring("#{"));
+          assert.equal(result, '"\\#{"');
+        });
+
+        it("a hash that doesn't open an interpolation is not escaped", () => {
+          const result = Interpreter.inspect(Type.bitstring("a#b"));
+          assert.equal(result, '"a#b"');
         });
 
         it("non-printable", () => {
@@ -3817,6 +4567,65 @@ describe("Interpreter", () => {
         assert.equal(result, "[1, 2 | 3]");
       });
 
+      describe("charlist", () => {
+        it("printable characters", () => {
+          const term = Type.list([
+            Type.integer(97),
+            Type.integer(98),
+            Type.integer(99),
+          ]);
+
+          assert.equal(Interpreter.inspect(term), '~c"abc"');
+        });
+
+        it("characters shown as escape sequences", () => {
+          const term = Type.list(
+            [7, 8, 9, 10, 11, 12, 13, 27].map(Type.integer),
+          );
+
+          assert.equal(
+            Interpreter.inspect(term),
+            '~c"\\a\\b\\t\\n\\v\\f\\r\\e"',
+          );
+        });
+
+        it("quote and backslash", () => {
+          const term = Type.list([34, 92].map(Type.integer));
+
+          assert.equal(Interpreter.inspect(term), '~c"\\"\\\\"');
+        });
+
+        it("an interpolation opener is escaped", () => {
+          const term = Type.list([35, 123].map(Type.integer));
+
+          assert.equal(Interpreter.inspect(term), '~c"\\#{"');
+        });
+
+        it("a hash that doesn't open an interpolation is not escaped", () => {
+          const term = Type.list([97, 35, 98].map(Type.integer));
+
+          assert.equal(Interpreter.inspect(term), '~c"a#b"');
+        });
+
+        it("a non-printable character keeps the list form", () => {
+          const term = Type.list([104, 105, 0].map(Type.integer));
+
+          assert.equal(Interpreter.inspect(term), "[104, 105, 0]");
+        });
+
+        it("a codepoint above ASCII keeps the list form", () => {
+          const term = Type.list([104, 105, 233].map(Type.integer));
+
+          assert.equal(Interpreter.inspect(term), "[104, 105, 233]");
+        });
+
+        it("an improper list keeps the list form", () => {
+          const term = Type.improperList([104, 105].map(Type.integer));
+
+          assert.equal(Interpreter.inspect(term), "[104 | 105]");
+        });
+      });
+
       describe("keyword list", () => {
         it("single item", () => {
           const term = Type.keywordList([[Type.atom("a"), Type.integer(1)]]);
@@ -3859,6 +4668,22 @@ describe("Interpreter", () => {
         const result = Interpreter.inspect(map);
 
         assert.equal(result, '%{a: 1, b: "xyz"}');
+      });
+
+      it("with an alias key", () => {
+        const map = Type.map([[Type.alias("Aaa.Bbb"), Type.integer(1)]]);
+
+        const result = Interpreter.inspect(map);
+
+        assert.equal(result, "%{Aaa.Bbb => 1}");
+      });
+
+      it("with a key that isn't a valid identifier", () => {
+        const map = Type.map([[Type.atom("aaa bbb"), Type.integer(1)]]);
+
+        const result = Interpreter.inspect(map);
+
+        assert.equal(result, '%{"aaa bbb": 1}');
       });
 
       it("with non-atom keys", () => {
@@ -4584,7 +5409,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(myAtom, Type.atom("abc"), context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(myAtom),
+          buildMatchErrorMsg(myAtom),
         );
       });
 
@@ -4595,7 +5420,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(myInteger, Type.atom("abc"), context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(myInteger),
+          buildMatchErrorMsg(myInteger),
         );
       });
     });
@@ -4632,7 +5457,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(myBitstring),
+          buildMatchErrorMsg(myBitstring),
         );
       });
 
@@ -4644,7 +5469,7 @@ describe("Interpreter", () => {
           () =>
             Interpreter.matchOperator(myAtom, emptyBitstringPattern, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(myAtom),
+          buildMatchErrorMsg(myAtom),
         );
       });
 
@@ -4681,7 +5506,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(myBitstring),
+          buildMatchErrorMsg(myBitstring),
         );
       });
 
@@ -4698,7 +5523,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(myAtom),
+          buildMatchErrorMsg(myAtom),
         );
       });
 
@@ -4865,7 +5690,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(multiSegmentBitstringValue),
+          buildMatchErrorMsg(multiSegmentBitstringValue),
         );
       });
 
@@ -4885,7 +5710,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(multiSegmentBitstringValue),
+          buildMatchErrorMsg(multiSegmentBitstringValue),
         );
       });
 
@@ -4905,7 +5730,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(multiSegmentBitstringValue),
+          buildMatchErrorMsg(multiSegmentBitstringValue),
         );
       });
 
@@ -5331,7 +6156,7 @@ describe("Interpreter", () => {
                 context,
               ),
             "MatchError",
-            Interpreter.buildMatchErrorMsg(myBitstring),
+            buildMatchErrorMsg(myBitstring),
           );
         });
 
@@ -5356,7 +6181,7 @@ describe("Interpreter", () => {
                 context,
               ),
             "MatchError",
-            Interpreter.buildMatchErrorMsg(myBitstring),
+            buildMatchErrorMsg(myBitstring),
           );
         });
 
@@ -5380,9 +6205,297 @@ describe("Interpreter", () => {
                 context,
               ),
             "MatchError",
-            Interpreter.buildMatchErrorMsg(myBitstring),
+            buildMatchErrorMsg(myBitstring),
           );
         });
+      });
+
+      // IMPORTANT!
+      // Each test here has a related Elixir consistency test in
+      // test/elixir/hologram/ex_js_consistency/match_operator_test.exs ("utf8 type modifier" section).
+      describe("utf8 type modifier", () => {
+        const matchUtf8 = (value) =>
+          Interpreter.matchOperator(
+            value,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            contextFixture(),
+          );
+
+        // <<x::utf8, rest::binary>> = "abc"
+        it("one-byte code point", () => {
+          const context = contextFixture();
+
+          Interpreter.matchOperator(
+            Type.bitstring("abc"),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assert.deepStrictEqual(context.vars.x, Type.integer(97));
+          assertBoxedStrictEqual(context.vars.rest, Type.bitstring("bc"));
+        });
+
+        // <<x::utf8, rest::binary>> = "élo"
+        it("two-byte code point", () => {
+          const context = contextFixture();
+
+          Interpreter.matchOperator(
+            Type.bitstring("élo"),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assert.deepStrictEqual(context.vars.x, Type.integer(233));
+          assertBoxedStrictEqual(context.vars.rest, Type.bitstring("lo"));
+        });
+
+        // <<x::utf8, rest::binary>> = "日本"
+        it("three-byte code point", () => {
+          const context = contextFixture();
+
+          Interpreter.matchOperator(
+            Type.bitstring("日本"),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assert.deepStrictEqual(context.vars.x, Type.integer(26085));
+          assertBoxedStrictEqual(context.vars.rest, Type.bitstring("本"));
+        });
+
+        // <<x::utf8, rest::binary>> = "😀a"
+        it("four-byte code point", () => {
+          const context = contextFixture();
+
+          Interpreter.matchOperator(
+            Type.bitstring("😀a"),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assert.deepStrictEqual(context.vars.x, Type.integer(128512));
+          assertBoxedStrictEqual(context.vars.rest, Type.bitstring("a"));
+        });
+
+        // <<x::utf8, y::utf8, rest::binary>> = "héllo"
+        it("multiple utf8 segments", () => {
+          const context = contextFixture();
+
+          Interpreter.matchOperator(
+            Type.bitstring("héllo"),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("y"), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assert.deepStrictEqual(context.vars.x, Type.integer(104));
+          assert.deepStrictEqual(context.vars.y, Type.integer(233));
+          assertBoxedStrictEqual(context.vars.rest, Type.bitstring("llo"));
+        });
+
+        // <<?a::utf8, rest::binary>> = "abc"
+        it("literal code point that matches", () => {
+          const context = contextFixture();
+
+          Interpreter.matchOperator(
+            Type.bitstring("abc"),
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.integer(97), {type: "utf8"}),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assertBoxedStrictEqual(context.vars.rest, Type.bitstring("bc"));
+        });
+
+        // <<x::utf8, _rest::bitstring>> = <<1::1, "a">>
+        it("a sequence needs no byte alignment", () => {
+          const context = contextFixture();
+
+          const myBitstring = Type.bitstring([
+            Type.bitstringSegment(Type.integer(1), {
+              type: "integer",
+              size: Type.integer(1),
+            }),
+            Type.bitstringSegment(Type.bitstring("a"), {type: "binary"}),
+          ]);
+
+          Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.integer(1), {
+                type: "integer",
+                size: Type.integer(1),
+              }),
+              Type.bitstringSegment(Type.variablePattern("x"), {type: "utf8"}),
+              Type.bitstringSegment(Type.matchPlaceholder(), {
+                type: "bitstring",
+              }),
+            ]),
+            context,
+          );
+
+          Interpreter.updateVarsToMatchedValues(context);
+
+          assert.deepStrictEqual(context.vars.x, Type.integer(97));
+        });
+
+        // <<?z::utf8, rest::binary>> = "abc"
+        it("literal code point that doesn't match", () => {
+          const myBitstring = Type.bitstring("abc");
+
+          assertBoxedError(
+            () =>
+              Interpreter.matchOperator(
+                myBitstring,
+                Type.bitstringPattern([
+                  Type.bitstringSegment(Type.integer(122), {type: "utf8"}),
+                  Type.bitstringSegment(Type.variablePattern("rest"), {
+                    type: "binary",
+                  }),
+                ]),
+                contextFixture(),
+              ),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // <<x::utf8, rest::binary>> = <<0xFF, 0xFE>>
+        it("invalid utf8 bytes", () => {
+          const myBitstring = Type.bitstring([
+            Type.bitstringSegment(Type.integer(0xff), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(0xfe), {type: "integer"}),
+          ]);
+
+          assertBoxedError(
+            () => matchUtf8(myBitstring),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // <<x::utf8, rest::binary>> = ""
+        it("empty bitstring", () => {
+          const myBitstring = Type.bitstring("");
+
+          assertBoxedError(
+            () => matchUtf8(myBitstring),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // <<x::utf8, rest::binary>> = <<0xC3>>
+        it("truncated sequence", () => {
+          const myBitstring = Type.bitstring([
+            Type.bitstringSegment(Type.integer(0xc3), {type: "integer"}),
+          ]);
+
+          assertBoxedError(
+            () => matchUtf8(myBitstring),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // <<x::utf8, rest::binary>> = <<0xED, 0xA0, 0x80>>
+        it("surrogate is invalid", () => {
+          const myBitstring = Type.bitstring([
+            Type.bitstringSegment(Type.integer(0xed), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(0xa0), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(0x80), {type: "integer"}),
+          ]);
+
+          assertBoxedError(
+            () => matchUtf8(myBitstring),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // <<x::utf8, rest::binary>> = <<0xC0, 0xAF>>
+        it("overlong encoding is invalid", () => {
+          const myBitstring = Type.bitstring([
+            Type.bitstringSegment(Type.integer(0xc0), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(0xaf), {type: "integer"}),
+          ]);
+
+          assertBoxedError(
+            () => matchUtf8(myBitstring),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // <<x::utf8>> = "ab"
+        it("leftover bits after the sequence", () => {
+          const myBitstring = Type.bitstring("ab");
+
+          assertBoxedError(
+            () =>
+              Interpreter.matchOperator(
+                myBitstring,
+                Type.bitstringPattern([
+                  Type.bitstringSegment(Type.variablePattern("x"), {
+                    type: "utf8",
+                  }),
+                ]),
+                contextFixture(),
+              ),
+            "MatchError",
+            buildMatchErrorMsg(myBitstring),
+          );
+        });
+
+        // Not implemented on the client - the raise names them.
+        // it("utf16 type modifier")
+        // it("utf32 type modifier")
       });
     });
 
@@ -5494,7 +6607,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
 
@@ -5638,7 +6751,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
 
@@ -6663,7 +7776,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
 
@@ -6680,7 +7793,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
 
@@ -6692,7 +7805,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
 
@@ -6731,7 +7844,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
 
@@ -6755,6 +7868,90 @@ describe("Interpreter", () => {
         assert.deepStrictEqual(result, right);
 
         assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
+      });
+    });
+
+    // A match inside a pattern constrains the term from both sides, so a
+    // variable on either side binds to the term rather than to what stands
+    // opposite it.
+    describe("match pattern", () => {
+      const term = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const constraint = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+      // %{a: 1} = x = %{a: 1, b: 2}
+      it("binds a variable standing on the right of the match", () => {
+        const pattern = Type.matchPattern(
+          constraint,
+          Type.variablePattern("x"),
+        );
+
+        const result = Interpreter.matchOperator(term, pattern, context);
+
+        assert.deepStrictEqual(result, term);
+
+        assert.deepStrictEqual(context.vars, {
+          a: Type.integer(9),
+          __matched__: {x: term},
+        });
+      });
+
+      // x = %{a: 1} = %{a: 1, b: 2}
+      it("binds a variable standing on the left of the match", () => {
+        const pattern = Type.matchPattern(
+          Type.variablePattern("x"),
+          constraint,
+        );
+
+        const result = Interpreter.matchOperator(term, pattern, context);
+
+        assert.deepStrictEqual(result, term);
+
+        assert.deepStrictEqual(context.vars, {
+          a: Type.integer(9),
+          __matched__: {x: term},
+        });
+      });
+
+      // x = %{a: 3}, matched against %{a: 1, b: 2} without raising
+      it("fails on a constraint standing on the right of the match", () => {
+        const pattern = Type.matchPattern(
+          Type.variablePattern("x"),
+          Type.map([[Type.atom("a"), Type.integer(3)]]),
+        );
+
+        const result = Interpreter.matchOperator(term, pattern, context, false);
+
+        assert.isFalse(result);
+      });
+
+      // %{a: 3} = x, matched against %{a: 1, b: 2} without raising
+      it("fails on a constraint standing on the left of the match", () => {
+        const pattern = Type.matchPattern(
+          Type.map([[Type.atom("a"), Type.integer(3)]]),
+          Type.variablePattern("x"),
+        );
+
+        const result = Interpreter.matchOperator(term, pattern, context, false);
+
+        assert.isFalse(result);
+      });
+
+      // %{a: 3} = x = %{a: 1, b: 2}
+      it("raises when the term fails the constraint standing beside it", () => {
+        const pattern = Type.matchPattern(
+          Type.map([[Type.atom("a"), Type.integer(3)]]),
+          Type.variablePattern("x"),
+        );
+
+        assertBoxedError(
+          () => Interpreter.matchOperator(term, pattern, context),
+          "MatchError",
+          buildMatchErrorMsg(term),
+        );
       });
     });
 
@@ -6906,7 +8103,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(3)),
+          buildMatchErrorMsg(Type.integer(3)),
         );
       });
 
@@ -6944,7 +8141,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(3)),
+          buildMatchErrorMsg(Type.integer(3)),
         );
       });
 
@@ -6991,7 +8188,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(context.vars.x),
+          buildMatchErrorMsg(context.vars.x),
         );
       });
 
@@ -7015,7 +8212,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(2)),
+          buildMatchErrorMsg(Type.integer(2)),
         );
       });
 
@@ -7099,7 +8296,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(2)),
+          buildMatchErrorMsg(Type.integer(2)),
         );
       });
 
@@ -7124,7 +8321,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(1)),
+          buildMatchErrorMsg(Type.integer(1)),
         );
       });
 
@@ -7150,7 +8347,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(2)),
+          buildMatchErrorMsg(Type.integer(2)),
         );
       });
 
@@ -7176,7 +8373,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(Type.integer(1)),
+          buildMatchErrorMsg(Type.integer(1)),
         );
       });
 
@@ -8155,7 +9352,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(right),
+          buildMatchErrorMsg(right),
         );
       });
     });
@@ -8273,7 +9470,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => globalThis.Elixir_MyModuleExName["my_undefined_fun/3"](),
           "UndefinedFunctionError",
-          Interpreter.buildUndefinedFunctionErrorMsg(
+          buildUndefinedFunctionErrorMsg(
             Type.alias("MyModuleExName"),
             "my_undefined_fun",
             3,
@@ -8348,7 +9545,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => globalThis.Erlang_My_Module["my_undefined_fun/3"](),
           "UndefinedFunctionError",
-          Interpreter.buildUndefinedFunctionErrorMsg(
+          buildUndefinedFunctionErrorMsg(
             Type.atom("my_module"),
             "my_undefined_fun",
             3,
@@ -8494,47 +9691,39 @@ describe("Interpreter", () => {
     );
   });
 
-  describe("raiseArithmeticError()", () => {
-    it("without blame info", () => {
-      assertBoxedError(
-        () => Interpreter.raiseArithmeticError(),
-        "ArithmeticError",
-        "bad argument in arithmetic expression",
-      );
-    });
-
-    it("with blame info", () => {
-      assertBoxedError(
-        () => Interpreter.raiseArithmeticError("my blame"),
-        "ArithmeticError",
-        "bad argument in arithmetic expression: my blame",
-      );
-    });
-  });
-
   describe("raiseBadArityError()", () => {
+    const buildFun = (arity) =>
+      Type.anonymousFunction(arity, [], contextFixture(), "-my_fun/1-fun-0-");
+
     it("called with no args", () => {
+      const fun = buildFun(1);
+
       assertBoxedError(
-        () => Interpreter.raiseBadArityError(1, []),
+        () => Interpreter.raiseBadArityError(fun, []),
         "BadArityError",
-        "anonymous function with arity 1 called with no arguments",
+        buildBadArityErrorMsg(fun, []),
       );
     });
 
     it("called with a single arg", () => {
+      const fun = buildFun(2);
+      const args = [Type.integer(9)];
+
       assertBoxedError(
-        () => Interpreter.raiseBadArityError(2, [Type.integer(9)]),
+        () => Interpreter.raiseBadArityError(fun, args),
         "BadArityError",
-        "anonymous function with arity 2 called with 1 argument (9)",
+        buildBadArityErrorMsg(fun, args),
       );
     });
 
     it("called with multiple args", () => {
+      const fun = buildFun(1);
+      const args = [Type.integer(9), Type.integer(8)];
+
       assertBoxedError(
-        () =>
-          Interpreter.raiseBadArityError(1, [Type.integer(9), Type.integer(8)]),
+        () => Interpreter.raiseBadArityError(fun, args),
         "BadArityError",
-        "anonymous function with arity 1 called with 2 arguments (9, 8)",
+        buildBadArityErrorMsg(fun, args),
       );
     });
   });
@@ -8542,26 +9731,423 @@ describe("Interpreter", () => {
   it("raiseBadFunctionError()", () => {
     const term = Type.atom("abc");
 
-    assertBoxedError(
-      () => Interpreter.raiseBadFunctionError(term),
-      "BadFunctionError",
-      Interpreter.buildBadFunctionErrorMsg(term),
+    let caught;
+
+    try {
+      Interpreter.raiseBadFunctionError(term);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("BadFunctionError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("term"), term],
+      ]),
+    );
+
+    assert.equal(
+      boxedErrorMessage(caught),
+      "(BadFunctionError) expected a function, got: :abc",
     );
   });
 
   it("raiseBadMapError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseBadMapError(Type.atom("abc")),
-      "BadMapError",
-      Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+    const term = Type.atom("abc");
+
+    let caught;
+
+    try {
+      Interpreter.raiseBadMapError(term);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("BadMapError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("term"), term],
+      ]),
+    );
+
+    assert.equal(
+      boxedErrorMessage(caught),
+      "(BadMapError) expected a map, got:\n\n    :abc\n",
     );
   });
 
+  describe("raiseBifError()", () => {
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    it("replaces the function's own frame with the raising frame", () => {
+      const callerFrame = {
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      };
+
+      const ownFrame = {
+        module: "maps",
+        function: "get",
+        arityOrArgs: 2,
+        file: null,
+        line: null,
+        errorInfo: null,
+      };
+
+      CallStack.push(callerFrame);
+      CallStack.push(ownFrame);
+
+      const args = [Type.atom("a"), Type.atom("b")];
+      const reason = ["badmap", Type.atom("b")];
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError(reason, "erlang", "map_get", args);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "erlang",
+          function: "map_get",
+          arityOrArgs: Type.list(args),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_erts_errors")],
+          ]),
+        },
+        callerFrame,
+      ]);
+
+      assert.equal(
+        boxedErrorMessage(caught),
+        "(BadMapError) expected a map, got:\n\n    :b\n",
+      );
+    });
+
+    it("the raising frame stands alone when frame tracking is disabled", () => {
+      const args = [Type.atom("a"), Type.atom("b")];
+      const reason = ["badmap", Type.atom("b")];
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError(reason, "maps", "find", args);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "maps",
+          function: "find",
+          arityOrArgs: Type.list(args),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+          ]),
+        },
+      ]);
+    });
+
+    it("names the kernel formatter for a kernel module", () => {
+      const args = [Type.atom("abc")];
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError("badarg", "os", "system_time", args);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(
+        caught.stacktrace[0].errorInfo,
+        Type.map([[Type.atom("module"), Type.atom("erl_kernel_errors")]]),
+      );
+    });
+
+    it("names the format module the raise site states over the inferred one", () => {
+      const args = [Type.atom("abc")];
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError(
+          "badarg",
+          "erlang",
+          "map_get",
+          args,
+          "erl_stdlib_errors",
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(
+        caught.stacktrace[0].errorInfo,
+        Type.map([[Type.atom("module"), Type.atom("erl_stdlib_errors")]]),
+      );
+    });
+
+    it("derives the message against the raising frame", () => {
+      const args = [Type.atom("a")];
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError("badarg", "maps", "from_list", args);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.equal(
+        boxedErrorMessage(caught),
+        "(ArgumentError) errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
+      );
+    });
+
+    it("plants the cause in the error_info map", () => {
+      const args = [
+        Type.bitstring("abc"),
+        Type.bitstring("b"),
+        Type.bitstring("x"),
+        Type.list([Type.atom("y")]),
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError(
+          "badarg",
+          "binary",
+          "replace",
+          args,
+          "erl_stdlib_errors",
+          "badopt",
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "binary",
+          function: "replace",
+          arityOrArgs: Type.list(args),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+            [Type.atom("cause"), Type.atom("badopt")],
+          ]),
+        },
+      ]);
+
+      assert.equal(
+        boxedErrorMessage(caught),
+        "(ArgumentError) errors were found at the given arguments:\n\n  * 4th argument: invalid options\n",
+      );
+    });
+
+    it("omits error_info when the format module is null", () => {
+      const args = [Type.atom("a"), Type.list()];
+
+      let caught;
+
+      try {
+        Interpreter.raiseBifError("badarg", "erlang", "++", args, null);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "erlang",
+          function: "++",
+          arityOrArgs: Type.list(args),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+
+      assert.equal(boxedErrorMessage(caught), "(ArgumentError) argument error");
+    });
+  });
+
+  describe("raiseBitstringConstructionError()", () => {
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    it("decorates the enclosing function's frame with the error_info", () => {
+      const enclosingFrame = {
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      };
+
+      CallStack.push(enclosingFrame);
+
+      let caught;
+
+      try {
+        Interpreter.raiseBitstringConstructionError(
+          1,
+          "binary",
+          "type",
+          Type.integer(170),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          ...enclosingFrame,
+          errorInfo: Type.map([
+            [
+              Type.atom("cause"),
+              Type.tuple([
+                Type.integer(1),
+                Type.atom("binary"),
+                Type.atom("type"),
+                Type.integer(170),
+              ]),
+            ],
+            [Type.atom("function"), Type.atom("format_bs_fail")],
+            [Type.atom("module"), Type.atom("erl_erts_errors")],
+          ]),
+        },
+      ]);
+    });
+
+    it("leaves the frame on the call stack undecorated", () => {
+      const enclosingFrame = {
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      };
+
+      CallStack.push(enclosingFrame);
+
+      try {
+        Interpreter.raiseBitstringConstructionError(
+          1,
+          "binary",
+          "type",
+          Type.integer(170),
+        );
+      } catch {
+        // The decoration must not leak into later traces taken through the
+        // same frame.
+      }
+
+      assert.isNull(CallStack.peek().errorInfo);
+    });
+
+    it("the error_info stands alone when frame tracking is disabled", () => {
+      let caught;
+
+      try {
+        Interpreter.raiseBitstringConstructionError(
+          1,
+          "binary",
+          "type",
+          Type.integer(170),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: null,
+          function: null,
+          arityOrArgs: 0,
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [
+              Type.atom("cause"),
+              Type.tuple([
+                Type.integer(1),
+                Type.atom("binary"),
+                Type.atom("type"),
+                Type.integer(170),
+              ]),
+            ],
+            [Type.atom("function"), Type.atom("format_bs_fail")],
+            [Type.atom("module"), Type.atom("erl_erts_errors")],
+          ]),
+        },
+      ]);
+    });
+
+    it("derives the message against the decorated frame", () => {
+      let caught;
+
+      try {
+        Interpreter.raiseBitstringConstructionError(
+          2,
+          "float",
+          "invalid",
+          Type.integer(24),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.value, Type.atom("badarg"));
+
+      assert.equal(
+        boxedErrorMessage(caught),
+        "(ArgumentError) construction of binary failed: segment 2 of type 'float': expected one of the supported sizes 16, 32, or 64 but got: 24",
+      );
+    });
+  });
+
   it("raiseCaseClauseError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseCaseClauseError(Type.atom("abc")),
-      "CaseClauseError",
-      Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
+    const term = Type.atom("abc");
+
+    let caught;
+
+    try {
+      Interpreter.raiseCaseClauseError(term);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("CaseClauseError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("term"), term],
+      ]),
+    );
+
+    assert.equal(
+      boxedErrorMessage(caught),
+      "(CaseClauseError) no case clause matching:\n\n    :abc\n",
     );
   });
 
@@ -8569,14 +10155,6 @@ describe("Interpreter", () => {
     assertBoxedError(
       () => Interpreter.raiseCompileError("abc"),
       "CompileError",
-      "abc",
-    );
-  });
-
-  it("raiseErlangError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseErlangError("abc"),
-      "ErlangError",
       "abc",
     );
   });
@@ -8589,47 +10167,455 @@ describe("Interpreter", () => {
     );
   });
 
-  it("raiseFunctionClauseError()", () => {
+  describe("raiseFramelessError()", () => {
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    it("drops the function's own frame and attributes the error to the caller", () => {
+      const callerFrame = {
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      };
+
+      const ownFrame = {
+        module: "maps",
+        function: "get",
+        arityOrArgs: 3,
+        file: null,
+        line: null,
+        errorInfo: null,
+      };
+
+      CallStack.push(callerFrame);
+      CallStack.push(ownFrame);
+
+      let caught;
+
+      try {
+        Interpreter.raiseFramelessError(["badmap", Type.atom("b")]);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [callerFrame]);
+
+      assert.equal(
+        boxedErrorMessage(caught),
+        "(BadMapError) expected a map, got:\n\n    :b\n",
+      );
+    });
+
+    it("raises with an empty trace when frame tracking is disabled", () => {
+      let caught;
+
+      try {
+        Interpreter.raiseFramelessError(["badmap", Type.atom("b")]);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, []);
+
+      assert.equal(
+        boxedErrorMessage(caught),
+        "(BadMapError) expected a map, got:\n\n    :b\n",
+      );
+    });
+  });
+
+  describe("raiseFunctionClauseError()", () => {
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    it("replaces the function's own frame with an args-bearing raising frame", () => {
+      const callerFrame = {
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      };
+
+      const ownFrame = {
+        module: "sets",
+        function: "filter",
+        arityOrArgs: 2,
+        file: null,
+        line: null,
+        errorInfo: null,
+      };
+
+      CallStack.push(callerFrame);
+      CallStack.push(ownFrame);
+
+      const args = [Type.atom("a"), Type.atom("b")];
+
+      let caught;
+
+      try {
+        Interpreter.raiseFunctionClauseError("sets", "filter", 2, args);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "sets",
+          function: "filter",
+          arityOrArgs: Type.list(args),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+        callerFrame,
+      ]);
+
+      assert.deepStrictEqual(
+        caught.value,
+        Type.struct("FunctionClauseError", [
+          [Type.atom("__exception__"), Type.boolean(true)],
+          [Type.atom("args"), Type.list(args)],
+          [Type.atom("arity"), Type.integer(2)],
+          [Type.atom("clauses"), Type.nil()],
+          [Type.atom("function"), Type.atom("filter")],
+          [Type.atom("kind"), Type.nil()],
+          [Type.atom("module"), Type.atom("sets")],
+        ]),
+      );
+
+      assert.equal(
+        boxedErrorMessage(caught),
+        "(FunctionClauseError) no function clause matching in :sets.filter/2\n\nThe following arguments were given to :sets.filter/2:\n\n    # 1\n    :a\n\n    # 2\n    :b\n",
+      );
+    });
+
+    it("carries the bare arity when args are not given", () => {
+      let caught;
+
+      try {
+        Interpreter.raiseFunctionClauseError("sets", "fold", 3);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "sets",
+          function: "fold",
+          arityOrArgs: 3,
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
+
+      assert.deepStrictEqual(
+        caught.value,
+        Type.struct("FunctionClauseError", [
+          [Type.atom("__exception__"), Type.boolean(true)],
+          [Type.atom("args"), Type.nil()],
+          [Type.atom("arity"), Type.integer(3)],
+          [Type.atom("clauses"), Type.nil()],
+          [Type.atom("function"), Type.atom("fold")],
+          [Type.atom("kind"), Type.nil()],
+          [Type.atom("module"), Type.atom("sets")],
+        ]),
+      );
+
+      assert.equal(
+        boxedErrorMessage(caught),
+        "(FunctionClauseError) no function clause matching in :sets.fold/3",
+      );
+    });
+
+    describe("with registered clause heads", () => {
+      const blamedNode = (match, source) =>
+        Type.map([
+          [Type.atom("match?"), Type.boolean(match)],
+          [Type.atom("source"), Type.bitstring(source)],
+        ]);
+
+      // def my_fun(x, y) when is_integer(x) and x + 1 > y
+      const defineClauseHeads = (blame = true) => {
+        const clauseHead = {
+          params: (_context) => [
+            Type.variablePattern("x"),
+            Type.variablePattern("y"),
+          ],
+          guards: [],
+        };
+
+        if (blame) {
+          clauseHead.blame = {
+            params: ["x", "y"],
+            guards: [
+              {
+                operator: "and",
+                left: {
+                  source: "is_integer(x)",
+                  test: (context) => Erlang["is_integer/1"](context.vars.x),
+                },
+                right: {
+                  source: "x + 1 > y",
+                  test: (context) =>
+                    Erlang[">/2"](
+                      Erlang["+/2"](context.vars.x, Type.integer(1)),
+                      context.vars.y,
+                    ),
+                },
+              },
+            ],
+          };
+        }
+
+        Interpreter.defineFunctionClauseHeads(
+          "MyBlamedModule",
+          "my_fun",
+          2,
+          "public",
+          [clauseHead],
+        );
+      };
+
+      it("marks the parts of the clause head that didn't match", () => {
+        defineClauseHeads();
+
+        const args = [Type.integer(1), Type.integer(9)];
+
+        let caught;
+
+        try {
+          Interpreter.raiseFunctionClauseError(
+            "MyBlamedModule",
+            "my_fun",
+            2,
+            args,
+          );
+        } catch (e) {
+          caught = e;
+        }
+
+        const clauses = caught.value.data["atom(clauses)"][1];
+
+        assert.deepStrictEqual(
+          clauses,
+          Type.list([
+            Type.tuple([
+              Type.list([blamedNode(true, "x"), blamedNode(true, "y")]),
+              Type.list([
+                Type.tuple([
+                  Type.atom("and"),
+                  blamedNode(true, "is_integer(x)"),
+                  blamedNode(false, "x + 1 > y"),
+                ]),
+              ]),
+            ]),
+          ]),
+        );
+
+        assert.deepStrictEqual(
+          caught.value.data["atom(kind)"][1],
+          Type.atom("def"),
+        );
+      });
+
+      it("treats a guard that raises as one that didn't hold", () => {
+        defineClauseHeads();
+
+        const args = [Type.atom("abc"), Type.integer(9)];
+
+        let caught;
+
+        try {
+          Interpreter.raiseFunctionClauseError(
+            "MyBlamedModule",
+            "my_fun",
+            2,
+            args,
+          );
+        } catch (e) {
+          caught = e;
+        }
+
+        const clauses = caught.value.data["atom(clauses)"][1];
+        const guard = clauses.data[0].data[1].data[0];
+
+        assert.deepStrictEqual(
+          guard,
+          Type.tuple([
+            Type.atom("and"),
+            blamedNode(false, "is_integer(x)"),
+            blamedNode(false, "x + 1 > y"),
+          ]),
+        );
+      });
+
+      it("leaves the clauses out when the heads carry no rendered sources", () => {
+        defineClauseHeads(false);
+
+        let caught;
+
+        try {
+          Interpreter.raiseFunctionClauseError("MyBlamedModule", "my_fun", 2, [
+            Type.integer(1),
+            Type.integer(9),
+          ]);
+        } catch (e) {
+          caught = e;
+        }
+
+        assert.deepStrictEqual(
+          caught.value.data["atom(clauses)"][1],
+          Type.nil(),
+        );
+
+        assert.deepStrictEqual(caught.value.data["atom(kind)"][1], Type.nil());
+      });
+    });
+  });
+
+  it("raiseFunctionClauseErrorMsg()", () => {
     assertBoxedError(
-      () => Interpreter.raiseFunctionClauseError("my_message"),
+      () => Interpreter.raiseFunctionClauseErrorMsg("my_message"),
       "FunctionClauseError",
       "my_message",
     );
   });
 
-  it("raiseKeyError()", () => {
-    assertBoxedError(() => Interpreter.raiseKeyError("abc"), "KeyError", "abc");
-  });
-
   it("raiseMatchError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseMatchError("my_message"),
-      "MatchError",
-      "my_message",
+    const term = Type.atom("abc");
+
+    let caught;
+
+    try {
+      Interpreter.raiseMatchError(term);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("MatchError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("term"), term],
+      ]),
+    );
+
+    assert.equal(
+      boxedErrorMessage(caught),
+      "(MatchError) no match of right hand side value:\n\n    :abc\n",
     );
   });
 
   it("raiseTryClauseError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseTryClauseError(Type.atom("abc")),
-      "TryClauseError",
-      Interpreter.buildTryClauseErrorMsg(Type.atom("abc")),
+    const term = Type.atom("abc");
+
+    let caught;
+
+    try {
+      Interpreter.raiseTryClauseError(term);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("TryClauseError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("term"), term],
+      ]),
+    );
+
+    assert.equal(
+      boxedErrorMessage(caught),
+      "(TryClauseError) no try clause matching:\n\n    :abc\n",
     );
   });
 
-  it("raiseUndefinedFunctionError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseUndefinedFunctionError("my_message"),
-      "UndefinedFunctionError",
-      "my_message",
-    );
+  describe("raiseUndefinedFunctionError()", () => {
+    it("the module is available but doesn't export the function", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.raiseUndefinedFunctionError(
+            Type.alias("Aaa.Bbb"),
+            "my_fun",
+            2,
+          ),
+        "UndefinedFunctionError",
+        "function Aaa.Bbb.my_fun/2 is undefined or private",
+      );
+    });
+
+    it("the module is not available", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.raiseUndefinedFunctionError(
+            Type.alias("MyModule"),
+            "my_fun",
+            2,
+            false,
+          ),
+        "UndefinedFunctionError",
+        "function MyModule.my_fun/2 is undefined (module MyModule is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)",
+      );
+    });
+
+    it("carries the missing function as fields", () => {
+      let caught;
+
+      try {
+        Interpreter.raiseUndefinedFunctionError(
+          Type.alias("Aaa.Bbb"),
+          "my_fun",
+          2,
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(
+        caught.value,
+        Type.struct("UndefinedFunctionError", [
+          [Type.atom("__exception__"), Type.boolean(true)],
+          [Type.atom("arity"), Type.integer(2)],
+          [Type.atom("function"), Type.atom("my_fun")],
+          [Type.atom("message"), Type.nil()],
+          [Type.atom("module"), Type.alias("Aaa.Bbb")],
+          [Type.atom("reason"), Type.atom("function not exported")],
+        ]),
+      );
+    });
   });
 
   it("raiseWithClauseError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseWithClauseError(Type.atom("abc")),
-      "WithClauseError",
-      Interpreter.buildWithClauseErrorMsg(Type.atom("abc")),
+    const term = Type.atom("abc");
+
+    let caught;
+
+    try {
+      Interpreter.raiseWithClauseError(term);
+    } catch (e) {
+      caught = e;
+    }
+
+    assert.deepStrictEqual(
+      caught.value,
+      Type.struct("WithClauseError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("term"), term],
+      ]),
+    );
+
+    assert.equal(
+      boxedErrorMessage(caught),
+      "(WithClauseError) no with clause matching:\n\n    :abc\n",
     );
   });
 
@@ -8705,15 +10691,56 @@ describe("Interpreter", () => {
       assert.equal(result, "my message");
     });
 
-    it("returns the inspected struct when the struct has no message field", () => {
-      const struct = Type.struct("MyError", [
+    it("derives the message through the exception module's message/1 callback", () => {
+      globalThis.Elixir_MyDerivedError = {
+        "message/1": (struct) => {
+          const reason = struct.data["atom(reason)"][1];
+          return Type.bitstring(`derived: ${Interpreter.inspect(reason)}`);
+        },
+      };
+
+      const struct = Type.struct("MyDerivedError", [
         [Type.atom("__exception__"), Type.boolean(true)],
         [Type.atom("reason"), Type.atom("some_reason")],
       ]);
 
       const result = Interpreter.resolveErrorMessage(struct);
 
-      assert.equal(result, Interpreter.inspect(struct));
+      assert.equal(result, "derived: :some_reason");
+
+      // cleanup
+      delete globalThis.Elixir_MyDerivedError;
+    });
+  });
+
+  describe("setFrameLine()", () => {
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    afterEach(() => {
+      CallStack.reset();
+    });
+
+    it("records the line on the frame the call is being made from", () => {
+      CallStack.push({
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 1,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      });
+
+      Interpreter.setFrameLine(22);
+
+      assert.equal(CallStack.peek().line, 22);
+    });
+
+    it("records nothing when no frame is being tracked", () => {
+      Interpreter.setFrameLine(22);
+
+      assert.deepStrictEqual(CallStack.snapshot(), []);
     });
   });
 
@@ -8785,6 +10812,116 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, Type.integer(3));
       assert.deepStrictEqual(context.vars.a, Type.integer(1));
+    });
+
+    it("binds the captured boxed stacktrace in rescue clause scope", () => {
+      const error = new HologramBoxedError(
+        Type.errorStruct("RuntimeError", "boom"),
+      );
+
+      error.stacktrace = [
+        {
+          module: "MyModule",
+          function: "my_fun",
+          arityOrArgs: 2,
+          file: "lib/my_module.ex",
+          line: 11,
+          errorInfo: null,
+        },
+      ];
+
+      const body = (_context) => {
+        throw error;
+      };
+
+      const rescueClauses = [
+        {
+          variable: null,
+          modules: [],
+          body: (context) => context.stacktrace,
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([
+            Type.alias("MyModule"),
+            Type.atom("my_fun"),
+            Type.integer(2),
+            Type.list([
+              Type.tuple([
+                Type.atom("file"),
+                Type.charlist("lib/my_module.ex"),
+              ]),
+              Type.tuple([Type.atom("line"), Type.integer(11)]),
+            ]),
+          ]),
+        ]),
+      );
+
+      // The binding is clause-scoped and doesn't leak into the outer context.
+      assert.isNull(context.stacktrace);
+    });
+
+    it("binds the captured boxed stacktrace in catch clause scope", () => {
+      const error = new HologramBoxedError(
+        Type.atom("my_value"),
+        Type.atom("throw"),
+      );
+
+      error.stacktrace = [
+        {
+          module: "MyModule",
+          function: "my_fun",
+          arityOrArgs: 2,
+          file: "lib/my_module.ex",
+          line: 11,
+          errorInfo: null,
+        },
+      ];
+
+      const body = (_context) => {
+        throw error;
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.variablePattern("kind"),
+          value: Type.variablePattern("value"),
+          guards: [],
+          body: (context) => context.stacktrace,
+        },
+      ];
+
+      const result = Interpreter.try(body, [], catchClauses, [], null, context);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([
+            Type.alias("MyModule"),
+            Type.atom("my_fun"),
+            Type.integer(2),
+            Type.list([
+              Type.tuple([
+                Type.atom("file"),
+                Type.charlist("lib/my_module.ex"),
+              ]),
+              Type.tuple([Type.atom("line"), Type.integer(11)]),
+            ]),
+          ]),
+        ]),
+      );
     });
 
     it("runs the after block on success without changing the return value", () => {
@@ -9078,20 +11215,102 @@ describe("Interpreter", () => {
       );
     });
 
+    // Case not possible on the server - normalizing a reason there always
+    // succeeds, so every error reaching a rescue carries its exception struct.
+    describe("error that never derived its exception struct", () => {
+      let normalizeErrorStub;
+
+      // Mirrors the derivation machinery faulting, which leaves a bare reason
+      // with no normalized form (see HologramBoxedError).
+      const buildStructlessError = () => {
+        normalizeErrorStub = sinon
+          .stub(Interpreter, "normalizeError")
+          .callsFake(() => {
+            throw new TypeError("my fault");
+          });
+
+        const error = new HologramBoxedError(Type.atom("badarg"));
+
+        normalizeErrorStub.restore();
+        normalizeErrorStub = null;
+
+        return error;
+      };
+
+      afterEach(() => {
+        normalizeErrorStub?.restore();
+        normalizeErrorStub = null;
+      });
+
+      it("isn't claimed by a bare rescue clause", () => {
+        const error = buildStructlessError();
+
+        const body = (_context) => {
+          throw error;
+        };
+
+        const rescueClauses = [
+          {
+            variable: Type.variablePattern("e"),
+            modules: [],
+            body: (context) => context.vars.e,
+          },
+        ];
+
+        let caught;
+
+        try {
+          Interpreter.try(body, rescueClauses, [], [], null, context);
+        } catch (thrownError) {
+          caught = thrownError;
+        }
+
+        assert.equal(caught, error);
+      });
+
+      it("isn't claimed by a rescue clause listing modules", () => {
+        const error = buildStructlessError();
+
+        const body = (_context) => {
+          throw error;
+        };
+
+        const rescueClauses = [
+          {
+            variable: null,
+            modules: [Type.alias("ArgumentError")],
+            body: (_context) => Type.atom("rescued"),
+          },
+        ];
+
+        let caught;
+
+        try {
+          Interpreter.try(body, rescueClauses, [], [], null, context);
+        } catch (thrownError) {
+          caught = thrownError;
+        }
+
+        assert.equal(caught, error);
+      });
+    });
+
     it("reraise re-raises the rescued exception", () => {
       // try (raise ArgumentError) rescue error -> reraise error, __STACKTRACE__
-      // reraise expands to :erlang.raise(:error, error, []) for an exception, so
-      // the rescued exception propagates unchanged (__STACKTRACE__ is []).
-      //
-      // This asserts only the re-raised exception. The matching consistency test
-      // additionally asserts that reraise preserves the original raise-site
-      // stacktrace, which is server-only - the client has no stacktraces yet
-      // (__STACKTRACE__ is []), so there is nothing to preserve here.
-      //
-      // TODO: once client-side stacktraces are supported (see the TODO in
-      // lib/hologram/compiler/transformer.ex), tighten this to also assert that
-      // reraise preserves the original raise-site stacktrace, mirroring the
-      // consistency test.
+      // reraise expands to :erlang.raise(:error, error, __STACKTRACE__), so the
+      // rescued exception propagates unchanged, preserving the stacktrace of
+      // the original raise site - not the rescue clause that re-raises.
+      CallStack.reset();
+
+      CallStack.push({
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 0,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      });
+
       const struct = Type.errorStruct("ArgumentError", "my message");
 
       const body = (_context) => {
@@ -9106,7 +11325,7 @@ describe("Interpreter", () => {
             Erlang["raise/3"](
               Type.atom("error"),
               context.vars.error,
-              Type.list(),
+              context.stacktrace,
             ),
         },
       ];
@@ -9119,34 +11338,57 @@ describe("Interpreter", () => {
         caught = e;
       }
 
+      CallStack.reset();
+
       assert.instanceOf(caught, HologramBoxedError);
       assert.deepStrictEqual(caught.struct, struct);
+
+      assert.deepStrictEqual(
+        caught.stacktrace,
+        Type.list([
+          Type.tuple([
+            Type.alias("MyModule"),
+            Type.atom("my_fun"),
+            Type.integer(0),
+            Type.list([
+              Type.tuple([
+                Type.atom("file"),
+                Type.charlist("lib/my_module.ex"),
+              ]),
+              Type.tuple([Type.atom("line"), Type.integer(11)]),
+            ]),
+          ]),
+        ]),
+      );
     });
 
-    it("evaluates __STACKTRACE__ to an empty list (no client stacktraces yet)", () => {
-      // CLIENT/SERVER DIVERGENCE: the client does not support stacktraces yet, so
-      // __STACKTRACE__ is compiled to an empty list (its rescue-clause body below
-      // is Type.list(), the compiled form). This DIFFERS from the matching
-      // consistency test (try_test.exs "__STACKTRACE__ holds the stacktrace
-      // pointing to where the error was raised"), which asserts the real,
-      // non-empty server stacktrace.
-      //
-      // TODO: support real client-side stacktraces so this matches the consistency
-      // test. Maintain a call stack in the interpreter (push a frame per function
-      // call), capture it when a HologramBoxedError is raised, and bind
-      // __STACKTRACE__ to that captured trace within rescue/catch clause scopes,
-      // instead of compiling it to an empty list in
-      // lib/hologram/compiler/transformer.ex.
+    it("__STACKTRACE__ holds the stacktrace pointing to where the error was raised", () => {
+      // Mirrors the consistency test (try_test.exs "__STACKTRACE__ holds the
+      // stacktrace pointing to where the error was raised"): the raise-site
+      // frame is on the call stack when the error is constructed, and
+      // __STACKTRACE__ (compiled to context.stacktrace) evaluates to the boxed
+      // captured trace in rescue clause scope.
+      CallStack.reset();
+
+      CallStack.push({
+        module: "MyModule",
+        function: "my_fun",
+        arityOrArgs: 0,
+        file: "lib/my_module.ex",
+        line: 11,
+        errorInfo: null,
+      });
+
       const body = (_context) => {
         throw new HologramBoxedError(Type.errorStruct("RuntimeError", "boom"));
       };
 
-      // rescue _exception -> __STACKTRACE__   (compiled body is the empty list [])
+      // rescue _exception -> __STACKTRACE__
       const rescueClauses = [
         {
           variable: Type.variablePattern("_exception"),
           modules: [],
-          body: (_context) => Type.list(),
+          body: (context) => context.stacktrace,
         },
       ];
 
@@ -9159,7 +11401,25 @@ describe("Interpreter", () => {
         context,
       );
 
-      assert.deepStrictEqual(result, Type.list());
+      CallStack.reset();
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([
+            Type.alias("MyModule"),
+            Type.atom("my_fun"),
+            Type.integer(0),
+            Type.list([
+              Type.tuple([
+                Type.atom("file"),
+                Type.charlist("lib/my_module.ex"),
+              ]),
+              Type.tuple([Type.atom("line"), Type.integer(11)]),
+            ]),
+          ]),
+        ]),
+      );
     });
 
     it("does not rescue an exception whose module is not listed", () => {
@@ -9703,7 +11963,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(context.vars.a),
+          buildMatchErrorMsg(context.vars.a),
         );
       });
     });
@@ -9877,7 +12137,7 @@ describe("Interpreter", () => {
               context,
             ),
           "WithClauseError",
-          Interpreter.buildWithClauseErrorMsg(context.vars.a),
+          buildWithClauseErrorMsg(context.vars.a),
         );
       });
     });

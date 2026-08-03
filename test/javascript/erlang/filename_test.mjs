@@ -4,15 +4,15 @@ import {
   assert,
   assertBoxedError,
   assertBoxedStrictEqual,
-  defineGlobalErlangAndElixirModules,
+  buildFunctionClauseErrorMsg,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Filename from "../../../assets/js/erlang/filename.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/filename_test.exs
@@ -197,7 +197,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => basename(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
           Type.list(),
         ]),
@@ -210,11 +210,32 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => basename(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
           Type.list(),
         ]),
       );
+    });
+
+    it("error frame carries the flatten args", () => {
+      let caught;
+
+      try {
+        Erlang_Filename["basename/1"](Type.integer(123));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "filename",
+          function: "do_flatten",
+          arityOrArgs: Type.list([Type.integer(123), Type.list()]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 
@@ -599,7 +620,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => basename(filename, ext),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           filename,
           Type.list(),
         ]),
@@ -613,7 +634,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => basename(filename, ext),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           ext,
           Type.list(),
         ]),
@@ -627,7 +648,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => basename(filename, ext),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           filename,
           Type.list(),
         ]),
@@ -641,7 +662,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => basename(filename, ext),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           ext,
           Type.list(),
         ]),
@@ -864,7 +885,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => dirname(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
           Type.list(),
         ]),
@@ -877,7 +898,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => dirname(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
           Type.list(),
         ]),
@@ -1093,7 +1114,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => extension(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
           Type.list(),
         ]),
@@ -1106,7 +1127,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => extension(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
           Type.list(),
         ]),
@@ -1270,7 +1291,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => flatten(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
           Type.list(),
         ]),
@@ -1283,7 +1304,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => flatten(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
           Type.list(),
         ]),
@@ -1542,7 +1563,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => join(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
+        buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
       );
     });
 
@@ -1552,7 +1573,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => join(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
+        buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
       );
     });
 
@@ -1562,8 +1583,29 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => join(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
+        buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
       );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        Erlang_Filename["join/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "filename",
+          function: "join",
+          arityOrArgs: Type.list([Type.atom("abc")]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 
@@ -1812,10 +1854,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => join(arg1, arg2),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.join/2", [
-          arg1,
-          arg2,
-        ]),
+        buildFunctionClauseErrorMsg(":filename.join/2", [arg1, arg2]),
       );
     });
 
@@ -1826,11 +1865,29 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => join(arg1, arg2),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.join/2", [
-          arg1,
-          arg2,
-        ]),
+        buildFunctionClauseErrorMsg(":filename.join/2", [arg1, arg2]),
       );
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        Erlang_Filename["join/2"](Type.bitstring("a"), Type.integer(1));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "filename",
+          function: "join",
+          arityOrArgs: Type.list([Type.bitstring("a"), Type.integer(1)]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 
@@ -2080,7 +2137,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => rootname(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
           Type.list(),
         ]),
@@ -2093,7 +2150,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => rootname(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
           Type.list(),
         ]),
@@ -2335,7 +2392,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => rootname(arg1, arg2),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg1,
           Type.list(),
         ]),
@@ -2349,7 +2406,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => rootname(arg1, arg2),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg1,
           Type.list(),
         ]),
@@ -2363,7 +2420,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => rootname(arg1, arg2),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg2,
           Type.list(),
         ]),
@@ -2377,7 +2434,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => rootname(arg1, arg2),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg2,
           Type.list(),
         ]),
@@ -2676,7 +2733,7 @@ describe("Erlang_Filename", () => {
       assertBoxedError(
         () => split(arg),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
           Type.list(),
         ]),

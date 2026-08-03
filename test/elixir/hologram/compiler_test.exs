@@ -424,37 +424,167 @@ defmodule Hologram.CompilerTest do
     assert PLT.get_all(plt) == %{MyPage1 => "my-digest-1", MyPage2 => "my-digest-3"}
   end
 
-  test "build_runtime_js/4", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-    js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
+  describe "build_runtime_js/5" do
+    setup do
+      on_exit(fn ->
+        Application.delete_env(:hologram, :client_error_overlay)
+        Application.delete_env(:hologram, :client_stacktraces)
+      end)
 
-    assert String.contains?(
-             js,
-             ~s/Interpreter.defineElixirFunction("Enum", "into", 2, "public"/
-           )
+      :ok
+    end
 
-    assert String.contains?(
-             js,
-             ~s/Interpreter.defineElixirFunction("Enum", "into_protocol", 2, "private"/
-           )
+    test "renders reachable function defs", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
 
-    assert String.contains?(
-             js,
-             ~s/Interpreter.defineElixirFunction("String.Chars", "to_string", 1, "public"/
-           )
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineElixirFunction("Enum", "into", 2, "public"/
+             )
 
-    assert String.contains?(
-             js,
-             ~s/Interpreter.defineElixirFunction("String.Chars", "impl_for!", 1, "public"/
-           )
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineElixirFunction("Enum", "into_protocol", 2, "private"/
+             )
 
-    refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineElixirFunction("String.Chars", "to_string", 1, "public"/
+             )
 
-    assert String.contains?(js, ~s/Interpreter.defineErlangFunction("erlang", "error", 1/)
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineElixirFunction("String.Chars", "impl_for!", 1, "public"/
+             )
 
-    assert String.contains?(
-             js,
-             ~s/Interpreter.defineNotImplementedErlangFunction("application", "get_application", 1/
-           )
+      refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+
+      assert String.contains?(js, ~s/Interpreter.defineErlangFunction("erlang", "error", 1/)
+
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineNotImplementedErlangFunction("erlang", "process_info", 2/
+             )
+    end
+
+    test "renders the clause heads of manually ported functions", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineFunctionClauseHeads("Code", "ensure_loaded", 1, "public", [{params: (context) => [Type.variablePattern("module_0")], guards: [(context) => Erlang["is_atom\/1"](context.vars.module_0)], blame: {params: ["module"], guards: [{source: "is_atom(module)", test: (context) => Erlang["is_atom\/1"](context.vars.module_0)}]}}]);/
+             )
+
+      # A default argument makes the ported arity differ from the raised one.
+      assert String.contains?(
+               js,
+               ~s/Interpreter.defineFunctionClauseHeads("Task", "await", 2, "public"/
+             )
+    end
+
+    test "injects the client config when the presentation settings are enabled", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_error_overlay, true)
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
+
+      assert String.contains?(
+               js,
+               "globalThis.Hologram.config = {errorOverlay: true, stacktraces: true};"
+             )
+    end
+
+    test "injects the client config when the presentation settings are disabled", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_error_overlay, false)
+      Application.put_env(:hologram, :client_stacktraces, false)
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
+
+      assert String.contains?(
+               js,
+               "globalThis.Hologram.config = {errorOverlay: false, stacktraces: false};"
+             )
+    end
+
+    test "registers the metadata of the modules it defines", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/ERTS.registerModuleMetadata({"Access": {app: "elixir", file: "lib\/access.ex"/
+             )
+    end
+
+    test "injects the versions of the applications the frames name", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      app_versions = [hologram: "0.1.0", my_app: "9.8.7"]
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), app_versions, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/ERTS.appVersions = {"hologram": "0.1.0", "my_app": "9.8.7"};/
+             )
+    end
+
+    test "quotes an application name that isn't a JavaScript identifier", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      app_versions = [{:"my-app", "9.8.7"}]
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), app_versions, @js_dir)
+
+      assert String.contains?(js, ~s/ERTS.appVersions = {"my-app": "9.8.7"};/)
+    end
+
+    test "injects no application versions when client stacktraces are disabled", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_stacktraces, false)
+
+      app_versions = [hologram: "0.1.0", my_app: "9.8.7"]
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), app_versions, @js_dir)
+
+      assert String.contains?(js, "ERTS.appVersions = {};")
+    end
+
+    test "injects the client config when the error overlay is opted out of", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      Application.put_env(:hologram, :client_error_overlay, false)
+      Application.put_env(:hologram, :client_stacktraces, true)
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
+
+      assert String.contains?(
+               js,
+               "globalThis.Hologram.config = {errorOverlay: false, stacktraces: true};"
+             )
+    end
   end
 
   test "bundle/2" do
@@ -712,15 +842,15 @@ defmodule Hologram.CompilerTest do
     end)
   end
 
-  test "create_runtime_entry_file/4", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+  test "create_runtime_entry_file/5", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     opts = [
       js_dir: @js_dir,
-      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_runtime_entry_file_4"])
+      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_runtime_entry_file_5"])
     ]
 
     clean_dir(opts[:tmp_dir])
 
-    entry_file_path = create_runtime_entry_file(runtime_mfas, ir_plt, MapSet.new(), opts)
+    entry_file_path = create_runtime_entry_file(runtime_mfas, ir_plt, MapSet.new(), [], opts)
 
     assert entry_file_path == Path.join(opts[:tmp_dir], "runtime.entry.js")
 
@@ -768,8 +898,7 @@ defmodule Hologram.CompilerTest do
         normalize_newlines("""
         (left, right) => {
             if (!Type.isNumber(left) || !Type.isNumber(right)) {
-              const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(right)}`;
-              Interpreter.raiseArithmeticError(blame);
+              Interpreter.raiseBifError("badarith", "erlang", "+", [left, right]);
             }
 
             const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
@@ -797,13 +926,20 @@ defmodule Hologram.CompilerTest do
       expected =
         normalize_newlines("""
         (key, map) => {
-            const value = Erlang_Maps["get/3"](key, map, null);
-
-            if (value !== null) {
-              return value;
+            if (!Type.isMap(map)) {
+              Interpreter.raiseBifError(["badmap", map], "erlang", "map_get", [
+                key,
+                map,
+              ]);
             }
 
-            Interpreter.raiseKeyError(Interpreter.buildKeyErrorMsg(key, map));
+            const encodedKey = Type.encodeMapKey(key);
+
+            if (map.data[encodedKey]) {
+              return map.data[encodedKey][1];
+            }
+
+            Interpreter.raiseBifError(["badkey", key], "erlang", "map_get", [key, map]);
           }\
         """)
 
@@ -1182,7 +1318,9 @@ defmodule Hologram.CompilerTest do
                      guards: [],
                      body: %IR.Block{
                        expressions: [%IR.IntegerType{value: 3}]
-                     }
+                     },
+                     line: 11,
+                     blame: %{params: [":a", ":b"], guards: []}
                    }
                  },
                  %IR.FunctionDefinition{
@@ -1197,7 +1335,11 @@ defmodule Hologram.CompilerTest do
                      guards: [],
                      body: %IR.Block{
                        expressions: [%IR.IntegerType{value: 4}]
-                     }
+                     },
+                     # The AST reconstructed from BEAM debug info carries the
+                     # first clause's line on every clause of a function.
+                     line: 11,
+                     blame: %{params: [":b", ":c"], guards: []}
                    }
                  },
                  %IR.FunctionDefinition{
@@ -1209,7 +1351,9 @@ defmodule Hologram.CompilerTest do
                      guards: [],
                      body: %IR.Block{
                        expressions: [%IR.Variable{name: :x, version: 0}]
-                     }
+                     },
+                     line: 19,
+                     blame: %{params: ["x"], guards: []}
                    }
                  }
                ]

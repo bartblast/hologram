@@ -7,10 +7,10 @@ import {benchmark} from "../../../support/helpers.mjs";
 
 import {
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "../../../../../test/javascript/support/helpers.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const context = contextFixture();
 

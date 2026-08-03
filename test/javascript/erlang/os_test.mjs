@@ -3,14 +3,14 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  buildArgumentErrorMsg,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Erlang_Os from "../../../assets/js/erlang/os.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/os_test.exs
@@ -59,7 +59,7 @@ describe("Erlang_Os", () => {
       assertBoxedError(
         () => systemTime(Type.float(1.0)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -67,7 +67,7 @@ describe("Erlang_Os", () => {
       assertBoxedError(
         () => systemTime(Type.atom("invalid")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -75,7 +75,7 @@ describe("Erlang_Os", () => {
       assertBoxedError(
         () => systemTime(Type.integer(0)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
@@ -83,8 +83,33 @@ describe("Erlang_Os", () => {
       assertBoxedError(
         () => systemTime(Type.integer(-1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        buildArgumentErrorMsg(1, "invalid time unit"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      const unit = Type.atom("invalid");
+
+      let caught;
+
+      try {
+        systemTime(unit);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "os",
+          function: "system_time",
+          arityOrArgs: Type.list([unit]),
+          file: null,
+          line: null,
+          errorInfo: Type.map([
+            [Type.atom("module"), Type.atom("erl_kernel_errors")],
+          ]),
+        },
+      ]);
     });
   });
 

@@ -2,26 +2,31 @@
 
 import {
   assert,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   registerWebApis,
   sinon,
   UUID_REGEX,
 } from "./support/helpers.mjs";
 
+import CallStack from "../../assets/js/erts/call_stack.mjs";
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Config from "../../assets/js/config.mjs";
 import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
+import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
+import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
+import Interpreter from "../../assets/js/interpreter.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
+import UncaughtErrorOverlay from "../../assets/js/uncaught_error_overlay.mjs";
 import Vdom from "../../assets/js/vdom.mjs";
 
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 registerWebApis();
 defineModule7Fixture();
 
@@ -1092,6 +1097,83 @@ describe("Hologram", () => {
       });
 
       sinon.assert.notCalled(loadNewPageStub);
+    });
+  });
+
+  describe("handleUncaughtError()", () => {
+    let overlayShowStub;
+
+    const boxedError = () =>
+      new HologramBoxedError(Type.errorStruct("MyError", "my message"));
+
+    beforeEach(() => {
+      CallStack.reset();
+      overlayShowStub = sinon.stub(UncaughtErrorOverlay, "show");
+      globalThis.Hologram.config.errorOverlay = false;
+    });
+
+    afterEach(() => {
+      overlayShowStub.restore();
+      globalThis.Hologram.config.errorOverlay = false;
+    });
+
+    // The overlay reads the frames and the message off the error itself, so
+    // it is handed the error rather than the report rendered from it.
+    it("renders the error in the page when the overlay is enabled", () => {
+      globalThis.Hologram.config.errorOverlay = true;
+
+      const error = boxedError();
+
+      Hologram.handleUncaughtError(error);
+
+      sinon.assert.calledOnceWithExactly(overlayShowStub, error);
+    });
+
+    it("keeps the error out of the page when the overlay is disabled", () => {
+      Hologram.handleUncaughtError(boxedError());
+
+      sinon.assert.notCalled(overlayShowStub);
+    });
+
+    it("records the error for the feature test helpers", () => {
+      Hologram.handleUncaughtError(boxedError());
+
+      assert.deepStrictEqual(GlobalRegistry.get("lastBoxedError"), {
+        module: "MyError",
+        message: "my message",
+      });
+    });
+
+    // Deriving here a second time would fault the same way the first one did,
+    // leaving the error unreported - the very thing the reader needs to see.
+    it("records an error that failed to derive its message, naming the fault", () => {
+      const normalizeErrorStub = sinon
+        .stub(Interpreter, "normalizeError")
+        .callsFake(() => {
+          throw new TypeError("my fault");
+        });
+
+      const error = new HologramBoxedError(Type.atom("badarg"));
+
+      normalizeErrorStub.restore();
+
+      Hologram.handleUncaughtError(error);
+
+      assert.deepStrictEqual(GlobalRegistry.get("lastBoxedError"), {
+        module: "error",
+        message: ":badarg (message derivation failed: my fault)",
+      });
+    });
+
+    it("ignores an error raised outside the runtime", () => {
+      globalThis.Hologram.config.errorOverlay = true;
+
+      const error = new Error("my message");
+
+      Hologram.handleUncaughtError(error);
+
+      assert.equal(error.message, "my message");
+      sinon.assert.notCalled(overlayShowStub);
     });
   });
 

@@ -137,13 +137,20 @@ defmodule Hologram.Runtime.ConnectionTest do
                {:push, {:text, ~s'"reload"'}, @state}
     end
 
-    test "handles {:compilation_error, output} message" do
-      output = "Compile error in module MyModule"
-      message = {:compilation_error, output}
+    test "handles {:compilation_error, lines} message" do
+      lines = [
+        [%{tone: :banner, text: "error: undefined function foo/0"}],
+        [%{tone: :chrome, text: "  3 │ "}, %{tone: :body, text: "    foo()"}]
+      ]
+
+      message = {:compilation_error, lines}
+
+      expected_payload =
+        ~s'[[{"text":"error: undefined function foo/0","tone":"banner"}],' <>
+          ~s'[{"text":"  3 │ ","tone":"chrome"},{"text":"    foo()","tone":"body"}]]'
 
       assert handle_info(message, @state) ==
-               {:push, {:text, ~s'["compilation_error","Compile error in module MyModule"]'},
-                @state}
+               {:push, {:text, ~s'["compilation_error",' <> expected_payload <> "]"}, @state}
     end
 
     test "returns {:ok, state} tuple for other messages" do

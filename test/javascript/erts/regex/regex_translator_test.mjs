@@ -1,14 +1,11 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "../../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../../support/helpers.mjs";
 
 import RegexParser from "../../../../assets/js/erts/regex/regex_parser.mjs";
 import RegexTranslator from "../../../../assets/js/erts/regex/regex_translator.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const translate = (source, opts = {}) => {
   const {source: jsSource, flags} = translateFull(source, opts);

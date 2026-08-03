@@ -1,14 +1,10 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-  sinon,
-} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
 import HttpTransport from "../../assets/js/http_transport.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("HttpTransport", () => {
   let clock;

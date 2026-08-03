@@ -1,13 +1,10 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import Sequence from "../../assets/js/sequence.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("Sequence", () => {
   beforeEach(() => {

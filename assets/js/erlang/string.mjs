@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang from "./erlang.mjs";
 import Erlang_Unicode from "./unicode.mjs";
 import Erlang_Unicode_Util from "./unicode_util.mjs";
 import ERTS from "../erts.mjs";
@@ -25,47 +26,53 @@ const Erlang_String = {
 
     try {
       stringBinary = Erlang_Unicode["characters_to_binary/1"](string);
-    } catch {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+    } catch (error) {
+      if (error.struct) {
+        Interpreter.raiseMatchError(string);
+      }
+
+      throw error;
     }
 
     if (Type.isTuple(stringBinary)) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+      Interpreter.raiseMatchError(string);
     }
 
-    const patternBinary =
-      Erlang_Unicode["characters_to_binary/1"](searchPattern);
+    // The server converts the pattern with unicode:characters_to_list/1, so
+    // its badarg reports that identity.
+    const raiseInvalidPattern = () =>
+      Interpreter.raiseBifError("badarg", "unicode", "characters_to_list", [
+        searchPattern,
+      ]);
+
+    let patternBinary;
+
+    try {
+      patternBinary = Erlang_Unicode["characters_to_binary/1"](searchPattern);
+    } catch (error) {
+      if (error.struct) {
+        raiseInvalidPattern();
+      }
+
+      throw error;
+    }
 
     if (Type.isTuple(patternBinary)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
+      raiseInvalidPattern();
     }
 
-    if (!Type.isAtom(direction)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":string.find/3", [
-          string,
-          searchPattern,
-          direction,
-        ]),
-      );
+    if (
+      !Type.isAtom(direction) ||
+      !["leading", "trailing"].includes(direction.value)
+    ) {
+      Interpreter.raiseFunctionClauseError("string", "find", 3, [
+        string,
+        searchPattern,
+        direction,
+      ]);
     }
 
     const directionValue = direction.value;
-
-    if (!["leading", "trailing"].includes(directionValue)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":string.find/3", [
-          string,
-          searchPattern,
-          direction,
-        ]),
-      );
-    }
 
     const stringText = Bitstring.toText(stringBinary);
     const patternText = Bitstring.toText(patternBinary);
@@ -171,26 +178,26 @@ const Erlang_String = {
   // Deps: [:string.to_graphemes/1]
 
   // Start join/2
-  "join/2": function (list, separator) {
+  "join/2": (list, separator) => {
     if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":string.join/2", arguments),
-      );
+      Interpreter.raiseFunctionClauseError("string", "join", 2, [
+        list,
+        separator,
+      ]);
     }
 
     if (!Type.isProperList(list)) {
-      Interpreter.raiseErlangError(
-        Interpreter.buildErlangErrorMsg(
-          `{:bad_generator, ${Interpreter.inspect(list.data.at(-1))}}`,
-        ),
+      Erlang["error/1"](
+        Type.tuple([Type.atom("bad_generator"), list.data.at(-1)]),
       );
     }
 
     if (list.data.length === 0) {
       if (!Type.isProperList(separator)) {
-        Interpreter.raiseFunctionClauseError(
-          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", arguments),
-        );
+        Interpreter.raiseFunctionClauseError("string", "join", 2, [
+          list,
+          separator,
+        ]);
       }
 
       return Type.list();
@@ -201,39 +208,70 @@ const Erlang_String = {
       const element = list.data[0];
 
       if (!Type.isList(element)) {
-        Interpreter.raiseArgumentError("argument error");
+        // The server fails concatenating the element with the joined rest,
+        // so its badarg reports :erlang.++/2.
+        Interpreter.raiseBifError("badarg", "erlang", "++", [
+          element,
+          Type.list(),
+        ]);
       }
 
       return element;
     }
 
-    // Multiple elements - validate separator is a list (for concatenation)
+    // The server joins as H ++ lists:append([Sep ++ X || X <- T]), so a
+    // separator or an element that isn't a list fails inside one of those
+    // concatenations rather than in join/2 itself - which is the identity and
+    // the arguments its badarg reports.
+    const [head, ...tail] = list.data;
+
     if (!Type.isList(separator)) {
-      Interpreter.raiseArgumentError("argument error");
+      // The first concatenation the comprehension makes is Sep ++ hd(T).
+      Interpreter.raiseBifError("badarg", "erlang", "++", [separator, tail[0]]);
     }
 
-    // Join the strings with separator
-    const result = [];
-
-    for (let i = 0; i < list.data.length; i++) {
-      const element = list.data[i];
-
-      // Each element must be a list (for concatenation)
-      if (!Type.isList(element)) {
-        Interpreter.raiseArgumentError("argument error");
+    // Sep ++ X keeps X as the tail when X isn't a list, giving an improper
+    // list rather than an error.
+    const concat = (leftData, right) => {
+      if (leftData.length === 0) {
+        return right;
       }
 
-      if (i > 0) {
-        result.push(...separator.data);
+      if (!Type.isList(right)) {
+        return Type.improperList([...leftData, right]);
       }
 
-      result.push(...element.data);
+      const data = [...leftData, ...right.data];
+
+      return right.isProper ? Type.list(data) : Type.improperList(data);
+    };
+
+    const pieces = tail.map((element) => concat(separator.data, element));
+
+    // lists:append/1 concatenates from the right, so a piece ending in a term
+    // instead of an empty list fails the concatenation that follows it - and
+    // the last piece has nothing following it, which is how an element that
+    // isn't a list ends up as the joined result's tail.
+    let appended = pieces.at(-1);
+
+    for (let index = pieces.length - 2; index >= 0; index--) {
+      const piece = pieces[index];
+
+      if (!Type.isProperList(piece)) {
+        Interpreter.raiseBifError("badarg", "erlang", "++", [piece, appended]);
+      }
+
+      appended = concat(piece.data, appended);
     }
 
-    return Type.list(result);
+    if (!Type.isList(head)) {
+      Interpreter.raiseBifError("badarg", "erlang", "++", [head, appended]);
+    }
+
+    return concat(head.data, appended);
   },
   // End join/2
-  // Deps: []
+  // Deps: [:erlang.error/1]
 
   // Start length/1
   "length/1": (string) => {
@@ -241,9 +279,9 @@ const Erlang_String = {
     const isList = Type.isList(string);
 
     if (!isBinary && !isList) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [string]),
-      );
+      // The server fails matching a clause of unicode_util:cp/1, so the
+      // error reports that identity.
+      Interpreter.raiseFunctionClauseError("unicode_util", "cp", 1, [string]);
     }
 
     // Binary fast path
@@ -298,9 +336,7 @@ const Erlang_String = {
       }
 
       if (Type.isTuple(gcResult)) {
-        Interpreter.raiseArgumentError(
-          `argument error: ${Interpreter.inspect(gcResult.data[1])}`,
-        );
+        Erlang["error/1"](Type.tuple([Type.atom("badarg"), gcResult.data[1]]));
       }
 
       count++;
@@ -313,7 +349,7 @@ const Erlang_String = {
     }
   },
   // End length/1
-  // Deps: [:unicode.characters_to_binary/1, :unicode_util.gc/1]
+  // Deps: [:erlang.error/1, :unicode.characters_to_binary/1, :unicode_util.gc/1]
 
   // Start replace/3
   "replace/3": (string, pattern, replacement) => {
@@ -334,12 +370,40 @@ const Erlang_String = {
     // Convert string to binary - re-throw as MatchError (Erlang raises MatchError for invalid string)
     try {
       stringBinary = Erlang_Unicode["characters_to_binary/1"](string);
-    } catch {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+    } catch (error) {
+      if (error.struct) {
+        Interpreter.raiseMatchError(string);
+      }
+
+      throw error;
     }
 
-    // Convert pattern to binary - let ArgumentError propagate naturally
-    const patternBinary = Erlang_Unicode["characters_to_binary/1"](pattern);
+    if (Type.isTuple(stringBinary)) {
+      Interpreter.raiseMatchError(string);
+    }
+
+    // The server converts the pattern with unicode:characters_to_list/1, so
+    // its badarg reports that identity.
+    const raiseInvalidPattern = () =>
+      Interpreter.raiseBifError("badarg", "unicode", "characters_to_list", [
+        pattern,
+      ]);
+
+    let patternBinary;
+
+    try {
+      patternBinary = Erlang_Unicode["characters_to_binary/1"](pattern);
+    } catch (error) {
+      if (error.struct) {
+        raiseInvalidPattern();
+      }
+
+      throw error;
+    }
+
+    if (Type.isTuple(patternBinary)) {
+      raiseInvalidPattern();
+    }
 
     if (!Type.isAtom(direction)) {
       Interpreter.raiseCaseClauseError(direction);
@@ -402,23 +466,39 @@ const Erlang_String = {
     let subjectBinary;
     try {
       subjectBinary = Erlang_Unicode["characters_to_binary/1"](subject);
-    } catch {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(subject));
+    } catch (error) {
+      if (error.struct) {
+        Interpreter.raiseMatchError(subject);
+      }
+
+      throw error;
     }
 
     if (Type.isTuple(subjectBinary)) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(subject));
+      Interpreter.raiseMatchError(subject);
     }
 
-    const patternBinary = Erlang_Unicode["characters_to_binary/1"](pattern);
+    // The server converts the pattern with unicode:characters_to_list/1, so
+    // its badarg reports that identity.
+    const raiseInvalidPattern = () =>
+      Interpreter.raiseBifError("badarg", "unicode", "characters_to_list", [
+        pattern,
+      ]);
+
+    let patternBinary;
+
+    try {
+      patternBinary = Erlang_Unicode["characters_to_binary/1"](pattern);
+    } catch (error) {
+      if (error.struct) {
+        raiseInvalidPattern();
+      }
+
+      throw error;
+    }
 
     if (Type.isTuple(patternBinary)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
+      raiseInvalidPattern();
     }
 
     if (!Type.isAtom(direction)) {
@@ -554,9 +634,7 @@ const Erlang_String = {
       if (Type.isTuple(cpResult)) {
         // Extract the binary from the error tuple {:error, binary}
         const errorBinary = cpResult.data[1];
-        Interpreter.raiseArgumentError(
-          `argument error: ${Interpreter.inspect(errorBinary)}`,
-        );
+        Erlang["error/1"](Type.tuple([Type.atom("badarg"), errorBinary]));
       }
 
       // Return null for empty results
@@ -650,12 +728,10 @@ const Erlang_String = {
     }
 
     // If subject is neither binary nor list, raise FunctionClauseError
-    Interpreter.raiseFunctionClauseError(
-      Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [subject]),
-    );
+    Interpreter.raiseFunctionClauseError("string", "titlecase", 1, [subject]);
   },
   // End titlecase/1
-  // Deps: [:unicode_util.cp/1]
+  // Deps: [:erlang.error/1, :unicode_util.cp/1]
 
   // Start to_graphemes/1
   "to_graphemes/1": (string) => {
@@ -675,9 +751,7 @@ const Erlang_String = {
         const [tag, rest] = result.data;
 
         if (Type.isAtom(tag) && tag.value === "error") {
-          Interpreter.raiseArgumentError(
-            `argument error: ${Interpreter.inspect(rest)}`,
-          );
+          Erlang["error/1"](Type.tuple([Type.atom("badarg"), rest]));
         }
       }
 
@@ -705,7 +779,7 @@ const Erlang_String = {
     return Type.list(graphemes);
   },
   // End to_graphemes/1
-  // Deps: [:unicode_util.gc/1]
+  // Deps: [:erlang.error/1, :unicode_util.gc/1]
 };
 
 export default Erlang_String;

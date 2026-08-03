@@ -26,6 +26,7 @@ import Serializer from "./serializer.mjs";
 import Sse from "./sse.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
+import UncaughtErrorOverlay from "./uncaught_error_overlay.mjs";
 import Utils from "./utils.mjs";
 import Vdom from "./vdom.mjs";
 
@@ -49,11 +50,14 @@ import ManuallyPortedElixirApplication from "./elixir/application.mjs";
 import ManuallyPortedElixirCldrLocale from "./elixir/cldr/locale.mjs";
 import ManuallyPortedElixirCldrValidityU from "./elixir/cldr/validity/u.mjs";
 import ManuallyPortedElixirCode from "./elixir/code.mjs";
+import ManuallyPortedElixirException from "./elixir/exception.mjs";
+import ManuallyPortedElixirFunctionClauseError from "./elixir/function_clause_error.mjs";
 import ManuallyPortedElixirHologramJS from "./elixir/hologram/js.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
 import ManuallyPortedElixirIO from "./elixir/io.mjs";
 import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
 import ManuallyPortedElixirString from "./elixir/string.mjs";
+import ManuallyPortedElixirStringTokenizer from "./elixir/string/tokenizer.mjs";
 import ManuallyPortedElixirTask from "./elixir/task.mjs";
 import ManuallyPortedElixirURI from "./elixir/uri.mjs";
 
@@ -309,6 +313,31 @@ export default class Hologram {
     };
   }
 
+  // Records an uncaught boxed error and puts it in the page.
+  //
+  // Nothing is written to the console here: the error carries the whole report
+  // as its message, so the entry the browser writes for an error nobody caught
+  // holds the Elixir frames and the JavaScript stack below them - one entry,
+  // and its stack stays the structured one the devtools resolve through the
+  // bundle's source maps.
+  static handleUncaughtError(error) {
+    if (!(error instanceof HologramBoxedError)) {
+      return;
+    }
+
+    // Read by the feature test helpers, which assert against the error the
+    // page last raised. Both parts are taken as the error derived them, so an
+    // error that failed to derive is still reported, with the fault named.
+    GlobalRegistry.set("lastBoxedError", {
+      module: error.type,
+      message: error.text,
+    });
+
+    if (globalThis.Hologram.config.errorOverlay) {
+      UncaughtErrorOverlay.show(error);
+    }
+  }
+
   // Made public to make tests easier
   static async loadNewPage(pagePath, html) {
     await $.#savePageSnapshot();
@@ -408,8 +437,8 @@ export default class Hologram {
         Hologram.#mountPage();
       } catch (error) {
         if (error instanceof HologramBoxedError) {
-          error.name = Interpreter.getErrorType(error);
-          error.message = Interpreter.resolveErrorMessage(error.struct);
+          error.name = error.type;
+          error.message = error.text;
         }
 
         throw error;
@@ -473,6 +502,27 @@ export default class Hologram {
       "ensure_compiled/1",
       "public",
       ManuallyPortedElixirCode["ensure_compiled/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Code",
+      "ensure_loaded/1",
+      "public",
+      ManuallyPortedElixirCode["ensure_loaded/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Exception",
+      "format_stacktrace/1",
+      "public",
+      ManuallyPortedElixirException["format_stacktrace/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "FunctionClauseError",
+      "message/1",
+      "public",
+      ManuallyPortedElixirFunctionClauseError["message/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -658,6 +708,13 @@ export default class Hologram {
     );
 
     Interpreter.defineManuallyPortedFunction(
+      "String.Tokenizer",
+      "tokenize/1",
+      "public",
+      ManuallyPortedElixirStringTokenizer["tokenize/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
       "Task",
       "await/1",
       "public",
@@ -829,33 +886,15 @@ export default class Hologram {
   // Executed only once, on the initial page load.
   // Deps: [:maps.get/2]
   static async #init() {
-    // TODO: consider when porting Elixir error handling
-    // window.addEventListener("error", (event) => {
-    //   if (event.error instanceof HologramBoxedError) {
-    //     console.error(`${event.error.message}\n`, event.error);
-    //     event.preventDefault();
-    //   }
-    // });
-
-    // TODO: consider when porting Elixir error handling
-    const handleBoxedError = (error) => {
-      if (error instanceof HologramBoxedError) {
-        GlobalRegistry.set("lastBoxedError", {
-          module: Interpreter.inspect(
-            Erlang_Maps["get/2"](Type.atom("__struct__"), error.struct),
-          ),
-          message: Interpreter.resolveErrorMessage(error.struct),
-        });
-      }
-    };
-
-    window.addEventListener("error", (event) => handleBoxedError(event.error));
+    window.addEventListener("error", (event) => {
+      $.handleUncaughtError(event.error);
+    });
 
     // Async action errors surface as rejected Promises (from the .then() path
     // in executeAction) and fire "unhandledrejection" instead of "error".
-    window.addEventListener("unhandledrejection", (event) =>
-      handleBoxedError(event.reason),
-    );
+    window.addEventListener("unhandledrejection", (event) => {
+      $.handleUncaughtError(event.reason);
+    });
 
     window.addEventListener("beforeunload", () => {
       // Force synchronous session storage save since async OPFS may not complete before page termination

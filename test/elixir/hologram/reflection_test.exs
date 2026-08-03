@@ -116,6 +116,20 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "exception?/1" do
+    test "module which is an exception" do
+      assert exception?(ArgumentError)
+    end
+
+    test "module which is not an exception" do
+      refute exception?(Calendar.ISO)
+    end
+
+    test "non-module" do
+      refute exception?(123)
+    end
+  end
+
   describe "elixir_module?/1" do
     test "existing Elixir module" do
       assert elixir_module?(Calendar.ISO)
@@ -485,6 +499,34 @@ defmodule Hologram.ReflectionTest do
 
     test "module that does not implement a protocol" do
       refute protocol_implementation?(Calendar.ISO)
+    end
+  end
+
+  describe "relative_source_path/1" do
+    test "project module" do
+      assert relative_source_path(Hologram.Reflection) == "lib/hologram/reflection.ex"
+    end
+
+    test "dep module" do
+      assert relative_source_path(BeamFile) == "lib/beam_file.ex"
+    end
+
+    test "Elixir standard library module" do
+      assert relative_source_path(Enum) == "lib/enum.ex"
+    end
+
+    test "module with an unrecognized source root" do
+      code = "defmodule Hologram.Test.Fixtures.Reflection.ForeignSourceModule do end"
+
+      [{module, _bytecode}] =
+        Code.compile_string(code, "/foreign/build/machine/lib/foreign_source.ex")
+
+      on_exit(fn ->
+        :code.purge(module)
+        :code.delete(module)
+      end)
+
+      assert relative_source_path(module) == "foreign_source.ex"
     end
   end
 

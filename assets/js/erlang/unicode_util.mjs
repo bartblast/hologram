@@ -153,21 +153,17 @@ const Erlang_Unicode_Util = {
 
     // Non-byte-aligned bitstring
     if (Type.isBitstring(list)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl/2", [
-          list,
-          restList,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("unicode_util", "cpl", 2, [
+        list,
+        restList,
+      ]);
     }
 
     // Should not reach here
-    Interpreter.raiseFunctionClauseError(
-      Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl/2", [
-        list,
-        restList,
-      ]),
-    );
+    Interpreter.raiseFunctionClauseError("unicode_util", "cpl", 2, [
+      list,
+      restList,
+    ]);
   },
   // End _cpl/2
   // Deps: [:unicode_util._cpl_1_cont/1, :unicode_util._cpl_cont/2, :unicode_util._is_cp/1, :unicode_util._merge_lcr/2, :unicode_util.cp/1]
@@ -390,21 +386,17 @@ const Erlang_Unicode_Util = {
 
     // Non-byte-aligned bitstring
     if (Type.isBitstring(list)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl_cont/2", [
-          list,
-          restList,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("unicode_util", "cpl_cont", 2, [
+        list,
+        restList,
+      ]);
     }
 
     // Should not reach here
-    Interpreter.raiseFunctionClauseError(
-      Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl_cont/2", [
-        list,
-        restList,
-      ]),
-    );
+    Interpreter.raiseFunctionClauseError("unicode_util", "cpl_cont", 2, [
+      list,
+      restList,
+    ]);
   },
   // End _cpl_cont/2
   // Deps: [:unicode_util._cpl/2, :unicode_util._is_cp/1, :unicode_util._merge_lcr/2, :unicode_util.cp/1]
@@ -701,9 +693,7 @@ const Erlang_Unicode_Util = {
     }
 
     // All other cases: invalid input type (including non-byte-aligned bitstrings)
-    Interpreter.raiseFunctionClauseError(
-      Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [string]),
-    );
+    Interpreter.raiseFunctionClauseError("unicode_util", "cp", 1, [string]);
   },
 
   // End cp/1

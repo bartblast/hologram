@@ -42,8 +42,8 @@ defmodule Hologram.Runtime.Connection do
   end
 
   @impl WebSock
-  def handle_info({:compilation_error, output}, state) do
-    message = encode("compilation_error", output, nil)
+  def handle_info({:compilation_error, lines}, state) do
+    message = encode("compilation_error", lines, nil)
     {:push, {:text, message}, state}
   end
 

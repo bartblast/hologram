@@ -3,15 +3,15 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  buildFunctionClauseErrorMsg,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Unicode_Util from "../../../assets/js/erlang/unicode_util.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/unicode_util_test.exs
@@ -145,9 +145,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => cp(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.integer(-1),
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [Type.integer(-1)]),
         );
       });
 
@@ -157,7 +155,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => cp(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.integer(0x110000),
           ]),
         );
@@ -236,9 +234,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => cp(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            bitstring,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [bitstring]),
         );
       });
     });
@@ -457,9 +453,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => cp(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.integer(97),
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [Type.integer(97)]),
         );
       });
 
@@ -471,9 +465,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => cp(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.integer(97),
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [Type.integer(97)]),
         );
       });
     });
@@ -746,9 +738,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => cp(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            input,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [input]),
         );
       });
 
@@ -758,9 +748,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => cp(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            input,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [input]),
         );
       });
 
@@ -770,9 +758,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => cp(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            input,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [input]),
         );
       });
 
@@ -782,9 +768,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => cp(bitstring),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            bitstring,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [bitstring]),
         );
       });
 
@@ -794,7 +778,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => cp(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.atom("invalid"),
           ]),
         );
@@ -806,7 +790,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => cp(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl/2", [
+          buildFunctionClauseErrorMsg(":unicode_util.cpl/2", [
             Type.atom("a"),
             Type.list([Type.atom("b")]),
           ]),
@@ -819,11 +803,30 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => cp(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.float(3.14),
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [Type.float(3.14)]),
         );
       });
+    });
+
+    it("error frame carries args", () => {
+      let caught;
+
+      try {
+        Erlang_Unicode_Util["cp/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "unicode_util",
+          function: "cp",
+          arityOrArgs: Type.list([Type.atom("abc")]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 
@@ -1020,9 +1023,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => gc(bitstring),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            bitstring,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [bitstring]),
         );
       });
 
@@ -1032,9 +1033,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => gc(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            input,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [input]),
         );
       });
 
@@ -1044,9 +1043,7 @@ describe("Erlang_Unicode_Util", () => {
         assertBoxedError(
           () => gc(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            input,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [input]),
         );
       });
     });

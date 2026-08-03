@@ -70,10 +70,44 @@ defmodule Hologram.Compiler.Encoder do
         ) :: String.t()
   def encode_elixir_function(module_name, function, arity, visibility, clauses, context) do
     async? = MapSet.member?(context.async_mfas, {context.module, function, arity})
-    clause_context = %{context | async?: async?}
+    clause_context = %{context | arity: arity, async?: async?, function: function}
     clauses_js = encode_as_array(clauses, clause_context)
 
     ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
+  end
+
+  @doc """
+  Generates the interpreter registration statement carrying the clause heads of
+  the given manually ported Elixir function.
+
+  A manually ported function has no encoded clauses of its own, so its raise
+  sites have nothing to report attempted clauses from - this registers the
+  heads the server would blame, without their bodies.
+
+  ## Examples
+
+      iex> encode_elixir_function_clause_heads("Code", :ensure_compiled, 1, :public, clauses, context)
+      "Interpreter.defineFunctionClauseHeads(\"Code\", \"ensure_compiled\", 1, \"public\", [...]);"
+  """
+  @spec encode_elixir_function_clause_heads(
+          String.t(),
+          atom,
+          non_neg_integer,
+          :public | :private,
+          list(IR.FunctionClause.t()),
+          Context.t()
+        ) :: String.t()
+  def encode_elixir_function_clause_heads(
+        module_name,
+        function,
+        arity,
+        visibility,
+        clauses,
+        context
+      ) do
+    heads_js = encode_as_array(clauses, %{context | async?: false}, &encode_clause_head/2)
+
+    ~s/Interpreter.defineFunctionClauseHeads("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{heads_js});/
   end
 
   @doc """
@@ -121,12 +155,13 @@ defmodule Hologram.Compiler.Encoder do
   @spec encode_ir(IR.t(), Context.t()) :: String.t()
   def encode_ir(ir, context)
 
-  def encode_ir(%IR.AnonymousFunctionCall{function: function, args: args}, context) do
+  def encode_ir(%IR.AnonymousFunctionCall{function: function, args: args, line: line}, context) do
     function_js = encode_ir(function, context)
     args_js = encode_as_array(args, context)
     call = "Interpreter.callAnonymousFunction(#{function_js}, #{args_js})"
+    awaited_call = if context.async?, do: "(await #{call})", else: call
 
-    if context.async?, do: "(await #{call})", else: call
+    maybe_encode_frame_line(awaited_call, line, context)
   end
 
   def encode_ir(
@@ -141,8 +176,9 @@ defmodule Hologram.Compiler.Encoder do
     async? = has_async_call?(clauses, context)
     clause_context = %{context | async?: async?}
     clauses_js = encode_as_array(clauses, clause_context)
+    name_js = encode_anonymous_function_name(context)
 
-    "Type.anonymousFunction(#{arity}, #{clauses_js}, context)"
+    "Type.anonymousFunction(#{arity}, #{clauses_js}, context#{name_js})"
   end
 
   def encode_ir(
@@ -200,10 +236,11 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("Type.bitstringPattern([", "])")
   end
 
-  def encode_ir(%IR.BitstringType{segments: segments}, %{pattern?: false} = context) do
+  def encode_ir(%IR.BitstringType{segments: segments, line: line}, %{pattern?: false} = context) do
     segments
     |> encode_bitstring_segments(context)
     |> StringUtils.wrap("Type.bitstring([", "])")
+    |> maybe_encode_frame_line(line, context)
   end
 
   def encode_ir(%IR.Block{} = block, %{async?: true} = context) do
@@ -214,7 +251,7 @@ defmodule Hologram.Compiler.Encoder do
     "(#{encode_closure(block, context)})(context)"
   end
 
-  def encode_ir(%IR.Case{condition: condition, clauses: clauses}, context) do
+  def encode_ir(%IR.Case{condition: condition, clauses: clauses, line: line}, context) do
     condition_js =
       case condition do
         %IR.Block{} = block -> encode_closure(block, context)
@@ -223,11 +260,14 @@ defmodule Hologram.Compiler.Encoder do
 
     clauses_js = encode_as_array(clauses, context)
 
-    if context.async? do
-      "(await Interpreter.asyncCase(#{condition_js}, #{clauses_js}, context))"
-    else
-      "Interpreter.case(#{condition_js}, #{clauses_js}, context)"
-    end
+    call =
+      if context.async? do
+        "(await Interpreter.asyncCase(#{condition_js}, #{clauses_js}, context))"
+      else
+        "Interpreter.case(#{condition_js}, #{clauses_js}, context)"
+      end
+
+    maybe_encode_frame_line(call, line, context)
   end
 
   def encode_ir(%IR.Clause{} = clause, context) do
@@ -244,11 +284,14 @@ defmodule Hologram.Compiler.Encoder do
     unique = comprehension.unique.value
     mapper = encode_closure(comprehension.mapper, context)
 
-    if context.async? do
-      "(await Interpreter.asyncComprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context))"
-    else
-      "Interpreter.comprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context)"
-    end
+    call =
+      if context.async? do
+        "(await Interpreter.asyncComprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context))"
+      else
+        "Interpreter.comprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context)"
+      end
+
+    maybe_encode_frame_line(call, comprehension.line, context)
   end
 
   def encode_ir(%IR.Comprehension{} = comprehension, context) do
@@ -258,21 +301,27 @@ defmodule Hologram.Compiler.Encoder do
     initial_value = encode_ir(comprehension.reducer.initial_value, context)
     clauses = encode_as_array(comprehension.reducer.clauses, context)
 
-    if context.async? do
-      "(await Interpreter.asyncComprehensionReduce(#{qualifiers}, #{initial_value}, #{clauses}, context))"
-    else
-      "Interpreter.comprehensionReduce(#{qualifiers}, #{initial_value}, #{clauses}, context)"
-    end
+    call =
+      if context.async? do
+        "(await Interpreter.asyncComprehensionReduce(#{qualifiers}, #{initial_value}, #{clauses}, context))"
+      else
+        "Interpreter.comprehensionReduce(#{qualifiers}, #{initial_value}, #{clauses}, context)"
+      end
+
+    maybe_encode_frame_line(call, comprehension.line, context)
   end
 
-  def encode_ir(%IR.Cond{clauses: clauses_ir}, context) do
+  def encode_ir(%IR.Cond{clauses: clauses_ir, line: line}, context) do
     clauses_js = encode_as_array(clauses_ir, context)
 
-    if context.async? do
-      "(await Interpreter.asyncCond(#{clauses_js}, context))"
-    else
-      "Interpreter.cond(#{clauses_js}, context)"
-    end
+    call =
+      if context.async? do
+        "(await Interpreter.asyncCond(#{clauses_js}, context))"
+      else
+        "Interpreter.cond(#{clauses_js}, context)"
+      end
+
+    maybe_encode_frame_line(call, line, context)
   end
 
   def encode_ir(%IR.CondClause{condition: condition_ir, body: body_ir}, context) do
@@ -290,11 +339,11 @@ defmodule Hologram.Compiler.Encoder do
     "Interpreter.consOperator(#{encode_ir(head, context)}, #{encode_ir(tail, context)})"
   end
 
-  def encode_ir(%IR.DotOperator{left: left, right: right}, context) do
+  def encode_ir(%IR.DotOperator{left: left, right: right, line: line}, context) do
     left_js = encode_ir(left, context)
     right_js = encode_ir(right, context)
 
-    "Interpreter.dotOperator(#{left_js}, #{right_js})"
+    maybe_encode_frame_line("Interpreter.dotOperator(#{left_js}, #{right_js})", line, context)
   end
 
   def encode_ir(%IR.FloatType{value: value}, _context) do
@@ -306,11 +355,24 @@ defmodule Hologram.Compiler.Encoder do
     params_closure = "(context) => #{params_array}"
 
     # Guards are never async — Elixir guards are restricted to a safe subset of functions.
-    guards = encode_as_array(clause.guards, %{context | async?: false}, &encode_closure/2)
+    guards_context = %{context | async?: false, guard?: true}
+    guards = encode_as_array(clause.guards, guards_context, &encode_closure/2)
 
     body = encode_closure(clause.body, context)
 
-    "{params: #{params_closure}, guards: #{guards}, body: #{body}}"
+    properties =
+      Enum.reject(
+        [
+          params: params_closure,
+          guards: guards,
+          body: body,
+          line: encode_clause_line(clause),
+          blame: encode_clause_blame(clause, guards_context)
+        ],
+        fn {_name, value} -> is_nil(value) end
+      )
+
+    encode_as_object(properties)
   end
 
   def encode_ir(%IR.IntegerType{value: value}, _context) do
@@ -323,11 +385,14 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode_ir(
-        %IR.LocalFunctionCall{function: function, args: args},
+        %IR.LocalFunctionCall{function: function, args: args, line: line},
         %{module: module} = context
       ) do
     module_ir = %IR.AtomType{value: module}
-    encode_named_function_call(module_ir, function, args, context)
+
+    module_ir
+    |> encode_named_function_call(function, args, context)
+    |> maybe_encode_frame_line(line, context)
   end
 
   def encode_ir(%IR.MapType{data: data}, context) do
@@ -339,18 +404,40 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("Type.map([", "])")
   end
 
-  def encode_ir(%IR.MatchOperator{left: left, right: right}, %{match_operator?: true} = context) do
+  # Inside a pattern neither side is a value to match the other against - both
+  # constrain the term being matched, and a variable on either side binds to
+  # that term. So the match is carried into the pattern, to be matched against
+  # each of its sides in turn.
+  def encode_ir(%IR.MatchOperator{left: left, right: right}, %{pattern?: true} = context) do
+    left_js = encode_ir(left, context)
+    right_js = encode_ir(right, context)
+
+    "Type.matchPattern(#{left_js}, #{right_js})"
+  end
+
+  def encode_ir(
+        %IR.MatchOperator{left: left, right: right, line: line},
+        %{match_operator?: true} = context
+      ) do
     left = encode_ir(left, %{context | pattern?: true})
     right = encode_ir(right, context)
 
-    "Interpreter.matchOperator(#{right}, #{left}, context)"
+    maybe_encode_frame_line(
+      "Interpreter.matchOperator(#{right}, #{left}, context)",
+      line,
+      context
+    )
   end
 
-  def encode_ir(%IR.MatchOperator{left: left, right: right}, context) do
+  def encode_ir(%IR.MatchOperator{left: left, right: right, line: line}, context) do
     left = encode_ir(left, %{context | match_operator?: true, pattern?: true})
     right = encode_ir(right, %{context | match_operator?: true})
 
-    "Interpreter.matchOperator(#{right}, #{left}, context)"
+    maybe_encode_frame_line(
+      "Interpreter.matchOperator(#{right}, #{left}, context)",
+      line,
+      context
+    )
   end
 
   def encode_ir(%IR.MatchPlaceholder{}, _context) do
@@ -428,11 +515,21 @@ defmodule Hologram.Compiler.Encoder do
         %IR.RemoteFunctionCall{
           module: module,
           function: function,
-          args: args
+          args: args,
+          line: line
         },
         context
       ) do
-    encode_named_function_call(module, function, args, context)
+    module
+    |> encode_named_function_call(function, args, context)
+    |> maybe_encode_frame_line(line, context)
+  end
+
+  # __STACKTRACE__ - the interpreter binds the boxed trace captured on the
+  # handled error to the context's stacktrace field in rescue/catch clause
+  # scope.
+  def encode_ir(%IR.Stacktrace{}, _context) do
+    "context.stacktrace"
   end
 
   def encode_ir(%IR.StringType{value: value}, _context) do
@@ -450,11 +547,14 @@ defmodule Hologram.Compiler.Encoder do
     args_js =
       "#{body_js}, #{rescue_clauses_js}, #{catch_clauses_js}, #{else_clauses_js}, #{after_block_js}, context"
 
-    if context.async? do
-      "(await Interpreter.asyncTry(#{args_js}))"
-    else
-      "Interpreter.try(#{args_js})"
-    end
+    call =
+      if context.async? do
+        "(await Interpreter.asyncTry(#{args_js}))"
+      else
+        "Interpreter.try(#{args_js})"
+      end
+
+    maybe_encode_frame_line(call, ir.line, context)
   end
 
   def encode_ir(%IR.TryCatchClause{} = ir, context) do
@@ -462,7 +562,8 @@ defmodule Hologram.Compiler.Encoder do
     value_js = encode_ir(ir.value, %{context | pattern?: true})
 
     # Guards are never async - Elixir guards are restricted to a safe subset of functions.
-    guards_js = encode_as_array(ir.guards, %{context | async?: false}, &encode_closure/2)
+    guards_js =
+      encode_as_array(ir.guards, %{context | async?: false, guard?: true}, &encode_closure/2)
 
     body_js = encode_closure(ir.body, context)
 
@@ -497,16 +598,22 @@ defmodule Hologram.Compiler.Encoder do
     encode_var(name, version)
   end
 
-  def encode_ir(%IR.With{body: body, clauses: clauses, else_clauses: else_clauses}, context) do
+  def encode_ir(
+        %IR.With{body: body, clauses: clauses, else_clauses: else_clauses, line: line},
+        context
+      ) do
     body_js = encode_closure(body, context)
     clauses_js = encode_as_array(clauses, context)
     else_clauses_js = encode_as_array(else_clauses, context)
 
-    if context.async? do
-      "(await Interpreter.asyncWith(#{body_js}, #{clauses_js}, #{else_clauses_js}, context))"
-    else
-      "Interpreter.with(#{body_js}, #{clauses_js}, #{else_clauses_js}, context)"
-    end
+    call =
+      if context.async? do
+        "(await Interpreter.asyncWith(#{body_js}, #{clauses_js}, #{else_clauses_js}, context))"
+      else
+        "Interpreter.with(#{body_js}, #{clauses_js}, #{else_clauses_js}, context)"
+      end
+
+    maybe_encode_frame_line(call, line, context)
   end
 
   def encode_ir(%IR.WithBareClause{expression: expression}, context) do
@@ -522,11 +629,47 @@ defmodule Hologram.Compiler.Encoder do
     match_js = encode_ir(match, %{context | pattern?: true})
 
     # Guards are never async — Elixir guards are restricted to a safe subset of functions.
-    guards_js = encode_as_array(guards, %{context | async?: false}, &encode_closure/2)
+    guards_js =
+      encode_as_array(guards, %{context | async?: false, guard?: true}, &encode_closure/2)
 
     expression_js = encode_closure(expression, context)
 
     "{match: #{match_js}, guards: #{guards_js}, expression: #{expression_js}}"
+  end
+
+  @doc """
+  Generates the ERTS registration statement carrying the metadata of the given modules.
+
+  Each bundle registers the modules it defines, so a stacktrace frame can name the application a
+  module belongs to and the source file it was compiled from. Returns an empty string when client
+  stacktraces are disabled, or when none of the modules can be loaded to read their metadata
+  from.
+
+  ## Examples
+
+      iex> encode_module_metadata_registration([Aaa.Bbb])
+      "ERTS.registerModuleMetadata({\"Aaa.Bbb\": {app: \"my_app\", file: \"lib/aaa/bbb.ex\"}});"
+  """
+  @spec encode_module_metadata_registration(list(module)) :: String.t()
+  def encode_module_metadata_registration(modules) do
+    entries =
+      if Hologram.client_stacktraces?() do
+        modules
+        |> Enum.sort()
+        |> Enum.map(fn module -> {module, encode_module_metadata(module)} end)
+        |> Enum.reject(fn {_module, metadata} -> metadata == "{}" end)
+        |> Enum.map_join(", ", fn {module, metadata} ->
+          ~s/"#{Reflection.module_name(module)}": #{metadata}/
+        end)
+      else
+        ""
+      end
+
+    if entries == "" do
+      ""
+    else
+      "ERTS.registerModuleMetadata({#{entries}});"
+    end
   end
 
   @doc """
@@ -602,6 +745,16 @@ defmodule Hologram.Compiler.Encoder do
     value
     |> encode_as_string(false)
     |> StringUtils.wrap("\"", "\"")
+  end
+
+  # The BEAM names an anonymous function after the definition it appears in,
+  # numbering the ones defined there. The index is left at zero, because the
+  # BEAM's counts every generated function in the module - comprehensions and
+  # captures included - and it shows up in no message, only in the name itself.
+  defp encode_anonymous_function_name(%Context{function: nil}), do: ""
+
+  defp encode_anonymous_function_name(%Context{arity: arity, function: function}) do
+    ", " <> encode_as_string("-#{function}/#{arity}-fun-0-", true)
   end
 
   defp encode_bitstring_modifier({:size, size}, context) do
@@ -681,11 +834,84 @@ defmodule Hologram.Compiler.Encoder do
     "\n#{expr_js};"
   end
 
+  # The clause head is rendered at build time, but which of its parts failed to
+  # match is known only at raise time, so each guard leaf travels with its own
+  # closure for the client to evaluate. The leaves line up with the guard IR,
+  # which carries the same and/or structure they were split at.
+  defp encode_clause_blame(%IR.FunctionClause{blame: nil}, _context), do: nil
+
+  defp encode_clause_blame(%IR.FunctionClause{blame: blame} = clause, context) do
+    if Hologram.client_stacktraces?() do
+      encode_clause_blame_properties(blame, clause.guards, context)
+    end
+  end
+
+  defp encode_clause_blame_properties(blame, guards_ir, context) do
+    params = Enum.map_join(blame.params, ", ", &encode_as_string(&1, true))
+
+    guards =
+      blame.guards
+      |> Enum.zip(guards_ir)
+      |> Enum.map_join(", ", fn {guard, guard_ir} ->
+        encode_clause_blame_guard(guard, guard_ir, context)
+      end)
+
+    encode_as_object(
+      params: StringUtils.wrap(params, "[", "]"),
+      guards: StringUtils.wrap(guards, "[", "]")
+    )
+  end
+
+  defp encode_clause_blame_guard(
+         {operator, left, right},
+         %IR.RemoteFunctionCall{module: %IR.AtomType{value: :erlang}, args: [left_ir, right_ir]},
+         context
+       ) do
+    encode_as_object(
+      operator: encode_as_string(operator, true),
+      left: encode_clause_blame_guard(left, left_ir, context),
+      right: encode_clause_blame_guard(right, right_ir, context)
+    )
+  end
+
+  defp encode_clause_blame_guard({:leaf, source}, guard_ir, context) do
+    encode_as_object(
+      source: encode_as_string(source, true),
+      test: encode_closure(guard_ir, context)
+    )
+  end
+
+  defp encode_clause_head(%IR.FunctionClause{} = clause, context) do
+    params_array = encode_as_array(clause.params, %{context | pattern?: true})
+    guard_context = %{context | guard?: true}
+
+    properties =
+      Enum.reject(
+        [
+          params: "(context) => #{params_array}",
+          guards: encode_as_array(clause.guards, guard_context, &encode_closure/2),
+          blame: encode_clause_blame(clause, guard_context)
+        ],
+        fn {_name, value} -> is_nil(value) end
+      )
+
+    encode_as_object(properties)
+  end
+
+  defp encode_clause_line(%IR.FunctionClause{line: nil}), do: nil
+
+  defp encode_clause_line(%IR.FunctionClause{line: line}) do
+    if Hologram.client_stacktraces?() do
+      to_string(line)
+    end
+  end
+
   defp encode_clause_properties(%IR.Clause{} = clause, context) do
     match = encode_ir(clause.match, %{context | pattern?: true})
 
     # Guards are never async — Elixir guards are restricted to a safe subset of functions.
-    guards = encode_as_array(clause.guards, %{context | async?: false}, &encode_closure/2)
+    guards =
+      encode_as_array(clause.guards, %{context | async?: false, guard?: true}, &encode_closure/2)
 
     body = encode_closure(clause.body, context)
 
@@ -754,6 +980,29 @@ defmodule Hologram.Compiler.Encoder do
     encoded_segments = encode_as_array(segments, context, integer_encoder)
 
     "Type.#{type}(#{encoded_node}, #{encoded_segments})"
+  end
+
+  # Module-level frame metadata: the module's source file (relative to its
+  # source root) and the app that owns it, so client frames render the same
+  # "(app vsn) file:line" prefix as server frames - the version comes from
+  # ERTS.appVersions, keyed by the app named here.
+  # Nil values are omitted rather than encoded as null.
+  defp encode_module_metadata(module) do
+    entries =
+      if Code.ensure_loaded?(module) do
+        [app: Application.get_application(module), file: Reflection.relative_source_path(module)]
+      else
+        []
+      end
+
+    fields =
+      entries
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+      |> Enum.map_join(", ", fn {key, value} ->
+        "#{key}: #{encode_as_string(value, true)}"
+      end)
+
+    "{#{fields}}"
   end
 
   defp encode_named_function_call(%IR.AtomType{value: :erlang}, :andalso, [left, right], context) do
@@ -942,6 +1191,22 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp has_match_operator?(_ast), do: false
+
+  # A stacktrace frame reports the line the function currently running has
+  # reached, so each call records its own line before it is made - the way the
+  # BEAM does it. A call the AST gave no line to records nothing, and the frame
+  # keeps the line it already had.
+  defp maybe_encode_frame_line(js, nil, _context), do: js
+
+  defp maybe_encode_frame_line(js, _line, %Context{guard?: true}), do: js
+
+  defp maybe_encode_frame_line(js, line, _context) do
+    if Hologram.client_stacktraces?() do
+      "(Interpreter.setFrameLine(#{line}), #{js})"
+    else
+      js
+    end
+  end
 
   # Parses NEWER_REFERENCE_EXT binary format to extract node name, creation number, and ID words
   # See: https://www.erlang.org/doc/apps/erts/erl_ext_dist.html
