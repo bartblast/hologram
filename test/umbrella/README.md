@@ -24,4 +24,4 @@ mix deps.get
 mix holo
 ```
 
-Open http://localhost:4000, then edit the message returned by `apps/app_2/lib/app_2.ex` - the browser should reload automatically and show the new value.
+Open http://localhost:4000 and click `Fetch app_2 message` to see the current value. Then edit the message returned by `apps/app_2/lib/app_2.ex` - the browser should reload automatically, and clicking the button again should show the new value.
