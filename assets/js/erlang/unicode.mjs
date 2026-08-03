@@ -1,7 +1,6 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
-import Erlang_Lists from "./lists.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -26,7 +25,12 @@ const Erlang_Unicode = {
       return null;
     }
 
-    const flatInput = Erlang_Lists["flatten/1"](input);
+    const flatInput = Erlang_Unicode["_flatten_chardata/1"](input);
+
+    if (flatInput === null) {
+      return null;
+    }
+
     const chunks = [];
 
     for (let i = 0; i < flatInput.data.length; ++i) {
@@ -55,7 +59,36 @@ const Erlang_Unicode = {
     return Bitstring.concat(chunks);
   },
   // End _chardata_to_utf8_binary/1
-  // Deps: [:lists.flatten/1]
+  // Deps: [:unicode._flatten_chardata/1]
+
+  // Collects the elements of chardata into a flat list, answering JS null where
+  // the structure isn't chardata at all. Chardata admits a binary as the tail of
+  // an improper list, which is why lists:flatten/1 can't do this - it turns down
+  // every improper list, including the ones the BEAM reads happily.
+  // Start _flatten_chardata/1
+  "_flatten_chardata/1": (chardata) => {
+    const elems = [];
+
+    const collect = (list) => {
+      for (const elem of list.data) {
+        if (Type.isList(elem)) {
+          if (!collect(elem)) {
+            return false;
+          }
+        } else {
+          elems.push(elem);
+        }
+      }
+
+      // The tail of an improper list is its last element, so it has already
+      // been collected by the time its type is what decides the answer.
+      return list.isProper || Type.isBinary(list.data.at(-1));
+    };
+
+    return collect(chardata) ? Type.list(elems) : null;
+  },
+  // End _flatten_chardata/1
+  // Deps: []
 
   // Start characters_to_binary/1
   "characters_to_binary/1": (input) => {
@@ -396,7 +429,13 @@ const Erlang_Unicode = {
     }
 
     // List path (guaranteed to be list at this point)
-    const flatData = Erlang_Lists["flatten/1"](data).data;
+    const flatInput = Erlang_Unicode["_flatten_chardata/1"](data);
+
+    if (flatInput === null) {
+      raiseInvalidChardataError();
+    }
+
+    const flatData = flatInput.data;
     const chunks = [];
 
     // Process elements: concatenate all valid data first, then convert to codepoints.
@@ -427,7 +466,7 @@ const Erlang_Unicode = {
     return Type.list(codepoints);
   },
   // End characters_to_list/1
-  // Deps: [:lists.flatten/1]
+  // Deps: [:unicode._flatten_chardata/1]
 
   // Start characters_to_nfc_binary/1
   "characters_to_nfc_binary/1": (data) => {
@@ -688,7 +727,13 @@ const Erlang_Unicode = {
     }
 
     // List path (guaranteed to be list at this point)
-    const flatData = Erlang_Lists["flatten/1"](chardata).data;
+    const flatInput = Erlang_Unicode["_flatten_chardata/1"](chardata);
+
+    if (flatInput === null) {
+      raiseInvalidChardataError();
+    }
+
+    const flatData = flatInput.data;
     const chunks = [];
 
     // Process elements: concatenate all valid data first (combining characters
@@ -715,7 +760,7 @@ const Erlang_Unicode = {
     return Type.list(codepoints);
   },
   // End characters_to_nfc_list/1
-  // Deps: [:lists.flatten/1, :unicode.characters_to_nfc_binary/1]
+  // Deps: [:unicode._flatten_chardata/1, :unicode.characters_to_nfc_binary/1]
 
   // Start characters_to_nfd_binary/1
   "characters_to_nfd_binary/1": (data) => {

@@ -38,6 +38,21 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_binary([<<0xFF>>]) == {:error, "", <<255>>}
     end
 
+    # Chardata admits a binary as the tail of an improper list, so a list that
+    # ends in one is read, not turned down.
+    test "reads an improper list whose tail is a binary" do
+      assert :unicode.characters_to_binary([?a | <<"b">>]) == "ab"
+    end
+
+    test "raises ArgumentError for an improper list whose tail is not a binary" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_binary([?a | ?b])
+      end
+    end
+
     test "error frame carries args and error_info" do
       chardata = wrap_term(:abc)
 
@@ -434,11 +449,26 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_list(input) == expected
     end
 
+    # Chardata admits a binary as the tail of an improper list, so a list that
+    # ends in one is read, not turned down.
+    test "reads an improper list whose tail is a binary" do
+      assert :unicode.characters_to_list([?a | <<"b">>]) == ~c"ab"
+    end
+
     test "returns error tuple on negative integer code point" do
       input = [-1]
       expected = {:error, [], [-1]}
 
       assert :unicode.characters_to_list(input) == expected
+    end
+
+    test "raises ArgumentError for an improper list whose tail is not a binary" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_list([?a | ?b])
+      end
     end
 
     test "error frame carries args and error_info" do
@@ -836,6 +866,12 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       end
     end
 
+    # Chardata admits a binary as the tail of an improper list, so a list that
+    # ends in one is read, not turned down.
+    test "reads an improper list whose tail is a binary" do
+      assert :unicode.characters_to_nfc_list([?a | <<"b">>]) == ~c"ab"
+    end
+
     test "raises ArgumentError on negative integer code point" do
       input = [-1]
 
@@ -844,6 +880,15 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfc_list(input)
+      end
+    end
+
+    test "raises ArgumentError for an improper list whose tail is not a binary" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfc_list([?a | ?b])
       end
     end
 

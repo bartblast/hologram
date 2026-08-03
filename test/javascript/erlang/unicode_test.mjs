@@ -112,6 +112,28 @@ describe("Erlang_Unicode", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    // Chardata admits a binary as the tail of an improper list, so a list that
+    // ends in one is read, not turned down.
+    it("reads an improper list whose tail is a binary", () => {
+      const input = Type.improperList([Type.integer(97), Type.bitstring("b")]);
+
+      assert.deepStrictEqual(
+        Erlang_Unicode["characters_to_binary/1"](input),
+        Type.bitstring("ab"),
+      );
+    });
+
+    it("raises ArgumentError for an improper list whose tail is not a binary", () => {
+      const input = Type.improperList([Type.integer(97), Type.integer(98)]);
+
+      assertBoxedError(
+        () => Erlang_Unicode["characters_to_binary/1"](input),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
+      );
+    });
+
     it("error frame carries args and error_info", () => {
       let caught;
 
@@ -733,6 +755,14 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // Chardata admits a binary as the tail of an improper list, so a list that
+    // ends in one is read, not turned down.
+    it("reads an improper list whose tail is a binary", () => {
+      const input = Type.improperList([Type.integer(97), Type.bitstring("b")]);
+
+      assert.deepStrictEqual(fun(input), Type.charlist("ab"));
+    });
+
     it("returns error tuple on negative integer code point", () => {
       const input = Type.list([Type.integer(-1)]);
 
@@ -745,6 +775,16 @@ describe("Erlang_Unicode", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError for an improper list whose tail is not a binary", () => {
+      const input = Type.improperList([Type.integer(97), Type.integer(98)]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
+      );
     });
 
     it("error frame carries args and error_info", () => {
@@ -1322,8 +1362,26 @@ describe("Erlang_Unicode", () => {
       );
     });
 
+    // Chardata admits a binary as the tail of an improper list, so a list that
+    // ends in one is read, not turned down.
+    it("reads an improper list whose tail is a binary", () => {
+      const input = Type.improperList([Type.integer(97), Type.bitstring("b")]);
+
+      assert.deepStrictEqual(fun(input), Type.charlist("ab"));
+    });
+
     it("raises ArgumentError on negative integer code point", () => {
       const input = Type.list([Type.integer(-1)]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
+      );
+    });
+
+    it("raises ArgumentError for an improper list whose tail is not a binary", () => {
+      const input = Type.improperList([Type.integer(97), Type.integer(98)]);
 
       assertBoxedError(
         () => fun(input),
