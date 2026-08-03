@@ -672,7 +672,15 @@ function defineElixirTermErrorModule(messageLabel) {
 
 function defineGlobalModule(moduleJsName, moduleObj) {
   globalThis[moduleJsName] = moduleObj;
-  moduleObj.__exports__ = new Set(Object.keys(moduleObj));
+
+  // Every test file defines the modules again, over the same objects, so by the
+  // second one the metadata written here is an own key of the module - and left
+  // in it would name itself as something the module exports.
+  const exportedKeys = Object.keys(moduleObj).filter(
+    (key) => key !== "__exports__",
+  );
+
+  moduleObj.__exports__ = new Set(exportedKeys);
 }
 
 export function defineRuntimeGlobals() {
