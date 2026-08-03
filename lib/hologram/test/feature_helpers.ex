@@ -95,10 +95,19 @@ defmodule Hologram.Test.FeatureHelpers do
     start_time = start_time || current_time()
 
     callback = fn mounted_page ->
-      if mounted_page != inspect(expected_page) && !timed_out?(start_time) do
-        maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page)
-        :timer.sleep(100)
-        wait_for_page_mounting(session, expected_page, opts, start_time)
+      cond do
+        mounted_page == inspect(expected_page) ->
+          :ok
+
+        timed_out?(start_time) ->
+          raise Wallaby.ExpectationNotMetError,
+                "Timed out waiting for page mounting, expected #{inspect(expected_page)}, " <>
+                  "mounted #{inspect(mounted_page)}"
+
+        true ->
+          maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page)
+          :timer.sleep(100)
+          wait_for_page_mounting(session, expected_page, opts, start_time)
       end
     end
 
@@ -109,13 +118,20 @@ defmodule Hologram.Test.FeatureHelpers do
 
   defp wait_for_path(session, path, start_time \\ nil) do
     start_time = start_time || current_time()
+    current_path = Browser.current_path(session)
 
-    if Browser.current_path(session) != path && !timed_out?(start_time) do
-      :timer.sleep(100)
-      wait_for_path(session, path, start_time)
+    cond do
+      current_path == path ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for path #{path}, current path is #{current_path}"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_path(session, path, start_time)
     end
-
-    session
   end
 
   defp wait_for_sse_connection(session, start_time \\ nil) do
