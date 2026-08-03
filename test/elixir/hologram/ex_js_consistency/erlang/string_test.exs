@@ -279,9 +279,9 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
 
     test "an element that isn't a list fails the concatenation that follows it" do
-      assert_error ArgumentError,
-                   "argument error",
-                   {:erlang, :++, [[45 | :bad], ~c"-c"]}
+      assert_error ArgumentError, "argument error", fn ->
+        :string.join([~c"a", :bad, ~c"c"], ~c"-")
+      end
     end
 
     test "error frame carries args and error_info for a non-list first element" do
