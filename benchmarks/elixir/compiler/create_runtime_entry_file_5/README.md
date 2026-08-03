@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.create_runtime_entry_file/4
+Hologram.Compiler.create_runtime_entry_file/5
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">create_runtime_entry_file/4</td>
-    <td style="white-space: nowrap; text-align: right">26.28</td>
-    <td style="white-space: nowrap; text-align: right">38.05 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;10.77%</td>
-    <td style="white-space: nowrap; text-align: right">37.67 ms</td>
-    <td style="white-space: nowrap; text-align: right">51.59 ms</td>
+    <td style="white-space: nowrap">create_runtime_entry_file/5</td>
+    <td style="white-space: nowrap; text-align: right">8.67</td>
+    <td style="white-space: nowrap; text-align: right">115.28 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;11.29%</td>
+    <td style="white-space: nowrap; text-align: right">112.17 ms</td>
+    <td style="white-space: nowrap; text-align: right">159.64 ms</td>
   </tr>
 
 </table>
