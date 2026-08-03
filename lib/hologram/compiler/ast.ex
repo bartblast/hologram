@@ -23,11 +23,14 @@ defmodule Hologram.Compiler.AST do
 
   @doc """
   Returns normalized AST of the given module.
-  Specifying the module's BEAM path makes the call faster.
+  Specifying the module's BEAM path or BEAM binary makes the call faster.
   """
-  @spec for_module(module, charlist | nil) :: AST.t()
-  def for_module(module, beam_path \\ nil) do
-    input = beam_path || :code.which(module)
+  # TODO: Narrow the spec back to charlist, and rename the param back to
+  # beam_path, when Hologram.Compiler.resolve_beam_source/2 goes (see the
+  # removal note there) - nothing passes a BEAM binary here after that.
+  @spec for_module(module, charlist | binary | nil) :: AST.t()
+  def for_module(module, beam_source \\ nil) do
+    input = beam_source || :code.which(module)
 
     input
     |> BeamFile.elixir_quoted!()

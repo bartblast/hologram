@@ -36,7 +36,7 @@ defmodule Hologram.Reflection do
   def alias?(_term), do: false
 
   @doc """
-  Returns BEAM definitions for the given BEAM file path.
+  Returns BEAM definitions for the given BEAM file path or BEAM binary.
 
   ## Examples
 
@@ -61,10 +61,43 @@ defmodule Hologram.Reflection do
         ]}
       ]
   """
-  @spec beam_defs(charlist) :: list(tuple)
-  def beam_defs(beam_path) do
-    {:ok, %{definitions: definitions}} = BeamFile.debug_info(beam_path)
+  # TODO: Narrow the spec back to charlist, and rename the param back to
+  # beam_path, when beam_source/1 goes (see the removal note there) - nothing
+  # passes a BEAM binary here once the umbrella fallback is gone.
+  @spec beam_defs(charlist | binary) :: list(tuple)
+  def beam_defs(beam_source) do
+    {:ok, %{definitions: definitions}} = BeamFile.debug_info(beam_source)
     definitions
+  end
+
+  # TODO: Remove together with Hologram.Compiler.resolve_beam_source/2 (see the
+  # removal note there), consolidated_beam_removed?/1 and object_code/1 included.
+  @doc """
+  Returns the given module's BEAM code in a form accepted by BeamFile - the beam
+  file path in the common case, or the module's object code found in the code
+  path when the module was loaded from a consolidated protocol beam that no
+  longer exists. Returns nil when the BEAM code can't be located at all.
+
+  The fallback matters during dev-time recompiles: Phoenix's code reloader purges
+  stale consolidated protocol beams while the modules stay loaded, with
+  `:code.which/1` still pointing at the removed files. Only consolidated beam
+  paths are checked for existence (with a raw stat), so the per-module cost on
+  regular beams stays a substring scan without any syscall.
+  """
+  @spec beam_source(module) :: charlist | binary | nil
+  def beam_source(module) do
+    beam_path = :code.which(module)
+
+    cond do
+      not is_list(beam_path) ->
+        object_code(module)
+
+      consolidated_beam_removed?(beam_path) ->
+        object_code(module)
+
+      true ->
+        beam_path
+    end
   end
 
   @doc """
@@ -656,6 +689,27 @@ defmodule Hologram.Reflection do
     Path.join(root_dir(), "tmp")
   end
 
+  # TODO: Remove when Hologram.Compiler.resolve_beam_source/2 goes (see the
+  # removal note there), unless something else uses it by then - it exists to
+  # keep the purged-consolidated-beam fallback off the single-app path.
+  @doc """
+  Returns true if the code runs in an umbrella project, or false otherwise.
+
+  Detects the umbrella root through its apps path, a child app entered from the
+  root through its parent project file, and a child app run directly through its
+  in-umbrella deps. A child app that has no in-umbrella deps and is run directly
+  is not detected.
+
+  Requires a Mix project context (compilation or Mix tasks in any Mix env) -
+  not callable inside a release, where Mix is unavailable.
+  """
+  @spec umbrella?() :: boolean
+  def umbrella? do
+    Mix.Project.apps_paths() != nil or
+      Mix.Project.parent_umbrella_project_file() != nil or
+      Enum.any?(Mix.Dep.cached(), & &1.opts[:in_umbrella])
+  end
+
   defp apps_depending_on_hologram do
     apps =
       for {app, _description, _version} <- Application.loaded_applications(),
@@ -665,6 +719,17 @@ defmodule Hologram.Reflection do
       end
 
     Enum.sort(apps)
+  end
+
+  # TODO: Remove together with beam_source/1 (see the removal note there), which
+  # is its only caller.
+  defp consolidated_beam_removed?(beam_path) do
+    if :string.find(beam_path, ~c"/consolidated/") == :nomatch do
+      false
+    else
+      beam_path_str = to_string(beam_path)
+      not File.exists?(beam_path_str, [:raw])
+    end
   end
 
   defp include_app_elixir_modules(app, modules) do
@@ -687,6 +752,15 @@ defmodule Hologram.Reflection do
 
     # Combine both sources and remove duplicates
     Enum.uniq(modules ++ spec_modules ++ ebin_modules)
+  end
+
+  # TODO: Remove together with beam_source/1 (see the removal note there), which
+  # is its only caller.
+  defp object_code(module) do
+    case :code.get_object_code(module) do
+      {^module, binary, _beam_path} -> binary
+      :error -> nil
+    end
   end
 
   defp otp_app_from_loaded_apps do

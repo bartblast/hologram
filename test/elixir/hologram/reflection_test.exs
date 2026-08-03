@@ -74,26 +74,107 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "beam_defs/1" do
-    beam_path = :code.which(Module1)
+  describe "beam_defs/1" do
+    test "beam file path" do
+      beam_path = :code.which(Module1)
 
-    assert [
-             {{:fun_2, 2}, :def, [{:line, 7} | _column_1],
-              [
-                {[{:line, 7} | _column_2],
-                 [
-                   {:a, [{:version, 0}, {:line, 7} | _column_3], nil},
-                   {:b, [{:version, 1}, {:line, 7} | _column_4], nil}
-                 ], [],
-                 {{:., [{:line, 8} | _column_5], [:erlang, :+]}, [{:line, 8} | _column_6],
-                  [
-                    {:a, [{:version, 0}, {:line, 8} | _column_7], nil},
-                    {:b, [{:version, 1}, {:line, 8} | _column_8], nil}
-                  ]}}
-              ]},
-             {{:fun_1, 0}, :def, [{:line, 3} | _column_9],
-              [{[{:line, 3} | _column_10], [], [], :value_1}]}
-           ] = beam_defs(beam_path)
+      assert [
+               {{:fun_2, 2}, :def, [{:line, 7} | _column_1],
+                [
+                  {[{:line, 7} | _column_2],
+                   [
+                     {:a, [{:version, 0}, {:line, 7} | _column_3], nil},
+                     {:b, [{:version, 1}, {:line, 7} | _column_4], nil}
+                   ], [],
+                   {{:., [{:line, 8} | _column_5], [:erlang, :+]}, [{:line, 8} | _column_6],
+                    [
+                      {:a, [{:version, 0}, {:line, 8} | _column_7], nil},
+                      {:b, [{:version, 1}, {:line, 8} | _column_8], nil}
+                    ]}}
+                ]},
+               {{:fun_1, 0}, :def, [{:line, 3} | _column_9],
+                [{[{:line, 3} | _column_10], [], [], :value_1}]}
+             ] = beam_defs(beam_path)
+    end
+
+    # TODO: Remove when Hologram.Reflection.beam_source/1 goes (see the removal
+    # note there), together with the beam_source/1 and umbrella?/0 describes.
+    test "beam binary" do
+      {Module1, bytecode, beam_path} = :code.get_object_code(Module1)
+
+      assert beam_defs(bytecode) == beam_defs(beam_path)
+    end
+  end
+
+  # TODO: Remove this describe when Hologram.Reflection.beam_source/1 goes (see
+  # the removal note there).
+  describe "beam_source/1" do
+    test "module whose beam file exists" do
+      assert beam_source(Hologram.Reflection) == :code.which(Hologram.Reflection)
+    end
+
+    # Reproduces the state Phoenix's code reloader leaves behind when it purges a
+    # stale consolidated protocol beam: the module stays loaded from the removed
+    # file, while its object code is still findable in the code path.
+    test "loaded module whose consolidated beam was removed, with object code in the code path" do
+      module = Hologram.Test.Fixtures.Reflection.OrphanedBeamModule
+      code = "defmodule #{inspect(module)} do end"
+      [{^module, bytecode}] = Code.compile_string(code)
+
+      ebin_dir = Path.join([tmp_dir(), "tests", "reflection", "beam_source_1", "ebin"])
+      ebin_dir_charlist = String.to_charlist(ebin_dir)
+      beam_file_path = Path.join(ebin_dir, "#{module}.beam")
+
+      File.mkdir_p!(ebin_dir)
+      File.write!(beam_file_path, bytecode)
+      true = :code.add_path(ebin_dir_charlist)
+
+      {:module, ^module} =
+        :code.load_binary(module, ~c"/removed/consolidated/#{module}.beam", bytecode)
+
+      on_exit(fn ->
+        :code.del_path(ebin_dir_charlist)
+        :code.purge(module)
+        :code.delete(module)
+        File.rm_rf!(ebin_dir)
+      end)
+
+      assert beam_source(module) == bytecode
+    end
+
+    test "loaded module whose consolidated beam was removed, without object code in the code path" do
+      module = Hologram.Test.Fixtures.Reflection.VanishedBeamModule
+      code = "defmodule #{inspect(module)} do end"
+      [{^module, bytecode}] = Code.compile_string(code)
+
+      {:module, ^module} =
+        :code.load_binary(module, ~c"/removed/consolidated/#{module}.beam", bytecode)
+
+      on_exit(fn ->
+        :code.purge(module)
+        :code.delete(module)
+      end)
+
+      assert beam_source(module) == nil
+    end
+
+    # Regular (non-consolidated) beam paths are returned without checking that the
+    # file exists, so the hot compilation paths don't pay a stat per module.
+    test "loaded module whose non-consolidated beam file was removed" do
+      module = Hologram.Test.Fixtures.Reflection.MissingRegularBeamModule
+      code = "defmodule #{inspect(module)} do end"
+      [{^module, bytecode}] = Code.compile_string(code)
+
+      beam_path = ~c"/removed/ebin/#{module}.beam"
+      {:module, ^module} = :code.load_binary(module, beam_path, bytecode)
+
+      on_exit(fn ->
+        :code.purge(module)
+        :code.delete(module)
+      end)
+
+      assert beam_source(module) == beam_path
+    end
   end
 
   test "build_dir/0" do
@@ -697,5 +778,24 @@ defmodule Hologram.ReflectionTest do
 
   test "tmp_dir/0" do
     assert tmp_dir() == File.cwd!() <> "/tmp"
+  end
+
+  # TODO: Remove this describe when Hologram.Reflection.umbrella?/0 goes (see the
+  # removal note there).
+  describe "umbrella?/0" do
+    test "single-app project" do
+      refute umbrella?()
+    end
+
+    test "umbrella project root" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+
+      result =
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          umbrella?()
+        end)
+
+      assert result == true
+    end
   end
 end
