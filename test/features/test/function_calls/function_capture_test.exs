@@ -97,7 +97,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCaptureTest do
   feature "arity invalid, called with no args", %{session: session} do
     assert_client_error session,
                         BadArityError,
-                        ~r"^#Function<\d+\.\d+/2 in #{inspect(FunctionCapturePage)}\.action/3> with arity 2 called with no arguments$",
+                        ~r"^#Function<\d+\.\d+/2 in #{Regex.escape(inspect(FunctionCapturePage))}\.action/3> with arity 2 called with no arguments$",
                         fn ->
                           session
                           |> visit(FunctionCapturePage)
@@ -108,7 +108,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCaptureTest do
   feature "arity invalid, called with single arg", %{session: session} do
     assert_client_error session,
                         BadArityError,
-                        ~r"^#Function<\d+\.\d+/2 in #{inspect(FunctionCapturePage)}\.action/3> with arity 2 called with 1 argument \(:a\)$",
+                        ~r"^#Function<\d+\.\d+/2 in #{Regex.escape(inspect(FunctionCapturePage))}\.action/3> with arity 2 called with 1 argument \(:a\)$",
                         fn ->
                           session
                           |> visit(FunctionCapturePage)
@@ -119,7 +119,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCaptureTest do
   feature "arity invalid, called with multiple args", %{session: session} do
     assert_client_error session,
                         BadArityError,
-                        ~r"^#Function<\d+\.\d+/1 in #{inspect(FunctionCapturePage)}\.action/3> with arity 1 called with 2 arguments \(:a, :b\)$",
+                        ~r"^#Function<\d+\.\d+/1 in #{Regex.escape(inspect(FunctionCapturePage))}\.action/3> with arity 1 called with 2 arguments \(:a, :b\)$",
                         fn ->
                           session
                           |> visit(FunctionCapturePage)
