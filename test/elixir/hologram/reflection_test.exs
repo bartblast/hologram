@@ -50,6 +50,14 @@ defmodule Hologram.ReflectionTest do
        vsn: ~c"0.0.0"}
 
     :ok = :application.load(spec)
+
+    on_exit(fn -> :application.unload(app) end)
+  end
+
+  defp put_env_with_cleanup(app, key, value) do
+    Application.put_env(app, key, value)
+
+    on_exit(fn -> Application.delete_env(app, key) end)
   end
 
   describe "alias?/1" do
@@ -458,15 +466,13 @@ defmodule Hologram.ReflectionTest do
         end)
 
       assert result == :otp_app_fixture_a
-
-      :application.unload(:otp_app_fixture_a)
     end
 
     test "umbrella project with multiple apps depending on Hologram, one owning a Phoenix endpoint" do
       umbrella_dir = Path.join(@fixtures_dir, "umbrella")
       load_app_depending_on_hologram(:otp_app_fixture_b)
       load_app_depending_on_hologram(:otp_app_fixture_c)
-      Application.put_env(:otp_app_fixture_c, Module7, [])
+      put_env_with_cleanup(:otp_app_fixture_c, Module7, [])
 
       result =
         Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
@@ -474,10 +480,6 @@ defmodule Hologram.ReflectionTest do
         end)
 
       assert result == :otp_app_fixture_c
-
-      Application.delete_env(:otp_app_fixture_c, Module7)
-      :application.unload(:otp_app_fixture_b)
-      :application.unload(:otp_app_fixture_c)
     end
 
     test "umbrella project with multiple apps depending on Hologram, none owning a Phoenix endpoint" do
@@ -490,28 +492,20 @@ defmodule Hologram.ReflectionTest do
           otp_app()
         end)
       end
-
-      :application.unload(:otp_app_fixture_d)
-      :application.unload(:otp_app_fixture_e)
     end
 
     test "umbrella project with multiple apps depending on Hologram, all owning Phoenix endpoints" do
       umbrella_dir = Path.join(@fixtures_dir, "umbrella")
       load_app_depending_on_hologram(:otp_app_fixture_f)
       load_app_depending_on_hologram(:otp_app_fixture_g)
-      Application.put_env(:otp_app_fixture_f, Module7, [])
-      Application.put_env(:otp_app_fixture_g, Module7, [])
+      put_env_with_cleanup(:otp_app_fixture_f, Module7, [])
+      put_env_with_cleanup(:otp_app_fixture_g, Module7, [])
 
       assert_raise RuntimeError, ~r/one endpoint app per running BEAM instance/, fn ->
         Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
           otp_app()
         end)
       end
-
-      Application.delete_env(:otp_app_fixture_f, Module7)
-      Application.delete_env(:otp_app_fixture_g, Module7)
-      :application.unload(:otp_app_fixture_f)
-      :application.unload(:otp_app_fixture_g)
     end
 
     test "umbrella project with no apps depending on Hologram" do
@@ -540,8 +534,6 @@ defmodule Hologram.ReflectionTest do
         end)
 
       assert result == Path.join(umbrella_dir, "apps/app_a")
-
-      :application.unload(:app_a)
     end
 
     test "umbrella project child app" do
@@ -585,11 +577,9 @@ defmodule Hologram.ReflectionTest do
 
   describe "phoenix_endpoint/0" do
     test "there is a config entry for the given Phoenix endpoint module" do
-      Application.put_env(:hologram, Module7, [])
+      put_env_with_cleanup(:hologram, Module7, [])
 
       assert phoenix_endpoint() == Module7
-
-      Application.delete_env(:hologram, Module7)
     end
 
     test "there is no config entry for the given Phoenix endpoint module" do
@@ -597,11 +587,9 @@ defmodule Hologram.ReflectionTest do
     end
 
     test "ignores config entries whose keys are not Phoenix endpoint modules" do
-      Application.put_env(:hologram, Module1, [])
+      put_env_with_cleanup(:hologram, Module1, [])
 
       assert phoenix_endpoint() == nil
-
-      Application.delete_env(:hologram, Module1)
     end
   end
 
