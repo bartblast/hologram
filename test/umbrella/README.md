@@ -10,7 +10,7 @@ App structure:
 
 ## Running the tests
 
-```
+```sh
 mix deps.get
 mix test
 ```
@@ -19,7 +19,7 @@ mix test
 
 Live reload can't be reliably automated (it requires editing source files while the server runs), so verify it manually:
 
-```
+```sh
 mix deps.get
 mix holo
 ```
