@@ -29,6 +29,13 @@ describe("HologramBoxedError", () => {
   });
 
   describe("error kind (default)", () => {
+    // A test that stands a module up for derivation to find has to take it back
+    // down whatever the outcome, since defineRuntimeGlobals() only fills gaps
+    // and would leave a stray one standing for every test that follows.
+    afterEach(() => {
+      delete globalThis.Elixir_MyBlamedType;
+    });
+
     it("defaults the kind to :error", () => {
       const struct = Type.errorStruct("MyType", "my message");
       const error = new HologramBoxedError(struct);
@@ -107,8 +114,6 @@ describe("HologramBoxedError", () => {
 
       const struct = Type.errorStruct("MyBlamedType", "my message");
       const error = new HologramBoxedError(struct);
-
-      delete globalThis.Elixir_MyBlamedType;
 
       assert.deepStrictEqual(error.struct, struct);
 
