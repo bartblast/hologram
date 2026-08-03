@@ -81,6 +81,8 @@ jobs:
       # Step: Checkout the code.
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # Step: Setup Node.js.
       - name: Set up Node.js
@@ -267,6 +269,8 @@ jobs:
       # Step: Checkout the code.
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # Step: Setup Node.js.
       - name: Set up Node.js
@@ -451,6 +455,8 @@ jobs:
       # Step: Checkout the code.
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # Step: Setup Node.js.
       - name: Set up Node.js
