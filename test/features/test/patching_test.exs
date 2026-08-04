@@ -6,6 +6,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page1
   alias HologramFeatureTests.Patching.Page10
   alias HologramFeatureTests.Patching.Page11
+  alias HologramFeatureTests.Patching.Page12
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
@@ -824,14 +825,14 @@ defmodule HologramFeatureTests.PatchingTest do
   end
 
   describe "sibling identity across block boundaries" do
-    @panels ["input_a", "input_b", "input_c"]
-
     feature "stateful siblings survive a conditional toggle", %{session: session} do
+      inputs = ["input_a", "input_b", "input_c"]
+
       # Each input is tagged with a property the diff never reads, so it lives exactly as long as
       # the DOM node does. The keeper wrapper is tagged too, which is what makes it possible to see
       # a keeper repurposed into a banner rather than merely replaced.
       mark_nodes = """
-      #{inspect(@panels)}.forEach((id) => {
+      #{inspect(inputs)}.forEach((id) => {
         const input = document.getElementById(id);
         input.__probe = id;
         input.closest(".keeper").__probe = id;
@@ -844,7 +845,7 @@ defmodule HologramFeatureTests.PatchingTest do
       toggle = ~s|document.querySelector("button").click();|
 
       kept_nodes = """
-      return #{inspect(@panels)}.filter((id) => document.getElementById(id).__probe === id);
+      return #{inspect(inputs)}.filter((id) => document.getElementById(id).__probe === id);
       """
 
       repurposed_keepers = """
@@ -870,7 +871,61 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_input_value("#input_a", "typed a")
       |> assert_input_value("#input_b", "typed b")
       |> assert_input_value("#input_c", "typed c")
-      |> assert_script_result(kept_nodes, @panels)
+      |> assert_script_result(kept_nodes, inputs)
+      |> assert_script_result(repurposed_keepers, [])
+      |> assert_script_result(~s|return document.activeElement.id;|, "input_a")
+    end
+
+    feature "stateful siblings survive a branch switch", %{session: session} do
+      inputs = ["input_a", "input_b"]
+
+      mark_nodes = """
+      #{inspect(inputs)}.forEach((id) => {
+        const input = document.getElementById(id);
+        input.__probe = id;
+        input.closest(".keeper").__probe = id;
+      });
+      document.getElementById("input_a").focus();
+      """
+
+      switch = ~s|document.querySelector("button").click();|
+
+      kept_nodes = """
+      return #{inspect(inputs)}.filter((id) => document.getElementById(id).__probe === id);
+      """
+
+      repurposed_keepers = """
+      return ["panel_a", "panel_b"].filter((id) =>
+        [...document.querySelectorAll(`#${id} .branch`)].some((el) => el.__probe !== undefined),
+      );
+      """
+
+      session =
+        session
+        |> visit(Page12)
+        |> assert_text(css("#result"), "true")
+        |> fill_in(css("#input_a"), with: "typed a")
+        |> fill_in(css("#input_b"), with: "typed b")
+
+      script_result(session, mark_nodes)
+      script_result(session, switch)
+
+      session =
+        session
+        |> assert_text(css("#result"), "false")
+        |> assert_input_value("#input_a", "typed a")
+        |> assert_input_value("#input_b", "typed b")
+        |> assert_script_result(kept_nodes, inputs)
+        |> assert_script_result(repurposed_keepers, [])
+        |> assert_script_result(~s|return document.activeElement.id;|, "input_a")
+
+      script_result(session, switch)
+
+      session
+      |> assert_text(css("#result"), "true")
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_script_result(kept_nodes, inputs)
       |> assert_script_result(repurposed_keepers, [])
       |> assert_script_result(~s|return document.activeElement.id;|, "input_a")
     end
