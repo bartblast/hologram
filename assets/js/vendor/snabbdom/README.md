@@ -3,6 +3,10 @@
 Version 3.6.4, MIT licensed - see LICENSE. Copied verbatim from the npm package's `build`
 directory, which is the compiled ESM the package publishes.
 
+The `.js.map` and `.d.ts` files are dropped. The source maps point at `../src/*.ts`, which the
+package does not ship, so every one of them is broken, and nothing here reads the type
+declarations. The `.js` files are untouched.
+
 ## Why it is vendored
 
 Hologram renders template blocks as fragment vnodes, which snabbdom supports only behind
@@ -28,5 +32,6 @@ why. Nothing yet.
 
 ## Updating
 
-Replace `build/` and `LICENSE` with the new release verbatim in one commit, then re-apply each
-deviation above in its own commit. Anything since fixed upstream is simply dropped.
+Replace `build/` and `LICENSE` with the new release verbatim, delete the `.js.map` and `.d.ts`
+files, and commit that as one step. Then re-apply each deviation above in its own commit,
+dropping anything since fixed upstream.
