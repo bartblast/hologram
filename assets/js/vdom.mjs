@@ -9,11 +9,36 @@ import {
 
 const patch = init([attributesModule, eventListenersModule]);
 
+// Marker text of a block anchor comment, e.g. "[h:1a2b3c:0:o]" - four bracketed segments:
+//
+//   h       namespace, distinguishing an anchor from an ordinary comment
+//   1a2b3c  hash of the template module the block was written in
+//   0       index of the block within that template
+//   o       side of the pair, "o" opening or "c" closing
+//
+// The module hash is what keeps keys unique: slot splicing merges nodes from different templates
+// into one children list, where bare block indexes would collide.
+//
+// Anchors bracket a template block so that changing how many nodes the block renders can't shift
+// the identity of the block's siblings. The diff pairs keyless children by tag and position, so
+// an unbracketed block that starts rendering an extra node lets a sibling be matched against the
+// block's content and rebuilt, destroying focus, scroll position and media state.
+//
+// The marker doubles as the vnode key: keys must survive HTML serialization, since the client
+// diffs against a vdom derived from server-rendered markup, and a comment's own text is the only
+// carrier that round-trips. Unkeyed anchors would be matched against unrelated comments, which
+// desyncs the pairing and reopens the same failure.
+const ANCHOR_KEY_REGEX = /^\[h:[a-z0-9]+:\d+:[oc]\]$/;
+
 export default class Vdom {
-  static addKeysToLinkAndScriptVnodes(node) {
+  static addKeysToVnodes(node) {
     let key;
 
     switch (node.sel) {
+      case "!":
+        key = $.anchorKey(node.text);
+        break;
+
       case "link":
         if (
           node.data?.attrs?.href &&
@@ -40,9 +65,17 @@ export default class Vdom {
 
     if (Array.isArray(node.children)) {
       for (const childNode of node.children) {
-        Vdom.addKeysToLinkAndScriptVnodes(childNode);
+        Vdom.addKeysToVnodes(childNode);
       }
     }
+  }
+
+  // Returns the vnode key carried by a block anchor comment's text, or null when the text belongs
+  // to an ordinary comment.
+  static anchorKey(text) {
+    return typeof text === "string" && ANCHOR_KEY_REGEX.test(text)
+      ? text
+      : null;
   }
 
   static from(html) {
@@ -97,7 +130,11 @@ export default class Vdom {
     }
 
     if (node.nodeType === Node.COMMENT_NODE) {
-      return vnode("!", node.textContent);
+      const key = $.anchorKey(node.textContent);
+
+      return key
+        ? vnode("!", {key: key}, node.textContent)
+        : vnode("!", node.textContent);
     }
 
     const children = Array.from(node.childNodes).map(
