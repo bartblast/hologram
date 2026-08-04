@@ -273,6 +273,36 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("numbers repeated block anchor markers in one list", () => {
+      // <!--[h:1a2b3c:0:o]--><!--[h:1a2b3c:0:o]-->
+      const anchor = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring("[h:1a2b3c:0:o]")]),
+        ]),
+      ]);
+
+      const node = Type.list([anchor, anchor]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        result.map((child) => child.key),
+        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]:1"],
+      );
+
+      assert.deepStrictEqual(
+        result.map((child) => child.text),
+        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]"],
+      );
+    });
+
     it("with nested stateful components", () => {
       const cid3 = Type.bitstring("component_3");
       const cid7 = Type.bitstring("component_7");
