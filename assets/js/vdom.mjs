@@ -74,7 +74,7 @@ export default class Vdom {
         Vdom.addKeysToVnodes(childNode);
       }
 
-      $.dedupeMarkerKeys(node.children);
+      node.children = $.groupBlockFragments($.dedupeMarkerKeys(node.children));
     }
   }
 
@@ -157,14 +157,13 @@ export default class Vdom {
         children.slice(index + 1, closeIndex),
       );
 
-      const blockFragment = fragment([
-        child,
-        ...interior,
-        children[closeIndex],
-      ]);
+      const closingChild = children[closeIndex];
+
+      const blockFragment = fragment([child, ...interior, closingChild]);
 
       blockFragment.key = openKey;
       blockFragment.data.key = openKey;
+      blockFragment.elm = $.#fragmentElm(child, closingChild);
 
       grouped.push(blockFragment);
       index = closeIndex + 1;
@@ -233,8 +232,10 @@ export default class Vdom {
         : vnode("!", node.textContent);
     }
 
-    const children = $.dedupeMarkerKeys(
-      Array.from(node.childNodes).map(Vdom.#buildVnodeFromDomNode),
+    const children = $.groupBlockFragments(
+      $.dedupeMarkerKeys(
+        Array.from(node.childNodes).map(Vdom.#buildVnodeFromDomNode),
+      ),
     );
 
     const attrs = {};
@@ -260,6 +261,30 @@ export default class Vdom {
     }
 
     return vnode(tagName, data, children);
+  }
+
+  // The live node a fragment stands for, or undefined when there isn't one.
+  //
+  // A fragment grouped out of vnodes that already carry live nodes - the boot walk over the
+  // server-rendered page - has to stand for the span those nodes occupy, because it is the old
+  // side of the first patch and the diff resolves a fragment's real parent through it. A
+  // DocumentFragment empties itself once inserted, so the boundary nodes and the parent are
+  // recorded on it, which is the same bookkeeping the diff does for fragments it creates itself.
+  //
+  // Vnodes built from parsed markup carry no live nodes: they are only ever the new side of a
+  // patch, where the diff assigns them.
+  static #fragmentElm(openingChild, closingChild) {
+    if (!openingChild.elm) {
+      return undefined;
+    }
+
+    const elm = document.createDocumentFragment();
+
+    elm.parent = openingChild.elm.parentNode;
+    elm.firstChildNode = openingChild.elm;
+    elm.lastChildNode = closingChild.elm;
+
+    return elm;
   }
 
   // We're checking html element children,

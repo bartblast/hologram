@@ -80,13 +80,17 @@ describe("Vdom", () => {
 
         Vdom.addKeysToVnodes(node);
 
+        // The marked span is gathered into one keyed fragment.
+        assert.equal(node.children.length, 1);
+
+        const blockFragment = node.children[0];
+
+        assert.isUndefined(blockFragment.sel);
+        assert.equal(blockFragment.key, "[h:1a2b3c:0:o]");
+
         assert.deepStrictEqual(
-          node,
-          vnode("div", {}, [
-            vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
-            vnode("img", {attrs: {src: "my_src"}}, []),
-            vnode("!", {key: "[h:1a2b3c:0:c]"}, "[h:1a2b3c:0:c]"),
-          ]),
+          blockFragment.children.map((child) => child.key ?? child.sel),
+          ["[h:1a2b3c:0:o]", "img", "[h:1a2b3c:0:c]"],
         );
       });
     });
@@ -344,16 +348,18 @@ describe("Vdom", () => {
         "<html><body><!--[h:1a2b3c:0:o]--><!-- my comment --><!--[h:1a2b3c:0:c]--></body></html>",
       );
 
-      const expected = vnode("html", {attrs: {}}, [
-        vnode("head", {attrs: {}}, []),
-        vnode("body", {attrs: {}}, [
-          vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
-          vnode("!", " my comment "),
-          vnode("!", {key: "[h:1a2b3c:0:c]"}, "[h:1a2b3c:0:c]"),
-        ]),
-      ]);
+      const body = result.children[1];
 
-      assert.deepStrictEqual(result, expected);
+      assert.equal(body.children.length, 1);
+
+      const blockFragment = body.children[0];
+
+      assert.equal(blockFragment.key, "[h:1a2b3c:0:o]");
+
+      assert.deepStrictEqual(
+        blockFragment.children.map((child) => child.key ?? child.text),
+        ["[h:1a2b3c:0:o]", " my comment ", "[h:1a2b3c:0:c]"],
+      );
     });
 
     describe("link element vnode key", () => {
@@ -675,6 +681,33 @@ describe("Vdom", () => {
       const result = Vdom.groupBlockFragments(children);
 
       assert.deepStrictEqual(keysOf(result), ["[h:1a2b3c:0:o]", "p"]);
+    });
+
+    it("fragment grouped from live nodes stands for the span they occupy", () => {
+      const container = document.createElement("div");
+      container.innerHTML = "<!--[h:1a2b3c:0:o]--><p></p><!--[h:1a2b3c:0:c]-->";
+
+      const [openNode, contentNode, closeNode] = [...container.childNodes];
+
+      const children = [
+        {...marker("[h:1a2b3c:0:o]"), elm: openNode},
+        {...vnode("p", {attrs: {}}, []), elm: contentNode},
+        {...marker("[h:1a2b3c:0:c]"), elm: closeNode},
+      ];
+
+      const [blockFragment] = Vdom.groupBlockFragments(children);
+
+      assert.equal(blockFragment.elm.nodeType, 11);
+      assert.equal(blockFragment.elm.parent, container);
+      assert.equal(blockFragment.elm.firstChildNode, openNode);
+      assert.equal(blockFragment.elm.lastChildNode, closeNode);
+    });
+
+    it("fragment grouped from parsed markup has no live node", () => {
+      const children = [marker("[h:1a2b3c:0:o]"), marker("[h:1a2b3c:0:c]")];
+      const [blockFragment] = Vdom.groupBlockFragments(children);
+
+      assert.isUndefined(blockFragment.elm);
     });
 
     it("ordinary comments are left alone", () => {
