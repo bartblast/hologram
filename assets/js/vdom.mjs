@@ -299,6 +299,12 @@ export default class Vdom {
     return vnode.sel?.[0] === "h";
   }
 
+  // The marker text a key was built from, with any number added for a repeat dropped, so that
+  // every rendering of one block compares equal.
+  static #markerBaseKey(key) {
+    return key.slice(0, key.indexOf("]") + 1);
+  }
+
   // The opening side of a marker pair, or null for anything else. Read off the key rather than
   // the comment's text, so a key renumbered for a repeat still pairs with its own closing side.
   static #markerOpenKey(child) {
@@ -307,12 +313,6 @@ export default class Vdom {
       child.key.includes(":o]")
       ? child.key
       : null;
-  }
-
-  // The marker text a key was built from, with any number added for a repeat dropped, so that
-  // every rendering of one block compares equal.
-  static #markerBaseKey(key) {
-    return key.slice(0, key.indexOf("]") + 1);
   }
 
   // The closing side matching the given opening key, or -1.
