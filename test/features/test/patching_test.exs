@@ -7,6 +7,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page10
   alias HologramFeatureTests.Patching.Page11
   alias HologramFeatureTests.Patching.Page12
+  alias HologramFeatureTests.Patching.Page13
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
@@ -928,6 +929,60 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_script_result(kept_nodes, inputs)
       |> assert_script_result(repurposed_keepers, [])
       |> assert_script_result(~s|return document.activeElement.id;|, "input_a")
+    end
+
+    feature "stateful siblings survive loop changes", %{session: session} do
+      inputs = ["input_a", "input_b"]
+
+      mark_nodes = """
+      #{inspect(inputs)}.forEach((id) => {
+        document.getElementById(id).__probe = id;
+      });
+      """
+
+      kept_nodes = """
+      return #{inspect(inputs)}.filter((id) => document.getElementById(id).__probe === id);
+      """
+
+      session =
+        session
+        |> visit(Page13)
+        |> click(button("Add item"))
+        |> click(button("Add item"))
+        |> assert_text(css("#result"), "item 1, item 2, item 3")
+        |> fill_in(css("#input_a"), with: "typed a")
+        |> fill_in(css("#input_b"), with: "typed b")
+
+      script_result(session, mark_nodes)
+
+      # Switching the conditional inside the loop body renders the same marker once per item, so
+      # this is the patch that throws when repeated keys reach the diff unnumbered. It takes three
+      # of them: with two the diff realigns on its own and the failure does not surface.
+      session =
+        session
+        |> click(button("Toggle badges"))
+        |> assert_count(".badge", 0)
+        |> assert_input_value("#input_a", "typed a")
+        |> assert_input_value("#input_b", "typed b")
+        |> assert_script_result(kept_nodes, inputs)
+        |> click(button("Toggle badges"))
+        |> assert_count(".badge", 3)
+        |> assert_input_value("#input_a", "typed a")
+        |> assert_input_value("#input_b", "typed b")
+        |> assert_script_result(kept_nodes, inputs)
+
+      session
+      |> click(button("Add item"))
+      |> assert_text(css("#result"), "item 1, item 2, item 3, item 4")
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_script_result(kept_nodes, inputs)
+      |> click(button("Remove item"))
+      |> click(button("Remove item"))
+      |> assert_text(css("#result"), "item 1, item 2")
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_script_result(kept_nodes, inputs)
     end
   end
 end
