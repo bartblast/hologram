@@ -87,11 +87,15 @@ defmodule Hologram.Template.DOM do
   # markup: the client diffs against a virtual DOM derived from server-rendered HTML, and a
   # comment's own text is the only carrier that survives serialization. The client recognizes the
   # same format in Vdom.anchorKey/1.
-  defp anchor_tags(hash, index, side) do
+  #
+  # Takes the tags that follow the anchor, so an opening anchor can be built in front of its block
+  # without appending to the list it just built.
+  defp anchor_tags(hash, index, side, tail \\ []) do
     [
       :public_comment_start,
       {:text, "[h:#{hash}:#{index}:#{side}]"},
       :public_comment_end
+      | tail
     ]
   end
 
@@ -144,7 +148,7 @@ defmodule Hologram.Template.DOM do
 
   defp inject_block_anchors({:block_start, {block_name, _expr}} = tag, {index, open, 0}, hash)
        when block_name in @anchored_blocks do
-    {anchor_tags(hash, index, "o") ++ [tag], {index + 1, [index | open], 0}}
+    {anchor_tags(hash, index, "o", [tag]), {index + 1, [index | open], 0}}
   end
 
   defp inject_block_anchors(
