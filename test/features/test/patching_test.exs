@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.PatchingTest do
 
   alias HologramFeatureTests.Patching.Page1
   alias HologramFeatureTests.Patching.Page10
+  alias HologramFeatureTests.Patching.Page11
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
@@ -819,6 +820,59 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_input_value("#select", "")
       |> refute_has(css("#select_option_1[selected]"))
       |> refute_has(css("#select_option_2[selected]"))
+    end
+  end
+
+  describe "sibling identity across block boundaries" do
+    @panels ["input_a", "input_b", "input_c"]
+
+    feature "stateful siblings survive a conditional toggle", %{session: session} do
+      # Each input is tagged with a property the diff never reads, so it lives exactly as long as
+      # the DOM node does. The keeper wrapper is tagged too, which is what makes it possible to see
+      # a keeper repurposed into a banner rather than merely replaced.
+      mark_nodes = """
+      #{inspect(@panels)}.forEach((id) => {
+        const input = document.getElementById(id);
+        input.__probe = id;
+        input.closest(".keeper").__probe = id;
+      });
+      document.getElementById("input_a").focus();
+      """
+
+      # Clicked from a script rather than by the driver so the button never takes focus: any focus
+      # loss below is then caused by the patch, which is the thing under test.
+      toggle = ~s|document.querySelector("button").click();|
+
+      kept_nodes = """
+      return #{inspect(@panels)}.filter((id) => document.getElementById(id).__probe === id);
+      """
+
+      repurposed_keepers = """
+      return ["panel_a", "panel_b", "panel_c"].filter(
+        (id) => document.querySelector(`#${id} .banner`).__probe !== undefined,
+      );
+      """
+
+      session =
+        session
+        |> visit(Page11)
+        |> assert_text(css("#result"), "false")
+        |> fill_in(css("#input_a"), with: "typed a")
+        |> fill_in(css("#input_b"), with: "typed b")
+        |> fill_in(css("#input_c"), with: "typed c")
+
+      script_result(session, mark_nodes)
+      script_result(session, toggle)
+
+      session
+      |> assert_text(css("#result"), "true")
+      |> assert_count(".banner", 3)
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_input_value("#input_c", "typed c")
+      |> assert_script_result(kept_nodes, @panels)
+      |> assert_script_result(repurposed_keepers, [])
+      |> assert_script_result(~s|return document.activeElement.id;|, "input_a")
     end
   end
 end
