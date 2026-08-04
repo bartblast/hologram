@@ -6,7 +6,7 @@ import {
   fragment,
   h as vnode,
   init,
-} from "snabbdom";
+} from "./vendor/snabbdom/build/index.js";
 
 // Fragments let a block occupy exactly one position in its parent's children list however many
 // nodes it renders, so its siblings never shift and never get paired with the block's content.

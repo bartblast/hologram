@@ -61,7 +61,7 @@ import ManuallyPortedElixirStringTokenizer from "./elixir/string/tokenizer.mjs";
 import ManuallyPortedElixirTask from "./elixir/task.mjs";
 import ManuallyPortedElixirURI from "./elixir/uri.mjs";
 
-import {toVNode} from "snabbdom";
+import {toVNode} from "./vendor/snabbdom/build/index.js";
 
 // TODO: test
 export default class Hologram {

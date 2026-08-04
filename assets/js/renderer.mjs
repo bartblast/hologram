@@ -18,7 +18,7 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 import Vdom from "./vdom.mjs";
 
-import {h as vnode} from "snabbdom";
+import {h as vnode} from "./vendor/snabbdom/build/index.js";
 import vnodeToHtml from "snabbdom-to-html";
 
 export default class Renderer {
