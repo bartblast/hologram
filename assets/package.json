@@ -2,7 +2,7 @@
   "dependencies": {
     "esbuild": "^0.28",
     "lodash": "^4",
-    "snabbdom": "^3",
+    "snabbdom": "3.6.4",
     "snabbdom-to-html": "^7"
   },
   "devDependencies": {
