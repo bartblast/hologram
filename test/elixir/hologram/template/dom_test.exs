@@ -2109,6 +2109,24 @@ defmodule Hologram.Template.DOMTest do
                {:public_comment, [text: "[h:h1bmt3:0:c]"]}
              ]
     end
+
+    test "anchor markers do not depend on line endings" do
+      # {%if @aaa}bbb
+      # ccc{/if}, checked out with Unix and with Windows line endings
+      lf_tags = [
+        {:block_start, {"if", "{ @aaa}"}},
+        {:text, "bbb\nccc"},
+        {:block_end, "if"}
+      ]
+
+      crlf_tags = [
+        {:block_start, {"if", "{ @aaa}"}},
+        {:text, "bbb\r\nccc"},
+        {:block_end, "if"}
+      ]
+
+      assert anchor_markers(build_ast(lf_tags)) == anchor_markers(build_ast(crlf_tags))
+    end
   end
 
   describe "build_ast/1, raw block" do
@@ -2309,5 +2327,12 @@ defmodule Hologram.Template.DOMTest do
                 ]}
              }
            ]
+  end
+
+  defp anchor_markers(ast) do
+    ast
+    |> inspect(limit: :infinity)
+    |> then(&Regex.scan(~r/\[h:[a-z0-9]+:\d+:[oc]\]/, &1))
+    |> List.flatten()
   end
 end

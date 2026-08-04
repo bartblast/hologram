@@ -1,6 +1,7 @@
 defmodule Hologram.Template.DOM do
   @moduledoc false
 
+  alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.AST
   alias Hologram.Template.EventModifiers
   alias Hologram.Template.Helpers
@@ -194,6 +195,25 @@ defmodule Hologram.Template.DOM do
     end
   end
 
+  # Templates checked out on Windows carry CRLF line endings, which would otherwise give the same
+  # template a different hash per platform, so anchor markers could not be asserted verbatim.
+  defp normalize_newlines(term) when is_binary(term) do
+    StringUtils.normalize_newlines(term)
+  end
+
+  defp normalize_newlines(term) when is_list(term) do
+    Enum.map(term, &normalize_newlines/1)
+  end
+
+  defp normalize_newlines(term) when is_tuple(term) do
+    term
+    |> Tuple.to_list()
+    |> Enum.map(&normalize_newlines/1)
+    |> List.to_tuple()
+  end
+
+  defp normalize_newlines(term), do: term
+
   defp render_attribute_code({:spread, templ_expr}, _tag_type) do
     "{:spread, #{normalize_implicit_keyword_list(templ_expr)}}"
   end
@@ -322,6 +342,7 @@ defmodule Hologram.Template.DOM do
   # architecture and ERTS version, which is what lets tests assert marker text verbatim.
   defp template_hash(tags) do
     tags
+    |> normalize_newlines()
     |> :erlang.phash2(4_294_967_296)
     |> Integer.to_string(36)
     |> String.downcase()
