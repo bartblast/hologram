@@ -309,16 +309,42 @@ export default class Vdom {
       : null;
   }
 
-  // The closing side matching the given opening key, or -1. A block never contains itself and
-  // repeats are renumbered before this runs, so the first key match is the right one.
+  // The marker text a key was built from, with any number added for a repeat dropped, so that
+  // every rendering of one block compares equal.
+  static #markerBaseKey(key) {
+    return key.slice(0, key.indexOf("]") + 1);
+  }
+
+  // The closing side matching the given opening key, or -1.
+  //
+  // Counts depth rather than taking the first close, because a block can contain itself: a
+  // component whose template holds a block that renders the component again, with nothing between
+  // them, splices both renderings into one children list, and both carry the block's marker. The
+  // numbering that keeps their keys unique runs outwards on the opening sides and inwards on the
+  // closing ones, so an opening side cannot find its own close by name either.
   static #matchingCloseIndex(children, openIndex, openKey) {
-    const closeKey = openKey.replace(":o]", ":c]");
+    const baseOpenKey = $.#markerBaseKey(openKey);
+    const baseCloseKey = baseOpenKey.replace(":o]", ":c]");
+
+    let depth = 1;
 
     for (let index = openIndex + 1; index < children.length; index += 1) {
       const child = children[index];
 
-      if (child?.sel === "!" && child.key === closeKey) {
-        return index;
+      if (child?.sel !== "!" || typeof child.key !== "string") {
+        continue;
+      }
+
+      const baseKey = $.#markerBaseKey(child.key);
+
+      if (baseKey === baseOpenKey) {
+        depth += 1;
+      } else if (baseKey === baseCloseKey) {
+        depth -= 1;
+
+        if (depth === 0) {
+          return index;
+        }
       }
     }
 

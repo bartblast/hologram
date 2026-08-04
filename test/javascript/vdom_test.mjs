@@ -675,6 +675,86 @@ describe("Vdom", () => {
       ]);
     });
 
+    it("same block nested inside itself pairs by depth", () => {
+      // A component whose template holds a block that renders the component again, with nothing
+      // between them, splices both renderings into one children list under the same marker.
+      const children = [
+        marker("[h:1a2b3c:0:o]"),
+        marker("[h:1a2b3c:0:o]"),
+        vnode("p", {attrs: {}}, []),
+        marker("[h:1a2b3c:0:c]"),
+        marker("[h:1a2b3c:0:c]"),
+      ];
+
+      Vdom.dedupeMarkerKeys(children);
+
+      const result = Vdom.groupBlockFragments(children);
+
+      assert.deepStrictEqual(keysOf(result), ["[h:1a2b3c:0:o]"]);
+
+      const outer = result[0];
+
+      assert.deepStrictEqual(keysOf(outer.children), [
+        "[h:1a2b3c:0:o]",
+        "[h:1a2b3c:0:o]:1",
+        "[h:1a2b3c:0:c]:1",
+      ]);
+
+      assert.deepStrictEqual(keysOf(outer.children[1].children), [
+        "[h:1a2b3c:0:o]:1",
+        "p",
+        "[h:1a2b3c:0:c]",
+      ]);
+    });
+
+    it("same block nested inside itself twice over", () => {
+      const children = [
+        marker("[h:1a2b3c:0:o]"),
+        marker("[h:1a2b3c:0:o]"),
+        marker("[h:1a2b3c:0:o]"),
+        vnode("p", {attrs: {}}, []),
+        marker("[h:1a2b3c:0:c]"),
+        marker("[h:1a2b3c:0:c]"),
+        marker("[h:1a2b3c:0:c]"),
+      ];
+
+      Vdom.dedupeMarkerKeys(children);
+
+      const result = Vdom.groupBlockFragments(children);
+      const depth = (children) =>
+        children.length === 0
+          ? 0
+          : 1 +
+            Math.max(
+              ...children.map((child) =>
+                child.children ? depth(child.children) : 0,
+              ),
+            );
+
+      assert.equal(result.length, 1);
+      assert.equal(depth(result), 4);
+    });
+
+    it("same block nested inside itself, followed by a sibling rendering", () => {
+      const children = [
+        marker("[h:1a2b3c:0:o]"),
+        marker("[h:1a2b3c:0:o]"),
+        marker("[h:1a2b3c:0:c]"),
+        marker("[h:1a2b3c:0:c]"),
+        marker("[h:1a2b3c:0:o]"),
+        marker("[h:1a2b3c:0:c]"),
+      ];
+
+      Vdom.dedupeMarkerKeys(children);
+
+      const result = Vdom.groupBlockFragments(children);
+
+      assert.deepStrictEqual(keysOf(result), [
+        "[h:1a2b3c:0:o]",
+        "[h:1a2b3c:0:o]:2",
+      ]);
+    });
+
     it("opening marker without a matching close leaves the list flat", () => {
       const children = [marker("[h:1a2b3c:0:o]"), vnode("p", {attrs: {}}, [])];
 
