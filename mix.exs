@@ -11,7 +11,12 @@ defmodule Hologram.MixProject do
     [
       eslint:
         "cmd assets/node_modules/.bin/eslint --color --config assets/eslint.config.mjs assets/js/** benchmarks/javascript/** scripts/** test/javascript/** --no-error-on-unmatched-pattern",
-      f: ["format", "format.js", "cmd cd test/features && mix format && mix format.js"],
+      f: [
+        "format",
+        "format.js",
+        "cmd cd test/features && mix format && mix format.js",
+        "cmd cd test/umbrella && mix format"
+      ],
       "format.js":
         "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --config 'assets/.prettierrc.json' -u --write",
       "format.js.check":
@@ -20,7 +25,9 @@ defmodule Hologram.MixProject do
         "deps.get",
         "cmd --cd assets npm install",
         "cmd --cd test/features mix deps.get",
-        "cmd --cd test/features/assets npm install"
+        "cmd --cd test/features/assets npm install",
+        "cmd --cd test/umbrella mix deps.get",
+        "cmd --cd test/umbrella/assets npm install"
       ],
       t: ["test", "test.js"],
       "test.js": [&test_js/1]
@@ -75,6 +82,7 @@ defmodule Hologram.MixProject do
       {:sobelow, "~> 0.12", only: [:dev, :test], runtime: false},
       {:telemetry, "~> 1.0"},
       {:uuid, "~> 1.0"},
+      {:wallaby, "~> 0.30", only: [:dev, :test], runtime: false},
       {:websock_adapter, "~> 0.5"}
     ]
   end
@@ -122,7 +130,7 @@ defmodule Hologram.MixProject do
       description:
         "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
       dialyzer: [
-        plt_add_apps: [:ex_unit, :iex, :mix],
+        plt_add_apps: [:ex_unit, :iex, :mix, :wallaby],
         plt_core_path: Path.join(["priv", "plts", "core.plt"]),
         plt_local_path: Path.join(["priv", "plts", "project.plt"])
       ],

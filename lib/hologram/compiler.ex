@@ -136,14 +136,18 @@ defmodule Hologram.Compiler do
     # (determined experimentally)
     chunk_size = 2
 
+    # TODO: Remove this flag and call :code.which/1 directly below when
+    # resolve_beam_source/2 goes (see the removal note there).
+    umbrella? = Reflection.umbrella?()
+
     modules
     |> Enum.chunk_every(chunk_size)
     |> TaskUtils.async_many(fn module_chunk ->
       Enum.each(module_chunk, fn module ->
-        beam_path = :code.which(module)
+        beam_source = resolve_beam_source(module, umbrella?)
 
-        if beam_path != :non_existing do
-          ir = IR.for_module(module, beam_path)
+        if beam_source do
+          ir = IR.for_module(module, beam_source)
           PLT.put(ir_plt, module, ir)
         end
       end)
@@ -162,8 +166,13 @@ defmodule Hologram.Compiler do
   def build_module_digest_plt!(opts \\ []) do
     module_digest_plt = PLT.start(opts)
 
+    # TODO: Remove this flag and the argument it feeds to
+    # rebuild_module_digest_plt_entry!/3 when resolve_beam_source/2 goes (see
+    # the removal note there).
+    umbrella? = Reflection.umbrella?()
+
     Reflection.list_elixir_modules()
-    |> TaskUtils.async_many(&rebuild_module_digest_plt_entry!(&1, module_digest_plt))
+    |> TaskUtils.async_many(&rebuild_module_digest_plt_entry!(&1, module_digest_plt, umbrella?))
     |> Task.await_many(:infinity)
 
     module_digest_plt
@@ -365,11 +374,17 @@ defmodule Hologram.Compiler do
       "--target=es2021"
     ]
 
-    project_node_modules_path = Path.join([Reflection.root_dir(), "assets", "node_modules"])
+    # Both the workspace root's and the OTP app's assets/node_modules go on
+    # NODE_PATH (identical in single-app projects, hence deduplicated).
+    # Non-existent dirs are silently ignored by Node.
+    workspace_and_otp_app_node_modules_paths =
+      [Reflection.root_dir(), Reflection.otp_app_dir()]
+      |> Enum.uniq()
+      |> Enum.map(&Path.join([&1, "assets", "node_modules"]))
 
     node_path =
       Enum.join(
-        [opts[:node_modules_path], project_node_modules_path],
+        [opts[:node_modules_path] | workspace_and_otp_app_node_modules_paths],
         PathUtils.env_path_separator()
       )
 
@@ -638,13 +653,17 @@ defmodule Hologram.Compiler do
   """
   @spec patch_ir_plt!(PLT.t(), map) :: PLT.t()
   def patch_ir_plt!(ir_plt, module_digests_diff) do
+    # TODO: Remove this flag and the argument it feeds to rebuild_ir_plt_entry!/3
+    # when resolve_beam_source/2 goes (see the removal note there).
+    umbrella? = Reflection.umbrella?()
+
     delete_tasks =
       TaskUtils.async_many(module_digests_diff.removed_modules, &PLT.delete(ir_plt, &1))
 
     rebuild_tasks =
       TaskUtils.async_many(
         module_digests_diff.edited_modules ++ module_digests_diff.added_modules,
-        &rebuild_ir_plt_entry!(ir_plt, &1)
+        &rebuild_ir_plt_entry!(ir_plt, &1, umbrella?)
       )
 
     Task.await_many(delete_tasks, :infinity)
@@ -812,17 +831,24 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp rebuild_ir_plt_entry!(ir_plt, module) do
-    beam_path = :code.which(module)
-    PLT.put(ir_plt, module, IR.for_module(module, beam_path))
+  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
+  # when resolve_beam_source/2 goes (see the removal note there).
+  defp rebuild_ir_plt_entry!(ir_plt, module, umbrella?) do
+    # A nil beam source must not reach IR.for_module/2 - it resolves a nil one
+    # with :code.which/1, which is exactly the stale path that yielded nil here.
+    if beam_source = resolve_beam_source(module, umbrella?) do
+      PLT.put(ir_plt, module, IR.for_module(module, beam_source))
+    end
   end
 
-  defp rebuild_module_digest_plt_entry!(module, module_digest_plt) do
-    beam_path = :code.which(module)
+  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
+  # when resolve_beam_source/2 goes (see the removal note there).
+  defp rebuild_module_digest_plt_entry!(module, module_digest_plt, umbrella?) do
+    beam_source = resolve_beam_source(module, umbrella?)
 
-    if beam_path != :non_existing do
+    if beam_source do
       digest =
-        beam_path
+        beam_source
         |> Reflection.beam_defs()
         # Fast and deterministic for change detection
         |> :erlang.phash2()
@@ -951,5 +977,31 @@ defmodule Hologram.Compiler do
       end)
 
     ~s'Interpreter.registerJsBindings({#{modules_arg}});'
+  end
+
+  # In umbrella projects a module can stay loaded from a consolidated protocol
+  # beam that Phoenix's code reloader has purged: the reloader compiles with
+  # --purge-consolidation-path-if-stale, which deletes the umbrella root
+  # consolidated dir while :code.which/1 keeps pointing into it. The beam source
+  # is therefore resolved through Reflection.beam_source/1, which falls back to
+  # the module's object code. Single-app projects never hit that state, so they
+  # resolve through a plain :code.which/1 lookup with no per-module overhead.
+  # Note that this is NOT fixed by the Phoenix > 1.8.9 code reloader rework
+  # (phoenixframework/phoenix#6753) - the purge flag is still passed after it.
+  # TODO: Remove the umbrella branch once upstream stops leaving loaded modules
+  # pointing at purged consolidated beams. That means this function,
+  # Reflection.beam_source/1 and Reflection.umbrella?/0 (if nothing else uses
+  # them by then), plus unwinding the umbrella? flag threaded through
+  # build_ir_plt/1, build_module_digest_plt!/1, patch_ir_plt!/2,
+  # rebuild_ir_plt_entry!/3 and rebuild_module_digest_plt_entry!/3 - their
+  # bodies go back to resolving the beam path with :code.which/1 directly.
+  defp resolve_beam_source(module, true), do: Reflection.beam_source(module)
+
+  defp resolve_beam_source(module, false) do
+    beam_path = :code.which(module)
+
+    if beam_path != :non_existing do
+      beam_path
+    end
   end
 end

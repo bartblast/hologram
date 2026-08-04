@@ -136,6 +136,20 @@ defp elixirc_paths(_env), do: ["app", "lib"]
 
 This allows you to organize your code like `app/pages/`, `app/components/`, etc., which many developers find cleaner than keeping everything in `lib/`.
 
+#### Umbrella Projects
+
+Hologram supports umbrella projects. The steps above apply to the child app that owns the Phoenix endpoint - it takes the Hologram dependency (step 1), the compiler entry (step 3), the router plug (step 4), the static asset configuration (step 5) and the gitignore entry (step 7).
+
+Child apps that only define pages and components take the dependency alone, without the compiler entry. Their pages are discovered and bundled when the endpoint app compiles.
+
+A few umbrella-specific details:
+
+- Endpoint configuration lives in the umbrella root `config` directory, as it does for any umbrella app.
+- Run `mix holo` from the umbrella root. Started from inside the endpoint app it watches only that app's sources, so changes in sibling apps will not trigger a live reload.
+- Add `listeners: [Phoenix.CodeReloader]` to the `project` config in the umbrella root `mix.exs`. Mix reads listeners from the project it runs as, so the entry Phoenix generates in the endpoint app is not seen when `mix holo` runs from the root, and every reload logs a missing-listener warning.
+- npm packages go in an `assets` directory at the umbrella root, and are resolved from there for every child app.
+- Hologram supports one endpoint app per running BEAM instance. If several apps in the umbrella have a configured Phoenix endpoint, Hologram raises a descriptive error.
+
 #### Next Steps
 
 After completing the installation, you can start building your isomorphic web application with Hologram. For more information on how to use Hologram's features, please refer to the website's Documentation section.
@@ -3930,7 +3944,13 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 
 #### Tooling
 
-**Development:** Client Error Overlay (done), Incremental Compilation (done), Live Reload (done), Standalone Mode (in progress, 70%), Template Formatter (in progress, 60%), VS Code Extension (done)
+**Development:** Client Error Overlay (done), Incremental Compilation (done), Live Reload (done), Template Formatter (in progress, 60%), VS Code Extension (done)
+
+#### Project Setup
+
+**Deployment:** Standalone Mode (in progress, 70%)
+
+**Structure:** Umbrella Apps (done)
 
 #### Elixir Client Runtime
 
@@ -3964,7 +3984,6 @@ Our development roadmap is organized by timeline, with colors representing proxi
 - **Navigate Between Pages from Commands** - Enable navigation to another page from within a command.
 - **Standalone Mode** - Enable a standalone mode that operates without Phoenix, with installer, asset pipeline & watchers, code reloader, clustering, and deployment-ready defaults.
 - **Template Engine Error Reporting** - Improve error reporting in the template engine to make debugging template issues more straightforward.
-- **Umbrella Applications** - Support Hologram in umbrella project layouts, resolving dependency and asset paths through Mix and watching source across all child apps for live reload.
 
 #### Medium-Term Goals - Advanced Features & Enhanced DX
 

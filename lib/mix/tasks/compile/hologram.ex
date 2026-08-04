@@ -41,17 +41,26 @@ defmodule Mix.Tasks.Compile.Hologram do
   def run(opts) do
     opts = Keyword.merge(build_default_opts(), opts)
 
-    cond do
-      opts[:force?] -> compile_with_lock(opts)
-      language_server_build?(opts) -> :noop
-      !compiler_enabled?() -> :noop
-      true -> compile_with_lock(opts)
+    result =
+      cond do
+        opts[:force?] -> compile_with_lock(opts)
+        language_server_build?(opts) -> :noop
+        !compiler_enabled?() -> :noop
+        true -> compile_with_lock(opts)
+      end
+
+    # TODO: Remove this block together with refresh_umbrella_app_manifests/0
+    # (see the removal note there), and inline the cond above back into the
+    # function body - the result binding exists only to run this afterwards.
+    if not language_server_build?(opts) do
+      refresh_umbrella_app_manifests()
     end
+
+    result
   end
 
   defp build_default_opts do
-    root_dir = Reflection.root_dir()
-    assets_dir = Path.join([root_dir, "deps", "hologram", "assets"])
+    assets_dir = Path.join(Reflection.hologram_dep_dir(), "assets")
     build_dir = Reflection.build_dir()
     node_modules_path = Path.join(assets_dir, "node_modules")
 
@@ -61,7 +70,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       js_dir: Path.join(assets_dir, "js"),
       node_modules_path: node_modules_path,
-      static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
+      static_dir: Path.join(Reflection.otp_app_static_dir(), "hologram"),
       tmp_dir: Path.join(build_dir, "tmp")
     ]
   end
@@ -215,6 +224,27 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
+  # Phoenix's code reloader (up to 1.8.9) treats the per-app compile.lock files in
+  # the umbrella build dir as configuration inputs, and refuses to reload any
+  # umbrella app whose compile.lock is newer than its Elixir compile manifest.
+  # Every Mix invocation bumps the locks without necessarily recompiling anything,
+  # so in an umbrella the check fails from boot onwards - every live reload and
+  # every request served through the Phoenix.CodeReloader plug raises
+  # "could not compile application". Touching the manifests right after the
+  # Hologram compiler runs keeps them newer than the locks, which lets the check
+  # pass without changing what gets recompiled. Single-app projects have no
+  # in-umbrella deps, so this is a no-op for them.
+  # Fixed upstream after Phoenix 1.8.9 (phoenixframework/phoenix#6753).
+  # TODO: Remove once Hologram requires a Phoenix version containing the fix.
+  defp refresh_umbrella_app_manifests do
+    build_lib_dir = Path.join(Mix.Project.build_path(), "lib")
+
+    umbrella_apps()
+    |> Enum.map(&Path.join([build_lib_dir, to_string(&1), ".mix", "compile.elixir"]))
+    |> Enum.filter(&File.exists?/1)
+    |> Enum.each(&File.touch!/1)
+  end
+
   defp remove_lock_file_with_invalid_os_pid(lock_path) do
     Logger.info("Hologram: removing lock file with invalid OS-level PID format")
     File.rm(lock_path)
@@ -231,6 +261,31 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp remove_unreadable_lock_file(lock_path) do
     Logger.info("Hologram: removing unreadable lock file")
     File.rm(lock_path)
+  end
+
+  # Lists all apps of the enclosing umbrella project, whether the compiler runs in
+  # the umbrella root context or in a child app context. Empty in single-app projects.
+  # TODO: Remove together with refresh_umbrella_app_manifests/0 (see the removal
+  # note there), which is its only caller.
+  defp umbrella_apps do
+    case Mix.Project.apps_paths() do
+      nil ->
+        case umbrella_sibling_apps() do
+          [] -> []
+          sibling_apps -> [Mix.Project.config()[:app] | sibling_apps]
+        end
+
+      apps_paths ->
+        Map.keys(apps_paths)
+    end
+  end
+
+  # TODO: Remove together with refresh_umbrella_app_manifests/0 (see the removal
+  # note there) - umbrella_apps/0 is its only caller.
+  defp umbrella_sibling_apps do
+    Mix.Dep.cached()
+    |> Enum.filter(& &1.opts[:in_umbrella])
+    |> Enum.map(& &1.app)
   end
 
   defp validate_lock_file_and_proceed_accordingly(lock_path, os_pid_str) do

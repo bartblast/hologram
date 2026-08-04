@@ -245,3 +245,13 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - `:client_stacktraces` defaults to `true` in `dev`/`test` and `false` elsewhere. `:client_error_overlay` follows it unless set on its own - set it to `false` to keep the console report without showing an error screen to users.
 - Enabling `:client_stacktraces` outside `dev`/`test` puts argument values, source paths and line numbers in front of users, and makes the compiled Elixir in a bundle roughly a third larger over the wire.
 - `:max_bundle_size` (bytes) fails the build when a generated bundle grows past it. Unset by default.
+
+## Umbrella Projects
+
+- Only the child app that owns the Phoenix endpoint gets the compiler entry (`compilers: Mix.compilers() ++ [:hologram]`). It also takes the `:hologram` dep, the `Hologram.Router` plug, the `"hologram"` static path and the `/priv/static/hologram/` gitignore entry.
+- Child apps that only define pages and components take the `:hologram` dep alone. **Never** add the compiler entry to them - their pages are discovered and bundled when the endpoint app compiles.
+- Endpoint configuration lives in the umbrella root `config` directory, not in the child app.
+- Run `mix holo` from the umbrella root. Started from inside the endpoint app it watches only that app's sources, so changes in sibling apps do not trigger a live reload.
+- Add `listeners: [Phoenix.CodeReloader]` to the umbrella root `mix.exs` project config. Mix reads listeners from the project it runs as - the entry Phoenix generates in the endpoint app is not seen when `mix holo` runs from the root.
+- npm packages go in an `assets` directory at the umbrella root, not in a child app.
+- One Hologram endpoint app per running BEAM instance. If several apps in the umbrella have a configured Phoenix endpoint, Hologram raises a descriptive error.

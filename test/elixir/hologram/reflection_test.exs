@@ -40,6 +40,26 @@ defmodule Hologram.ReflectionTest do
     module
   end
 
+  defp load_app_depending_on_hologram(app) do
+    spec =
+      {:application, app,
+       applications: [:hologram],
+       description: ~c"fixture",
+       modules: [],
+       registered: [],
+       vsn: ~c"0.0.0"}
+
+    :ok = :application.load(spec)
+
+    on_exit(fn -> :application.unload(app) end)
+  end
+
+  defp put_env_with_cleanup(app, key, value) do
+    Application.put_env(app, key, value)
+
+    on_exit(fn -> Application.delete_env(app, key) end)
+  end
+
   describe "alias?/1" do
     test "atom which is an alias" do
       assert alias?(Calendar.ISO)
@@ -54,26 +74,107 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "beam_defs/1" do
-    beam_path = :code.which(Module1)
+  describe "beam_defs/1" do
+    test "beam file path" do
+      beam_path = :code.which(Module1)
 
-    assert [
-             {{:fun_2, 2}, :def, [{:line, 7} | _column_1],
-              [
-                {[{:line, 7} | _column_2],
-                 [
-                   {:a, [{:version, 0}, {:line, 7} | _column_3], nil},
-                   {:b, [{:version, 1}, {:line, 7} | _column_4], nil}
-                 ], [],
-                 {{:., [{:line, 8} | _column_5], [:erlang, :+]}, [{:line, 8} | _column_6],
-                  [
-                    {:a, [{:version, 0}, {:line, 8} | _column_7], nil},
-                    {:b, [{:version, 1}, {:line, 8} | _column_8], nil}
-                  ]}}
-              ]},
-             {{:fun_1, 0}, :def, [{:line, 3} | _column_9],
-              [{[{:line, 3} | _column_10], [], [], :value_1}]}
-           ] = beam_defs(beam_path)
+      assert [
+               {{:fun_2, 2}, :def, [{:line, 7} | _column_1],
+                [
+                  {[{:line, 7} | _column_2],
+                   [
+                     {:a, [{:version, 0}, {:line, 7} | _column_3], nil},
+                     {:b, [{:version, 1}, {:line, 7} | _column_4], nil}
+                   ], [],
+                   {{:., [{:line, 8} | _column_5], [:erlang, :+]}, [{:line, 8} | _column_6],
+                    [
+                      {:a, [{:version, 0}, {:line, 8} | _column_7], nil},
+                      {:b, [{:version, 1}, {:line, 8} | _column_8], nil}
+                    ]}}
+                ]},
+               {{:fun_1, 0}, :def, [{:line, 3} | _column_9],
+                [{[{:line, 3} | _column_10], [], [], :value_1}]}
+             ] = beam_defs(beam_path)
+    end
+
+    # TODO: Remove when Hologram.Reflection.beam_source/1 goes (see the removal
+    # note there), together with the beam_source/1 and umbrella?/0 describes.
+    test "beam binary" do
+      {Module1, bytecode, beam_path} = :code.get_object_code(Module1)
+
+      assert beam_defs(bytecode) == beam_defs(beam_path)
+    end
+  end
+
+  # TODO: Remove this describe when Hologram.Reflection.beam_source/1 goes (see
+  # the removal note there).
+  describe "beam_source/1" do
+    test "module whose beam file exists" do
+      assert beam_source(Hologram.Reflection) == :code.which(Hologram.Reflection)
+    end
+
+    # Reproduces the state Phoenix's code reloader leaves behind when it purges a
+    # stale consolidated protocol beam: the module stays loaded from the removed
+    # file, while its object code is still findable in the code path.
+    test "loaded module whose consolidated beam was removed, with object code in the code path" do
+      module = Hologram.Test.Fixtures.Reflection.OrphanedBeamModule
+      code = "defmodule #{inspect(module)} do end"
+      [{^module, bytecode}] = Code.compile_string(code)
+
+      ebin_dir = Path.join([tmp_dir(), "tests", "reflection", "beam_source_1", "ebin"])
+      ebin_dir_charlist = String.to_charlist(ebin_dir)
+      beam_file_path = Path.join(ebin_dir, "#{module}.beam")
+
+      File.mkdir_p!(ebin_dir)
+      File.write!(beam_file_path, bytecode)
+      true = :code.add_path(ebin_dir_charlist)
+
+      {:module, ^module} =
+        :code.load_binary(module, ~c"/removed/consolidated/#{module}.beam", bytecode)
+
+      on_exit(fn ->
+        :code.del_path(ebin_dir_charlist)
+        :code.purge(module)
+        :code.delete(module)
+        File.rm_rf!(ebin_dir)
+      end)
+
+      assert beam_source(module) == bytecode
+    end
+
+    test "loaded module whose consolidated beam was removed, without object code in the code path" do
+      module = Hologram.Test.Fixtures.Reflection.VanishedBeamModule
+      code = "defmodule #{inspect(module)} do end"
+      [{^module, bytecode}] = Code.compile_string(code)
+
+      {:module, ^module} =
+        :code.load_binary(module, ~c"/removed/consolidated/#{module}.beam", bytecode)
+
+      on_exit(fn ->
+        :code.purge(module)
+        :code.delete(module)
+      end)
+
+      assert beam_source(module) == nil
+    end
+
+    # Regular (non-consolidated) beam paths are returned without checking that the
+    # file exists, so the hot compilation paths don't pay a stat per module.
+    test "loaded module whose non-consolidated beam file was removed" do
+      module = Hologram.Test.Fixtures.Reflection.MissingRegularBeamModule
+      code = "defmodule #{inspect(module)} do end"
+      [{^module, bytecode}] = Code.compile_string(code)
+
+      beam_path = ~c"/removed/ebin/#{module}.beam"
+      {:module, ^module} = :code.load_binary(module, beam_path, bytecode)
+
+      on_exit(fn ->
+        :code.purge(module)
+        :code.delete(module)
+      end)
+
+      assert beam_source(module) == beam_path
+    end
   end
 
   test "build_dir/0" do
@@ -210,6 +311,10 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  test "hologram_dep_dir/0" do
+    assert hologram_dep_dir() == File.cwd!() <> "/deps/hologram"
+  end
+
   test "ir_plt_dump_file_name/0" do
     assert ir_plt_dump_file_name() == "ir.plt"
   end
@@ -242,7 +347,7 @@ defmodule Hologram.ReflectionTest do
     end
 
     test "OTP app doesn't have ebin dir" do
-      assert list_ebin_modules(:ssl) == []
+      assert list_ebin_modules(:nonexistent_otp_app) == []
     end
   end
 
@@ -424,8 +529,113 @@ defmodule Hologram.ReflectionTest do
     assert module_name(Aaa.Bbb) == "Aaa.Bbb"
   end
 
-  test "otp_app/0" do
-    assert otp_app() == :hologram
+  describe "otp_app/0" do
+    test "single-app project" do
+      assert otp_app() == :hologram
+    end
+
+    # Mix.Project.in_project/4 injects its app atom as the :app config default when it
+    # serves a cached project, but a real umbrella root project has no :app - the
+    # [app: nil] post-config forces that value in every load path.
+    test "umbrella project with a single app depending on Hologram" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      load_app_depending_on_hologram(:otp_app_fixture_a)
+
+      result =
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          otp_app()
+        end)
+
+      assert result == :otp_app_fixture_a
+    end
+
+    test "umbrella project with multiple apps depending on Hologram, one owning a Phoenix endpoint" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      load_app_depending_on_hologram(:otp_app_fixture_b)
+      load_app_depending_on_hologram(:otp_app_fixture_c)
+      put_env_with_cleanup(:otp_app_fixture_c, Module7, [])
+
+      result =
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          otp_app()
+        end)
+
+      assert result == :otp_app_fixture_c
+    end
+
+    test "umbrella project with multiple apps depending on Hologram, none owning a Phoenix endpoint" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      load_app_depending_on_hologram(:otp_app_fixture_d)
+      load_app_depending_on_hologram(:otp_app_fixture_e)
+
+      assert_raise RuntimeError, ~r/none of them has a configured Phoenix endpoint/, fn ->
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          otp_app()
+        end)
+      end
+    end
+
+    test "umbrella project with multiple apps depending on Hologram, all owning Phoenix endpoints" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      load_app_depending_on_hologram(:otp_app_fixture_f)
+      load_app_depending_on_hologram(:otp_app_fixture_g)
+      put_env_with_cleanup(:otp_app_fixture_f, Module7, [])
+      put_env_with_cleanup(:otp_app_fixture_g, Module7, [])
+
+      assert_raise RuntimeError, ~r/one endpoint app per running BEAM instance/, fn ->
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          otp_app()
+        end)
+      end
+    end
+
+    test "umbrella project with no apps depending on Hologram" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+
+      assert_raise RuntimeError, ~r/no loaded application depends on :hologram/, fn ->
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          otp_app()
+        end)
+      end
+    end
+  end
+
+  describe "otp_app_dir/0" do
+    test "single-app project" do
+      assert otp_app_dir() == File.cwd!()
+    end
+
+    test "umbrella project root" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      load_app_depending_on_hologram(:app_a)
+
+      result =
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          otp_app_dir()
+        end)
+
+      assert result == Path.join(umbrella_dir, "apps/app_a")
+    end
+
+    test "umbrella project child app" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      app_a_dir = Path.join(umbrella_dir, "apps/app_a")
+
+      result =
+        Mix.Project.in_project(:app_a, app_a_dir, fn _module ->
+          otp_app_dir()
+        end)
+
+      assert result == app_a_dir
+    end
+  end
+
+  test "otp_app_priv_dir/0" do
+    assert otp_app_priv_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv"
+  end
+
+  test "otp_app_static_dir/0" do
+    assert otp_app_static_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
   end
 
   describe "page?" do
@@ -448,24 +658,20 @@ defmodule Hologram.ReflectionTest do
 
   describe "phoenix_endpoint/0" do
     test "there is a config entry for the given Phoenix endpoint module" do
-      Application.put_env(:hologram, Module7, [])
+      put_env_with_cleanup(:hologram, Module7, [])
 
       assert phoenix_endpoint() == Module7
-
-      Application.delete_env(:hologram, Module7)
     end
 
     test "there is no config entry for the given Phoenix endpoint module" do
       assert phoenix_endpoint() == nil
     end
-  end
 
-  test "release_priv_dir/0" do
-    assert release_priv_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv"
-  end
+    test "ignores config entries whose keys are not Phoenix endpoint modules" do
+      put_env_with_cleanup(:hologram, Module1, [])
 
-  test "release_static_dir/0" do
-    assert release_static_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
+      assert phoenix_endpoint() == nil
+    end
   end
 
   describe "protocol?/1" do
@@ -530,12 +736,22 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "root_dir/0" do
-    assert root_dir() == File.cwd!()
-  end
+  describe "root_dir/0" do
+    test "single-app project" do
+      assert root_dir() == File.cwd!()
+    end
 
-  test "root_priv_dir/0" do
-    assert root_priv_dir() == File.cwd!() <> "/priv/hologram"
+    test "umbrella project child app" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      app_a_dir = Path.join(umbrella_dir, "apps/app_a")
+
+      result =
+        Mix.Project.in_project(:app_a, app_a_dir, fn _module ->
+          root_dir()
+        end)
+
+      assert result == umbrella_dir
+    end
   end
 
   test "source_path/1" do
@@ -562,5 +778,24 @@ defmodule Hologram.ReflectionTest do
 
   test "tmp_dir/0" do
     assert tmp_dir() == File.cwd!() <> "/tmp"
+  end
+
+  # TODO: Remove this describe when Hologram.Reflection.umbrella?/0 goes (see the
+  # removal note there).
+  describe "umbrella?/0" do
+    test "single-app project" do
+      refute umbrella?()
+    end
+
+    test "umbrella project root" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+
+      result =
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          umbrella?()
+        end)
+
+      assert result == true
+    end
   end
 end
