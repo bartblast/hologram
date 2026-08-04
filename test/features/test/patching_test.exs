@@ -8,6 +8,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page11
   alias HologramFeatureTests.Patching.Page12
   alias HologramFeatureTests.Patching.Page13
+  alias HologramFeatureTests.Patching.Page14
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
@@ -983,6 +984,52 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_input_value("#input_a", "typed a")
       |> assert_input_value("#input_b", "typed b")
       |> assert_script_result(kept_nodes, inputs)
+    end
+
+    feature "stateful siblings survive several conditionals switching at once", %{
+      session: session
+    } do
+      fields = ["field_1", "field_2", "field_3"]
+
+      mark_nodes = """
+      #{inspect(fields)}.forEach((id) => {
+        document.getElementById(id).__probe = id;
+      });
+      """
+
+      kept_nodes = """
+      return #{inspect(fields)}.filter((id) => document.getElementById(id).__probe === id);
+      """
+
+      typed_values = """
+      return #{inspect(fields)}.map((id) => document.getElementById(id).value);
+      """
+
+      session =
+        session
+        |> visit(Page14)
+        |> assert_text(css("#result"), "true")
+        |> assert_count(".hint", 3)
+        |> fill_in(css("#field_1"), with: "typed 1")
+        |> fill_in(css("#field_2"), with: "typed 2")
+        |> fill_in(css("#field_3"), with: "typed 3")
+
+      script_result(session, mark_nodes)
+
+      # Hiding is the direction that fails: three regions shrink in one patch, and the fields
+      # between them are keyless. Values are read as a list so a value landing in a neighbouring
+      # field is caught, not just a value going missing.
+      session
+      |> click(button("Toggle hints"))
+      |> assert_text(css("#result"), "false")
+      |> assert_count(".hint", 0)
+      |> assert_script_result(typed_values, ["typed 1", "typed 2", "typed 3"])
+      |> assert_script_result(kept_nodes, fields)
+      |> click(button("Toggle hints"))
+      |> assert_text(css("#result"), "true")
+      |> assert_count(".hint", 3)
+      |> assert_script_result(typed_values, ["typed 1", "typed 2", "typed 3"])
+      |> assert_script_result(kept_nodes, fields)
     end
   end
 end
