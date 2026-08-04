@@ -3,11 +3,17 @@
 import {
   attributesModule,
   eventListenersModule,
+  fragment,
   h as vnode,
   init,
 } from "snabbdom";
 
-const patch = init([attributesModule, eventListenersModule]);
+// Fragments let a block occupy exactly one position in its parent's children list however many
+// nodes it renders, so its siblings never shift and never get paired with the block's content.
+// The flag is opt-in upstream, which is why the library version is pinned exactly.
+const patch = init([attributesModule, eventListenersModule], undefined, {
+  experimental: {fragments: true},
+});
 
 // Marker text of a block anchor comment, e.g. "[h:1a2b3c:0:o]" - four bracketed segments:
 //
@@ -120,6 +126,55 @@ export default class Vdom {
     return Vdom.#buildVnodeFromDomNode(doc.documentElement);
   }
 
+  // Wraps each anchored span into a keyed fragment, so a block takes one position in its parent's
+  // children list whatever it renders. Positions of the nodes around it then hold still, which is
+  // what stops them being paired with the block's own content.
+  //
+  // The markers stay as the bag's first and last children, so this models the same nodes the
+  // markup has, and both sides of a diff can be built the same way. An open marker with no
+  // matching close leaves the list flat - the behaviour from before bags rather than a broken
+  // tree. Interiors are grouped recursively, since blocks nest.
+  //
+  // The list is only copied once a bag is actually found: most children lists contain no blocks
+  // at all, and this runs on every one of them.
+  static groupAnchorBags(children) {
+    let grouped = null;
+    let index = 0;
+
+    while (index < children.length) {
+      const child = children[index];
+      const openKey = $.#anchorOpenKey(child);
+
+      const closeIndex =
+        openKey === null ? -1 : $.#matchingCloseIndex(children, index, openKey);
+
+      if (closeIndex === -1) {
+        if (grouped !== null) {
+          grouped.push(child);
+        }
+
+        index += 1;
+        continue;
+      }
+
+      if (grouped === null) {
+        grouped = children.slice(0, index);
+      }
+
+      const interior = $.groupAnchorBags(children.slice(index + 1, closeIndex));
+
+      const bag = fragment([child, ...interior, children[closeIndex]]);
+
+      bag.key = openKey;
+      bag.data.key = openKey;
+
+      grouped.push(bag);
+      index = closeIndex + 1;
+    }
+
+    return grouped ?? children;
+  }
+
   // Covered in feature tests
   static patchVirtualDocument(oldVirtualDocument, newVirtualDocument) {
     const newRootVNode = {
@@ -157,6 +212,16 @@ export default class Vdom {
     );
 
     return patchedVirtualDocument;
+  }
+
+  // The opening side of an anchor pair, or null for anything else. Read off the key rather than
+  // the comment's text, so a key renumbered for a repeat still pairs with its own closing side.
+  static #anchorOpenKey(child) {
+    return child?.sel === "!" &&
+      typeof child.key === "string" &&
+      child.key.includes(":o]")
+      ? child.key
+      : null;
   }
 
   static #buildVnodeFromDomNode(node) {
@@ -199,6 +264,22 @@ export default class Vdom {
     }
 
     return vnode(tagName, data, children);
+  }
+
+  // The closing side matching the given opening key, or -1. A block never contains itself and
+  // repeats are renumbered before this runs, so the first key match is the right one.
+  static #matchingCloseIndex(children, openIndex, openKey) {
+    const closeKey = openKey.replace(":o]", ":c]");
+
+    for (let index = openIndex + 1; index < children.length; index += 1) {
+      const child = children[index];
+
+      if (child?.sel === "!" && child.key === closeKey) {
+        return index;
+      }
+    }
+
+    return -1;
   }
 
   // We're checking html element children,

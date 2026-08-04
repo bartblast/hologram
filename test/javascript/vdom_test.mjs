@@ -574,4 +574,147 @@ describe("Vdom", () => {
       });
     });
   });
+  describe("groupAnchorBags()", () => {
+    const anchor = (key) => vnode("!", {key}, key);
+
+    const keysOf = (children) =>
+      children.map((child) =>
+        typeof child === "string" ? child : (child.key ?? child.sel ?? "text"),
+      );
+
+    it("children list without anchors is returned unchanged", () => {
+      const children = [vnode("div", {attrs: {}}, []), "abc"];
+      const result = Vdom.groupAnchorBags(children);
+
+      assert.equal(result, children);
+    });
+
+    it("anchored span becomes a single keyed bag", () => {
+      const children = [
+        "before",
+        anchor("[h:1a2b3c:0:o]"),
+        vnode("p", {attrs: {}}, []),
+        anchor("[h:1a2b3c:0:c]"),
+        vnode("input", {attrs: {}}, []),
+      ];
+
+      const result = Vdom.groupAnchorBags(children);
+
+      assert.deepStrictEqual(keysOf(result), [
+        "before",
+        "[h:1a2b3c:0:o]",
+        "input",
+      ]);
+
+      const bag = result[1];
+
+      assert.isUndefined(bag.sel);
+      assert.deepStrictEqual(keysOf(bag.children), [
+        "[h:1a2b3c:0:o]",
+        "p",
+        "[h:1a2b3c:0:c]",
+      ]);
+    });
+
+    it("empty span becomes a bag holding only its markers", () => {
+      const children = [
+        anchor("[h:1a2b3c:0:o]"),
+        anchor("[h:1a2b3c:0:c]"),
+        vnode("input", {attrs: {}}, []),
+      ];
+
+      const result = Vdom.groupAnchorBags(children);
+
+      assert.deepStrictEqual(keysOf(result), ["[h:1a2b3c:0:o]", "input"]);
+      assert.equal(result[0].children.length, 2);
+    });
+
+    it("sibling spans become separate bags", () => {
+      const children = [
+        anchor("[h:1a2b3c:0:o]"),
+        anchor("[h:1a2b3c:0:c]"),
+        vnode("input", {attrs: {}}, []),
+        anchor("[h:1a2b3c:1:o]"),
+        anchor("[h:1a2b3c:1:c]"),
+      ];
+
+      const result = Vdom.groupAnchorBags(children);
+
+      assert.deepStrictEqual(keysOf(result), [
+        "[h:1a2b3c:0:o]",
+        "input",
+        "[h:1a2b3c:1:o]",
+      ]);
+    });
+
+    it("nested spans become nested bags", () => {
+      const children = [
+        anchor("[h:1a2b3c:0:o]"),
+        anchor("[h:1a2b3c:1:o]"),
+        vnode("b", {attrs: {}}, []),
+        anchor("[h:1a2b3c:1:c]"),
+        anchor("[h:1a2b3c:0:c]"),
+      ];
+
+      const result = Vdom.groupAnchorBags(children);
+
+      assert.deepStrictEqual(keysOf(result), ["[h:1a2b3c:0:o]"]);
+
+      const outer = result[0];
+
+      assert.deepStrictEqual(keysOf(outer.children), [
+        "[h:1a2b3c:0:o]",
+        "[h:1a2b3c:1:o]",
+        "[h:1a2b3c:0:c]",
+      ]);
+
+      assert.deepStrictEqual(keysOf(outer.children[1].children), [
+        "[h:1a2b3c:1:o]",
+        "b",
+        "[h:1a2b3c:1:c]",
+      ]);
+    });
+
+    it("renumbered repeats pair with their own closing side", () => {
+      const children = [
+        anchor("[h:1a2b3c:0:o]"),
+        vnode("b", {attrs: {}}, []),
+        anchor("[h:1a2b3c:0:c]"),
+        anchor("[h:1a2b3c:0:o]:1"),
+        vnode("i", {attrs: {}}, []),
+        anchor("[h:1a2b3c:0:c]:1"),
+      ];
+
+      const result = Vdom.groupAnchorBags(children);
+
+      assert.deepStrictEqual(keysOf(result), [
+        "[h:1a2b3c:0:o]",
+        "[h:1a2b3c:0:o]:1",
+      ]);
+
+      assert.deepStrictEqual(keysOf(result[1].children), [
+        "[h:1a2b3c:0:o]:1",
+        "i",
+        "[h:1a2b3c:0:c]:1",
+      ]);
+    });
+
+    it("opening marker without a matching close leaves the list flat", () => {
+      const children = [anchor("[h:1a2b3c:0:o]"), vnode("p", {attrs: {}}, [])];
+
+      const result = Vdom.groupAnchorBags(children);
+
+      assert.deepStrictEqual(keysOf(result), ["[h:1a2b3c:0:o]", "p"]);
+    });
+
+    it("ordinary comments are left alone", () => {
+      const children = [
+        vnode("!", "my comment"),
+        vnode("div", {attrs: {}}, []),
+      ];
+      const result = Vdom.groupAnchorBags(children);
+
+      assert.equal(result, children);
+    });
+  });
 });
