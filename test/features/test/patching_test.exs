@@ -912,14 +912,13 @@ defmodule HologramFeatureTests.PatchingTest do
       script_result(session, mark_nodes)
       script_result(session, switch)
 
-      session =
-        session
-        |> assert_text(css("#result"), "false")
-        |> assert_input_value("#input_a", "typed a")
-        |> assert_input_value("#input_b", "typed b")
-        |> assert_script_result(kept_nodes, inputs)
-        |> assert_script_result(repurposed_keepers, [])
-        |> assert_script_result(~s|return document.activeElement.id;|, "input_a")
+      session
+      |> assert_text(css("#result"), "false")
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_script_result(kept_nodes, inputs)
+      |> assert_script_result(repurposed_keepers, [])
+      |> assert_script_result(~s|return document.activeElement.id;|, "input_a")
 
       script_result(session, switch)
 
@@ -959,18 +958,17 @@ defmodule HologramFeatureTests.PatchingTest do
       # Switching the conditional inside the loop body renders the same marker once per item, so
       # this is the patch that throws when repeated keys reach the diff unnumbered. It takes three
       # of them: with two the diff realigns on its own and the failure does not surface.
-      session =
-        session
-        |> click(button("Toggle badges"))
-        |> assert_count(".badge", 0)
-        |> assert_input_value("#input_a", "typed a")
-        |> assert_input_value("#input_b", "typed b")
-        |> assert_script_result(kept_nodes, inputs)
-        |> click(button("Toggle badges"))
-        |> assert_count(".badge", 3)
-        |> assert_input_value("#input_a", "typed a")
-        |> assert_input_value("#input_b", "typed b")
-        |> assert_script_result(kept_nodes, inputs)
+      session
+      |> click(button("Toggle badges"))
+      |> assert_count(".badge", 0)
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_script_result(kept_nodes, inputs)
+      |> click(button("Toggle badges"))
+      |> assert_count(".badge", 3)
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_script_result(kept_nodes, inputs)
 
       session
       |> click(button("Add item"))
