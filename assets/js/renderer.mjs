@@ -16,8 +16,9 @@ import Once from "./once.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
+import Vdom from "./vdom.mjs";
 
-import {h as vnode} from "snabbdom";
+import {h as vnode} from "./vendor/snabbdom/build/index.js";
 import vnodeToHtml from "snabbdom-to-html";
 
 export default class Renderer {
@@ -1557,20 +1558,30 @@ export default class Renderer {
 
   // Based on render_dom/3 (list case)
   static #renderNodes(nodes, context, slots, defaultTarget, parentTagName) {
-    return Renderer.#mergeNeighbouringTextNodes(
-      nodes.data
-        // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if} or DOCTYPE
-        .filter((node) => !Type.isNil(node))
-        .map((node) =>
-          Renderer.renderDom(
-            node,
-            context,
-            slots,
-            defaultTarget,
-            parentTagName,
-          ),
-        )
-        .flat(),
+    // A block rendered more than once into this list carries the same marker key each time, so the
+    // repeats are numbered here, where the list is finalized, and each marked span is then gathered
+    // into one fragment so the block holds a single position however much it renders.
+    //
+    // Numbering runs first: a fragment pairs its markers by key, and a repeat's key is only unique
+    // once numbered.
+    return Vdom.groupBlockFragments(
+      Vdom.dedupeMarkerKeys(
+        Renderer.#mergeNeighbouringTextNodes(
+          nodes.data
+            // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if} or DOCTYPE
+            .filter((node) => !Type.isNil(node))
+            .map((node) =>
+              Renderer.renderDom(
+                node,
+                context,
+                slots,
+                defaultTarget,
+                parentTagName,
+              ),
+            )
+            .flat(),
+        ),
+      ),
     );
   }
 
@@ -1641,7 +1652,14 @@ export default class Renderer {
       .map((child) => (typeof child === "string" ? child : vnodeToHtml(child)))
       .join("");
 
-    return vnode("!", commentContent);
+    // Block markers are emitted as comments, so they arrive here like any other comment node and
+    // are told apart by their marker text. Keying them here keeps client-rendered markers matching
+    // the ones recovered from server-rendered markup.
+    const key = Vdom.markerKey(commentContent);
+
+    return key
+      ? vnode("!", {key: key}, commentContent)
+      : vnode("!", commentContent);
   }
 
   // Based on render_dom/3 (slot case)

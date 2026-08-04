@@ -61,7 +61,7 @@ import ManuallyPortedElixirStringTokenizer from "./elixir/string/tokenizer.mjs";
 import ManuallyPortedElixirTask from "./elixir/task.mjs";
 import ManuallyPortedElixirURI from "./elixir/uri.mjs";
 
-import {toVNode} from "snabbdom";
+import {toVNode} from "./vendor/snabbdom/build/index.js";
 
 // TODO: test
 export default class Hologram {
@@ -949,7 +949,7 @@ export default class Hologram {
     Hologram.#defineManuallyPortedFunctions();
 
     Hologram.virtualDocument = toVNode(document.documentElement);
-    Vdom.addKeysToLinkAndScriptVnodes(Hologram.virtualDocument);
+    Vdom.addKeysToVnodes(Hologram.virtualDocument);
 
     console.inspect = (term) => console.log(Interpreter.inspect(term));
 

@@ -251,6 +251,106 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("with block marker", () => {
+      // <!--[h:1a2b3c:0:o]-->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring("[h:1a2b3c:0:o]")]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("numbers repeated block markers in one list", () => {
+      // <!--[h:1a2b3c:0:o]--><!--[h:1a2b3c:0:o]-->
+      const marker = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring("[h:1a2b3c:0:o]")]),
+        ]),
+      ]);
+
+      const node = Type.list([marker, marker]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        result.map((child) => child.key),
+        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]:1"],
+      );
+
+      assert.deepStrictEqual(
+        result.map((child) => child.text),
+        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]"],
+      );
+    });
+
+    it("gathers a marked span into one fragment", () => {
+      // <!--[h:1a2b3c:0:o]--><div></div><!--[h:1a2b3c:0:c]--><input />
+      const marker = (side) =>
+        Type.tuple([
+          Type.atom("public_comment"),
+          Type.list([
+            Type.tuple([
+              Type.atom("text"),
+              Type.bitstring(`[h:1a2b3c:0:${side}]`),
+            ]),
+          ]),
+        ]);
+
+      const element = (tagName) =>
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring(tagName),
+          Type.list(),
+          Type.list(),
+        ]);
+
+      const node = Type.list([
+        marker("o"),
+        element("div"),
+        marker("c"),
+        element("input"),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // The block holds one position whatever it renders, so the input never shifts.
+      assert.equal(result.length, 2);
+      assert.isUndefined(result[0].sel);
+      assert.equal(result[0].key, "[h:1a2b3c:0:o]");
+      assert.equal(result[1].sel, "input");
+
+      assert.deepStrictEqual(
+        result[0].children.map((child) => child.key ?? child.sel),
+        ["[h:1a2b3c:0:o]", "div", "[h:1a2b3c:0:c]"],
+      );
+    });
+
     it("with nested stateful components", () => {
       const cid3 = Type.bitstring("component_3");
       const cid7 = Type.bitstring("component_7");

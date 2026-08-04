@@ -15,6 +15,12 @@ const compat = new FlatCompat({
 });
 
 export default [
+  {
+    // Vendored third-party code is kept byte-identical to upstream, so it is neither ours to
+    // restyle nor ours to lint. It also carries eslint-disable directives for plugins this config
+    // does not load, which are themselves reported as errors.
+    ignores: ["**/js/vendor/**"],
+  },
   ...compat.extends("eslint:recommended"),
   {
     languageOptions: {
