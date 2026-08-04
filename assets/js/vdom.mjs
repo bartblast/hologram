@@ -15,9 +15,9 @@ const patch = init([attributesModule, eventListenersModule], undefined, {
   experimental: {fragments: true},
 });
 
-// Marker text of a block anchor comment, e.g. "[h:1a2b3c:0:o]" - four bracketed segments:
+// Text of a block marker comment, e.g. "[h:1a2b3c:0:o]" - four bracketed segments:
 //
-//   h       namespace, distinguishing an anchor from an ordinary comment
+//   h       namespace, distinguishing a marker from an ordinary comment
 //   1a2b3c  hash of the template module the block was written in
 //   0       index of the block within that template
 //   o       side of the pair, "o" opening or "c" closing
@@ -25,16 +25,16 @@ const patch = init([attributesModule, eventListenersModule], undefined, {
 // The module hash is what keeps keys unique: slot splicing merges nodes from different templates
 // into one children list, where bare block indexes would collide.
 //
-// Anchors bracket a template block so that changing how many nodes the block renders can't shift
+// Markers bracket a template block so that changing how many nodes the block renders can't shift
 // the identity of the block's siblings. The diff pairs keyless children by tag and position, so
 // an unbracketed block that starts rendering an extra node lets a sibling be matched against the
 // block's content and rebuilt, destroying focus, scroll position and media state.
 //
 // The marker doubles as the vnode key: keys must survive HTML serialization, since the client
 // diffs against a vdom derived from server-rendered markup, and a comment's own text is the only
-// carrier that round-trips. Unkeyed anchors would be matched against unrelated comments, which
+// carrier that round-trips. Unkeyed markers would be matched against unrelated comments, which
 // desyncs the pairing and reopens the same failure.
-const ANCHOR_KEY_REGEX = /^\[h:[a-z0-9]+:\d+:[oc]\]$/;
+const MARKER_KEY_REGEX = /^\[h:[a-z0-9]+:\d+:[oc]\]$/;
 
 export default class Vdom {
   static addKeysToVnodes(node) {
@@ -42,7 +42,7 @@ export default class Vdom {
 
     switch (node.sel) {
       case "!":
-        key = $.anchorKey(node.text);
+        key = $.markerKey(node.text);
         break;
 
       case "link":
@@ -74,19 +74,11 @@ export default class Vdom {
         Vdom.addKeysToVnodes(childNode);
       }
 
-      $.dedupeAnchorKeys(node.children);
+      $.dedupeMarkerKeys(node.children);
     }
   }
 
-  // Returns the vnode key carried by a block anchor comment's text, or null when the text belongs
-  // to an ordinary comment.
-  static anchorKey(text) {
-    return typeof text === "string" && ANCHOR_KEY_REGEX.test(text)
-      ? text
-      : null;
-  }
-
-  // Numbers repeats of an anchor key within one children list, in document order: the second
+  // Numbers repeats of a marker key within one children list, in document order: the second
   // occurrence becomes "<key>:1", the third "<key>:2".
   //
   // A block carries one marker from the compiler, but it can be rendered more than once into the
@@ -97,7 +89,7 @@ export default class Vdom {
   // Only the vnode key is renumbered, never the comment's text, so server-rendered and
   // client-rendered markup stay byte-identical. Both sides walk a children list in document order,
   // so both arrive at the same keys.
-  static dedupeAnchorKeys(children) {
+  static dedupeMarkerKeys(children) {
     const counts = new Map();
 
     for (const child of children) {
@@ -126,24 +118,24 @@ export default class Vdom {
     return Vdom.#buildVnodeFromDomNode(doc.documentElement);
   }
 
-  // Wraps each anchored span into a keyed fragment, so a block takes one position in its parent's
+  // Wraps each marked span into a keyed fragment, so a block takes one position in its parent's
   // children list whatever it renders. Positions of the nodes around it then hold still, which is
   // what stops them being paired with the block's own content.
   //
-  // The markers stay as the bag's first and last children, so this models the same nodes the
+  // The markers stay as the fragment's first and last children, so this models the same nodes the
   // markup has, and both sides of a diff can be built the same way. An open marker with no
-  // matching close leaves the list flat - the behaviour from before bags rather than a broken
+  // matching close leaves the list flat - the behaviour from before fragments rather than a broken
   // tree. Interiors are grouped recursively, since blocks nest.
   //
-  // The list is only copied once a bag is actually found: most children lists contain no blocks
-  // at all, and this runs on every one of them.
-  static groupAnchorBags(children) {
+  // The list is only copied once a fragment is actually found: most children lists contain no
+  // blocks at all, and this runs on every one of them.
+  static groupBlockFragments(children) {
     let grouped = null;
     let index = 0;
 
     while (index < children.length) {
       const child = children[index];
-      const openKey = $.#anchorOpenKey(child);
+      const openKey = $.#markerOpenKey(child);
 
       const closeIndex =
         openKey === null ? -1 : $.#matchingCloseIndex(children, index, openKey);
@@ -161,18 +153,32 @@ export default class Vdom {
         grouped = children.slice(0, index);
       }
 
-      const interior = $.groupAnchorBags(children.slice(index + 1, closeIndex));
+      const interior = $.groupBlockFragments(
+        children.slice(index + 1, closeIndex),
+      );
 
-      const bag = fragment([child, ...interior, children[closeIndex]]);
+      const blockFragment = fragment([
+        child,
+        ...interior,
+        children[closeIndex],
+      ]);
 
-      bag.key = openKey;
-      bag.data.key = openKey;
+      blockFragment.key = openKey;
+      blockFragment.data.key = openKey;
 
-      grouped.push(bag);
+      grouped.push(blockFragment);
       index = closeIndex + 1;
     }
 
     return grouped ?? children;
+  }
+
+  // Returns the vnode key carried by a block marker comment's text, or null when the text belongs
+  // to an ordinary comment.
+  static markerKey(text) {
+    return typeof text === "string" && MARKER_KEY_REGEX.test(text)
+      ? text
+      : null;
   }
 
   // Covered in feature tests
@@ -214,30 +220,20 @@ export default class Vdom {
     return patchedVirtualDocument;
   }
 
-  // The opening side of an anchor pair, or null for anything else. Read off the key rather than
-  // the comment's text, so a key renumbered for a repeat still pairs with its own closing side.
-  static #anchorOpenKey(child) {
-    return child?.sel === "!" &&
-      typeof child.key === "string" &&
-      child.key.includes(":o]")
-      ? child.key
-      : null;
-  }
-
   static #buildVnodeFromDomNode(node) {
     if (node.nodeType === Node.TEXT_NODE) {
       return node.textContent;
     }
 
     if (node.nodeType === Node.COMMENT_NODE) {
-      const key = $.anchorKey(node.textContent);
+      const key = $.markerKey(node.textContent);
 
       return key
         ? vnode("!", {key: key}, node.textContent)
         : vnode("!", node.textContent);
     }
 
-    const children = $.dedupeAnchorKeys(
+    const children = $.dedupeMarkerKeys(
       Array.from(node.childNodes).map(Vdom.#buildVnodeFromDomNode),
     );
 
@@ -276,6 +272,16 @@ export default class Vdom {
   // so the nodes are either: head element, body element or text (whitespace) nodes
   static #isHeadVnode(vnode) {
     return vnode.sel?.[0] === "h";
+  }
+
+  // The opening side of a marker pair, or null for anything else. Read off the key rather than
+  // the comment's text, so a key renumbered for a repeat still pairs with its own closing side.
+  static #markerOpenKey(child) {
+    return child?.sel === "!" &&
+      typeof child.key === "string" &&
+      child.key.includes(":o]")
+      ? child.key
+      : null;
   }
 
   // The closing side matching the given opening key, or -1. A block never contains itself and

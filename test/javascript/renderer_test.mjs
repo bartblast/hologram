@@ -251,7 +251,7 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("with block anchor marker", () => {
+    it("with block marker", () => {
       // <!--[h:1a2b3c:0:o]-->
       const node = Type.tuple([
         Type.atom("public_comment"),
@@ -273,16 +273,16 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("numbers repeated block anchor markers in one list", () => {
+    it("numbers repeated block markers in one list", () => {
       // <!--[h:1a2b3c:0:o]--><!--[h:1a2b3c:0:o]-->
-      const anchor = Type.tuple([
+      const marker = Type.tuple([
         Type.atom("public_comment"),
         Type.list([
           Type.tuple([Type.atom("text"), Type.bitstring("[h:1a2b3c:0:o]")]),
         ]),
       ]);
 
-      const node = Type.list([anchor, anchor]);
+      const node = Type.list([marker, marker]);
 
       const result = Renderer.renderDom(
         node,

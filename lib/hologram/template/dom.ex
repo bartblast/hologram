@@ -11,7 +11,7 @@ defmodule Hologram.Template.DOM do
   # Blocks whose rendered node count can change between renders, shifting the position of every
   # sibling that follows them. "raw" and "else" are absent because neither delimits a region whose
   # size can vary: "raw" only marks source to reconstruct, and "else" is a branch within an "if".
-  @anchored_blocks ["for", "if"]
+  @marked_blocks ["for", "if"]
 
   @type attribute :: {String.t(), t} | {:spread, {any}}
 
@@ -40,7 +40,7 @@ defmodule Hologram.Template.DOM do
   def build_ast(tags) do
     {code, _last_tag_type} =
       tags
-      |> add_block_anchors()
+      |> add_block_markers()
       |> Enum.reduce({"", nil}, fn tag, {code_acc, last_tag_type} ->
         current_tag_type = if is_tuple(tag), do: elem(tag, 0), else: tag
 
@@ -59,27 +59,27 @@ defmodule Hologram.Template.DOM do
     |> substitute_module_attributes()
   end
 
-  # Brackets each block in a pair of anchor comments, so that changing how many nodes the block
+  # Brackets each block in a pair of marker comments, so that changing how many nodes the block
   # renders can't change the identity of the block's siblings. The client diffs children by tag and
-  # position, so without the anchors a block that starts rendering an extra node lets the following
+  # position, so without the markers a block that starts rendering an extra node lets the following
   # sibling be paired with the block's content and rebuilt, destroying focus, scroll position and
   # media state.
   #
   # Blocks inside <script> and <style> are left alone: a comment there would be part of the script
   # or stylesheet source rather than markup, and their text-only children have no identity to
   # protect anyway.
-  defp add_block_anchors(tags) do
+  defp add_block_markers(tags) do
     hash = template_hash(tags)
 
-    {anchored_tags, _state} =
-      Enum.flat_map_reduce(tags, {0, [], 0}, &inject_block_anchors(&1, &2, hash))
+    {marked_tags, _state} =
+      Enum.flat_map_reduce(tags, {0, [], 0}, &inject_block_markers(&1, &2, hash))
 
-    anchored_tags
+    marked_tags
   end
 
-  # Builds one anchor comment, whose text is four bracketed segments, e.g. "[h:a3f2b1c4:0:o]":
+  # Builds one marker comment, whose text is four bracketed segments, e.g. "[h:a3f2b1c4:0:o]":
   #
-  #   h         namespace, distinguishing an anchor from a comment written in the template
+  #   h         namespace, distinguishing a marker from a comment written in the template
   #   a3f2b1c4  template hash, see template_hash/1
   #   0         index of the block within its template, counted in source order
   #   o         side of the pair, "o" opening or "c" closing
@@ -87,11 +87,11 @@ defmodule Hologram.Template.DOM do
   # The marker text doubles as the client-side vnode key, which is why it has to be part of the
   # markup: the client diffs against a virtual DOM derived from server-rendered HTML, and a
   # comment's own text is the only carrier that survives serialization. The client recognizes the
-  # same format in Vdom.anchorKey/1.
+  # same format in Vdom.markerKey/1.
   #
-  # Takes the tags that follow the anchor, so an opening anchor can be built in front of its block
+  # Takes the tags that follow the marker, so an opening marker can be built in front of its block
   # without appending to the list it just built.
-  defp anchor_tags(hash, index, side, tail \\ []) do
+  defp marker_tags(hash, index, side, tail \\ []) do
     [
       :public_comment_start,
       {:text, "[h:#{hash}:#{index}:#{side}]"},
@@ -136,50 +136,50 @@ defmodule Hologram.Template.DOM do
 
   # State is {next block index, stack of open blocks, nesting depth inside <script>/<style>}. A
   # block opened inside raw text pushes :skipped so that its end tag pops the stack without
-  # emitting a closing anchor.
-  defp inject_block_anchors({:start_tag, {tag_name, _attrs}} = tag, {index, open, depth}, _hash)
+  # emitting a closing marker.
+  defp inject_block_markers({:start_tag, {tag_name, _attrs}} = tag, {index, open, depth}, _hash)
        when tag_name in ["script", "style"] do
     {[tag], {index, open, depth + 1}}
   end
 
-  defp inject_block_anchors({:end_tag, tag_name} = tag, {index, open, depth}, _hash)
+  defp inject_block_markers({:end_tag, tag_name} = tag, {index, open, depth}, _hash)
        when tag_name in ["script", "style"] do
     {[tag], {index, open, max(depth - 1, 0)}}
   end
 
-  defp inject_block_anchors({:block_start, {block_name, _expr}} = tag, {index, open, 0}, hash)
-       when block_name in @anchored_blocks do
-    {anchor_tags(hash, index, "o", [tag]), {index + 1, [index | open], 0}}
+  defp inject_block_markers({:block_start, {block_name, _expr}} = tag, {index, open, 0}, hash)
+       when block_name in @marked_blocks do
+    {marker_tags(hash, index, "o", [tag]), {index + 1, [index | open], 0}}
   end
 
-  defp inject_block_anchors(
+  defp inject_block_markers(
          {:block_start, {block_name, _expr}} = tag,
          {index, open, depth},
          _hash
        )
-       when block_name in @anchored_blocks do
+       when block_name in @marked_blocks do
     {[tag], {index, [:skipped | open], depth}}
   end
 
-  defp inject_block_anchors(
+  defp inject_block_markers(
          {:block_end, block_name} = tag,
          {index, [:skipped | open], depth},
          _hash
        )
-       when block_name in @anchored_blocks do
+       when block_name in @marked_blocks do
     {[tag], {index, open, depth}}
   end
 
-  defp inject_block_anchors(
+  defp inject_block_markers(
          {:block_end, block_name} = tag,
          {index, [block_index | open], depth},
          hash
        )
-       when block_name in @anchored_blocks do
-    {[tag | anchor_tags(hash, block_index, "c")], {index, open, depth}}
+       when block_name in @marked_blocks do
+    {[tag | marker_tags(hash, block_index, "c")], {index, open, depth}}
   end
 
-  defp inject_block_anchors(tag, state, _hash), do: {[tag], state}
+  defp inject_block_markers(tag, state, _hash), do: {[tag], state}
 
   # Wraps implicit keyword list.
   # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
@@ -196,7 +196,7 @@ defmodule Hologram.Template.DOM do
   end
 
   # Templates checked out on Windows carry CRLF line endings, which would otherwise give the same
-  # template a different hash per platform, so anchor markers could not be asserted verbatim.
+  # template a different hash per platform, so markers could not be asserted verbatim.
   defp normalize_newlines(term) when is_binary(term) do
     StringUtils.normalize_newlines(term)
   end
@@ -332,10 +332,10 @@ defmodule Hologram.Template.DOM do
     inspect(EventModifiers.parse(base_name, modifiers))
   end
 
-  # Distinguishes anchors belonging to different templates, since slot content is spliced into the
+  # Distinguishes markers belonging to different templates, since slot content is spliced into the
   # surrounding template's children and bare block indexes would collide there. Derived from the
   # tags rather than the module name so that it stays stable across renames and needs no caller
-  # context. Two byte-identical templates share a hash, which degrades to anchor churn rather than
+  # context. Two byte-identical templates share a hash, which degrades to marker churn rather than
   # element identity loss.
   #
   # :erlang.phash2/2 is documented to return the same value for a given term regardless of machine

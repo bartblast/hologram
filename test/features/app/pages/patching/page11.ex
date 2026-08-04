@@ -21,9 +21,9 @@ defmodule HologramFeatureTests.Patching.Page11 do
   # the banner and rebuilds the input. Panel B differs only in the banner's tag, which is enough
   # for the pairing to miss and the keeper to survive - nothing in the template says A and B should
   # behave differently, the tag names decide it. Panel C wraps the conditional in an
-  # always-rendered element, the workaround that held the slot before blocks were anchored.
+  # always-rendered element, the workaround that held the slot before blocks were marked.
   #
-  # B and C are here to pin down that the anchors leave the already-working shapes working.
+  # B and C are here to pin down that the markers leave the already-working shapes working.
   def template do
     ~HOLO"""
     <!DOCTYPE html>

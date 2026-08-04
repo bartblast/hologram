@@ -1543,7 +1543,7 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
-    test "for block inside script element is not anchored" do
+    test "for block inside script element is not marked" do
       # <script>{%for x <- @aaa}bbb{/for}</script>
       tags = [
         {:start_tag, {"script", []}},
@@ -1575,7 +1575,7 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
-    test "for block nested in if block is anchored separately" do
+    test "for block nested in if block is marked separately" do
       # {%if @aaa}{%for x <- @bbb}ccc{/for}{/if}
       tags = [
         {:block_start, {"if", "{ @aaa}"}},
@@ -1966,7 +1966,7 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
-    test "nested if blocks are anchored separately" do
+    test "nested if blocks are marked separately" do
       # {%if @aaa}{%if @bbb}ccc{/if}{/if}
       tags = [
         {:block_start, {"if", "{ @aaa}"}},
@@ -1999,7 +1999,7 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
-    test "sibling if blocks get distinct anchor indexes" do
+    test "sibling if blocks get distinct marker indexes" do
       # {%if @aaa}bbb{/if}{%if @ccc}ddd{/if}
       tags = [
         {:block_start, {"if", "{ @aaa}"}},
@@ -2030,7 +2030,7 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
-    test "if block inside script element is not anchored" do
+    test "if block inside script element is not marked" do
       # <script>{%if @aaa}bbb{/if}</script>
       tags = [
         {:start_tag, {"script", []}},
@@ -2058,7 +2058,7 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
-    test "if block inside style element is not anchored" do
+    test "if block inside style element is not marked" do
       # <style>{%if @aaa}bbb{/if}</style>
       tags = [
         {:start_tag, {"style", []}},
@@ -2086,7 +2086,7 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
-    test "if block following a script element is anchored" do
+    test "if block following a script element is marked" do
       # <script>aaa</script>{%if @bbb}ccc{/if}
       tags = [
         {:start_tag, {"script", []}},
@@ -2110,7 +2110,7 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
-    test "anchor markers do not depend on line endings" do
+    test "markers do not depend on line endings" do
       # {%if @aaa}bbb
       # ccc{/if}, checked out with Unix and with Windows line endings
       lf_tags = [
@@ -2125,7 +2125,7 @@ defmodule Hologram.Template.DOMTest do
         {:block_end, "if"}
       ]
 
-      assert anchor_markers(build_ast(lf_tags)) == anchor_markers(build_ast(crlf_tags))
+      assert marker_markers(build_ast(lf_tags)) == marker_markers(build_ast(crlf_tags))
     end
   end
 
@@ -2329,7 +2329,7 @@ defmodule Hologram.Template.DOMTest do
            ]
   end
 
-  defp anchor_markers(ast) do
+  defp marker_markers(ast) do
     ast
     |> inspect(limit: :infinity)
     |> then(&Regex.scan(~r/\[h:[a-z0-9]+:\d+:[oc]\]/, &1))

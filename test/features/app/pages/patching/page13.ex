@@ -29,7 +29,7 @@ defmodule HologramFeatureTests.Patching.Page13 do
   # leave a test that passes whether or not repeated keys are handled.
   #
   # Only the keepers are checked for identity. Which DOM node a given item keeps across a reorder
-  # is a separate question, answered by keys rather than by anchors.
+  # is a separate question, answered by keys rather than by markers.
   def template do
     ~HOLO"""
     <!DOCTYPE html>
