@@ -860,6 +860,7 @@ defmodule Hologram.Template.DOMTest do
       ]
 
       assert build_ast(tags) == [
+               {:public_comment, [text: "[h:yc0r1e:0:o]"]},
                {:if, [line: 1],
                 [
                   {{:., [line: 1], [{:vars, [line: 1], nil}, :flag]}, [no_parens: true, line: 1],
@@ -869,7 +870,8 @@ defmodule Hologram.Template.DOMTest do
                       {:{}, [line: 1], [:dynamic_tag, {:{}, [line: 1], ["div"]}, [], []]}
                     ]
                   ]
-                ]}
+                ]},
+               {:public_comment, [text: "[h:yc0r1e:0:c]"]}
              ]
     end
   end
@@ -1544,6 +1546,7 @@ defmodule Hologram.Template.DOMTest do
       tags = [{:block_start, {"if", "{ @xyz == 123}"}}, {:text, "abc"}, {:block_end, "if"}]
 
       assert build_ast(tags) == [
+               {:public_comment, [text: "[h:1jafcb3:0:o]"]},
                {:if, [line: 1],
                 [
                   {:==, [line: 1],
@@ -1553,7 +1556,8 @@ defmodule Hologram.Template.DOMTest do
                      123
                    ]},
                   [do: [text: "abc"]]
-                ]}
+                ]},
+               {:public_comment, [text: "[h:1jafcb3:0:c]"]}
              ]
     end
 
@@ -1568,6 +1572,7 @@ defmodule Hologram.Template.DOMTest do
       ]
 
       assert build_ast(tags) == [
+               {:public_comment, [text: "[h:9rt9sz:0:o]"]},
                {:if, [line: 1],
                 [
                   {:==, [line: 1],
@@ -1579,7 +1584,8 @@ defmodule Hologram.Template.DOMTest do
                   [
                     do: [{:text, "abc"}, {:{}, [line: 1], [:element, "div", [], []]}]
                   ]
-                ]}
+                ]},
+               {:public_comment, [text: "[h:9rt9sz:0:c]"]}
              ]
     end
 
@@ -1594,6 +1600,7 @@ defmodule Hologram.Template.DOMTest do
       ]
 
       assert build_ast(tags) == [
+               {:public_comment, [text: "[h:1cnyble:0:o]"]},
                {:if, [line: 1],
                 [
                   {:==, [line: 1],
@@ -1603,7 +1610,8 @@ defmodule Hologram.Template.DOMTest do
                      123
                    ]},
                   [do: [{:text, "aaa"}], else: [{:text, "bbb"}]]
-                ]}
+                ]},
+               {:public_comment, [text: "[h:1cnyble:0:c]"]}
              ]
     end
 
@@ -1620,6 +1628,7 @@ defmodule Hologram.Template.DOMTest do
       ]
 
       assert build_ast(tags) == [
+               {:public_comment, [text: "[h:d2j815:0:o]"]},
                {:if, [line: 1],
                 [
                   {:==, [line: 1],
@@ -1632,7 +1641,8 @@ defmodule Hologram.Template.DOMTest do
                     do: [{:text, "aaa"}],
                     else: [{:text, "bbb"}, {:{}, [line: 1], [:element, "div", [], []]}]
                   ]
-                ]}
+                ]},
+               {:public_comment, [text: "[h:d2j815:0:c]"]}
              ]
     end
 
@@ -1653,6 +1663,7 @@ defmodule Hologram.Template.DOMTest do
                   "div",
                   [],
                   [
+                    {:public_comment, [text: "[h:tc0zyg:0:o]"]},
                     {:if, [line: 1],
                      [
                        {:==, [line: 1],
@@ -1662,7 +1673,8 @@ defmodule Hologram.Template.DOMTest do
                           123
                         ]},
                        [do: [text: "bbb"]]
-                     ]}
+                     ]},
+                    {:public_comment, [text: "[h:tc0zyg:0:c]"]}
                   ]
                 ]}
              ]
@@ -1685,6 +1697,7 @@ defmodule Hologram.Template.DOMTest do
                   {:alias!, [line: 1], [{:__aliases__, [line: 1], [:MyComponent]}]},
                   [],
                   [
+                    {:public_comment, [text: "[h:15k7x25:0:o]"]},
                     {:if, [line: 1],
                      [
                        {:==, [line: 1],
@@ -1694,7 +1707,8 @@ defmodule Hologram.Template.DOMTest do
                           123
                         ]},
                        [do: [text: "bbb"]]
-                     ]}
+                     ]},
+                    {:public_comment, [text: "[h:15k7x25:0:c]"]}
                   ]
                 ]}
              ]
@@ -1718,6 +1732,7 @@ defmodule Hologram.Template.DOMTest do
                   "div",
                   [],
                   [
+                    {:public_comment, [text: "[h:1c04v9h:0:o]"]},
                     {:if, [line: 1],
                      [
                        {:==, [line: 1],
@@ -1728,6 +1743,7 @@ defmodule Hologram.Template.DOMTest do
                         ]},
                        [do: [text: "bbb"]]
                      ]},
+                    {:public_comment, [text: "[h:1c04v9h:0:c]"]},
                     {:text, "ccc"}
                   ]
                 ]}
@@ -1752,6 +1768,7 @@ defmodule Hologram.Template.DOMTest do
                   {:alias!, [line: 1], [{:__aliases__, [line: 1], [:MyComponent]}]},
                   [],
                   [
+                    {:public_comment, [text: "[h:1vbrvk2:0:o]"]},
                     {:if, [line: 1],
                      [
                        {:==, [line: 1],
@@ -1762,6 +1779,7 @@ defmodule Hologram.Template.DOMTest do
                         ]},
                        [do: [text: "bbb"]]
                      ]},
+                    {:public_comment, [text: "[h:1vbrvk2:0:c]"]},
                     {:text, "ccc"}
                   ]
                 ]}
@@ -1787,6 +1805,7 @@ defmodule Hologram.Template.DOMTest do
                   [],
                   [
                     {:text, "ccc"},
+                    {:public_comment, [text: "[h:lg34lu:0:o]"]},
                     {:if, [line: 1],
                      [
                        {:==, [line: 1],
@@ -1796,7 +1815,8 @@ defmodule Hologram.Template.DOMTest do
                           123
                         ]},
                        [do: [text: "bbb"]]
-                     ]}
+                     ]},
+                    {:public_comment, [text: "[h:lg34lu:0:c]"]}
                   ]
                 ]}
              ]
@@ -1821,6 +1841,7 @@ defmodule Hologram.Template.DOMTest do
                   [],
                   [
                     {:text, "ccc"},
+                    {:public_comment, [text: "[h:17xgj1q:0:o]"]},
                     {:if, [line: 1],
                      [
                        {:==, [line: 1],
@@ -1830,9 +1851,154 @@ defmodule Hologram.Template.DOMTest do
                           123
                         ]},
                        [do: [text: "bbb"]]
+                     ]},
+                    {:public_comment, [text: "[h:17xgj1q:0:c]"]}
+                  ]
+                ]}
+             ]
+    end
+
+    test "nested if blocks are anchored separately" do
+      # {%if @aaa}{%if @bbb}ccc{/if}{/if}
+      tags = [
+        {:block_start, {"if", "{ @aaa}"}},
+        {:block_start, {"if", "{ @bbb}"}},
+        {:text, "ccc"},
+        {:block_end, "if"},
+        {:block_end, "if"}
+      ]
+
+      assert build_ast(tags) == [
+               {:public_comment, [text: "[h:1815mne:0:o]"]},
+               {:if, [line: 1],
+                [
+                  {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]}, [no_parens: true, line: 1],
+                   []},
+                  [
+                    do: [
+                      {:public_comment, [text: "[h:1815mne:1:o]"]},
+                      {:if, [line: 1],
+                       [
+                         {{:., [line: 1], [{:vars, [line: 1], nil}, :bbb]},
+                          [no_parens: true, line: 1], []},
+                         [do: [text: "ccc"]]
+                       ]},
+                      {:public_comment, [text: "[h:1815mne:1:c]"]}
+                    ]
+                  ]
+                ]},
+               {:public_comment, [text: "[h:1815mne:0:c]"]}
+             ]
+    end
+
+    test "sibling if blocks get distinct anchor indexes" do
+      # {%if @aaa}bbb{/if}{%if @ccc}ddd{/if}
+      tags = [
+        {:block_start, {"if", "{ @aaa}"}},
+        {:text, "bbb"},
+        {:block_end, "if"},
+        {:block_start, {"if", "{ @ccc}"}},
+        {:text, "ddd"},
+        {:block_end, "if"}
+      ]
+
+      assert build_ast(tags) == [
+               {:public_comment, [text: "[h:1dkwq9i:0:o]"]},
+               {:if, [line: 1],
+                [
+                  {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]}, [no_parens: true, line: 1],
+                   []},
+                  [do: [text: "bbb"]]
+                ]},
+               {:public_comment, [text: "[h:1dkwq9i:0:c]"]},
+               {:public_comment, [text: "[h:1dkwq9i:1:o]"]},
+               {:if, [line: 1],
+                [
+                  {{:., [line: 1], [{:vars, [line: 1], nil}, :ccc]}, [no_parens: true, line: 1],
+                   []},
+                  [do: [text: "ddd"]]
+                ]},
+               {:public_comment, [text: "[h:1dkwq9i:1:c]"]}
+             ]
+    end
+
+    test "if block inside script element is not anchored" do
+      # <script>{%if @aaa}bbb{/if}</script>
+      tags = [
+        {:start_tag, {"script", []}},
+        {:block_start, {"if", "{ @aaa}"}},
+        {:text, "bbb"},
+        {:block_end, "if"},
+        {:end_tag, "script"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "script",
+                  [],
+                  [
+                    {:if, [line: 1],
+                     [
+                       {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]},
+                        [no_parens: true, line: 1], []},
+                       [do: [text: "bbb"]]
                      ]}
                   ]
                 ]}
+             ]
+    end
+
+    test "if block inside style element is not anchored" do
+      # <style>{%if @aaa}bbb{/if}</style>
+      tags = [
+        {:start_tag, {"style", []}},
+        {:block_start, {"if", "{ @aaa}"}},
+        {:text, "bbb"},
+        {:block_end, "if"},
+        {:end_tag, "style"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "style",
+                  [],
+                  [
+                    {:if, [line: 1],
+                     [
+                       {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]},
+                        [no_parens: true, line: 1], []},
+                       [do: [text: "bbb"]]
+                     ]}
+                  ]
+                ]}
+             ]
+    end
+
+    test "if block following a script element is anchored" do
+      # <script>aaa</script>{%if @bbb}ccc{/if}
+      tags = [
+        {:start_tag, {"script", []}},
+        {:text, "aaa"},
+        {:end_tag, "script"},
+        {:block_start, {"if", "{ @bbb}"}},
+        {:text, "ccc"},
+        {:block_end, "if"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "script", [], [text: "aaa"]]},
+               {:public_comment, [text: "[h:h1bmt3:0:o]"]},
+               {:if, [line: 1],
+                [
+                  {{:., [line: 1], [{:vars, [line: 1], nil}, :bbb]}, [no_parens: true, line: 1],
+                   []},
+                  [do: [text: "ccc"]]
+                ]},
+               {:public_comment, [text: "[h:h1bmt3:0:c]"]}
              ]
     end
   end

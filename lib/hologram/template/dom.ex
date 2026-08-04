@@ -33,7 +33,9 @@ defmodule Hologram.Template.DOM do
   @spec build_ast(list(Parser.parsed_tag())) :: AST.t()
   def build_ast(tags) do
     {code, _last_tag_type} =
-      Enum.reduce(tags, {"", nil}, fn tag, {code_acc, last_tag_type} ->
+      tags
+      |> add_block_anchors()
+      |> Enum.reduce({"", nil}, fn tag, {code_acc, last_tag_type} ->
         current_tag_type = if is_tuple(tag), do: elem(tag, 0), else: tag
 
         # :skip items are fully elided, as if they did not appear
@@ -49,6 +51,43 @@ defmodule Hologram.Template.DOM do
     "[#{code}]"
     |> AST.for_code()
     |> substitute_module_attributes()
+  end
+
+  # Brackets each block in a pair of anchor comments, so that changing how many nodes the block
+  # renders can't change the identity of the block's siblings. The client diffs children by tag and
+  # position, so without the anchors a block that starts rendering an extra node lets the following
+  # sibling be paired with the block's content and rebuilt, destroying focus, scroll position and
+  # media state.
+  #
+  # Blocks inside <script> and <style> are left alone: a comment there would be part of the script
+  # or stylesheet source rather than markup, and their text-only children have no identity to
+  # protect anyway.
+  defp add_block_anchors(tags) do
+    hash = template_hash(tags)
+
+    {anchored_tags, _state} =
+      Enum.flat_map_reduce(tags, {0, [], 0}, &inject_block_anchors(&1, &2, hash))
+
+    anchored_tags
+  end
+
+  # Builds one anchor comment, whose text is four bracketed segments, e.g. "[h:a3f2b1c4:0:o]":
+  #
+  #   h         namespace, distinguishing an anchor from a comment written in the template
+  #   a3f2b1c4  template hash, see template_hash/1
+  #   0         index of the block within its template, counted in source order
+  #   o         side of the pair, "o" opening or "c" closing
+  #
+  # The marker text doubles as the client-side vnode key, which is why it has to be part of the
+  # markup: the client diffs against a virtual DOM derived from server-rendered HTML, and a
+  # comment's own text is the only carrier that survives serialization. The client recognizes the
+  # same format in Vdom.anchorKey/1.
+  defp anchor_tags(hash, index, side) do
+    [
+      :public_comment_start,
+      {:text, "[h:#{hash}:#{index}:#{side}]"},
+      :public_comment_end
+    ]
   end
 
   defp append_code(code_acc, code, last_tag_type)
@@ -84,6 +123,37 @@ defmodule Hologram.Template.DOM do
     |> String.slice(1, String.length(expr_str) - 2)
     |> String.trim()
   end
+
+  # State is {next block index, stack of open blocks, nesting depth inside <script>/<style>}. A
+  # block opened inside raw text pushes :skipped so that its end tag pops the stack without
+  # emitting a closing anchor.
+  defp inject_block_anchors({:start_tag, {tag_name, _attrs}} = tag, {index, open, depth}, _hash)
+       when tag_name in ["script", "style"] do
+    {[tag], {index, open, depth + 1}}
+  end
+
+  defp inject_block_anchors({:end_tag, tag_name} = tag, {index, open, depth}, _hash)
+       when tag_name in ["script", "style"] do
+    {[tag], {index, open, max(depth - 1, 0)}}
+  end
+
+  defp inject_block_anchors({:block_start, {"if", _expr}} = tag, {index, open, 0}, hash) do
+    {anchor_tags(hash, index, "o") ++ [tag], {index + 1, [index | open], 0}}
+  end
+
+  defp inject_block_anchors({:block_start, {"if", _expr}} = tag, {index, open, depth}, _hash) do
+    {[tag], {index, [:skipped | open], depth}}
+  end
+
+  defp inject_block_anchors({:block_end, "if"} = tag, {index, [:skipped | open], depth}, _hash) do
+    {[tag], {index, open, depth}}
+  end
+
+  defp inject_block_anchors({:block_end, "if"} = tag, {index, [block_index | open], depth}, hash) do
+    {[tag | anchor_tags(hash, block_index, "c")], {index, open, depth}}
+  end
+
+  defp inject_block_anchors(tag, state, _hash), do: {[tag], state}
 
   # Wraps implicit keyword list.
   # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
@@ -215,6 +285,21 @@ defmodule Hologram.Template.DOM do
   # Every event's raw segments are parsed and validated into tagged modifiers at compile time.
   defp render_event_modifiers(base_name, modifiers) do
     inspect(EventModifiers.parse(base_name, modifiers))
+  end
+
+  # Distinguishes anchors belonging to different templates, since slot content is spliced into the
+  # surrounding template's children and bare block indexes would collide there. Derived from the
+  # tags rather than the module name so that it stays stable across renames and needs no caller
+  # context. Two byte-identical templates share a hash, which degrades to anchor churn rather than
+  # element identity loss.
+  #
+  # :erlang.phash2/2 is documented to return the same value for a given term regardless of machine
+  # architecture and ERTS version, which is what lets tests assert marker text verbatim.
+  defp template_hash(tags) do
+    tags
+    |> :erlang.phash2(4_294_967_296)
+    |> Integer.to_string(36)
+    |> String.downcase()
   end
 
   defp substitute_module_attributes({:@, meta_1, [{name, _meta_2, _args}]}) do
