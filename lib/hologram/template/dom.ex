@@ -7,6 +7,11 @@ defmodule Hologram.Template.DOM do
   alias Hologram.Template.Parser
   alias Hologram.TemplateSyntaxError
 
+  # Blocks whose rendered node count can change between renders, shifting the position of every
+  # sibling that follows them. "raw" and "else" are absent because neither delimits a region whose
+  # size can vary: "raw" only marks source to reconstruct, and "else" is a branch within an "if".
+  @anchored_blocks ["for", "if"]
+
   @type attribute :: {String.t(), t} | {:spread, {any}}
 
   # 'dom_node' name used instead of 'node" because type node/0 is a built-in type and it cannot be redefined.
@@ -137,19 +142,35 @@ defmodule Hologram.Template.DOM do
     {[tag], {index, open, max(depth - 1, 0)}}
   end
 
-  defp inject_block_anchors({:block_start, {"if", _expr}} = tag, {index, open, 0}, hash) do
+  defp inject_block_anchors({:block_start, {block_name, _expr}} = tag, {index, open, 0}, hash)
+       when block_name in @anchored_blocks do
     {anchor_tags(hash, index, "o") ++ [tag], {index + 1, [index | open], 0}}
   end
 
-  defp inject_block_anchors({:block_start, {"if", _expr}} = tag, {index, open, depth}, _hash) do
+  defp inject_block_anchors(
+         {:block_start, {block_name, _expr}} = tag,
+         {index, open, depth},
+         _hash
+       )
+       when block_name in @anchored_blocks do
     {[tag], {index, [:skipped | open], depth}}
   end
 
-  defp inject_block_anchors({:block_end, "if"} = tag, {index, [:skipped | open], depth}, _hash) do
+  defp inject_block_anchors(
+         {:block_end, block_name} = tag,
+         {index, [:skipped | open], depth},
+         _hash
+       )
+       when block_name in @anchored_blocks do
     {[tag], {index, open, depth}}
   end
 
-  defp inject_block_anchors({:block_end, "if"} = tag, {index, [block_index | open], depth}, hash) do
+  defp inject_block_anchors(
+         {:block_end, block_name} = tag,
+         {index, [block_index | open], depth},
+         hash
+       )
+       when block_name in @anchored_blocks do
     {[tag | anchor_tags(hash, block_index, "c")], {index, open, depth}}
   end
 

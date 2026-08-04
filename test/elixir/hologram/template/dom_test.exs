@@ -1499,6 +1499,7 @@ defmodule Hologram.Template.DOMTest do
       tags = [{:block_start, {"for", "{ item <- @items}"}}, {:text, "abc"}, {:block_end, "for"}]
 
       assert build_ast(tags) == [
+               {:public_comment, [text: "[h:2789se:0:o]"]},
                {:for, [line: 1],
                 [
                   {:<-, [line: 1],
@@ -1508,7 +1509,8 @@ defmodule Hologram.Template.DOMTest do
                       [no_parens: true, line: 1], []}
                    ]},
                   [do: {:__block__, [], [[text: "abc"]]}]
-                ]}
+                ]},
+               {:public_comment, [text: "[h:2789se:0:c]"]}
              ]
     end
 
@@ -1522,6 +1524,7 @@ defmodule Hologram.Template.DOMTest do
       ]
 
       assert build_ast(tags) == [
+               {:public_comment, [text: "[h:2rfi1c:0:o]"]},
                {:for, [line: 1],
                 [
                   {:<-, [line: 1],
@@ -1535,7 +1538,112 @@ defmodule Hologram.Template.DOMTest do
                       {:__block__, [],
                        [[{:text, "abc"}, {:{}, [line: 1], [:element, "div", [], []]}]]}
                   ]
+                ]},
+               {:public_comment, [text: "[h:2rfi1c:0:c]"]}
+             ]
+    end
+
+    test "for block inside script element is not anchored" do
+      # <script>{%for x <- @aaa}bbb{/for}</script>
+      tags = [
+        {:start_tag, {"script", []}},
+        {:block_start, {"for", "{ x <- @aaa}"}},
+        {:text, "bbb"},
+        {:block_end, "for"},
+        {:end_tag, "script"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "script",
+                  [],
+                  [
+                    {:for, [line: 1],
+                     [
+                       {:<-, [line: 1],
+                        [
+                          {:x, [line: 1], nil},
+                          {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]},
+                           [no_parens: true, line: 1], []}
+                        ]},
+                       [do: {:__block__, [], [[text: "bbb"]]}]
+                     ]}
+                  ]
                 ]}
+             ]
+    end
+
+    test "for block nested in if block is anchored separately" do
+      # {%if @aaa}{%for x <- @bbb}ccc{/for}{/if}
+      tags = [
+        {:block_start, {"if", "{ @aaa}"}},
+        {:block_start, {"for", "{ x <- @bbb}"}},
+        {:text, "ccc"},
+        {:block_end, "for"},
+        {:block_end, "if"}
+      ]
+
+      assert build_ast(tags) == [
+               {:public_comment, [text: "[h:17h2ajb:0:o]"]},
+               {:if, [line: 1],
+                [
+                  {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]}, [no_parens: true, line: 1],
+                   []},
+                  [
+                    do: [
+                      {:public_comment, [text: "[h:17h2ajb:1:o]"]},
+                      {:for, [line: 1],
+                       [
+                         {:<-, [line: 1],
+                          [
+                            {:x, [line: 1], nil},
+                            {{:., [line: 1], [{:vars, [line: 1], nil}, :bbb]},
+                             [no_parens: true, line: 1], []}
+                          ]},
+                         [do: {:__block__, [], [[text: "ccc"]]}]
+                       ]},
+                      {:public_comment, [text: "[h:17h2ajb:1:c]"]}
+                    ]
+                  ]
+                ]},
+               {:public_comment, [text: "[h:17h2ajb:0:c]"]}
+             ]
+    end
+
+    test "for and if blocks share the block index sequence" do
+      # {%for x <- @aaa}bbb{/for}{%if @ccc}ddd{/if}
+      tags = [
+        {:block_start, {"for", "{ x <- @aaa}"}},
+        {:text, "bbb"},
+        {:block_end, "for"},
+        {:block_start, {"if", "{ @ccc}"}},
+        {:text, "ddd"},
+        {:block_end, "if"}
+      ]
+
+      assert build_ast(tags) == [
+               {:public_comment, [text: "[h:17e67kg:0:o]"]},
+               {:for, [line: 1],
+                [
+                  {:<-, [line: 1],
+                   [
+                     {:x, [line: 1], nil},
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :aaa]},
+                      [no_parens: true, line: 1], []}
+                   ]},
+                  [do: {:__block__, [], [[text: "bbb"]]}]
+                ]},
+               {:public_comment, [text: "[h:17e67kg:0:c]"]},
+               {:public_comment, [text: "[h:17e67kg:1:o]"]},
+               {:if, [line: 1],
+                [
+                  {{:., [line: 1], [{:vars, [line: 1], nil}, :ccc]}, [no_parens: true, line: 1],
+                   []},
+                  [do: [text: "ddd"]]
+                ]},
+               {:public_comment, [text: "[h:17e67kg:1:c]"]}
              ]
     end
   end
