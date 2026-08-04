@@ -67,6 +67,8 @@ export default class Vdom {
       for (const childNode of node.children) {
         Vdom.addKeysToVnodes(childNode);
       }
+
+      $.dedupeAnchorKeys(node.children);
     }
   }
 
@@ -76,6 +78,39 @@ export default class Vdom {
     return typeof text === "string" && ANCHOR_KEY_REGEX.test(text)
       ? text
       : null;
+  }
+
+  // Numbers repeats of an anchor key within one children list, in document order: the second
+  // occurrence becomes "<key>:1", the third "<key>:2".
+  //
+  // A block carries one marker from the compiler, but it can be rendered more than once into the
+  // same list - a loop whose body holds a block, or the same component placed twice. Keys have to
+  // be unique among siblings, since the diff indexes them by key and a repeat makes it reach for a
+  // node it has already consumed.
+  //
+  // Only the vnode key is renumbered, never the comment's text, so server-rendered and
+  // client-rendered markup stay byte-identical. Both sides walk a children list in document order,
+  // so both arrive at the same keys.
+  static dedupeAnchorKeys(children) {
+    const counts = new Map();
+
+    for (const child of children) {
+      if (child?.sel !== "!" || !child.key) {
+        continue;
+      }
+
+      const count = counts.get(child.key) ?? 0;
+      counts.set(child.key, count + 1);
+
+      if (count > 0) {
+        const dedupedKey = `${child.key}:${count}`;
+
+        child.key = dedupedKey;
+        child.data.key = dedupedKey;
+      }
+    }
+
+    return children;
   }
 
   static from(html) {
@@ -137,8 +172,8 @@ export default class Vdom {
         : vnode("!", node.textContent);
     }
 
-    const children = Array.from(node.childNodes).map(
-      Vdom.#buildVnodeFromDomNode,
+    const children = $.dedupeAnchorKeys(
+      Array.from(node.childNodes).map(Vdom.#buildVnodeFromDomNode),
     );
 
     const attrs = {};

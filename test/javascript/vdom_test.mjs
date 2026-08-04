@@ -274,6 +274,69 @@ describe("Vdom", () => {
     });
   });
 
+  describe("dedupeAnchorKeys()", () => {
+    it("distinct anchor keys", () => {
+      const children = [
+        vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
+        vnode("!", {key: "[h:1a2b3c:0:c]"}, "[h:1a2b3c:0:c]"),
+      ];
+
+      Vdom.dedupeAnchorKeys(children);
+
+      assert.deepStrictEqual(
+        children.map((child) => child.key),
+        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:c]"],
+      );
+    });
+
+    it("repeated anchor keys", () => {
+      const children = [
+        vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
+        vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
+        vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
+      ];
+
+      Vdom.dedupeAnchorKeys(children);
+
+      assert.deepStrictEqual(
+        children.map((child) => child.key),
+        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]:1", "[h:1a2b3c:0:o]:2"],
+      );
+    });
+
+    it("renumbers the vnode key without touching the comment text", () => {
+      const children = [
+        vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
+        vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
+      ];
+
+      Vdom.dedupeAnchorKeys(children);
+
+      assert.deepStrictEqual(
+        children.map((child) => child.text),
+        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]"],
+      );
+
+      assert.equal(children[1].data.key, "[h:1a2b3c:0:o]:1");
+    });
+
+    it("ordinary comments and elements", () => {
+      const children = [
+        vnode("!", "my comment"),
+        vnode("!", "my comment"),
+        vnode("div", {attrs: {}}, []),
+        vnode("div", {attrs: {}}, []),
+      ];
+
+      Vdom.dedupeAnchorKeys(children);
+
+      assert.deepStrictEqual(
+        children.map((child) => child.key),
+        [undefined, undefined, undefined, undefined],
+      );
+    });
+  });
+
   describe("from()", () => {
     it("builds virtual DOM from HTML markup", () => {
       const html =
@@ -291,6 +354,19 @@ describe("Vdom", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("numbers repeated block anchor comments", () => {
+      const result = Vdom.from(
+        "<html><body><!--[h:1a2b3c:0:o]--><!--[h:1a2b3c:0:o]--></body></html>",
+      );
+
+      const body = result.children[1];
+
+      assert.deepStrictEqual(
+        body.children.map((child) => child.key),
+        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]:1"],
+      );
     });
 
     it("keys block anchor comments", () => {
