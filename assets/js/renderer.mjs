@@ -16,6 +16,7 @@ import Once from "./once.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
+import Vdom from "./vdom.mjs";
 
 import {h as vnode} from "snabbdom";
 import vnodeToHtml from "snabbdom-to-html";
@@ -1641,7 +1642,14 @@ export default class Renderer {
       .map((child) => (typeof child === "string" ? child : vnodeToHtml(child)))
       .join("");
 
-    return vnode("!", commentContent);
+    // Block anchors are emitted as comments, so they arrive here like any other comment node and
+    // are told apart by their marker text. Keying them here keeps client-rendered anchors matching
+    // the ones recovered from server-rendered markup.
+    const key = Vdom.anchorKey(commentContent);
+
+    return key
+      ? vnode("!", {key: key}, commentContent)
+      : vnode("!", commentContent);
   }
 
   // Based on render_dom/3 (slot case)

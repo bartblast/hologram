@@ -251,6 +251,28 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("with block anchor marker", () => {
+      // <!--[h:1a2b3c:0:o]-->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring("[h:1a2b3c:0:o]")]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("with nested stateful components", () => {
       const cid3 = Type.bitstring("component_3");
       const cid7 = Type.bitstring("component_7");
