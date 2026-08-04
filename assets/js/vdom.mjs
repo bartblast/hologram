@@ -266,6 +266,18 @@ export default class Vdom {
     return vnode(tagName, data, children);
   }
 
+  // We're checking html element children,
+  // so the nodes are either: head element, body element or text (whitespace) nodes
+  static #isBodyVnode(vnode) {
+    return vnode.sel?.[0] === "b";
+  }
+
+  // We're checking html element children,
+  // so the nodes are either: head element, body element or text (whitespace) nodes
+  static #isHeadVnode(vnode) {
+    return vnode.sel?.[0] === "h";
+  }
+
   // The closing side matching the given opening key, or -1. A block never contains itself and
   // repeats are renumbered before this runs, so the first key match is the right one.
   static #matchingCloseIndex(children, openIndex, openKey) {
@@ -280,18 +292,6 @@ export default class Vdom {
     }
 
     return -1;
-  }
-
-  // We're checking html element children,
-  // so the nodes are either: head element, body element or text (whitespace) nodes
-  static #isBodyVnode(vnode) {
-    return vnode.sel?.[0] === "b";
-  }
-
-  // We're checking html element children,
-  // so the nodes are either: head element, body element or text (whitespace) nodes
-  static #isHeadVnode(vnode) {
-    return vnode.sel?.[0] === "h";
   }
 }
 

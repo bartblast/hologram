@@ -1559,22 +1559,27 @@ export default class Renderer {
   // Based on render_dom/3 (list case)
   static #renderNodes(nodes, context, slots, defaultTarget, parentTagName) {
     // A block rendered more than once into this list carries the same anchor key each time, so the
-    // repeats are numbered here, where the list is finalized.
-    return Vdom.dedupeAnchorKeys(
-      Renderer.#mergeNeighbouringTextNodes(
-        nodes.data
-          // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if} or DOCTYPE
-          .filter((node) => !Type.isNil(node))
-          .map((node) =>
-            Renderer.renderDom(
-              node,
-              context,
-              slots,
-              defaultTarget,
-              parentTagName,
-            ),
-          )
-          .flat(),
+    // repeats are numbered here, where the list is finalized, and each anchored span is then
+    // gathered into a single bag so the block holds one position however much it renders.
+    // Numbering runs first: bags pair their markers by key, and a repeat's key is only unique
+    // once numbered.
+    return Vdom.groupAnchorBags(
+      Vdom.dedupeAnchorKeys(
+        Renderer.#mergeNeighbouringTextNodes(
+          nodes.data
+            // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if} or DOCTYPE
+            .filter((node) => !Type.isNil(node))
+            .map((node) =>
+              Renderer.renderDom(
+                node,
+                context,
+                slots,
+                defaultTarget,
+                parentTagName,
+              ),
+            )
+            .flat(),
+        ),
       ),
     );
   }
