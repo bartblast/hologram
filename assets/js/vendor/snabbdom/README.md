@@ -28,7 +28,13 @@ file, and a diff against upstream becomes unreadable.
 ## Deviations from upstream
 
 Each one is marked in the source with a `HOLOGRAM PATCH` comment explaining what it changes and
-why. Nothing yet.
+why, and is covered by `test/javascript/vendor/snabbdom_test.mjs` - so an upgrade that drops one
+fails there rather than in a browser.
+
+- `build/init.js` - when removing a text node, resolve its own parent instead of using the one
+  passed in. Inside a fragment the parent passed in is that fragment's `DocumentFragment`, which
+  emptied itself into the page on insertion, so removal throws. The element branch already
+  resolves the parent this way, through `createRmCb`.
 
 ## Updating
 
