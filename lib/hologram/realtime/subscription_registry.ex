@@ -279,11 +279,16 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   def init(_opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
 
-    {:ok, %{}}
+    # `refs` maps each monitor reference to its instance_id, so a :DOWN can find
+    # the entry to delete.
+    #
+    # TODO: `waiters` holds callers parked because their instance has no entry yet -
+    # populated by apply_deltas/4 on a lookup miss, drained by attach_connection/5.
+    {:ok, %{refs: %{}, waiters: %{}}}
   end
 
   @impl GenServer
-  def handle_call({:apply_deltas, instance_id, adds, drops, authorizing_user_id}, _from, refs) do
+  def handle_call({:apply_deltas, instance_id, adds, drops, authorizing_user_id}, _from, state) do
     reply =
       case :ets.lookup(@table_name, instance_id) do
         [{^instance_id, entry}] ->
@@ -310,24 +315,24 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
           {adds, drops}
       end
 
-    {:reply, reply, refs}
+    {:reply, reply, state}
   end
 
   @impl GenServer
   def handle_call(
         {:attach_connection, instance_id, session_id, user_id, sse_pid, validated_bindings},
         _from,
-        refs
+        state
       ) do
     {bindings, refs_without_prior} =
       case :ets.lookup(@table_name, instance_id) do
         [] ->
-          {Map.new(validated_bindings), refs}
+          {Map.new(validated_bindings), state.refs}
 
         [{^instance_id, %{sse_pid: prior_pid, sse_ref: prior_ref, bindings: prior_bindings}}] ->
           Process.demonitor(prior_ref, [:flush])
           send(prior_pid, {:close, :superseded})
-          {prior_bindings, Map.delete(refs, prior_ref)}
+          {prior_bindings, Map.delete(state.refs, prior_ref)}
       end
 
     sse_ref = Process.monitor(sse_pid)
@@ -347,11 +352,13 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
       |> channels_of()
       |> MapSet.to_list()
 
-    {:reply, validated_channels, Map.put(refs_without_prior, sse_ref, instance_id)}
+    new_refs = Map.put(refs_without_prior, sse_ref, instance_id)
+
+    {:reply, validated_channels, %{state | refs: new_refs}}
   end
 
   @impl GenServer
-  def handle_call({:drop_for_identity_change, instance_id, new_user_id}, _from, refs) do
+  def handle_call({:drop_for_identity_change, instance_id, new_user_id}, _from, state) do
     reply =
       case :ets.lookup(@table_name, instance_id) do
         [{^instance_id, entry}] ->
@@ -377,11 +384,11 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
           {[], []}
       end
 
-    {:reply, reply, refs}
+    {:reply, reply, state}
   end
 
   @impl GenServer
-  def handle_call({:drop_keys, instance_id, keys}, _from, refs) do
+  def handle_call({:drop_keys, instance_id, keys}, _from, state) do
     reply =
       case :ets.lookup(@table_name, instance_id) do
         [{^instance_id, entry}] ->
@@ -401,11 +408,11 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
           {[], []}
       end
 
-    {:reply, reply, refs}
+    {:reply, reply, state}
   end
 
   @impl GenServer
-  def handle_call({:register_connection, instance_id, sse_pid}, _from, refs) do
+  def handle_call({:register_connection, instance_id, sse_pid}, _from, state) do
     sse_ref = Process.monitor(sse_pid)
 
     entry = %{
@@ -418,14 +425,16 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
     :ets.insert(@table_name, {instance_id, entry})
 
-    {:reply, :ok, Map.put(refs, sse_ref, instance_id)}
+    new_refs = Map.put(state.refs, sse_ref, instance_id)
+
+    {:reply, :ok, %{state | refs: new_refs}}
   end
 
   @impl GenServer
   def handle_call(
         {:transition, instance_id, new_sub_keys, client_claimed_sub_keys, authorizing_user_id},
         _from,
-        refs
+        state
       ) do
     new_keys_set = MapSet.new(new_sub_keys)
     client_keys_set = MapSet.new(client_claimed_sub_keys)
@@ -454,11 +463,11 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
         :noop
     end
 
-    {:reply, {add_keys, drop_keys}, refs}
+    {:reply, {add_keys, drop_keys}, state}
   end
 
   @impl GenServer
-  def handle_call({:update_identity, instance_id, session_id, user_id}, _from, refs) do
+  def handle_call({:update_identity, instance_id, session_id, user_id}, _from, state) do
     case :ets.lookup(@table_name, instance_id) do
       [{^instance_id, entry}] ->
         new_entry = %{entry | session_id: session_id, user_id: user_id}
@@ -468,18 +477,18 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
         :noop
     end
 
-    {:reply, :ok, refs}
+    {:reply, :ok, state}
   end
 
   @impl GenServer
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, refs) do
-    case Map.pop(refs, ref) do
-      {nil, refs} ->
-        {:noreply, refs}
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
+    case Map.pop(state.refs, ref) do
+      {nil, _refs} ->
+        {:noreply, state}
 
       {instance_id, new_refs} ->
         :ets.delete(@table_name, instance_id)
-        {:noreply, new_refs}
+        {:noreply, %{state | refs: new_refs}}
     end
   end
 
