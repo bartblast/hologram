@@ -3,6 +3,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
   use GenServer
 
+  @attach_wait_ms 500
   @table_name :hologram_subscriptions
 
   @doc """
@@ -32,16 +33,25 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   later identity changes selectively drop bindings whose authorization no
   longer holds.
 
-  When no entry exists at call time (the SSE connection has already died and
-  been garbage-collected by the registry's `:DOWN` handler), the call is
-  alive-only: no entry is created and no zero-crossing messages are emitted.
-  The input `adds` and `drops` are returned unchanged so the framework can
-  still sign receipts and ship a coherent response to the client.
+  When no entry exists at call time the caller is parked rather than answered.
+  A lookup miss has two causes with opposite correct responses: the connection
+  is attaching right now (a command issued during page boot races the SSE
+  handshake), or it is genuinely gone (the connection died and was
+  garbage-collected by the registry's `:DOWN` handler). Answering immediately
+  assumes the second and silently discards the deltas in the first.
+
+  If no connection attaches within `attach_wait_ms/0`, no entry is created and
+  no zero-crossing messages are emitted, and the input `adds` and `drops` are
+  returned unchanged so the framework can still sign receipts and ship a
+  coherent response to the client. Receipts signed on that path stay valid and
+  reattach their bindings at the client's next handshake.
   """
   @spec apply_deltas(String.t(), [{any, String.t()}], [{any, String.t()}], term | nil) ::
           {[{any, String.t()}], [{any, String.t()}]}
   def apply_deltas(instance_id, adds, drops, authorizing_user_id) do
-    GenServer.call(__MODULE__, {:apply_deltas, instance_id, adds, drops, authorizing_user_id})
+    message = {:apply_deltas, instance_id, adds, drops, authorizing_user_id}
+
+    GenServer.call(__MODULE__, message, @attach_wait_ms + 1_000)
   end
 
   @doc """
@@ -79,6 +89,16 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
       {:attach_connection, instance_id, session_id, user_id, sse_pid, validated_bindings}
     )
   end
+
+  @doc """
+  Returns how long `apply_deltas/4` waits for a connection to attach before
+  giving up and returning its deltas unapplied.
+
+  Sized to span one client round trip, since the miss it covers is a command
+  racing an SSE handshake that is already in flight.
+  """
+  @spec attach_wait_ms() :: pos_integer
+  def attach_wait_ms, do: @attach_wait_ms
 
   @doc """
   Returns the `bindings` map (`%{ {channel, cid} => authorizing_user_id | nil }`)
@@ -288,34 +308,19 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @impl GenServer
-  def handle_call({:apply_deltas, instance_id, adds, drops, authorizing_user_id}, _from, state) do
-    reply =
-      case :ets.lookup(@table_name, instance_id) do
-        [{^instance_id, entry}] ->
-          prior_bindings = entry.bindings
+  def handle_call({:apply_deltas, instance_id, adds, drops, authorizing_user_id}, from, state) do
+    case :ets.lookup(@table_name, instance_id) do
+      [{^instance_id, entry}] ->
+        reply = apply_deltas_to_entry(instance_id, entry, adds, drops, authorizing_user_id)
 
-          actually_added = Enum.reject(adds, &Map.has_key?(prior_bindings, &1))
-          actually_dropped = Enum.filter(drops, &Map.has_key?(prior_bindings, &1))
+        {:reply, reply, state}
 
-          new_bindings =
-            prior_bindings
-            |> Map.drop(actually_dropped)
-            |> Map.merge(Map.new(actually_added, fn key -> {key, authorizing_user_id} end))
-
-          :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings}})
-
-          prior_channels = channels_of(prior_bindings)
-          new_channels = channels_of(new_bindings)
-
-          emit_zero_crossings(entry.sse_pid, prior_channels, new_channels)
-
-          {actually_added, actually_dropped}
-
-        [] ->
-          {adds, drops}
-      end
-
-    {:reply, reply, state}
+      # TODO: parked callers are drained by attach_connection/5 once it creates the
+      # entry. Until then every miss simply waits out attach_wait_ms/0 and falls
+      # through to the timeout reply.
+      [] ->
+        {:noreply, park_caller(state, instance_id, from, adds, drops, authorizing_user_id)}
+    end
   end
 
   @impl GenServer
@@ -481,6 +486,32 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @impl GenServer
+  def handle_info({:apply_deltas_timeout, instance_id, timer_ref}, state) do
+    case Map.get(state.waiters, instance_id) do
+      nil ->
+        {:noreply, state}
+
+      waiter_list ->
+        {matching, remaining} =
+          Enum.split_with(waiter_list, fn {_from, ref, _adds, _drops, _user_id} ->
+            ref == timer_ref
+          end)
+
+        Enum.each(matching, fn {from, _ref, adds, drops, _user_id} ->
+          GenServer.reply(from, {adds, drops})
+        end)
+
+        new_waiters =
+          case remaining do
+            [] -> Map.delete(state.waiters, instance_id)
+            _remaining_waiters -> Map.put(state.waiters, instance_id, remaining)
+          end
+
+        {:noreply, %{state | waiters: new_waiters}}
+    end
+  end
+
+  @impl GenServer
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
     case Map.pop(state.refs, ref) do
       {nil, _refs} ->
@@ -490,6 +521,27 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
         :ets.delete(@table_name, instance_id)
         {:noreply, %{state | refs: new_refs}}
     end
+  end
+
+  defp apply_deltas_to_entry(instance_id, entry, adds, drops, authorizing_user_id) do
+    prior_bindings = entry.bindings
+
+    actually_added = Enum.reject(adds, &Map.has_key?(prior_bindings, &1))
+    actually_dropped = Enum.filter(drops, &Map.has_key?(prior_bindings, &1))
+
+    new_bindings =
+      prior_bindings
+      |> Map.drop(actually_dropped)
+      |> Map.merge(Map.new(actually_added, fn key -> {key, authorizing_user_id} end))
+
+    :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings}})
+
+    prior_channels = channels_of(prior_bindings)
+    new_channels = channels_of(new_bindings)
+
+    emit_zero_crossings(entry.sse_pid, prior_channels, new_channels)
+
+    {actually_added, actually_dropped}
   end
 
   defp channels_of(bindings) do
@@ -504,6 +556,21 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     prior_channels
     |> MapSet.difference(new_channels)
     |> Enum.each(fn channel -> send(sse_pid, {:unsub, channel}) end)
+  end
+
+  defp park_caller(state, instance_id, from, adds, drops, authorizing_user_id) do
+    timer_ref = make_ref()
+    timeout_message = {:apply_deltas_timeout, instance_id, timer_ref}
+
+    Process.send_after(self(), timeout_message, @attach_wait_ms)
+
+    waiter = {from, timer_ref, adds, drops, authorizing_user_id}
+
+    # Prepended for O(1) insert. The drain reverses, so deltas parked for the same
+    # instance apply in the order they were issued.
+    waiters = Map.update(state.waiters, instance_id, [waiter], &[waiter | &1])
+
+    %{state | waiters: waiters}
   end
 
   defp resolve_by_field(field, value) do

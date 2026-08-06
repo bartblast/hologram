@@ -226,7 +226,17 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       refute_receive {:unsub, _channel}
     end
 
-    test "returns the input adds and drops for an unknown instance_id" do
+    test "parks the caller for the wait window when no entry exists" do
+      started_at = System.monotonic_time(:millisecond)
+
+      apply_deltas("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      elapsed_ms = System.monotonic_time(:millisecond) - started_at
+
+      assert elapsed_ms >= attach_wait_ms()
+    end
+
+    test "returns the input adds and drops when no connection attaches within the wait window" do
       adds = [{:room_a, "page"}, {:room_b, "comp_1"}]
       drops = [{:room_c, "page"}]
 
@@ -237,17 +247,23 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert Enum.sort(drop_keys) == Enum.sort(drops)
     end
 
-    test "creates no entry for an unknown instance_id" do
+    test "creates no entry when no connection attaches within the wait window" do
       apply_deltas("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
       assert :ets.lookup(ets_table_name(), "test-unknown-instance-id") == []
     end
 
-    test "sends no zero-crossing messages for an unknown instance_id" do
+    test "sends no zero-crossing messages when no connection attaches within the wait window" do
       apply_deltas("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
       refute_receive {:sub, _channel}
       refute_receive {:unsub, _channel}
+    end
+
+    test "discards the parked caller once the wait window has elapsed" do
+      apply_deltas("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      assert :sys.get_state(SubscriptionRegistry).waiters == %{}
     end
   end
 
@@ -384,6 +400,12 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
       assert entry.session_id == "new-session"
       assert entry.user_id == "new-user"
+    end
+  end
+
+  describe "attach_wait_ms/0" do
+    test "returns the window apply_deltas/4 waits for a connection to attach" do
+      assert attach_wait_ms() == 500
     end
   end
 
