@@ -25,11 +25,14 @@ defmodule Hologram.Database.QueryCompiler do
   when view bounds are set, since a counting query counts what it evaluates to.
   Counting queries carry no includes - an embedded entity cannot change the count.
 
-  To-one includes compile into correlated jsonb subselects - one per included
-  relationship, in sorted name order, each aliased distinctly (self-referencing
-  relationships stay unambiguous - the root table is addressed by name). The jsonb
-  keys are the target's physical column names in mapping order, and the subselect
-  is NULL when the reference is.
+  Includes compile into correlated jsonb subselects - one per included relationship,
+  in sorted name order, each aliased distinctly (self-referencing relationships stay
+  unambiguous - the root table is addressed by name). The jsonb keys are the target's
+  physical column names in mapping order. A to-one subselect is NULL when the
+  reference is. A to-many subselect aggregates the related set through its join table
+  into a jsonb array (empty set = empty array), applying the sub-term's filter,
+  ordering, and view bounds inside the aggregation - include param slots follow the
+  root's in placeholder order.
 
   Nil is a regular value for equality and membership on both execution tiers:
   inequality matches missing values (`!=` widens with `OR IS NULL` on optional
@@ -43,10 +46,28 @@ defmodule Hologram.Database.QueryCompiler do
   def compile(term, mapping) do
     entity_mapping = Map.fetch!(mapping, term.entity)
 
-    {where_sql, params} = where_clause(term.filter, entity_mapping)
-    order_sql = order_clause(term.order_by, entity_mapping)
+    {where_sql, where_reversed_params} = where_clause(term.filter, entity_mapping, [])
 
-    %{params: params, sql: statement(term, entity_mapping, mapping, where_sql, order_sql)}
+    {include_sql, all_reversed_params} =
+      include_selects(term, entity_mapping, mapping, where_reversed_params)
+
+    order_sql = order_clause(term.order_by, entity_mapping)
+    sql = statement(term, entity_mapping, where_sql, order_sql, include_sql)
+
+    %{params: Enum.reverse(all_reversed_params), sql: sql}
+  end
+
+  defp aggregate_order([], _target_mapping, _quoted_alias), do: ""
+
+  defp aggregate_order(entries, target_mapping, quoted_alias) do
+    rendered_entries =
+      Enum.map_join(entries, ", ", fn {name, direction} ->
+        column = fetch_column!(target_mapping, name)
+
+        "#{quoted_alias}.#{Mapper.quote_identifier(column.name)} #{direction_sql(direction)}"
+      end)
+
+    " ORDER BY " <> rendered_entries
   end
 
   defp bind_slot({:param, param_name}, column, reversed_params) do
@@ -164,6 +185,12 @@ defmodule Hologram.Database.QueryCompiler do
     {"#{Mapper.quote_identifier(column.name)} #{operator} #{placeholder}", new_params}
   end
 
+  defp conditions(triples, entity_mapping, reversed_params) do
+    Enum.map_reduce(triples, reversed_params, fn triple, acc_params ->
+      condition(triple, entity_mapping, acc_params)
+    end)
+  end
+
   defp direction_sql(:asc), do: "ASC"
   defp direction_sql(:desc), do: "DESC"
 
@@ -187,33 +214,50 @@ defmodule Hologram.Database.QueryCompiler do
     {"$#{length(reversed_params) + 1}", [{:value, encoded_values} | reversed_params]}
   end
 
-  defp include_select({name, sub_term}, index, parent_mapping, mapping) do
-    reference_column =
-      Enum.find(parent_mapping.columns, &(&1.source == {:relationship, name}))
+  defp include_select({name, sub_term} = entry, index, parent_mapping, mapping, reversed_params) do
+    join_table = Enum.find(parent_mapping.join_tables, &(&1.relationship == name))
 
-    target_mapping = Map.fetch!(mapping, sub_term.entity)
-    quoted_alias = Mapper.quote_identifier("i#{index + 1}")
+    if join_table do
+      to_many_include_select(entry, index, join_table, parent_mapping, mapping, reversed_params)
+    else
+      reference_column =
+        Enum.find(parent_mapping.columns, &(&1.source == {:relationship, name}))
 
-    jsonb_pairs =
-      Enum.map_join(target_mapping.columns, ", ", fn column ->
-        "'#{column.name}', #{quoted_alias}.#{Mapper.quote_identifier(column.name)}"
-      end)
+      target_mapping = Map.fetch!(mapping, sub_term.entity)
+      quoted_alias = Mapper.quote_identifier("i#{index + 1}")
 
-    parent_reference =
-      "#{Mapper.quote_identifier(parent_mapping.table)}.#{Mapper.quote_identifier(reference_column.name)}"
+      parent_reference =
+        "#{Mapper.quote_identifier(parent_mapping.table)}.#{Mapper.quote_identifier(reference_column.name)}"
 
-    "(SELECT jsonb_build_object(#{jsonb_pairs}) " <>
-      "FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} " <>
-      "WHERE #{quoted_alias}.\"id\" = #{parent_reference}) " <>
-      "AS #{Mapper.quote_identifier(Atom.to_string(name))}"
+      sql =
+        "(SELECT jsonb_build_object(#{jsonb_pairs(target_mapping, quoted_alias)}) " <>
+          "FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} " <>
+          ~s|WHERE #{quoted_alias}."id" = #{parent_reference}) | <>
+          "AS #{Mapper.quote_identifier(Atom.to_string(name))}"
+
+      {sql, reversed_params}
+    end
   end
 
-  defp include_selects(term, entity_mapping, mapping) do
+  defp include_selects(%{cardinality: :count}, _entity_mapping, _mapping, reversed_params) do
+    {"", reversed_params}
+  end
+
+  defp include_selects(term, entity_mapping, mapping, reversed_params) do
     term.include
     |> Enum.sort_by(fn {name, _sub_term} -> name end)
     |> Enum.with_index()
-    |> Enum.map_join("", fn {entry, index} ->
-      ", " <> include_select(entry, index, entity_mapping, mapping)
+    |> Enum.map_reduce(reversed_params, fn {entry, index}, acc_params ->
+      {sql, new_params} = include_select(entry, index, entity_mapping, mapping, acc_params)
+
+      {", " <> sql, new_params}
+    end)
+    |> then(fn {fragments, new_params} -> {Enum.join(fragments, ""), new_params} end)
+  end
+
+  defp jsonb_pairs(target_mapping, quoted_alias) do
+    Enum.map_join(target_mapping.columns, ", ", fn column ->
+      "'#{column.name}', #{quoted_alias}.#{Mapper.quote_identifier(column.name)}"
     end)
   end
 
@@ -251,7 +295,13 @@ defmodule Hologram.Database.QueryCompiler do
     |> Mapper.quote_identifier()
   end
 
-  defp statement(%{cardinality: :count} = term, entity_mapping, _mapping, where_sql, _order_sql) do
+  defp statement(
+         %{cardinality: :count} = term,
+         entity_mapping,
+         where_sql,
+         _order_sql,
+         _include_sql
+       ) do
     from_sql = "FROM #{qualified_table(entity_mapping.table)}#{where_sql}"
     bounds_sql = bounds_clause(term)
 
@@ -262,29 +312,63 @@ defmodule Hologram.Database.QueryCompiler do
     end
   end
 
-  defp statement(%{cardinality: :one} = term, entity_mapping, mapping, where_sql, order_sql) do
+  defp statement(%{cardinality: :one} = term, entity_mapping, where_sql, order_sql, include_sql) do
     effective_limit = if term.limit == 0, do: 0, else: 1
     offset_sql = if term.offset, do: " OFFSET #{term.offset}", else: ""
 
-    "SELECT #{column_list(entity_mapping)}#{include_selects(term, entity_mapping, mapping)} " <>
+    "SELECT #{column_list(entity_mapping)}#{include_sql} " <>
       "FROM #{qualified_table(entity_mapping.table)}" <>
       where_sql <> order_sql <> " LIMIT #{effective_limit}" <> offset_sql
   end
 
-  defp statement(term, entity_mapping, mapping, where_sql, order_sql) do
-    "SELECT #{column_list(entity_mapping)}#{include_selects(term, entity_mapping, mapping)} " <>
+  defp statement(term, entity_mapping, where_sql, order_sql, include_sql) do
+    "SELECT #{column_list(entity_mapping)}#{include_sql} " <>
       "FROM #{qualified_table(entity_mapping.table)}" <>
       where_sql <> order_sql <> bounds_clause(term)
   end
 
-  defp where_clause([], _entity_mapping), do: {"", []}
+  defp to_many_include_select(
+         {name, sub_term},
+         index,
+         join_table,
+         parent_mapping,
+         mapping,
+         reversed_params
+       ) do
+    target_mapping = Map.fetch!(mapping, sub_term.entity)
+    quoted_wrapper = Mapper.quote_identifier("i#{index + 1}")
+    quoted_join = Mapper.quote_identifier("j#{index + 1}")
+    quoted_target = Mapper.quote_identifier("t#{index + 1}")
 
-  defp where_clause(triples, entity_mapping) do
-    {conditions, reversed_params} =
-      Enum.map_reduce(triples, [], fn triple, acc_params ->
-        condition(triple, entity_mapping, acc_params)
-      end)
+    {conditions, new_params} = conditions(sub_term.filter, target_mapping, reversed_params)
+    filter_sql = Enum.map_join(conditions, "", &(" AND " <> &1))
 
-    {" WHERE " <> Enum.join(conditions, " AND "), Enum.reverse(reversed_params)}
+    parent_reference = ~s|#{Mapper.quote_identifier(parent_mapping.table)}."id"|
+
+    inner_sql =
+      "SELECT #{quoted_target}.* " <>
+        "FROM #{qualified_table(join_table.name)} AS #{quoted_join} " <>
+        "JOIN #{qualified_table(target_mapping.table)} AS #{quoted_target} " <>
+        ~s|ON #{quoted_target}."id" = #{quoted_join}."target_id" | <>
+        ~s|WHERE #{quoted_join}."source_id" = #{parent_reference}| <>
+        filter_sql <>
+        order_clause(sub_term.order_by, target_mapping) <>
+        bounds_clause(sub_term)
+
+    sql =
+      "(SELECT COALESCE(jsonb_agg(jsonb_build_object(#{jsonb_pairs(target_mapping, quoted_wrapper)})" <>
+        aggregate_order(sub_term.order_by, target_mapping, quoted_wrapper) <>
+        "), '[]'::jsonb) FROM (#{inner_sql}) AS #{quoted_wrapper}) " <>
+        "AS #{Mapper.quote_identifier(Atom.to_string(name))}"
+
+    {sql, new_params}
+  end
+
+  defp where_clause([], _entity_mapping, reversed_params), do: {"", reversed_params}
+
+  defp where_clause(triples, entity_mapping, reversed_params) do
+    {conditions, new_params} = conditions(triples, entity_mapping, reversed_params)
+
+    {" WHERE " <> Enum.join(conditions, " AND "), new_params}
   end
 end

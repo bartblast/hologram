@@ -41,6 +41,24 @@ defmodule Hologram.Database.QueryCompilerTest do
              }
     end
 
+    test "applies nested clauses to a to-many include" do
+      mapping = Mapper.derive!([Module1, Module2, Module3])
+
+      term =
+        Module3
+        |> Query.include(:a, fn related_query ->
+          related_query
+          |> Query.filter(a: true)
+          |> Query.order_by(:c)
+          |> Query.limit(5)
+        end)
+        |> Query.normalize()
+
+      assert %{params: [{:value, true}], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s( AND "a" = $1 ORDER BY "c" ASC, "id" ASC LIMIT 5))
+      assert String.contains?(sql, ~s|ORDER BY "i1"."c" ASC, "i1"."id" ASC), '[]'::jsonb|)
+    end
+
     test "binds membership params with list types" do
       mapping = Mapper.derive!([Module2])
       term = %{Query.normalize(Module2) | filter: [{:c, :in, {:param, :names}}]}
@@ -198,6 +216,31 @@ defmodule Hologram.Database.QueryCompilerTest do
                sql:
                  ~s|SELECT count(*) FROM (SELECT 1 FROM "hologram_data"."test_fixtures_entity_module2" LIMIT 50) AS "sub"|
              }
+    end
+
+    test "embeds a to-many relationship as an aggregated array" do
+      mapping = Mapper.derive!([Module1, Module2, Module3])
+
+      term =
+        Module3
+        |> Query.include(:a)
+        |> Query.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      expected_fragment =
+        ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
+          ~s|'id', "i1"."id", 'a', "i1"."a", 'b', "i1"."b", 'c', "i1"."c", | <>
+          ~s|'created_at', "i1"."created_at", 'updated_at', "i1"."updated_at"| <>
+          ~s|) ORDER BY "i1"."id" ASC), '[]'::jsonb) | <>
+          ~s|FROM (SELECT "t1".* | <>
+          ~s|FROM "hologram_data"."test_fixtures_entity_module3_a_$join" AS "j1" | <>
+          ~s|JOIN "hologram_data"."test_fixtures_entity_module2" AS "t1" | <>
+          ~s|ON "t1"."id" = "j1"."target_id" | <>
+          ~s|WHERE "j1"."source_id" = "test_fixtures_entity_module3"."id" | <>
+          ~s|ORDER BY "id" ASC) AS "i1") AS "a"|
+
+      assert String.contains?(sql, expected_fragment)
     end
 
     test "embeds a to-one relationship as a jsonb subselect" do
@@ -372,6 +415,23 @@ defmodule Hologram.Database.QueryCompilerTest do
                sql:
                  ~s(SELECT "id", "b_id", "c_id", "created_at", "updated_at" FROM "hologram_data"."test_fixtures_entity_module3" ORDER BY "id" ASC)
              }
+    end
+
+    test "threads include params after the root's" do
+      mapping = Mapper.derive!([Module1, Module2, Module3])
+
+      base_term =
+        Module3
+        |> Query.include(:a, &Query.filter(&1, a: true))
+        |> Query.normalize()
+
+      term = %{base_term | filter: [{:id, :==, {:param, :root_id}}]}
+
+      assert %{params: [{:param, :root_id, :uuid}, {:value, true}], sql: sql} =
+               compile(term, mapping)
+
+      assert String.contains?(sql, ~s( WHERE "id" = $1))
+      assert String.contains?(sql, ~s( AND "a" = $2))
     end
   end
 end
