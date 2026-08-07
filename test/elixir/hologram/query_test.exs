@@ -3,9 +3,23 @@ defmodule Hologram.QueryTest do
 
   import Hologram.Query
 
+  alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module5
+
+  defp base_term(entity_type) do
+    %{
+      cardinality: :set,
+      entity: entity_type,
+      filter: [],
+      include: %{},
+      limit: nil,
+      offset: nil,
+      order_by: []
+    }
+  end
 
   describe "filter/2" do
     test "accepts an explicit equality operator tuple" do
@@ -335,6 +349,134 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, [:a])
+      end
+    end
+  end
+
+  describe "include/3" do
+    test "accumulates multiple includes" do
+      query =
+        Module3
+        |> include(:a)
+        |> include(:b)
+
+      assert query.include == %{a: base_term(Module2), b: base_term(Module2)}
+    end
+
+    test "embeds a to-many relationship" do
+      assert include(Module3, :a) == %{
+               cardinality: :set,
+               entity: Module3,
+               filter: [],
+               include: %{a: base_term(Module2)},
+               limit: nil,
+               offset: nil,
+               order_by: []
+             }
+    end
+
+    test "embeds a to-one relationship" do
+      query = include(Module3, :c)
+
+      assert query.include == %{c: base_term(Module1)}
+    end
+
+    test "nests includes through the sub-builder" do
+      query = include(Module5, :a, &include(&1, :a))
+
+      assert query.include == %{a: %{base_term(Module3) | include: %{a: base_term(Module2)}}}
+    end
+
+    test "refines a to-many include with a sub-builder" do
+      query =
+        include(Module3, :a, fn related_query ->
+          related_query
+          |> filter(a: false)
+          |> order_by(:c)
+        end)
+
+      expected_sub_term = %{
+        base_term(Module2)
+        | filter: [{:a, :==, false}],
+          order_by: [{:c, :asc}]
+      }
+
+      assert query.include == %{a: expected_sub_term}
+    end
+
+    test "raises on a duplicate include" do
+      expected_msg = "relationship :a is already included"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module3
+        |> include(:a)
+        |> include(:a)
+      end
+    end
+
+    test "raises on a non-function sub-builder" do
+      expected_msg =
+        "include sub-builder for relationship :a must be a one-argument function, got: 5"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, :a, 5)
+      end
+    end
+
+    test "raises on a sub-builder returning a different entity's term" do
+      expected_msg =
+        "include sub-builder for relationship :a must return a query term for Hologram.Test.Fixtures.Entity.Module2 - got a query term for Hologram.Test.Fixtures.Entity.Module1"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, :a, fn _related_query -> filter(Module1, []) end)
+      end
+    end
+
+    test "raises on a sub-builder returning a non-term" do
+      expected_msg =
+        "include sub-builder for relationship :a must return a query term for Hologram.Test.Fixtures.Entity.Module2, got: 123"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, :a, fn _related_query -> 123 end)
+      end
+    end
+
+    test "raises on an attribute name" do
+      expected_msg =
+        ":a is an attribute in Hologram.Test.Fixtures.Entity.Module2 - only relationships can be included"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module2, :a)
+      end
+    end
+
+    test "raises on an unknown relationship" do
+      expected_msg =
+        "unknown relationship :x in Hologram.Test.Fixtures.Entity.Module3 - known relationships: :a, :b, :c"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, :x)
+      end
+    end
+
+    test "raises on clauses on a to-one include" do
+      expected_msg =
+        "to-one relationship :b takes no clauses - clauses apply to to-many includes"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, :b, &filter(&1, a: true))
+      end
+    end
+
+    test "raises on excessive traversal depth" do
+      expected_msg = "including :b exceeds the traversal depth limit of 2 levels"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module5, :b, fn level_1 ->
+          include(level_1, :b, fn level_2 ->
+            include(level_2, :b)
+          end)
+        end)
       end
     end
   end

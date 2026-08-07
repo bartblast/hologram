@@ -60,6 +60,56 @@ defmodule Hologram.Query do
   end
 
   @doc """
+  Adds a relationship traversal to the given query's include map and returns the
+  resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The relationship must be declared on the query's entity type - the whole
+  related entity (to-one) or entity set (to-many) is embedded in results under the
+  relationship's name. `include/3` additionally takes a one-argument sub-builder
+  function: it receives the related entity's base query term and returns a refined
+  query term for the same entity - to-many includes take nested clauses this way, and
+  nesting further `include` calls inside the sub-builder traverses deeper.
+
+  To-one includes take no clauses (a single embedded entity has nothing to filter,
+  order, or slice) - nested `include` calls are their only refinement. Traversal depth
+  is limited to 2 levels.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, when the name is not a declared relationship, when the relationship is already
+  included, when the sub-builder is not a one-argument function or does not return a
+  query term for the related entity type, when a to-one include carries clauses, or
+  when the include depth exceeds 2 levels.
+  """
+  @spec include(module | %{atom => any}, atom, (%{atom => any} -> %{atom => any})) ::
+          %{atom => any}
+  def include(query, name, sub_builder \\ fn related_term -> related_term end)
+
+  def include(query, name, sub_builder) when is_function(sub_builder, 1) do
+    term = to_term(query)
+
+    {target, kind} = validate_relationship_name!(name, term.entity)
+
+    if Map.has_key?(term.include, name) do
+      raise ArgumentError,
+        message: "relationship #{inspect(name)} is already included"
+    end
+
+    related_base_term = to_term(target)
+    sub_term = sub_builder.(related_base_term)
+
+    validate_sub_term!(sub_term, name, target, kind)
+
+    %{term | include: Map.put(term.include, name, sub_term)}
+  end
+
+  def include(_query, name, sub_builder) do
+    raise ArgumentError,
+      message:
+        "include sub-builder for relationship #{inspect(name)} must be a one-argument function, got: #{inspect(sub_builder)}"
+  end
+
+  @doc """
   Appends ordering keys to the given query's order list and returns the resulting
   query term.
 
@@ -115,6 +165,20 @@ defmodule Hologram.Query do
     end
 
     {name, operator, operand}
+  end
+
+  defp include_depth(term) do
+    if term.include == %{} do
+      0
+    else
+      max_child_depth =
+        term.include
+        |> Map.values()
+        |> Enum.map(&include_depth/1)
+        |> Enum.max()
+
+      1 + max_child_depth
+    end
   end
 
   defp order_entries!(name, entity_type) when is_atom(name) do
@@ -230,6 +294,11 @@ defmodule Hologram.Query do
     Enum.map(entity_type.__relationships__(), fn {name, _type, _opts} -> name end)
   end
 
+  defp sub_term_has_clauses?(sub_term) do
+    sub_term.filter != [] or sub_term.order_by != [] or sub_term.limit != nil or
+      sub_term.offset != nil
+  end
+
   defp to_term(%{entity: _entity_type} = term), do: term
 
   defp to_term(query) do
@@ -339,5 +408,60 @@ defmodule Hologram.Query do
         message:
           "ordering by enum attributes is not supported - attribute #{inspect(name)} in #{inspect(entity_type)} has type :enum"
     end
+  end
+
+  defp validate_relationship_name!(name, entity_type) do
+    definitions = entity_type.__relationships__()
+
+    case Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end) do
+      {_name, [target], _opts} ->
+        {target, :to_many}
+
+      {_name, target, _opts} ->
+        {target, :to_one}
+
+      nil ->
+        if name in attribute_names(entity_type) do
+          raise ArgumentError,
+            message:
+              "#{inspect(name)} is an attribute in #{inspect(entity_type)} - only relationships can be included"
+        end
+
+        relationship_names = relationship_names(entity_type)
+        known = Enum.map_join(relationship_names, ", ", &inspect/1)
+
+        raise ArgumentError,
+          message:
+            "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known relationships: #{known}"
+    end
+  end
+
+  defp validate_sub_term!(sub_term, name, target, kind) do
+    validate_sub_term_entity!(sub_term, name, target)
+
+    if kind == :to_one and sub_term_has_clauses?(sub_term) do
+      raise ArgumentError,
+        message:
+          "to-one relationship #{inspect(name)} takes no clauses - clauses apply to to-many includes"
+    end
+
+    if include_depth(sub_term) > 1 do
+      raise ArgumentError,
+        message: "including #{inspect(name)} exceeds the traversal depth limit of 2 levels"
+    end
+  end
+
+  defp validate_sub_term_entity!(%{entity: target}, _name, target), do: :ok
+
+  defp validate_sub_term_entity!(%{entity: other_entity_type}, name, target) do
+    raise ArgumentError,
+      message:
+        "include sub-builder for relationship #{inspect(name)} must return a query term for #{inspect(target)} - got a query term for #{inspect(other_entity_type)}"
+  end
+
+  defp validate_sub_term_entity!(sub_term, name, target) do
+    raise ArgumentError,
+      message:
+        "include sub-builder for relationship #{inspect(name)} must return a query term for #{inspect(target)}, got: #{inspect(sub_term)}"
   end
 end
