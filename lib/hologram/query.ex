@@ -24,6 +24,10 @@ defmodule Hologram.Query do
   integer) and a non-nil operand - SQL comparisons with NULL never match, so a nil
   operand would mean different things on the two execution tiers.
 
+  An integer Range value (`3..10`, bare or as `{:in, range}`) is shorthand for the
+  inclusive bounds - it expands into a `>=` triple and a `<=` triple. Ranges require
+  an integer attribute, step 1, and at least one element.
+
   Membership lists must be non-empty lists of plain values. They must not hold nil -
   SQL membership never matches NULL, so a nil element would mean different things on
   the two execution tiers - matching nil is an equality predicate instead.
@@ -43,9 +47,9 @@ defmodule Hologram.Query do
     end
 
     triples =
-      Enum.map(predicates, fn {name, value} ->
+      Enum.flat_map(predicates, fn {name, value} ->
         validate_attribute_name!(name, term.entity)
-        predicate_triple!(name, value, term.entity)
+        predicate_triples!(name, value, term.entity)
       end)
 
     %{term | filter: term.filter ++ triples}
@@ -90,17 +94,27 @@ defmodule Hologram.Query do
     {name, operator, operand}
   end
 
-  defp predicate_triple!(name, {operator, operand}, entity_type) when is_atom(operator) do
+  defp predicate_triples!(name, {:in, %Range{} = range}, entity_type) do
+    predicate_triples!(name, range, entity_type)
+  end
+
+  defp predicate_triples!(name, %Range{} = range, entity_type) do
+    validate_membership_range!(range, name, entity_type)
+
+    [{name, :>=, range.first}, {name, :<=, range.last}]
+  end
+
+  defp predicate_triples!(name, {operator, operand}, entity_type) when is_atom(operator) do
     cond do
       operator in @equality_operators ->
-        equality_triple!(name, operator, operand)
+        [equality_triple!(name, operator, operand)]
 
       operator in @membership_operators ->
         validate_membership_list!(operand, name, operator)
-        {name, operator, operand}
+        [{name, operator, operand}]
 
       operator in @ordering_operators ->
-        ordering_triple!(name, operator, operand, entity_type)
+        [ordering_triple!(name, operator, operand, entity_type)]
 
       true ->
         raise ArgumentError,
@@ -109,17 +123,18 @@ defmodule Hologram.Query do
     end
   end
 
-  defp predicate_triple!(name, value, _entity_type) when is_tuple(value) do
+  defp predicate_triples!(name, value, _entity_type) when is_tuple(value) do
     raise ArgumentError,
       message: "invalid filter value #{inspect(value)} for attribute #{inspect(name)}"
   end
 
-  defp predicate_triple!(name, values, _entity_type) when is_list(values) do
+  defp predicate_triples!(name, values, _entity_type) when is_list(values) do
     validate_membership_list!(values, name, :in)
-    {name, :in, values}
+
+    [{name, :in, values}]
   end
 
-  defp predicate_triple!(name, value, _entity_type), do: {name, :==, value}
+  defp predicate_triples!(name, value, _entity_type), do: [{name, :==, value}]
 
   defp relationship_names(entity_type) do
     Enum.map(entity_type.__relationships__(), fn {name, _type, _opts} -> name end)
@@ -192,6 +207,28 @@ defmodule Hologram.Query do
     raise ArgumentError,
       message:
         "operator #{inspect(operator)} on attribute #{inspect(name)} requires a list operand, got: #{inspect(operand)}"
+  end
+
+  defp validate_membership_range!(range, name, entity_type) do
+    type = attribute_type(entity_type, name)
+
+    if type != :integer do
+      raise ArgumentError,
+        message:
+          "range #{inspect(range)} requires an integer attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
+    end
+
+    if range.step != 1 do
+      raise ArgumentError,
+        message:
+          "stepped range #{inspect(range)} for attribute #{inspect(name)} is not supported - membership ranges use step 1"
+    end
+
+    if Range.size(range) == 0 do
+      raise ArgumentError,
+        message:
+          "range #{inspect(range)} for attribute #{inspect(name)} is empty - it would match nothing"
+    end
   end
 
   defp validate_orderable_attribute!(name, entity_type, operator) do

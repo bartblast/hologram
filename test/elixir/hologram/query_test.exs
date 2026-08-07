@@ -97,6 +97,18 @@ defmodule Hologram.QueryTest do
       assert query.filter == [{:b, :>=, 3}]
     end
 
+    test "expands a range passed to the membership operator" do
+      query = filter(Module2, b: {:in, 3..10})
+
+      assert query.filter == [{:b, :>=, 3}, {:b, :<=, 10}]
+    end
+
+    test "expands an integer range into inclusive bound triples" do
+      query = filter(Module2, b: 3..10)
+
+      assert query.filter == [{:b, :>=, 3}, {:b, :<=, 10}]
+    end
+
     test "keeps predicates in the given order" do
       query = filter(Module2, c: "abc", a: false)
 
@@ -119,6 +131,15 @@ defmodule Hologram.QueryTest do
       query = filter(Module2, b: nil)
 
       assert query.filter == [{:b, :==, nil}]
+    end
+
+    test "raises on a descending range" do
+      expected_msg =
+        "stepped range 10..3//-1 for attribute :b is not supported - membership ranges use step 1"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, b: 10..3//-1)
+      end
     end
 
     test "raises on a list operand for an equality operator" do
@@ -199,6 +220,24 @@ defmodule Hologram.QueryTest do
       end
     end
 
+    test "raises on a range on a non-integer attribute" do
+      expected_msg =
+        "range 3..10 requires an integer attribute - attribute :d in Hologram.Test.Fixtures.Entity.Module4 has type :float"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module4, d: 3..10)
+      end
+    end
+
+    test "raises on a stepped range" do
+      expected_msg =
+        "stepped range 3..10//2 for attribute :b is not supported - membership ranges use step 1"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, b: 3..10//2)
+      end
+    end
+
     test "raises on an empty membership list" do
       expected_msg = "membership list for attribute :b must not be empty"
 
@@ -208,6 +247,14 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, b: {:in, []})
+      end
+    end
+
+    test "raises on an empty range" do
+      expected_msg = "range 5..3//1 for attribute :b is empty - it would match nothing"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, b: 5..3//1)
       end
     end
 
