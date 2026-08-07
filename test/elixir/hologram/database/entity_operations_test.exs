@@ -40,9 +40,20 @@ defmodule Hologram.Database.EntityOperationsTest do
 
   describe "add_relationship/4" do
     test "adds an edge to the join table" do
-      required_target = create(Entity.new(Module1))
-      source_entity = create(Entity.new(Module3, c_id: required_target.id))
-      target_entity = create(Entity.new(Module2, a: true, c: "some text"))
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
 
       assert add_relationship(Module3, source_entity.id, :a, target_entity.id) == :ok
 
@@ -50,9 +61,20 @@ defmodule Hologram.Database.EntityOperationsTest do
     end
 
     test "is idempotent" do
-      required_target = create(Entity.new(Module1))
-      source_entity = create(Entity.new(Module3, c_id: required_target.id))
-      target_entity = create(Entity.new(Module2, a: true, c: "some text"))
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
 
       :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
       :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
@@ -70,8 +92,15 @@ defmodule Hologram.Database.EntityOperationsTest do
     end
 
     test "raises when the source or target entity is missing" do
-      required_target = create(Entity.new(Module1))
-      source_entity = create(Entity.new(Module3, c_id: required_target.id))
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
 
       error =
         try do
@@ -119,7 +148,10 @@ defmodule Hologram.Database.EntityOperationsTest do
     end
 
     test "writes to-one relationship references into the reference columns" do
-      target_entity = create(Entity.new(Module1))
+      target_entity =
+        Module1
+        |> Entity.new()
+        |> create()
 
       entity = Entity.new(Module3, c_id: target_entity.id)
 
@@ -152,7 +184,10 @@ defmodule Hologram.Database.EntityOperationsTest do
 
   describe "delete/2" do
     test "deletes the entity row" do
-      created_entity = create(Entity.new(Module1))
+      created_entity =
+        Module1
+        |> Entity.new()
+        |> create()
 
       assert delete(Module1, created_entity.id) == :ok
 
@@ -160,9 +195,20 @@ defmodule Hologram.Database.EntityOperationsTest do
     end
 
     test "deletes own outgoing edges with the row" do
-      required_target = create(Entity.new(Module1))
-      source_entity = create(Entity.new(Module3, c_id: required_target.id))
-      target_entity = create(Entity.new(Module2, a: true, c: "some text"))
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
 
       :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
 
@@ -173,8 +219,15 @@ defmodule Hologram.Database.EntityOperationsTest do
     end
 
     test "restricts when another entity references the entity" do
-      target_entity = create(Entity.new(Module1))
-      referencing_entity = create(Entity.new(Module3, c_id: target_entity.id))
+      target_entity =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      referencing_entity =
+        Module3
+        |> Entity.new(c_id: target_entity.id)
+        |> create()
 
       assert delete(Module1, target_entity.id) ==
                {:error, {:restricted, %{entity_type: Module1, id: target_entity.id}}}
@@ -184,9 +237,20 @@ defmodule Hologram.Database.EntityOperationsTest do
     end
 
     test "restricts when the entity is the target of another entity's edges" do
-      required_target = create(Entity.new(Module1))
-      source_entity = create(Entity.new(Module3, c_id: required_target.id))
-      target_entity = create(Entity.new(Module2, a: true, c: "some text"))
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
 
       :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
 
@@ -203,9 +267,20 @@ defmodule Hologram.Database.EntityOperationsTest do
 
   describe "delete_relationship/4" do
     test "deletes an edge from the join table" do
-      required_target = create(Entity.new(Module1))
-      source_entity = create(Entity.new(Module3, c_id: required_target.id))
-      target_entity = create(Entity.new(Module2, a: true, c: "some text"))
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
 
       :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
 
@@ -215,9 +290,20 @@ defmodule Hologram.Database.EntityOperationsTest do
     end
 
     test "deleting an absent edge is a no-op" do
-      required_target = create(Entity.new(Module1))
-      source_entity = create(Entity.new(Module3, c_id: required_target.id))
-      target_entity = create(Entity.new(Module2, a: true, c: "some text"))
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
 
       assert delete_relationship(Module3, source_entity.id, :a, target_entity.id) == :ok
     end
@@ -242,8 +328,15 @@ defmodule Hologram.Database.EntityOperationsTest do
     end
 
     test "returns to-one relationship references as target ids" do
-      target_entity = create(Entity.new(Module1))
-      created_entity = create(Entity.new(Module3, c_id: target_entity.id))
+      target_entity =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      created_entity =
+        Module3
+        |> Entity.new(c_id: target_entity.id)
+        |> create()
 
       assert get(Module3, created_entity.id) == created_entity
     end
@@ -255,7 +348,10 @@ defmodule Hologram.Database.EntityOperationsTest do
 
   describe "update/3" do
     test "sets exactly the changed columns and bumps updated_at" do
-      created_entity = create(Entity.new(Module2, a: true, b: 1, c: "before"))
+      created_entity =
+        Module2
+        |> Entity.new(a: true, b: 1, c: "before")
+        |> create()
 
       wait_until_clock_advances_past(created_entity.updated_at)
 
@@ -271,11 +367,25 @@ defmodule Hologram.Database.EntityOperationsTest do
     end
 
     test "sets, reassigns and clears to-one references" do
-      first_target = create(Entity.new(Module1))
-      second_target = create(Entity.new(Module1))
-      optional_target = create(Entity.new(Module2, a: true, c: "some text"))
+      first_target =
+        Module1
+        |> Entity.new()
+        |> create()
 
-      created_entity = create(Entity.new(Module3, c_id: first_target.id))
+      second_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      optional_target =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      created_entity =
+        Module3
+        |> Entity.new(c_id: first_target.id)
+        |> create()
 
       :ok = update(Module3, created_entity.id, %{c_id: second_target.id})
       assert get(Module3, created_entity.id).c_id == second_target.id
@@ -288,7 +398,10 @@ defmodule Hologram.Database.EntityOperationsTest do
     end
 
     test "raises when changes name anything but declared attributes and to-one relationships" do
-      created_entity = create(Entity.new(Module2, a: true, c: "some text"))
+      created_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
 
       expected_unknown_msg =
         "invalid changes for Hologram.Test.Fixtures.Entity.Module2 - only declared attributes and to-one relationships can be updated: :nonexistent"
@@ -306,7 +419,10 @@ defmodule Hologram.Database.EntityOperationsTest do
     end
 
     test "raises when changes are empty" do
-      created_entity = create(Entity.new(Module2, a: true, c: "some text"))
+      created_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
 
       expected_msg =
         "invalid changes for Hologram.Test.Fixtures.Entity.Module2 - at least one declared attribute or to-one relationship must be changed"

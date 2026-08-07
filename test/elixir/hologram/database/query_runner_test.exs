@@ -15,17 +15,33 @@ defmodule Hologram.Database.QueryRunnerTest do
   @mapping Mapper.derive!([Module1, Module2, Module3])
 
   defp create_module_2_entities do
-    first = create(Entity.new(Module2, a: true, c: "banana"))
-    second = create(Entity.new(Module2, a: false, c: "apple"))
-    third = create(Entity.new(Module2, a: true, b: 7, c: "cherry"))
+    first =
+      Module2
+      |> Entity.new(a: true, c: "banana")
+      |> create()
+
+    second =
+      Module2
+      |> Entity.new(a: false, c: "apple")
+      |> create()
+
+    third =
+      Module2
+      |> Entity.new(a: true, b: 7, c: "cherry")
+      |> create()
 
     {first, second, third}
   end
 
   defp create_module_3_entity do
-    target = create(Entity.new(Module1))
+    target =
+      Module1
+      |> Entity.new()
+      |> create()
 
-    create(Entity.new(Module3, c_id: target.id))
+    Module3
+    |> Entity.new(c_id: target.id)
+    |> create()
   end
 
   describe "run/3" do
