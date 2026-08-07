@@ -10,6 +10,28 @@ defmodule Hologram.Query do
   @ordering_operators [:<, :<=, :>, :>=]
 
   @doc """
+  Marks the given query as counting and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. A counting query evaluates to a non-negative integer - the number of
+  results the query otherwise evaluates to, view bounds included.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, or when a cardinality is already marked.
+  """
+  @spec count(module | %{atom => any}) :: %{atom => any}
+  def count(query) do
+    term = to_term(query)
+
+    if term.cardinality != :set do
+      raise ArgumentError,
+        message: "cardinality is already set to #{inspect(term.cardinality)}"
+    end
+
+    %{term | cardinality: :count}
+  end
+
+  @doc """
   Appends predicates to the given query's filter list and returns the resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built

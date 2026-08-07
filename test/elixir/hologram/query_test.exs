@@ -21,6 +21,40 @@ defmodule Hologram.QueryTest do
     }
   end
 
+  describe "count/1" do
+    test "composes with other stages" do
+      query =
+        Module2
+        |> filter(a: true)
+        |> count()
+
+      assert query.cardinality == :count
+      assert query.filter == [{:a, :==, true}]
+    end
+
+    test "marks the query as counting" do
+      assert count(Module2) == %{
+               cardinality: :count,
+               entity: Module2,
+               filter: [],
+               include: %{},
+               limit: nil,
+               offset: nil,
+               order_by: []
+             }
+    end
+
+    test "raises when cardinality is already marked" do
+      expected_msg = "cardinality is already set to :one"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module2
+        |> one()
+        |> count()
+      end
+    end
+  end
+
   describe "filter/2" do
     test "accepts an explicit equality operator tuple" do
       query = filter(Module2, a: {:==, true})
