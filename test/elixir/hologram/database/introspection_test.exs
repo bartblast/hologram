@@ -18,7 +18,9 @@ defmodule Hologram.Database.IntrospectionTest do
                "test_fixtures_entity_module3",
                "test_fixtures_entity_module3_a_$join",
                "test_fixtures_entity_module4",
-               "test_fixtures_entity_module5"
+               "test_fixtures_entity_module5",
+               "test_fixtures_entity_module6",
+               "test_fixtures_entity_module6_a_$join"
              ]
     end
 

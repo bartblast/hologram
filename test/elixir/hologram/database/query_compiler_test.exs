@@ -10,6 +10,7 @@ defmodule Hologram.Database.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
+  alias Hologram.Test.Fixtures.Entity.Module6
 
   describe "compile/2" do
     test "assigns placeholders to param slots" do
@@ -378,6 +379,49 @@ defmodule Hologram.Database.QueryCompilerTest do
              } = compile(term, mapping)
 
       assert String.contains?(sql, ~s( WHERE "a" = $1 AND "c" = $2))
+    end
+
+    test "nests a to-one inside a to-one include" do
+      mapping = Mapper.derive!([Module2, Module3, Module5])
+
+      term =
+        Module5
+        |> Query.include(a: :b)
+        |> Query.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      expected_fragment =
+        ~s|, 'b', (SELECT jsonb_build_object(| <>
+          ~s|'id', "i2"."id", 'a', "i2"."a", 'b', "i2"."b", 'c', "i2"."c", | <>
+          ~s|'created_at', "i2"."created_at", 'updated_at', "i2"."updated_at"| <>
+          ~s|) FROM "hologram_data"."test_fixtures_entity_module2" AS "i2" | <>
+          ~s|WHERE "i2"."id" = "i1"."b_id")|
+
+      assert String.contains?(sql, expected_fragment)
+    end
+
+    test "nests an include inside a to-many aggregation" do
+      mapping = Mapper.derive!([Module2, Module3, Module6])
+
+      term =
+        Module6
+        |> Query.include(a: :b)
+        |> Query.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|, 'b', (SELECT jsonb_build_object('id', "i2"."id"|
+             )
+
+      assert String.contains?(sql, ~s|AS "i2" WHERE "i2"."id" = "i1"."b_id")|)
+
+      assert String.contains?(
+               sql,
+               ~s|FROM "hologram_data"."test_fixtures_entity_module6_a_$join" AS "j1"|
+             )
     end
 
     test "omits includes from counting queries" do

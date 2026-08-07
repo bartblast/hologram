@@ -214,29 +214,28 @@ defmodule Hologram.Database.QueryCompiler do
     {"$#{length(reversed_params) + 1}", [{:value, encoded_values} | reversed_params]}
   end
 
-  defp include_select({name, sub_term} = entry, index, parent_mapping, mapping, reversed_params) do
+  defp include_expression({name, sub_term}, parent_mapping, mapping, parent_prefix, acc) do
     join_table = Enum.find(parent_mapping.join_tables, &(&1.relationship == name))
 
     if join_table do
-      to_many_include_select(entry, index, join_table, parent_mapping, mapping, reversed_params)
+      to_many_include_expression(sub_term, join_table, mapping, parent_prefix, acc)
     else
-      reference_column =
-        Enum.find(parent_mapping.columns, &(&1.source == {:relationship, name}))
-
-      target_mapping = Map.fetch!(mapping, sub_term.entity)
-      quoted_alias = Mapper.quote_identifier("i#{index + 1}")
-
-      parent_reference =
-        "#{Mapper.quote_identifier(parent_mapping.table)}.#{Mapper.quote_identifier(reference_column.name)}"
-
-      sql =
-        "(SELECT jsonb_build_object(#{jsonb_pairs(target_mapping, quoted_alias)}) " <>
-          "FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} " <>
-          ~s|WHERE #{quoted_alias}."id" = #{parent_reference}) | <>
-          "AS #{Mapper.quote_identifier(Atom.to_string(name))}"
-
-      {sql, reversed_params}
+      to_one_include_expression(name, sub_term, parent_mapping, mapping, parent_prefix, acc)
     end
+  end
+
+  defp include_pairs(term, target_mapping, mapping, quoted_alias, acc) do
+    {fragments, new_acc} =
+      term.include
+      |> Enum.sort_by(fn {entry_name, _sub_term} -> entry_name end)
+      |> Enum.map_reduce(acc, fn {entry_name, _sub_term} = entry, inner_acc ->
+        {expression, next_acc} =
+          include_expression(entry, target_mapping, mapping, quoted_alias, inner_acc)
+
+        {", '#{entry_name}', #{expression}", next_acc}
+      end)
+
+    {Enum.join(fragments, ""), new_acc}
   end
 
   defp include_selects(%{cardinality: :count}, _entity_mapping, _mapping, reversed_params) do
@@ -244,15 +243,19 @@ defmodule Hologram.Database.QueryCompiler do
   end
 
   defp include_selects(term, entity_mapping, mapping, reversed_params) do
-    term.include
-    |> Enum.sort_by(fn {name, _sub_term} -> name end)
-    |> Enum.with_index()
-    |> Enum.map_reduce(reversed_params, fn {entry, index}, acc_params ->
-      {sql, new_params} = include_select(entry, index, entity_mapping, mapping, acc_params)
+    quoted_prefix = Mapper.quote_identifier(entity_mapping.table)
 
-      {", " <> sql, new_params}
-    end)
-    |> then(fn {fragments, new_params} -> {Enum.join(fragments, ""), new_params} end)
+    {fragments, {new_params, _next_index}} =
+      term.include
+      |> Enum.sort_by(fn {name, _sub_term} -> name end)
+      |> Enum.map_reduce({reversed_params, 1}, fn {name, _sub_term} = entry, acc ->
+        {expression, new_acc} =
+          include_expression(entry, entity_mapping, mapping, quoted_prefix, acc)
+
+        {", #{expression} AS #{Mapper.quote_identifier(Atom.to_string(name))}", new_acc}
+      end)
+
+    {Enum.join(fragments, ""), new_params}
   end
 
   defp jsonb_pairs(target_mapping, quoted_alias) do
@@ -327,41 +330,71 @@ defmodule Hologram.Database.QueryCompiler do
       where_sql <> order_sql <> bounds_clause(term)
   end
 
-  defp to_many_include_select(
-         {name, sub_term},
-         index,
+  defp to_many_include_expression(
+         sub_term,
          join_table,
-         parent_mapping,
          mapping,
-         reversed_params
+         parent_prefix,
+         {reversed_params, index}
        ) do
     target_mapping = Map.fetch!(mapping, sub_term.entity)
-    quoted_wrapper = Mapper.quote_identifier("i#{index + 1}")
-    quoted_join = Mapper.quote_identifier("j#{index + 1}")
-    quoted_target = Mapper.quote_identifier("t#{index + 1}")
+    quoted_wrapper = Mapper.quote_identifier("i#{index}")
+    quoted_join = Mapper.quote_identifier("j#{index}")
+    quoted_target = Mapper.quote_identifier("t#{index}")
 
-    {conditions, new_params} = conditions(sub_term.filter, target_mapping, reversed_params)
+    {conditions, filtered_params} = conditions(sub_term.filter, target_mapping, reversed_params)
     filter_sql = Enum.map_join(conditions, "", &(" AND " <> &1))
 
-    parent_reference = ~s|#{Mapper.quote_identifier(parent_mapping.table)}."id"|
+    {nested_pairs, new_acc} =
+      include_pairs(
+        sub_term,
+        target_mapping,
+        mapping,
+        quoted_wrapper,
+        {filtered_params, index + 1}
+      )
 
     inner_sql =
       "SELECT #{quoted_target}.* " <>
         "FROM #{qualified_table(join_table.name)} AS #{quoted_join} " <>
         "JOIN #{qualified_table(target_mapping.table)} AS #{quoted_target} " <>
         ~s|ON #{quoted_target}."id" = #{quoted_join}."target_id" | <>
-        ~s|WHERE #{quoted_join}."source_id" = #{parent_reference}| <>
+        ~s|WHERE #{quoted_join}."source_id" = #{parent_prefix}."id"| <>
         filter_sql <>
         order_clause(sub_term.order_by, target_mapping) <>
         bounds_clause(sub_term)
 
-    sql =
-      "(SELECT COALESCE(jsonb_agg(jsonb_build_object(#{jsonb_pairs(target_mapping, quoted_wrapper)})" <>
+    expression =
+      "(SELECT COALESCE(jsonb_agg(jsonb_build_object(#{jsonb_pairs(target_mapping, quoted_wrapper)}#{nested_pairs})" <>
         aggregate_order(sub_term.order_by, target_mapping, quoted_wrapper) <>
-        "), '[]'::jsonb) FROM (#{inner_sql}) AS #{quoted_wrapper}) " <>
-        "AS #{Mapper.quote_identifier(Atom.to_string(name))}"
+        "), '[]'::jsonb) FROM (#{inner_sql}) AS #{quoted_wrapper})"
 
-    {sql, new_params}
+    {expression, new_acc}
+  end
+
+  defp to_one_include_expression(
+         name,
+         sub_term,
+         parent_mapping,
+         mapping,
+         parent_prefix,
+         {reversed_params, index}
+       ) do
+    reference_column =
+      Enum.find(parent_mapping.columns, &(&1.source == {:relationship, name}))
+
+    target_mapping = Map.fetch!(mapping, sub_term.entity)
+    quoted_alias = Mapper.quote_identifier("i#{index}")
+
+    {nested_pairs, new_acc} =
+      include_pairs(sub_term, target_mapping, mapping, quoted_alias, {reversed_params, index + 1})
+
+    expression =
+      "(SELECT jsonb_build_object(#{jsonb_pairs(target_mapping, quoted_alias)}#{nested_pairs}) " <>
+        "FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} " <>
+        ~s|WHERE #{quoted_alias}."id" = #{parent_prefix}.#{Mapper.quote_identifier(reference_column.name)})|
+
+    {expression, new_acc}
   end
 
   defp where_clause([], _entity_mapping, reversed_params), do: {"", reversed_params}
