@@ -13,7 +13,7 @@ defmodule Hologram.Query.RegistryTest do
       term_id = id(term)
 
       assert build([term]) == %{
-               term_id => %{param_shape: %{search: :string}, term: term}
+               term_id => %{param_shape: %{search: :string}, term: term, window: nil}
              }
     end
 

@@ -5,14 +5,19 @@ defmodule Hologram.Query.Registry do
 
   @doc """
   Builds the query registry from the given normalized query terms - a map from
-  content id to an entry holding the term and its derived param shape.
+  content id to an entry holding the term, its derived param shape, and its window.
 
-  Structurally equal terms collapse into one entry.
+  The window is the term the sync layer downloads for the query when that differs
+  from the term itself - nil means the download is exactly the term. Structurally
+  equal terms collapse into one entry.
   """
   @spec build(list(%{atom => any})) :: %{String.t() => %{atom => any}}
   def build(terms) do
     Map.new(terms, fn term ->
-      {id(term), %{param_shape: param_shape(term), term: term}}
+      # TODO: sync-window derivation fills the :window slot for queries whose
+      # download must widen beyond the term (e.g. interaction-driven filters) -
+      # until it exists, nil keeps download = term for every query.
+      {id(term), %{param_shape: param_shape(term), term: term, window: nil}}
     end)
   end
 
