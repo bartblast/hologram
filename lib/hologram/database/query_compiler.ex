@@ -19,6 +19,11 @@ defmodule Hologram.Database.QueryCompiler do
   equality compiles to `IS NULL` and nil inequality to `IS NOT NULL`, with no bind
   slot. Column selection follows the mapping's physical column order.
 
+  Cardinality shapes the statement: `:set` selects the mapped columns with ordering
+  and view bounds, `:one` selects with `LIMIT 1` under the query's total order (a
+  zero limit stays zero), and `:count` selects `count(*)` - over a capped subquery
+  when view bounds are set, since a counting query counts what it evaluates to.
+
   Nil is a regular value for equality and membership on both execution tiers:
   inequality matches missing values (`!=` widens with `OR IS NULL` on optional
   attributes), membership lists may hold nil (compiled into the `IS [NOT] NULL`
@@ -31,17 +36,10 @@ defmodule Hologram.Database.QueryCompiler do
   def compile(term, mapping) do
     entity_mapping = Map.fetch!(mapping, term.entity)
 
-    column_list = Enum.map_join(entity_mapping.columns, ", ", &Mapper.quote_identifier(&1.name))
-
     {where_sql, params} = where_clause(term.filter, entity_mapping)
     order_sql = order_clause(term.order_by, entity_mapping)
-    bounds_sql = bounds_clause(term)
 
-    sql =
-      "SELECT #{column_list} FROM #{qualified_table(entity_mapping.table)}" <>
-        where_sql <> order_sql <> bounds_sql
-
-    %{params: params, sql: sql}
+    %{params: params, sql: statement(term, entity_mapping, where_sql, order_sql)}
   end
 
   defp bind_slot({:param, param_name}, column, reversed_params) do
@@ -59,6 +57,10 @@ defmodule Hologram.Database.QueryCompiler do
     offset_sql = if term.offset, do: " OFFSET #{term.offset}", else: ""
 
     limit_sql <> offset_sql
+  end
+
+  defp column_list(entity_mapping) do
+    Enum.map_join(entity_mapping.columns, ", ", &Mapper.quote_identifier(&1.name))
   end
 
   defp condition({name, :==, nil}, entity_mapping, reversed_params) do
@@ -210,6 +212,30 @@ defmodule Hologram.Database.QueryCompiler do
     |> fetch_column!(name)
     |> Map.fetch!(:name)
     |> Mapper.quote_identifier()
+  end
+
+  defp statement(%{cardinality: :count} = term, entity_mapping, where_sql, _order_sql) do
+    from_sql = "FROM #{qualified_table(entity_mapping.table)}#{where_sql}"
+    bounds_sql = bounds_clause(term)
+
+    if bounds_sql == "" do
+      "SELECT count(*) #{from_sql}"
+    else
+      ~s|SELECT count(*) FROM (SELECT 1 #{from_sql}#{bounds_sql}) AS "sub"|
+    end
+  end
+
+  defp statement(%{cardinality: :one} = term, entity_mapping, where_sql, order_sql) do
+    effective_limit = if term.limit == 0, do: 0, else: 1
+    offset_sql = if term.offset, do: " OFFSET #{term.offset}", else: ""
+
+    "SELECT #{column_list(entity_mapping)} FROM #{qualified_table(entity_mapping.table)}" <>
+      where_sql <> order_sql <> " LIMIT #{effective_limit}" <> offset_sql
+  end
+
+  defp statement(term, entity_mapping, where_sql, order_sql) do
+    "SELECT #{column_list(entity_mapping)} FROM #{qualified_table(entity_mapping.table)}" <>
+      where_sql <> order_sql <> bounds_clause(term)
   end
 
   defp where_clause([], _entity_mapping), do: {"", []}

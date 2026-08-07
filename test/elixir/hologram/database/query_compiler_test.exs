@@ -144,6 +144,38 @@ defmodule Hologram.Database.QueryCompilerTest do
       assert String.contains?(sql, ~s( WHERE "b" IS NOT NULL))
     end
 
+    test "compiles counting queries as a bare count" do
+      mapping = Mapper.derive!([Module2])
+
+      term =
+        Module2
+        |> Query.filter(a: true)
+        |> Query.count()
+        |> Query.normalize()
+
+      assert compile(term, mapping) == %{
+               params: [{:value, true}],
+               sql:
+                 ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_entity_module2" WHERE "a" = $1|
+             }
+    end
+
+    test "compiles counting over view bounds as a capped subquery" do
+      mapping = Mapper.derive!([Module2])
+
+      term =
+        Module2
+        |> Query.limit(50)
+        |> Query.count()
+        |> Query.normalize()
+
+      assert compile(term, mapping) == %{
+               params: [],
+               sql:
+                 ~s|SELECT count(*) FROM (SELECT 1 FROM "hologram_data"."test_fixtures_entity_module2" LIMIT 50) AS "sub"|
+             }
+    end
+
     test "compiles nil equality as IS NULL without a bind slot" do
       mapping = Mapper.derive!([Module2])
 
@@ -180,6 +212,19 @@ defmodule Hologram.Database.QueryCompilerTest do
       assert String.contains?(sql, ~s( WHERE "b" < $1 AND "b" >= $2))
     end
 
+    test "compiles single-result queries with a unit limit" do
+      mapping = Mapper.derive!([Module2])
+
+      term =
+        Module2
+        |> Query.filter(a: true)
+        |> Query.one()
+        |> Query.normalize()
+
+      assert %{params: [{:value, true}], sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s( WHERE "a" = $1 ORDER BY "id" ASC LIMIT 1))
+    end
+
     test "compiles ordering keys with directions and the id tiebreaker" do
       mapping = Mapper.derive!([Module2])
 
@@ -190,6 +235,19 @@ defmodule Hologram.Database.QueryCompilerTest do
 
       assert %{params: [], sql: sql} = compile(term, mapping)
       assert String.ends_with?(sql, ~s( ORDER BY "b" DESC, "c" ASC, "id" ASC))
+    end
+
+    test "compiles single-result queries with a zero limit as zero" do
+      mapping = Mapper.derive!([Module2])
+
+      term =
+        Module2
+        |> Query.limit(0)
+        |> Query.one()
+        |> Query.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s( ORDER BY "id" ASC LIMIT 0))
     end
 
     test "encodes literal values with the attribute's codec type" do
