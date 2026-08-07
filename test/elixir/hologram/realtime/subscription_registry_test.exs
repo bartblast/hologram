@@ -1,6 +1,7 @@
 defmodule Hologram.Realtime.SubscriptionRegistryTest do
   use Hologram.Test.BasicCase, async: false
 
+  import ExUnit.CaptureLog
   import Hologram.Realtime.SubscriptionRegistry
 
   alias Hologram.Realtime.SubscriptionRegistry
@@ -284,6 +285,38 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
       assert :sys.get_state(SubscriptionRegistry).waiters == %{}
     end
+
+    test "logs the unapplied deltas when no connection attaches within the wait window" do
+      log =
+        capture_log(fn ->
+          apply_deltas(
+            "test-unknown-instance-id",
+            [{:room_a, "page"}],
+            [{:room_b, "comp_1"}],
+            "test-user-id"
+          )
+        end)
+
+      assert log =~ ~s(No connection attached for instance "test-unknown-instance-id")
+      assert log =~ "within #{@attach_wait_ms}ms"
+      assert log =~ ~s(adds: [room_a: "page"])
+      assert log =~ ~s(drops: [room_b: "comp_1"])
+    end
+
+    test "logs nothing when a connection attaches within the wait window" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      log =
+        capture_log(fn ->
+          task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+          attach_connection("test-instance-id", "test-session-id", "test-user-id", sse_pid, [])
+
+          Task.await(task)
+        end)
+
+      refute log =~ "No connection attached"
+    end
   end
 
   describe "attach_connection/5" do
@@ -494,18 +527,22 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
 
     test "leaves callers parked for other instances untouched" do
-      task = park_apply_deltas("test-other-instance-id", [{:room_a, "page"}], [], "test-user-id")
+      # Captured because the untouched caller goes on to time out, which logs.
+      capture_log(fn ->
+        task =
+          park_apply_deltas("test-other-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
-      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+        sse_pid = spawn(fn -> Process.sleep(:infinity) end)
 
-      attach_connection("test-instance-id", "test-session-id", "test-user-id", sse_pid, [])
+        attach_connection("test-instance-id", "test-session-id", "test-user-id", sse_pid, [])
 
-      assert Map.has_key?(
-               :sys.get_state(SubscriptionRegistry).waiters,
-               "test-other-instance-id"
-             )
+        assert Map.has_key?(
+                 :sys.get_state(SubscriptionRegistry).waiters,
+                 "test-other-instance-id"
+               )
 
-      Task.await(task)
+        Task.await(task)
+      end)
     end
   end
 

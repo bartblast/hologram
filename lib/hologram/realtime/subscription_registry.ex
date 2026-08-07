@@ -3,6 +3,8 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
   use GenServer
 
+  require Logger
+
   @attach_wait_ms 2_000
   @table_name :hologram_subscriptions
 
@@ -51,7 +53,8 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   no zero-crossing messages are emitted, and the input `adds` and `drops` are
   returned unchanged so the framework can still sign receipts and ship a
   coherent response to the client. Receipts signed on that path stay valid and
-  reattach their bindings at the client's next handshake.
+  reattach their bindings at the client's next handshake, and the unapplied
+  deltas are logged as a warning so the case is visible rather than silent.
   """
   @spec apply_deltas(String.t(), [{any, String.t()}], [{any, String.t()}], term | nil) ::
           {[{any, String.t()}], [{any, String.t()}]}
@@ -518,6 +521,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
           end)
 
         Enum.each(matching, fn {from, _ref, adds, drops, _user_id} ->
+          log_unapplied_deltas(instance_id, adds, drops, state.attach_wait_ms)
           GenServer.reply(from, {adds, drops})
         end)
 
@@ -592,6 +596,18 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     prior_channels
     |> MapSet.difference(new_channels)
     |> Enum.each(fn channel -> send(sse_pid, {:unsub, channel}) end)
+  end
+
+  defp log_unapplied_deltas(instance_id, adds, drops, wait_ms) do
+    message = """
+    No connection attached for instance #{inspect(instance_id)} within #{wait_ms}ms, \
+    so its subscription deltas were not applied \
+    (adds: #{inspect(adds)}, drops: #{inspect(drops)}). \
+    Receipts already issued for these bindings stay valid and reattach the subscriptions \
+    at the client's next handshake.\
+    """
+
+    Logger.warning(message)
   end
 
   defp park_caller(state, instance_id, from, adds, drops, authorizing_user_id) do
