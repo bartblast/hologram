@@ -176,10 +176,25 @@ defmodule HologramFeatureTests.Helpers do
   that need to target the connected client from outside the connection
   (e.g., `Realtime.unsubscribe_all({:instance, current_instance_id()}, channel)`).
   """
+  # TODO: replace with current_instance_id/1, which resolves the browser's own
+  # connection instead of assuming a single registered one.
   @spec current_instance_id() :: String.t()
   def current_instance_id do
     [{instance_id, _entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
     instance_id
+  end
+
+  @doc """
+  Returns the `instance_id` of the given `session`'s browser.
+
+  Read from the browser's own JS context rather than from the registry, so it
+  holds however many connections are registered, and keeps working when this
+  one has no registry entry - after `simulate_sse_disconnect/1`, or before the
+  stream has attached.
+  """
+  @spec current_instance_id(Wallaby.Session.t()) :: String.t()
+  def current_instance_id(session) do
+    script_result(session, "return globalThis.Hologram.instanceId;")
   end
 
   @doc """
@@ -189,10 +204,24 @@ defmodule HologramFeatureTests.Helpers do
   a connection's session id before a second connection opens, e.g. to target it
   via `Realtime.broadcast_action_except({:session, current_session_id()}, ...)`.
   """
+  # TODO: replace with current_session_id/1, which resolves the browser's own
+  # connection instead of assuming a single registered one.
   @spec current_session_id() :: term
   def current_session_id do
     [{_instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
     entry.session_id
+  end
+
+  @doc """
+  Returns the `session_id` recorded for the given `session`'s connection, or
+  `nil` when it has no registry entry.
+  """
+  @spec current_session_id(Wallaby.Session.t()) :: term
+  def current_session_id(session) do
+    case registry_entry(session) do
+      nil -> nil
+      entry -> entry.session_id
+    end
   end
 
   @doc """
@@ -201,10 +230,27 @@ defmodule HologramFeatureTests.Helpers do
   Assumes exactly one SSE process is currently registered. Useful for gating on
   a handler-driven identity change having propagated to the connection.
   """
+  # TODO: replace with current_user_id/1, which resolves the browser's own
+  # connection instead of assuming a single registered one.
   @spec current_user_id() :: term
   def current_user_id do
     [{_instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
     entry.user_id
+  end
+
+  @doc """
+  Returns the `user_id` recorded for the given `session`'s connection, or `nil`
+  when it has no registry entry.
+
+  Returning `nil` rather than raising lets a poller keep waiting through the
+  window where a connection has not attached yet, or has just been reaped.
+  """
+  @spec current_user_id(Wallaby.Session.t()) :: term
+  def current_user_id(session) do
+    case registry_entry(session) do
+      nil -> nil
+      entry -> entry.user_id
+    end
   end
 
   @doc """
@@ -574,6 +620,15 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   # credo:disable-for-lines:9 Credo.Check.Refactor.IoPuts
+  defp registry_entry(session) do
+    instance_id = current_instance_id(session)
+
+    case :ets.lookup(SubscriptionRegistry.ets_table_name(), instance_id) do
+      [{^instance_id, entry}] -> entry
+      [] -> nil
+    end
+  end
+
   defp subscription_count(channel, cid) do
     SubscriptionRegistry.ets_table_name()
     |> :ets.tab2list()
