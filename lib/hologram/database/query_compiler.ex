@@ -23,6 +23,13 @@ defmodule Hologram.Database.QueryCompiler do
   and view bounds, `:one` selects with `LIMIT 1` under the query's total order (a
   zero limit stays zero), and `:count` selects `count(*)` - over a capped subquery
   when view bounds are set, since a counting query counts what it evaluates to.
+  Counting queries carry no includes - an embedded entity cannot change the count.
+
+  To-one includes compile into correlated jsonb subselects - one per included
+  relationship, in sorted name order, each aliased distinctly (self-referencing
+  relationships stay unambiguous - the root table is addressed by name). The jsonb
+  keys are the target's physical column names in mapping order, and the subselect
+  is NULL when the reference is.
 
   Nil is a regular value for equality and membership on both execution tiers:
   inequality matches missing values (`!=` widens with `OR IS NULL` on optional
@@ -39,7 +46,7 @@ defmodule Hologram.Database.QueryCompiler do
     {where_sql, params} = where_clause(term.filter, entity_mapping)
     order_sql = order_clause(term.order_by, entity_mapping)
 
-    %{params: params, sql: statement(term, entity_mapping, where_sql, order_sql)}
+    %{params: params, sql: statement(term, entity_mapping, mapping, where_sql, order_sql)}
   end
 
   defp bind_slot({:param, param_name}, column, reversed_params) do
@@ -180,6 +187,36 @@ defmodule Hologram.Database.QueryCompiler do
     {"$#{length(reversed_params) + 1}", [{:value, encoded_values} | reversed_params]}
   end
 
+  defp include_select({name, sub_term}, index, parent_mapping, mapping) do
+    reference_column =
+      Enum.find(parent_mapping.columns, &(&1.source == {:relationship, name}))
+
+    target_mapping = Map.fetch!(mapping, sub_term.entity)
+    quoted_alias = Mapper.quote_identifier("i#{index + 1}")
+
+    jsonb_pairs =
+      Enum.map_join(target_mapping.columns, ", ", fn column ->
+        "'#{column.name}', #{quoted_alias}.#{Mapper.quote_identifier(column.name)}"
+      end)
+
+    parent_reference =
+      "#{Mapper.quote_identifier(parent_mapping.table)}.#{Mapper.quote_identifier(reference_column.name)}"
+
+    "(SELECT jsonb_build_object(#{jsonb_pairs}) " <>
+      "FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} " <>
+      "WHERE #{quoted_alias}.\"id\" = #{parent_reference}) " <>
+      "AS #{Mapper.quote_identifier(Atom.to_string(name))}"
+  end
+
+  defp include_selects(term, entity_mapping, mapping) do
+    term.include
+    |> Enum.sort_by(fn {name, _sub_term} -> name end)
+    |> Enum.with_index()
+    |> Enum.map_join("", fn {entry, index} ->
+      ", " <> include_select(entry, index, entity_mapping, mapping)
+    end)
+  end
+
   defp maybe_require_value(condition_sql, quoted_name, %{null: true}) do
     "(#{condition_sql} AND #{quoted_name} IS NOT NULL)"
   end
@@ -214,7 +251,7 @@ defmodule Hologram.Database.QueryCompiler do
     |> Mapper.quote_identifier()
   end
 
-  defp statement(%{cardinality: :count} = term, entity_mapping, where_sql, _order_sql) do
+  defp statement(%{cardinality: :count} = term, entity_mapping, _mapping, where_sql, _order_sql) do
     from_sql = "FROM #{qualified_table(entity_mapping.table)}#{where_sql}"
     bounds_sql = bounds_clause(term)
 
@@ -225,16 +262,18 @@ defmodule Hologram.Database.QueryCompiler do
     end
   end
 
-  defp statement(%{cardinality: :one} = term, entity_mapping, where_sql, order_sql) do
+  defp statement(%{cardinality: :one} = term, entity_mapping, mapping, where_sql, order_sql) do
     effective_limit = if term.limit == 0, do: 0, else: 1
     offset_sql = if term.offset, do: " OFFSET #{term.offset}", else: ""
 
-    "SELECT #{column_list(entity_mapping)} FROM #{qualified_table(entity_mapping.table)}" <>
+    "SELECT #{column_list(entity_mapping)}#{include_selects(term, entity_mapping, mapping)} " <>
+      "FROM #{qualified_table(entity_mapping.table)}" <>
       where_sql <> order_sql <> " LIMIT #{effective_limit}" <> offset_sql
   end
 
-  defp statement(term, entity_mapping, where_sql, order_sql) do
-    "SELECT #{column_list(entity_mapping)} FROM #{qualified_table(entity_mapping.table)}" <>
+  defp statement(term, entity_mapping, mapping, where_sql, order_sql) do
+    "SELECT #{column_list(entity_mapping)}#{include_selects(term, entity_mapping, mapping)} " <>
+      "FROM #{qualified_table(entity_mapping.table)}" <>
       where_sql <> order_sql <> bounds_clause(term)
   end
 

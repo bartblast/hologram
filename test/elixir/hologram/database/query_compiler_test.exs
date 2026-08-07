@@ -5,9 +5,11 @@ defmodule Hologram.Database.QueryCompilerTest do
 
   alias Hologram.Database.Mapper
   alias Hologram.Query
+  alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module5
 
   describe "compile/2" do
     test "assigns placeholders to param slots" do
@@ -144,6 +146,28 @@ defmodule Hologram.Database.QueryCompilerTest do
       assert String.contains?(sql, ~s( WHERE "b" IS NOT NULL))
     end
 
+    test "aliases sibling includes distinctly" do
+      mapping = Mapper.derive!([Module1, Module2, Module3])
+
+      term =
+        Module3
+        |> Query.include(:b)
+        |> Query.include(:c)
+        |> Query.normalize()
+
+      assert %{sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "i1" WHERE "i1"."id" = "test_fixtures_entity_module3"."b_id") AS "b"|
+             )
+
+      assert String.contains?(
+               sql,
+               ~s|FROM "hologram_data"."test_fixtures_entity_module1" AS "i2" WHERE "i2"."id" = "test_fixtures_entity_module3"."c_id") AS "c"|
+             )
+    end
+
     test "compiles counting queries as a bare count" do
       mapping = Mapper.derive!([Module2])
 
@@ -174,6 +198,41 @@ defmodule Hologram.Database.QueryCompilerTest do
                sql:
                  ~s|SELECT count(*) FROM (SELECT 1 FROM "hologram_data"."test_fixtures_entity_module2" LIMIT 50) AS "sub"|
              }
+    end
+
+    test "embeds a to-one relationship as a jsonb subselect" do
+      mapping = Mapper.derive!([Module1, Module2, Module3])
+
+      term =
+        Module3
+        |> Query.include(:c)
+        |> Query.normalize()
+
+      assert compile(term, mapping) == %{
+               params: [],
+               sql:
+                 ~s|SELECT "id", "b_id", "c_id", "created_at", "updated_at", | <>
+                   ~s|(SELECT jsonb_build_object('id', "i1"."id", 'created_at', "i1"."created_at", 'updated_at', "i1"."updated_at") | <>
+                   ~s|FROM "hologram_data"."test_fixtures_entity_module1" AS "i1" | <>
+                   ~s|WHERE "i1"."id" = "test_fixtures_entity_module3"."c_id") AS "c" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_entity_module3" ORDER BY "id" ASC|
+             }
+    end
+
+    test "embeds a self-referencing to-one unambiguously" do
+      mapping = Mapper.derive!([Module3, Module5])
+
+      term =
+        Module5
+        |> Query.include(:b)
+        |> Query.normalize()
+
+      assert %{sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|FROM "hologram_data"."test_fixtures_entity_module5" AS "i1" WHERE "i1"."id" = "test_fixtures_entity_module5"."b_id") AS "b"|
+             )
     end
 
     test "compiles nil equality as IS NULL without a bind slot" do
@@ -276,6 +335,21 @@ defmodule Hologram.Database.QueryCompilerTest do
              } = compile(term, mapping)
 
       assert String.contains?(sql, ~s( WHERE "a" = $1 AND "c" = $2))
+    end
+
+    test "omits includes from counting queries" do
+      mapping = Mapper.derive!([Module1, Module2, Module3])
+
+      term =
+        Module3
+        |> Query.include(:c)
+        |> Query.count()
+        |> Query.normalize()
+
+      assert compile(term, mapping) == %{
+               params: [],
+               sql: ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_entity_module3"|
+             }
     end
 
     test "selects the mapped columns in physical order" do
