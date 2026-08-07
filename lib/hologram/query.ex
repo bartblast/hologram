@@ -3,6 +3,23 @@ defmodule Hologram.Query do
 
   alias Hologram.Reflection
 
+  defmacro __using__(_opts) do
+    quote do
+      import Hologram.Query,
+        only: [
+          count: 1,
+          filter: 2,
+          include: 2,
+          include: 3,
+          limit: 2,
+          offset: 2,
+          one: 1,
+          order_by: 2,
+          paginate: 2
+        ]
+    end
+  end
+
   @directions [:asc, :desc]
   @equality_operators [:!=, :==]
   @membership_operators [:in, :not_in]
@@ -181,18 +198,15 @@ defmodule Hologram.Query do
     set_view_bound!(query, :limit, value)
   end
 
-  @doc """
-  Returns the canonical form of the given query - the form executors run literally.
-
-  The query is an entity type module or an already built query term. Normalization:
-  sorts filter predicates into canonical order (conjunction is commutative), gives
-  every set-returning shape a total deterministic order by appending an ascending id
-  tiebreaker (or the id ordering itself when no ordering is set) unless id is already
-  among the ordering keys, drops the ordering from counting queries (counts are
-  order-invariant, view bounds included), and normalizes included sub-terms
-  recursively - to-one includes embed a single entity and carry no ordering.
-  Normalization is idempotent.
-  """
+  # Returns the canonical form of the given query - the form executors run literally
+  # and the registry hashes. Normalization: sorts filter predicates into canonical
+  # order (conjunction is commutative), gives every set-returning shape a total
+  # deterministic order by appending an ascending id tiebreaker (or the id ordering
+  # itself when no ordering is set) unless id is already among the ordering keys,
+  # drops the ordering from counting queries (counts are order-invariant, view bounds
+  # included), and normalizes included sub-terms recursively - to-one includes embed
+  # a single entity and carry no ordering. Idempotent.
+  @doc false
   @spec normalize(module | %{atom => any}) :: %{atom => any}
   def normalize(query) do
     query
