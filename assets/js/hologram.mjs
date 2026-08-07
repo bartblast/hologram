@@ -6,6 +6,7 @@ import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
+import Debouncer from "./debouncer.mjs";
 import Deserializer from "./deserializer.mjs";
 import ERTS from "./erts.mjs";
 import EventListenerRegistry from "./event_listener_registry.mjs";
@@ -23,7 +24,9 @@ import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
 import Serializer from "./serializer.mjs";
 import Sse from "./sse.mjs";
+import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
+import UncaughtErrorOverlay from "./uncaught_error_overlay.mjs";
 import Utils from "./utils.mjs";
 import Vdom from "./vdom.mjs";
 
@@ -47,16 +50,19 @@ import ManuallyPortedElixirApplication from "./elixir/application.mjs";
 import ManuallyPortedElixirCldrLocale from "./elixir/cldr/locale.mjs";
 import ManuallyPortedElixirCldrValidityU from "./elixir/cldr/validity/u.mjs";
 import ManuallyPortedElixirCode from "./elixir/code.mjs";
+import ManuallyPortedElixirException from "./elixir/exception.mjs";
+import ManuallyPortedElixirFunctionClauseError from "./elixir/function_clause_error.mjs";
 import ManuallyPortedElixirHologramEntity from "./elixir/hologram/entity.mjs";
 import ManuallyPortedElixirHologramJS from "./elixir/hologram/js.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
 import ManuallyPortedElixirIO from "./elixir/io.mjs";
 import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
 import ManuallyPortedElixirString from "./elixir/string.mjs";
+import ManuallyPortedElixirStringTokenizer from "./elixir/string/tokenizer.mjs";
 import ManuallyPortedElixirTask from "./elixir/task.mjs";
 import ManuallyPortedElixirURI from "./elixir/uri.mjs";
 
-import {toVNode} from "snabbdom";
+import {toVNode} from "./vendor/snabbdom/build/index.js";
 
 // TODO: test
 export default class Hologram {
@@ -308,6 +314,31 @@ export default class Hologram {
     };
   }
 
+  // Records an uncaught boxed error and puts it in the page.
+  //
+  // Nothing is written to the console here: the error carries the whole report
+  // as its message, so the entry the browser writes for an error nobody caught
+  // holds the Elixir frames and the JavaScript stack below them - one entry,
+  // and its stack stays the structured one the devtools resolve through the
+  // bundle's source maps.
+  static handleUncaughtError(error) {
+    if (!(error instanceof HologramBoxedError)) {
+      return;
+    }
+
+    // Read by the feature test helpers, which assert against the error the
+    // page last raised. Both parts are taken as the error derived them, so an
+    // error that failed to derive is still reported, with the fault named.
+    GlobalRegistry.set("lastBoxedError", {
+      module: error.type,
+      message: error.text,
+    });
+
+    if (globalThis.Hologram.config.errorOverlay) {
+      UncaughtErrorOverlay.show(error);
+    }
+  }
+
   // Made public to make tests easier
   static async loadNewPage(pagePath, html) {
     await $.#savePageSnapshot();
@@ -407,8 +438,8 @@ export default class Hologram {
         Hologram.#mountPage();
       } catch (error) {
         if (error instanceof HologramBoxedError) {
-          error.name = Interpreter.getErrorType(error);
-          error.message = Interpreter.resolveErrorMessage(error.struct);
+          error.name = error.type;
+          error.message = error.text;
         }
 
         throw error;
@@ -472,6 +503,27 @@ export default class Hologram {
       "ensure_compiled/1",
       "public",
       ManuallyPortedElixirCode["ensure_compiled/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Code",
+      "ensure_loaded/1",
+      "public",
+      ManuallyPortedElixirCode["ensure_loaded/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Exception",
+      "format_stacktrace/1",
+      "public",
+      ManuallyPortedElixirException["format_stacktrace/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "FunctionClauseError",
+      "message/1",
+      "public",
+      ManuallyPortedElixirFunctionClauseError["message/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -664,6 +716,13 @@ export default class Hologram {
     );
 
     Interpreter.defineManuallyPortedFunction(
+      "String.Tokenizer",
+      "tokenize/1",
+      "public",
+      ManuallyPortedElixirStringTokenizer["tokenize/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
       "Task",
       "await/1",
       "public",
@@ -835,33 +894,15 @@ export default class Hologram {
   // Executed only once, on the initial page load.
   // Deps: [:maps.get/2]
   static async #init() {
-    // TODO: consider when porting Elixir error handling
-    // window.addEventListener("error", (event) => {
-    //   if (event.error instanceof HologramBoxedError) {
-    //     console.error(`${event.error.message}\n`, event.error);
-    //     event.preventDefault();
-    //   }
-    // });
-
-    // TODO: consider when porting Elixir error handling
-    const handleBoxedError = (error) => {
-      if (error instanceof HologramBoxedError) {
-        GlobalRegistry.set("lastBoxedError", {
-          module: Interpreter.inspect(
-            Erlang_Maps["get/2"](Type.atom("__struct__"), error.struct),
-          ),
-          message: Interpreter.resolveErrorMessage(error.struct),
-        });
-      }
-    };
-
-    window.addEventListener("error", (event) => handleBoxedError(event.error));
+    window.addEventListener("error", (event) => {
+      $.handleUncaughtError(event.error);
+    });
 
     // Async action errors surface as rejected Promises (from the .then() path
     // in executeAction) and fire "unhandledrejection" instead of "error".
-    window.addEventListener("unhandledrejection", (event) =>
-      handleBoxedError(event.reason),
-    );
+    window.addEventListener("unhandledrejection", (event) => {
+      $.handleUncaughtError(event.reason);
+    });
 
     window.addEventListener("beforeunload", () => {
       // Force synchronous session storage save since async OPFS may not complete before page termination
@@ -878,6 +919,21 @@ export default class Hologram {
         Client.connect(true);
       }
     });
+
+    // Losing focus definitively ends any burst of events from an element, so its pending
+    // debounced dispatches fire now instead of waiting out the rest of their windows.
+    document.addEventListener("focusout", (event) =>
+      Debouncer.flush(event.target),
+    );
+
+    // Submit is a commit point: everything entered into the form is logically before it, so the
+    // form's pending debounced dispatches run first. Capture phase guarantees the flush precedes
+    // the form's own bound handler reading the event payload and dispatching.
+    document.addEventListener(
+      "submit",
+      (event) => Debouncer.flushWithin(event.target),
+      true,
+    );
 
     // Check if there's already a history state (e.g., when navigating back from external page)
     if (history.state) {
@@ -901,7 +957,7 @@ export default class Hologram {
     Hologram.#defineManuallyPortedFunctions();
 
     Hologram.virtualDocument = toVNode(document.documentElement);
-    Vdom.addKeysToLinkAndScriptVnodes(Hologram.virtualDocument);
+    Vdom.addKeysToVnodes(Hologram.virtualDocument);
 
     console.inspect = (term) => console.log(Interpreter.inspect(term));
 
@@ -962,6 +1018,14 @@ export default class Hologram {
   }
 
   static #mountPage(isPageModuleRegistered = false) {
+    // Every page-entry path funnels through here (client-side navigation, back/forward
+    // restoration, initial mount), so this is where dispatches still pending from the previous
+    // page are dropped - the context they were meant for no longer exists. Cancel, not flush: a
+    // dispatch must never execute on a page the user has left. On the initial mount both
+    // cancellations are no-ops.
+    Debouncer.cancelAll();
+    Throttler.cancelAll();
+
     let mountData = null;
 
     if ($.#shouldLoadMountData) {

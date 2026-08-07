@@ -1,22 +1,22 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import App from "../../assets/js/app.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("App", () => {
   describe("maybeLoadInstanceId()", () => {
+    let originalHologram;
+
     beforeEach(() => {
+      originalHologram = globalThis.Hologram;
       globalThis.Hologram = {};
     });
 
     afterEach(() => {
-      delete globalThis.Hologram;
+      globalThis.Hologram = originalHologram;
       App.instanceId = null;
     });
 

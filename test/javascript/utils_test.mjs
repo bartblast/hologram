@@ -1,13 +1,10 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import Utils from "../../assets/js/utils.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("Utils", () => {
   describe("capitalize()", () => {
@@ -62,28 +59,6 @@ describe("Utils", () => {
       const expected = new Uint8Array([1, 2, 3, 4, 5, 6]);
 
       assert.deepStrictEqual(result, expected);
-    });
-  });
-
-  describe("naiveNounPlural", () => {
-    it("0", () => {
-      const result = Utils.naiveNounPlural("car", 0);
-      assert.equal(result, "cars");
-    });
-
-    it("1", () => {
-      const result = Utils.naiveNounPlural("car", 1);
-      assert.equal(result, "car");
-    });
-
-    it("2", () => {
-      const result = Utils.naiveNounPlural("car", 2);
-      assert.equal(result, "cars");
-    });
-
-    it("3", () => {
-      const result = Utils.naiveNounPlural("car", 3);
-      assert.equal(result, "cars");
     });
   });
 

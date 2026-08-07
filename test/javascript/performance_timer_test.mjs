@@ -1,14 +1,10 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-  sinon,
-} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
 import PerformanceTimer from "../../assets/js/performance_timer.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("PerformanceTimer", () => {
   let performanceNowStub;

@@ -48,15 +48,6 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
     end
 
     feature "reraise re-raises the rescued exception", %{session: session} do
-      # Asserts only the re-raised exception. The matching consistency test
-      # additionally asserts that reraise preserves the original raise-site
-      # stacktrace, which is server-only - the client has no stacktraces yet
-      # (__STACKTRACE__ is []), so there is nothing to preserve here.
-      #
-      # TODO: once client-side stacktraces are supported (see the TODO in
-      # lib/hologram/compiler/transformer.ex), tighten this to also assert that
-      # reraise preserves the original raise-site stacktrace, mirroring the
-      # consistency test.
       assert_client_error session,
                           ArgumentError,
                           "my message",
@@ -103,22 +94,35 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
   end
 
   describe "__STACKTRACE__" do
-    # CLIENT/SERVER DIVERGENCE: the client does not support stacktraces yet, so
-    # __STACKTRACE__ is compiled to an empty list. The consistency test
-    # (test/elixir/hologram/ex_js_consistency/try_test.exs "__STACKTRACE__ holds the
-    # stacktrace pointing to where the error was raised") asserts the real, non-empty
-    # server stacktrace instead.
-    #
-    # TODO: support real client-side stacktraces so this matches the consistency
-    # test. Maintain a call stack in the interpreter (push a frame per function
-    # call), capture it when a HologramBoxedError is raised, and bind __STACKTRACE__
-    # to that captured trace within rescue/catch clause scopes, instead of compiling
-    # it to an empty list in lib/hologram/compiler/transformer.ex.
-    feature "evaluates to an empty list on the client", %{session: session} do
+    # The line `raise "boom"` sits on in app/pages/control_flow/try_page.ex.
+    @raise_line 274
+
+    # The line `raise "bang"` sits on in app/pages/control_flow/try_page.ex -
+    # the raise site reraise has to preserve, not the clause re-raising it.
+    @reraise_line 196
+
+    feature "holds the frame the error was raised in", %{session: session} do
+      expected =
+        "{:stacktrace, [{#{inspect(TryPage)}, :action, 3, " <>
+          ~s([file: ~c"app/pages/control_flow/try_page.ex", ) <>
+          "line: #{@raise_line}, error_info: %{module: Exception}]}]}"
+
       session
       |> visit(TryPage)
       |> click(button("Stacktrace"))
-      |> assert_text(css("#result"), ~s/{:stacktrace, []}/)
+      |> assert_text(css("#result"), expected)
+    end
+
+    feature "reraise preserves the frame of the original raise site", %{session: session} do
+      expected =
+        "{:reraise_stacktrace, [{#{inspect(TryPage)}, :action, 3, " <>
+          ~s([file: ~c"app/pages/control_flow/try_page.ex", ) <>
+          "line: #{@reraise_line}, error_info: %{module: Exception}]}]}"
+
+      session
+      |> visit(TryPage)
+      |> click(button("Reraise stacktrace"))
+      |> assert_text(css("#result"), expected)
     end
   end
 

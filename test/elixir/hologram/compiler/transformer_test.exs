@@ -224,14 +224,14 @@ defmodule Hologram.Compiler.TransformerTest do
     test "AST from source code" do
       ast = ast("__STACKTRACE__")
 
-      assert transform(ast, %Context{}) == %IR.ListType{data: []}
+      assert transform(ast, %Context{}) == %IR.Stacktrace{}
     end
 
     test "AST from BEAM file" do
       assert %IR.Try{
                rescue_clauses: [
                  %IR.TryRescueClause{
-                   body: %IR.Block{expressions: [%IR.ListType{data: []}]}
+                   body: %IR.Block{expressions: [%IR.Stacktrace{}]}
                  }
                ]
              } = transform_module_and_fetch_expr(Module181)
@@ -244,7 +244,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionCall{
                function: %IR.Variable{name: :my_fun},
-               args: []
+               args: [],
+               line: 1
              }
     end
 
@@ -252,7 +253,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform_module_and_fetch_expr(Module9) ==
                %IR.AnonymousFunctionCall{
                  function: %IR.Variable{name: :my_fun, version: 0},
-                 args: []
+                 args: [],
+                 line: 4
                }
     end
 
@@ -264,7 +266,8 @@ defmodule Hologram.Compiler.TransformerTest do
                args: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2}
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -274,7 +277,8 @@ defmodule Hologram.Compiler.TransformerTest do
                args: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2}
-               ]
+               ],
+               line: 4
              }
     end
   end
@@ -291,7 +295,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :ok}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -306,7 +311,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :ok}]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -323,7 +329,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -339,7 +346,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      guards: [],
                      body: %IR.Block{
                        expressions: [%IR.Variable{name: :x, version: 0}]
-                     }
+                     },
+                     line: 4
                    }
                  ]
                }
@@ -361,7 +369,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [
                        %IR.TupleType{data: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]}
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -386,7 +395,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          ]
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -412,7 +422,8 @@ defmodule Hologram.Compiler.TransformerTest do
                        %IR.AtomType{value: :expr_1},
                        %IR.AtomType{value: :expr_2}
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -430,7 +441,8 @@ defmodule Hologram.Compiler.TransformerTest do
                        %IR.AtomType{value: :expr_1},
                        %IR.AtomType{value: :expr_2}
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -453,14 +465,16 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :ok}]
-                   }
+                   },
+                   line: 2
                  },
                  %IR.FunctionClause{
                    params: [%IR.IntegerType{value: 2}],
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :error}]
-                   }
+                   },
+                   line: 3
                  }
                ]
              }
@@ -475,14 +489,16 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :ok}]
-                   }
+                   },
+                   line: 5
                  },
                  %IR.FunctionClause{
                    params: [%IR.IntegerType{value: 2}],
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :error}]
-                   }
+                   },
+                   line: 6
                  }
                ]
              }
@@ -501,12 +517,14 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [
                      %IR.LocalFunctionCall{
                        function: :is_integer,
-                       args: [%IR.Variable{name: :x}]
+                       args: [%IR.Variable{name: :x}],
+                       line: 1
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -524,12 +542,14 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :x, version: 0}]
+                       args: [%IR.Variable{name: :x, version: 0}],
+                       line: 4
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x, version: 0}]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -548,19 +568,22 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [
                      %IR.LocalFunctionCall{
                        function: :is_integer,
-                       args: [%IR.Variable{name: :x}]
+                       args: [%IR.Variable{name: :x}],
+                       line: 1
                      },
                      %IR.LocalFunctionCall{
                        function: :>,
                        args: [
                          %IR.Variable{name: :x},
                          %IR.IntegerType{value: 1}
-                       ]
+                       ],
+                       line: 1
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -578,7 +601,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :x, version: 0}]
+                       args: [%IR.Variable{name: :x, version: 0}],
+                       line: 4
                      },
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
@@ -586,12 +610,14 @@ defmodule Hologram.Compiler.TransformerTest do
                        args: [
                          %IR.Variable{name: :x, version: 0},
                          %IR.IntegerType{value: 1}
-                       ]
+                       ],
+                       line: 4
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x, version: 0}]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -610,26 +636,30 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [
                      %IR.LocalFunctionCall{
                        function: :is_integer,
-                       args: [%IR.Variable{name: :x}]
+                       args: [%IR.Variable{name: :x}],
+                       line: 1
                      },
                      %IR.LocalFunctionCall{
                        function: :>,
                        args: [
                          %IR.Variable{name: :x},
                          %IR.IntegerType{value: 1}
-                       ]
+                       ],
+                       line: 1
                      },
                      %IR.LocalFunctionCall{
                        function: :<,
                        args: [
                          %IR.Variable{name: :x},
                          %IR.IntegerType{value: 9}
-                       ]
+                       ],
+                       line: 1
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -647,7 +677,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :x, version: 0}]
+                       args: [%IR.Variable{name: :x, version: 0}],
+                       line: 4
                      },
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
@@ -655,7 +686,8 @@ defmodule Hologram.Compiler.TransformerTest do
                        args: [
                          %IR.Variable{name: :x, version: 0},
                          %IR.IntegerType{value: 1}
-                       ]
+                       ],
+                       line: 4
                      },
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
@@ -663,12 +695,14 @@ defmodule Hologram.Compiler.TransformerTest do
                        args: [
                          %IR.Variable{name: :x, version: 0},
                          %IR.IntegerType{value: 9}
-                       ]
+                       ],
+                       line: 4
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x, version: 0}]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -693,7 +727,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -716,7 +751,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x, version: 0}]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -744,12 +780,14 @@ defmodule Hologram.Compiler.TransformerTest do
                        args: [
                          %IR.Variable{name: :x},
                          %IR.AtomType{value: MyModule}
-                       ]
+                       ],
+                       line: 1
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :x}]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -777,12 +815,14 @@ defmodule Hologram.Compiler.TransformerTest do
                      args: [
                        %IR.Variable{name: :x, version: 0},
                        %IR.AtomType{value: MyModule}
-                     ]
+                     ],
+                     line: 4
                    }
                  ],
                  body: %IR.Block{
                    expressions: [%IR.Variable{name: :x, version: 0}]
-                 }
+                 },
+                 line: 4
                }
              ]
            }
@@ -837,7 +877,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "empty" do
       ast = ast("<<>>")
 
-      assert transform(ast, %Context{}) == %IR.BitstringType{segments: []}
+      assert transform(ast, %Context{}) == %IR.BitstringType{segments: [], line: 1}
     end
 
     test "single segment" do
@@ -1507,10 +1547,12 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [
                        %IR.LocalFunctionCall{
                          function: :my_fun,
-                         args: []
+                         args: [],
+                         line: 1
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1530,10 +1572,12 @@ defmodule Hologram.Compiler.TransformerTest do
                        expressions: [
                          %IR.LocalFunctionCall{
                            function: :my_fun,
-                           args: []
+                           args: [],
+                           line: 4
                          }
                        ]
-                     }
+                     },
+                     line: 4
                    }
                  ]
                }
@@ -1556,10 +1600,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          function: :my_fun,
                          args: [
                            %IR.Variable{name: :"$1"}
-                         ]
+                         ],
+                         line: 1
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1583,10 +1629,12 @@ defmodule Hologram.Compiler.TransformerTest do
                            function: :my_fun,
                            args: [
                              %IR.Variable{name: :"$1"}
-                           ]
+                           ],
+                           line: 4
                          }
                        ]
-                     }
+                     },
+                     line: 4
                    }
                  ]
                }
@@ -1613,10 +1661,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          args: [
                            %IR.Variable{name: :"$1"},
                            %IR.Variable{name: :"$2"}
-                         ]
+                         ],
+                         line: 1
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1642,10 +1692,12 @@ defmodule Hologram.Compiler.TransformerTest do
                            args: [
                              %IR.Variable{name: :"$1"},
                              %IR.Variable{name: :"$2"}
-                           ]
+                           ],
+                           line: 4
                          }
                        ]
-                     }
+                     },
+                     line: 4
                    }
                  ]
                }
@@ -1675,10 +1727,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          args: [
                            %IR.Variable{name: :"$1"},
                            %IR.Variable{name: :"$2"}
-                         ]
+                         ],
+                         line: 1
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1704,10 +1758,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          args: [
                            %IR.Variable{name: :"$1"},
                            %IR.Variable{name: :"$2"}
-                         ]
+                         ],
+                         line: 4
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -1735,10 +1791,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          args: [
                            %IR.Variable{name: :"$1"},
                            %IR.Variable{name: :"$2"}
-                         ]
+                         ],
+                         line: 1
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1764,10 +1822,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          args: [
                            %IR.Variable{name: :"$1"},
                            %IR.Variable{name: :"$2"}
-                         ]
+                         ],
+                         line: 4
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -1797,10 +1857,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          args: [
                            %IR.Variable{name: :"$1"},
                            %IR.Variable{name: :"$2"}
-                         ]
+                         ],
+                         line: 1
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1826,10 +1888,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          args: [
                            %IR.Variable{name: :"$1"},
                            %IR.Variable{name: :"$2"}
-                         ]
+                         ],
+                         line: 4
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -1859,10 +1923,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          args: [
                            %IR.Variable{name: :"$1"},
                            %IR.Variable{name: :"$2"}
-                         ]
+                         ],
+                         line: 1
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1888,10 +1954,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          args: [
                            %IR.Variable{name: :"$1"},
                            %IR.Variable{name: :"$2"}
-                         ]
+                         ],
+                         line: 4
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -1926,10 +1994,12 @@ defmodule Hologram.Compiler.TransformerTest do
                                %IR.Variable{name: :"$2"}
                              ]
                            }
-                         ]
+                         ],
+                         line: 1
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -1972,10 +2042,12 @@ defmodule Hologram.Compiler.TransformerTest do
                                %IR.Variable{name: param_2_name, version: param_2_version}
                              ]
                            }
-                         ]
+                         ],
+                         line: 4
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -2011,10 +2083,12 @@ defmodule Hologram.Compiler.TransformerTest do
                                %IR.Variable{name: :"$2"}
                              ]
                            }
-                         ]
+                         ],
+                         line: 1
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -2058,10 +2132,12 @@ defmodule Hologram.Compiler.TransformerTest do
                                %IR.Variable{name: param_2_name, version: param_2_version}
                              ]
                            }
-                         ]
+                         ],
+                         line: 6
                        }
                      ]
-                   }
+                   },
+                   line: 6
                  }
                ]
              }
@@ -2093,13 +2169,16 @@ defmodule Hologram.Compiler.TransformerTest do
                              args: [
                                %IR.Variable{name: :"$1"},
                                %IR.Variable{name: :"$2"}
-                             ]
+                             ],
+                             line: 1
                            },
                            %IR.Variable{name: :"$1"}
-                         ]
+                         ],
+                         line: 1
                        }
                      ]
-                   }
+                   },
+                   line: 1
                  }
                ]
              }
@@ -2141,13 +2220,16 @@ defmodule Hologram.Compiler.TransformerTest do
                              args: [
                                %IR.Variable{name: param_1_name, version: param_1_version},
                                %IR.Variable{name: param_2_name, version: param_2_version}
-                             ]
+                             ],
+                             line: 4
                            },
                            %IR.Variable{name: param_1_name, version: param_1_version}
-                         ]
+                         ],
+                         line: 4
                        }
                      ]
-                   }
+                   },
+                   line: 4
                  }
                ]
              }
@@ -2173,7 +2255,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.Variable{name: :x}]
                    }
                  }
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -2188,7 +2271,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.Variable{name: :x, version: 0}]
                    }
                  }
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -2218,7 +2302,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.IntegerType{value: 3}]
                    }
                  }
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -2240,7 +2325,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.IntegerType{value: 3}]
                    }
                  }
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -2267,7 +2353,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -2285,7 +2372,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -2310,14 +2398,16 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [
                      %IR.LocalFunctionCall{
                        function: :is_integer,
-                       args: [%IR.Variable{name: :n}]
+                       args: [%IR.Variable{name: :n}],
+                       line: 2
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :n}]
                    }
                  }
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -2336,14 +2426,16 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :n, version: 1}]
+                       args: [%IR.Variable{name: :n, version: 1}],
+                       line: 5
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :n, version: 1}]
                    }
                  }
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -2368,18 +2460,21 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [
                      %IR.LocalFunctionCall{
                        function: :is_integer,
-                       args: [%IR.Variable{name: :n}]
+                       args: [%IR.Variable{name: :n}],
+                       line: 2
                      },
                      %IR.LocalFunctionCall{
                        function: :>,
-                       args: [%IR.Variable{name: :n}, %IR.IntegerType{value: 1}]
+                       args: [%IR.Variable{name: :n}, %IR.IntegerType{value: 1}],
+                       line: 2
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :n}]
                    }
                  }
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -2398,19 +2493,22 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :n, version: 1}]
+                       args: [%IR.Variable{name: :n, version: 1}],
+                       line: 5
                      },
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :>,
-                       args: [%IR.Variable{name: :n, version: 1}, %IR.IntegerType{value: 1}]
+                       args: [%IR.Variable{name: :n, version: 1}, %IR.IntegerType{value: 1}],
+                       line: 5
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :n, version: 1}]
                    }
                  }
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -2435,22 +2533,26 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [
                      %IR.LocalFunctionCall{
                        function: :is_integer,
-                       args: [%IR.Variable{name: :n}]
+                       args: [%IR.Variable{name: :n}],
+                       line: 2
                      },
                      %IR.LocalFunctionCall{
                        function: :>,
-                       args: [%IR.Variable{name: :n}, %IR.IntegerType{value: 1}]
+                       args: [%IR.Variable{name: :n}, %IR.IntegerType{value: 1}],
+                       line: 2
                      },
                      %IR.LocalFunctionCall{
                        function: :<,
-                       args: [%IR.Variable{name: :n}, %IR.IntegerType{value: 9}]
+                       args: [%IR.Variable{name: :n}, %IR.IntegerType{value: 9}],
+                       line: 2
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :n}]
                    }
                  }
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -2469,24 +2571,28 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :n, version: 1}]
+                       args: [%IR.Variable{name: :n, version: 1}],
+                       line: 5
                      },
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :>,
-                       args: [%IR.Variable{name: :n, version: 1}, %IR.IntegerType{value: 1}]
+                       args: [%IR.Variable{name: :n, version: 1}, %IR.IntegerType{value: 1}],
+                       line: 5
                      },
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :<,
-                       args: [%IR.Variable{name: :n, version: 1}, %IR.IntegerType{value: 9}]
+                       args: [%IR.Variable{name: :n, version: 1}, %IR.IntegerType{value: 9}],
+                       line: 5
                      }
                    ],
                    body: %IR.Block{
                      expressions: [%IR.Variable{name: :n, version: 1}]
                    }
                  }
-               ]
+               ],
+               line: 4
              }
     end
   end
@@ -3529,7 +3635,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.AtomType{value: :expr}]
                    }
                  }
-               ]
+               ],
+               line: 2
              }
     end
 
@@ -3542,7 +3649,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.AtomType{value: :expr}]
                    }
                  }
-               ]
+               ],
+               line: 5
              }
     end
 
@@ -3569,7 +3677,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      expressions: [%IR.AtomType{value: :expr_2}]
                    }
                  }
-               ]
+               ],
+               line: 3
              }
     end
 
@@ -3580,7 +3689,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    condition: %IR.RemoteFunctionCall{
                      args: [%IR.IntegerType{value: 1}],
                      function: :wrap_term,
-                     module: %IR.AtomType{value: TestUtils}
+                     module: %IR.AtomType{value: TestUtils},
+                     line: 7
                    },
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_1}]
@@ -3590,13 +3700,15 @@ defmodule Hologram.Compiler.TransformerTest do
                    condition: %IR.RemoteFunctionCall{
                      args: [%IR.IntegerType{value: 2}],
                      function: :wrap_term,
-                     module: %IR.AtomType{value: TestUtils}
+                     module: %IR.AtomType{value: TestUtils},
+                     line: 8
                    },
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_2}]
                    }
                  }
-               ]
+               ],
+               line: 8
              }
     end
 
@@ -3621,7 +3733,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ]
+               ],
+               line: 2
              }
     end
 
@@ -3637,7 +3750,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ]
+               ],
+               line: 5
              }
     end
   end
@@ -3770,14 +3884,16 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.DotOperator{
                left: %IR.Variable{name: :my_var},
-               right: %IR.AtomType{value: :my_key}
+               right: %IR.AtomType{value: :my_key},
+               line: 1
              }
     end
 
     test "AST from BEAM file" do
       assert transform_module_and_fetch_expr(Module66) == %IR.DotOperator{
                left: %IR.Variable{name: :my_var, version: 0},
-               right: %IR.AtomType{value: :my_key}
+               right: %IR.AtomType{value: :my_key},
+               line: 4
              }
     end
   end
@@ -3991,14 +4107,17 @@ defmodule Hologram.Compiler.TransformerTest do
                  guards: [
                    %IR.LocalFunctionCall{
                      function: :is_integer,
-                     args: [%IR.Variable{name: :x}]
+                     args: [%IR.Variable{name: :x}],
+                     line: 1
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
                      %IR.Variable{name: :x}
                    ]
-                 }
+                 },
+                 line: 1,
+                 blame: %{params: ["x"], guards: [{:leaf, "is_integer(x)"}]}
                }
              }
     end
@@ -4016,14 +4135,17 @@ defmodule Hologram.Compiler.TransformerTest do
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :is_integer,
-                     args: [%IR.Variable{name: :x, version: 0}]
+                     args: [%IR.Variable{name: :x, version: 0}],
+                     line: 3
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
                      %IR.Variable{name: :x, version: 0}
                    ]
-                 }
+                 },
+                 line: 3,
+                 blame: %{params: ["x"], guards: [{:leaf, "is_integer(x)"}]}
                }
              }
     end
@@ -4047,17 +4169,24 @@ defmodule Hologram.Compiler.TransformerTest do
                  guards: [
                    %IR.LocalFunctionCall{
                      function: :is_integer,
-                     args: [%IR.Variable{name: :x}]
+                     args: [%IR.Variable{name: :x}],
+                     line: 1
                    },
                    %IR.LocalFunctionCall{
                      function: :>,
-                     args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}]
+                     args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}],
+                     line: 1
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
                      %IR.Variable{name: :x}
                    ]
+                 },
+                 line: 1,
+                 blame: %{
+                   params: ["x"],
+                   guards: [{:leaf, "is_integer(x)"}, {:leaf, "x > 1"}]
                  }
                }
              }
@@ -4076,18 +4205,25 @@ defmodule Hologram.Compiler.TransformerTest do
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :is_integer,
-                     args: [%IR.Variable{name: :x, version: 0}]
+                     args: [%IR.Variable{name: :x, version: 0}],
+                     line: 3
                    },
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :>,
-                     args: [%IR.Variable{name: :x, version: 0}, %IR.IntegerType{value: 1}]
+                     args: [%IR.Variable{name: :x, version: 0}, %IR.IntegerType{value: 1}],
+                     line: 3
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
                      %IR.Variable{name: :x, version: 0}
                    ]
+                 },
+                 line: 3,
+                 blame: %{
+                   params: ["x"],
+                   guards: [{:leaf, "is_integer(x)"}, {:leaf, "x > 1"}]
                  }
                }
              }
@@ -4112,21 +4248,29 @@ defmodule Hologram.Compiler.TransformerTest do
                  guards: [
                    %IR.LocalFunctionCall{
                      function: :is_integer,
-                     args: [%IR.Variable{name: :x}]
+                     args: [%IR.Variable{name: :x}],
+                     line: 1
                    },
                    %IR.LocalFunctionCall{
                      function: :>,
-                     args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}]
+                     args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}],
+                     line: 1
                    },
                    %IR.LocalFunctionCall{
                      function: :<,
-                     args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 9}]
+                     args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 9}],
+                     line: 1
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
                      %IR.Variable{name: :x}
                    ]
+                 },
+                 line: 1,
+                 blame: %{
+                   params: ["x"],
+                   guards: [{:leaf, "is_integer(x)"}, {:leaf, "x > 1"}, {:leaf, "x < 9"}]
                  }
                }
              }
@@ -4145,23 +4289,31 @@ defmodule Hologram.Compiler.TransformerTest do
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :is_integer,
-                     args: [%IR.Variable{name: :x, version: 0}]
+                     args: [%IR.Variable{name: :x, version: 0}],
+                     line: 3
                    },
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :>,
-                     args: [%IR.Variable{name: :x, version: 0}, %IR.IntegerType{value: 1}]
+                     args: [%IR.Variable{name: :x, version: 0}, %IR.IntegerType{value: 1}],
+                     line: 3
                    },
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :<,
-                     args: [%IR.Variable{name: :x, version: 0}, %IR.IntegerType{value: 9}]
+                     args: [%IR.Variable{name: :x, version: 0}, %IR.IntegerType{value: 9}],
+                     line: 3
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
                      %IR.Variable{name: :x, version: 0}
                    ]
+                 },
+                 line: 3,
+                 blame: %{
+                   params: ["x"],
+                   guards: [{:leaf, "is_integer(x)"}, {:leaf, "x > 1"}, {:leaf, "x < 9"}]
                  }
                }
              }
@@ -4256,13 +4408,18 @@ defmodule Hologram.Compiler.TransformerTest do
     test "without args (AST from source code)" do
       ast = ast("my_fun()")
 
-      assert transform(ast, %Context{}) == %IR.LocalFunctionCall{function: :my_fun, args: []}
+      assert transform(ast, %Context{}) == %IR.LocalFunctionCall{
+               function: :my_fun,
+               args: [],
+               line: 1
+             }
     end
 
     test "without args (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module82) == %IR.LocalFunctionCall{
                function: :my_fun,
-               args: []
+               args: [],
+               line: 4
              }
     end
 
@@ -4274,7 +4431,8 @@ defmodule Hologram.Compiler.TransformerTest do
                args: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2}
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -4284,7 +4442,8 @@ defmodule Hologram.Compiler.TransformerTest do
                args: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2}
-               ]
+               ],
+               line: 4
              }
     end
   end
@@ -4353,7 +4512,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                    ]
                  }
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -4369,7 +4529,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                    ]
                  }
-               ]
+               ],
+               line: 4
              }
     end
   end
@@ -4390,7 +4551,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
                    {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                  ]
-               }
+               },
+               line: 1
              }
     end
 
@@ -4407,7 +4569,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
                    {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                  ]
-               }
+               },
+               line: 4
              }
     end
   end
@@ -4586,7 +4749,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.Variable{name: :x},
                function: :my_fun,
-               args: []
+               args: [],
+               line: 1
              }
     end
 
@@ -4594,7 +4758,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform_module_and_fetch_expr(Module94) == %IR.RemoteFunctionCall{
                module: %IR.Variable{name: :x, version: 0},
                function: :my_fun,
-               args: []
+               args: [],
+               line: 4
              }
     end
 
@@ -4607,7 +4772,8 @@ defmodule Hologram.Compiler.TransformerTest do
                args: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2}
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -4618,7 +4784,8 @@ defmodule Hologram.Compiler.TransformerTest do
                args: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2}
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -4628,7 +4795,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :"Elixir.DateTime"},
                function: :utc_now,
-               args: []
+               args: [],
+               line: 1
              }
     end
 
@@ -4636,7 +4804,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform_module_and_fetch_expr(Module96) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :"Elixir.DateTime"},
                function: :utc_now,
-               args: []
+               args: [],
+               line: 4
              }
     end
 
@@ -4646,7 +4815,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :"Elixir.DateTime"},
                function: :utc_now,
-               args: []
+               args: [],
+               line: 1
              }
     end
 
@@ -4654,7 +4824,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform_module_and_fetch_expr(Module97) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :"Elixir.DateTime"},
                function: :utc_now,
-               args: []
+               args: [],
+               line: 4
              }
     end
 
@@ -4667,7 +4838,8 @@ defmodule Hologram.Compiler.TransformerTest do
                args: [
                  %IR.IntegerType{value: 123},
                  %IR.IntegerType{value: 10}
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -4678,7 +4850,8 @@ defmodule Hologram.Compiler.TransformerTest do
                args: [
                  %IR.IntegerType{value: 123},
                  %IR.IntegerType{value: 10}
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -4692,7 +4865,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.ModuleAttributeOperator{name: :my_attr},
                function: :my_fun,
-               args: []
+               args: [],
+               line: 1
              }
     end
 
@@ -4706,7 +4880,8 @@ defmodule Hologram.Compiler.TransformerTest do
                args: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2}
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -4722,10 +4897,12 @@ defmodule Hologram.Compiler.TransformerTest do
                  args: [
                    %IR.IntegerType{value: 1},
                    %IR.IntegerType{value: 2}
-                 ]
+                 ],
+                 line: 1
                },
                function: :remote_fun,
-               args: []
+               args: [],
+               line: 1
              }
     end
 
@@ -4736,10 +4913,12 @@ defmodule Hologram.Compiler.TransformerTest do
                  args: [
                    %IR.IntegerType{value: 1},
                    %IR.IntegerType{value: 2}
-                 ]
+                 ],
+                 line: 4
                },
                function: :remote_fun,
-               args: []
+               args: [],
+               line: 4
              }
     end
 
@@ -4752,13 +4931,15 @@ defmodule Hologram.Compiler.TransformerTest do
                  args: [
                    %IR.IntegerType{value: 1},
                    %IR.IntegerType{value: 2}
-                 ]
+                 ],
+                 line: 1
                },
                function: :remote_fun,
                args: [
                  %IR.IntegerType{value: 3},
                  %IR.IntegerType{value: 4}
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -4769,13 +4950,15 @@ defmodule Hologram.Compiler.TransformerTest do
                  args: [
                    %IR.IntegerType{value: 1},
                    %IR.IntegerType{value: 2}
-                 ]
+                 ],
+                 line: 4
                },
                function: :remote_fun,
                args: [
                  %IR.IntegerType{value: 3},
                  %IR.IntegerType{value: 4}
-               ]
+               ],
+               line: 4
              }
     end
 
@@ -4785,7 +4968,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :maps},
                function: :new,
-               args: []
+               args: [],
+               line: 1
              }
     end
 
@@ -4793,7 +4977,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform_module_and_fetch_expr(Module101) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :maps},
                function: :new,
-               args: []
+               args: [],
+               line: 4
              }
     end
 
@@ -4803,7 +4988,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :maps},
                function: :new,
-               args: []
+               args: [],
+               line: 1
              }
     end
 
@@ -4811,7 +4997,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform_module_and_fetch_expr(Module102) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: :maps},
                function: :new,
-               args: []
+               args: [],
+               line: 4
              }
     end
 
@@ -4824,7 +5011,8 @@ defmodule Hologram.Compiler.TransformerTest do
                args: [
                  %IR.IntegerType{value: 2},
                  %IR.IntegerType{value: 3}
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -4835,7 +5023,8 @@ defmodule Hologram.Compiler.TransformerTest do
                args: [
                  %IR.IntegerType{value: 2},
                  %IR.IntegerType{value: 3}
-               ]
+               ],
+               line: 4
              }
     end
   end
@@ -4878,7 +5067,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      }
                    ]
                  }
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -4903,7 +5093,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      }
                    ]
                  }
-               ]
+               ],
+               line: 8
              }
     end
 
@@ -5019,9 +5210,11 @@ defmodule Hologram.Compiler.TransformerTest do
                          }
                        ]
                      }
-                   ]
+                   ],
+                   line: 1
                  }
-               ]
+               ],
+               line: 1
              }
     end
 
@@ -5051,9 +5244,11 @@ defmodule Hologram.Compiler.TransformerTest do
                          }
                        ]
                      }
-                   ]
+                   ],
+                   line: 8
                  }
-               ]
+               ],
+               line: 8
              }
     end
 
@@ -6733,7 +6928,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.With{
                clauses: [],
                else_clauses: [],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -6741,7 +6937,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform_module_and_fetch_expr(Module174) == %IR.With{
                clauses: [],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 4
              }
     end
 
@@ -6761,7 +6958,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -6775,7 +6973,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 4
              }
     end
 
@@ -6792,14 +6991,16 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [
                      %IR.LocalFunctionCall{
                        function: :is_integer,
-                       args: [%IR.Variable{name: :i}]
+                       args: [%IR.Variable{name: :i}],
+                       line: 1
                      }
                    ],
                    expression: %IR.Variable{name: :x}
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.Variable{name: :x}]}
+               body: %IR.Block{expressions: [%IR.Variable{name: :x}]},
+               line: 1
              }
     end
 
@@ -6812,14 +7013,16 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :i, version: 1}]
+                       args: [%IR.Variable{name: :i, version: 1}],
+                       line: 4
                      }
                    ],
                    expression: %IR.Variable{name: :x, version: 0}
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.Variable{name: :x, version: 0}]}
+               body: %IR.Block{expressions: [%IR.Variable{name: :x, version: 0}]},
+               line: 4
              }
     end
 
@@ -6839,23 +7042,27 @@ defmodule Hologram.Compiler.TransformerTest do
                        args: [
                          %IR.LocalFunctionCall{
                            function: :is_integer,
-                           args: [%IR.Variable{name: :x}]
+                           args: [%IR.Variable{name: :x}],
+                           line: 1
                          },
                          %IR.LocalFunctionCall{
                            function: :>,
                            args: [
                              %IR.Variable{name: :x},
                              %IR.IntegerType{value: 5}
-                           ]
+                           ],
+                           line: 1
                          }
-                       ]
+                       ],
+                       line: 1
                      }
                    ],
                    expression: %IR.Variable{name: :y}
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 1
              }
     end
 
@@ -6872,7 +7079,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          %IR.RemoteFunctionCall{
                            module: %IR.AtomType{value: :erlang},
                            function: :is_integer,
-                           args: [%IR.Variable{name: :x, version: 1}]
+                           args: [%IR.Variable{name: :x, version: 1}],
+                           line: 4
                          },
                          %IR.RemoteFunctionCall{
                            module: %IR.AtomType{value: :erlang},
@@ -6880,16 +7088,19 @@ defmodule Hologram.Compiler.TransformerTest do
                            args: [
                              %IR.Variable{name: :x, version: 1},
                              %IR.IntegerType{value: 5}
-                           ]
+                           ],
+                           line: 4
                          }
-                       ]
+                       ],
+                       line: 4
                      }
                    ],
                    expression: %IR.Variable{name: :y, version: 0}
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 4
              }
     end
 
@@ -6909,7 +7120,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [
                      %IR.LocalFunctionCall{
                        function: :is_integer,
-                       args: [%IR.Variable{name: :i}]
+                       args: [%IR.Variable{name: :i}],
+                       line: 1
                      }
                    ],
                    expression: %IR.Variable{name: :x}
@@ -6919,14 +7131,16 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [
                      %IR.LocalFunctionCall{
                        function: :is_binary,
-                       args: [%IR.Variable{name: :s}]
+                       args: [%IR.Variable{name: :s}],
+                       line: 2
                      }
                    ],
                    expression: %IR.Variable{name: :y}
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+               line: 1
              }
     end
 
@@ -6939,7 +7153,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :i, version: 2}]
+                       args: [%IR.Variable{name: :i, version: 2}],
+                       line: 4
                      }
                    ],
                    expression: %IR.Variable{name: :x, version: 0}
@@ -6950,14 +7165,16 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_binary,
-                       args: [%IR.Variable{name: :s, version: 3}]
+                       args: [%IR.Variable{name: :s, version: 3}],
+                       line: 5
                      }
                    ],
                    expression: %IR.Variable{name: :y, version: 1}
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+               line: 4
              }
     end
 
@@ -6974,12 +7191,14 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :a},
-                     right: %IR.IntegerType{value: 1}
+                     right: %IR.IntegerType{value: 1},
+                     line: 1
                    }
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.Variable{name: :a}]}
+               body: %IR.Block{expressions: [%IR.Variable{name: :a}]},
+               line: 1
              }
     end
 
@@ -6989,12 +7208,14 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :a, version: 0},
-                     right: %IR.IntegerType{value: 1}
+                     right: %IR.IntegerType{value: 1},
+                     line: 5
                    }
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.Variable{name: :a, version: 0}]}
+               body: %IR.Block{expressions: [%IR.Variable{name: :a, version: 0}]},
+               line: 5
              }
     end
 
@@ -7012,13 +7233,15 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :a},
-                     right: %IR.IntegerType{value: 1}
+                     right: %IR.IntegerType{value: 1},
+                     line: 1
                    }
                  },
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :b},
-                     right: %IR.IntegerType{value: 2}
+                     right: %IR.IntegerType{value: 2},
+                     line: 2
                    }
                  }
                ],
@@ -7029,7 +7252,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      data: [%IR.Variable{name: :a}, %IR.Variable{name: :b}]
                    }
                  ]
-               }
+               },
+               line: 1
              }
     end
 
@@ -7039,13 +7263,15 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :a, version: 0},
-                     right: %IR.IntegerType{value: 1}
+                     right: %IR.IntegerType{value: 1},
+                     line: 5
                    }
                  },
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :b, version: 1},
-                     right: %IR.IntegerType{value: 2}
+                     right: %IR.IntegerType{value: 2},
+                     line: 6
                    }
                  }
                ],
@@ -7059,7 +7285,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  ]
-               }
+               },
+               line: 5
              }
     end
 
@@ -7084,7 +7311,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -7103,7 +7331,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 4
              }
     end
 
@@ -7124,7 +7353,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+               line: 1
              }
     end
 
@@ -7138,7 +7368,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]},
+               line: 5
              }
     end
 
@@ -7164,11 +7395,13 @@ defmodule Hologram.Compiler.TransformerTest do
                  expressions: [
                    %IR.MatchOperator{
                      left: %IR.Variable{name: :a},
-                     right: %IR.Variable{name: :x}
+                     right: %IR.Variable{name: :x},
+                     line: 2
                    },
                    %IR.Variable{name: :a}
                  ]
-               }
+               },
+               line: 1
              }
     end
 
@@ -7186,11 +7419,13 @@ defmodule Hologram.Compiler.TransformerTest do
                  expressions: [
                    %IR.MatchOperator{
                      left: %IR.Variable{name: :a, version: 2},
-                     right: %IR.Variable{name: :x, version: 1}
+                     right: %IR.Variable{name: :x, version: 1},
+                     line: 5
                    },
                    %IR.Variable{name: :a, version: 2}
                  ]
-               }
+               },
+               line: 4
              }
     end
 
@@ -7218,7 +7453,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.IntegerType{value: 0}]}
                  }
                ],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -7238,7 +7474,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.IntegerType{value: 0}]}
                  }
                ],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 5
              }
     end
 
@@ -7272,7 +7509,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.IntegerType{value: 1}]}
                  }
                ],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -7297,7 +7535,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.IntegerType{value: 1}]}
                  }
                ],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 5
              }
     end
 
@@ -7324,13 +7563,15 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [
                      %IR.LocalFunctionCall{
                        function: :is_binary,
-                       args: [%IR.Variable{name: :msg}]
+                       args: [%IR.Variable{name: :msg}],
+                       line: 3
                      }
                    ],
                    body: %IR.Block{expressions: [%IR.Variable{name: :msg}]}
                  }
                ],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -7350,13 +7591,15 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_binary,
-                       args: [%IR.Variable{name: :msg, version: 1}]
+                       args: [%IR.Variable{name: :msg, version: 1}],
+                       line: 7
                      }
                    ],
                    body: %IR.Block{expressions: [%IR.Variable{name: :msg, version: 1}]}
                  }
                ],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 5
              }
     end
 
@@ -7386,25 +7629,30 @@ defmodule Hologram.Compiler.TransformerTest do
                        args: [
                          %IR.LocalFunctionCall{
                            function: :is_binary,
-                           args: [%IR.Variable{name: :msg}]
+                           args: [%IR.Variable{name: :msg}],
+                           line: 3
                          },
                          %IR.LocalFunctionCall{
                            function: :>,
                            args: [
                              %IR.LocalFunctionCall{
                                function: :byte_size,
-                               args: [%IR.Variable{name: :msg}]
+                               args: [%IR.Variable{name: :msg}],
+                               line: 3
                              },
                              %IR.IntegerType{value: 0}
-                           ]
+                           ],
+                           line: 3
                          }
-                       ]
+                       ],
+                       line: 3
                      }
                    ],
                    body: %IR.Block{expressions: [%IR.Variable{name: :msg}]}
                  }
                ],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -7428,7 +7676,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          %IR.RemoteFunctionCall{
                            module: %IR.AtomType{value: :erlang},
                            function: :is_binary,
-                           args: [%IR.Variable{name: :msg, version: 1}]
+                           args: [%IR.Variable{name: :msg, version: 1}],
+                           line: 7
                          },
                          %IR.RemoteFunctionCall{
                            module: %IR.AtomType{value: :erlang},
@@ -7437,18 +7686,22 @@ defmodule Hologram.Compiler.TransformerTest do
                              %IR.RemoteFunctionCall{
                                module: %IR.AtomType{value: :erlang},
                                function: :byte_size,
-                               args: [%IR.Variable{name: :msg, version: 1}]
+                               args: [%IR.Variable{name: :msg, version: 1}],
+                               line: 7
                              },
                              %IR.IntegerType{value: 0}
-                           ]
+                           ],
+                           line: 7
                          }
-                       ]
+                       ],
+                       line: 7
                      }
                    ],
                    body: %IR.Block{expressions: [%IR.Variable{name: :msg, version: 1}]}
                  }
                ],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 5
              }
     end
 
@@ -7486,7 +7739,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [
                      %IR.LocalFunctionCall{
                        function: :is_binary,
-                       args: [%IR.Variable{name: :msg}]
+                       args: [%IR.Variable{name: :msg}],
+                       line: 3
                      }
                    ],
                    body: %IR.Block{expressions: [%IR.Variable{name: :msg}]}
@@ -7498,13 +7752,15 @@ defmodule Hologram.Compiler.TransformerTest do
                    guards: [
                      %IR.LocalFunctionCall{
                        function: :is_integer,
-                       args: [%IR.Variable{name: :code}]
+                       args: [%IR.Variable{name: :code}],
+                       line: 6
                      }
                    ],
                    body: %IR.Block{expressions: [%IR.Variable{name: :code}]}
                  }
                ],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -7531,7 +7787,8 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_binary,
-                       args: [%IR.Variable{name: :msg, version: 2}]
+                       args: [%IR.Variable{name: :msg, version: 2}],
+                       line: 7
                      }
                    ],
                    body: %IR.Block{expressions: [%IR.Variable{name: :msg, version: 2}]}
@@ -7544,13 +7801,15 @@ defmodule Hologram.Compiler.TransformerTest do
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :code, version: 3}]
+                       args: [%IR.Variable{name: :code, version: 3}],
+                       line: 10
                      }
                    ],
                    body: %IR.Block{expressions: [%IR.Variable{name: :code, version: 3}]}
                  }
                ],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 5
              }
     end
 
@@ -7570,7 +7829,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 1
              }
     end
 
@@ -7584,7 +7844,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 4
              }
     end
 
@@ -7608,7 +7869,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 3
              }
     end
 
@@ -7628,7 +7890,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 6
              }
     end
 
@@ -7660,7 +7923,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
                  }
                ],
-               body: %IR.Block{expressions: []}
+               body: %IR.Block{expressions: []},
+               line: 3
              }
     end
 
@@ -7686,7 +7950,8 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
                  }
                ],
-               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               line: 7
              }
     end
 
@@ -7713,12 +7978,14 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :x},
-                     right: %IR.IntegerType{value: 1}
+                     right: %IR.IntegerType{value: 1},
+                     line: 2
                    }
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.Variable{name: :x}]}
+               body: %IR.Block{expressions: [%IR.Variable{name: :x}]},
+               line: 1
              }
     end
 
@@ -7737,12 +8004,14 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.MatchOperator{
                      left: %IR.Variable{name: :x, version: 0},
-                     right: %IR.IntegerType{value: 1}
+                     right: %IR.IntegerType{value: 1},
+                     line: 7
                    }
                  }
                ],
                else_clauses: [],
-               body: %IR.Block{expressions: [%IR.Variable{name: :x, version: 0}]}
+               body: %IR.Block{expressions: [%IR.Variable{name: :x, version: 0}]},
+               line: 6
              }
     end
   end

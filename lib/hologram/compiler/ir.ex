@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.IR do
   alias Hologram.Commons.AtomUtils
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler.AST
+  alias Hologram.Compiler.ClauseBlame
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Transformer
@@ -46,6 +47,7 @@ defmodule Hologram.Compiler.IR do
           | IR.PortType.t()
           | IR.ReferenceType.t()
           | IR.RemoteFunctionCall.t()
+          | IR.Stacktrace.t()
           | IR.StringType.t()
           | IR.Try.t()
           | IR.TryCatchClause.t()
@@ -59,9 +61,12 @@ defmodule Hologram.Compiler.IR do
   defmodule AnonymousFunctionCall do
     @moduledoc false
 
-    defstruct [:function, :args]
+    # line is the call's line in the module's source file, or nil when the AST
+    # metadata carries none. A stacktrace frame reports the line of the call
+    # being made, which is how the BEAM records it.
+    defstruct [:function, :args, :line]
 
-    @type t :: %__MODULE__{function: IR.t(), args: list(IR.t())}
+    @type t :: %__MODULE__{function: IR.t(), args: list(IR.t()), line: integer | nil}
   end
 
   defmodule AnonymousFunctionType do
@@ -103,9 +108,10 @@ defmodule Hologram.Compiler.IR do
   defmodule BitstringType do
     @moduledoc false
 
-    defstruct [:segments]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:segments, :line]
 
-    @type t :: %__MODULE__{segments: list(IR.BitstringSegment.t())}
+    @type t :: %__MODULE__{segments: list(IR.BitstringSegment.t()), line: integer | nil}
   end
 
   defmodule Block do
@@ -119,9 +125,14 @@ defmodule Hologram.Compiler.IR do
   defmodule Case do
     @moduledoc false
 
-    defstruct [:condition, :clauses]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:condition, :clauses, :line]
 
-    @type t :: %__MODULE__{condition: IR.t(), clauses: list(IR.Clause.t())}
+    @type t :: %__MODULE__{
+            condition: IR.t(),
+            clauses: list(IR.Clause.t()),
+            line: integer | nil
+          }
   end
 
   defmodule Clause do
@@ -135,7 +146,8 @@ defmodule Hologram.Compiler.IR do
   defmodule Comprehension do
     @moduledoc false
 
-    defstruct [:qualifiers, :collectable, :unique, :mapper, :reducer]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:qualifiers, :collectable, :unique, :mapper, :reducer, :line]
 
     @type t :: %__MODULE__{
             qualifiers:
@@ -152,7 +164,8 @@ defmodule Hologram.Compiler.IR do
                 initial_value: IR.t(),
                 clauses: list(IR.Clause.t())
               }
-              | nil
+              | nil,
+            line: integer | nil
           }
   end
 
@@ -175,9 +188,12 @@ defmodule Hologram.Compiler.IR do
   defmodule Cond do
     @moduledoc false
 
-    defstruct [:clauses]
+    # line is the last clause's line, which is where the BEAM reports a cond
+    # that matched none of them - cond expands into nested cases, and the raise
+    # ends up in the innermost one. See IR.AnonymousFunctionCall about line.
+    defstruct [:clauses, :line]
 
-    @type t :: %__MODULE__{clauses: list(IR.CondClause.t())}
+    @type t :: %__MODULE__{clauses: list(IR.CondClause.t()), line: integer | nil}
   end
 
   defmodule CondClause do
@@ -199,9 +215,10 @@ defmodule Hologram.Compiler.IR do
   defmodule DotOperator do
     @moduledoc false
 
-    defstruct [:left, :right]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:left, :right, :line]
 
-    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t(), line: integer | nil}
   end
 
   defmodule FloatType do
@@ -215,9 +232,19 @@ defmodule Hologram.Compiler.IR do
   defmodule FunctionClause do
     @moduledoc false
 
-    defstruct [:params, :guards, :body]
+    # line is the clause head's line in the module's source file, or nil when
+    # the AST metadata carries none.
+    # blame is the clause head rendered for attempted-clause reporting, or nil
+    # for an anonymous function clause, which the server doesn't report either.
+    defstruct [:params, :guards, :body, :line, :blame]
 
-    @type t :: %__MODULE__{params: list(IR.t()), guards: list(IR.t()), body: IR.Block.t()}
+    @type t :: %__MODULE__{
+            params: list(IR.t()),
+            guards: list(IR.t()),
+            body: IR.Block.t(),
+            line: integer | nil,
+            blame: %{params: list(String.t()), guards: list(ClauseBlame.guard())} | nil
+          }
   end
 
   defmodule FunctionDefinition do
@@ -260,9 +287,10 @@ defmodule Hologram.Compiler.IR do
   defmodule LocalFunctionCall do
     @moduledoc false
 
-    defstruct [:function, :args]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:function, :args, :line]
 
-    @type t :: %__MODULE__{function: atom, args: list(IR.t())}
+    @type t :: %__MODULE__{function: atom, args: list(IR.t()), line: integer | nil}
   end
 
   defmodule MapType do
@@ -276,9 +304,10 @@ defmodule Hologram.Compiler.IR do
   defmodule MatchOperator do
     @moduledoc false
 
-    defstruct [:left, :right]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:left, :right, :line]
 
-    @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
+    @type t :: %__MODULE__{left: IR.t(), right: IR.t(), line: integer | nil}
   end
 
   defmodule MatchPlaceholder do
@@ -340,9 +369,23 @@ defmodule Hologram.Compiler.IR do
   defmodule RemoteFunctionCall do
     @moduledoc false
 
-    defstruct [:module, :function, :args]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:module, :function, :args, :line]
 
-    @type t :: %__MODULE__{module: IR.t(), function: atom, args: list(IR.t())}
+    @type t :: %__MODULE__{
+            module: IR.t(),
+            function: atom,
+            args: list(IR.t()),
+            line: integer | nil
+          }
+  end
+
+  defmodule Stacktrace do
+    @moduledoc false
+
+    defstruct []
+
+    @type t :: %__MODULE__{}
   end
 
   defmodule StringType do
@@ -356,14 +399,16 @@ defmodule Hologram.Compiler.IR do
   defmodule Try do
     @moduledoc false
 
-    defstruct [:body, :rescue_clauses, :catch_clauses, :else_clauses, :after_block]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:body, :rescue_clauses, :catch_clauses, :else_clauses, :after_block, :line]
 
     @type t :: %__MODULE__{
             body: IR.Block.t(),
             rescue_clauses: list(IR.TryRescueClause.t()),
             catch_clauses: list(IR.TryCatchClause.t()),
             else_clauses: list(IR.Clause.t()),
-            after_block: IR.Block.t()
+            after_block: IR.Block.t(),
+            line: integer | nil
           }
   end
 
@@ -407,12 +452,14 @@ defmodule Hologram.Compiler.IR do
   defmodule With do
     @moduledoc false
 
-    defstruct [:clauses, :body, :else_clauses]
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:clauses, :body, :else_clauses, :line]
 
     @type t :: %__MODULE__{
             clauses: list(IR.WithBareClause.t() | IR.WithMatchClause.t()),
             body: IR.Block.t(),
-            else_clauses: list(IR.Clause.t())
+            else_clauses: list(IR.Clause.t()),
+            line: integer | nil
           }
   end
 
@@ -488,17 +535,20 @@ defmodule Hologram.Compiler.IR do
 
   @doc """
   Returns Hologram IR of the given module.
-  Specifying the module's BEAM path makes the call faster.
+  Specifying the module's BEAM path or BEAM binary makes the call faster.
 
   ## Examples
 
       iex> for_module(MyModule)
       %IR.ModuleDefinition{module: MyModule, body: %IR.Block{expressions: [...]}}
   """
-  @spec for_module(module, charlist | nil) :: IR.t()
-  def for_module(module, beam_path \\ nil) do
+  # TODO: Narrow the spec back to charlist, and rename the param back to
+  # beam_path, when Hologram.Compiler.resolve_beam_source/2 goes (see the
+  # removal note there) - nothing passes a BEAM binary here after that.
+  @spec for_module(module, charlist | binary | nil) :: IR.t()
+  def for_module(module, beam_source \\ nil) do
     module
-    |> AST.for_module(beam_path)
+    |> AST.for_module(beam_source)
     |> Transformer.transform(%Context{module: module})
   end
 
@@ -578,6 +628,33 @@ defmodule Hologram.Compiler.IR do
   def for_term!(term) when is_list(term) do
     data = Enum.map(term, &for_term!/1)
     %IR.ListType{data: data}
+  end
+
+  def for_term!(%Regex{} = term) do
+    # A compiled pattern exists only inside the runtime that compiled it, so
+    # the client rebuilds it through the same pathway as regex literals: an
+    # exported pattern imported with :re.import/1, which registers the
+    # compiled pattern in the client runtime.
+    {:ok, exported} = :re.compile(term.source, [:export | term.opts])
+
+    import_call_ir = %IR.RemoteFunctionCall{
+      module: %IR.AtomType{value: :re},
+      function: :import,
+      args: [for_term!(exported)]
+    }
+
+    data =
+      term
+      |> Map.to_list()
+      |> Enum.map(fn
+        {:re_pattern, _compiled_pattern} ->
+          {%IR.AtomType{value: :re_pattern}, import_call_ir}
+
+        {key, value} ->
+          {for_term!(key), for_term!(value)}
+      end)
+
+    %IR.MapType{data: data}
   end
 
   def for_term!(term) when is_map(term) do

@@ -2,15 +2,15 @@ import {
   assert,
   assertBoxedError,
   assertBoxedStrictEqual,
+  buildFunctionClauseErrorMsg,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Elixir_URI from "../../../assets/js/elixir/uri.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/elixir/uri_test.exs
@@ -165,6 +165,9 @@ describe("Elixir_URI", () => {
     });
 
     describe("error cases", () => {
+      // The attempted function clauses come from the clause heads the runtime
+      // script registers at bundle load, which unit tests don't run, so this
+      // twin asserts the message without them.
       it("raises FunctionClauseError when first argument is not a bitstring", () => {
         const string = Type.atom("hello");
 
@@ -179,13 +182,13 @@ describe("Elixir_URI", () => {
         assertBoxedError(
           () => encode(string, predicate),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("URI.encode/2", [
-            string,
-            predicate,
-          ]),
+          buildFunctionClauseErrorMsg("URI.encode/2", [string, predicate]),
         );
       });
 
+      // The attempted function clauses come from the clause heads the runtime
+      // script registers at bundle load, which unit tests don't run, so this
+      // twin asserts the message without them.
       it("raises FunctionClauseError when first argument is a non-binary bitstring", () => {
         const string = Type.bitstring([1, 0, 1, 0]);
 
@@ -200,13 +203,13 @@ describe("Elixir_URI", () => {
         assertBoxedError(
           () => encode(string, predicate),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("URI.encode/2", [
-            string,
-            predicate,
-          ]),
+          buildFunctionClauseErrorMsg("URI.encode/2", [string, predicate]),
         );
       });
 
+      // The attempted function clauses come from the clause heads the runtime
+      // script registers at bundle load, which unit tests don't run, so this
+      // twin asserts the message without them.
       it("raises FunctionClauseError when second argument is not a function", () => {
         const string = Type.bitstring("hello");
         const predicate = Type.atom("not_a_function");
@@ -214,13 +217,13 @@ describe("Elixir_URI", () => {
         assertBoxedError(
           () => encode(string, predicate),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("URI.encode/2", [
-            string,
-            predicate,
-          ]),
+          buildFunctionClauseErrorMsg("URI.encode/2", [string, predicate]),
         );
       });
 
+      // The attempted function clauses come from the clause heads the runtime
+      // script registers at bundle load, which unit tests don't run, so this
+      // twin asserts the message without them.
       it("raises FunctionClauseError when predicate arity is not 1", () => {
         const string = Type.bitstring("hello");
 
@@ -242,11 +245,32 @@ describe("Elixir_URI", () => {
         assertBoxedError(
           () => encode(string, predicate),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("URI.encode/2", [
-            string,
-            predicate,
-          ]),
+          buildFunctionClauseErrorMsg("URI.encode/2", [string, predicate]),
         );
+      });
+
+      it("error frame carries args", () => {
+        const string = Type.atom("hello");
+        const predicate = Type.atom("not_a_function");
+
+        let caught;
+
+        try {
+          encode(string, predicate);
+        } catch (e) {
+          caught = e;
+        }
+
+        assert.deepStrictEqual(caught.stacktrace, [
+          {
+            module: "URI",
+            function: "encode",
+            arityOrArgs: Type.list([string, predicate]),
+            file: null,
+            line: null,
+            errorInfo: null,
+          },
+        ]);
       });
     });
   });

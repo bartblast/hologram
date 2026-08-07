@@ -5,6 +5,10 @@ defmodule HologramFeatureTests.PatchingTest do
 
   alias HologramFeatureTests.Patching.Page1
   alias HologramFeatureTests.Patching.Page10
+  alias HologramFeatureTests.Patching.Page11
+  alias HologramFeatureTests.Patching.Page12
+  alias HologramFeatureTests.Patching.Page13
+  alias HologramFeatureTests.Patching.Page14
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
@@ -819,6 +823,211 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_input_value("#select", "")
       |> refute_has(css("#select_option_1[selected]"))
       |> refute_has(css("#select_option_2[selected]"))
+    end
+  end
+
+  describe "sibling identity across block boundaries" do
+    feature "stateful siblings survive a conditional toggle", %{session: session} do
+      inputs = ["input_a", "input_b", "input_c"]
+
+      # Each input is tagged with a property the diff never reads, so it lives exactly as long as
+      # the DOM node does. The keeper wrapper is tagged too, which is what makes it possible to see
+      # a keeper repurposed into a banner rather than merely replaced.
+      mark_nodes = """
+      #{inspect(inputs)}.forEach((id) => {
+        const input = document.getElementById(id);
+        input.__probe = id;
+        input.closest(".keeper").__probe = id;
+      });
+      document.getElementById("input_a").focus();
+      """
+
+      # Clicked from a script rather than by the driver so the button never takes focus: any focus
+      # loss below is then caused by the patch, which is the thing under test.
+      toggle = ~s|document.querySelector("button").click();|
+
+      kept_nodes = """
+      return #{inspect(inputs)}.filter((id) => document.getElementById(id).__probe === id);
+      """
+
+      repurposed_keepers = """
+      return ["panel_a", "panel_b", "panel_c"].filter(
+        (id) => document.querySelector(`#${id} .banner`).__probe !== undefined,
+      );
+      """
+
+      session =
+        session
+        |> visit(Page11)
+        |> assert_text(css("#result"), "false")
+        |> fill_in(css("#input_a"), with: "typed a")
+        |> fill_in(css("#input_b"), with: "typed b")
+        |> fill_in(css("#input_c"), with: "typed c")
+
+      script_result(session, mark_nodes)
+      script_result(session, toggle)
+
+      session
+      |> assert_text(css("#result"), "true")
+      |> assert_count(".banner", 3)
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_input_value("#input_c", "typed c")
+      |> assert_script_result(kept_nodes, inputs)
+      |> assert_script_result(repurposed_keepers, [])
+      |> assert_script_result(~s|return document.activeElement.id;|, "input_a")
+    end
+
+    feature "stateful siblings survive a branch switch", %{session: session} do
+      inputs = ["input_a", "input_b"]
+
+      mark_nodes = """
+      #{inspect(inputs)}.forEach((id) => {
+        const input = document.getElementById(id);
+        input.__probe = id;
+        input.closest(".keeper").__probe = id;
+      });
+      document.getElementById("input_a").focus();
+      """
+
+      switch = ~s|document.querySelector("button").click();|
+
+      kept_nodes = """
+      return #{inspect(inputs)}.filter((id) => document.getElementById(id).__probe === id);
+      """
+
+      repurposed_keepers = """
+      return ["panel_a", "panel_b"].filter((id) =>
+        [...document.querySelectorAll(`#${id} .branch`)].some((el) => el.__probe !== undefined),
+      );
+      """
+
+      session =
+        session
+        |> visit(Page12)
+        |> assert_text(css("#result"), "true")
+        |> fill_in(css("#input_a"), with: "typed a")
+        |> fill_in(css("#input_b"), with: "typed b")
+
+      script_result(session, mark_nodes)
+      script_result(session, switch)
+
+      session
+      |> assert_text(css("#result"), "false")
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_script_result(kept_nodes, inputs)
+      |> assert_script_result(repurposed_keepers, [])
+      |> assert_script_result(~s|return document.activeElement.id;|, "input_a")
+
+      script_result(session, switch)
+
+      session
+      |> assert_text(css("#result"), "true")
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_script_result(kept_nodes, inputs)
+      |> assert_script_result(repurposed_keepers, [])
+      |> assert_script_result(~s|return document.activeElement.id;|, "input_a")
+    end
+
+    feature "stateful siblings survive loop changes", %{session: session} do
+      inputs = ["input_a", "input_b"]
+
+      mark_nodes = """
+      #{inspect(inputs)}.forEach((id) => {
+        document.getElementById(id).__probe = id;
+      });
+      """
+
+      kept_nodes = """
+      return #{inspect(inputs)}.filter((id) => document.getElementById(id).__probe === id);
+      """
+
+      session =
+        session
+        |> visit(Page13)
+        |> click(button("Add item"))
+        |> click(button("Add item"))
+        |> assert_text(css("#result"), "item 1, item 2, item 3")
+        |> fill_in(css("#input_a"), with: "typed a")
+        |> fill_in(css("#input_b"), with: "typed b")
+
+      script_result(session, mark_nodes)
+
+      # Switching the conditional inside the loop body renders the same marker once per item, so
+      # this is the patch that throws when repeated keys reach the diff unnumbered. It takes three
+      # of them: with two the diff realigns on its own and the failure does not surface.
+      session
+      |> click(button("Toggle badges"))
+      |> assert_count(".badge", 0)
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_script_result(kept_nodes, inputs)
+      |> click(button("Toggle badges"))
+      |> assert_count(".badge", 3)
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_script_result(kept_nodes, inputs)
+
+      session
+      |> click(button("Add item"))
+      |> assert_text(css("#result"), "item 1, item 2, item 3, item 4")
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_script_result(kept_nodes, inputs)
+      |> click(button("Remove item"))
+      |> click(button("Remove item"))
+      |> assert_text(css("#result"), "item 1, item 2")
+      |> assert_input_value("#input_a", "typed a")
+      |> assert_input_value("#input_b", "typed b")
+      |> assert_script_result(kept_nodes, inputs)
+    end
+
+    feature "stateful siblings survive several conditionals switching at once", %{
+      session: session
+    } do
+      fields = ["field_1", "field_2", "field_3"]
+
+      mark_nodes = """
+      #{inspect(fields)}.forEach((id) => {
+        document.getElementById(id).__probe = id;
+      });
+      """
+
+      kept_nodes = """
+      return #{inspect(fields)}.filter((id) => document.getElementById(id).__probe === id);
+      """
+
+      typed_values = """
+      return #{inspect(fields)}.map((id) => document.getElementById(id).value);
+      """
+
+      session =
+        session
+        |> visit(Page14)
+        |> assert_text(css("#result"), "true")
+        |> assert_count(".hint", 3)
+        |> fill_in(css("#field_1"), with: "typed 1")
+        |> fill_in(css("#field_2"), with: "typed 2")
+        |> fill_in(css("#field_3"), with: "typed 3")
+
+      script_result(session, mark_nodes)
+
+      # Hiding is the direction that fails: three regions shrink in one patch, and the fields
+      # between them are keyless. Values are read as a list so a value landing in a neighbouring
+      # field is caught, not just a value going missing.
+      session
+      |> click(button("Toggle hints"))
+      |> assert_text(css("#result"), "false")
+      |> assert_count(".hint", 0)
+      |> assert_script_result(typed_values, ["typed 1", "typed 2", "typed 3"])
+      |> assert_script_result(kept_nodes, fields)
+      |> click(button("Toggle hints"))
+      |> assert_text(css("#result"), "true")
+      |> assert_count(".hint", 3)
+      |> assert_script_result(typed_values, ["typed 1", "typed 2", "typed 3"])
+      |> assert_script_result(kept_nodes, fields)
     end
   end
 end

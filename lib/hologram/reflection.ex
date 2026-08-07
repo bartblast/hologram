@@ -36,7 +36,7 @@ defmodule Hologram.Reflection do
   def alias?(_term), do: false
 
   @doc """
-  Returns BEAM definitions for the given BEAM file path.
+  Returns BEAM definitions for the given BEAM file path or BEAM binary.
 
   ## Examples
 
@@ -61,10 +61,43 @@ defmodule Hologram.Reflection do
         ]}
       ]
   """
-  @spec beam_defs(charlist) :: list(tuple)
-  def beam_defs(beam_path) do
-    {:ok, %{definitions: definitions}} = BeamFile.debug_info(beam_path)
+  # TODO: Narrow the spec back to charlist, and rename the param back to
+  # beam_path, when beam_source/1 goes (see the removal note there) - nothing
+  # passes a BEAM binary here once the umbrella fallback is gone.
+  @spec beam_defs(charlist | binary) :: list(tuple)
+  def beam_defs(beam_source) do
+    {:ok, %{definitions: definitions}} = BeamFile.debug_info(beam_source)
     definitions
+  end
+
+  # TODO: Remove together with Hologram.Compiler.resolve_beam_source/2 (see the
+  # removal note there), consolidated_beam_removed?/1 and object_code/1 included.
+  @doc """
+  Returns the given module's BEAM code in a form accepted by BeamFile - the beam
+  file path in the common case, or the module's object code found in the code
+  path when the module was loaded from a consolidated protocol beam that no
+  longer exists. Returns nil when the BEAM code can't be located at all.
+
+  The fallback matters during dev-time recompiles: Phoenix's code reloader purges
+  stale consolidated protocol beams while the modules stay loaded, with
+  `:code.which/1` still pointing at the removed files. Only consolidated beam
+  paths are checked for existence (with a raw stat), so the per-module cost on
+  regular beams stays a substring scan without any syscall.
+  """
+  @spec beam_source(module) :: charlist | binary | nil
+  def beam_source(module) do
+    beam_path = :code.which(module)
+
+    cond do
+      not is_list(beam_path) ->
+        object_code(module)
+
+      consolidated_beam_removed?(beam_path) ->
+        object_code(module)
+
+      true ->
+        beam_path
+    end
   end
 
   @doc """
@@ -211,6 +244,15 @@ defmodule Hologram.Reflection do
   def erlang_module?(_term), do: false
 
   @doc """
+  Returns true if the given term is an exception module, or false otherwise.
+  """
+  @spec exception?(any) :: boolean
+  def exception?(term) do
+    elixir_module?(term) && has_function?(term, :exception, 1) &&
+      has_function?(term, :message, 1)
+  end
+
+  @doc """
   Returns true if module contains a public function with the given arity, otherwise false.
 
   Kernel.function_exported?/3 does not load the module in case it is not loaded
@@ -228,6 +270,24 @@ defmodule Hologram.Reflection do
   @spec has_struct?(module) :: boolean
   def has_struct?(module) do
     has_function?(module, :__struct__, 0) && has_function?(module, :__struct__, 1)
+  end
+
+  @doc """
+  Returns the absolute path of the Hologram dependency directory.
+
+  Resolves through `Mix.Project.deps_paths/0`, which yields the correct
+  location for any dependency type (Hex, Git or path) in both single-app and
+  umbrella projects. Falls back to `<deps path>/hologram` when Hologram itself
+  is not among the current project's dependencies (e.g. inside the Hologram
+  repo itself).
+
+  Requires a Mix project context (compilation or Mix tasks in any Mix env) -
+  not callable inside a release, where Mix is unavailable.
+  """
+  @spec hologram_dep_dir() :: String.t()
+  def hologram_dep_dir do
+    fallback_dir = Path.join(Mix.Project.deps_path(), "hologram")
+    Map.get(Mix.Project.deps_paths(), :hologram, fallback_dir)
   end
 
   @doc """
@@ -444,21 +504,59 @@ defmodule Hologram.Reflection do
 
   @doc """
   Returns the project OTP application name.
+
+  Resolved from the active Mix project when it defines an `:app`. Otherwise
+  (umbrella root, releases) it is identified among the loaded applications as
+  the one that depends on `:hologram`, disambiguated by Phoenix endpoint
+  ownership when several do.
   """
   @spec otp_app() :: atom
   def otp_app do
-    if Code.ensure_loaded?(Mix.Project) do
-      Mix.Project.config()[:app]
-    else
-      [project_app] =
-        for {app, _description, _vsn} <- Application.loaded_applications(),
-            deps = Application.spec(app)[:applications],
-            :hologram in deps do
-          app
-        end
+    otp_app_from_mix_project() || otp_app_from_loaded_apps()
+  end
 
-      project_app
+  @doc """
+  Returns the absolute path of the project OTP application's source directory.
+
+  In an umbrella this is the app's directory under the umbrella's apps path.
+  Otherwise it is the active Mix project's directory (which Mix keeps as the
+  current working directory).
+
+  Requires a Mix project context (compilation or Mix tasks in any Mix env) -
+  not callable inside a release, where Mix is unavailable.
+  """
+  @spec otp_app_dir() :: String.t()
+  def otp_app_dir do
+    case Mix.Project.apps_paths() do
+      nil ->
+        File.cwd!()
+
+      apps_paths ->
+        apps_paths
+        |> Map.fetch!(otp_app())
+        |> Path.expand()
     end
+  end
+
+  @doc """
+  Returns the absolute path of the priv dir of the project OTP application.
+
+  Resolved through the code path (`:code.priv_dir/1`), so it points at the
+  build dir in Mix environments and at the release dir in releases.
+  """
+  @spec otp_app_priv_dir() :: String.t()
+  def otp_app_priv_dir do
+    otp_app()
+    |> :code.priv_dir()
+    |> to_string()
+  end
+
+  @doc """
+  Returns the absolute path of the static dir of the project OTP application.
+  """
+  @spec otp_app_static_dir() :: String.t()
+  def otp_app_static_dir do
+    Path.join(otp_app_priv_dir(), "static")
   end
 
   @doc """
@@ -487,22 +585,13 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Determines the app's Phoenix endpoint module.
+  Determines the project's Phoenix endpoint module - the module implementing
+  the `Phoenix.Endpoint` behaviour that is configured in the project OTP
+  application's environment.
   """
   @spec phoenix_endpoint :: module | nil
   def phoenix_endpoint do
-    modules = list_elixir_modules([otp_app()])
-
-    Enum.find(modules, fn module ->
-      has_phoenix_endpoint_behaviour? =
-        :attributes
-        |> module.module_info()
-        |> Keyword.get_values(:behaviour)
-        |> List.flatten()
-        |> Enum.member?(Phoenix.Endpoint)
-
-      has_phoenix_endpoint_behaviour? && Application.get_env(otp_app(), module)
-    end)
+    phoenix_endpoint_for_app(otp_app())
   end
 
   @doc """
@@ -532,47 +621,55 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Returns the release priv dir path.
+  Returns the given module's source file path in the form stacktraces render:
+  relative to the root of the code that compiled it. Project modules are
+  relative to the project root, dep modules to their dep's root, and Elixir
+  standard library modules to Elixir's own source root. When no source root
+  is recognized, the file name alone is returned, so absolute build-machine
+  paths are never exposed.
   """
-  @spec release_priv_dir() :: String.t()
-  def release_priv_dir do
-    otp_app()
-    |> :code.priv_dir()
-    |> to_string()
+  @spec relative_source_path(module) :: String.t()
+  def relative_source_path(module) do
+    source_path = source_path(module)
+    root_prefix = root_dir() <> "/"
+    deps_prefix = root_prefix <> "deps/"
+
+    cond do
+      String.starts_with?(source_path, deps_prefix) ->
+        source_path
+        |> String.replace_prefix(deps_prefix, "")
+        |> String.split("/", parts: 2)
+        |> List.last()
+
+      String.starts_with?(source_path, root_prefix) ->
+        String.replace_prefix(source_path, root_prefix, "")
+
+      String.contains?(source_path, "/lib/elixir/") ->
+        source_path
+        |> String.split("/lib/elixir/", parts: 2)
+        |> List.last()
+
+      true ->
+        Path.basename(source_path)
+    end
   end
 
   @doc """
-  Returns the release static dir path.
-  """
-  @spec release_static_dir() :: String.t()
-  def release_static_dir do
-    Path.join(release_priv_dir(), "static")
-  end
+  Returns the absolute path of the workspace root - the top of the codebase
+  checkout: the umbrella root in an umbrella project, the project root in a
+  single-app project.
 
-  @doc """
-  Returns the absolute dir path of the project.
+  Derived from `Mix.Project.deps_path/0`, so it assumes the deps dir sits
+  directly under the workspace root (Mix's default in every layout). A custom
+  external `:deps_path` or `MIX_DEPS_PATH` breaks this assumption and is not
+  supported.
 
-  ## Examples
-
-      iex> root_dir()
-      "/Users/bartblast/Projects/my_project"
+  Requires a Mix project context (compilation or Mix tasks in any Mix env) -
+  not callable inside a release, where Mix is unavailable.
   """
   @spec root_dir() :: String.t()
   def root_dir do
-    File.cwd!()
-  end
-
-  @doc """
-  Returns the absolute path of the project priv dir for Hologram.
-
-  ## Examples
-
-      iex> root_priv_dir()
-      "/Users/bartblast/Projects/my_project/priv/hologram"
-  """
-  @spec root_priv_dir() :: String.t()
-  def root_priv_dir do
-    Path.join([root_dir(), "priv", "hologram"])
+    Path.dirname(Mix.Project.deps_path())
   end
 
   @doc """
@@ -617,6 +714,49 @@ defmodule Hologram.Reflection do
     Path.join(root_dir(), "tmp")
   end
 
+  # TODO: Remove when Hologram.Compiler.resolve_beam_source/2 goes (see the
+  # removal note there), unless something else uses it by then - it exists to
+  # keep the purged-consolidated-beam fallback off the single-app path.
+  @doc """
+  Returns true if the code runs in an umbrella project, or false otherwise.
+
+  Detects the umbrella root through its apps path, a child app entered from the
+  root through its parent project file, and a child app run directly through its
+  in-umbrella deps. A child app that has no in-umbrella deps and is run directly
+  is not detected.
+
+  Requires a Mix project context (compilation or Mix tasks in any Mix env) -
+  not callable inside a release, where Mix is unavailable.
+  """
+  @spec umbrella?() :: boolean
+  def umbrella? do
+    Mix.Project.apps_paths() != nil or
+      Mix.Project.parent_umbrella_project_file() != nil or
+      Enum.any?(Mix.Dep.cached(), & &1.opts[:in_umbrella])
+  end
+
+  defp apps_depending_on_hologram do
+    apps =
+      for {app, _description, _version} <- Application.loaded_applications(),
+          deps = Application.spec(app)[:applications],
+          :hologram in deps do
+        app
+      end
+
+    Enum.sort(apps)
+  end
+
+  # TODO: Remove together with beam_source/1 (see the removal note there), which
+  # is its only caller.
+  defp consolidated_beam_removed?(beam_path) do
+    if :string.find(beam_path, ~c"/consolidated/") == :nomatch do
+      false
+    else
+      beam_path_str = to_string(beam_path)
+      not File.exists?(beam_path_str, [:raw])
+    end
+  end
+
   defp include_app_elixir_modules(app, modules) do
     # Get modules from Application.spec (faster, but may miss newly compiled modules)
     spec_modules =
@@ -637,5 +777,62 @@ defmodule Hologram.Reflection do
 
     # Combine both sources and remove duplicates
     Enum.uniq(modules ++ spec_modules ++ ebin_modules)
+  end
+
+  # TODO: Remove together with beam_source/1 (see the removal note there), which
+  # is its only caller.
+  defp object_code(module) do
+    case :code.get_object_code(module) do
+      {^module, binary, _beam_path} -> binary
+      :error -> nil
+    end
+  end
+
+  defp otp_app_from_loaded_apps do
+    case apps_depending_on_hologram() do
+      [app] ->
+        app
+
+      [] ->
+        raise "Hologram could not determine the project OTP application: " <>
+                "no loaded application depends on :hologram."
+
+      apps ->
+        case Enum.filter(apps, &phoenix_endpoint_for_app/1) do
+          [app] ->
+            app
+
+          [] ->
+            raise "Hologram could not determine the project OTP application: " <>
+                    "multiple loaded applications depend on :hologram (#{inspect(apps)}), " <>
+                    "but none of them has a configured Phoenix endpoint."
+
+          endpoint_apps ->
+            raise "Hologram found multiple applications with configured Phoenix endpoints " <>
+                    "(#{inspect(endpoint_apps)}). Hologram supports one endpoint app " <>
+                    "per running BEAM instance."
+        end
+    end
+  end
+
+  defp otp_app_from_mix_project do
+    if Code.ensure_loaded?(Mix.Project), do: Mix.Project.config()[:app]
+  end
+
+  defp phoenix_endpoint?(module) do
+    elixir_module?(module) &&
+      :attributes
+      |> module.module_info()
+      |> Keyword.get_values(:behaviour)
+      |> List.flatten()
+      |> Enum.member?(Phoenix.Endpoint)
+  end
+
+  defp phoenix_endpoint_for_app(app) do
+    app
+    |> Application.get_all_env()
+    |> Enum.find_value(fn {key, value} ->
+      if value && phoenix_endpoint?(key), do: key
+    end)
   end
 end

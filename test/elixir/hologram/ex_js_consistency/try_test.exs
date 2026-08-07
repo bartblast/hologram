@@ -70,16 +70,6 @@ defmodule Hologram.ExJsConsistency.TryTest do
       # reraise/2 must preserve the stacktrace of the original raise site, not the
       # rescue clause that re-raises. The outer try captures the re-raised error
       # together with its stacktrace.
-      #
-      # CLIENT/SERVER DIVERGENCE: the stacktrace assertion is server-only. On the
-      # client reraise re-raises with __STACKTRACE__ = [] (no client stacktraces
-      # yet - see the "__STACKTRACE__" describe and the TODO in
-      # lib/hologram/compiler/transformer.ex), so the paired JavaScript and feature
-      # tests assert only that the exception is re-raised.
-      #
-      # TODO: once client-side stacktraces are supported (see the TODO in
-      # lib/hologram/compiler/transformer.ex), the paired JavaScript and feature
-      # tests should be tightened to mirror this stacktrace-preservation assertion.
       expected_line = __ENV__.line + 5
 
       {error, stacktrace} =
@@ -145,18 +135,6 @@ defmodule Hologram.ExJsConsistency.TryTest do
   end
 
   describe "__STACKTRACE__" do
-    # CLIENT/SERVER DIVERGENCE: on the server __STACKTRACE__ is the real stacktrace
-    # asserted below, but the client does not support stacktraces yet, so it
-    # compiles __STACKTRACE__ to an empty list. The related JavaScript test
-    # (interpreter_test.mjs) and the try feature test therefore assert [] instead
-    # of this shape - they carry a TODO pointing here, and the steps to make the
-    # client match this test live in the TODO in lib/hologram/compiler/transformer.ex.
-    #
-    # TODO: support real client-side stacktraces so the client matches this test.
-    # Maintain a call stack in the interpreter (push a frame per function call),
-    # capture it when a HologramBoxedError is raised, and bind __STACKTRACE__ to that
-    # captured trace within rescue/catch clause scopes, instead of compiling it to an
-    # empty list in lib/hologram/compiler/transformer.ex.
     test "holds the stacktrace pointing to where the error was raised" do
       expected_line = __ENV__.line + 4
 

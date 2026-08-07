@@ -1,16 +1,16 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  buildFunctionClauseErrorMsg,
+  defineRuntimeGlobals,
   sinon,
 } from "../support/helpers.mjs";
 
 import Elixir_IO from "../../../assets/js/elixir/io.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/elixir/io_test.exs
@@ -90,18 +90,46 @@ describe("Elixir_IO", () => {
       sinon.assert.calledOnceWithExactly(consoleLogStub, "%{a: 1, b: 2}\n");
     });
 
-    // Client error message is intentionally different than server error message.
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the first arg is not an atom or a pid", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        "IO.inspect/3",
-        [Type.integer(123), Type.atom("abc"), Type.keywordList()],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg("IO.inspect/3", [
+        Type.integer(123),
+        Type.atom("abc"),
+        Type.keywordList(),
+      ]);
 
       assertBoxedError(
         () => inspect(Type.integer(123), Type.atom("abc"), Type.keywordList()),
         "FunctionClauseError",
         expectedMessage,
       );
+    });
+
+    it("error frame carries args", () => {
+      const device = Type.integer(123);
+      const term = Type.atom("abc");
+      const opts = Type.keywordList();
+
+      let caught;
+
+      try {
+        inspect(device, term, opts);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "IO",
+          function: "inspect",
+          arityOrArgs: Type.list([device, term, opts]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
 
     describe("client-only behaviour", () => {

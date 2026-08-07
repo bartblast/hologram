@@ -1,0 +1,13 @@
+Usable codepoints compared: 33781
+Divergent codepoints: 2
+Divergent ranges: 2
+
+By signature pair:
+
+  elixir=0000100000000 js=0000000000000 -> 1 codepoints
+  elixir=1111111111111 js=0100000000000 -> 1 codepoints
+
+Ranges:
+
+956-956          | elixir=1111111111111 | js=0100000000000 (μ)
+2191-2191        | elixir=0000100000000 | js=0000000000000 (࢏)

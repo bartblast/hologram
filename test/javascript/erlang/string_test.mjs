@@ -3,19 +3,40 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  buildArgumentErrorMsg,
+  buildCaseClauseErrorMsg,
+  buildErlangErrorMsg,
+  buildFunctionClauseErrorMsg,
+  buildMatchErrorMsg,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_String from "../../../assets/js/erlang/string.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/string_test.exs
 // Always update both together.
+
+function errorFrame(module, functionName, args, errorInfo = null) {
+  return {
+    module,
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo,
+  };
+}
+
+const ertsErrorInfo = () =>
+  Type.map([[Type.atom("module"), Type.atom("erl_erts_errors")]]);
+
+const unicodeErrorInfo = () =>
+  Type.map([[Type.atom("module"), Type.atom("erl_stdlib_errors")]]);
 
 describe("Erlang_String", () => {
   describe("find/2", () => {
@@ -222,7 +243,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => find(invalidArg, Type.bitstring("_"), Type.atom("leading")),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(invalidArg),
+          buildMatchErrorMsg(invalidArg),
         );
       });
 
@@ -233,7 +254,7 @@ describe("Erlang_String", () => {
           () =>
             find(nonBinaryBitstring, Type.bitstring("x"), Type.atom("leading")),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(nonBinaryBitstring),
+          buildMatchErrorMsg(nonBinaryBitstring),
         );
       });
 
@@ -246,10 +267,7 @@ describe("Erlang_String", () => {
               Type.atom("leading"),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+          buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
         );
       });
 
@@ -262,10 +280,7 @@ describe("Erlang_String", () => {
               Type.atom("leading"),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+          buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
         );
       });
 
@@ -278,7 +293,7 @@ describe("Erlang_String", () => {
               Type.bitstring("leading"),
             ),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.find/3", [
+          buildFunctionClauseErrorMsg(":string.find/3", [
             Type.bitstring("Hello World"),
             Type.bitstring(" "),
             Type.bitstring("leading"),
@@ -295,13 +310,57 @@ describe("Erlang_String", () => {
               Type.atom("all"),
             ),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.find/3", [
+          buildFunctionClauseErrorMsg(":string.find/3", [
             Type.bitstring("Hello World"),
             Type.bitstring(" "),
             Type.atom("all"),
           ]),
         );
       });
+    });
+
+    it("error frame carries args and error_info for an invalid pattern", () => {
+      const string = Type.bitstring("abc");
+      const searchPattern = Type.atom("xyz");
+
+      let caught;
+
+      try {
+        find(string, searchPattern, Type.atom("leading"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "unicode",
+          "characters_to_list",
+          Type.list([searchPattern]),
+          unicodeErrorInfo(),
+        ),
+      ]);
+    });
+
+    it("error frame carries args for an unrecognized direction", () => {
+      const string = Type.bitstring("abc");
+      const searchPattern = Type.bitstring("b");
+      const direction = Type.atom("bad");
+
+      let caught;
+
+      try {
+        find(string, searchPattern, direction);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "string",
+          "find",
+          Type.list([string, searchPattern, direction]),
+        ),
+      ]);
     });
   });
 
@@ -534,6 +593,57 @@ describe("Erlang_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // The server joins as H ++ lists:append([Sep ++ X || X <- T]), so an element
+    // that isn't a list becomes the tail of the concatenation it is part of -
+    // and the last one has nothing following it to fail against.
+    it("an element that isn't a list ends the result when it is the last one", () => {
+      const list = Type.list([Type.charlist("a"), Type.atom("bad")]);
+
+      assert.deepStrictEqual(
+        join(list, Type.charlist("-")),
+        Type.improperList([
+          Type.integer(97),
+          Type.integer(45),
+          Type.atom("bad"),
+        ]),
+      );
+    });
+
+    it("an element that isn't a list fails the concatenation that follows it", () => {
+      const list = Type.list([
+        Type.charlist("a"),
+        Type.atom("bad"),
+        Type.charlist("c"),
+      ]);
+
+      assertBoxedError(
+        () => join(list, Type.charlist("-")),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("error frame carries args and error_info for a non-list first element", () => {
+      const list = Type.list([Type.atom("bad"), Type.charlist("a")]);
+
+      let caught;
+
+      try {
+        join(list, Type.charlist("-"));
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "erlang",
+          "++",
+          Type.list([Type.atom("bad"), Type.charlist("-a")]),
+          ertsErrorInfo(),
+        ),
+      ]);
+    });
+
     it("raises FunctionClauseError if the first argument is not a list", () => {
       const list = Type.atom("not_a_list");
       const separator = Type.charlist(", ");
@@ -541,10 +651,7 @@ describe("Erlang_String", () => {
       assertBoxedError(
         () => join(list, separator),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
-          list,
-          separator,
-        ]),
+        buildFunctionClauseErrorMsg(":string.join/2", [list, separator]),
       );
     });
 
@@ -559,7 +666,7 @@ describe("Erlang_String", () => {
       assertBoxedError(
         () => join(list, separator),
         "ErlangError",
-        Interpreter.buildErlangErrorMsg("{:bad_generator, :tail}"),
+        buildErlangErrorMsg("{:bad_generator, :tail}"),
       );
     });
 
@@ -570,10 +677,7 @@ describe("Erlang_String", () => {
       assertBoxedError(
         () => join(list, separator),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
-          list,
-          separator,
-        ]),
+        buildFunctionClauseErrorMsg(":string.join/2", [list, separator]),
       );
     });
 
@@ -587,6 +691,66 @@ describe("Erlang_String", () => {
         "ArgumentError",
         "argument error",
       );
+    });
+
+    it("error frame carries args for a non-list first argument", () => {
+      const list = Type.atom("not_a_list");
+      const separator = Type.charlist(", ");
+
+      let caught;
+
+      try {
+        join(list, separator);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("string", "join", Type.list([list, separator])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a single non-list element", () => {
+      const list = Type.list([Type.atom("abc")]);
+
+      let caught;
+
+      try {
+        join(list, Type.charlist(", "));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "erlang",
+          "++",
+          Type.list([Type.atom("abc"), Type.list()]),
+          ertsErrorInfo(),
+        ),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a non-list separator", () => {
+      const list = Type.list([Type.charlist("a"), Type.charlist("b")]);
+      const separator = Type.atom("sep");
+
+      let caught;
+
+      try {
+        join(list, separator);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "erlang",
+          "++",
+          Type.list([separator, Type.charlist("b")]),
+          ertsErrorInfo(),
+        ),
+      ]);
     });
   });
 
@@ -712,7 +876,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(Type.atom("atom")),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.atom("atom"),
           ]),
         );
@@ -722,9 +886,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(Type.integer(42)),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.integer(42),
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [Type.integer(42)]),
         );
       });
 
@@ -734,9 +896,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(bitstring),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            bitstring,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [bitstring]),
         );
       });
 
@@ -744,7 +904,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(Type.list([Type.atom("atom")])),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.atom("atom"),
           ]),
         );
@@ -756,9 +916,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(Type.list([bitstring])),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            bitstring,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [bitstring]),
         );
       });
 
@@ -766,9 +924,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(Type.list([Type.integer(-1)])),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.integer(-1),
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [Type.integer(-1)]),
         );
       });
 
@@ -776,7 +932,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => length(Type.list([Type.integer(9_999_999)])),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.integer(9_999_999),
           ]),
         );
@@ -787,7 +943,7 @@ describe("Erlang_String", () => {
           () =>
             length(Type.improperList([Type.integer(104), Type.atom("tail")])),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.atom("tail"),
           ]),
         );
@@ -800,6 +956,22 @@ describe("Erlang_String", () => {
           "argument error: <<255, 255>>",
         );
       });
+    });
+
+    it("error frame carries args for non-chardata input", () => {
+      const string = Type.atom("abc");
+
+      let caught;
+
+      try {
+        length(string);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("unicode_util", "cp", Type.list([string])),
+      ]);
     });
   });
 
@@ -1069,7 +1241,7 @@ describe("Erlang_String", () => {
               Type.atom("all"),
             ),
           "MatchError",
-          Interpreter.buildMatchErrorMsg(invalidArg),
+          buildMatchErrorMsg(invalidArg),
         );
       });
 
@@ -1083,10 +1255,7 @@ describe("Erlang_String", () => {
               Type.atom("all"),
             ),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
+          buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
         );
       });
 
@@ -1100,7 +1269,7 @@ describe("Erlang_String", () => {
               Type.bitstring("all"),
             ),
           "CaseClauseError",
-          Interpreter.buildCaseClauseErrorMsg(Type.bitstring("all")),
+          buildCaseClauseErrorMsg(Type.bitstring("all")),
         );
       });
 
@@ -1114,9 +1283,35 @@ describe("Erlang_String", () => {
               Type.atom("invalid"),
             ),
           "CaseClauseError",
-          Interpreter.buildCaseClauseErrorMsg(Type.atom("invalid")),
+          buildCaseClauseErrorMsg(Type.atom("invalid")),
         );
       });
+    });
+
+    it("error frame carries args and error_info for an invalid pattern", () => {
+      const pattern = Type.atom("xyz");
+
+      let caught;
+
+      try {
+        replace(
+          Type.bitstring("abc"),
+          pattern,
+          Type.bitstring("x"),
+          Type.atom("all"),
+        );
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "unicode",
+          "characters_to_list",
+          Type.list([pattern]),
+          unicodeErrorInfo(),
+        ),
+      ]);
     });
   });
 
@@ -1241,7 +1436,7 @@ describe("Erlang_String", () => {
             Type.atom("all"),
           ),
         "MatchError",
-        Interpreter.buildMatchErrorMsg(Type.atom("hello_world")),
+        buildMatchErrorMsg(Type.atom("hello_world")),
       );
     });
 
@@ -1251,7 +1446,7 @@ describe("Erlang_String", () => {
       assertBoxedError(
         () => split(nonBinaryBitstring, Type.bitstring(" "), Type.atom("all")),
         "MatchError",
-        Interpreter.buildMatchErrorMsg(nonBinaryBitstring),
+        buildMatchErrorMsg(nonBinaryBitstring),
       );
     });
 
@@ -1264,10 +1459,7 @@ describe("Erlang_String", () => {
             Type.atom("all"),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1280,10 +1472,7 @@ describe("Erlang_String", () => {
             Type.atom("all"),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1296,7 +1485,7 @@ describe("Erlang_String", () => {
             Type.bitstring("all"),
           ),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(Type.bitstring("all")),
+        buildCaseClauseErrorMsg(Type.bitstring("all")),
       );
     });
 
@@ -1309,8 +1498,29 @@ describe("Erlang_String", () => {
             Type.atom("invalid"),
           ),
         "CaseClauseError",
-        Interpreter.buildCaseClauseErrorMsg(Type.atom("invalid")),
+        buildCaseClauseErrorMsg(Type.atom("invalid")),
       );
+    });
+
+    it("error frame carries args and error_info for an invalid pattern", () => {
+      const pattern = Type.atom("xyz");
+
+      let caught;
+
+      try {
+        split(Type.bitstring("abc"), pattern, Type.atom("all"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame(
+          "unicode",
+          "characters_to_list",
+          Type.list([pattern]),
+          unicodeErrorInfo(),
+        ),
+      ]);
     });
   });
 
@@ -2017,9 +2227,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.integer(-1),
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [Type.integer(-1)]),
         );
       });
 
@@ -2029,7 +2237,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.integer(9_999_999),
           ]),
         );
@@ -2041,9 +2249,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(bitstring),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
-            bitstring,
-          ]),
+          buildFunctionClauseErrorMsg(":string.titlecase/1", [bitstring]),
         );
       });
 
@@ -2054,9 +2260,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            bitstring,
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [bitstring]),
         );
       });
     });
@@ -2068,9 +2272,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
-            input,
-          ]),
+          buildFunctionClauseErrorMsg(":string.titlecase/1", [input]),
         );
       });
 
@@ -2080,9 +2282,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
-            input,
-          ]),
+          buildFunctionClauseErrorMsg(":string.titlecase/1", [input]),
         );
       });
 
@@ -2092,9 +2292,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
-            input,
-          ]),
+          buildFunctionClauseErrorMsg(":string.titlecase/1", [input]),
         );
       });
 
@@ -2104,7 +2302,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
             Type.atom("invalid"),
           ]),
         );
@@ -2116,11 +2314,25 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.float(3.14),
-          ]),
+          buildFunctionClauseErrorMsg(":unicode_util.cp/1", [Type.float(3.14)]),
         );
       });
+    });
+
+    it("error frame carries args for non-chardata input", () => {
+      const subject = Type.atom("abc");
+
+      let caught;
+
+      try {
+        titlecase(subject);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        errorFrame("string", "titlecase", Type.list([subject])),
+      ]);
     });
   });
 

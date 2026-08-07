@@ -24,16 +24,19 @@ jobs:
     name: Lib Tests on ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     strategy:
       fail-fast: false
-      # Each supported Elixir version is tested against a single Erlang/OTP version,
-      # staggered so the matrix collectively spans the full supported OTP range (24-29).
-      # The newest Elixir is tested against all three OTP versions it supports, since
-      # that is where OTP and type-system differences are most likely to surface.
+      # Each supported Elixir version is tested against every Erlang/OTP major it supports
+      # within the supported OTP range, since that is where OTP and type-system
+      # differences are most likely to surface.
       # OTP compatibility per Elixir version:
       # https://hexdocs.pm/elixir/compatibility-and-deprecations.html#between-elixir-and-erlang-otp
       #
       # Notes on the bounds:
-      # - Multi-letter uppercase sigils (~HOLO) were introduced in Elixir 1.15.0, so 1.15 is the floor.
-      # - Elixir 1.15+ requires Erlang/OTP 24+ (and cowlib 2.14+ requires OTP 23+).
+      # - Client-side regex support requires PCRE2 semantics (OTP 28+) and :re.import/1 (OTP 28.1+),
+      #   so OTP 28.1 is the floor.
+      # - Elixir 1.19 is the oldest version cleanly pairing with OTP 28, so 1.19 is the floor.
+      # - Underlying older constraints, superseded by the floors above: multi-letter uppercase
+      #   sigils (~HOLO) were introduced in Elixir 1.15.0, Elixir 1.15+ requires Erlang/OTP 24+,
+      #   and cowlib 2.14+ requires OTP 23+.
       # - Node.js only builds the JS step (actual JS runs in browsers), so we pin the latest LTS
       #   only, matching .tool-versions for dev/prod/CI parity. Floor rationale: the Web Crypto API
       #   requires Node 19+, and a few JS libs used by Hologram require Node 20+.
@@ -43,28 +46,8 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            elixir: "1.15.8"
-            otp: "24.3"
-            node: "24.13.0"
-          - os: ubuntu-latest
-            elixir: "1.16.3"
-            otp: "25.3"
-            node: "24.13.0"
-          - os: ubuntu-latest
-            elixir: "1.17.3"
-            otp: "26.2"
-            node: "24.13.0"
-          - os: ubuntu-latest
-            elixir: "1.18.2"
-            otp: "27.2"
-            node: "24.13.0"
-          - os: ubuntu-latest
             elixir: "1.19.5"
             otp: "28.5"
-            node: "24.13.0"
-          - os: ubuntu-latest
-            elixir: "1.20.0"
-            otp: "27.2"
             node: "24.13.0"
           - os: ubuntu-latest
             elixir: "1.20.0"
@@ -73,10 +56,6 @@ jobs:
           - os: ubuntu-latest
             elixir: "1.20.0"
             otp: "29.0"
-            node: "24.13.0"
-          - os: windows-2022
-            elixir: "1.20.0"
-            otp: "27.2"
             node: "24.13.0"
           - os: windows-2022
             elixir: "1.20.0"
@@ -102,10 +81,12 @@ jobs:
       # Step: Checkout the code.
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # Step: Setup Node.js.
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
 
@@ -308,10 +289,12 @@ jobs:
       # Step: Checkout the code.
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # Step: Setup Node.js.
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
 
@@ -371,15 +354,19 @@ jobs:
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
         # TODO: Remove this allowlist wrapper and restore `run: mix hex.audit` once the EEF advisory
         # database registers a cowlib version as patched for EEF-CVE-2026-43966 and
-        # EEF-CVE-2026-43969 (as of 2026-07-03 no version is registered as patched, so even
-        # cowlib 2.18.0 with its cow_http_struct_hd hardening is still flagged). cowlib reaches
+        # EEF-CVE-2026-43969 (as of 2026-07-28 no version is registered as patched, so even
+        # cowlib 2.19.0 with its cow_http_struct_hd hardening is still flagged). cowlib reaches
         # the build only through the Wallaby test-server stack (plug_cowboy -> cowboy -> cowlib),
-        # and the MEDIUM advisory is already mitigated by cowboy 2.16.1's CR/LF header validation.
+        # and the MEDIUM advisory is already mitigated by cowboy's CR/LF header validation.
         # The wrapper allowlists exactly those two IDs, so the audit still fails on every other
         # advisory and on any retired package.
         run: |
-          output="$(mix hex.audit 2>&1)" && exit 0
+          status=0
+          output="$(mix hex.audit 2>&1)" || status=$?
           printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
           if printf '%s\n' "$output" | grep -qiE 'retired'; then
             echo "::error::hex.audit reported a retired package"
             exit 1
@@ -389,6 +376,10 @@ jobs:
             echo "::error::hex.audit reported advisories beyond the allowlisted cowlib CVEs"
             printf '%s\n' "$unexpected"
             exit 1
+          fi
+          if ! printf '%s\n' "$output" | grep -qE 'EEF-CVE-2026-4396[69]'; then
+            echo "::error::hex.audit failed without a recognized allowlisted advisory"
+            exit "$status"
           fi
           echo "Only the allowlisted cowlib advisories present - passing."
 
@@ -454,3 +445,197 @@ jobs:
         with:
           name: fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/features/tmp/screenshots
+
+  umbrella_tests:
+    runs-on: ubuntu-latest
+    name: Umbrella Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    defaults:
+      run:
+        working-directory: test/umbrella
+    strategy:
+      fail-fast: false
+      # Specify the Elixir and OTP versions to use when building
+      # and running the workflow steps.
+      matrix:
+        elixir:
+          # Run umbrella tests on latest pinned stable Elixir version only
+          - "1.20.0"
+        otp:
+          # Run umbrella tests on latest pinned stable OTP version only
+          - "29.0"
+        node:
+          # Run umbrella tests on latest LTS version only.
+          # Must match .tool-versions for dev/prod/CI parity.
+          - "24.13.0"
+    env:
+      IS_HIGHEST_MATRIX_COMBINATION: "true"
+    steps:
+      # Step: Setup Elixir + Erlang/OTP image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Step: Setup Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+
+      ### UMBRELLA TESTS APP CHECKS ###
+
+      # Step: Define how to cache the umbrella tests app Elixir dependencies.
+      - name: Cache umbrella tests app Elixir deps
+        id: cache-umbrella-tests-app-elixir-deps
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-umbrella-tests-app-elixir-deps
+        with:
+          path: test/umbrella/deps
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/umbrella/mix.lock') }}
+
+      # Step: Define how to cache the umbrella tests app Elixir build.
+      - name: Cache umbrella tests app Elixir build
+        id: cache-umbrella-tests-app-elixir-build
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-umbrella-tests-app-elixir-build
+        with:
+          path: test/umbrella/_build
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/umbrella/mix.lock') }}
+
+      # Step: Download umbrella tests app Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download umbrella tests app Elixir deps
+        uses: nick-fields/retry@v4
+        with:
+          # TODO: set working directory with action input when https://github.com/nick-fields/retry/issues/89 is implemented
+          command: cd test/umbrella && mix deps.get
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Download umbrella tests app JavaScript dependencies.
+      - name: Download umbrella tests app JavaScript deps
+        uses: nick-fields/retry@v4
+        with:
+          command: cd test/umbrella/assets && npm clean-install
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Compile the umbrella tests app project treating any warnings as errors.
+      - name: Check umbrella tests app project compiles without warnings
+        run: mix compile --all-warnings --warnings-as-errors
+
+      # Step: Check if umbrella tests app mix.lock has any unused dependencies.
+      - name: Check umbrella tests app unused Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix deps.unlock --check-unused
+
+      # Step: Check if there are any umbrella tests app Elixir dependencies which have been marked as retired.
+      - name: Check umbrella tests app retired Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        # TODO: Remove this allowlist wrapper and restore `run: mix hex.audit` once the EEF advisory
+        # database registers a cowlib version as patched for EEF-CVE-2026-43966 and
+        # EEF-CVE-2026-43969 (as of 2026-07-28 no version is registered as patched, so even
+        # cowlib 2.19.0 with its cow_http_struct_hd hardening is still flagged). cowlib reaches
+        # the build only through the Wallaby test-server stack (plug_cowboy -> cowboy -> cowlib),
+        # and the MEDIUM advisory is already mitigated by cowboy's CR/LF header validation.
+        # The wrapper allowlists exactly those two IDs, so the audit still fails on every other
+        # advisory and on any retired package.
+        run: |
+          status=0
+          output="$(mix hex.audit 2>&1)" || status=$?
+          printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          if printf '%s\n' "$output" | grep -qiE 'retired'; then
+            echo "::error::hex.audit reported a retired package"
+            exit 1
+          fi
+          unexpected="$(printf '%s\n' "$output" | grep -E '\((LOW|MEDIUM|HIGH|CRITICAL)\)' | grep -vE 'EEF-CVE-2026-4396[69]' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "::error::hex.audit reported advisories beyond the allowlisted cowlib CVEs"
+            printf '%s\n' "$unexpected"
+            exit 1
+          fi
+          if ! printf '%s\n' "$output" | grep -qE 'EEF-CVE-2026-4396[69]'; then
+            echo "::error::hex.audit failed without a recognized allowlisted advisory"
+            exit "$status"
+          fi
+          echo "Only the allowlisted cowlib advisories present - passing."
+
+      # Step: Check that the umbrella tests app Elixir code has already been formatted.
+      - name: Check umbrella tests app Elixir code formatted
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix format --check-formatted
+
+      # Step: Run umbrella tests app Elixir static code analysis with Credo.
+      - name: Run umbrella tests app Elixir static code analysis with Credo
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix credo --strict
+
+      # Step: Restore umbrella tests app Dialyzer PLT cache.
+      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
+      - name: Restore umbrella tests app Dialyzer PLT cache
+        id: restore-umbrella-tests-app-dialyzer-plt-cache
+        uses: actions/cache/restore@v6
+        with:
+          key: |
+            dialyzer-plt-umbrella-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/umbrella/mix.lock') }}
+          path: |
+            test/umbrella/priv/plts
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+
+      # Step: Create umbrella tests app Dialyzer PLTs if no cache was found.
+      - name: Create umbrella tests app Dialyzer PLTs
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-umbrella-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        run: mix dialyzer --plt
+
+      # Step: Save umbrella tests app Dialyzer PLT cache.
+      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
+      # so we separate the cache restore and save steps in case running dialyzer fails.
+      - name: Save umbrella tests app Dialyzer PLT cache
+        id: save-umbrella-tests-app-dialyzer-plt-cache
+        uses: actions/cache/save@v6
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-umbrella-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        with:
+          key: |
+            dialyzer-plt-umbrella-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/umbrella/mix.lock') }}
+          path: |
+            test/umbrella/priv/plts
+
+      # Step: Run umbrella tests app Elixir static code analysis with Dialyzer.
+      - name: Run umbrella tests app Elixir static code analysis with Dialyzer
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix dialyzer --format github
+
+      # Step: Check that all umbrella tests app test scripts have valid file names.
+      - name: Check umbrella tests app test file names
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix holo.test.check_file_names apps/app_1/test
+
+      # Step: Execute umbrella tests app Elixir tests.
+      - name: Run umbrella tests app Elixir tests
+        run: mix test --warnings-as-errors
+
+      # Step: Archive the browser screenshots of tests that failed.
+      - name: Archive fail screenshots
+        # Execute the step even if the job has already failed, but don't execute it if the job has been canceled.
+        if: success() || failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: umbrella-fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
+          path: test/umbrella/tmp/screenshots

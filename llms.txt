@@ -9,13 +9,13 @@
 ## Guides
 
 - [Introduction](https://hologram.page/docs/introduction): Overview of Hologram, key features, framework philosophy, and inspirations
-- [Installation](https://hologram.page/docs/installation): Prerequisites (Elixir, OTP, Phoenix, Node.js) and step-by-step setup
+- [Installation](https://hologram.page/docs/installation): Prerequisites (Elixir, OTP, Phoenix, Node.js), step-by-step setup, and umbrella projects
 - [Quick Start](https://hologram.page/docs/quick-start): Build a simple blog app demonstrating layouts, pages, components, and interactions
 
 ## Documentation
 
 - [Architecture](https://hologram.page/docs/architecture): Pages and components, code distribution, client-server communication
-- [Template Syntax](https://hologram.page/docs/template-syntax): ~HOLO sigil, HTML markup, @var access, component nodes, interpolation, control flow blocks
+- [Template Syntax](https://hologram.page/docs/template-syntax): ~HOLO sigil, HTML markup, @var access, component nodes, dynamic nodes, interpolation, attribute and prop spread, control flow blocks
 - [Components](https://hologram.page/docs/components): Reusable UI building blocks, props, stateful vs stateless, slots, templates
 - [Pages](https://hologram.page/docs/pages): Route entry points, routing and parameters, differences from regular components
 - [Layouts](https://hologram.page/docs/layouts): Root components that wrap page content, specifying layouts, layout templates
@@ -29,6 +29,7 @@
 - [Cookies](https://hologram.page/docs/cookies): Client-side persistent storage managed through server-side functions
 - [Realtime](https://hologram.page/docs/realtime): Live server-pushed updates, subscribing to channels, broadcasting actions, delivery semantics
 - [JavaScript Interop](https://hologram.page/docs/javascript-interop): Calling JavaScript from Elixir, importing JS modules, async support
+- [Configuration](https://hologram.page/docs/configuration): Client diagnostics settings, bundle size limit, environment variables
 
 ## Reference
 

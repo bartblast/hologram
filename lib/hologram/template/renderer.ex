@@ -90,6 +90,27 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
+  # A dynamic tag decides between the element and the component branch at render time, then behaves
+  # exactly like the equivalent static tag would.
+  def render_dom({:dynamic_tag, {tag_name}, attrs_dom, children_dom}, env, server_struct)
+      when is_binary(tag_name) do
+    render_dom({:element, tag_name, attrs_dom, children_dom}, env, server_struct)
+  end
+
+  def render_dom({:dynamic_tag, {module}, props_dom, children_dom}, env, server_struct)
+      when is_atom(module) do
+    if Reflection.component?(module) do
+      render_dom({:component, module, props_dom, children_dom}, env, server_struct)
+    else
+      raise ArgumentError,
+        message: invalid_dynamic_tag_value_message(module) <> ", which is not a component module"
+    end
+  end
+
+  def render_dom({:dynamic_tag, {value}, _attrs_dom, _children_dom}, _env, _server_struct) do
+    raise ArgumentError, message: invalid_dynamic_tag_value_message(value)
+  end
+
   def render_dom({:doctype, content}, _env, server_struct) do
     {"<!DOCTYPE #{content}>", %{}, server_struct}
   end
@@ -255,10 +276,39 @@ defmodule Hologram.Template.Renderer do
 
   defp cast_props(props_dom, module) do
     props_dom
+    |> expand_prop_spreads()
     |> filter_allowed_props(module)
     |> Stream.map(&evaluate_prop_value/1)
     |> Stream.map(&normalize_prop_name/1)
     |> Enum.into(%{})
+  end
+
+  # HTML attribute names are dash-separated, while Elixir identifiers can't contain dashes, so each
+  # name segment converts to the convention of the namespace it lands in. Nesting composes the
+  # segments with hyphens, e.g. %{data: %{user_id: 1}} becomes "data-user-id".
+  defp compose_attribute_name(key, name_prefix) do
+    segment =
+      key
+      |> to_string()
+      |> validate_spread_key()
+      |> String.replace("_", "-")
+
+    if name_prefix, do: name_prefix <> "-" <> segment, else: segment
+  end
+
+  # Event attributes are exempt from deduplication, because a tag may carry multiple bindings which
+  # share a base name once their modifiers are decomposed at compile time, e.g. both
+  # $key_down.enter and $key_down.esc are named "$key_down".
+  defp dedupe_attributes(attrs_dom) do
+    attrs_dom
+    |> Enum.with_index()
+    |> Enum.reverse()
+    |> Enum.uniq_by(fn {attr_dom, index} ->
+      name = elem(attr_dom, 0)
+      if String.starts_with?(name, "$"), do: {name, index}, else: name
+    end)
+    |> Enum.reverse()
+    |> Enum.map(fn {attr_dom, _index} -> attr_dom end)
   end
 
   defp evaluate_prop_value({name, [expression: {value}]}) do
@@ -276,6 +326,54 @@ defmodule Hologram.Template.Renderer do
     {name, value_str}
   end
 
+  defp expand_attribute(attr_dom)
+
+  # A spread's own entries are sorted by name, so that rendering is reproducible: map key order is
+  # undefined in Erlang, and a keyword list's order decides only which duplicate key wins, never how
+  # the surviving entries are laid out. The sort is stable, which is what keeps that later-wins rule
+  # intact. Only the block a single spread expands to is sorted, so attributes written literally in
+  # the markup keep their authored position.
+  defp expand_attribute({:spread, {value}}) do
+    value
+    |> expand_spread_attributes(nil)
+    |> Enum.sort_by(fn {name, _value_dom} -> name end)
+  end
+
+  defp expand_attribute(attr_dom), do: [attr_dom]
+
+  # Spread entries are splatted into synthetic named attributes at the spread's position, so that
+  # everything downstream (event attribute filtering, boolean attribute rules, value rendering) is
+  # reached through the same path as attributes written literally in the markup. Names then resolve
+  # positionally, last one wins.
+  defp expand_attribute_spreads(attrs_dom) do
+    if Enum.any?(attrs_dom, &match?({:spread, _value}, &1)) do
+      attrs_dom
+      |> Enum.flat_map(&expand_attribute/1)
+      |> dedupe_attributes()
+    else
+      attrs_dom
+    end
+  end
+
+  defp expand_prop(prop_dom)
+
+  defp expand_prop({:spread, {value}}), do: expand_spread_props(value)
+
+  defp expand_prop(prop_dom), do: [prop_dom]
+
+  # Spread entries are splatted into synthetic named props at the spread's position, so that
+  # everything downstream (filtering to declared props, name normalization, context injection,
+  # defaults, cid detection) is reached through the same path as props written literally in the
+  # markup. Names then resolve positionally, last one wins, which the final collapse into a map
+  # already does - no deduplication step is needed here.
+  defp expand_prop_spreads(props_dom) do
+    if Enum.any?(props_dom, &match?({:spread, _value}, &1)) do
+      Enum.flat_map(props_dom, &expand_prop/1)
+    else
+      props_dom
+    end
+  end
+
   defp expand_slots(dom, slots)
 
   defp expand_slots(nodes, slots) when is_list(nodes) do
@@ -288,6 +386,10 @@ defmodule Hologram.Template.Renderer do
     {:component, module, props_dom, expand_slots(children_dom, slots)}
   end
 
+  defp expand_slots({:dynamic_tag, {value}, attrs_dom, children_dom}, slots) do
+    {:dynamic_tag, {value}, attrs_dom, expand_slots(children_dom, slots)}
+  end
+
   defp expand_slots({:element, "slot", _attrs_dom, []}, slots) do
     slots[:default]
   end
@@ -297,6 +399,37 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp expand_slots(node, _slots), do: node
+
+  defp expand_spread_attribute({key, value}, name_prefix) do
+    name = compose_attribute_name(key, name_prefix)
+
+    if nested_spread_value?(value) do
+      expand_spread_attributes(value, name)
+    else
+      [{name, [expression: {value}]}]
+    end
+  end
+
+  defp expand_spread_attributes(value, name_prefix) do
+    value
+    |> spread_entries()
+    |> Enum.flat_map(&expand_spread_attribute(&1, name_prefix))
+  end
+
+  # Props live in the Elixir namespace, so unlike attribute names they are verbatim and flat - a map
+  # or keyword list entry value is simply a raw prop value, and doesn't compose a nested name.
+  defp expand_spread_props(value) do
+    value
+    |> spread_entries()
+    |> Enum.map(fn {key, entry_value} ->
+      name =
+        key
+        |> to_string()
+        |> validate_spread_key()
+
+      {name, [expression: {entry_value}]}
+    end)
+  end
 
   defp filter_allowed_props(props_dom, module) do
     registered_prop_names =
@@ -378,6 +511,10 @@ defmodule Hologram.Template.Renderer do
     String.replace(html, "$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
   end
 
+  defp invalid_dynamic_tag_value_message(value) do
+    "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: #{inspect(value)}"
+  end
+
   defp maybe_put_csrf_token_context(page_component_struct, opts, true) do
     csrf_token =
       opts[:csrf_token] || raise ArgumentError, "CSRF token is required for initial page requests"
@@ -409,6 +546,12 @@ defmodule Hologram.Template.Renderer do
     page_component_struct
   end
 
+  # Maps and keyword lists compose nested attribute names, everything else is a leaf value. Structs
+  # are excluded, since they are ordinary values which stringify through String.Chars, e.g. Date.
+  defp nested_spread_value?(value) do
+    (is_map(value) and not is_struct(value)) or (is_list(value) and Keyword.keyword?(value))
+  end
+
   defp normalize_prop_name({name, value}) do
     {String.to_existing_atom(name), value}
   end
@@ -437,6 +580,11 @@ defmodule Hologram.Template.Renderer do
     )
   end
 
+  defp raise_invalid_spread_value(value) do
+    raise ArgumentError,
+      message: "spread value must be a map or a keyword list, got: #{inspect(value)}"
+  end
+
   defp render_attribute(name, value_dom)
 
   defp render_attribute(name, []), do: name
@@ -462,6 +610,7 @@ defmodule Hologram.Template.Renderer do
 
   defp render_attributes(attrs_dom) do
     attrs_dom
+    |> expand_attribute_spreads()
     |> Enum.reject(fn attr ->
       attr
       |> elem(0)
@@ -513,4 +662,27 @@ defmodule Hologram.Template.Renderer do
     |> module.template().()
     |> render_dom(%Env{context: context, slots: [default: children_dom]}, server_struct)
   end
+
+  defp spread_entries(value)
+
+  # Structs are maps, but their __struct__ key is not a name.
+  defp spread_entries(%_struct{} = value), do: raise_invalid_spread_value(value)
+
+  defp spread_entries(value) when is_map(value), do: Enum.to_list(value)
+
+  defp spread_entries(value) when is_list(value) do
+    if Keyword.keyword?(value), do: value, else: raise_invalid_spread_value(value)
+  end
+
+  defp spread_entries(value), do: raise_invalid_spread_value(value)
+
+  # Event bindings require compile-time modifier parsing and listener collection, so they can be
+  # written only as literal attributes. Silently not binding an intended event would be worse than
+  # erroring here.
+  defp validate_spread_key("$" <> _rest = key) do
+    raise ArgumentError,
+      message: "event bindings can't be set through a spread, got the #{inspect(key)} key"
+  end
+
+  defp validate_spread_key(key), do: key
 end

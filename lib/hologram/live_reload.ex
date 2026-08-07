@@ -9,6 +9,7 @@ defmodule Hologram.LiveReload do
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
   alias Hologram.Database
+  alias Hologram.LiveReload.Diagnostic
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
 
@@ -107,14 +108,28 @@ defmodule Hologram.LiveReload do
   @doc """
   Returns the list of directories that are watched for file changes.
 
-  The directories are determined by the project's `:elixirc_paths` configuration
-  and are converted to absolute paths based on the project root directory.
+  In a single-app project the directories are the project's own
+  `:elixirc_paths`, joined to the project's directory.
+
+  In an umbrella project they are the union of every child app's
+  `:elixirc_paths`, joined to that child app's directory - so changes in any
+  child app trigger a reload.
   """
   @spec watched_dirs :: [String.t()]
   def watched_dirs do
-    root_dir = Reflection.root_dir()
-    compiled_paths = Mix.Project.get().project()[:elixirc_paths]
-    Enum.map(compiled_paths, &Path.join(root_dir, &1))
+    case Mix.Project.apps_paths() do
+      nil ->
+        project_dir = active_project_dir()
+        Enum.map(Mix.Project.config()[:elixirc_paths], &Path.join(project_dir, &1))
+
+      apps_paths ->
+        # Paths returned by Mix.Project.apps_paths/0 are relative to the umbrella
+        # root, which is the cwd while the umbrella project is active.
+        Enum.flat_map(apps_paths, fn {app, app_path} ->
+          abs_app_path = Path.expand(app_path)
+          Enum.map(app_elixirc_paths(app, abs_app_path), &Path.join(abs_app_path, &1))
+        end)
+    end
   end
 
   @doc """
@@ -135,11 +150,24 @@ defmodule Hologram.LiveReload do
     [dirs: watched_dirs()]
   end
 
+  defp active_project_dir do
+    # Mix keeps cwd at the active project's root.
+    File.cwd!()
+  end
+
+  defp app_elixirc_paths(app, app_path) do
+    Mix.Project.in_project(app, app_path, fn _module ->
+      Mix.Project.config()[:elixirc_paths]
+    end)
+  end
+
   defp broadcast_compilation_error(output) do
+    lines = Diagnostic.to_lines(output)
+
     Phoenix.PubSub.broadcast(
       Hologram.PubSub,
       "hologram_live_reload",
-      {:compilation_error, output}
+      {:compilation_error, lines}
     )
   end
 
@@ -163,6 +191,14 @@ defmodule Hologram.LiveReload do
     # Code.put_compiler_option(:ignore_module_conflict, true)
     # Kernel.ParallelCompiler.compile_to_path([file_path], Mix.Project.compile_path())
     # Code.put_compiler_option(:ignore_module_conflict, false)
+    #
+    # TODO: compiling here rather than through Phoenix would hand back the
+    # compiler's diagnostics as structs, which Phoenix flattens to a string
+    # before returning them. Broadcasting those instead of text would leave
+    # Hologram.LiveReload.Diagnostic with nothing to read by shape - severity,
+    # location and the stacktrace would all arrive as data. What the overlay
+    # would take on in exchange is drawing the source excerpt itself, since
+    # Elixir prints that rather than returning it.
   end
 
   # Reconciliation failures surface like compilation errors - logged loudly and

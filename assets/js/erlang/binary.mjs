@@ -106,16 +106,54 @@ const Erlang_Binary = {
   // End _boyer_moore_search/4
   // Deps: []
 
-  // Start _parse_search_opts/2
-  "_parse_search_opts/2": (opts, argPosition) => {
-    const raiseInvalidOptions = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(argPosition, "invalid options"),
-      );
+  // Reports whether the term is a valid search pattern: a non-empty binary,
+  // a non-empty list of non-empty binaries, or a compiled pattern whose
+  // registry entry is present. Non-raising on purpose - the error formatter
+  // probes pattern validity while deriving a message, where a raise would
+  // derive its own message and recurse.
+  // Start _is_valid_pattern/1
+  "_is_valid_pattern/1": (pattern) => {
+    if (Type.isCompiledPattern(pattern)) {
+      const patternType = pattern.data[0].value;
+      const compiledData = ERTS.binaryPatternRegistry.get(pattern.data[1]);
+
+      if (!compiledData || compiledData.type !== patternType) {
+        return false;
+      }
+
+      return patternType !== "bm" || Boolean(compiledData.patternBytes);
+    }
+
+    const isNonEmptyBinary = (term) => {
+      if (!Type.isBinary(term)) {
+        return false;
+      }
+
+      Bitstring.maybeSetBytesFromText(term);
+
+      return term.bytes.length > 0;
     };
 
+    if (Type.isBinary(pattern)) {
+      return isNonEmptyBinary(pattern);
+    }
+
+    return (
+      Type.isProperList(pattern) &&
+      pattern.data.length > 0 &&
+      pattern.data.every(isNonEmptyBinary)
+    );
+  },
+  // End _is_valid_pattern/1
+  // Deps: []
+
+  // Parses the search options that match/3, matches/3, and split/3 accept,
+  // returning JS null when the options are invalid. Signaling instead of
+  // raising lets each public function raise with its own identity.
+  // Start _parse_search_opts/1
+  "_parse_search_opts/1": (opts) => {
     if (!Type.isList(opts) || Type.isImproperList(opts)) {
-      raiseInvalidOptions();
+      return null;
     }
 
     let global = false;
@@ -124,24 +162,24 @@ const Erlang_Binary = {
     let scopeStart = 0;
     let scopeLength = null; // null means "until end"
 
-    opts.data.forEach((option) => {
+    for (const option of opts.data) {
       if (Type.isAtom(option)) {
         if (option.value === "global") {
           global = true;
-          return;
+          continue;
         }
 
         if (option.value === "trim") {
           trim = true;
-          return;
+          continue;
         }
 
         if (option.value === "trim_all") {
           trimAll = true;
-          return;
+          continue;
         }
 
-        raiseInvalidOptions();
+        return null;
       }
 
       const isScopeTuple =
@@ -151,7 +189,7 @@ const Erlang_Binary = {
         option.data[0].value === "scope";
 
       if (!isScopeTuple) {
-        raiseInvalidOptions();
+        return null;
       }
 
       const scopeData = option.data[1];
@@ -163,7 +201,7 @@ const Erlang_Binary = {
         Type.isInteger(scopeData.data[1]);
 
       if (!isValidScope) {
-        raiseInvalidOptions();
+        return null;
       }
 
       const startValue = scopeData.data[0].value;
@@ -171,39 +209,23 @@ const Erlang_Binary = {
 
       scopeStart = Number(startValue);
       scopeLength = Number(lengthValue);
-    });
+    }
 
     return {global, trim, trimAll, scopeStart, scopeLength};
   },
-  // End _parse_search_opts/2
+  // End _parse_search_opts/1
   // Deps: []
 
   // Start at/2
   "at/2": (subject, pos) => {
-    if (!Type.isBinary(subject)) {
-      const msg = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
-
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
-    }
-
-    if (!Type.isInteger(pos)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
-    }
-
-    if (pos.value < 0n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
+    if (!Type.isBinary(subject) || !Type.isInteger(pos) || pos.value < 0n) {
+      Interpreter.raiseBifError("badarg", "binary", "at", [subject, pos]);
     }
 
     Bitstring.maybeSetBytesFromText(subject);
 
     if (pos.value >= subject.bytes.length) {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseBifError("badarg", "binary", "at", [subject, pos]);
     }
 
     return Type.integer(subject.bytes[pos.value]);
@@ -214,9 +236,9 @@ const Erlang_Binary = {
   // Start compile_pattern/1
   "compile_pattern/1": (pattern) => {
     const raiseInvalidPattern = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a valid pattern"),
-      );
+      Interpreter.raiseBifError("badarg", "binary", "compile_pattern", [
+        pattern,
+      ]);
     };
 
     const compileBoyerMoorePattern = (singlePattern) => {
@@ -316,7 +338,7 @@ const Erlang_Binary = {
     if (Type.isBinary(pattern)) {
       return compileBoyerMoorePattern(pattern);
     } else if (
-      Type.isList(pattern) &&
+      Type.isProperList(pattern) &&
       pattern.data.length > 0 &&
       pattern.data.every((i) => Type.isBinary(i))
     ) {
@@ -332,24 +354,8 @@ const Erlang_Binary = {
 
   // Start copy/2
   "copy/2": (subject, count) => {
-    if (!Type.isBinary(subject)) {
-      const msg = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
-
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
-    }
-
-    if (!Type.isInteger(count)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
-    }
-
-    if (count.value < 0n) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
+    if (!Type.isBinary(subject) || !Type.isInteger(count) || count.value < 0n) {
+      Interpreter.raiseBifError("badarg", "binary", "copy", [subject, count]);
     }
 
     if (count.value === 0n) {
@@ -386,23 +392,8 @@ const Erlang_Binary = {
 
   // Start first/1
   "first/1": (subject) => {
-    if (!Type.isBinary(subject)) {
-      const message = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
-
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, message),
-      );
-    }
-
-    if (Bitstring.isEmpty(subject)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "a zero-sized binary is not allowed",
-        ),
-      );
+    if (!Type.isBinary(subject) || Bitstring.isEmpty(subject)) {
+      Interpreter.raiseBifError("badarg", "binary", "first", [subject]);
     }
 
     Bitstring.maybeSetBytesFromText(subject);
@@ -414,23 +405,8 @@ const Erlang_Binary = {
 
   // Start last/1
   "last/1": (subject) => {
-    if (!Type.isBinary(subject)) {
-      const message = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
-
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, message),
-      );
-    }
-
-    if (Bitstring.isEmpty(subject)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "a zero-sized binary is not allowed",
-        ),
-      );
+    if (!Type.isBinary(subject) || Bitstring.isEmpty(subject)) {
+      Interpreter.raiseBifError("badarg", "binary", "last", [subject]);
     }
 
     Bitstring.maybeSetBytesFromText(subject);
@@ -442,54 +418,62 @@ const Erlang_Binary = {
 
   // Start match/2
   "match/2": (subject, pattern) => {
-    return Erlang_Binary["match/3"](subject, pattern, Type.list());
+    try {
+      return Erlang_Binary["match/3"](subject, pattern, Type.list());
+    } catch (error) {
+      // Re-raise with this arity's own identity - the BEAM reports the
+      // called function's frame, not the delegate's.
+      if (error.struct) {
+        Interpreter.raiseBifError("badarg", "binary", "match", [
+          subject,
+          pattern,
+        ]);
+      }
+
+      throw error;
+    }
   },
   // End match/2
   // Deps: [:binary.match/3]
 
   // Start match/3
   "match/3": (subject, pattern, options) => {
-    if (!Type.isBinary(subject)) {
-      const msg = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "binary", "match", [
+        subject,
+        pattern,
+        options,
+      ]);
+    };
 
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
+    if (!Type.isBinary(subject)) {
+      raiseBadarg();
     }
 
     // Ensure subject bytes are available after validation
     Bitstring.maybeSetBytesFromText(subject);
 
-    // Parse options and reject unsupported flags for match/3
-    const {global, trim, trimAll, scopeStart, scopeLength} = Erlang_Binary[
-      "_parse_search_opts/2"
-    ](options, 3);
+    const parsedOpts = Erlang_Binary["_parse_search_opts/1"](options);
+
+    if (parsedOpts === null) {
+      raiseBadarg();
+    }
+
+    const {global, trim, trimAll, scopeStart, scopeLength} = parsedOpts;
 
     // match/3 only supports :scope; reject :global, :trim, and :trim_all
     if (global || trim || trimAll) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-      );
+      raiseBadarg();
     }
 
     // Validate scope start is within subject bounds
     if (scopeStart < 0 || scopeStart > subject.bytes.length) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          3,
-          "specified part is not wholly inside binary",
-        ),
-      );
+      raiseBadarg();
     }
 
     // Validate that if scopeLength is specified, scopeStart + scopeLength >= 0
     if (scopeLength !== null && scopeStart + scopeLength < 0) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          3,
-          "specified part is not wholly inside binary",
-        ),
-      );
+      raiseBadarg();
     }
 
     const effectiveLength =
@@ -497,12 +481,7 @@ const Erlang_Binary = {
 
     // Validate scope doesn't extend beyond subject
     if (scopeStart + effectiveLength > subject.bytes.length) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          3,
-          "specified part is not wholly inside binary",
-        ),
-      );
+      raiseBadarg();
     }
 
     const scopeEnd = scopeStart + effectiveLength;
@@ -521,11 +500,9 @@ const Erlang_Binary = {
         ? pattern
         : Erlang_Binary["compile_pattern/1"](pattern);
     } catch (error) {
-      // Re-raise pattern compilation errors with correct argument position
+      // Re-raise pattern compilation errors with this function's identity
       if (error.struct) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
+        raiseBadarg();
       }
 
       throw error;
@@ -536,9 +513,7 @@ const Erlang_Binary = {
     const compiledData = ERTS.binaryPatternRegistry.get(patternRef);
 
     if (!compiledData || compiledData.type !== patternType) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-      );
+      raiseBadarg();
     }
 
     // After pattern validation passes, check if search range is available
@@ -556,9 +531,7 @@ const Erlang_Binary = {
       const patternBytes = compiledData.patternBytes;
 
       if (!patternBytes) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
+        raiseBadarg();
       }
 
       match = Erlang_Binary["_boyer_moore_search/4"](
@@ -585,53 +558,62 @@ const Erlang_Binary = {
     return Type.tuple([Type.integer(absolutePos), Type.integer(match.length)]);
   },
   // End match/3
-  // Deps: [:binary._aho_corasick_search/3, :binary._boyer_moore_search/4, :binary._parse_search_opts/2, :binary.compile_pattern/1]
+  // Deps: [:binary._aho_corasick_search/3, :binary._boyer_moore_search/4, :binary._parse_search_opts/1, :binary.compile_pattern/1]
 
   // Start matches/2
   "matches/2": (subject, pattern) => {
-    return Erlang_Binary["matches/3"](subject, pattern, Type.list());
+    try {
+      return Erlang_Binary["matches/3"](subject, pattern, Type.list());
+    } catch (error) {
+      // Re-raise with this arity's own identity - the BEAM reports the
+      // called function's frame, not the delegate's.
+      if (error.struct) {
+        Interpreter.raiseBifError("badarg", "binary", "matches", [
+          subject,
+          pattern,
+        ]);
+      }
+
+      throw error;
+    }
   },
   // End matches/2
   // Deps: [:binary.matches/3]
 
   // Start matches/3
   "matches/3": (subject, pattern, options) => {
-    if (!Type.isBinary(subject)) {
-      const msg = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "binary", "matches", [
+        subject,
+        pattern,
+        options,
+      ]);
+    };
 
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
+    if (!Type.isBinary(subject)) {
+      raiseBadarg();
     }
 
     Bitstring.maybeSetBytesFromText(subject);
 
-    const {global, trim, trimAll, scopeStart, scopeLength} = Erlang_Binary[
-      "_parse_search_opts/2"
-    ](options, 3);
+    const parsedOpts = Erlang_Binary["_parse_search_opts/1"](options);
+
+    if (parsedOpts === null) {
+      raiseBadarg();
+    }
+
+    const {global, trim, trimAll, scopeStart, scopeLength} = parsedOpts;
 
     if (global || trim || trimAll) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-      );
+      raiseBadarg();
     }
 
     if (scopeStart < 0 || scopeStart > subject.bytes.length) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          3,
-          "specified part is not wholly inside binary",
-        ),
-      );
+      raiseBadarg();
     }
 
     if (scopeLength !== null && scopeStart + scopeLength < 0) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          3,
-          "specified part is not wholly inside binary",
-        ),
-      );
+      raiseBadarg();
     }
 
     const isCompiledPattern = Type.isCompiledPattern(pattern);
@@ -643,10 +625,9 @@ const Erlang_Binary = {
         ? pattern
         : Erlang_Binary["compile_pattern/1"](pattern);
     } catch (error) {
+      // Re-raise pattern compilation errors with this function's identity
       if (error.struct) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
+        raiseBadarg();
       }
 
       throw error;
@@ -657,21 +638,14 @@ const Erlang_Binary = {
     const compiledData = ERTS.binaryPatternRegistry.get(patternRef);
 
     if (!compiledData || compiledData.type !== patternType) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-      );
+      raiseBadarg();
     }
 
     const effectiveLength =
       scopeLength === null ? subject.bytes.length - scopeStart : scopeLength;
 
     if (scopeStart + effectiveLength > subject.bytes.length) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          3,
-          "specified part is not wholly inside binary",
-        ),
-      );
+      raiseBadarg();
     }
 
     const scopeEnd = scopeStart + effectiveLength;
@@ -719,16 +693,30 @@ const Erlang_Binary = {
     return Type.list(results);
   },
   // End matches/3
-  // Deps: [:binary._parse_search_opts/2, :binary.compile_pattern/1, :binary.match/3]
+  // Deps: [:binary._parse_search_opts/1, :binary.compile_pattern/1, :binary.match/3]
 
   // Start replace/3
   "replace/3": (subject, pattern, replacement) => {
-    return Erlang_Binary["replace/4"](
-      subject,
-      pattern,
-      replacement,
-      Type.list(),
-    );
+    try {
+      return Erlang_Binary["replace/4"](
+        subject,
+        pattern,
+        replacement,
+        Type.list(),
+      );
+    } catch (error) {
+      // Re-raise with this arity's own identity - the BEAM reports the
+      // called function's frame, not the delegate's.
+      if (error.struct) {
+        Interpreter.raiseBifError("badarg", "binary", "replace", [
+          subject,
+          pattern,
+          replacement,
+        ]);
+      }
+
+      throw error;
+    }
   },
   // End replace/3
   // Deps: [:binary.replace/4]
@@ -746,42 +734,35 @@ const Erlang_Binary = {
       }
     };
 
-    const compilePatternOrRaise = (pat, argPos) => {
+    const compilePatternOrRaise = (pat) => {
       const isCompiled = Type.isCompiledPattern(pat);
 
       try {
         return isCompiled ? pat : Erlang_Binary["compile_pattern/1"](pat);
       } catch (error) {
+        // Re-raise pattern compilation errors with this function's identity
         if (error.struct) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(argPos, "not a valid pattern"),
-          );
+          raiseBadarg();
         }
 
         throw error;
       }
     };
 
-    const computeScopeBounds = (subjectBin, start, length, argPos) => {
+    const computeScopeBounds = (subjectBin, start, length) => {
       if (start > subjectBin.bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(argPos, "invalid options"),
-        );
+        raiseBadarg();
       }
 
       if (length !== null && start + length < 0) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(argPos, "invalid options"),
-        );
+        raiseBadarg();
       }
 
       const effectiveLength =
         length === null ? subjectBin.bytes.length - start : length;
 
       if (start + effectiveLength > subjectBin.bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(argPos, "invalid options"),
-        );
+        raiseBadarg();
       }
 
       const scopeEnd = start + effectiveLength;
@@ -799,9 +780,7 @@ const Erlang_Binary = {
       const data = ERTS.binaryPatternRegistry.get(ref);
 
       if (!data || data.type !== type) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
+        raiseBadarg();
       }
 
       return {type, data};
@@ -824,9 +803,7 @@ const Erlang_Binary = {
 
       for (const pos of positions) {
         if (pos > replacementLength) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-          );
+          raiseBadarg();
         }
       }
 
@@ -860,15 +837,14 @@ const Erlang_Binary = {
       return Erlang["iolist_to_binary/1"](Type.list(items));
     };
 
-    const parseReplaceOpts = (opts, argPosition) => {
-      const raiseInvalidOptions = () => {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(argPosition, "invalid options"),
-        );
-      };
-
+    // Parses the replace options. Option structure errors (a non-list, an
+    // unknown option, a scope value that is not a 2-tuple) raise with the
+    // badopt cause, while recognized options carrying invalid values fail
+    // without one - mirroring which raises OTP's binary.erl tags with
+    // badopt.
+    const parseReplaceOpts = (opts) => {
       if (!Type.isList(opts) || Type.isImproperList(opts)) {
-        raiseInvalidOptions();
+        raiseBadopt();
       }
 
       let global = false;
@@ -883,7 +859,7 @@ const Erlang_Binary = {
             return;
           }
 
-          raiseInvalidOptions();
+          raiseBadopt();
         }
 
         const isScopeTuple =
@@ -895,18 +871,21 @@ const Erlang_Binary = {
         if (isScopeTuple) {
           const scopeData = option.data[1];
 
-          const isValidScope =
-            Type.isTuple(scopeData) &&
-            scopeData.data.length === 2 &&
-            Type.isInteger(scopeData.data[0]) &&
-            Type.isInteger(scopeData.data[1]);
+          if (!Type.isTuple(scopeData) || scopeData.data.length !== 2) {
+            raiseBadopt();
+          }
 
-          if (!isValidScope) raiseInvalidOptions();
+          if (
+            !Type.isInteger(scopeData.data[0]) ||
+            !Type.isInteger(scopeData.data[1])
+          ) {
+            raiseBadarg();
+          }
 
           const startValue = scopeData.data[0].value;
           const lengthValue = scopeData.data[1].value;
 
-          if (startValue < 0n) raiseInvalidOptions();
+          if (startValue < 0n) raiseBadarg();
 
           scopeStart = Number(startValue);
           scopeLength = Number(lengthValue);
@@ -924,33 +903,53 @@ const Erlang_Binary = {
           const insertData = option.data[1];
 
           if (Type.isInteger(insertData)) {
-            if (insertData.value < 0n) raiseInvalidOptions();
+            if (insertData.value < 0n) raiseBadarg();
             insertReplaced = insertData;
           } else if (Type.isList(insertData)) {
             // Reject improper lists to match top-level options validation
-            if (Type.isImproperList(insertData)) raiseInvalidOptions();
+            if (Type.isImproperList(insertData)) raiseBadarg();
 
             const allIntegers = insertData.data.every((item) =>
               Type.isInteger(item),
             );
 
-            if (!allIntegers) raiseInvalidOptions();
+            if (!allIntegers) raiseBadarg();
 
             const hasNegative = insertData.data.some((item) => item.value < 0n);
-            if (hasNegative) raiseInvalidOptions();
+            if (hasNegative) raiseBadarg();
 
             insertReplaced = insertData;
           } else {
-            raiseInvalidOptions();
+            raiseBadarg();
           }
 
           return;
         }
 
-        raiseInvalidOptions();
+        raiseBadopt();
       });
 
       return {global, scopeStart, scopeLength, insertReplaced};
+    };
+
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "binary", "replace", [
+        subject,
+        pattern,
+        replacement,
+        options,
+      ]);
+    };
+
+    const raiseBadopt = () => {
+      Interpreter.raiseBifError(
+        "badarg",
+        "binary",
+        "replace",
+        [subject, pattern, replacement, options],
+        "erl_stdlib_errors",
+        "badopt",
+      );
     };
 
     // Helper closes over isReplacementFunction and replacement for clarity
@@ -962,9 +961,7 @@ const Erlang_Binary = {
         );
 
         if (!Type.isBinary(replacementResult)) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-          );
+          raiseBadarg();
         }
 
         Bitstring.maybeSetBytesFromText(replacementResult);
@@ -991,11 +988,7 @@ const Erlang_Binary = {
 
     // Validate subject is a binary
     if (!Type.isBinary(subject)) {
-      const msg = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
-
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
+      raiseBadarg();
     }
 
     // Ensure subject bytes are available
@@ -1006,9 +999,7 @@ const Erlang_Binary = {
     const isReplacementFunction = Type.isAnonymousFunction(replacement);
 
     if (!isReplacementBinary && !isReplacementFunction) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
-      );
+      raiseBadarg();
     }
 
     // Parse options
@@ -1017,17 +1008,16 @@ const Erlang_Binary = {
       scopeStart,
       scopeLength,
       insertReplaced: insertPositionsOpt,
-    } = parseReplaceOpts(options, 4);
+    } = parseReplaceOpts(options);
 
     const {actualStart, actualEnd, effectiveLength} = computeScopeBounds(
       subject,
       scopeStart,
       scopeLength,
-      4,
     );
 
     // Validate pattern before checking scope length - pattern errors take priority
-    const compiledPattern = compilePatternOrRaise(pattern, 2);
+    const compiledPattern = compilePatternOrRaise(pattern);
 
     const {type: patternType, data: compiledData} =
       getCompiledData(compiledPattern);
@@ -1181,7 +1171,20 @@ const Erlang_Binary = {
 
   // Start split/2
   "split/2": (subject, pattern) => {
-    return Erlang_Binary["split/3"](subject, pattern, Type.list());
+    try {
+      return Erlang_Binary["split/3"](subject, pattern, Type.list());
+    } catch (error) {
+      // Re-raise with this arity's own identity - the BEAM reports the
+      // called function's frame, not the delegate's.
+      if (error.struct) {
+        Interpreter.raiseBifError("badarg", "binary", "split", [
+          subject,
+          pattern,
+        ]);
+      }
+
+      throw error;
+    }
   },
   // End split/2
   // Deps: [:binary.split/3]
@@ -1220,78 +1223,46 @@ const Erlang_Binary = {
       }
     };
 
+    const raiseBadarg = () => {
+      Interpreter.raiseBifError("badarg", "binary", "split", [
+        subject,
+        pattern,
+        options,
+      ]);
+    };
+
     // Validate subject is a binary
     if (!Type.isBinary(subject)) {
-      const msg = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
-
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
+      raiseBadarg();
     }
 
     // Ensure subject bytes are available after validation
     Bitstring.maybeSetBytesFromText(subject);
 
-    const {global, trim, trimAll, scopeStart, scopeLength} = Erlang_Binary[
-      "_parse_search_opts/2"
-    ](options, 3);
+    const parsedOpts = Erlang_Binary["_parse_search_opts/1"](options);
+
+    if (parsedOpts === null) {
+      raiseBadarg();
+    }
+
+    const {global, trim, trimAll, scopeStart, scopeLength} = parsedOpts;
 
     // Validate scope start is within subject bounds
     if (scopeStart < 0 || scopeStart > subject.bytes.length) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-      );
+      raiseBadarg();
     }
 
     // Validate that if scopeLength is specified, scopeStart + scopeLength >= 0
     if (scopeLength !== null && scopeStart + scopeLength < 0) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-      );
+      raiseBadarg();
     }
 
-    // Validate pattern before compiling (to raise with correct arg position)
-    const raiseInvalidPattern = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-      );
-    };
-
-    const isCompiledPattern = Type.isCompiledPattern(pattern);
-
-    if (!isCompiledPattern) {
-      const isValidBinary = Type.isBinary(pattern);
-
-      const isValidList =
-        Type.isList(pattern) &&
-        pattern.data.length > 0 &&
-        pattern.data.every((p) => Type.isBinary(p));
-
-      // Check if pattern is valid before compiling
-      if (!isValidBinary && !isValidList) {
-        raiseInvalidPattern();
-      }
-
-      // Check for empty patterns
-      if (isValidBinary) {
-        Bitstring.maybeSetBytesFromText(pattern);
-
-        if (pattern.bytes.length === 0) {
-          raiseInvalidPattern();
-        }
-      } else if (isValidList) {
-        for (const p of pattern.data) {
-          Bitstring.maybeSetBytesFromText(p);
-
-          if (p.bytes.length === 0) {
-            raiseInvalidPattern();
-          }
-        }
-      }
+    if (!Erlang_Binary["_is_valid_pattern/1"](pattern)) {
+      raiseBadarg();
     }
 
     // Pre-compile pattern once before loop to avoid recompilation on each match
-    const compiledPattern = isCompiledPattern
+    const compiledPattern = Type.isCompiledPattern(pattern)
       ? pattern
       : Erlang_Binary["compile_pattern/1"](pattern);
 
@@ -1300,9 +1271,7 @@ const Erlang_Binary = {
 
     // Validate scope doesn't extend beyond subject
     if (scopeStart + effectiveLength > subject.bytes.length) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-      );
+      raiseBadarg();
     }
 
     const scopeEnd = scopeStart + effectiveLength;
@@ -1410,7 +1379,7 @@ const Erlang_Binary = {
     return Type.list(trimmedResults);
   },
   // End split/3
-  // Deps: [:binary._parse_search_opts/2, :binary.compile_pattern/1, :binary.match/3]
+  // Deps: [:binary._is_valid_pattern/1, :binary._parse_search_opts/1, :binary.compile_pattern/1, :binary.match/3]
 };
 
 export default Erlang_Binary;

@@ -56,11 +56,10 @@ defmodule HologramFeatureTests.FunctionCalls.AnonymousFunctionTest do
     |> assert_text(css("#result"), "{3, 4, {1, 2}}")
   end
 
-  # TODO: client error message for this case is inconsistent with server error message
   feature "arity invalid, called with no args", %{session: session} do
     assert_client_error session,
                         BadArityError,
-                        "anonymous function with arity 2 called with no arguments",
+                        ~r"^#Function<\d+\.\d+/2 in #{Regex.escape(inspect(AnonymousFunctionPage))}\.action/3> with arity 2 called with no arguments$",
                         fn ->
                           session
                           |> visit(AnonymousFunctionPage)
@@ -68,11 +67,10 @@ defmodule HologramFeatureTests.FunctionCalls.AnonymousFunctionTest do
                         end
   end
 
-  # TODO: client error message for this case is inconsistent with server error message
   feature "arity invalid, called with single arg", %{session: session} do
     assert_client_error session,
                         BadArityError,
-                        "anonymous function with arity 2 called with 1 argument (:a)",
+                        ~r"^#Function<\d+\.\d+/2 in #{Regex.escape(inspect(AnonymousFunctionPage))}\.action/3> with arity 2 called with 1 argument \(:a\)$",
                         fn ->
                           session
                           |> visit(AnonymousFunctionPage)
@@ -80,11 +78,10 @@ defmodule HologramFeatureTests.FunctionCalls.AnonymousFunctionTest do
                         end
   end
 
-  # TODO: client error message for this case is inconsistent with server error message
   feature "arity invalid, called with multiple args", %{session: session} do
     assert_client_error session,
                         BadArityError,
-                        "anonymous function with arity 1 called with 2 arguments (:a, :b)",
+                        ~r"^#Function<\d+\.\d+/1 in #{Regex.escape(inspect(AnonymousFunctionPage))}\.action/3> with arity 1 called with 2 arguments \(:a, :b\)$",
                         fn ->
                           session
                           |> visit(AnonymousFunctionPage)
@@ -92,11 +89,13 @@ defmodule HologramFeatureTests.FunctionCalls.AnonymousFunctionTest do
                         end
   end
 
-  # TODO: client error message for this case is inconsistent with server error message
   feature "no matching clause", %{session: session} do
     assert_client_error session,
                         FunctionClauseError,
-                        build_function_clause_error_msg("anonymous fn/2", [5, 6]),
+                        build_function_clause_error_msg(
+                          "anonymous fn/2 in #{inspect(AnonymousFunctionPage)}.action/3",
+                          [5, 6]
+                        ),
                         fn ->
                           session
                           |> visit(AnonymousFunctionPage)

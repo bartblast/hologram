@@ -39,6 +39,7 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
     </p>
     <p>
       <strong>Stacktrace</strong>
+      <button $click="reraise_stacktrace"> Reraise stacktrace </button>
       <button $click="stacktrace"> Stacktrace </button>
     </p>
     <p>
@@ -186,6 +187,21 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
     after
       nil
     end
+  end
+
+  def action(:reraise_stacktrace, _params, component) do
+    result =
+      try do
+        try do
+          raise "bang"
+        rescue
+          error -> reraise error, __STACKTRACE__
+        end
+      rescue
+        _exception -> {:reraise_stacktrace, __STACKTRACE__}
+      end
+
+    put_state(component, :result, result)
   end
 
   def action(:rescue_bare_reason, _params, component) do

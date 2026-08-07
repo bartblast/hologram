@@ -14,27 +14,38 @@ import Type from "../type.mjs";
 const Erlang_Sets = {
   // Start _validate_opts/1
   "_validate_opts/1": (opts) => {
+    // The server reads the version option with proplists:get_value/3, so
+    // its clause mismatch reports that identity.
     if (!Type.isList(opts)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":proplists.get_value/3", [
-          Type.atom("version"),
-          opts,
-          Type.integer(2),
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("proplists", "get_value", 3, [
+        Type.atom("version"),
+        opts,
+        Type.integer(2),
+      ]);
     }
 
-    if (Type.isImproperList(opts)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":proplists.get_value/3"),
-      );
-    }
+    // The server reads the pairs one at a time and answers as soon as it finds
+    // the option, so an improper list only fails when the read runs past the
+    // last pair without having found one - which is where its recursion is
+    // handed the tail in place of a list. Options carrying the version are
+    // answered before the tail is ever reached.
+    const improper = Type.isImproperList(opts);
+    const pairs = improper ? Type.list(opts.data.slice(0, -1)) : opts;
 
     const versionOptTuple = Erlang_Lists["keyfind/3"](
       Type.atom("version"),
       Type.integer(1),
-      opts,
+      pairs,
     );
+
+    if (improper && Type.isFalse(versionOptTuple)) {
+      // The failed call's second arg is the tail the recursion reached.
+      Interpreter.raiseFunctionClauseError("proplists", "get_value", 3, [
+        Type.atom("version"),
+        opts.data.at(-1),
+        Type.integer(2),
+      ]);
+    }
 
     if (Type.isFalse(versionOptTuple)) {
       throw new HologramInterpreterError(
@@ -62,12 +73,10 @@ const Erlang_Sets = {
   // Start add_element/2
   "add_element/2": (element, set) => {
     if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.add_element/2", [
-          element,
-          set,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("sets", "add_element", 2, [
+        element,
+        set,
+      ]);
     }
 
     return Erlang_Maps["put/3"](element, Type.list(), set);
@@ -78,12 +87,10 @@ const Erlang_Sets = {
   // Start del_element/2
   "del_element/2": (element, set) => {
     if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.del_element/2", [
-          element,
-          set,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("sets", "del_element", 2, [
+        element,
+        set,
+      ]);
     }
 
     return Erlang_Maps["remove/2"](element, set);
@@ -94,20 +101,14 @@ const Erlang_Sets = {
   // Start filter/2
   "filter/2": (fun, set) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1 || !Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.filter/2", [fun, set]),
-      );
+      Interpreter.raiseFunctionClauseError("sets", "filter", 2, [fun, set]);
     }
 
     const predicate = ([key, _value]) => {
       const result = Interpreter.callAnonymousFunction(fun, [key]);
 
       if (!Type.isBoolean(result)) {
-        Interpreter.raiseErlangError(
-          Interpreter.buildErlangErrorMsg(
-            `{:bad_filter, ${Interpreter.inspect(result)}}`,
-          ),
-        );
+        Erlang["error/1"](Type.tuple([Type.atom("bad_filter"), result]));
       }
 
       return Type.isTrue(result);
@@ -116,18 +117,16 @@ const Erlang_Sets = {
     return Type.map(Object.values(set.data).filter(predicate));
   },
   // End filter/2
-  // Deps: []
+  // Deps: [:erlang.error/1]
 
   // Start fold/3
   "fold/3": (fun, initialAcc, set) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2 || !Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3", [
-          fun,
-          initialAcc,
-          set,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("sets", "fold", 3, [
+        fun,
+        initialAcc,
+        set,
+      ]);
     }
 
     const elements = Erlang_Maps["keys/1"](set);
@@ -150,11 +149,11 @@ const Erlang_Sets = {
   // Start intersection/2
   "intersection/2": (set1, set2) => {
     if (!Type.isMap(set1) || !Type.isMap(set2)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [
-          !Type.isMap(set1) ? set1 : set2,
-        ]),
-      );
+      // The server sizes both sets first, so its clause mismatch reports
+      // sets:size/1.
+      Interpreter.raiseFunctionClauseError("sets", "size", 1, [
+        !Type.isMap(set1) ? set1 : set2,
+      ]);
     }
 
     const encodedKeys1 = new Set(Object.keys(set1.data));
@@ -174,11 +173,11 @@ const Erlang_Sets = {
   // Start is_disjoint/2
   "is_disjoint/2": (set1, set2) => {
     if (!Type.isMap(set1) || !Type.isMap(set2)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [
-          !Type.isMap(set1) ? set1 : set2,
-        ]),
-      );
+      // The server sizes both sets first, so its clause mismatch reports
+      // sets:size/1.
+      Interpreter.raiseFunctionClauseError("sets", "size", 1, [
+        !Type.isMap(set1) ? set1 : set2,
+      ]);
     }
 
     const encodedKeys1 = new Set(Object.keys(set1.data));
@@ -192,12 +191,10 @@ const Erlang_Sets = {
   // Start is_element/2
   "is_element/2": (element, set) => {
     if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.is_element/2", [
-          element,
-          set,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("sets", "is_element", 2, [
+        element,
+        set,
+      ]);
     }
 
     return Erlang_Maps["is_key/2"](element, set);
@@ -208,9 +205,10 @@ const Erlang_Sets = {
   // Start is_subset/2
   "is_subset/2": (set1, set2) => {
     if (!Type.isMap(set1)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3"),
-      );
+      // The server folds over the first set, so its clause mismatch reports
+      // sets:fold/3. The failed call's args contain a sets-internal fun the
+      // client cannot mirror, so the frame carries the bare arity.
+      Interpreter.raiseFunctionClauseError("sets", "fold", 3);
     }
 
     if (Object.keys(set1.data).length === 0) {
@@ -220,12 +218,12 @@ const Erlang_Sets = {
     const set1Items = Erlang_Sets["to_list/1"](set1).data;
 
     if (!Type.isMap(set2)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.is_element/2", [
-          set1Items[0],
-          set2,
-        ]),
-      );
+      // The server checks membership element by element, so its clause
+      // mismatch reports sets:is_element/2 with the first element.
+      Interpreter.raiseFunctionClauseError("sets", "is_element", 2, [
+        set1Items[0],
+        set2,
+      ]);
     }
 
     return Type.boolean(
@@ -248,9 +246,7 @@ const Erlang_Sets = {
   // Start size/1
   "size/1": (set) => {
     if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [set]),
-      );
+      Interpreter.raiseFunctionClauseError("sets", "size", 1, [set]);
     }
 
     return Erlang["map_size/1"](set);
@@ -261,9 +257,10 @@ const Erlang_Sets = {
   // Start subtract/2
   "subtract/2": (set1, set2) => {
     if (!Type.isMap(set1)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.filter/2"),
-      );
+      // The server filters the first set, so its clause mismatch reports
+      // sets:filter/2. The failed call's args contain a sets-internal fun
+      // the client cannot mirror, so the frame carries the bare arity.
+      Interpreter.raiseFunctionClauseError("sets", "filter", 2);
     }
 
     if (Object.keys(set1.data).length === 0) {
@@ -273,12 +270,12 @@ const Erlang_Sets = {
     if (!Type.isMap(set2)) {
       const firstElement = Object.values(set1.data)[0][0];
 
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.is_element/2", [
-          firstElement,
-          set2,
-        ]),
-      );
+      // The server checks membership element by element, so its clause
+      // mismatch reports sets:is_element/2 with the first element.
+      Interpreter.raiseFunctionClauseError("sets", "is_element", 2, [
+        firstElement,
+        set2,
+      ]);
     }
 
     const encodedKeys1 = new Set(Object.keys(set1.data));
@@ -298,9 +295,7 @@ const Erlang_Sets = {
   // Start to_list/1
   "to_list/1": (set) => {
     if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.to_list/1", [set]),
-      );
+      Interpreter.raiseFunctionClauseError("sets", "to_list", 1, [set]);
     }
 
     return Erlang_Maps["keys/1"](set);
@@ -311,11 +306,11 @@ const Erlang_Sets = {
   // Start union/2
   "union/2": (set1, set2) => {
     if (!Type.isMap(set1) || !Type.isMap(set2)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [
-          !Type.isMap(set1) ? set1 : set2,
-        ]),
-      );
+      // The server sizes both sets first, so its clause mismatch reports
+      // sets:size/1.
+      Interpreter.raiseFunctionClauseError("sets", "size", 1, [
+        !Type.isMap(set1) ? set1 : set2,
+      ]);
     }
 
     const encodedKeys1 = new Set(Object.keys(set1.data));

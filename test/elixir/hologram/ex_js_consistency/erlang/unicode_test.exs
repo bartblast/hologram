@@ -10,9 +10,71 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
   @moduletag :consistency
 
-  test "characters_to_binary/1" do
-    assert :unicode.characters_to_binary("全息图") ==
-             :unicode.characters_to_binary("全息图", :utf8, :utf8)
+  describe "characters_to_binary/1" do
+    test "returns the same result as characters_to_binary/3 with utf8 encodings" do
+      assert :unicode.characters_to_binary("全息图") ==
+               :unicode.characters_to_binary("全息图", :utf8, :utf8)
+    end
+
+    # Bytes that don't decode aren't characters: the server names what it read
+    # before the break and what was left over, rather than handing the bytes
+    # back.
+    test "answers what it read and what was left when the bytes don't decode" do
+      assert :unicode.characters_to_binary(<<0xFF, 0xFE>>) == {:error, "", <<255, 254>>}
+    end
+
+    test "answers incomplete when the bytes break off mid-character" do
+      assert :unicode.characters_to_binary(<<"abc", 0xC3>>) == {:incomplete, "abc", <<195>>}
+    end
+
+    test "leaves the chardata it hadn't read in the rest" do
+      assert :unicode.characters_to_binary([<<0xFF>>, "rest"]) ==
+               {:error, "", [<<255>>, "rest"]}
+    end
+
+    # A list holding nothing but the bytes that broke is answered as those
+    # bytes, where a longer one keeps its list form.
+    # An element that breaks partway through is read up to the break, so the
+    # bytes before it belong with what came before rather than with the rest.
+    test "reads a binary element up to the byte that breaks it" do
+      assert :unicode.characters_to_binary([<<"a", 0xFF>>]) == {:error, "a", <<0xFF>>}
+    end
+
+    test "answers a list holding only the broken bytes as those bytes" do
+      assert :unicode.characters_to_binary([<<0xFF>>]) == {:error, "", <<255>>}
+    end
+
+    # Chardata admits a binary as the tail of an improper list, so a list that
+    # ends in one is read, not turned down.
+    test "reads an improper list whose tail is a binary" do
+      assert :unicode.characters_to_binary([?a | <<"b">>]) == "ab"
+    end
+
+    test "raises ArgumentError for an improper list whose tail is not a binary" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_binary([?a | ?b])
+      end
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_binary(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_binary, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
   end
 
   describe "characters_to_binary/3" do
@@ -159,6 +221,38 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
       assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
     end
+
+    test "input contains a UTF-16 surrogate code point" do
+      input = [
+        ?a,
+        <<"bcd">>,
+        0xD800,
+        <<"efg">>
+      ]
+
+      expected = {:error, <<"abcd">>, [0xD800, <<"efg">>]}
+
+      assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_binary(chardata, :utf8, :utf8)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_binary, [:abc, :utf8, :utf8], location} =
+               wrap_term(top_frame)
+
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
   end
 
   describe "characters_to_list/1" do
@@ -247,6 +341,15 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
              ]
     end
 
+    # An element that breaks partway through is read up to the break, so the
+    # bytes before it belong with what came before rather than with the rest.
+    test "reads a binary element up to the byte that breaks it" do
+      input = [<<"a", 0xFF>>]
+      expected = {:error, ~c"a", [<<0xFF>>]}
+
+      assert :unicode.characters_to_list(input) == expected
+    end
+
     test "returns error tuple on invalid UTF-8 in binary" do
       invalid_binary = <<255, 255>>
       input = ["abc", invalid_binary]
@@ -273,6 +376,14 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       input = ["a", invalid_binary]
 
       expected = {:error, ~c"a", [invalid_binary]}
+
+      assert :unicode.characters_to_list(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate range in list" do
+      input = ["a", 0xD800]
+
+      expected = {:error, ~c"a", [0xD800]}
 
       assert :unicode.characters_to_list(input) == expected
     end
@@ -353,11 +464,43 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_list(input) == expected
     end
 
+    # Chardata admits a binary as the tail of an improper list, so a list that
+    # ends in one is read, not turned down.
+    test "reads an improper list whose tail is a binary" do
+      assert :unicode.characters_to_list([?a | <<"b">>]) == ~c"ab"
+    end
+
     test "returns error tuple on negative integer code point" do
       input = [-1]
       expected = {:error, [], [-1]}
 
       assert :unicode.characters_to_list(input) == expected
+    end
+
+    test "raises ArgumentError for an improper list whose tail is not a binary" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_list([?a | ?b])
+      end
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_list(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_list, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -518,6 +661,42 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfc_binary(input)
       end
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_nfc_binary(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_nfc_binary, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
+
+    test "error frame carries args and error_info for invalid codepoints" do
+      chardata = wrap_term([99_999_999_999])
+
+      top_frame =
+        try do
+          :unicode.characters_to_nfc_binary(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_nfc_binary, [[99_999_999_999]], location} =
+               wrap_term(top_frame)
+
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -702,6 +881,12 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       end
     end
 
+    # Chardata admits a binary as the tail of an improper list, so a list that
+    # ends in one is read, not turned down.
+    test "reads an improper list whose tail is a binary" do
+      assert :unicode.characters_to_nfc_list([?a | <<"b">>]) == ~c"ab"
+    end
+
     test "raises ArgumentError on negative integer code point" do
       input = [-1]
 
@@ -711,6 +896,32 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfc_list(input)
       end
+    end
+
+    test "raises ArgumentError for an improper list whose tail is not a binary" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfc_list([?a | ?b])
+      end
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_nfc_list(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_nfc_list, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -874,6 +1085,23 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfd_binary(input)
       end
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_nfd_binary(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_nfd_binary, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -1081,6 +1309,23 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfkc_binary(input)
       end
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_nfkc_binary(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_nfkc_binary, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 
@@ -1358,6 +1603,23 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfkd_binary(input)
       end
+    end
+
+    test "error frame carries args and error_info" do
+      chardata = wrap_term(:abc)
+
+      top_frame =
+        try do
+          :unicode.characters_to_nfkd_binary(chardata)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:unicode, :characters_to_nfkd_binary, [:abc], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 end

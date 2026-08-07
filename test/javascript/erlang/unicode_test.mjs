@@ -3,24 +3,37 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  buildArgumentErrorMsg,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/unicode_test.exs
 // Always update both together.
 
+function unicodeErrorFrame(functionName, args) {
+  return {
+    module: "unicode",
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo: Type.map([
+      [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+    ]),
+  };
+}
+
 describe("Erlang_Unicode", () => {
   describe("characters_to_binary/1", () => {
-    it("delegates to :unicode.characters_to_binary/3", () => {
+    it("returns the same result as characters_to_binary/3 with utf8 encodings", () => {
       const input = Type.bitstring("全息图");
       const encoding = Type.atom("utf8");
 
@@ -33,6 +46,126 @@ describe("Erlang_Unicode", () => {
       );
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    // Bytes that don't decode aren't characters: the server names what it read
+    // before the break and what was left over, rather than handing the bytes
+    // back.
+    it("answers what it read and what was left when the bytes don't decode", () => {
+      const input = Bitstring.fromBytes([0xff, 0xfe]);
+
+      const result = Erlang_Unicode["characters_to_binary/1"](input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring(""),
+        Bitstring.fromBytes([0xff, 0xfe]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("answers incomplete when the bytes break off mid-character", () => {
+      const input = Bitstring.fromBytes([0x61, 0x62, 0x63, 0xc3]);
+
+      const result = Erlang_Unicode["characters_to_binary/1"](input);
+
+      const expected = Type.tuple([
+        Type.atom("incomplete"),
+        Type.bitstring("abc"),
+        Bitstring.fromBytes([0xc3]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("leaves the chardata it hadn't read in the rest", () => {
+      const invalid = Bitstring.fromBytes([0xff]);
+      const rest = Type.bitstring("rest");
+      const input = Type.list([invalid, rest]);
+
+      const result = Erlang_Unicode["characters_to_binary/1"](input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring(""),
+        Type.list([invalid, rest]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    // A list holding nothing but the bytes that broke is answered as those
+    // bytes, where a longer one keeps its list form.
+    // An element that breaks partway through is read up to the break, so the
+    // bytes before it belong with what came before rather than with the rest.
+    it("reads a binary element up to the byte that breaks it", () => {
+      const input = Type.list([Bitstring.fromBytes([97, 255])]);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        Bitstring.fromBytes([255]),
+      ]);
+
+      assert.deepStrictEqual(
+        Erlang_Unicode["characters_to_binary/1"](input),
+        expected,
+      );
+    });
+
+    it("answers a list holding only the broken bytes as those bytes", () => {
+      const invalid = Bitstring.fromBytes([0xff]);
+
+      const result = Erlang_Unicode["characters_to_binary/1"](
+        Type.list([invalid]),
+      );
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring(""),
+        invalid,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    // Chardata admits a binary as the tail of an improper list, so a list that
+    // ends in one is read, not turned down.
+    it("reads an improper list whose tail is a binary", () => {
+      const input = Type.improperList([Type.integer(97), Type.bitstring("b")]);
+
+      assert.deepStrictEqual(
+        Erlang_Unicode["characters_to_binary/1"](input),
+        Type.bitstring("ab"),
+      );
+    });
+
+    it("raises ArgumentError for an improper list whose tail is not a binary", () => {
+      const input = Type.improperList([Type.integer(97), Type.integer(98)]);
+
+      assertBoxedError(
+        () => Erlang_Unicode["characters_to_binary/1"](input),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        Erlang_Unicode["characters_to_binary/1"](Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_binary",
+          Type.list([Type.atom("abc")]),
+        ),
+      ]);
     });
   });
 
@@ -87,10 +220,7 @@ describe("Erlang_Unicode", () => {
         () =>
           characters_to_binary(Type.bitstring([1, 0, 1]), utf8Atom, utf8Atom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -118,10 +248,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => characters_to_binary(input, utf8Atom, utf8Atom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -147,10 +274,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => characters_to_binary(input, utf8Atom, utf8Atom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -158,10 +282,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => characters_to_binary(Type.atom("abc"), utf8Atom, utf8Atom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -207,6 +328,25 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("input contains a UTF-16 surrogate code point", () => {
+      const input = Type.list([
+        Type.integer(97), // a
+        Type.bitstring("bcd"),
+        Type.integer(0xd800),
+        Type.bitstring("efg"),
+      ]);
+
+      const result = characters_to_binary(input, utf8Atom, utf8Atom);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("abcd"),
+        Type.list([Type.integer(0xd800), Type.bitstring("efg")]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     // This is temporary, until the related TODO is implemented.
     it("input encoding is different than :utf8", () => {
       assert.throw(
@@ -223,6 +363,23 @@ describe("Erlang_Unicode", () => {
         HologramInterpreterError,
         "encodings other than utf8 are not yet implemented in Hologram",
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        characters_to_binary(Type.atom("abc"), utf8Atom, utf8Atom);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_binary",
+          Type.list([Type.atom("abc"), utf8Atom, utf8Atom]),
+        ),
+      ]);
     });
   });
 
@@ -417,6 +574,20 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // An element that breaks partway through is read up to the break, so the
+    // bytes before it belong with what came before rather than with the rest.
+    it("reads a binary element up to the byte that breaks it", () => {
+      const input = Type.list([Bitstring.fromBytes([97, 255])]);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list([Type.integer(97)]),
+        Type.list([Bitstring.fromBytes([255])]),
+      ]);
+
+      assert.deepStrictEqual(fun(input), expected);
+    });
+
     it("returns error tuple on invalid UTF-8 in binary", () => {
       const input = Type.list([
         Type.bitstring("abc"),
@@ -477,6 +648,20 @@ describe("Erlang_Unicode", () => {
         Type.atom("error"),
         Type.list([Type.integer(97)]),
         Type.list([expectedRest]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects UTF-16 surrogate range in list", () => {
+      const input = Type.list([Type.bitstring("a"), Type.integer(0xd800)]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list([Type.integer(97)]),
+        Type.list([Type.integer(0xd800)]),
       ]);
 
       assert.deepStrictEqual(result, expected);
@@ -563,10 +748,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -576,10 +758,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -589,10 +768,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -610,6 +786,14 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // Chardata admits a binary as the tail of an improper list, so a list that
+    // ends in one is read, not turned down.
+    it("reads an improper list whose tail is a binary", () => {
+      const input = Type.improperList([Type.integer(97), Type.bitstring("b")]);
+
+      assert.deepStrictEqual(fun(input), Type.charlist("ab"));
+    });
+
     it("returns error tuple on negative integer code point", () => {
       const input = Type.list([Type.integer(-1)]);
 
@@ -622,6 +806,30 @@ describe("Erlang_Unicode", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError for an improper list whose tail is not a binary", () => {
+      const input = Type.improperList([Type.integer(97), Type.integer(98)]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame("characters_to_list", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -815,10 +1023,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -828,10 +1033,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -841,10 +1043,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -854,10 +1053,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -871,11 +1067,41 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_nfc_binary",
+          Type.list([Type.atom("abc")]),
+        ),
+      ]);
+    });
+
+    it("error frame carries args and error_info for invalid codepoints", () => {
+      const input = Type.list([Type.integer(99999999999)]);
+
+      let caught;
+
+      try {
+        fun(input);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame("characters_to_nfc_binary", Type.list([input])),
+      ]);
     });
   });
 
@@ -1120,10 +1346,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1133,10 +1356,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1146,10 +1366,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1159,10 +1376,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1175,11 +1389,16 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
+    });
+
+    // Chardata admits a binary as the tail of an improper list, so a list that
+    // ends in one is read, not turned down.
+    it("reads an improper list whose tail is a binary", () => {
+      const input = Type.improperList([Type.integer(97), Type.bitstring("b")]);
+
+      assert.deepStrictEqual(fun(input), Type.charlist("ab"));
     });
 
     it("raises ArgumentError on negative integer code point", () => {
@@ -1188,11 +1407,35 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
+    });
+
+    it("raises ArgumentError for an improper list whose tail is not a binary", () => {
+      const input = Type.improperList([Type.integer(97), Type.integer(98)]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_nfc_list",
+          Type.list([Type.atom("abc")]),
+        ),
+      ]);
     });
   });
 
@@ -1387,10 +1630,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1400,10 +1640,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1413,10 +1650,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1426,10 +1660,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1443,11 +1674,25 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_nfd_binary",
+          Type.list([Type.atom("abc")]),
+        ),
+      ]);
     });
   });
 
@@ -1696,10 +1941,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1709,10 +1951,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1722,10 +1961,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1735,10 +1971,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1748,10 +1981,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -1765,11 +1995,25 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_nfkc_binary",
+          Type.list([Type.atom("abc")]),
+        ),
+      ]);
     });
   });
 
@@ -2076,10 +2320,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -2089,10 +2330,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -2100,10 +2338,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(Type.integer(65)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -2113,10 +2348,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -2126,10 +2358,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
     });
 
@@ -2143,11 +2372,25 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
+        buildArgumentErrorMsg(1, "not valid character data (an iodata term)"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        unicodeErrorFrame(
+          "characters_to_nfkd_binary",
+          Type.list([Type.atom("abc")]),
+        ),
+      ]);
     });
   });
 });

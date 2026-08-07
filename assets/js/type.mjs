@@ -39,7 +39,10 @@ export default class Type {
     return Type.atom(`Elixir.${aliasStr}`);
   }
 
-  static anonymousFunction(arity, clauses, context) {
+  // name is the identity the BEAM gives a function defined inside another one,
+  // e.g. "-my_fun/1-fun-0-". The compiler emits it, so a function built by the
+  // client runtime rather than by transpiled code carries none.
+  static anonymousFunction(arity, clauses, context, name = null) {
     return {
       type: "anonymous_function",
       arity: arity,
@@ -47,6 +50,7 @@ export default class Type {
       capturedModule: null,
       clauses: clauses,
       context: Interpreter.cloneContext(context),
+      name: name,
       uniq: ERTS.funSequence.next(),
     };
   }
@@ -205,6 +209,8 @@ export default class Type {
       capturedModule: capturedModule,
       clauses: clauses,
       context: Interpreter.buildContext({module: context.module, vars: {}}),
+      // A capture is named by what it captures, so it needs no fun name.
+      name: null,
       uniq: ERTS.funSequence.next(),
     };
   }
@@ -308,27 +314,6 @@ export default class Type {
     return term.type === "integer";
   }
 
-  static isIterator(term) {
-    if (Type.isTuple(term) && term.data.length === 3) {
-      return true;
-    }
-
-    if (
-      Type.isImproperList(term) &&
-      term.data.length === 2 &&
-      Type.isInteger(term.data[0]) &&
-      Type.isMap(term.data[1])
-    ) {
-      return true;
-    }
-
-    if (Interpreter.isEqual(term, Type.atom("none"))) {
-      return true;
-    }
-
-    return false;
-  }
-
   static isKeywordList(term) {
     if (!Type.isList(term)) {
       return false;
@@ -382,6 +367,17 @@ export default class Type {
     return Type.isStruct(term, "Range");
   }
 
+  // Returns true when the term is a tuple of the given arity with the given
+  // atom as its first element (the shape of an Erlang record).
+  static isRecordTuple(term, tag, arity) {
+    return (
+      Type.isTuple(term) &&
+      term.data.length === arity &&
+      term.data[0]?.type === "atom" &&
+      term.data[0].value === tag
+    );
+  }
+
   static isReference(term) {
     return term.type === "reference";
   }
@@ -433,6 +429,10 @@ export default class Type {
     }, {});
 
     return {type: "map", data: hashTableWithMetadata};
+  }
+
+  static matchPattern(left, right) {
+    return {type: "match_pattern", left: left, right: right};
   }
 
   static matchPlaceholder() {

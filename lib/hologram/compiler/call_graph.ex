@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
+  alias Hologram.Component
   alias Hologram.Realtime
   alias Hologram.Reflection
 
@@ -15,11 +16,17 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type t :: %CallGraph{pid: pid}
 
+  @type broadcast_caller_analysis :: %{
+          dispatch_types: MapSet.t(module),
+          referenced_components: [module]
+        }
+
   @type edge :: {vertex, vertex}
 
   @type server_callback_analysis :: %{
           dispatch_types: MapSet.t(module),
-          reflection_mfas: [mfa]
+          reflection_mfas: [mfa],
+          server_referenced_components: [module]
         }
 
   @type vertex :: module | mfa
@@ -29,7 +36,14 @@ defmodule Hologram.Compiler.CallGraph do
   @dialyzer {:no_opaque, {:start_reachable_state, 3}}
 
   # Functions that broadcast action params from arbitrary server code to connected clients.
-  @broadcast_action_mfas [
+  # The Component helpers queue a broadcast on the server struct, which the framework
+  # flushes after the handler returns - they reach the same audience as the immediate
+  # Realtime functions, so their callers are analysed the same way.
+  @broadcast_mfas [
+    {Component, :put_broadcast, 3},
+    {Component, :put_broadcast, 4},
+    {Component, :put_broadcast_except, 4},
+    {Component, :put_broadcast_except, 5},
     {Realtime, :broadcast_action, 2},
     {Realtime, :broadcast_action, 3},
     {Realtime, :broadcast_action_except, 3},
@@ -52,7 +66,9 @@ defmodule Hologram.Compiler.CallGraph do
     Tuple
   ]
 
-  # These edges can't be discovered from static IR analysis.
+  # Edges for dynamic dispatch: the caller reads the callee module from data
+  # (e.g. a struct's calendar field), so static IR analysis can't see the
+  # target. Each edge points at the known implementation.
   @dynamic_dispatch_edges [
     {{Date, :day_of_era, 1}, {Calendar.ISO, :day_of_era, 3}},
     {{Date, :day_of_week, 2}, {Calendar.ISO, :day_of_week, 4}},
@@ -99,16 +115,36 @@ defmodule Hologram.Compiler.CallGraph do
     {{Time, :to_string, 1}, {Calendar.ISO, :time_to_string, 4}}
   ]
 
+  # Each group names the client-runtime mechanism that needs its edges.
+  # They can't be discovered from static IR analysis, because the target
+  # module is read from data planted by manually ported JavaScript code -
+  # e.g. the error_info entry that maps.mjs raise sites put on the raising
+  # stacktrace frame, which ErlangError.normalize/2 applies at format time.
+  # Deps annotations can't carry these either: the raise sites reference the
+  # format module only as data, and the format function name is implicit
+  # (the :format_error default), so the MFA is not visible in the JS code.
+  # Exception.blame/3 dispatches the same way, on the module of the exception
+  # struct it is given.
+  @edges_used_by_client_runtime [
+    error_message_derivation: [
+      {{ErlangError, :normalize, 2}, {:erl_erts_errors, :format_bs_fail, 2}},
+      {{ErlangError, :normalize, 2}, {:erl_erts_errors, :format_error, 2}},
+      {{ErlangError, :normalize, 2}, {:erl_kernel_errors, :format_error, 2}},
+      {{ErlangError, :normalize, 2}, {:erl_stdlib_errors, :format_error, 2}},
+      {{Exception, :blame, 3}, {ArithmeticError, :blame, 2}}
+    ]
+  ]
+
   # TODO: Determine automatically based on deps annotations next to function implementations
   @erlang_mfa_edges [
     {{:binary, :compile_pattern, 1}, {:erlang, :make_ref, 0}},
     {{:binary, :match, 2}, {:binary, :match, 3}},
     {{:binary, :match, 3}, {:binary, :_aho_corasick_search, 3}},
     {{:binary, :match, 3}, {:binary, :_boyer_moore_search, 4}},
-    {{:binary, :match, 3}, {:binary, :_parse_search_opts, 2}},
+    {{:binary, :match, 3}, {:binary, :_parse_search_opts, 1}},
     {{:binary, :match, 3}, {:binary, :compile_pattern, 1}},
     {{:binary, :matches, 2}, {:binary, :matches, 3}},
-    {{:binary, :matches, 3}, {:binary, :_parse_search_opts, 2}},
+    {{:binary, :matches, 3}, {:binary, :_parse_search_opts, 1}},
     {{:binary, :matches, 3}, {:binary, :compile_pattern, 1}},
     {{:binary, :matches, 3}, {:binary, :match, 3}},
     {{:binary, :replace, 3}, {:binary, :replace, 4}},
@@ -117,12 +153,56 @@ defmodule Hologram.Compiler.CallGraph do
     {{:binary, :replace, 4}, {:binary, :split, 3}},
     {{:binary, :replace, 4}, {:erlang, :iolist_to_binary, 1}},
     {{:binary, :split, 2}, {:binary, :split, 3}},
-    {{:binary, :split, 3}, {:binary, :_parse_search_opts, 2}},
+    {{:binary, :split, 3}, {:binary, :_is_valid_pattern, 1}},
+    {{:binary, :split, 3}, {:binary, :_parse_search_opts, 1}},
     {{:binary, :split, 3}, {:binary, :compile_pattern, 1}},
     {{:binary, :split, 3}, {:binary, :match, 3}},
     {{:elixir_aliases, :safe_concat, 1}, {:elixir_aliases, :concat, 1}},
     {{:elixir_locals, :yank, 2}, {:maps, :remove, 2}},
     {{:elixir_utils, :jaro_similarity, 2}, {:unicode_util, :cp, 1}},
+    {{:erl_erts_errors, :_format_erlang_error, 3}, {:erlang, :_is_valid_time_unit, 1}},
+    {{:erl_erts_errors, :_format_error_map, 3}, {:erl_erts_errors, :_expand_error, 1}},
+    {{:erl_erts_errors, :format_error, 2}, {:erl_erts_errors, :_format_erlang_error, 3}},
+    {{:erl_erts_errors, :format_error, 2}, {:erl_erts_errors, :_format_error_map, 3}},
+    {{:erl_kernel_errors, :_format_error_map, 3}, {:erl_kernel_errors, :_expand_error, 1}},
+    {{:erl_kernel_errors, :format_error, 2}, {:erl_kernel_errors, :_format_error_map, 3}},
+    {{:erl_kernel_errors, :format_error, 2}, {:erl_kernel_errors, :_format_os_error, 3}},
+    {{:erl_stdlib_errors, :_format_binary_error, 3}, {:erl_stdlib_errors, :_must_be_binary, 1}},
+    {{:erl_stdlib_errors, :_format_binary_error, 3},
+     {:erl_stdlib_errors, :_must_be_binary_replacement, 1}},
+    {{:erl_stdlib_errors, :_format_binary_error, 3},
+     {:erl_stdlib_errors, :_must_be_non_neg_integer, 1}},
+    {{:erl_stdlib_errors, :_format_binary_error, 3}, {:erl_stdlib_errors, :_must_be_pattern, 1}},
+    {{:erl_stdlib_errors, :_format_binary_error, 3}, {:erl_stdlib_errors, :_must_be_position, 1}},
+    {{:erl_stdlib_errors, :_format_error_map, 3}, {:erl_stdlib_errors, :_expand_error, 1}},
+    {{:erl_stdlib_errors, :_format_lists_error, 2}, {:erl_stdlib_errors, :_must_be_list, 1}},
+    {{:erl_stdlib_errors, :_format_maps_error, 2}, {:erl_stdlib_errors, :_must_be_fun, 2}},
+    {{:erl_stdlib_errors, :_format_maps_error, 2}, {:erl_stdlib_errors, :_must_be_list, 1}},
+    {{:erl_stdlib_errors, :_format_maps_error, 2}, {:erl_stdlib_errors, :_must_be_map, 1}},
+    {{:erl_stdlib_errors, :_format_maps_error, 2},
+     {:erl_stdlib_errors, :_must_be_map_or_iter, 1}},
+    {{:erl_stdlib_errors, :_format_math_error, 2}, {:erl_stdlib_errors, :_must_be_number, 1}},
+    {{:erl_stdlib_errors, :_format_re_error, 3}, {:erl_stdlib_errors, :_must_be_iodata, 1}},
+    {{:erl_stdlib_errors, :_format_re_error, 3}, {:erl_stdlib_errors, :_must_be_regexp, 1}},
+    {{:erl_stdlib_errors, :_format_re_error, 3}, {:erl_stdlib_errors, :_re_compile_error, 1}},
+    {{:erl_stdlib_errors, :_format_unicode_error, 2},
+     {:erl_stdlib_errors, :_unicode_char_data, 1}},
+    {{:erl_stdlib_errors, :_format_unicode_error, 2},
+     {:erl_stdlib_errors, :_unicode_encoding, 1}},
+    {{:erl_stdlib_errors, :_must_be_iodata, 1}, {:erl_stdlib_errors, :_is_iodata, 1}},
+    {{:erl_stdlib_errors, :_must_be_map_or_iter, 1}, {:maps, :is_iterator_valid, 1}},
+    {{:erl_stdlib_errors, :_must_be_pattern, 1}, {:binary, :_is_valid_pattern, 1}},
+    {{:erl_stdlib_errors, :_must_be_regexp, 1}, {:erl_stdlib_errors, :_re_compile_error, 1}},
+    {{:erl_stdlib_errors, :_re_compile_error, 1}, {:erl_stdlib_errors, :_is_iodata, 1}},
+    {{:erl_stdlib_errors, :_re_compile_error, 1}, {:erlang, :iolist_to_binary, 1}},
+    {{:erl_stdlib_errors, :_unicode_char_data, 1}, {:unicode, :_chardata_to_utf8_binary, 1}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_binary_error, 3}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_error_map, 3}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_lists_error, 2}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_maps_error, 2}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_math_error, 2}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_re_error, 3}},
+    {{:erl_stdlib_errors, :format_error, 2}, {:erl_stdlib_errors, :_format_unicode_error, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
     {{:erlang, :>=, 2}, {:erlang, :==, 2}},
@@ -132,8 +212,9 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :binary_to_existing_atom, 1}, {:erlang, :binary_to_atom, 1}},
     {{:erlang, :binary_to_existing_atom, 2}, {:erlang, :binary_to_atom, 2}},
     {{:erlang, :binary_to_integer, 1}, {:erlang, :binary_to_integer, 2}},
-    {{:erlang, :convert_time_unit, 3}, {:erlang, :_validate_time_unit, 2}},
-    {{:erlang, :error, 1}, {:erlang, :error, 2}},
+    {{:erlang, :convert_time_unit, 3}, {:erlang, :_is_valid_time_unit, 1}},
+    {{:erlang, :error, 1}, {:erlang, :error, 3}},
+    {{:erlang, :error, 2}, {:erlang, :error, 3}},
     {{:erlang, :float_to_list, 2}, {:erlang, :float_to_binary, 2}},
     {{:erlang, :fun_info, 2}, {:erlang, :fun_info, 1}},
     {{:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2}},
@@ -143,7 +224,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :list_to_existing_atom, 1}, {:erlang, :list_to_atom, 1}},
     {{:erlang, :list_to_integer, 1}, {:erlang, :list_to_integer, 2}},
     {{:erlang, :map_get, 2}, {:maps, :get, 2}},
-    {{:erlang, :monotonic_time, 1}, {:erlang, :_validate_time_unit, 2}},
+    {{:erlang, :monotonic_time, 1}, {:erlang, :_is_valid_time_unit, 1}},
     {{:erlang, :monotonic_time, 1}, {:erlang, :convert_time_unit, 3}},
     {{:erlang, :monotonic_time, 1}, {:erlang, :monotonic_time, 0}},
     {{:erlang, :split_binary, 2}, {:erlang, :byte_size, 1}},
@@ -151,9 +232,10 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :system_time, 1}, {:os, :system_time, 1}},
     {{:erlang, :time_offset, 0}, {:erlang, :monotonic_time, 0}},
     {{:erlang, :time_offset, 0}, {:os, :system_time, 0}},
-    {{:erlang, :time_offset, 1}, {:erlang, :_validate_time_unit, 2}},
+    {{:erlang, :time_offset, 1}, {:erlang, :_is_valid_time_unit, 1}},
     {{:erlang, :time_offset, 1}, {:erlang, :convert_time_unit, 3}},
     {{:erlang, :time_offset, 1}, {:erlang, :time_offset, 0}},
+    {{:erlang, :unique_integer, 1}, {:erlang, :unique_integer, 0}},
     {{:filelib, :safe_relative_path, 2}, {:filename, :join, 1}},
     {{:filelib, :safe_relative_path, 2}, {:filename, :split, 1}},
     {{:filename, :_do_flatten, 2}, {:erlang, :atom_to_list, 1}},
@@ -179,21 +261,29 @@ defmodule Hologram.Compiler.CallGraph do
     {{:filename, :rootname, 2}, {:filename, :flatten, 1}},
     {{:filename, :split, 1}, {:erlang, :iolist_to_binary, 1}},
     {{:filename, :split, 1}, {:filename, :flatten, 1}},
-    {{:lists, :flatten, 2}, {:lists, :flatten, 1}},
-    {{:lists, :seq, 2}, {:lists, :seq, 3}},
+    {{:lists, :filter, 2}, {:erlang, :error, 1}},
+    {{:lists, :flatten, 1}, {:lists, :_do_flatten, 2}},
+    {{:lists, :flatten, 2}, {:lists, :_do_flatten, 2}},
     {{:lists, :keymember, 3}, {:lists, :keyfind, 3}},
     {{:lists, :keysort, 2}, {:erlang, :element, 2}},
-    {{:maps, :get, 2}, {:maps, :get, 3}},
+    {{:lists, :seq, 2}, {:lists, :seq, 3}},
     {{:maps, :take, 2}, {:maps, :get, 3}},
     {{:maps, :take, 2}, {:maps, :remove, 2}},
     {{:maps, :update, 3}, {:maps, :is_key, 2}},
     {{:maps, :update, 3}, {:maps, :put, 3}},
-    {{:os, :system_time, 1}, {:erlang, :_validate_time_unit, 2}},
+    {{:os, :system_time, 1}, {:erlang, :_is_valid_time_unit, 1}},
     {{:os, :system_time, 1}, {:erlang, :convert_time_unit, 3}},
     {{:os, :system_time, 1}, {:os, :system_time, 0}},
+    {{:re, :compile, 1}, {:re, :compile, 2}},
+    {{:re, :compile, 2}, {:erlang, :iolist_to_binary, 1}},
+    {{:re, :compile, 2}, {:erlang, :make_ref, 0}},
+    {{:re, :import, 1}, {:re, :compile, 2}},
+    {{:re, :run, 2}, {:re, :run, 3}},
+    {{:re, :run, 3}, {:erlang, :iolist_to_binary, 1}},
     {{:sets, :_validate_opts, 1}, {:lists, :keyfind, 3}},
     {{:sets, :add_element, 2}, {:maps, :put, 3}},
     {{:sets, :del_element, 2}, {:maps, :remove, 2}},
+    {{:sets, :filter, 2}, {:erlang, :error, 1}},
     {{:sets, :fold, 3}, {:maps, :keys, 1}},
     {{:sets, :from_list, 2}, {:maps, :from_keys, 2}},
     {{:sets, :from_list, 2}, {:sets, :_validate_opts, 1}},
@@ -206,24 +296,30 @@ defmodule Hologram.Compiler.CallGraph do
     {{:string, :find, 2}, {:string, :find, 3}},
     {{:string, :find, 3}, {:unicode, :characters_to_binary, 1}},
     {{:string, :jaro_similarity, 2}, {:string, :to_graphemes, 1}},
+    {{:string, :join, 2}, {:erlang, :error, 1}},
+    {{:string, :length, 1}, {:erlang, :error, 1}},
     {{:string, :length, 1}, {:unicode, :characters_to_binary, 1}},
     {{:string, :length, 1}, {:unicode_util, :gc, 1}},
     {{:string, :replace, 3}, {:string, :replace, 4}},
     {{:string, :replace, 4}, {:unicode, :characters_to_binary, 1}},
     {{:string, :split, 2}, {:string, :split, 3}},
     {{:string, :split, 3}, {:unicode, :characters_to_binary, 1}},
-    {{:string, :titlecase, 1}, {:lists, :flatten, 1}},
+    {{:string, :titlecase, 1}, {:erlang, :error, 1}},
     {{:string, :titlecase, 1}, {:unicode_util, :cp, 1}},
+    {{:string, :to_graphemes, 1}, {:erlang, :error, 1}},
     {{:string, :to_graphemes, 1}, {:unicode_util, :gc, 1}},
-    {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},
-    {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}},
-    {{:unicode, :characters_to_list, 1}, {:lists, :flatten, 1}},
-    {{:unicode, :characters_to_nfc_binary, 1}, {:unicode, :characters_to_binary, 3}},
+    {{:unicode, :_chardata_to_utf8_binary, 1}, {:unicode, :_flatten_chardata, 1}},
+    {{:unicode, :characters_to_binary, 1}, {:unicode, :_chardata_to_utf8_binary, 1}},
+    {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_list, 1}},
+    {{:unicode, :characters_to_binary, 3}, {:unicode, :_chardata_to_utf8_binary, 1}},
+    {{:unicode, :characters_to_binary, 3}, {:unicode, :characters_to_list, 1}},
+    {{:unicode, :characters_to_list, 1}, {:unicode, :_flatten_chardata, 1}},
+    {{:unicode, :characters_to_nfc_binary, 1}, {:unicode, :_chardata_to_utf8_binary, 1}},
     {{:unicode, :characters_to_nfc_list, 1}, {:unicode, :characters_to_nfc_binary, 1}},
-    {{:unicode, :characters_to_nfc_list, 1}, {:lists, :flatten, 1}},
-    {{:unicode, :characters_to_nfd_binary, 1}, {:unicode, :characters_to_binary, 3}},
-    {{:unicode, :characters_to_nfkc_binary, 1}, {:unicode, :characters_to_binary, 3}},
-    {{:unicode, :characters_to_nfkd_binary, 1}, {:unicode, :characters_to_binary, 3}},
+    {{:unicode, :characters_to_nfc_list, 1}, {:unicode, :_flatten_chardata, 1}},
+    {{:unicode, :characters_to_nfd_binary, 1}, {:unicode, :_chardata_to_utf8_binary, 1}},
+    {{:unicode, :characters_to_nfkc_binary, 1}, {:unicode, :_chardata_to_utf8_binary, 1}},
+    {{:unicode, :characters_to_nfkd_binary, 1}, {:unicode, :_chardata_to_utf8_binary, 1}},
     {{:unicode_util, :_cpl, 2}, {:unicode_util, :_cpl_1_cont, 1}},
     {{:unicode_util, :_cpl, 2}, {:unicode_util, :_cpl_cont, 2}},
     {{:unicode_util, :_cpl, 2}, {:unicode_util, :_is_cp, 1}},
@@ -247,7 +343,8 @@ defmodule Hologram.Compiler.CallGraph do
     {{:unicode_util, :_cpl_cont3, 2}, {:unicode_util, :_is_cp, 1}},
     {{:unicode_util, :cp, 1}, {:unicode_util, :_cpl, 2}},
     {{:unicode_util, :cp, 1}, {:unicode_util, :_is_cp, 1}},
-    {{:unicode_util, :gc, 1}, {:unicode_util, :cp, 1}}
+    {{:unicode_util, :gc, 1}, {:unicode_util, :cp, 1}},
+    {{:uri_string, :parse, 1}, {:unicode, :characters_to_binary, 1}}
   ]
 
   # These functions are transpiled manually for at least one of the following reasons:
@@ -260,7 +357,10 @@ defmodule Hologram.Compiler.CallGraph do
     {Application, :get_env, 3},
     {Cldr.Locale, :language_data, 0},
     {Cldr.Validity.U, :encode_key, 2},
+    {Code, :ensure_compiled, 1},
     {Code, :ensure_loaded, 1},
+    {Exception, :format_stacktrace, 1},
+    {FunctionClauseError, :message, 1},
     {Hologram.Entity, :generate_id, 0},
     {Hologram.JS, :call, 4},
     {Hologram.JS, :delete, 3},
@@ -288,6 +388,7 @@ defmodule Hologram.Compiler.CallGraph do
     {String, :trim, 1},
     {String, :upcase, 1},
     {String, :upcase, 2},
+    {String.Tokenizer, :tokenize, 1},
     {Task, :await, 1},
     {URI, :encode, 2}
   ]
@@ -326,7 +427,10 @@ defmodule Hologram.Compiler.CallGraph do
     interpreter_class: [
       {Enum, :into, 2},
       {Enum, :to_list, 1},
-      {Exception, :normalize, 2},
+      {Exception, :blame, 3},
+      {Exception, :message, 1},
+      {Exception, :normalize, 3},
+      {Macro, :inspect_atom, 3},
       {:erlang, :error, 1},
       {:erlang, :hd, 1},
       {:erlang, :tl, 1},
@@ -337,6 +441,9 @@ defmodule Hologram.Compiler.CallGraph do
     ],
     manually_ported_code_module: [
       {:code, :ensure_loaded, 1}
+    ],
+    manually_ported_function_clause_error_module: [
+      {Exception, :format_mfa, 3}
     ],
     manually_ported_io_module: [
       {:erlang, :iolist_to_binary, 1}
@@ -365,6 +472,12 @@ defmodule Hologram.Compiler.CallGraph do
     ]
   ]
 
+  # MFAs called by the JavaScript that Encoder emits for encoded terms.
+  @mfas_used_by_encoded_terms [
+    # Encoded Regex terms rebuild their compiled patterns on evaluation.
+    {:re, :import, 1}
+  ]
+
   @doc """
   Adds an edge between two vertices in the call graph.
   Automatically adds vertices if they don't exist.
@@ -387,15 +500,20 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Adds call graph edges that can't be discovered from static IR analysis:
-  Erlang functions depending on other Erlang functions, and dynamic dispatch
-  patterns in Elixir stdlib (e.g. behaviour callbacks called via variable with known default).
+  Erlang functions depending on other Erlang functions, dynamic dispatch
+  where the callee module is read from data (e.g. a struct's calendar field),
+  and edges needed by client-runtime mechanisms (e.g. error message derivation).
   """
   @spec add_non_discoverable_edges(t) :: t
   def add_non_discoverable_edges(%{pid: pid} = call_graph) do
+    client_runtime_edges =
+      Enum.flat_map(@edges_used_by_client_runtime, fn {_mechanism, edges} -> edges end)
+
     Agent.cast(pid, fn graph ->
       graph
-      |> Digraph.add_edges(@erlang_mfa_edges)
+      |> Digraph.add_edges(client_runtime_edges)
       |> Digraph.add_edges(@dynamic_dispatch_edges)
+      |> Digraph.add_edges(@erlang_mfa_edges)
     end)
 
     call_graph
@@ -413,14 +531,13 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Returns the set of types that can appear at protocol dispatch anywhere in an
   app with the given pages: types reachable from the client code of the pages,
-  types created in server-executed code of the pages and their components, and
-  types reachable from action broadcasting code.
+  types created in server-executed code of the pages, their components, and the
+  broadcast-referenced components, and types reachable from action broadcasting
+  code (taken from the given precomputed broadcast caller analysis).
   """
-  @spec app_protocol_dispatch_types(Digraph.t(), [module]) :: MapSet.t(module)
-  def app_protocol_dispatch_types(graph, pages) do
-    # Independent of the client and server traversal chain below, so it runs concurrently.
-    broadcast_types_task = Task.async(fn -> broadcast_caller_protocol_dispatch_types(graph) end)
-
+  @spec app_protocol_dispatch_types(Digraph.t(), [module], broadcast_caller_analysis) ::
+          MapSet.t(module)
+  def app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis) do
     page_entry_mfas = Enum.flat_map(pages, &list_page_entry_mfas/1)
 
     page_vertices =
@@ -431,34 +548,46 @@ defmodule Hologram.Compiler.CallGraph do
       |> Enum.filter(&match?({_module, _function, _arity}, &1))
       |> extract_uniq_components()
 
+    # A broadcast-referenced component executes its server callbacks like any other
+    # rendered component (e.g. command/3 triggered while it is mounted), so its
+    # server-created types count as app types.
+    templatables =
+      Enum.uniq(pages ++ components ++ broadcast_caller_analysis.referenced_components)
+
     client_types = protocol_dispatch_types(page_vertices)
-    server_types = server_protocol_dispatch_types(graph, pages ++ components)
-    broadcast_types = Task.await(broadcast_types_task, :infinity)
+    server_types = server_protocol_dispatch_types(graph, templatables)
 
     client_types
     |> MapSet.union(server_types)
-    |> MapSet.union(broadcast_types)
+    |> MapSet.union(broadcast_caller_analysis.dispatch_types)
   end
 
   @doc """
-  Returns the set of types that can appear at protocol dispatch in code of
-  functions that broadcast actions to connected clients, i.e. code reachable
-  from the callers of Hologram.Realtime.broadcast_action/2, broadcast_action/3,
-  broadcast_action_except/3, and broadcast_action_except/4.
+  Returns the analysis of code reachable from the callers of the functions that
+  broadcast actions: Hologram.Component.put_broadcast/3,4,
+  put_broadcast_except/4,5 and Hologram.Realtime.broadcast_action/2,3,
+  broadcast_action_except/3,4. Returns the protocol dispatch types that can
+  appear in that code and the component modules referenced in it. A broadcast
+  can deliver its payload to any connected client, so referenced components must
+  be available in the runtime bundle and the types count as app-wide dispatch types.
   Protocol function vertices are opaque during the traversal, so consolidated
   dispatch edges don't make every loaded implementation's type count as reachable.
   """
-  @spec broadcast_caller_protocol_dispatch_types(Digraph.t()) :: MapSet.t(module)
-  def broadcast_caller_protocol_dispatch_types(graph) do
+  @spec broadcast_caller_analysis(Digraph.t()) :: broadcast_caller_analysis
+  def broadcast_caller_analysis(graph) do
     caller_vertices =
-      for broadcast_mfa <- @broadcast_action_mfas,
+      for broadcast_mfa <- @broadcast_mfas,
           {caller_vertex, _broadcast_mfa} <- Digraph.incoming_edges(graph, broadcast_mfa) do
         caller_vertex
       end
 
-    graph
-    |> Digraph.reachable(caller_vertices, opaque_vertex?: &protocol_function_mfa?/1)
-    |> protocol_dispatch_types()
+    broadcast_vertices =
+      Digraph.reachable(graph, caller_vertices, opaque_vertex?: &protocol_function_mfa?/1)
+
+    %{
+      dispatch_types: protocol_dispatch_types(broadcast_vertices),
+      referenced_components: extract_component_module_vertices(broadcast_vertices)
+    }
   end
 
   @doc """
@@ -509,6 +638,7 @@ defmodule Hologram.Compiler.CallGraph do
     |> maybe_add_protocol_call_graph_edges(module)
     |> maybe_add_struct_call_graph_edges(module)
     |> maybe_add_ecto_schema_call_graph_edges(module)
+    |> maybe_add_exception_call_graph_edges(module)
     |> build(body, module)
   end
 
@@ -547,6 +677,28 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
     |> build(module, from_vertex)
     |> build(function, from_vertex)
+    |> build(args, from_vertex)
+  end
+
+  # An :erlang.error/3 raise site with an error_info option makes the runtime
+  # call the named format module when deriving the error message, as specified
+  # by EEP-54 (Erlang Enhancement Proposal 54, "Provide more information about
+  # errors"). That call never appears in the code - it's resolved from the
+  # error_info map at runtime. Mirror the resolution here, honoring its
+  # defaults (the raising module and :format_error), so the formatter reaches
+  # the bundle.
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :error,
+          args: [_reason, _args, options] = args
+        },
+        from_vertex
+      ) do
+    call_graph
+    |> add_edge(from_vertex, {:erlang, :error, 3})
+    |> maybe_add_error_info_formatter_edge(options, from_vertex)
     |> build(args, from_vertex)
   end
 
@@ -645,6 +797,13 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the calls between manually ported Erlang functions, which no IR
+  analysis can discover, since their bodies are JavaScript.
+  """
+  @spec erlang_mfa_edges :: [{mfa, mfa}]
+  def erlang_mfa_edges, do: @erlang_mfa_edges
+
+  @doc """
   Returns the underlying %Digraph{} struct containing vertices and edges data.
   """
   @spec get_graph(t) :: Digraph.t()
@@ -721,8 +880,9 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Returns the sorted list of MFAs that are reachable by the given page.
-  Server dispatch types and reflection MFAs of the page's templatables are
-  looked up in the given precomputed server callback analysis.
+  Server dispatch types, reflection MFAs, and server-referenced components of
+  the page's templatables are looked up in the given precomputed server
+  callback analysis.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_3/README.md
   """
@@ -733,14 +893,22 @@ defmodule Hologram.Compiler.CallGraph do
 
     initial_state = start_reachable_state(graph, entry_mfas, MapSet.new())
     initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
-    templatables = [page_module | extract_uniq_components(initial_mfas)]
+    initial_templatables = [page_module | extract_uniq_components(initial_mfas)]
+
+    {expanded_state, templatables, server_callback_analysis_by_templatable} =
+      expand_reachable_state_with_server_referenced_components(
+        graph,
+        initial_state,
+        initial_templatables,
+        server_callback_analysis_by_templatable
+      )
 
     server_types =
       Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
         MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
       end)
 
-    final_state = expand_reachable_state_with_types(graph, initial_state, server_types)
+    final_state = expand_reachable_state_with_types(graph, expanded_state, server_types)
 
     graph
     |> finalize_reachable_mfas(final_state)
@@ -761,15 +929,16 @@ defmodule Hologram.Compiler.CallGraph do
   @spec list_runtime_entry_mfas :: [mfa]
   def list_runtime_entry_mfas do
     @mfas_used_by_client_runtime
-    |> Enum.reduce(@mfas_used_by_all_pages_and_components, fn {_key, mfas}, acc ->
-      mfas ++ acc
+    |> Enum.reduce(@mfas_used_by_all_pages_and_components ++ @mfas_used_by_encoded_terms, fn
+      {_key, mfas}, acc -> mfas ++ acc
     end)
     |> Enum.uniq()
     |> Enum.sort()
   end
 
   @doc """
-  Lists MFAs required by the runtime JS script of an app with the given pages.
+  Lists MFAs required by the runtime JS script of an app with the given pages,
+  including the client MFAs of components referenced in broadcast caller code.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_runtime_mfas_2/README.md
   """
@@ -778,10 +947,43 @@ defmodule Hologram.Compiler.CallGraph do
     entry_mfas = list_runtime_entry_mfas()
     graph = get_graph(call_graph)
 
-    app_types = app_protocol_dispatch_types(graph, pages)
+    # A component module referenced in broadcast caller code can be delivered to any
+    # connected page as a runtime value (e.g. in broadcast action params) and render
+    # as a dynamic tag there, so its client code goes into the runtime bundle, which
+    # every page loads.
+    broadcast_caller_analysis = broadcast_caller_analysis(graph)
+    app_types = app_protocol_dispatch_types(graph, pages, broadcast_caller_analysis)
+
+    entry_vertices = entry_mfas ++ broadcast_caller_analysis.referenced_components
+    initial_state = start_reachable_state(graph, entry_vertices, app_types)
+    initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
+
+    initial_templatables =
+      Enum.uniq(
+        broadcast_caller_analysis.referenced_components ++ extract_uniq_components(initial_mfas)
+      )
+
+    # The same server-referenced component expansion as in list_page_mfas/3, so chains
+    # like a broadcast-referenced component whose own server callbacks reference
+    # further components end up in the runtime bundle too. Analyses are computed on
+    # demand from an empty map, since the runtime bundle has no precomputed analysis.
+    {expanded_state, templatables, server_callback_analysis_by_templatable} =
+      expand_reachable_state_with_server_referenced_components(
+        graph,
+        initial_state,
+        initial_templatables,
+        %{}
+      )
+
+    server_types =
+      Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
+        MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
+      end)
+
+    final_state = expand_reachable_state_with_types(graph, expanded_state, server_types)
 
     graph
-    |> reachable_mfas(entry_mfas, app_types)
+    |> finalize_reachable_mfas(final_state)
     |> reject_hex_mfas()
     |> Enum.sort()
   end
@@ -1024,8 +1226,9 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Returns the server callback analysis of each given templatable module: the
   protocol dispatch types that can appear in its server-executed code (code
-  reachable from its init/3 and command/3 callbacks) and the reflection MFAs
-  reachable from its init/3.
+  reachable from its init/3 and command/3 callbacks), the reflection MFAs
+  reachable from its init/3, and the component modules referenced in its
+  server-executed code.
   Templatables are analyzed sequentially, since spawning a task per templatable
   would copy the whole graph into each task process, which costs far more than
   the traversals themselves.
@@ -1036,9 +1239,20 @@ defmodule Hologram.Compiler.CallGraph do
           %{module => server_callback_analysis}
   def server_callback_analysis_by_templatable(graph, templatables) do
     Map.new(templatables, fn templatable ->
+      # One traversal feeds both the dispatch types and the referenced components,
+      # matching what server_protocol_dispatch_types/2 would traverse for a single
+      # templatable.
+      server_vertices =
+        Digraph.reachable(
+          graph,
+          [{templatable, :command, 3}, {templatable, :init, 3}],
+          opaque_vertex?: &protocol_function_mfa?/1
+        )
+
       analysis = %{
-        dispatch_types: server_protocol_dispatch_types(graph, [templatable]),
-        reflection_mfas: list_reflection_mfas_reachable_from_server_init(templatable, graph)
+        dispatch_types: protocol_dispatch_types(server_vertices),
+        reflection_mfas: list_reflection_mfas_reachable_from_server_init(templatable, graph),
+        server_referenced_components: extract_component_module_vertices(server_vertices)
       }
 
       {templatable, analysis}
@@ -1237,11 +1451,67 @@ defmodule Hologram.Compiler.CallGraph do
     promote_pending_impl_candidates(graph, new_state)
   end
 
+  # A component module referenced in server-executed code can reach the client as a
+  # runtime value - put into state by init/3 or sent in action params by command/3 -
+  # and render as a dynamic tag, so its client code must be included in the page
+  # bundle. Newly included components introduce new templatables (their own server
+  # callbacks and the components statically referenced by their client code), so the
+  # expansion loops until no new components appear.
+  defp expand_reachable_state_with_server_referenced_components(
+         graph,
+         state,
+         templatables,
+         server_callback_analysis_by_templatable
+       ) do
+    # The page path passes a complete analysis map, but the runtime-bundle path
+    # discovers templatables lazily, so analyses missing from the map are computed
+    # on demand.
+    missing_templatables =
+      Enum.reject(templatables, &Map.has_key?(server_callback_analysis_by_templatable, &1))
+
+    server_callback_analysis_by_templatable =
+      Map.merge(
+        server_callback_analysis_by_templatable,
+        server_callback_analysis_by_templatable(graph, missing_templatables)
+      )
+
+    new_components =
+      templatables
+      |> Enum.flat_map(&server_callback_analysis_by_templatable[&1].server_referenced_components)
+      |> Enum.uniq()
+      |> Kernel.--(templatables)
+
+    if new_components == [] do
+      {state, templatables, server_callback_analysis_by_templatable}
+    else
+      new_state = expand_reachable_state(graph, state, new_components)
+
+      newly_reached_components =
+        new_state.reached_vertices
+        |> MapSet.difference(state.reached_vertices)
+        |> Enum.filter(&is_tuple/1)
+        |> extract_uniq_components()
+
+      new_templatables = Enum.uniq(templatables ++ new_components ++ newly_reached_components)
+
+      expand_reachable_state_with_server_referenced_components(
+        graph,
+        new_state,
+        new_templatables,
+        server_callback_analysis_by_templatable
+      )
+    end
+  end
+
   # Resumes the fixpoint from the given state with additional dispatch types,
   # reaching exactly the vertices a from-scratch run with those types would reach.
   defp expand_reachable_state_with_types(graph, state, extra_types) do
     new_state = %{state | types: MapSet.union(state.types, extra_types)}
     promote_pending_impl_candidates(graph, new_state)
+  end
+
+  defp extract_component_module_vertices(vertices) do
+    Enum.filter(vertices, &(is_atom(&1) && Reflection.component?(&1)))
   end
 
   # Implementation candidates are read from the dispatch edges added at build time
@@ -1312,9 +1582,55 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
+  defp maybe_add_error_info_formatter_edge(
+         call_graph,
+         %IR.ListType{data: options},
+         from_vertex
+       ) do
+    error_info_pairs =
+      Enum.find_value(options, fn
+        %IR.TupleType{
+          data: [%IR.AtomType{value: :error_info}, %IR.MapType{data: pairs}]
+        } ->
+          {:ok, pairs}
+
+        _option ->
+          nil
+      end)
+
+    default_module =
+      case from_vertex do
+        {module, _function, _arity} -> module
+        module when is_atom(module) -> module
+      end
+
+    with {:ok, pairs} <- error_info_pairs,
+         {:ok, format_module} <- resolve_error_info_key(pairs, :module, default_module),
+         {:ok, format_function} <- resolve_error_info_key(pairs, :function, :format_error) do
+      add_edge(call_graph, from_vertex, {format_module, format_function, 2})
+    else
+      _fallback -> call_graph
+    end
+  end
+
+  defp maybe_add_error_info_formatter_edge(call_graph, _options, _from_vertex) do
+    call_graph
+  end
+
   defp maybe_add_protocol_call_graph_edges(call_graph, module) do
     if Reflection.protocol?(module) do
       add_protocol_call_graph_edges(call_graph, module)
+    end
+
+    call_graph
+  end
+
+  # Exception.message/1 dispatches on the module of the struct it is given, so
+  # the callback isn't reachable from any call site - a reached exception
+  # module brings its own.
+  defp maybe_add_exception_call_graph_edges(call_graph, module) do
+    if Reflection.exception?(module) do
+      add_edge(call_graph, module, {module, :message, 1})
     end
 
     call_graph
@@ -1447,6 +1763,20 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp remove_module_vertices(call_graph, module) do
     remove_vertices(call_graph, module_vertices(call_graph, module))
+  end
+
+  # Resolves an error_info map key to an atom: an absent key resolves to the
+  # default, a literal atom value resolves to itself, and anything dynamic
+  # (or a nil default) makes the resolution fail.
+  defp resolve_error_info_key(pairs, key, default) do
+    found = Enum.find(pairs, fn {k, _v} -> match?(%IR.AtomType{value: ^key}, k) end)
+
+    case found do
+      {_key_ir, %IR.AtomType{value: value}} -> {:ok, value}
+      nil when is_nil(default) -> :error
+      nil -> {:ok, default}
+      _fallback -> :error
+    end
   end
 
   # Runs the protocol-aware fixpoint from the given entry vertices and returns the

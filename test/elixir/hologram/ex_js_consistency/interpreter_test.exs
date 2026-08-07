@@ -22,7 +22,6 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
   # Keep consistent with feature tests in test/features/test/function_calls/anonymous_function_test.exs
   # TODO: reimplement to be consistent with feature tests in test/features/test/function_calls/anonymous_function_test.exs
   describe "call anonymous function" do
-    # TODO: client error message for this case is inconsistent with server error message
     test "arity is invalid, called with no args" do
       fun =
         wrap_term(fn
@@ -30,13 +29,11 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
           2 -> :expr_2
         end)
 
-      expected_msg =
-        ~r'#Function<[0-9]+\.[0-9]+/1 in Hologram.ExJsConsistency\.InterpreterTest\."test call anonymous function arity is invalid, called with no args"/1> with arity 1 called with no arguments'
+      expected_msg = build_bad_arity_error_msg(fun, [])
 
       assert_error BadArityError, expected_msg, fn -> fun.() end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
     test "arity is invalid, called with a single arg" do
       fun =
         wrap_term(fn
@@ -44,13 +41,11 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
           3, 4 -> :expr_2
         end)
 
-      expected_msg =
-        ~r'#Function<[0-9]+\.[0-9]+/2 in Hologram.ExJsConsistency\.InterpreterTest\."test call anonymous function arity is invalid, called with a single arg"/1> with arity 2 called with 1 argument \(9\)'
+      expected_msg = build_bad_arity_error_msg(fun, [9])
 
       assert_error BadArityError, expected_msg, fn -> fun.(9) end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
     test "arity is invalid, called with multiple args" do
       fun =
         wrap_term(fn
@@ -58,8 +53,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
           2 -> :expr_2
         end)
 
-      expected_msg =
-        ~r'#Function<[0-9]+\.[0-9]+/1 in Hologram.ExJsConsistency\.InterpreterTest\."test call anonymous function arity is invalid, called with multiple args"/1> with arity 1 called with 2 arguments \(9, 8\)'
+      expected_msg = build_bad_arity_error_msg(fun, [9, 8])
 
       assert_error BadArityError, expected_msg, fn -> fun.(9, 8) end
     end
@@ -146,7 +140,6 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
                    end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message
     test "function arity is correct, but args don't match the pattern" do
       expected_msg =
         build_function_clause_error_msg(
@@ -162,17 +155,28 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
   end
 
   describe "inspect" do
-    # Client result for non-capture anonymous function is intentionally different than server result.
     test "anonymous function, non-capture" do
       anon_fun = fn x, y -> x + y * x end
+      info = Function.info(anon_fun)
 
-      Kernel.inspect(anon_fun, []) =~
-        ~r'#Function<[0-9]+\.[0-9]/2 in Hologram\.ExJsConsistency\.InterpreterTest\."test inspect/2 anonymous function, non-capture"/1>'
+      expected =
+        "#Function<#{info[:new_index]}.#{info[:uniq]}/2 in " <>
+          ~s(Hologram.ExJsConsistency.InterpreterTest."test inspect anonymous function, non-capture"/1>)
+
+      assert Kernel.inspect(anon_fun, []) == expected
     end
 
+    # Case not possible on the server - every fun there is defined inside a function definition.
+    # test "anonymous function, non-capture, defined outside of a function definition"
+
     test "anonymous function, local function capture" do
-      assert Kernel.inspect(&my_local_fun/2, []) =~
-               ~r'^#Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.InterpreterTest\.my_local_fun>$'
+      info = Function.info(&my_local_fun/2)
+
+      expected =
+        "#Function<#{info[:new_index]}.#{info[:uniq]}/2 in " <>
+          "Hologram.ExJsConsistency.InterpreterTest.my_local_fun>"
+
+      assert Kernel.inspect(&my_local_fun/2, []) == expected
     end
 
     test "anonymous function, remote function capture" do
@@ -195,8 +199,22 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert Kernel.inspect(Aaa.Bbb, []) == "Aaa.Bbb"
     end
 
+    test "atom, module alias naming Elixir itself" do
+      assert Kernel.inspect(Elixir.Elixir.Aaa, []) == "Elixir.Elixir.Aaa"
+    end
+
     test "atom, non-boolean and non-nil" do
       assert Kernel.inspect(:abc, []) == ":abc"
+    end
+
+    test "atom, name that isn't a valid identifier" do
+      assert Kernel.inspect(:"aaa bbb", []) == ~s':"aaa bbb"'
+    end
+
+    # The client classifies operators through the transpiled Macro.inspect_atom/3, which the
+    # JavaScript unit tests stand in for without the operator tables - this is what pins them.
+    test "atom, operator" do
+      assert Kernel.inspect(:<>, []) == ":<>"
     end
 
     test "bitstring, text, empty" do
@@ -209,6 +227,26 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
 
     test "bitstring, text, Unicode" do
       assert Kernel.inspect("全息图", []) == ~s'"全息图"'
+    end
+
+    test "bitstring, text, characters shown as escape sequences" do
+      assert Kernel.inspect("\a\b\t\n\v\f\r\e\d", []) == ~S'"\a\b\t\n\v\f\r\e\d"'
+    end
+
+    test "bitstring, text, quote and backslash" do
+      assert Kernel.inspect("\"\\", []) == ~S'"\"\\"'
+    end
+
+    test "bitstring, text, invisible characters shown as unicode escapes" do
+      assert Kernel.inspect("\u00A0\u200B\uFEFF", []) == ~S'"\u00A0\u200B\uFEFF"'
+    end
+
+    test "bitstring, text, an interpolation opener is escaped" do
+      assert Kernel.inspect("\#{", []) == ~S'"\#{"'
+    end
+
+    test "bitstring, text, a hash that doesn't open an interpolation is not escaped" do
+      assert Kernel.inspect("a#b", []) == ~s'"a#b"'
     end
 
     test "bitstring, text, non-printable" do
@@ -241,6 +279,38 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert Kernel.inspect([1, 2 | 3], []) == "[1, 2 | 3]"
     end
 
+    test "list, charlist, printable characters" do
+      assert Kernel.inspect([97, 98, 99], []) == ~s'~c"abc"'
+    end
+
+    test "list, charlist, characters shown as escape sequences" do
+      assert Kernel.inspect([7, 8, 9, 10, 11, 12, 13, 27], []) == ~S'~c"\a\b\t\n\v\f\r\e"'
+    end
+
+    test "list, charlist, quote and backslash" do
+      assert Kernel.inspect([34, 92], []) == ~S'~c"\"\\"'
+    end
+
+    test "list, charlist, an interpolation opener is escaped" do
+      assert Kernel.inspect([35, 123], []) == ~S'~c"\#{"'
+    end
+
+    test "list, charlist, a hash that doesn't open an interpolation is not escaped" do
+      assert Kernel.inspect([97, 35, 98], []) == ~S'~c"a#b"'
+    end
+
+    test "list, charlist, a non-printable character keeps the list form" do
+      assert Kernel.inspect([104, 105, 0], []) == "[104, 105, 0]"
+    end
+
+    test "list, charlist, a codepoint above ASCII keeps the list form" do
+      assert Kernel.inspect([104, 105, 233], []) == "[104, 105, 233]"
+    end
+
+    test "list, charlist, an improper list keeps the list form" do
+      assert Kernel.inspect([104 | 105], []) == "[104 | 105]"
+    end
+
     # TODO: lits / keyword list (see client-side Interpreter.inspect() tests)
 
     test "map, empty" do
@@ -254,6 +324,14 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
              ]
     end
 
+    test "map, with an alias key" do
+      assert Kernel.inspect(%{Aaa.Bbb => 1}, []) == "%{Aaa.Bbb => 1}"
+    end
+
+    test "map, with a key that isn't a valid identifier" do
+      assert Kernel.inspect(%{"aaa bbb": 1}, []) == ~s'%{"aaa bbb": 1}'
+    end
+
     test "map, with non-atom keys" do
       assert Kernel.inspect(%{9 => "xyz", "abc" => 2.3}, []) == ~s'%{9 => "xyz", "abc" => 2.3}'
     end
@@ -262,7 +340,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
 
     # TODO: maps / structs
 
-    assert "PID" do
+    test "PID" do
       result =
         "0.11.222"
         |> pid()
@@ -271,7 +349,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert result == "#PID<0.11.222>"
     end
 
-    assert "port" do
+    test "port" do
       result =
         "0.11"
         |> port()
@@ -280,7 +358,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert result == "#Port<0.11>"
     end
 
-    assert "reference" do
+    test "reference" do
       result =
         "0.1.2.3"
         |> ref()

@@ -1,18 +1,27 @@
 defmodule Hologram.Template.DOM do
   @moduledoc false
 
+  alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.AST
   alias Hologram.Template.EventModifiers
   alias Hologram.Template.Helpers
   alias Hologram.Template.Parser
   alias Hologram.TemplateSyntaxError
 
+  # Blocks whose rendered node count can change between renders, shifting the position of every
+  # sibling that follows them. "raw" and "else" are absent because neither delimits a region whose
+  # size can vary: "raw" only marks source to reconstruct, and "else" is a branch within an "if".
+  @marked_blocks ["for", "if"]
+
+  @type attribute :: {String.t(), t} | {:spread, {any}}
+
   # 'dom_node' name used instead of 'node" because type node/0 is a built-in type and it cannot be redefined.
   @type dom_node ::
-          {:component, module, list({String.t(), t}), t}
-          | {:element, String.t(), list({String.t(), t}), t}
+          {:component, module, list(attribute), t}
+          | {:dynamic_tag, {any}, list(attribute), t}
+          | {:element, String.t(), list(attribute), t}
           | {:expression, {any}}
-          | {:page, module, list({String.t(), t}), []}
+          | {:page, module, list(attribute), []}
           | {:public_comment, t}
           | {:text, String.t()}
 
@@ -30,7 +39,9 @@ defmodule Hologram.Template.DOM do
   @spec build_ast(list(Parser.parsed_tag())) :: AST.t()
   def build_ast(tags) do
     {code, _last_tag_type} =
-      Enum.reduce(tags, {"", nil}, fn tag, {code_acc, last_tag_type} ->
+      tags
+      |> add_block_markers()
+      |> Enum.reduce({"", nil}, fn tag, {code_acc, last_tag_type} ->
         current_tag_type = if is_tuple(tag), do: elem(tag, 0), else: tag
 
         # :skip items are fully elided, as if they did not appear
@@ -46,6 +57,47 @@ defmodule Hologram.Template.DOM do
     "[#{code}]"
     |> AST.for_code()
     |> substitute_module_attributes()
+  end
+
+  # Brackets each block in a pair of marker comments, so that changing how many nodes the block
+  # renders can't change the identity of the block's siblings. The client diffs children by tag and
+  # position, so without the markers a block that starts rendering an extra node lets the following
+  # sibling be paired with the block's content and rebuilt, destroying focus, scroll position and
+  # media state.
+  #
+  # Blocks inside <script> and <style> are left alone: a comment there would be part of the script
+  # or stylesheet source rather than markup, and their text-only children have no identity to
+  # protect anyway.
+  defp add_block_markers(tags) do
+    hash = template_hash(tags)
+
+    {marked_tags, _state} =
+      Enum.flat_map_reduce(tags, {0, [], 0}, &inject_block_markers(&1, &2, hash))
+
+    marked_tags
+  end
+
+  # Builds one marker comment, whose text is four bracketed segments, e.g. "[h:a3f2b1c4:0:o]":
+  #
+  #   h         namespace, distinguishing a marker from a comment written in the template
+  #   a3f2b1c4  template hash, see template_hash/1
+  #   0         index of the block within its template, counted in source order
+  #   o         side of the pair, "o" opening or "c" closing
+  #
+  # The marker text doubles as the client-side vnode key, which is why it has to be part of the
+  # markup: the client diffs against a virtual DOM derived from server-rendered HTML, and a
+  # comment's own text is the only carrier that survives serialization. The client recognizes the
+  # same format in Vdom.markerKey/1.
+  #
+  # Takes the tags that follow the marker, so an opening marker can be built in front of its block
+  # without appending to the list it just built.
+  defp marker_tags(hash, index, side, tail \\ []) do
+    [
+      :public_comment_start,
+      {:text, "[h:#{hash}:#{index}:#{side}]"},
+      :public_comment_end
+      | tail
+    ]
   end
 
   defp append_code(code_acc, code, last_tag_type)
@@ -80,6 +132,90 @@ defmodule Hologram.Template.DOM do
     expr_str
     |> String.slice(1, String.length(expr_str) - 2)
     |> String.trim()
+  end
+
+  # State is {next block index, stack of open blocks, nesting depth inside <script>/<style>}. A
+  # block opened inside raw text pushes :skipped so that its end tag pops the stack without
+  # emitting a closing marker.
+  defp inject_block_markers({:start_tag, {tag_name, _attrs}} = tag, {index, open, depth}, _hash)
+       when tag_name in ["script", "style"] do
+    {[tag], {index, open, depth + 1}}
+  end
+
+  defp inject_block_markers({:end_tag, tag_name} = tag, {index, open, depth}, _hash)
+       when tag_name in ["script", "style"] do
+    {[tag], {index, open, max(depth - 1, 0)}}
+  end
+
+  defp inject_block_markers({:block_start, {block_name, _expr}} = tag, {index, open, 0}, hash)
+       when block_name in @marked_blocks do
+    {marker_tags(hash, index, "o", [tag]), {index + 1, [index | open], 0}}
+  end
+
+  defp inject_block_markers(
+         {:block_start, {block_name, _expr}} = tag,
+         {index, open, depth},
+         _hash
+       )
+       when block_name in @marked_blocks do
+    {[tag], {index, [:skipped | open], depth}}
+  end
+
+  defp inject_block_markers(
+         {:block_end, block_name} = tag,
+         {index, [:skipped | open], depth},
+         _hash
+       )
+       when block_name in @marked_blocks do
+    {[tag], {index, open, depth}}
+  end
+
+  defp inject_block_markers(
+         {:block_end, block_name} = tag,
+         {index, [block_index | open], depth},
+         hash
+       )
+       when block_name in @marked_blocks do
+    {[tag | marker_tags(hash, block_index, "c")], {index, open, depth}}
+  end
+
+  defp inject_block_markers(tag, state, _hash), do: {[tag], state}
+
+  # Wraps implicit keyword list.
+  # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
+  defp normalize_implicit_keyword_list(templ_expr) do
+    regex = ~r/^\{\s*(([a-zA-Z_][a-zA-Z0-9_]*[?!]?|"[^"]+"):\s.+)\}$/s
+
+    case Regex.run(regex, templ_expr) do
+      [_full, content, _beginning] ->
+        "{[#{content}]}"
+
+      nil ->
+        templ_expr
+    end
+  end
+
+  # Templates checked out on Windows carry CRLF line endings, which would otherwise give the same
+  # template a different hash per platform, so markers could not be asserted verbatim.
+  defp normalize_newlines(term) when is_binary(term) do
+    StringUtils.normalize_newlines(term)
+  end
+
+  defp normalize_newlines(term) when is_list(term) do
+    Enum.map(term, &normalize_newlines/1)
+  end
+
+  defp normalize_newlines(term) when is_tuple(term) do
+    term
+    |> Tuple.to_list()
+    |> Enum.map(&normalize_newlines/1)
+    |> List.to_tuple()
+  end
+
+  defp normalize_newlines(term), do: term
+
+  defp render_attribute_code({:spread, templ_expr}, _tag_type) do
+    "{:spread, #{normalize_implicit_keyword_list(templ_expr)}}"
   end
 
   defp render_attribute_code({name, value_parts}, :element) do
@@ -137,21 +273,8 @@ defmodule Hologram.Template.DOM do
     "]}"
   end
 
-  # Wraps implicit keyword list.
-  # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
   defp render_code({:expression, templ_expr}) do
-    regex = ~r/^\{(([a-zA-Z][a-zA-Z0-9]*|"[^"]+"): .+)\}$/
-
-    elixir_expr =
-      case Regex.run(regex, templ_expr) do
-        [_full, content, _beginning] ->
-          "{[#{content}]}"
-
-        nil ->
-          templ_expr
-      end
-
-    "{:expression, #{elixir_expr}}"
+    "{:expression, #{normalize_implicit_keyword_list(templ_expr)}}"
   end
 
   defp render_code(:public_comment_end) do
@@ -164,6 +287,15 @@ defmodule Hologram.Template.DOM do
 
   defp render_code({:self_closing_tag, {tag_name, attributes}}) do
     render_code({:start_tag, {tag_name, attributes}}) <> render_code({:end_tag, tag_name})
+  end
+
+  # The tag name expression is already brace-wrapped, so emitting its source produces the one-tuple
+  # holding the runtime value. Attributes use element-style event decomposition, since the element
+  # branch is the only one that can consume events - the component branch filters them out anyway.
+  defp render_code({:start_tag, {{:expression, templ_expr}, attributes}}) do
+    attributes_code = Enum.map_join(attributes, ", ", &render_attribute_code(&1, :element))
+
+    "{:dynamic_tag, #{templ_expr}, [#{attributes_code}], ["
   end
 
   defp render_code({:start_tag, {tag_name, attributes}}) do
@@ -200,6 +332,22 @@ defmodule Hologram.Template.DOM do
     inspect(EventModifiers.parse(base_name, modifiers))
   end
 
+  # Distinguishes markers belonging to different templates, since slot content is spliced into the
+  # surrounding template's children and bare block indexes would collide there. Derived from the
+  # tags rather than the module name so that it stays stable across renames and needs no caller
+  # context. Two byte-identical templates share a hash, which degrades to marker churn rather than
+  # element identity loss.
+  #
+  # :erlang.phash2/2 is documented to return the same value for a given term regardless of machine
+  # architecture and ERTS version, which is what lets tests assert marker text verbatim.
+  defp template_hash(tags) do
+    tags
+    |> normalize_newlines()
+    |> :erlang.phash2(4_294_967_296)
+    |> Integer.to_string(36)
+    |> String.downcase()
+  end
+
   defp substitute_module_attributes({:@, meta_1, [{name, _meta_2, _args}]}) do
     {{:., meta_1, [{:vars, meta_1, nil}, name]}, [{:no_parens, true} | meta_1], []}
   end
@@ -220,12 +368,18 @@ defmodule Hologram.Template.DOM do
   # The <window> and <document> tags bind events to the window or document and nothing else, so each
   # attribute must be an event binding (a "$"-prefixed name). Any other attribute fails the build.
   defp validate_reserved_tag_attributes(tag_name, attributes) do
-    Enum.each(attributes, fn {name, _value_parts} ->
-      unless String.starts_with?(name, "$") do
+    Enum.each(attributes, fn
+      # Spread entries can't carry event bindings, since "$"-prefixed keys are rejected at runtime.
+      {:spread, _templ_expr} ->
         raise TemplateSyntaxError,
-          message:
-            ~s'the <#{tag_name}> tag accepts only event bindings, but got the "#{name}" attribute'
-      end
+          message: ~s'the <#{tag_name}> tag accepts only event bindings, but got a spread'
+
+      {name, _value_parts} ->
+        unless String.starts_with?(name, "$") do
+          raise TemplateSyntaxError,
+            message:
+              ~s'the <#{tag_name}> tag accepts only event bindings, but got the "#{name}" attribute'
+        end
     end)
   end
 end

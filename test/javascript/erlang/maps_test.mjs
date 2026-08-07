@@ -5,16 +5,18 @@ import {
   assertBoxedError,
   assertBoxedFalse,
   assertBoxedTrue,
+  buildArgumentErrorMsg,
+  buildBadMapErrorMsg,
+  buildKeyErrorMsg,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   freeze,
 } from "../support/helpers.mjs";
 
 import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 const atomA = freeze(Type.atom("a"));
 const atomAbc = freeze(Type.atom("abc"));
@@ -33,6 +35,30 @@ const mapA1B2 = freeze(
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/maps_test.exs
 // Always update both together.
+
+function ertsErrorFrame(functionName, args) {
+  return {
+    module: "erlang",
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo: Type.map([[Type.atom("module"), Type.atom("erl_erts_errors")]]),
+  };
+}
+
+function mapsErrorFrame(functionName, args) {
+  return {
+    module: "maps",
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo: Type.map([
+      [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+    ]),
+  };
+}
 
 describe("Erlang_Maps", () => {
   describe("find/2", () => {
@@ -66,8 +92,22 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => find(Type.string("a"), Type.integer(1)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
+        buildBadMapErrorMsg(Type.integer(1)),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        find(atomA, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("find", Type.list([atomA, atomB])),
+      ]);
     });
   });
 
@@ -118,10 +158,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fold(Type.atom("abc"), Type.integer(10), Type.map()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes three arguments"),
       );
     });
 
@@ -141,10 +178,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fold(fun, Type.integer(10), Type.map()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes three arguments"),
       );
     });
 
@@ -152,7 +186,36 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fold(fun, Type.integer(10), Type.atom("abc")),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+        buildBadMapErrorMsg(Type.atom("abc")),
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      const validFun = Type.anonymousFunction(3, [], contextFixture());
+
+      let caught;
+
+      try {
+        fold(validFun, Type.integer(0), atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("fold", Type.list([validFun, Type.integer(0), atomB])),
+      ]);
+    });
+
+    it("lists all invalid arguments in the message", () => {
+      assertBoxedError(
+        () =>
+          fold(
+            Type.anonymousFunction(1, [], contextFixture()),
+            Type.integer(0),
+            atomB,
+          ),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n  * 3rd argument: not a map or an iterator\n",
       );
     });
   });
@@ -189,7 +252,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => from_keys(atomA, integer1),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -197,8 +260,27 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => from_keys(Type.improperList([atomA, atomB]), integer1),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+        buildArgumentErrorMsg(1, "not a proper list"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      const improperList = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+      ]);
+
+      let caught;
+
+      try {
+        from_keys(improperList, atomA);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("from_keys", Type.list([improperList, atomA])),
+      ]);
     });
   });
 
@@ -245,8 +327,55 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => from_list(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        buildArgumentErrorMsg(1, "not a list"),
       );
+    });
+
+    it("raises ArgumentError if the argument is an improper list", () => {
+      const list = Type.improperList([Type.tuple([atomA, integer1]), atomB]);
+
+      assertBoxedError(
+        () => from_list(list),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+
+    it("raises ArgumentError if an element is not a tuple", () => {
+      const list = Type.list([Type.tuple([atomA, integer1]), atomB]);
+
+      assertBoxedError(
+        () => from_list(list),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError if an element is a tuple with arity other than 2", () => {
+      const list = Type.list([
+        Type.tuple([atomA, integer1]),
+        Type.tuple([atomB]),
+      ]);
+
+      assertBoxedError(
+        () => from_list(list),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        from_list(atomA);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("from_list", Type.list([atomA])),
+      ]);
     });
   });
 
@@ -271,7 +400,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => get(Type.atom("a"), Type.integer(1)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
+        buildBadMapErrorMsg(Type.integer(1)),
       );
     });
 
@@ -282,8 +411,38 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => get(key, map),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(key, map),
+        buildKeyErrorMsg(key, map),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        get(atomA, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("map_get", Type.list([atomA, atomB])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a missing key", () => {
+      const mapB2 = Type.map([[Type.atom("b"), Type.integer(2)]]);
+
+      let caught;
+
+      try {
+        get(atomA, mapB2);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("map_get", Type.list([atomA, mapB2])),
+      ]);
     });
   });
 
@@ -309,13 +468,25 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => get(Type.atom("a"), Type.integer(1), defaultValue),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
+        buildBadMapErrorMsg(Type.integer(1)),
       );
     });
 
     it("returns the default value if the map doesn't contain the given key", () => {
       const result = get(Type.atom("a"), Type.map(), defaultValue);
       assert.deepStrictEqual(result, defaultValue);
+    });
+
+    it("the error is attributed to the caller", () => {
+      let caught;
+
+      try {
+        get(atomA, atomB, defaultValue);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, []);
     });
   });
 
@@ -410,7 +581,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect(map1, map2),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(map1),
+        buildBadMapErrorMsg(map1),
       );
     });
 
@@ -421,7 +592,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect(map1, map2),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(map2),
+        buildBadMapErrorMsg(map2),
       );
     });
 
@@ -455,6 +626,20 @@ describe("Erlang_Maps", () => {
           ]),
         );
       });
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        intersect(atomA, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("intersect", Type.list([atomA, atomB])),
+      ]);
     });
   });
 
@@ -568,10 +753,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect_with(notAFun, map1, map2),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes three arguments"),
       );
     });
 
@@ -597,10 +779,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect_with(badFun, map1, map2),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes three arguments"),
       );
     });
 
@@ -611,7 +790,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect_with(fun, map1, map2),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(map1),
+        buildBadMapErrorMsg(map1),
       );
     });
 
@@ -622,7 +801,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect_with(fun, map1, map2),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(map2),
+        buildBadMapErrorMsg(map2),
       );
     });
 
@@ -658,6 +837,86 @@ describe("Erlang_Maps", () => {
         );
       });
     });
+
+    it("error frame carries args and error_info", () => {
+      const validFun = Type.anonymousFunction(3, [], contextFixture());
+
+      let caught;
+
+      try {
+        intersect_with(validFun, atomA, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("intersect_with", Type.list([validFun, atomA, atomB])),
+      ]);
+    });
+
+    it("lists all invalid arguments in the message", () => {
+      assertBoxedError(
+        () =>
+          intersect_with(
+            Type.anonymousFunction(1, [], contextFixture()),
+            atomA,
+            atomB,
+          ),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n  * 2nd argument: not a map\n  * 3rd argument: not a map\n",
+      );
+    });
+  });
+
+  describe("is_iterator_valid/1", () => {
+    const is_iterator_valid = Erlang_Maps["is_iterator_valid/1"];
+
+    it("returns true for a path iterator", () => {
+      const iterator = Type.improperList([
+        Type.integer(0),
+        Type.map([[Type.atom("a"), Type.integer(1)]]),
+      ]);
+
+      assertBoxedTrue(is_iterator_valid(iterator));
+    });
+
+    it("returns true for the :none atom", () => {
+      assertBoxedTrue(is_iterator_valid(Type.atom("none")));
+    });
+
+    it("returns true for a key-value tuple chain ending in a valid iterator", () => {
+      const iterator = Type.tuple([
+        Type.atom("a"),
+        Type.integer(1),
+        Type.tuple([
+          Type.atom("b"),
+          Type.integer(2),
+          Type.improperList([Type.integer(0), Type.map()]),
+        ]),
+      ]);
+
+      assertBoxedTrue(is_iterator_valid(iterator));
+    });
+
+    it("returns false for a key-value tuple chain ending in an invalid term", () => {
+      const iterator = Type.tuple([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assertBoxedFalse(is_iterator_valid(iterator));
+    });
+
+    it("returns false for a term that is not an iterator", () => {
+      assertBoxedFalse(is_iterator_valid(Type.atom("abc")));
+    });
+
+    it("returns false for an improper list that is not a path iterator", () => {
+      const term = Type.improperList([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedFalse(is_iterator_valid(term));
+    });
   });
 
   describe("is_key/2", () => {
@@ -675,8 +934,22 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => is_key(atomA, atomAbc),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(atomAbc),
+        buildBadMapErrorMsg(atomAbc),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        is_key(atomA, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        ertsErrorFrame("is_map_key", Type.list([atomA, atomB])),
+      ]);
     });
   });
 
@@ -707,8 +980,22 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => iterator(atomAbc),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(atomAbc),
+        buildBadMapErrorMsg(atomAbc),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        iterator(atomA);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("iterator", Type.list([atomA])),
+      ]);
     });
   });
 
@@ -732,8 +1019,22 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => keys(atomAbc),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(atomAbc),
+        buildBadMapErrorMsg(atomAbc),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        keys(atomA);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("keys", Type.list([atomA])),
+      ]);
     });
   });
 
@@ -786,10 +1087,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => map(Type.atom("abc"), Type.map()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes two arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes two arguments"),
       );
     });
 
@@ -811,10 +1109,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => map(fun, Type.map()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes two arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes two arguments"),
       );
     });
 
@@ -822,7 +1117,31 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => map(fun, Type.atom("abc")),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+        buildBadMapErrorMsg(Type.atom("abc")),
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      const validFun = Type.anonymousFunction(2, [], contextFixture());
+
+      let caught;
+
+      try {
+        map(validFun, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("map", Type.list([validFun, atomB])),
+      ]);
+    });
+
+    it("lists all invalid arguments in the message", () => {
+      assertBoxedError(
+        () => map(Type.anonymousFunction(1, [], contextFixture()), atomB),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes two arguments\n  * 2nd argument: not a map or an iterator\n",
       );
     });
   });
@@ -884,7 +1203,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge(Type.integer(123), map),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
+        buildBadMapErrorMsg(Type.integer(123)),
       );
     });
 
@@ -894,8 +1213,22 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge(map, Type.integer(123)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
+        buildBadMapErrorMsg(Type.integer(123)),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        merge(atomA, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("merge", Type.list([atomA, atomB])),
+      ]);
     });
   });
 
@@ -1020,10 +1353,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge_with(Type.atom("not_a_function"), map1, map2),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes three arguments"),
       );
     });
 
@@ -1049,10 +1379,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge_with(wrongArityFun, map1, map2),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a fun that takes three arguments",
-        ),
+        buildArgumentErrorMsg(1, "not a fun that takes three arguments"),
       );
     });
 
@@ -1062,7 +1389,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge_with(combiner, Type.integer(123), map),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
+        buildBadMapErrorMsg(Type.integer(123)),
       );
     });
 
@@ -1072,7 +1399,36 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge_with(combiner, map, Type.integer(123)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
+        buildBadMapErrorMsg(Type.integer(123)),
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      const validFun = Type.anonymousFunction(3, [], contextFixture());
+
+      let caught;
+
+      try {
+        merge_with(validFun, atomA, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("merge_with", Type.list([validFun, atomA, atomB])),
+      ]);
+    });
+
+    it("lists all invalid arguments in the message", () => {
+      assertBoxedError(
+        () =>
+          merge_with(
+            Type.anonymousFunction(1, [], contextFixture()),
+            atomA,
+            atomB,
+          ),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n  * 2nd argument: not a map\n  * 3rd argument: not a map\n",
       );
     });
   });
@@ -1125,12 +1481,46 @@ describe("Erlang_Maps", () => {
       assert.deepStrictEqual(result, iter);
     });
 
+    it("returns a key-value tuple without validating its tail", () => {
+      const tuple = Type.tuple([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(next(tuple), tuple);
+    });
+
     it("not an iterator", () => {
       assertBoxedError(
         () => next(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a valid iterator"),
+        buildArgumentErrorMsg(1, "not a valid iterator"),
       );
+    });
+
+    it("raises ArgumentError for an improper list that is not a path iterator", () => {
+      const term = Type.improperList([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedError(
+        () => next(term),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not a valid iterator"),
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        next(atomA);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("next", Type.list([atomA])),
+      ]);
     });
   });
 
@@ -1169,7 +1559,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => put(Type.atom("a"), Type.integer(1), Type.atom("abc")),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+        buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -1187,6 +1577,20 @@ describe("Erlang_Maps", () => {
       ]);
 
       assert.deepStrictEqual(map, expected);
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        put(atomA, integer1, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("put", Type.list([atomA, integer1, atomB])),
+      ]);
     });
   });
 
@@ -1230,7 +1634,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => remove(Type.atom("b"), Type.integer(123)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
+        buildBadMapErrorMsg(Type.integer(123)),
       );
     });
 
@@ -1248,6 +1652,20 @@ describe("Erlang_Maps", () => {
       ]);
 
       assert.deepStrictEqual(map, expected);
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        remove(atomA, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("remove", Type.list([atomA, atomB])),
+      ]);
     });
   });
 
@@ -1327,8 +1745,22 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => take(Type.atom("a"), Type.integer(123)),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
+        buildBadMapErrorMsg(Type.integer(123)),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        take(atomA, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("take", Type.list([atomA, atomB])),
+      ]);
     });
   });
 
@@ -1371,7 +1803,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => to_list(Type.atom("abc")),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+        buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -1386,8 +1818,22 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => to_list(iterator),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(iterator),
+        buildBadMapErrorMsg(iterator),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        to_list(atomA);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("to_list", Type.list([atomA])),
+      ]);
     });
   });
 
@@ -1401,7 +1847,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fun(key, Type.integer(2), map),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(key, map),
+        buildKeyErrorMsg(key, map),
       );
     });
 
@@ -1425,8 +1871,38 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fun(Type.atom("a"), Type.integer(1), Type.atom("abc")),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
+        buildBadMapErrorMsg(Type.atom("abc")),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(atomA, integer1, atomB);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("update", Type.list([atomA, integer1, atomB])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a missing key", () => {
+      const mapB2 = Type.map([[Type.atom("b"), Type.integer(2)]]);
+
+      let caught;
+
+      try {
+        fun(atomA, integer1, mapB2);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("update", Type.list([atomA, integer1, mapB2])),
+      ]);
     });
   });
 
@@ -1450,8 +1926,22 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fun(atomAbc),
         "BadMapError",
-        Interpreter.buildBadMapErrorMsg(atomAbc),
+        buildBadMapErrorMsg(atomAbc),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        fun(atomA);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mapsErrorFrame("values", Type.list([atomA])),
+      ]);
     });
   });
 });

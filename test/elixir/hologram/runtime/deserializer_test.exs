@@ -4,6 +4,15 @@ defmodule Hologram.Runtime.DeserializerTest do
 
   @delimiter delimiter()
 
+  defp regex_struct_entries(client_re_pattern, source_hex, opts_data) do
+    [
+      ["a__struct__", "aElixir.Regex"],
+      ["aopts", %{"t" => "l", "d" => opts_data}],
+      ["are_pattern", client_re_pattern],
+      ["asource", source_hex]
+    ]
+  end
+
   describe "version 3" do
     test "top-level data, raw JSON" do
       assert deserialize(~s'[3,"axyz"]') == :xyz
@@ -77,6 +86,21 @@ defmodule Hologram.Runtime.DeserializerTest do
     test "reference" do
       data = %{"t" => "r", "n" => "snonode@nohost", "c" => 0, "i" => [3, 2, 1]}
       assert deserialize(3, data) == ref("0.1.2.3")
+    end
+
+    test "Regex struct" do
+      client_ref = %{"t" => "r", "n" => "shologram_client", "c" => 0, "i" => [3, 2, 1]}
+      client_re_pattern = %{"t" => "t", "d" => ["are_pattern", "i0", "i0", "i0", client_ref]}
+
+      data = %{
+        "t" => "m",
+        "d" => regex_struct_entries(client_re_pattern, "b06162", ["acaseless"])
+      }
+
+      result = deserialize(3, data)
+
+      assert %Regex{source: "ab", opts: [:caseless]} = result
+      assert Regex.match?(result, "AB")
     end
 
     test "tuple" do
@@ -158,6 +182,21 @@ defmodule Hologram.Runtime.DeserializerTest do
     test "reference" do
       data = "rmy_node@my_host#{@delimiter}0,1,2,3#{@delimiter}server"
       assert deserialize(2, data) == ref("0.1.2.3")
+    end
+
+    test "Regex struct" do
+      client_ref = "rmy_node@my_host#{@delimiter}0,1,2,3#{@delimiter}server"
+      client_re_pattern = %{"t" => "t", "d" => ["are_pattern", "i0", "i0", "i0", client_ref]}
+
+      data = %{
+        "t" => "m",
+        "d" => regex_struct_entries(client_re_pattern, "b06162", ["acaseless"])
+      }
+
+      result = deserialize(2, data)
+
+      assert %Regex{source: "ab", opts: [:caseless]} = result
+      assert Regex.match?(result, "AB")
     end
 
     test "tuple" do

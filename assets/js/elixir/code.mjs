@@ -8,11 +8,21 @@ const Elixir_Code = {
   // Deps: [:code.ensure_loaded/1]
   "ensure_compiled/1": (module) => {
     if (!Type.isAtom(module)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg("Code.ensure_compiled/1", [
-          module,
-        ]),
-      );
+      Interpreter.raiseFunctionClauseError("Code", "ensure_compiled", 1, [
+        module,
+      ]);
+    }
+
+    return Erlang_Code["ensure_loaded/1"](module);
+  },
+
+  // This function is simplified - it returns either {:module, MyModule} or {:error, :nofile}.
+  // Deps: [:code.ensure_loaded/1]
+  "ensure_loaded/1": (module) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseFunctionClauseError("Code", "ensure_loaded", 1, [
+        module,
+      ]);
     }
 
     return Erlang_Code["ensure_loaded/1"](module);

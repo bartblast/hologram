@@ -137,19 +137,38 @@ defmodule Hologram.LiveReloadTest do
     end
   end
 
-  test "watched_dirs/0" do
-    result = LiveReload.watched_dirs()
+  describe "watched_dirs/0" do
+    test "single-app project" do
+      result = LiveReload.watched_dirs()
 
-    # Should return a list of string paths
-    assert is_list(result)
-    assert Enum.all?(result, &is_binary/1)
+      # Should return a list of string paths
+      assert is_list(result)
+      assert Enum.all?(result, &is_binary/1)
 
-    # All paths should be absolute
-    assert Enum.all?(result, fn path -> Path.type(path) == :absolute end)
+      # All paths should be absolute
+      assert Enum.all?(result, fn path -> Path.type(path) == :absolute end)
 
-    # Should contain the lib directory (standard in elixirc_paths)
-    lib_path = Path.join([File.cwd!(), "lib"])
-    assert lib_path in result
+      # Should contain the lib directory (standard in elixirc_paths)
+      lib_path = Path.join([File.cwd!(), "lib"])
+      assert lib_path in result
+    end
+
+    test "umbrella project" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      app_a_dir = Path.join(umbrella_dir, "apps/app_a")
+      app_b_dir = Path.join(umbrella_dir, "apps/app_b")
+
+      result =
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, fn _module ->
+          LiveReload.watched_dirs()
+        end)
+
+      # app_a doesn't set :elixirc_paths, so Mix's ["lib"] default applies
+      assert Path.join(app_a_dir, "lib") in result
+
+      assert Path.join(app_b_dir, "lib") in result
+      assert Path.join(app_b_dir, "support") in result
+    end
   end
 
   describe "watcher_opts/1" do

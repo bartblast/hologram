@@ -3,15 +3,15 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  buildFunctionClauseErrorMsg,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Elixir_Task from "../../../assets/js/elixir/task.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/elixir/task_test.exs
@@ -41,18 +41,43 @@ describe("Elixir_Task", () => {
       assert.deepStrictEqual(result, Type.integer(42));
     });
 
-    // Client error message is intentionally different than server error message.
+    // The attempted function clauses come from the clause heads the runtime script
+    // registers at bundle load, which unit tests don't run, so this twin asserts
+    // the message without them.
     it("raises FunctionClauseError if the arg is not a Task struct", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        "Task.await/2",
-        [Type.integer(123), Type.integer(5000)],
-      );
+      const expectedMessage = buildFunctionClauseErrorMsg("Task.await/2", [
+        Type.integer(123),
+        Type.integer(5000),
+      ]);
 
       assertBoxedError(
         () => taskAwait(Type.integer(123)),
         "FunctionClauseError",
         expectedMessage,
       );
+    });
+
+    it("error frame carries the await/2 args", () => {
+      const arg = Type.integer(123);
+
+      let caught;
+
+      try {
+        taskAwait(arg);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {
+          module: "Task",
+          function: "await",
+          arityOrArgs: Type.list([arg, Type.integer(5000)]),
+          file: null,
+          line: null,
+          errorInfo: null,
+        },
+      ]);
     });
   });
 });

@@ -43,6 +43,21 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
                }
     end
 
+    test "full URI with all components (nested chardata)" do
+      uri = ["foo://user@ex", ~c"ample.com:8042", [~c"/over/there?name=ferret"], "#nose"]
+
+      assert :uri_string.parse(uri) ==
+               %{
+                 fragment: ~c"nose",
+                 host: ~c"example.com",
+                 path: ~c"/over/there",
+                 port: 8042,
+                 query: ~c"name=ferret",
+                 scheme: ~c"foo",
+                 userinfo: ~c"user"
+               }
+    end
+
     test "invalid URI with list input returns error tuple" do
       assert :uri_string.parse(~c"http://[::1") == {:error, :invalid_uri, ~c":"}
     end
@@ -407,6 +422,81 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
       assert_error FunctionClauseError,
                    expected_msg,
                    fn -> :uri_string.parse([1_200_000]) end
+    end
+
+    test "raises FunctionClauseError if the argument is a list containing a surrogate code point" do
+      expected_msg =
+        build_function_clause_error_msg(":uri_string.parse_scheme_start/2", [
+          {:error, "", [0xD800]},
+          %{}
+        ])
+
+      assert_error FunctionClauseError,
+                   expected_msg,
+                   fn -> :uri_string.parse([0xD800]) end
+    end
+
+    test "raises FunctionClauseError if the argument is a list with an invalid code point after valid characters" do
+      expected_msg =
+        build_function_clause_error_msg(":uri_string.parse_scheme_start/2", [
+          {:error, "a", [0xD800, 98]},
+          %{}
+        ])
+
+      assert_error FunctionClauseError,
+                   expected_msg,
+                   fn -> :uri_string.parse([97, 0xD800, 98]) end
+    end
+
+    test "error frame carries args" do
+      arg = wrap_term(1)
+
+      top_frame =
+        try do
+          :uri_string.parse(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside uri_string.erl, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:uri_string, :parse, [1], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args for an invalid UTF-8 binary" do
+      arg = wrap_term(<<255>>)
+
+      top_frame =
+        try do
+          :uri_string.parse(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside uri_string.erl, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:uri_string, :parse_scheme_start, [<<255>>, %{}], location} = wrap_term(top_frame)
+      assert location[:error_info] == nil
+    end
+
+    test "error frame carries args and error_info for a non-integer list element" do
+      arg = wrap_term([:a])
+
+      top_frame =
+        try do
+          :uri_string.parse(arg)
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside unicode.erl, so its frame
+      # location also carries the corresponding file and line, which the
+      # client doesn't mirror.
+      assert {:unicode, :characters_to_binary, [[:a]], location} = wrap_term(top_frame)
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end
 end

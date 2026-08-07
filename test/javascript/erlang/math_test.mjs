@@ -3,18 +3,31 @@
 import {
   assert,
   assertBoxedError,
-  defineGlobalErlangAndElixirModules,
+  buildArgumentErrorMsg,
+  defineRuntimeGlobals,
 } from "../support/helpers.mjs";
 
 import Erlang_Math from "../../../assets/js/erlang/math.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/math_test.exs
 // Always update both together.
+
+function mathErrorFrame(functionName, args) {
+  return {
+    module: "math",
+    function: functionName,
+    arityOrArgs: args,
+    file: null,
+    line: null,
+    errorInfo: Type.map([
+      [Type.atom("module"), Type.atom("erl_stdlib_errors")],
+    ]),
+  };
+}
 
 describe("Erlang_Math", () => {
   describe("ceil/1", () => {
@@ -84,8 +97,22 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("ceil", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -215,8 +242,36 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => exp(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        exp(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("exp", Type.list([Type.atom("abc")])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for an overflow", () => {
+      let caught;
+
+      try {
+        exp(Type.float(709.783));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("exp", Type.list([Type.float(709.783)])),
+      ]);
     });
   });
 
@@ -287,8 +342,22 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("floor", Type.list([Type.atom("abc")])),
+      ]);
     });
   });
 
@@ -411,8 +480,36 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => log(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        log(Type.atom("abc"));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("log", Type.list([Type.atom("abc")])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a non-positive number", () => {
+      let caught;
+
+      try {
+        log(Type.integer(0));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("log", Type.list([Type.integer(0)])),
+      ]);
     });
   });
 
@@ -491,11 +588,17 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, Type.float(0.5));
     });
 
+    it("returns zero if the result underflows", () => {
+      const result = testedFun(Type.float(1.0e-300), Type.integer(300));
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
     it("raises ArgumentError if the first argument is not a number", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc"), Type.integer(3)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        buildArgumentErrorMsg(1, "not a number"),
       );
     });
 
@@ -503,7 +606,7 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => testedFun(Type.integer(7), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a number"),
+        buildArgumentErrorMsg(2, "not a number"),
       );
     });
 
@@ -512,6 +615,75 @@ describe("Erlang_Math", () => {
         () => testedFun(Type.integer(-7), Type.float(0.5)),
         "ArithmeticError",
         "bad argument in arithmetic expression",
+      );
+    });
+
+    it("raises ArithmeticError if the base is zero and the exponent is negative", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(0), Type.integer(-1)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+
+    it("raises ArithmeticError if the result overflows", () => {
+      assertBoxedError(
+        () => testedFun(Type.float(1.0e300), Type.integer(2)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+
+    it("error frame carries args and error_info", () => {
+      let caught;
+
+      try {
+        testedFun(Type.atom("abc"), Type.integer(3));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("pow", Type.list([Type.atom("abc"), Type.integer(3)])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for a fractional exponent with negative base", () => {
+      let caught;
+
+      try {
+        testedFun(Type.integer(-7), Type.float(0.5));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame("pow", Type.list([Type.integer(-7), Type.float(0.5)])),
+      ]);
+    });
+
+    it("error frame carries args and error_info for an overflow", () => {
+      let caught;
+
+      try {
+        testedFun(Type.float(1.0e300), Type.integer(2));
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        mathErrorFrame(
+          "pow",
+          Type.list([Type.float(1.0e300), Type.integer(2)]),
+        ),
+      ]);
+    });
+
+    it("lists all invalid arguments in the message", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.atom("def")),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not a number\n  * 2nd argument: not a number\n",
       );
     });
   });

@@ -5,9 +5,10 @@
 import {
   assert,
   assertBoxedError,
+  buildKeyErrorMsg,
   componentRegistryEntryFixture,
   contextFixture,
-  defineGlobalErlangAndElixirModules,
+  defineRuntimeGlobals,
   initComponentRegistryEntry,
   sinon,
   vnode,
@@ -69,6 +70,8 @@ import {defineModule7Fixture} from "./support/fixtures/renderer/module_7.mjs";
 import {defineModule76Fixture} from "./support/fixtures/renderer/module_76.mjs";
 import {defineModule77Fixture} from "./support/fixtures/renderer/module_77.mjs";
 import {defineModule78Fixture} from "./support/fixtures/renderer/module_78.mjs";
+import {defineModule86Fixture} from "./support/fixtures/renderer/module_86.mjs";
+import {defineModule87Fixture} from "./support/fixtures/renderer/module_87.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
 import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client_only/module_1.mjs";
@@ -78,13 +81,14 @@ import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
+import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Once from "../../assets/js/once.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 defineLayoutFixture();
 defineModule1Fixture();
@@ -142,6 +146,8 @@ defineModule7Fixture();
 defineModule76Fixture();
 defineModule77Fixture();
 defineModule78Fixture();
+defineModule86Fixture();
+defineModule87Fixture();
 defineModule8Fixture();
 defineModule9Fixture();
 defineClientOnlyModule1Fixture();
@@ -245,6 +251,106 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("with block marker", () => {
+      // <!--[h:1a2b3c:0:o]-->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring("[h:1a2b3c:0:o]")]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("numbers repeated block markers in one list", () => {
+      // <!--[h:1a2b3c:0:o]--><!--[h:1a2b3c:0:o]-->
+      const marker = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring("[h:1a2b3c:0:o]")]),
+        ]),
+      ]);
+
+      const node = Type.list([marker, marker]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        result.map((child) => child.key),
+        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]:1"],
+      );
+
+      assert.deepStrictEqual(
+        result.map((child) => child.text),
+        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]"],
+      );
+    });
+
+    it("gathers a marked span into one fragment", () => {
+      // <!--[h:1a2b3c:0:o]--><div></div><!--[h:1a2b3c:0:c]--><input />
+      const marker = (side) =>
+        Type.tuple([
+          Type.atom("public_comment"),
+          Type.list([
+            Type.tuple([
+              Type.atom("text"),
+              Type.bitstring(`[h:1a2b3c:0:${side}]`),
+            ]),
+          ]),
+        ]);
+
+      const element = (tagName) =>
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring(tagName),
+          Type.list(),
+          Type.list(),
+        ]);
+
+      const node = Type.list([
+        marker("o"),
+        element("div"),
+        marker("c"),
+        element("input"),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // The block holds one position whatever it renders, so the input never shifts.
+      assert.equal(result.length, 2);
+      assert.isUndefined(result[0].sel);
+      assert.equal(result[0].key, "[h:1a2b3c:0:o]");
+      assert.equal(result[1].sel, "input");
+
+      assert.deepStrictEqual(
+        result[0].children.map((child) => child.key ?? child.sel),
+        ["[h:1a2b3c:0:o]", "div", "[h:1a2b3c:0:c]"],
+      );
+    });
+
     it("with nested stateful components", () => {
       const cid3 = Type.bitstring("component_3");
       const cid7 = Type.bitstring("component_7");
@@ -293,6 +399,7 @@ describe("Renderer", () => {
       ]);
 
       const entry3 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
         state: Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.integer(2)],
@@ -302,6 +409,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid3, entry3);
 
       const entry7 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module7"),
         state: Type.map([
           [Type.atom("c"), Type.integer(3)],
           [Type.atom("d"), Type.integer(4)],
@@ -737,6 +845,7 @@ describe("Renderer", () => {
       ]);
 
       const entry3 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
         state: Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.integer(2)],
@@ -746,6 +855,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid3, entry3);
 
       const entry7 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module7"),
         state: Type.map([
           [Type.atom("c"), Type.integer(3)],
           [Type.atom("d"), Type.integer(4)],
@@ -2214,7 +2324,10 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          initComponentRegistryEntry(cid);
+          initComponentRegistryEntry(
+            cid,
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module55"),
+          );
 
           const vdom = Renderer.renderDom(
             node,
@@ -2285,8 +2398,14 @@ describe("Renderer", () => {
         });
 
         it("page", () => {
-          initComponentRegistryEntry(Type.bitstring("page"));
-          initComponentRegistryEntry(Type.bitstring("layout"));
+          initComponentRegistryEntry(
+            Type.bitstring("page"),
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module56"),
+          );
+          initComponentRegistryEntry(
+            Type.bitstring("layout"),
+            Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+          );
 
           const vdom = Renderer.renderPage(
             Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module56"),
@@ -2315,8 +2434,14 @@ describe("Renderer", () => {
         });
 
         it("layout", () => {
-          initComponentRegistryEntry(Type.bitstring("page"));
-          initComponentRegistryEntry(Type.bitstring("layout"));
+          initComponentRegistryEntry(
+            Type.bitstring("page"),
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module57"),
+          );
+          initComponentRegistryEntry(
+            Type.bitstring("layout"),
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module58"),
+          );
 
           const vdom = Renderer.renderPage(
             Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module57"),
@@ -2380,9 +2505,18 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          initComponentRegistryEntry(Type.bitstring("component_59"));
-          initComponentRegistryEntry(Type.bitstring("component_60"));
-          initComponentRegistryEntry(Type.bitstring("component_61"));
+          initComponentRegistryEntry(
+            Type.bitstring("component_59"),
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module59"),
+          );
+          initComponentRegistryEntry(
+            Type.bitstring("component_60"),
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module60"),
+          );
+          initComponentRegistryEntry(
+            Type.bitstring("component_61"),
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module61"),
+          );
 
           const vdom = Renderer.renderDom(
             node,
@@ -4518,6 +4652,602 @@ describe("Renderer", () => {
     });
   });
 
+  describe("element spread", () => {
+    const spread = (value) =>
+      Type.tuple([Type.atom("spread"), Type.tuple([value])]);
+
+    const namedAttr = (name, valueDom) =>
+      Type.tuple([Type.bitstring(name), valueDom]);
+
+    const textValue = (text) =>
+      Type.keywordList([[Type.atom("text"), Type.bitstring(text)]]);
+
+    const renderElement = (tagName, attrsDom) =>
+      Renderer.renderDom(
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring(tagName),
+          Type.list(attrsDom),
+          Type.list(),
+        ]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+    const assertRaises = (attrsDom, errorType, message) =>
+      assertBoxedError(
+        () => renderElement("div", attrsDom),
+        errorType,
+        message,
+      );
+
+    it("map value", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("id"), Type.bitstring("my_id")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "my_id"}, on: {}}, []),
+      );
+    });
+
+    it("keyword list value", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("id"), Type.bitstring("my_id")],
+            [Type.atom("class"), Type.bitstring("my_class")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {class: "my_class", id: "my_id"}, on: {}}, []),
+      );
+    });
+
+    it("map value with multiple entries", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [Type.atom("id"), Type.bitstring("my_id")],
+            [Type.atom("class"), Type.bitstring("my_class")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {class: "my_class", id: "my_id"}, on: {}}, []),
+      );
+    });
+
+    it("string keys", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.bitstring("id"), Type.bitstring("my_id")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "my_id"}, on: {}}, []),
+      );
+    });
+
+    it("entries are sorted by name, regardless of key type", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [Type.atom("my_key_3"), Type.bitstring("c")],
+            [Type.bitstring("my_key_1"), Type.bitstring("a")],
+            [Type.atom("my_key_2"), Type.bitstring("b")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode(
+          "div",
+          {
+            attrs: {"my-key-1": "a", "my-key-2": "b", "my-key-3": "c"},
+            on: {},
+          },
+          [],
+        ),
+      );
+    });
+
+    it("entries are sorted by the composed name, so nested ones stay next to their siblings", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("my_key_2"), Type.bitstring("b")],
+            [
+              Type.atom("data"),
+              Type.keywordList([
+                [Type.atom("user_id"), Type.integer(1)],
+                [Type.atom("role"), Type.bitstring("admin")],
+              ]),
+            ],
+            [Type.atom("my_key_1"), Type.bitstring("a")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode(
+          "div",
+          {
+            attrs: {
+              "data-role": "admin",
+              "data-user-id": "1",
+              "my-key-1": "a",
+              "my-key-2": "b",
+            },
+            on: {},
+          },
+          [],
+        ),
+      );
+    });
+
+    it("underscores in an atom key are converted to hyphens", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("my_key"), Type.bitstring("my_value")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"my-key": "my_value"}, on: {}}, []),
+      );
+    });
+
+    it("underscores in a string key are converted to hyphens", () => {
+      const attrsDom = [
+        spread(
+          Type.map([[Type.bitstring("my_key"), Type.bitstring("my_value")]]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"my-key": "my_value"}, on: {}}, []),
+      );
+    });
+
+    it("nested map value composes a dash-joined name", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("data"),
+              Type.map([[Type.atom("user_id"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"data-user-id": "1"}, on: {}}, []),
+      );
+    });
+
+    it("nested keyword list value composes a dash-joined name", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [
+              Type.atom("data"),
+              Type.keywordList([[Type.atom("user_id"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"data-user-id": "1"}, on: {}}, []),
+      );
+    });
+
+    it("map nested in a keyword list", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [
+              Type.atom("data"),
+              Type.map([[Type.atom("user_id"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"data-user-id": "1"}, on: {}}, []),
+      );
+    });
+
+    it("keyword list nested in a map", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("data"),
+              Type.keywordList([[Type.atom("user_id"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"data-user-id": "1"}, on: {}}, []),
+      );
+    });
+
+    it("nesting at multiple levels", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [
+              Type.atom("data"),
+              Type.keywordList([
+                [
+                  Type.atom("my_group"),
+                  Type.map([[Type.atom("my_key"), Type.bitstring("my_value")]]),
+                ],
+              ]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {"data-my-group-my-key": "my_value"}, on: {}}, []),
+      );
+    });
+
+    // Sorting is stable, so a keyword list's order still decides which duplicate key wins.
+    it("duplicate keys in a keyword list, later wins", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("id"), Type.bitstring("my_value_1")],
+            [Type.atom("id"), Type.bitstring("my_value_2")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "my_value_2"}, on: {}}, []),
+      );
+    });
+
+    it("entry with nil value is not rendered", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("id"), Type.nil()],
+            [Type.atom("class"), Type.bitstring("my_class")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {class: "my_class"}, on: {}}, []),
+      );
+    });
+
+    it("entry with false value is not rendered", () => {
+      const attrsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("id"), Type.boolean(false)],
+            [Type.atom("class"), Type.bitstring("my_class")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {class: "my_class"}, on: {}}, []),
+      );
+    });
+
+    it("entry with true value is stringified, same as a named attribute", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("id"), Type.boolean(true)]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "true"}, on: {}}, []),
+      );
+    });
+
+    it("entry with empty string value renders the bare name, same as a named attribute", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("id"), Type.bitstring("")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: true}, on: {}}, []),
+      );
+    });
+
+    // Only maps and keyword lists recurse, so a non-keyword list nested inside a spread is a value.
+    // String.Chars is stubbed in these tests, hence the dummy stringification result.
+    it("nested list which is not a keyword list is a leaf and is stringified", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("my_key"), Type.charlist("abc")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode(
+          "div",
+          {
+            attrs: {"my-key": "Dummy String.Chars protocol result"},
+            on: {},
+          },
+          [],
+        ),
+      );
+    });
+
+    it("empty map value renders no attributes", () => {
+      assert.deepStrictEqual(
+        renderElement("div", [spread(Type.map())]),
+        vnode("div", {attrs: {}, on: {}}, []),
+      );
+    });
+
+    it("empty keyword list value renders no attributes", () => {
+      assert.deepStrictEqual(
+        renderElement("div", [spread(Type.keywordList())]),
+        vnode("div", {attrs: {}, on: {}}, []),
+      );
+    });
+
+    it("void element", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("id"), Type.bitstring("my_id")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("img", attrsDom),
+        vnode("img", {attrs: {id: "my_id"}, on: {}}, []),
+      );
+    });
+
+    it("named attribute before the spread is overridden", () => {
+      const attrsDom = [
+        namedAttr("id", textValue("my_value_1")),
+        spread(Type.map([[Type.atom("id"), Type.bitstring("my_value_2")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "my_value_2"}, on: {}}, []),
+      );
+    });
+
+    it("named attribute after the spread wins", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("id"), Type.bitstring("my_value_1")]])),
+        namedAttr("id", textValue("my_value_2")),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "my_value_2"}, on: {}}, []),
+      );
+    });
+
+    it("later spread wins over an earlier one", () => {
+      const attrsDom = [
+        spread(Type.map([[Type.atom("id"), Type.bitstring("my_value_1")]])),
+        spread(Type.map([[Type.atom("id"), Type.bitstring("my_value_2")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {id: "my_value_2"}, on: {}}, []),
+      );
+    });
+
+    // A named attribute which is overridden by a spread must not survive as a leftover, even when
+    // the winning entry renders nothing.
+    it("named attribute overridden by a nil spread entry is dropped", () => {
+      const attrsDom = [
+        namedAttr("id", textValue("my_value")),
+        spread(Type.map([[Type.atom("id"), Type.nil()]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode("div", {attrs: {}, on: {}}, []),
+      );
+    });
+
+    // Only the block a single spread expands to is sorted.
+    it("sorting doesn't move attributes written literally", () => {
+      const attrsDom = [
+        namedAttr("zzz", textValue("my_value_1")),
+        spread(
+          Type.map([
+            [Type.atom("bbb"), Type.bitstring("my_value_2")],
+            [Type.atom("aaa"), Type.bitstring("my_value_3")],
+          ]),
+        ),
+        namedAttr("yyy", textValue("my_value_4")),
+      ];
+
+      assert.deepStrictEqual(
+        Object.keys(renderElement("div", attrsDom).data.attrs),
+        ["zzz", "aaa", "bbb", "yyy"],
+      );
+    });
+
+    it("each spread is sorted on its own", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [Type.atom("zzz"), Type.bitstring("my_value_1")],
+            [Type.atom("aaa"), Type.bitstring("my_value_2")],
+          ]),
+        ),
+        spread(Type.map([[Type.atom("bbb"), Type.bitstring("my_value_3")]])),
+      ];
+
+      assert.deepStrictEqual(
+        Object.keys(renderElement("div", attrsDom).data.attrs),
+        ["aaa", "zzz", "bbb"],
+      );
+    });
+
+    it("interleaved with named attributes", () => {
+      const attrsDom = [
+        namedAttr("attr_1", textValue("my_value_1")),
+        spread(Type.map([[Type.atom("attr_2"), Type.bitstring("my_value_2")]])),
+        namedAttr(
+          "attr_3",
+          Type.keywordList([
+            [
+              Type.atom("expression"),
+              Type.tuple([Type.bitstring("my_value_3")]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderElement("div", attrsDom),
+        vnode(
+          "div",
+          {
+            attrs: {
+              attr_1: "my_value_1",
+              "attr-2": "my_value_2",
+              attr_3: "my_value_3",
+            },
+            on: {},
+          },
+          [],
+        ),
+      );
+    });
+
+    // Client-only: the controlled-input path reads the type and value attributes back out of the
+    // expanded list, so a spread has to reach it the same way a named attribute does.
+    it("controlled input value supplied through a spread", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [Type.atom("type"), Type.bitstring("email")],
+            [Type.atom("value"), Type.bitstring("my_value")],
+          ]),
+        ),
+      ];
+
+      const result = renderElement("input", attrsDom);
+
+      assert.isUndefined(result.data.attrs.value);
+      assert.isUndefined(result.data.attrs["data-hologram-form-input-value"]);
+      assert.strictEqual(result.data.hologramFormInputValue, "my_value");
+      assert.strictEqual(typeof result.data.hook, "object");
+    });
+
+    it("raises for a nil value", () => {
+      assertRaises(
+        [spread(Type.nil())],
+        "ArgumentError",
+        "spread value must be a map or a keyword list, got: nil",
+      );
+    });
+
+    it("raises for a string value", () => {
+      assertRaises(
+        [spread(Type.bitstring("my_string"))],
+        "ArgumentError",
+        'spread value must be a map or a keyword list, got: "my_string"',
+      );
+    });
+
+    it("raises for a list which is not a keyword list", () => {
+      assertRaises(
+        [
+          spread(
+            Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          ),
+        ],
+        "ArgumentError",
+        "spread value must be a map or a keyword list, got: [1, 2, 3]",
+      );
+    });
+
+    it("raises for a struct value", () => {
+      const structDom = Type.map([
+        [Type.atom("__struct__"), Type.alias("Aaa.Bbb")],
+        [Type.atom("my_key"), Type.integer(1)],
+      ]);
+
+      assertRaises(
+        [spread(structDom)],
+        "ArgumentError",
+        `spread value must be a map or a keyword list, got: ${Interpreter.inspect(structDom)}`,
+      );
+    });
+
+    it("raises for a '$'-prefixed atom key", () => {
+      assertRaises(
+        [spread(Type.map([[Type.atom("$click"), Type.atom("my_command")]]))],
+        "ArgumentError",
+        `event bindings can't be set through a spread, got the "$click" key`,
+      );
+    });
+
+    it("raises for a '$'-prefixed string key", () => {
+      assertRaises(
+        [
+          spread(
+            Type.map([[Type.bitstring("$click"), Type.atom("my_command")]]),
+          ),
+        ],
+        "ArgumentError",
+        `event bindings can't be set through a spread, got the "$click" key`,
+      );
+    });
+
+    it("raises for a '$'-prefixed nested key", () => {
+      assertRaises(
+        [
+          spread(
+            Type.map([
+              [
+                Type.atom("data"),
+                Type.map([[Type.bitstring("$click"), Type.atom("my_command")]]),
+              ],
+            ]),
+          ),
+        ],
+        "ArgumentError",
+        `event bindings can't be set through a spread, got the "$click" key`,
+      );
+    });
+  });
+
   // Some client tests are different than server tests.
   describe("node list", () => {
     it("multiple nodes without merging", () => {
@@ -4651,6 +5381,7 @@ describe("Renderer", () => {
       ]);
 
       const entry3 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
         state: Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.integer(2)],
@@ -4660,6 +5391,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid3, entry3);
 
       const entry7 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module7"),
         state: Type.map([
           [Type.atom("c"), Type.integer(3)],
           [Type.atom("d"), Type.integer(4)],
@@ -4724,6 +5456,7 @@ describe("Renderer", () => {
       ]);
 
       const entry51 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module51"),
         state: Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.integer(2)],
@@ -4733,6 +5466,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid51, entry51);
 
       const entry52 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module52"),
         state: Type.map([
           [Type.atom("c"), Type.integer(3)],
           [Type.atom("d"), Type.integer(4)],
@@ -4908,7 +5642,10 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      initComponentRegistryEntry(Type.bitstring("component_37"));
+      initComponentRegistryEntry(
+        Type.bitstring("component_37"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module37"),
+      );
 
       const result = Renderer.renderDom(
         node,
@@ -4938,7 +5675,10 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      initComponentRegistryEntry(Type.bitstring("component_76"));
+      initComponentRegistryEntry(
+        Type.bitstring("component_76"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module76"),
+      );
 
       assertBoxedError(
         () =>
@@ -4950,7 +5690,7 @@ describe("Renderer", () => {
             parentTagName,
           ),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(Type.atom("aaa"), Type.map()),
+        buildKeyErrorMsg(Type.atom("aaa"), Type.map()),
       );
     });
 
@@ -4969,7 +5709,10 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      initComponentRegistryEntry(Type.bitstring("component_77"));
+      initComponentRegistryEntry(
+        Type.bitstring("component_77"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module77"),
+      );
 
       const result = Renderer.renderDom(
         node,
@@ -4982,6 +5725,351 @@ describe("Renderer", () => {
       const expected = ["prop_aaa = 987"];
 
       assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("component prop spread", () => {
+    const module16 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module16",
+    );
+
+    const module86 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module86",
+    );
+
+    const spread = (value) =>
+      Type.tuple([Type.atom("spread"), Type.tuple([value])]);
+
+    const namedProp = (name, text) =>
+      Type.tuple([
+        Type.bitstring(name),
+        Type.keywordList([[Type.atom("text"), Type.bitstring(text)]]),
+      ]);
+
+    const renderComponent = (moduleAlias, propsDom) =>
+      Renderer.renderDom(
+        Type.tuple([
+          Type.atom("component"),
+          moduleAlias,
+          Type.list(propsDom),
+          Type.list(),
+        ]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+    const assertRaises = (propsDom, errorType, message) =>
+      assertBoxedError(
+        () => renderComponent(module16, propsDom),
+        errorType,
+        message,
+      );
+
+    it("map value", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [Type.atom("prop_1"), Type.bitstring("my_value_1")],
+            [Type.atom("prop_2"), Type.integer(2)],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1", prop_2: 2}',
+      ]);
+    });
+
+    it("keyword list value", () => {
+      const propsDom = [
+        spread(
+          Type.keywordList([
+            [Type.atom("prop_1"), Type.bitstring("my_value_1")],
+            [Type.atom("prop_2"), Type.integer(2)],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1", prop_2: 2}',
+      ]);
+    });
+
+    it("string keys", () => {
+      const propsDom = [
+        spread(
+          Type.map([[Type.bitstring("prop_1"), Type.bitstring("my_value_1")]]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1"}',
+      ]);
+    });
+
+    // Prop names live in the Elixir namespace, so they are not dasherized the way attributes are.
+    it("underscores in names are kept verbatim", () => {
+      const propsDom = [
+        spread(
+          Type.map([[Type.atom("my_prop_1"), Type.bitstring("my_value_1")]]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        'component vars = %{my_prop_1: "my_value_1"}',
+      ]);
+    });
+
+    it("undeclared keys are filtered out", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [Type.atom("prop_1"), Type.bitstring("my_value_1")],
+            [Type.atom("undeclared"), Type.bitstring("my_value_2")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1"}',
+      ]);
+    });
+
+    it("values are passed as raw terms", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("my_prop"),
+              Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        renderComponent(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module64"),
+          propsDom,
+        ),
+        ["my_prop = {1, 2, 3}"],
+      );
+    });
+
+    // Unlike the element branch, a map value doesn't recurse into composed names.
+    it("map value of an entry is a raw prop value", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("my_prop_2"),
+              Type.map([[Type.atom("my_nested_key"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        "component vars = %{my_prop_2: %{my_nested_key: 1}}",
+      ]);
+    });
+
+    it("keyword list value of an entry is a raw prop value", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [
+              Type.atom("my_prop_3"),
+              Type.keywordList([[Type.atom("my_nested_key"), Type.integer(1)]]),
+            ],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        "component vars = %{my_prop_3: [my_nested_key: 1]}",
+      ]);
+    });
+
+    it("nil value is passed as-is", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("my_prop_1"), Type.nil()]])),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        "component vars = %{my_prop_1: nil}",
+      ]);
+    });
+
+    it("false value is passed as-is", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("my_prop_1"), Type.boolean(false)]])),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module86, propsDom), [
+        "component vars = %{my_prop_1: false}",
+      ]);
+    });
+
+    it("named prop before the spread is overridden", () => {
+      const propsDom = [
+        namedProp("prop_1", "my_value_1"),
+        spread(Type.map([[Type.atom("prop_1"), Type.bitstring("my_value_2")]])),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_2"}',
+      ]);
+    });
+
+    it("named prop after the spread wins", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("prop_1"), Type.bitstring("my_value_1")]])),
+        namedProp("prop_1", "my_value_2"),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_2"}',
+      ]);
+    });
+
+    it("later spread wins over an earlier one", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("prop_1"), Type.bitstring("my_value_1")]])),
+        spread(Type.map([[Type.atom("prop_1"), Type.bitstring("my_value_2")]])),
+      ];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_2"}',
+      ]);
+    });
+
+    it("cid supplied through a spread initializes a stateful component", () => {
+      const propsDom = [
+        spread(
+          Type.map([
+            [Type.atom("cid"), Type.bitstring("my_component")],
+            [Type.atom("prop_1"), Type.bitstring("my_value")],
+          ]),
+        ),
+      ];
+
+      initComponentRegistryEntry(
+        Type.bitstring("my_component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module16"),
+      );
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{cid: "my_component", prop_1: "my_value"}',
+      ]);
+    });
+
+    // Module3 is uninitialized here and declares no props, so its state can only reach the template
+    // through the stateful path, which the cid arriving via the spread is what selects.
+    it("cid supplied through a spread runs init and merges the resulting state into vars", () => {
+      const module3 = Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.Module3",
+      );
+
+      const cid = Type.bitstring("my_component");
+      const propsDom = [spread(Type.map([[Type.atom("cid"), cid]]))];
+
+      assert.deepStrictEqual(renderComponent(module3, propsDom), [
+        vnode("div", {attrs: {}, on: {}}, ["state_a = 11, state_b = 22"]),
+      ]);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: module3,
+              state: Type.map([
+                [Type.atom("a"), Type.integer(11)],
+                [Type.atom("b"), Type.integer(22)],
+              ]),
+            }),
+          ],
+        ]),
+      );
+    });
+
+    it("declared default value is applied for a key not supplied by the spread", () => {
+      const propsDom = [
+        spread(Type.map([[Type.atom("prop_2"), Type.atom("my_value")]])),
+      ];
+
+      assert.deepStrictEqual(
+        renderComponent(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module65"),
+          propsDom,
+        ),
+        ['component vars = %{prop_1: "abc", prop_2: :my_value, prop_3: 123}'],
+      );
+    });
+
+    it("empty map value supplies no props", () => {
+      const propsDom = [namedProp("prop_1", "my_value_1"), spread(Type.map())];
+
+      assert.deepStrictEqual(renderComponent(module16, propsDom), [
+        'component vars = %{prop_1: "my_value_1"}',
+      ]);
+    });
+
+    it("raises for a nil value", () => {
+      assertRaises(
+        [spread(Type.nil())],
+        "ArgumentError",
+        "spread value must be a map or a keyword list, got: nil",
+      );
+    });
+
+    it("raises for a string value", () => {
+      assertRaises(
+        [spread(Type.bitstring("my_string"))],
+        "ArgumentError",
+        'spread value must be a map or a keyword list, got: "my_string"',
+      );
+    });
+
+    it("raises for a list which is not a keyword list", () => {
+      assertRaises(
+        [
+          spread(
+            Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          ),
+        ],
+        "ArgumentError",
+        "spread value must be a map or a keyword list, got: [1, 2, 3]",
+      );
+    });
+
+    it("raises for a struct value", () => {
+      const structDom = Type.map([
+        [Type.atom("__struct__"), Type.alias("Aaa.Bbb")],
+        [Type.atom("my_key"), Type.integer(1)],
+      ]);
+
+      assertRaises(
+        [spread(structDom)],
+        "ArgumentError",
+        `spread value must be a map or a keyword list, got: ${Interpreter.inspect(structDom)}`,
+      );
+    });
+
+    it("raises for a '$'-prefixed key", () => {
+      assertRaises(
+        [
+          spread(
+            Type.map([[Type.bitstring("$click"), Type.atom("my_command")]]),
+          ),
+        ],
+        "ArgumentError",
+        `event bindings can't be set through a spread, got the "$click" key`,
+      );
     });
   });
 
@@ -5082,7 +6170,7 @@ describe("Renderer", () => {
             parentTagName,
           ),
         "KeyError",
-        Interpreter.buildKeyErrorMsg(
+        buildKeyErrorMsg(
           Type.atom("b"),
           Type.map([[Type.atom("a"), Type.bitstring("111")]]),
         ),
@@ -5105,7 +6193,10 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      initComponentRegistryEntry(cid);
+      initComponentRegistryEntry(
+        cid,
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+      );
 
       const resultVDom = Renderer.renderDom(
         node,
@@ -5119,7 +6210,14 @@ describe("Renderer", () => {
       assert.deepStrictEqual(resultVDom, expectedVdom);
 
       const expectedComponentRegistryEntries = Type.map([
-        [cid, componentRegistryEntryFixture()],
+        [
+          cid,
+          componentRegistryEntryFixture({
+            module: Type.alias(
+              "Hologram.Test.Fixtures.Template.Renderer.Module1",
+            ),
+          }),
+        ],
       ]);
 
       assert.deepStrictEqual(
@@ -5159,7 +6257,10 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      initComponentRegistryEntry(cid);
+      initComponentRegistryEntry(
+        cid,
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+      );
 
       const resultVDom = Renderer.renderDom(
         node,
@@ -5178,7 +6279,14 @@ describe("Renderer", () => {
       assert.deepStrictEqual(resultVDom, expectedVdom);
 
       const expectedComponentRegistryEntries = Type.map([
-        [cid, componentRegistryEntryFixture()],
+        [
+          cid,
+          componentRegistryEntryFixture({
+            module: Type.alias(
+              "Hologram.Test.Fixtures.Template.Renderer.Module2",
+            ),
+          }),
+        ],
       ]);
 
       assert.deepStrictEqual(
@@ -5201,6 +6309,7 @@ describe("Renderer", () => {
       ]);
 
       const entry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
         state: Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.integer(2)],
@@ -5298,6 +6407,7 @@ describe("Renderer", () => {
       ]);
 
       const entry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module4"),
         state: Type.map([
           [Type.atom("a"), Type.bitstring("state_a")],
           [Type.atom("b"), Type.bitstring("state_b")],
@@ -5363,7 +6473,10 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      initComponentRegistryEntry(cid);
+      initComponentRegistryEntry(
+        cid,
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module16"),
+      );
 
       const result = Renderer.renderDom(
         node,
@@ -5401,12 +6514,13 @@ describe("Renderer", () => {
       ]);
 
       const entry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module18"),
         state: Type.map([[Type.atom("b"), Type.integer(222)]]),
       });
 
       ComponentRegistry.putEntry(cid, entry);
 
-      const expectedMessage = Interpreter.buildKeyErrorMsg(
+      const expectedMessage = buildKeyErrorMsg(
         Type.atom("c"),
         Type.map([
           [Type.atom("a"), Type.bitstring("111")],
@@ -5426,6 +6540,165 @@ describe("Renderer", () => {
           ),
         "KeyError",
         expectedMessage,
+      );
+    });
+  });
+
+  // A stateful component's identity is {module, cid}, so a cid rendered by a different module than
+  // the registered one is a different component - it must not inherit the previous module's state.
+  describe("module swap under a cid", () => {
+    const module3 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module3",
+    );
+    const module4 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module4",
+    );
+
+    const componentNode = (module) =>
+      Type.tuple([
+        Type.atom("component"),
+        module,
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+    const registeredState = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    it("different module under the same cid re-initializes the component", () => {
+      ComponentRegistry.putEntry(
+        cid,
+        componentRegistryEntryFixture({
+          module: module4,
+          state: registeredState,
+        }),
+      );
+
+      const resultVdom = Renderer.renderDom(
+        componentNode(module3),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // Module3's init/2 puts %{a: 11, b: 22}, so the state of the swapped-out module is gone.
+      assert.deepStrictEqual(resultVdom, [
+        vnode("div", {attrs: {}, on: {}}, ["state_a = 11, state_b = 22"]),
+      ]);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: module3,
+              state: Type.map([
+                [Type.atom("a"), Type.integer(11)],
+                [Type.atom("b"), Type.integer(22)],
+              ]),
+            }),
+          ],
+        ]),
+      );
+    });
+
+    it("same module under the same cid keeps the state", () => {
+      const entry = componentRegistryEntryFixture({
+        module: module3,
+        state: registeredState,
+      });
+
+      ComponentRegistry.putEntry(cid, entry);
+
+      const resultVdom = Renderer.renderDom(
+        componentNode(module3),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(resultVdom, [
+        vnode("div", {attrs: {}, on: {}}, ["state_a = 1, state_b = 2"]),
+      ]);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([[cid, entry]]),
+      );
+    });
+
+    it("different module under the same cid re-emits the context of the new module", () => {
+      ComponentRegistry.putEntry(
+        cid,
+        componentRegistryEntryFixture({
+          module: module4,
+          emittedContext: Type.map([
+            [Type.atom("my_key"), Type.bitstring("swapped_out_value")],
+          ]),
+          state: registeredState,
+        }),
+      );
+
+      Renderer.renderDom(
+        componentNode(module3),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        ComponentRegistry.getComponentEmittedContext(cid),
+        Type.map(),
+      );
+    });
+
+    it("a dynamic tag swapping the module under a cid re-initializes the component", () => {
+      ComponentRegistry.putEntry(
+        cid,
+        componentRegistryEntryFixture({
+          module: module4,
+          state: registeredState,
+        }),
+      );
+
+      const node = Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([module3]),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const resultVdom = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(resultVdom, [
+        vnode("div", {attrs: {}, on: {}}, ["state_a = 11, state_b = 22"]),
+      ]);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.getComponentModule(cid),
+        module3,
       );
     });
   });
@@ -5516,18 +6789,21 @@ describe("Renderer", () => {
       ]);
 
       const entry10 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module10"),
         state: Type.map([[Type.atom("a"), Type.integer(10)]]),
       });
 
       ComponentRegistry.putEntry(cid10, entry10);
 
       const entry11 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module11"),
         state: Type.map([[Type.atom("a"), Type.integer(11)]]),
       });
 
       ComponentRegistry.putEntry(cid11, entry11);
 
       const entry12 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module12"),
         state: Type.map([[Type.atom("a"), Type.integer(12)]]),
       });
 
@@ -5596,6 +6872,7 @@ describe("Renderer", () => {
       ]);
 
       const entry34 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module34"),
         state: Type.map([
           [Type.atom("cid"), cid34],
           [Type.atom("a"), Type.bitstring("34a_prop")],
@@ -5610,6 +6887,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid34, entry34);
 
       const entry35 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module35"),
         state: Type.map([
           [Type.atom("cid"), cid35],
           [Type.atom("a"), Type.bitstring("35a_prop")],
@@ -5620,6 +6898,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid35, entry35);
 
       const entry36 = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module36"),
         state: Type.map([
           [Type.atom("cid"), cid36],
           [Type.atom("a"), Type.bitstring("36a_prop")],
@@ -5668,6 +6947,512 @@ describe("Renderer", () => {
       );
 
       assert.deepStrictEqual(result, ["\n  \n"]);
+    });
+  });
+
+  describe("dynamic tag node, element branch", () => {
+    const dynamicTag = (
+      value,
+      attrsDom = Type.list(),
+      childrenDom = Type.list(),
+    ) =>
+      Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([value]),
+        attrsDom,
+        childrenDom,
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    it("without attributes or children", () => {
+      // <{"div"}></{"div"}>
+      const result = render(dynamicTag(Type.bitstring("div")));
+
+      assert.deepStrictEqual(result, vnode("div", {attrs: {}, on: {}}, []));
+    });
+
+    it("with attributes", () => {
+      const attrsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("attr_1"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("aaa")]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("attr_2"),
+          Type.keywordList([
+            [Type.atom("expression"), Type.tuple([Type.integer(123)])],
+          ]),
+        ]),
+      ]);
+
+      const result = render(dynamicTag(Type.bitstring("div"), attrsDom));
+
+      assert.deepStrictEqual(
+        result,
+        vnode("div", {attrs: {attr_1: "aaa", attr_2: "123"}, on: {}}, []),
+      );
+    });
+
+    it("with children", () => {
+      const childrenDom = Type.list([
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring("span"),
+          Type.list(),
+          Type.list([Type.tuple([Type.atom("text"), Type.bitstring("abc")])]),
+        ]),
+        Type.tuple([Type.atom("text"), Type.bitstring("xyz")]),
+      ]);
+
+      const result = render(
+        dynamicTag(Type.bitstring("div"), Type.list(), childrenDom),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        vnode("div", {attrs: {}, on: {}}, [
+          vnode("span", {attrs: {}, on: {}}, ["abc"]),
+          "xyz",
+        ]),
+      );
+    });
+
+    it("void element", () => {
+      const attrsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("attr_1"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("aaa")]]),
+        ]),
+      ]);
+
+      const result = render(dynamicTag(Type.bitstring("img"), attrsDom));
+
+      assert.deepStrictEqual(
+        result,
+        vnode("img", {attrs: {attr_1: "aaa"}, on: {}}, []),
+      );
+    });
+
+    it("custom element", () => {
+      const childrenDom = Type.list([
+        Type.tuple([Type.atom("text"), Type.bitstring("abc")]),
+      ]);
+
+      const result = render(
+        dynamicTag(Type.bitstring("my-widget"), Type.list(), childrenDom),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        vnode("my-widget", {attrs: {}, on: {}}, ["abc"]),
+      );
+    });
+
+    it("cid attribute is rendered as a plain HTML attribute", () => {
+      const attrsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("my_component")],
+          ]),
+        ]),
+      ]);
+
+      const result = render(dynamicTag(Type.bitstring("div"), attrsDom));
+
+      assert.deepStrictEqual(
+        result,
+        vnode("div", {attrs: {cid: "my_component"}, on: {}}, []),
+      );
+    });
+
+    it("event attribute binds an event listener", () => {
+      const actionSpecDom = Type.list([
+        Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+      ]);
+
+      const attrsDom = Type.list([
+        Type.tuple([Type.bitstring("$click"), actionSpecDom]),
+      ]);
+
+      const result = render(dynamicTag(Type.bitstring("button"), attrsDom));
+
+      assert.deepStrictEqual(Object.keys(result.data.on), ["click"]);
+
+      const stub = sinon
+        .stub(Hologram, "handleUiEvent")
+        .callsFake(
+          (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+        );
+
+      result.data.on.click("dummyEvent");
+
+      sinon.assert.calledWith(
+        stub,
+        "dummyEvent",
+        "click",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      Hologram.handleUiEvent.restore();
+    });
+
+    it("with spread", () => {
+      const attrsDom = Type.list([
+        Type.tuple([
+          Type.atom("spread"),
+          Type.tuple([
+            Type.map([
+              [Type.atom("id"), Type.bitstring("my_id")],
+              [Type.atom("class"), Type.bitstring("my_class")],
+            ]),
+          ]),
+        ]),
+      ]);
+
+      const result = render(dynamicTag(Type.bitstring("div"), attrsDom));
+
+      assert.deepStrictEqual(
+        result,
+        vnode("div", {attrs: {class: "my_class", id: "my_id"}, on: {}}, []),
+      );
+    });
+
+    it("with nested stateful component", () => {
+      const childrenDom = Type.list([
+        Type.tuple([
+          Type.atom("component"),
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("cid"),
+              Type.keywordList([[Type.atom("text"), cid]]),
+            ]),
+          ]),
+          Type.list(),
+        ]),
+      ]);
+
+      initComponentRegistryEntry(
+        cid,
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+      );
+
+      const result = render(
+        dynamicTag(Type.bitstring("div"), Type.list(), childrenDom),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        vnode("div", {attrs: {}, on: {}}, [
+          vnode("div", {attrs: {}, on: {}}, ["abc"]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: Type.alias(
+                "Hologram.Test.Fixtures.Template.Renderer.Module1",
+              ),
+            }),
+          ],
+        ]),
+      );
+    });
+  });
+
+  describe("dynamic tag node, component branch", () => {
+    const dynamicTag = (
+      value,
+      attrsDom = Type.list(),
+      childrenDom = Type.list(),
+    ) =>
+      Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([value]),
+        attrsDom,
+        childrenDom,
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    it("stateless component without props", () => {
+      // <{Module1} />
+      const result = render(
+        dynamicTag(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+        ),
+      );
+
+      assert.deepStrictEqual(result, [
+        vnode("div", {attrs: {}, on: {}}, ["abc"]),
+      ]);
+      assert.deepStrictEqual(ComponentRegistry.entries, Type.map());
+    });
+
+    it("stateless component with props", () => {
+      const propsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("a"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("ddd")]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("b"),
+          Type.keywordList([
+            [Type.atom("expression"), Type.tuple([Type.integer(222)])],
+          ]),
+        ]),
+        Type.tuple([
+          Type.bitstring("c"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("fff")],
+            [Type.atom("expression"), Type.tuple([Type.integer(333)])],
+            [Type.atom("text"), Type.bitstring("hhh")],
+          ]),
+        ]),
+      ]);
+
+      const result = render(
+        dynamicTag(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+          propsDom,
+        ),
+      );
+
+      assert.deepStrictEqual(result, [
+        vnode("div", {attrs: {}, on: {}}, [
+          "prop_a = ddd, prop_b = 222, prop_c = fff333hhh",
+        ]),
+      ]);
+    });
+
+    it("stateful component", () => {
+      const propsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([[Type.atom("text"), cid]]),
+        ]),
+      ]);
+
+      initComponentRegistryEntry(
+        cid,
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+      );
+
+      const result = render(
+        dynamicTag(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+          propsDom,
+        ),
+      );
+
+      assert.deepStrictEqual(result, [
+        vnode("div", {attrs: {}, on: {}}, ["abc"]),
+      ]);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: Type.alias(
+                "Hologram.Test.Fixtures.Template.Renderer.Module1",
+              ),
+            }),
+          ],
+        ]),
+      );
+    });
+
+    it("undeclared props are dropped", () => {
+      const propsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("my_undeclared_prop"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("my_value")]]),
+        ]),
+      ]);
+
+      const result = render(
+        dynamicTag(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+          propsDom,
+        ),
+      );
+
+      assert.deepStrictEqual(result, [
+        vnode("div", {attrs: {}, on: {}}, ["abc"]),
+      ]);
+    });
+
+    it("event attributes are not passed as props", () => {
+      const propsDom = Type.list([
+        Type.tuple([
+          Type.bitstring("$click"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("my_action")]]),
+        ]),
+      ]);
+
+      const node = dynamicTag(
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+        propsDom,
+      );
+
+      assertBoxedError(
+        () => render(node),
+        "KeyError",
+        buildKeyErrorMsg(Type.atom("a"), Type.map()),
+      );
+    });
+
+    it("with slot content", () => {
+      const childrenDom = Type.keywordList([
+        [Type.atom("text"), Type.bitstring("123")],
+      ]);
+
+      const result = render(
+        dynamicTag(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module8"),
+          Type.list(),
+          childrenDom,
+        ),
+      );
+
+      assert.deepStrictEqual(result, ["abc123xyz"]);
+    });
+
+    it("with prop spread", () => {
+      const propsDom = Type.list([
+        Type.tuple([
+          Type.atom("spread"),
+          Type.tuple([
+            Type.map([
+              [Type.atom("a"), Type.bitstring("ddd")],
+              [Type.atom("b"), Type.integer(222)],
+              [Type.atom("c"), Type.bitstring("fff")],
+            ]),
+          ]),
+        ]),
+      ]);
+
+      const result = render(
+        dynamicTag(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+          propsDom,
+        ),
+      );
+
+      assert.deepStrictEqual(result, [
+        vnode("div", {attrs: {}, on: {}}, [
+          "prop_a = ddd, prop_b = 222, prop_c = fff",
+        ]),
+      ]);
+    });
+  });
+
+  describe("dynamic tag node, slots", () => {
+    it("slot content is expanded through dynamic tag children", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module87"),
+        Type.list(),
+        Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, [
+        "87a,32a,87b,",
+        vnode("div", {attrs: {}, on: {}}, ["abc"]),
+        ",87x,32z,87z",
+      ]);
+    });
+  });
+
+  describe("dynamic tag node, invalid tag name value", () => {
+    const render = (value) =>
+      Renderer.renderDom(
+        Type.tuple([
+          Type.atom("dynamic_tag"),
+          Type.tuple([value]),
+          Type.list(),
+          Type.list(),
+        ]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+    const assertNotAComponent = (value, inspectedValue) =>
+      assertBoxedError(
+        () => render(value),
+        "ArgumentError",
+        `dynamic tag expression must evaluate to a component module or an HTML tag name string, got: ${inspectedValue}, which is not a component module`,
+      );
+
+    it("non-component atom", () => {
+      assertNotAComponent(Type.atom("div"), ":div");
+    });
+
+    it("page module", () => {
+      assertNotAComponent(
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
+        "Hologram.Test.Fixtures.Template.Renderer.Module14",
+      );
+    });
+
+    it("nil", () => {
+      assertNotAComponent(Type.nil(), "nil");
+    });
+
+    it("integer", () => {
+      assertBoxedError(
+        () => render(Type.integer(123)),
+        "ArgumentError",
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: 123",
+      );
+    });
+
+    it("non-binary bitstring", () => {
+      assertBoxedError(
+        () => render(Type.bitstring([1, 1])),
+        "ArgumentError",
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: <<3::size(2)>>",
+      );
+    });
+
+    it("map", () => {
+      assertBoxedError(
+        () => render(Type.map([[Type.atom("a"), Type.integer(1)]])),
+        "ArgumentError",
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: %{a: 1}",
+      );
+    });
+
+    it("component module missing from the page bundle", () => {
+      assert.throw(
+        () =>
+          render(
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module999"),
+          ),
+        HologramRuntimeError,
+        "module Hologram.Test.Fixtures.Template.Renderer.Module999 is not available on the client, because it was not reachable from client code at compile time",
+      );
     });
   });
 
@@ -6373,9 +8158,13 @@ describe("Renderer", () => {
 
   describe("context", () => {
     it("emitted in page, accessed in component nested in page", () => {
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+      );
 
       const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module39"),
         emittedContext: Type.map([
           [
             Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -6399,9 +8188,13 @@ describe("Renderer", () => {
     });
 
     it("emitted in page, accessed in component nested in layout", () => {
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module47"),
+      );
 
       const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module46"),
         emittedContext: Type.map([
           [
             Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -6425,9 +8218,13 @@ describe("Renderer", () => {
     });
 
     it("emitted in page, accessed in layout", () => {
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module41"),
+      );
 
       const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module40"),
         emittedContext: Type.map([
           [
             Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -6451,9 +8248,13 @@ describe("Renderer", () => {
     });
 
     it("emmited in layout, accessed in component nested in page", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module43"),
+      );
 
       const layoutEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module42"),
         emittedContext: Type.map([
           [
             Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -6477,9 +8278,13 @@ describe("Renderer", () => {
     });
 
     it("emitted in layout, accessed in component nested in layout", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module45"),
+      );
 
       const layoutEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module44"),
         emittedContext: Type.map([
           [
             Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -6506,6 +8311,7 @@ describe("Renderer", () => {
       const cid = Type.bitstring("component_37");
 
       const entry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module37"),
         emittedContext: Type.map([
           [
             Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -6542,8 +8348,14 @@ describe("Renderer", () => {
 
   describe("page", () => {
     it("inside layout slot", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
+      );
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module15"),
+      );
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
@@ -6563,8 +8375,14 @@ describe("Renderer", () => {
     // it("cast page params")
 
     it("cast layout explicit static props", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module25"),
+      );
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module26"),
+      );
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module25"),
@@ -6582,6 +8400,7 @@ describe("Renderer", () => {
 
     it("cast layout props passed implicitely from page state", () => {
       const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module27"),
         state: Type.map([
           [Type.atom("prop_1"), Type.bitstring("prop_value_1")],
           [Type.atom("prop_2"), Type.bitstring("prop_value_2")],
@@ -6591,7 +8410,10 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(Type.bitstring("page"), pageEntry);
 
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module26"),
+      );
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module27"),
@@ -6609,6 +8431,7 @@ describe("Renderer", () => {
 
     it("aggregate page vars, giving state vars priority over param vars when there are name conflicts", () => {
       const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
         state: Type.map([
           [Type.atom("key_2"), Type.bitstring("state_value_2")],
           [Type.atom("key_3"), Type.bitstring("state_value_3")],
@@ -6617,7 +8440,10 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(Type.bitstring("page"), pageEntry);
 
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+      );
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
@@ -6637,9 +8463,13 @@ describe("Renderer", () => {
     });
 
     it("aggregate layout vars, giving state vars priority over prop vars when there are name conflicts", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module24"),
+      );
 
       const layoutEntry = componentRegistryEntryFixture({
+        module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module23"),
         state: Type.map([
           [Type.atom("key_2"), Type.bitstring("state_value_2")],
           [Type.atom("key_3"), Type.bitstring("state_value_3")],
@@ -6663,8 +8493,14 @@ describe("Renderer", () => {
     });
 
     it("with DOCTYPE", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module62"),
+      );
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+      );
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module62"),
@@ -6681,8 +8517,14 @@ describe("Renderer", () => {
     });
 
     it("without the root <html> element", () => {
-      initComponentRegistryEntry(Type.bitstring("page"));
-      initComponentRegistryEntry(Type.bitstring("layout"));
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module63"),
+      );
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+      );
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module63"),
@@ -7459,6 +9301,9 @@ describe("Renderer", () => {
 
       // Pre-initialize the component in registry
       const entry = componentRegistryEntryFixture({
+        module: Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module1",
+        ),
         state: Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.integer(2)],

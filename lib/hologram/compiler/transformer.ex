@@ -12,6 +12,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   alias Hologram.Compiler.AST
+  alias Hologram.Compiler.ClauseBlame
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Helpers
   alias Hologram.Compiler.IR
@@ -30,10 +31,11 @@ defmodule Hologram.Compiler.Transformer do
   @spec transform(AST.t(), Context.t()) :: IR.t()
   def transform(ast, context)
 
-  def transform({{:., _meta_2, [function]}, _meta_1, args}, context) do
+  def transform({{:., _meta_2, [function]}, meta_1, args}, context) do
     %IR.AnonymousFunctionCall{
       function: transform(function, context),
-      args: transform_list(args, context)
+      args: transform_list(args, context),
+      line: meta_1[:line]
     }
   end
 
@@ -136,14 +138,14 @@ defmodule Hologram.Compiler.Transformer do
     %IR.AtomType{value: value}
   end
 
-  def transform({:<<>>, _meta, segments}, context) do
+  def transform({:<<>>, meta, segments}, context) do
     segments_ir =
       segments
       |> Enum.map(&transform_bitstring_segment(&1, context))
       |> flatten_bitstring_segments()
       |> filter_out_empty_bitstring_segments()
 
-    %IR.BitstringType{segments: segments_ir}
+    %IR.BitstringType{segments: segments_ir, line: meta[:line]}
   end
 
   def transform({:__block__, _meta, exprs}, context) do
@@ -151,10 +153,11 @@ defmodule Hologram.Compiler.Transformer do
     %IR.Block{expressions: exprs_ir}
   end
 
-  def transform({:case, _meta, [condition, [do: clauses]]}, context) do
+  def transform({:case, meta, [condition, [do: clauses]]}, context) do
     %IR.Case{
       condition: transform(condition, context),
-      clauses: transform_list(clauses, context)
+      clauses: transform_list(clauses, context),
+      line: meta[:line]
     }
   end
 
@@ -190,7 +193,7 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:for, _meta, parts}, context) when is_list(parts) do
+  def transform({:for, meta, parts}, context) when is_list(parts) do
     initial_acc = %{
       qualifiers: [],
       collectable: %IR.ListType{data: []},
@@ -217,7 +220,8 @@ defmodule Hologram.Compiler.Transformer do
       collectable: collectable,
       unique: unique,
       mapper: mapper,
-      reducer: reducer
+      reducer: reducer,
+      line: meta[:line]
     }
   end
 
@@ -228,7 +232,10 @@ defmodule Hologram.Compiler.Transformer do
   def transform({:cond, _meta, [[do: clauses]]}, context) do
     clauses_ir = Enum.map(clauses, &build_cond_clause_ir(&1, context))
 
-    %IR.Cond{clauses: clauses_ir}
+    # The BEAM reports a cond that matched no clause at the last clause's line.
+    {:->, last_clause_meta, _parts} = List.last(clauses)
+
+    %IR.Cond{clauses: clauses_ir, line: last_clause_meta[:line]}
   end
 
   def transform([{:|, _meta, [head, tail]}], context) do
@@ -243,10 +250,11 @@ defmodule Hologram.Compiler.Transformer do
     if {:no_parens, true} in meta do
       %IR.DotOperator{
         left: transform(left, context),
-        right: transform(right, context)
+        right: transform(right, context),
+        line: meta[:line]
       }
     else
-      transform_remote_function_call(left, right, [], context)
+      transform_remote_function_call(left, right, [], meta, context)
     end
   end
 
@@ -255,21 +263,21 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform(
-        {marker, _meta_1, [{:when, _meta_2, [{name, _meta_3, params}, guards]}, [do: body]]},
+        {marker, meta_1, [{:when, _meta_2, [{name, _meta_3, params}, guards]}, [do: body]]},
         context
       )
       when marker in [:def, :defp] do
-    transform_function_definition(marker, name, params, guards, body, context)
+    transform_function_definition(marker, name, params, guards, body, meta_1, context)
   end
 
-  def transform({marker, _meta_1, [{name, _meta_2, params}, [do: body]]}, context)
+  def transform({marker, meta_1, [{name, _meta_2, params}, [do: body]]}, context)
       when marker in [:def, :defp] and (is_list(params) or is_nil(params)) do
-    transform_function_definition(marker, name, List.wrap(params), nil, body, context)
+    transform_function_definition(marker, name, List.wrap(params), nil, body, meta_1, context)
   end
 
-  def transform({marker, _meta_1, [{name, _meta_2, module}, [do: body]]}, context)
+  def transform({marker, meta_1, [{name, _meta_2, module}, [do: body]]}, context)
       when marker in [:def, :defp] and is_atom(module) do
-    transform_function_definition(marker, name, [], nil, body, context)
+    transform_function_definition(marker, name, [], nil, body, meta_1, context)
   end
 
   def transform(value, _context) when is_integer(value) do
@@ -293,14 +301,15 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Map with cons operator is transformed to Map.merge/2 remote function call.
-  def transform({:%{}, _meta_1, [{:|, _meta_2, [map_1, data_2]}]}, context) do
+  def transform({:%{}, meta_1, [{:|, _meta_2, [map_1, data_2]}]}, context) do
     %IR.RemoteFunctionCall{
       module: %IR.AtomType{value: Map},
       function: :merge,
       args: [
         transform(map_1, context),
         transform({:%{}, [], data_2}, context)
-      ]
+      ],
+      line: meta_1[:line]
     }
   end
 
@@ -313,10 +322,11 @@ defmodule Hologram.Compiler.Transformer do
     %IR.MapType{data: data_ir}
   end
 
-  def transform({:=, _meta, [left, right]}, context) do
+  def transform({:=, meta, [left, right]}, context) do
     %IR.MatchOperator{
       left: transform(left, %{context | pattern?: true}),
-      right: transform(right, context)
+      right: transform(right, context),
+      line: meta[:line]
     }
   end
 
@@ -365,7 +375,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Struct with cons operator is transformed to nested Map.merge/2 and __struct__/1 remote function calls.
-  def transform({:%, _meta_1, [module, {:%{}, _meta_2, [{:|, _meta_3, [map, data]}]}]}, context) do
+  def transform({:%, meta_1, [module, {:%{}, _meta_2, [{:|, _meta_3, [map, data]}]}]}, context) do
     %IR.RemoteFunctionCall{
       module: %IR.AtomType{value: Map},
       function: :merge,
@@ -374,9 +384,11 @@ defmodule Hologram.Compiler.Transformer do
         %IR.RemoteFunctionCall{
           module: transform(module, context),
           function: :__struct__,
-          args: [transform(data, context)]
+          args: [transform(data, context)],
+          line: meta_1[:line]
         }
-      ]
+      ],
+      line: meta_1[:line]
     }
   end
 
@@ -388,17 +400,18 @@ defmodule Hologram.Compiler.Transformer do
 
   # Struct without cons operator not in a pattern is transformed to __struct__/1 remote function call.
   def transform(
-        {:%, _meta_1, [module, {:%{}, _meta_2, data}]},
+        {:%, meta_1, [module, {:%{}, _meta_2, data}]},
         %Context{pattern?: false} = context
       ) do
     %IR.RemoteFunctionCall{
       module: transform(module, context),
       function: :__struct__,
-      args: [transform(data, context)]
+      args: [transform(data, context)],
+      line: meta_1[:line]
     }
   end
 
-  def transform({:try, _meta, [opts]}, context) do
+  def transform({:try, meta, [opts]}, context) do
     initial_acc = %{
       body: nil,
       rescue_clauses: [],
@@ -425,17 +438,19 @@ defmodule Hologram.Compiler.Transformer do
       rescue_clauses: rescue_clauses,
       catch_clauses: catch_clauses,
       else_clauses: else_clauses,
-      after_block: after_block
+      after_block: after_block,
+      line: meta[:line]
     }
   end
 
-  def transform({:with, _meta, parts}, context) when is_list(parts) do
+  def transform({:with, meta, parts}, context) when is_list(parts) do
     {clauses_ast, [[{:do, do_part}, {:else, else_clauses}]]} = Enum.split(parts, -1)
 
     %IR.With{
       clauses: Enum.map(clauses_ast, &transform_with_clause(&1, context)),
       else_clauses: Enum.map(else_clauses, &transform_with_else_clause(&1, context)),
-      body: transform(do_part, context)
+      body: transform(do_part, context),
+      line: meta[:line]
     }
   end
 
@@ -451,34 +466,26 @@ defmodule Hologram.Compiler.Transformer do
 
   # --- PRESERVE ORDER (BEGIN) ---
 
-  def transform({{:., _meta_2, [module, function]}, _meta_1, args}, context) do
-    transform_remote_function_call(module, function, args, context)
+  def transform({{:., _meta_2, [module, function]}, meta_1, args}, context) do
+    transform_remote_function_call(module, function, args, meta_1, context)
   end
 
-  # __STACKTRACE__ is a special form available inside rescue/catch clauses. The
-  # client does not support stacktraces yet, so for now it transforms to an empty
-  # list (a valid, empty stacktrace). This is what currently lets reraise/2 and
-  # reraise/3 work on the client: they expand to
-  # :erlang.raise(:error, exception, __STACKTRACE__), and :erlang.raise/3 ignores
-  # the stacktrace argument.
-  #
-  # TODO: support real client-side stacktraces. This requires maintaining a call
-  # stack in the interpreter (pushing a frame on each function call), capturing it
-  # when a HologramBoxedError is raised, and binding __STACKTRACE__ to that
-  # captured trace within rescue/catch clause scopes - instead of transforming it
-  # to an empty list literal here.
+  # __STACKTRACE__ is a special form available inside rescue/catch clauses.
+  # In rescue/catch clause scope it evaluates to the stacktrace captured on
+  # the error being handled.
   def transform({:__STACKTRACE__, _meta, _module}, _context) do
-    %IR.ListType{data: []}
+    %IR.Stacktrace{}
   end
 
   def transform({name, meta, module}, _context) when is_atom(name) and not is_list(module) do
     transform_variable(name, meta)
   end
 
-  def transform({function, _meta, args}, context) when is_atom(function) and is_list(args) do
+  def transform({function, meta, args}, context) when is_atom(function) and is_list(args) do
     %IR.LocalFunctionCall{
       function: function,
-      args: transform_list(args, context)
+      args: transform_list(args, context),
+      line: meta[:line]
     }
   end
 
@@ -622,7 +629,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_anonymous_function_clause(
-         {:->, _meta_1, [[{:when, _meta_2, params_and_guards}], body]},
+         {:->, meta_1, [[{:when, _meta_2, params_and_guards}], body]},
          context
        ) do
     {guards, params} = List.pop_at(params_and_guards, -1)
@@ -630,15 +637,17 @@ defmodule Hologram.Compiler.Transformer do
     %IR.FunctionClause{
       params: transform_list(params, %{context | pattern?: true}),
       guards: transform_guards(guards, context),
-      body: transform(body, context)
+      body: transform(body, context),
+      line: meta_1[:line]
     }
   end
 
-  defp transform_anonymous_function_clause({:->, _meta, [params, body]}, context) do
+  defp transform_anonymous_function_clause({:->, meta, [params, body]}, context) do
     %IR.FunctionClause{
       params: transform_list(params, %{context | pattern?: true}),
       guards: [],
-      body: transform(body, context)
+      body: transform(body, context),
+      line: meta[:line]
     }
   end
 
@@ -807,7 +816,7 @@ defmodule Hologram.Compiler.Transformer do
     transform(ast, context)
   end
 
-  defp transform_function_definition(marker, name, params, guards, body, context) do
+  defp transform_function_definition(marker, name, params, guards, body, meta, context) do
     visibility =
       if marker == :def do
         :public
@@ -815,13 +824,14 @@ defmodule Hologram.Compiler.Transformer do
         :private
       end
 
-    guards_ir =
+    guards_asts =
       if guards do
-        transform_guards(guards, context)
+        split_guards(guards)
       else
         []
       end
 
+    guards_ir = Enum.map(guards_asts, &transform(&1, context))
     params_ir = transform_list(params, %{context | pattern?: true})
 
     %IR.FunctionDefinition{
@@ -831,17 +841,25 @@ defmodule Hologram.Compiler.Transformer do
       clause: %IR.FunctionClause{
         params: params_ir,
         guards: guards_ir,
-        body: transform(body, context)
+        body: transform(body, context),
+        line: meta[:line],
+        blame: ClauseBlame.build(params, guards_asts)
       }
     }
   end
 
-  defp transform_guards({:when, _meta, [guard, rest]}, context) do
-    [transform(guard, context) | transform_guards(rest, context)]
+  defp split_guards({:when, _meta, [guard, rest]}) do
+    [guard | split_guards(rest)]
+  end
+
+  defp split_guards(ast) do
+    [ast]
   end
 
   defp transform_guards(ast, context) do
-    [transform(ast, context)]
+    ast
+    |> split_guards()
+    |> Enum.map(&transform(&1, context))
   end
 
   defp transform_list(list, context) do
@@ -868,11 +886,12 @@ defmodule Hologram.Compiler.Transformer do
     end)
   end
 
-  defp transform_remote_function_call(module, function, args, context) do
+  defp transform_remote_function_call(module, function, args, meta, context) do
     %IR.RemoteFunctionCall{
       module: transform(module, context),
       function: function,
-      args: transform_list(args, context)
+      args: transform_list(args, context),
+      line: meta[:line]
     }
   end
 

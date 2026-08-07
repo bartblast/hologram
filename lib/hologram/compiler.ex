@@ -68,6 +68,33 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the version of each OTP application the given call graph reaches, keyed by application
+  name and sorted by it.
+
+  A stacktrace frame names the application its module belongs to and that application's version,
+  the way the server renders one, and this is where the client reads the version from.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_app_versions_1/README.md
+  """
+  @spec build_app_versions(CallGraph.t()) :: keyword(String.t())
+  def build_app_versions(call_graph) do
+    call_graph
+    |> CallGraph.vertices()
+    |> Enum.map(fn
+      {module, _function, _arity} -> module
+      module -> module
+    end)
+    |> Enum.uniq()
+    |> Enum.map(&Application.get_application/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.map(fn app -> {app, Application.spec(app, :vsn)} end)
+    |> Enum.reject(fn {_app, vsn} -> is_nil(vsn) end)
+    |> Enum.map(fn {app, vsn} -> {app, to_string(vsn)} end)
+    |> Enum.sort()
+  end
+
+  @doc """
   Builds the call graph of all modules in the project.
   """
   @spec build_call_graph :: CallGraph.t()
@@ -109,14 +136,18 @@ defmodule Hologram.Compiler do
     # (determined experimentally)
     chunk_size = 2
 
+    # TODO: Remove this flag and call :code.which/1 directly below when
+    # resolve_beam_source/2 goes (see the removal note there).
+    umbrella? = Reflection.umbrella?()
+
     modules
     |> Enum.chunk_every(chunk_size)
     |> TaskUtils.async_many(fn module_chunk ->
       Enum.each(module_chunk, fn module ->
-        beam_path = :code.which(module)
+        beam_source = resolve_beam_source(module, umbrella?)
 
-        if beam_path != :non_existing do
-          ir = IR.for_module(module, beam_path)
+        if beam_source do
+          ir = IR.for_module(module, beam_source)
           PLT.put(ir_plt, module, ir)
         end
       end)
@@ -135,8 +166,13 @@ defmodule Hologram.Compiler do
   def build_module_digest_plt!(opts \\ []) do
     module_digest_plt = PLT.start(opts)
 
+    # TODO: Remove this flag and the argument it feeds to
+    # rebuild_module_digest_plt_entry!/3 when resolve_beam_source/2 goes (see
+    # the removal note there).
+    umbrella? = Reflection.umbrella?()
+
     Reflection.list_elixir_modules()
-    |> TaskUtils.async_many(&rebuild_module_digest_plt_entry!(&1, module_digest_plt))
+    |> TaskUtils.async_many(&rebuild_module_digest_plt_entry!(&1, module_digest_plt, umbrella?))
     |> Task.await_many(:infinity)
 
     module_digest_plt
@@ -213,6 +249,11 @@ defmodule Hologram.Compiler do
       |> render_elixir_function_defs(ir_plt, async_mfas)
       |> render_block()
 
+    module_metadata_registration =
+      mfas
+      |> render_module_metadata_registration()
+      |> render_block()
+
     """
     "use strict";
 
@@ -230,7 +271,7 @@ defmodule Hologram.Compiler do
         MemoryStorage,
         Type,
         Utils,
-      } = deps;#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}
+      } = deps;#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}
     }
 
     globalThis.Hologram.pageScriptLoaded = true;
@@ -243,8 +284,9 @@ defmodule Hologram.Compiler do
   @doc """
   Builds Hologram runtime JavaScript source code.
   """
-  @spec build_runtime_js(list(mfa), PLT.t(), MapSet.t(mfa), T.file_path()) :: String.t()
-  def build_runtime_js(runtime_mfas, ir_plt, async_mfas, js_dir) do
+  @spec build_runtime_js(list(mfa), PLT.t(), MapSet.t(mfa), keyword(String.t()), T.file_path()) ::
+          String.t()
+  def build_runtime_js(runtime_mfas, ir_plt, async_mfas, app_versions, js_dir) do
     erlang_function_defs =
       runtime_mfas
       |> render_erlang_function_defs(Path.join(js_dir, "erlang"))
@@ -253,6 +295,16 @@ defmodule Hologram.Compiler do
     elixir_function_defs =
       runtime_mfas
       |> render_elixir_function_defs(ir_plt, async_mfas)
+      |> render_block()
+
+    module_metadata_registration =
+      runtime_mfas
+      |> render_module_metadata_registration()
+      |> render_block()
+
+    manually_ported_clause_heads =
+      ir_plt
+      |> render_manually_ported_clause_heads()
       |> render_block()
 
     """
@@ -269,7 +321,11 @@ defmodule Hologram.Compiler do
     import Type from "#{js_dir}/type.mjs";
     import Utils from "#{js_dir}/utils.mjs";
 
-    const startTime = PerformanceTimer.start();#{erlang_function_defs}#{elixir_function_defs}
+    const startTime = PerformanceTimer.start();
+
+    globalThis.Hologram.config = #{render_client_config()};
+
+    ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
@@ -318,11 +374,17 @@ defmodule Hologram.Compiler do
       "--target=es2021"
     ]
 
-    project_node_modules_path = Path.join([Reflection.root_dir(), "assets", "node_modules"])
+    # Both the workspace root's and the OTP app's assets/node_modules go on
+    # NODE_PATH (identical in single-app projects, hence deduplicated).
+    # Non-existent dirs are silently ignored by Node.
+    workspace_and_otp_app_node_modules_paths =
+      [Reflection.root_dir(), Reflection.otp_app_dir()]
+      |> Enum.uniq()
+      |> Enum.map(&Path.join([&1, "assets", "node_modules"]))
 
     node_path =
       Enum.join(
-        [opts[:node_modules_path], project_node_modules_path],
+        [opts[:node_modules_path] | workspace_and_otp_app_node_modules_paths],
         PathUtils.env_path_separator()
       )
 
@@ -411,12 +473,18 @@ defmodule Hologram.Compiler do
   @doc """
   Creates runtime bundle entry file.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_4/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_5/README.md
   """
-  @spec create_runtime_entry_file(list(mfa), PLT.t(), MapSet.t(mfa), T.opts()) :: T.file_path()
-  def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts) do
+  @spec create_runtime_entry_file(
+          list(mfa),
+          PLT.t(),
+          MapSet.t(mfa),
+          keyword(String.t()),
+          T.opts()
+        ) :: T.file_path()
+  def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, app_versions, opts) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, async_mfas, opts[:js_dir])
+    |> build_runtime_js(ir_plt, async_mfas, app_versions, opts[:js_dir])
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
@@ -585,13 +653,17 @@ defmodule Hologram.Compiler do
   """
   @spec patch_ir_plt!(PLT.t(), map) :: PLT.t()
   def patch_ir_plt!(ir_plt, module_digests_diff) do
+    # TODO: Remove this flag and the argument it feeds to rebuild_ir_plt_entry!/3
+    # when resolve_beam_source/2 goes (see the removal note there).
+    umbrella? = Reflection.umbrella?()
+
     delete_tasks =
       TaskUtils.async_many(module_digests_diff.removed_modules, &PLT.delete(ir_plt, &1))
 
     rebuild_tasks =
       TaskUtils.async_many(
         module_digests_diff.edited_modules ++ module_digests_diff.added_modules,
-        &rebuild_ir_plt_entry!(ir_plt, &1)
+        &rebuild_ir_plt_entry!(ir_plt, &1, umbrella?)
       )
 
     Task.await_many(delete_tasks, :infinity)
@@ -759,22 +831,42 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp rebuild_ir_plt_entry!(ir_plt, module) do
-    beam_path = :code.which(module)
-    PLT.put(ir_plt, module, IR.for_module(module, beam_path))
+  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
+  # when resolve_beam_source/2 goes (see the removal note there).
+  defp rebuild_ir_plt_entry!(ir_plt, module, umbrella?) do
+    # A nil beam source must not reach IR.for_module/2 - it resolves a nil one
+    # with :code.which/1, which is exactly the stale path that yielded nil here.
+    if beam_source = resolve_beam_source(module, umbrella?) do
+      PLT.put(ir_plt, module, IR.for_module(module, beam_source))
+    end
   end
 
-  defp rebuild_module_digest_plt_entry!(module, module_digest_plt) do
-    beam_path = :code.which(module)
+  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
+  # when resolve_beam_source/2 goes (see the removal note there).
+  defp rebuild_module_digest_plt_entry!(module, module_digest_plt, umbrella?) do
+    beam_source = resolve_beam_source(module, umbrella?)
 
-    if beam_path != :non_existing do
+    if beam_source do
       digest =
-        beam_path
+        beam_source
         |> Reflection.beam_defs()
         # Fast and deterministic for change detection
         |> :erlang.phash2()
 
       PLT.put(module_digest_plt, module, digest)
+    end
+  end
+
+  # Travels with the per-module metadata, which is emitted under the same
+  # setting - a bundle built without client stacktraces names no application
+  # and no version anywhere.
+  defp render_app_versions(app_versions) do
+    if Hologram.client_stacktraces?() do
+      app_versions
+      |> Enum.map_join(", ", fn {app, vsn} -> ~s/"#{app}": "#{vsn}"/ end)
+      |> then(&"{#{&1}}")
+    else
+      "{}"
     end
   end
 
@@ -786,6 +878,10 @@ defmodule Hologram.Compiler do
     else
       ""
     end
+  end
+
+  defp render_client_config do
+    ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
   end
 
   defp render_elixir_function_defs(mfas, ir_plt, async_mfas) do
@@ -801,6 +897,56 @@ defmodule Hologram.Compiler do
     end)
     |> Task.await_many(:infinity)
     |> Enum.join("\n\n")
+  end
+
+  # A manually ported function's clauses aren't encoded, so its raise sites have
+  # no attempted clauses to report. Their heads are registered separately, from
+  # the IR of the Elixir function the port stands in for.
+  defp render_manually_ported_clause_heads(ir_plt) do
+    CallGraph.manually_ported_elixir_mfas()
+    |> Enum.map(fn {module, function, _arity} -> {module, function} end)
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.flat_map(fn {module, function} ->
+      render_manually_ported_clause_heads(ir_plt, module, function)
+    end)
+    |> Enum.join("\n")
+  end
+
+  # A raise reports the arity the function was defined with, which a default
+  # argument makes differ from the arity the port replaces - Task.await/1 is
+  # ported, but its clause is await/2 - so every arity is registered.
+  defp render_manually_ported_clause_heads(ir_plt, module, function) do
+    module_name = Reflection.module_name(module)
+
+    case PLT.get(ir_plt, module) do
+      {:ok, module_def} ->
+        module_def
+        |> IR.aggregate_module_funs()
+        |> Enum.filter(fn {{name, _arity}, _fun} -> name == function end)
+        |> Enum.sort()
+        |> Enum.map(fn {{name, arity}, {visibility, clauses}} ->
+          Encoder.encode_elixir_function_clause_heads(
+            module_name,
+            name,
+            arity,
+            visibility,
+            clauses,
+            %Context{module: module}
+          )
+        end)
+
+      :error ->
+        []
+    end
+  end
+
+  defp render_module_metadata_registration(mfas) do
+    mfas
+    |> filter_elixir_mfas()
+    |> Enum.map(fn {module, _function, _arity} -> module end)
+    |> Enum.uniq()
+    |> Encoder.encode_module_metadata_registration()
   end
 
   defp render_erlang_function_defs(mfas, erlang_js_dir) do
@@ -831,5 +977,31 @@ defmodule Hologram.Compiler do
       end)
 
     ~s'Interpreter.registerJsBindings({#{modules_arg}});'
+  end
+
+  # In umbrella projects a module can stay loaded from a consolidated protocol
+  # beam that Phoenix's code reloader has purged: the reloader compiles with
+  # --purge-consolidation-path-if-stale, which deletes the umbrella root
+  # consolidated dir while :code.which/1 keeps pointing into it. The beam source
+  # is therefore resolved through Reflection.beam_source/1, which falls back to
+  # the module's object code. Single-app projects never hit that state, so they
+  # resolve through a plain :code.which/1 lookup with no per-module overhead.
+  # Note that this is NOT fixed by the Phoenix > 1.8.9 code reloader rework
+  # (phoenixframework/phoenix#6753) - the purge flag is still passed after it.
+  # TODO: Remove the umbrella branch once upstream stops leaving loaded modules
+  # pointing at purged consolidated beams. That means this function,
+  # Reflection.beam_source/1 and Reflection.umbrella?/0 (if nothing else uses
+  # them by then), plus unwinding the umbrella? flag threaded through
+  # build_ir_plt/1, build_module_digest_plt!/1, patch_ir_plt!/2,
+  # rebuild_ir_plt_entry!/3 and rebuild_module_digest_plt_entry!/3 - their
+  # bodies go back to resolving the beam path with :code.which/1 directly.
+  defp resolve_beam_source(module, true), do: Reflection.beam_source(module)
+
+  defp resolve_beam_source(module, false) do
+    beam_path = :code.which(module)
+
+    if beam_path != :non_existing do
+      beam_path
+    end
   end
 end

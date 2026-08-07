@@ -68,6 +68,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module80
   alias Hologram.Test.Fixtures.Template.Renderer.Module84
+  alias Hologram.Test.Fixtures.Template.Renderer.Module86
+  alias Hologram.Test.Fixtures.Template.Renderer.Module87
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
   @csrf_token "test-csrf-token"
@@ -330,6 +332,305 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "element spread" do
+    test "map value" do
+      # <div ...{%{id: "my_id"}}></div>
+      node = {:element, "div", [{:spread, {%{id: "my_id"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_id"></div>), %{}, @server}
+    end
+
+    test "keyword list value" do
+      node = {:element, "div", [{:spread, {[id: "my_id", class: "my_class"]}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div class="my_class" id="my_id"></div>), %{}, @server}
+    end
+
+    test "map value with multiple entries" do
+      node = {:element, "div", [{:spread, {%{id: "my_id", class: "my_class"}}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div class="my_class" id="my_id"></div>), %{}, @server}
+    end
+
+    test "string keys" do
+      node = {:element, "div", [{:spread, {%{"id" => "my_id"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_id"></div>), %{}, @server}
+    end
+
+    test "entries are sorted by name, regardless of key type" do
+      node =
+        {:element, "div", [{:spread, {%{:my_key_3 => "c", "my_key_1" => "a", :my_key_2 => "b"}}}],
+         []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div my-key-1="a" my-key-2="b" my-key-3="c"></div>), %{}, @server}
+    end
+
+    test "entries are sorted by the composed name, so nested ones stay next to their siblings" do
+      node =
+        {:element, "div",
+         [{:spread, {[my_key_2: "b", data: [user_id: 1, role: "admin"], my_key_1: "a"]}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div data-role="admin" data-user-id="1" my-key-1="a" my-key-2="b"></div>), %{},
+                @server}
+    end
+
+    # Only the block a single spread expands to is sorted.
+    test "sorting doesn't move attributes written literally" do
+      node =
+        {:element, "div",
+         [
+           {"zzz", [text: "my_value_1"]},
+           {:spread, {%{bbb: "my_value_2", aaa: "my_value_3"}}},
+           {"yyy", [text: "my_value_4"]}
+         ], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div zzz="my_value_1" aaa="my_value_3" bbb="my_value_2" yyy="my_value_4"></div>),
+                %{}, @server}
+    end
+
+    test "each spread is sorted on its own" do
+      node =
+        {:element, "div",
+         [
+           {:spread, {%{zzz: "my_value_1", aaa: "my_value_2"}}},
+           {:spread, {%{bbb: "my_value_3"}}}
+         ], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div aaa="my_value_2" zzz="my_value_1" bbb="my_value_3"></div>), %{}, @server}
+    end
+
+    test "underscores in an atom key are converted to hyphens" do
+      node = {:element, "div", [{:spread, {%{my_key: "my_value"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div my-key="my_value"></div>), %{}, @server}
+    end
+
+    test "underscores in a string key are converted to hyphens" do
+      node = {:element, "div", [{:spread, {%{"my_key" => "my_value"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div my-key="my_value"></div>), %{}, @server}
+    end
+
+    test "nested map value composes a dash-joined name" do
+      node = {:element, "div", [{:spread, {%{data: %{user_id: 1}}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div data-user-id="1"></div>), %{}, @server}
+    end
+
+    test "nested keyword list value composes a dash-joined name" do
+      node = {:element, "div", [{:spread, {[data: [user_id: 1]]}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div data-user-id="1"></div>), %{}, @server}
+    end
+
+    test "map nested in a keyword list" do
+      node = {:element, "div", [{:spread, {[data: %{user_id: 1}]}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div data-user-id="1"></div>), %{}, @server}
+    end
+
+    test "keyword list nested in a map" do
+      node = {:element, "div", [{:spread, {%{data: [user_id: 1]}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div data-user-id="1"></div>), %{}, @server}
+    end
+
+    test "nesting at multiple levels" do
+      node = {:element, "div", [{:spread, {[data: [my_group: %{my_key: "my_value"}]]}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div data-my-group-my-key="my_value"></div>), %{}, @server}
+    end
+
+    # Sorting is stable, so a keyword list's order still decides which duplicate key wins.
+    test "duplicate keys in a keyword list, later wins" do
+      node = {:element, "div", [{:spread, {[id: "my_value_1", id: "my_value_2"]}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_value_2"></div>), %{}, @server}
+    end
+
+    test "entry with nil value is not rendered" do
+      node = {:element, "div", [{:spread, {[id: nil, class: "my_class"]}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div class="my_class"></div>), %{}, @server}
+    end
+
+    test "entry with false value is not rendered" do
+      node = {:element, "div", [{:spread, {[id: false, class: "my_class"]}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div class="my_class"></div>), %{}, @server}
+    end
+
+    test "entry with true value is stringified, same as a named attribute" do
+      node = {:element, "div", [{:spread, {%{id: true}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="true"></div>), %{}, @server}
+    end
+
+    test "entry with empty string value renders the bare name, same as a named attribute" do
+      node = {:element, "div", [{:spread, {%{id: ""}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id></div>), %{}, @server}
+    end
+
+    test "struct entry value is a leaf and is stringified" do
+      node = {:element, "div", [{:spread, {%{my_key: ~D[2024-01-15]}}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div my-key="2024-01-15"></div>), %{}, @server}
+    end
+
+    # Only maps and keyword lists recurse, so a non-keyword list nested inside a spread is a value.
+    test "nested list which is not a keyword list is a leaf and is stringified" do
+      node = {:element, "div", [{:spread, {%{my_key: ~c"abc"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div my-key="abc"></div>), %{}, @server}
+    end
+
+    test "empty map value renders no attributes" do
+      node = {:element, "div", [{:spread, {%{}}}], []}
+
+      assert render_dom(node, @env, @server) == {"<div></div>", %{}, @server}
+    end
+
+    test "empty keyword list value renders no attributes" do
+      node = {:element, "div", [{:spread, {[]}}], []}
+
+      assert render_dom(node, @env, @server) == {"<div></div>", %{}, @server}
+    end
+
+    test "void element" do
+      node = {:element, "img", [{:spread, {%{id: "my_id"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<img id="my_id" />), %{}, @server}
+    end
+
+    test "named attribute before the spread is overridden" do
+      node =
+        {:element, "div", [{"id", [text: "my_value_1"]}, {:spread, {%{id: "my_value_2"}}}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_value_2"></div>), %{}, @server}
+    end
+
+    test "named attribute after the spread wins" do
+      node =
+        {:element, "div", [{:spread, {%{id: "my_value_1"}}}, {"id", [text: "my_value_2"]}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_value_2"></div>), %{}, @server}
+    end
+
+    test "later spread wins over an earlier one" do
+      node =
+        {:element, "div", [{:spread, {%{id: "my_value_1"}}}, {:spread, {%{id: "my_value_2"}}}],
+         []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_value_2"></div>), %{}, @server}
+    end
+
+    # Attribute order carries no meaning in HTML, so the winning entry simply stays where it is.
+    test "overridden name is rendered at the position of the winning entry" do
+      node =
+        {:element, "div",
+         [
+           {"id", [text: "my_value_1"]},
+           {"class", [text: "my_class"]},
+           {:spread, {%{id: "my_value_2"}}}
+         ], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div class="my_class" id="my_value_2"></div>), %{}, @server}
+    end
+
+    test "interleaved with named attributes" do
+      node =
+        {:element, "div",
+         [
+           {"attr_1", [text: "my_value_1"]},
+           {:spread, {%{attr_2: "my_value_2"}}},
+           {"attr_3", [expression: {"my_value_3"}]}
+         ], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div attr_1="my_value_1" attr-2="my_value_2" attr_3="my_value_3"></div>), %{},
+                @server}
+    end
+
+    test "event attributes are filtered out, same as without a spread" do
+      node =
+        {:element, "div",
+         [
+           {"$click", [expression: {:my_command}]},
+           {:spread, {%{id: "my_id"}}},
+           {"$key_down", [expression: {:my_command}], %{key: [["enter"]]}}
+         ], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div id="my_id"></div>), %{}, @server}
+    end
+
+    test "raises for a nil value" do
+      node = {:element, "div", [{:spread, {nil}}], []}
+
+      assert_raise ArgumentError,
+                   "spread value must be a map or a keyword list, got: nil",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a string value" do
+      node = {:element, "div", [{:spread, {"my_string"}}], []}
+
+      assert_raise ArgumentError,
+                   ~s(spread value must be a map or a keyword list, got: "my_string"),
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a list which is not a keyword list" do
+      node = {:element, "div", [{:spread, {[1, 2, 3]}}], []}
+
+      assert_raise ArgumentError,
+                   "spread value must be a map or a keyword list, got: [1, 2, 3]",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a struct value" do
+      node = {:element, "div", [{:spread, {~D[2024-01-15]}}], []}
+
+      assert_raise ArgumentError,
+                   "spread value must be a map or a keyword list, got: ~D[2024-01-15]",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a '$'-prefixed atom key" do
+      node = {:element, "div", [{:spread, {%{"$click": :my_command}}}], []}
+
+      assert_raise ArgumentError,
+                   ~s(event bindings can't be set through a spread, got the "$click" key),
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a '$'-prefixed string key" do
+      node = {:element, "div", [{:spread, {%{"$click" => :my_command}}}], []}
+
+      assert_raise ArgumentError,
+                   ~s(event bindings can't be set through a spread, got the "$click" key),
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a '$'-prefixed nested key" do
+      node = {:element, "div", [{:spread, {%{data: %{"$click" => :my_command}}}}], []}
+
+      assert_raise ArgumentError,
+                   ~s(event bindings can't be set through a spread, got the "$click" key),
+                   fn -> render_dom(node, @env, @server) end
+    end
+  end
+
   # Some client tests are different than server tests.
   describe "node list" do
     test "text and expression nodes" do
@@ -479,6 +780,171 @@ defmodule Hologram.Template.RendererTest do
 
       assert {"prop_aaa = 987", _component_registry, _server_struct} =
                render_dom(node, @env, @server)
+    end
+  end
+
+  describe "component prop spread" do
+    test "map value" do
+      node = {:component, Module16, [{:spread, {%{prop_1: "my_value_1", prop_2: 2}}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;, prop_2: 2}', _registry,
+              _server_struct} = render_dom(node, @env, @server)
+    end
+
+    test "keyword list value" do
+      node = {:component, Module16, [{:spread, {[prop_1: "my_value_1", prop_2: 2]}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;, prop_2: 2}', _registry,
+              _server_struct} = render_dom(node, @env, @server)
+    end
+
+    test "string keys" do
+      node = {:component, Module16, [{:spread, {%{"prop_1" => "my_value_1"}}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    # Prop names live in the Elixir namespace, so they are not dasherized the way attributes are.
+    test "underscores in names are kept verbatim" do
+      node = {:component, Module86, [{:spread, {%{my_prop_1: "my_value_1"}}}], []}
+
+      assert {~s'component vars = %{my_prop_1: &quot;my_value_1&quot;}', _registry,
+              _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "undeclared keys are filtered out" do
+      node =
+        {:component, Module16, [{:spread, {%{prop_1: "my_value_1", undeclared: "my_value_2"}}}],
+         []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "values are passed as raw terms" do
+      node = {:component, Module64, [{:spread, {%{my_prop: {1, 2, 3}}}}], []}
+
+      assert render_dom(node, @env, @server) == {"my_prop = {1, 2, 3}", %{}, @server}
+    end
+
+    # Unlike the element branch, a map value doesn't recurse into composed names.
+    test "map value of an entry is a raw prop value" do
+      node = {:component, Module86, [{:spread, {%{my_prop_2: %{my_nested_key: 1}}}}], []}
+
+      assert {~s'component vars = %{my_prop_2: %{my_nested_key: 1}}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "keyword list value of an entry is a raw prop value" do
+      node = {:component, Module86, [{:spread, {%{my_prop_3: [my_nested_key: 1]}}}], []}
+
+      assert {~s'component vars = %{my_prop_3: [my_nested_key: 1]}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "nil value is passed as-is" do
+      node = {:component, Module86, [{:spread, {%{my_prop_1: nil}}}], []}
+
+      assert {"component vars = %{my_prop_1: nil}", _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "false value is passed as-is" do
+      node = {:component, Module86, [{:spread, {%{my_prop_1: false}}}], []}
+
+      assert {"component vars = %{my_prop_1: false}", _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "named prop before the spread is overridden" do
+      node =
+        {:component, Module16,
+         [{"prop_1", [text: "my_value_1"]}, {:spread, {%{prop_1: "my_value_2"}}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_2&quot;}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "named prop after the spread wins" do
+      node =
+        {:component, Module16,
+         [{:spread, {%{prop_1: "my_value_1"}}}, {"prop_1", [text: "my_value_2"]}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_2&quot;}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "later spread wins over an earlier one" do
+      node =
+        {:component, Module16,
+         [{:spread, {%{prop_1: "my_value_1"}}}, {:spread, {%{prop_1: "my_value_2"}}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_2&quot;}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "cid supplied through a spread initializes a stateful component" do
+      node = {:component, Module16, [{:spread, {%{cid: "my_component", prop_1: "my_value"}}}], []}
+
+      assert {~s'component vars = %{cid: &quot;my_component&quot;, prop_1: &quot;my_value&quot;}',
+              %{"my_component" => %{module: Module16, struct: %Component{}}}, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "declared default value is applied for a key not supplied by the spread" do
+      node = {:component, Module65, [{:spread, {%{prop_2: :my_value}}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;abc&quot;, prop_2: :my_value, prop_3: 123}',
+              _registry, _server_struct} = render_dom(node, @env, @server)
+    end
+
+    test "empty map value supplies no props" do
+      node = {:component, Module16, [{"prop_1", [text: "my_value_1"]}, {:spread, {%{}}}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;}', _registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "raises for a nil value" do
+      node = {:component, Module16, [{:spread, {nil}}], []}
+
+      assert_raise ArgumentError,
+                   "spread value must be a map or a keyword list, got: nil",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a string value" do
+      node = {:component, Module16, [{:spread, {"my_string"}}], []}
+
+      assert_raise ArgumentError,
+                   ~s(spread value must be a map or a keyword list, got: "my_string"),
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a list which is not a keyword list" do
+      node = {:component, Module16, [{:spread, {[1, 2, 3]}}], []}
+
+      assert_raise ArgumentError,
+                   "spread value must be a map or a keyword list, got: [1, 2, 3]",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a struct value" do
+      node = {:component, Module16, [{:spread, {~D[2024-01-15]}}], []}
+
+      assert_raise ArgumentError,
+                   "spread value must be a map or a keyword list, got: ~D[2024-01-15]",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a '$'-prefixed key" do
+      node = {:component, Module16, [{:spread, {%{"$click" => :my_command}}}], []}
+
+      assert_raise ArgumentError,
+                   ~s(event bindings can't be set through a spread, got the "$click" key),
+                   fn -> render_dom(node, @env, @server) end
     end
   end
 
@@ -748,9 +1214,239 @@ defmodule Hologram.Template.RendererTest do
 
       {html, component_registry, server_struct} = render_dom(node, @env, @server)
 
-      assert normalize_newlines(html) == "\n  \n"
+      assert normalize_newlines(html) ==
+               "\n  <!--[h:g1vmo2:0:o]--><!--[h:g1vmo2:0:c]-->\n"
+
       assert component_registry == %{}
       assert server_struct == @server
+    end
+  end
+
+  describe "dynamic tag node, element branch" do
+    test "without attributes or children" do
+      # <{"div"}></{"div"}>
+      node = {:dynamic_tag, {"div"}, [], []}
+
+      assert render_dom(node, @env, @server) == {"<div></div>", %{}, @server}
+    end
+
+    test "with attributes" do
+      node =
+        {:dynamic_tag, {"div"},
+         [
+           {"attr_1", [text: "aaa"]},
+           {"attr_2", [expression: {123}]},
+           {"attr_3", [text: "ccc", expression: {987}, text: "eee"]}
+         ], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div attr_1="aaa" attr_2="123" attr_3="ccc987eee"></div>), %{}, @server}
+    end
+
+    test "with children" do
+      node = {:dynamic_tag, {"div"}, [], [{:element, "span", [], [text: "abc"]}, {:text, "xyz"}]}
+
+      assert render_dom(node, @env, @server) == {"<div><span>abc</span>xyz</div>", %{}, @server}
+    end
+
+    test "void element" do
+      node = {:dynamic_tag, {"img"}, [{"attr_1", [text: "aaa"]}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<img attr_1="aaa" />), %{}, @server}
+    end
+
+    test "custom element" do
+      node = {:dynamic_tag, {"my-widget"}, [], [{:text, "abc"}]}
+
+      assert render_dom(node, @env, @server) == {"<my-widget>abc</my-widget>", %{}, @server}
+    end
+
+    test "filters out attributes that specify event handlers (starting with '$' character)" do
+      node =
+        {:dynamic_tag, {"div"},
+         [
+           {"attr_1", [text: "aaa"]},
+           {"$attr_2", [text: "bbb"]},
+           {"$attr_3", [text: "ccc"], ["mod_1"]}
+         ], []}
+
+      assert render_dom(node, @env, @server) == {~s(<div attr_1="aaa"></div>), %{}, @server}
+    end
+
+    test "cid attribute is rendered as a plain HTML attribute" do
+      node = {:dynamic_tag, {"div"}, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div cid="my_component"></div>), %{}, @server}
+    end
+
+    test "with spread" do
+      # <{"div"} ...{%{id: "my_id", class: "my_class"}}></{"div"}>
+      node = {:dynamic_tag, {"div"}, [{:spread, {%{id: "my_id", class: "my_class"}}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div class="my_class" id="my_id"></div>), %{}, @server}
+    end
+
+    test "with nested stateful component" do
+      node =
+        {:dynamic_tag, {"div"}, [], [{:component, Module3, [{"cid", [text: "component_3"]}], []}]}
+
+      {html, component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert html == "<div><div>state_a = 1, state_b = 2</div></div>"
+
+      assert component_registry == %{
+               "component_3" => %{module: Module3, struct: %Component{state: %{a: 1, b: 2}}}
+             }
+    end
+  end
+
+  describe "dynamic tag node, component branch" do
+    test "stateless component without props" do
+      # <{Module1} />
+      node = {:dynamic_tag, {Module1}, [], []}
+
+      assert render_dom(node, @env, @server) == {"<div>abc</div>", %{}, @server}
+    end
+
+    test "stateless component with props" do
+      node =
+        {:dynamic_tag, {Module2},
+         [
+           {"a", [text: "ddd"]},
+           {"b", [expression: {222}]},
+           {"c", [text: "fff", expression: {333}, text: "hhh"]}
+         ], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>", %{}, @server}
+    end
+
+    test "stateful component" do
+      node = {:dynamic_tag, {Module3}, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<div>state_a = 1, state_b = 2</div>",
+                %{"my_component" => %{module: Module3, struct: %Component{state: %{a: 1, b: 2}}}},
+                %Server{
+                  cookies: %{
+                    "initial_cookie_key" => :initial_cookie_value,
+                    "cookie_key_3" => :cookie_value_3
+                  },
+                  __meta__: %Metadata{
+                    cookie_ops: %{
+                      "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                      "cookie_key_3" => %Cookie{value: :cookie_value_3}
+                    }
+                  }
+                }}
+    end
+
+    test "undeclared props are dropped" do
+      node = {:dynamic_tag, {Module1}, [{"my_undeclared_prop", [text: "my_value"]}], []}
+
+      assert render_dom(node, @env, @server) == {"<div>abc</div>", %{}, @server}
+    end
+
+    test "event attributes are not passed as props" do
+      node = {:dynamic_tag, {Module2}, [{"$click", [text: "my_action"]}], []}
+
+      expected_msg = build_key_error_msg(:a, %{})
+
+      assert_raise KeyError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with slot content" do
+      node = {:dynamic_tag, {Module8}, [], [text: "123"]}
+
+      assert render_dom(node, @env, @server) == {"abc123xyz", %{}, @server}
+    end
+
+    test "with prop spread" do
+      node = {:dynamic_tag, {Module2}, [{:spread, {%{a: "ddd", b: 222, c: "fff"}}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<div>prop_a = ddd, prop_b = 222, prop_c = fff</div>", %{}, @server}
+    end
+  end
+
+  describe "dynamic tag node, slots" do
+    test "slot content is expanded through dynamic tag children" do
+      node = {:component, Module87, [], [text: "abc"]}
+
+      assert render_dom(node, @env, @server) ==
+               {"87a,32a,87b,<div>abc</div>,87x,32z,87z", %{}, @server}
+    end
+  end
+
+  describe "dynamic tag node, invalid tag name value" do
+    test "non-component atom" do
+      node = {:dynamic_tag, {:div}, [], []}
+
+      expected_msg =
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: :div, which is not a component module"
+
+      assert_raise ArgumentError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "page module" do
+      node = {:dynamic_tag, {Module14}, [], []}
+
+      expected_msg =
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: Hologram.Test.Fixtures.Template.Renderer.Module14, which is not a component module"
+
+      assert_raise ArgumentError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "nil" do
+      node = {:dynamic_tag, {nil}, [], []}
+
+      expected_msg =
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: nil, which is not a component module"
+
+      assert_raise ArgumentError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "integer" do
+      node = {:dynamic_tag, {123}, [], []}
+
+      expected_msg =
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: 123"
+
+      assert_raise ArgumentError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "non-binary bitstring" do
+      node = {:dynamic_tag, {<<3::2>>}, [], []}
+
+      expected_msg =
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: <<3::size(2)>>"
+
+      assert_raise ArgumentError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "map" do
+      node = {:dynamic_tag, {%{a: 1}}, [], []}
+
+      expected_msg =
+        "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: %{a: 1}"
+
+      assert_raise ArgumentError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
     end
   end
 

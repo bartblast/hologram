@@ -1,15 +1,11 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-  JSDOM,
-} from "../support/helpers.mjs";
+import {assert, defineRuntimeGlobals, JSDOM} from "../support/helpers.mjs";
 
 import ChangeEvent from "../../../assets/js/events/change_event.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 describe("ChangeEvent", () => {
   describe("buildOperationParam()", () => {
