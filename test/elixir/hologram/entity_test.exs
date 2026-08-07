@@ -3,6 +3,7 @@ defmodule Hologram.EntityTest do
 
   import Hologram.Entity
 
+  alias Hologram.Entity.NotIncluded
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
@@ -61,14 +62,24 @@ defmodule Hologram.EntityTest do
       assert field_names == [:a, :b, :c, :created_at, :id, :updated_at]
     end
 
-    test "includes to-one relationship fields and excludes to-many relationship fields" do
+    test "defaults relationship embed and to-many fields to the NotIncluded sentinel" do
+      entity = %Module3{}
+
+      assert entity.a == %NotIncluded{relationship: :a}
+      assert entity.b == %NotIncluded{relationship: :b}
+      assert entity.c == %NotIncluded{relationship: :c}
+      assert entity.b_id == nil
+      assert entity.c_id == nil
+    end
+
+    test "splits relationships into reference and embed fields" do
       field_names =
         %Module3{}
         |> Map.from_struct()
         |> Map.keys()
         |> Enum.sort()
 
-      assert field_names == [:b, :c, :created_at, :id, :updated_at]
+      assert field_names == [:a, :b, :b_id, :c, :c_id, :created_at, :id, :updated_at]
     end
   end
 
@@ -163,7 +174,16 @@ defmodule Hologram.EntityTest do
     end
 
     test "sets given to-one relationship references" do
-      assert new(Module3, %{c: "id_2"}).c == "id_2"
+      assert new(Module3, %{c_id: "id_2"}).c_id == "id_2"
+    end
+
+    test "raises on an assigned relationship value" do
+      expected_msg =
+        "relationship :c of Hologram.Test.Fixtures.Entity.Module3 cannot be assigned at construction - set a to-one reference via the :c_id field, to-many edges via add_relationship"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        new(Module3, %{c: "id_2"})
+      end
     end
   end
 end

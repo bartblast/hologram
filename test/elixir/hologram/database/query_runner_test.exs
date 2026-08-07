@@ -24,7 +24,7 @@ defmodule Hologram.Database.QueryRunnerTest do
   defp create_module_3_entity do
     target = create(Entity.new(Module1))
 
-    create(Entity.new(Module3, c: target.id))
+    create(Entity.new(Module3, c_id: target.id))
   end
 
   describe "run/3" do
@@ -80,7 +80,7 @@ defmodule Hologram.Database.QueryRunnerTest do
 
       assert [%{id: id, c: embedded_entity}] = run(term, @mapping)
       assert id == source.id
-      assert embedded_entity.id == source.c
+      assert embedded_entity.id == source.c_id
       assert %DateTime{} = embedded_entity.created_at
     end
 

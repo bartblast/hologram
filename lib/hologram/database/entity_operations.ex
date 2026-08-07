@@ -227,7 +227,7 @@ defmodule Hologram.Database.EntityOperations do
 
   defp field_name(%{source: {:attribute, name}}), do: name
 
-  defp field_name(%{source: {:relationship, name}}), do: name
+  defp field_name(%{source: {:relationship, name}}), do: String.to_existing_atom("#{name}_id")
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
