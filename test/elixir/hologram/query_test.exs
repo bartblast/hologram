@@ -628,6 +628,49 @@ defmodule Hologram.QueryTest do
     end
   end
 
+  describe "one/1" do
+    test "composes with other stages" do
+      query =
+        Module2
+        |> filter(a: true)
+        |> one()
+
+      assert query.cardinality == :one
+      assert query.filter == [{:a, :==, true}]
+    end
+
+    test "marks the query as single-result" do
+      assert one(Module2) == %{
+               cardinality: :one,
+               entity: Module2,
+               filter: [],
+               include: %{},
+               limit: nil,
+               offset: nil,
+               order_by: []
+             }
+    end
+
+    test "raises on a cardinality marker in an include sub-term" do
+      expected_msg =
+        "include sub-terms take no cardinality marker - the relationship declaration governs cardinality"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, :b, &one/1)
+      end
+    end
+
+    test "raises when cardinality is already marked" do
+      expected_msg = "cardinality is already set to :one"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module2
+        |> one()
+        |> one()
+      end
+    end
+  end
+
   describe "order_by/2" do
     test "accepts a keyword spec with directions" do
       query = order_by(Module2, b: :desc, c: :asc)

@@ -177,6 +177,29 @@ defmodule Hologram.Query do
   end
 
   @doc """
+  Marks the given query as single-result and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. A single-result query evaluates to the first entity under the query's
+  total order, or nil when no entity matches - never an error on multiplicity, since
+  live re-evaluation makes transient multiplicity a normal state.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, or when a cardinality is already marked.
+  """
+  @spec one(module | %{atom => any}) :: %{atom => any}
+  def one(query) do
+    term = to_term(query)
+
+    if term.cardinality != :set do
+      raise ArgumentError,
+        message: "cardinality is already set to #{inspect(term.cardinality)}"
+    end
+
+    %{term | cardinality: :one}
+  end
+
+  @doc """
   Appends ordering keys to the given query's order list and returns the resulting
   query term.
 
@@ -592,6 +615,12 @@ defmodule Hologram.Query do
 
   defp validate_sub_term!(sub_term, name, target, kind) do
     validate_sub_term_entity!(sub_term, name, target)
+
+    if sub_term.cardinality != :set do
+      raise ArgumentError,
+        message:
+          "include sub-terms take no cardinality marker - the relationship declaration governs cardinality"
+    end
 
     if kind == :to_one and sub_term_has_clauses?(sub_term) do
       raise ArgumentError,
