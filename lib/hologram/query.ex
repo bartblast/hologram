@@ -182,6 +182,25 @@ defmodule Hologram.Query do
   end
 
   @doc """
+  Returns the canonical form of the given query - the form executors run literally.
+
+  The query is an entity type module or an already built query term. Normalization:
+  sorts filter predicates into canonical order (conjunction is commutative), gives
+  every set-returning shape a total deterministic order by appending an ascending id
+  tiebreaker (or the id ordering itself when no ordering is set) unless id is already
+  among the ordering keys, drops the ordering from counting queries (counts are
+  order-invariant, view bounds included), and normalizes included sub-terms
+  recursively - to-one includes embed a single entity and carry no ordering.
+  Normalization is idempotent.
+  """
+  @spec normalize(module | %{atom => any}) :: %{atom => any}
+  def normalize(query) do
+    query
+    |> to_term()
+    |> normalized_term()
+  end
+
+  @doc """
   Sets the given query's offset - the number of results skipped before the query's
   results begin - and returns the resulting query term.
 
@@ -349,6 +368,37 @@ defmodule Hologram.Query do
         "invalid include spec entry #{inspect(entry)} - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair"
   end
 
+  defp normalized_includes(term) do
+    Map.new(term.include, fn {name, sub_term} ->
+      {name, normalized_sub_term(sub_term, relationship_kind(term.entity, name))}
+    end)
+  end
+
+  defp normalized_order(term) do
+    ordering_keys = Enum.map(term.order_by, fn {name, _direction} -> name end)
+
+    cond do
+      term.cardinality == :count -> []
+      :id in ordering_keys -> term.order_by
+      true -> List.insert_at(term.order_by, -1, {:id, :asc})
+    end
+  end
+
+  defp normalized_sub_term(sub_term, :to_many), do: normalized_term(sub_term)
+
+  defp normalized_sub_term(sub_term, :to_one) do
+    %{sub_term | include: normalized_includes(sub_term)}
+  end
+
+  defp normalized_term(term) do
+    %{
+      term
+      | filter: Enum.sort(term.filter),
+        include: normalized_includes(term),
+        order_by: normalized_order(term)
+    }
+  end
+
   defp order_entries!(name, entity_type) when is_atom(name) do
     [order_entry!(name, entity_type)]
   end
@@ -456,6 +506,12 @@ defmodule Hologram.Query do
 
   defp plain_value?(value) do
     not is_tuple(value) and not is_list(value) and not is_struct(value, Range)
+  end
+
+  defp relationship_kind(entity_type, name) do
+    {_target, kind} = validate_relationship_name!(name, entity_type)
+
+    kind
   end
 
   defp relationship_names(entity_type) do

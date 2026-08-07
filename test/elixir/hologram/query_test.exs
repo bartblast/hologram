@@ -640,6 +640,99 @@ defmodule Hologram.QueryTest do
     end
   end
 
+  describe "normalize/1" do
+    test "appends an ascending id tiebreaker to orderings" do
+      query =
+        Module2
+        |> order_by(:c)
+        |> normalize()
+
+      assert query.order_by == [{:c, :asc}, {:id, :asc}]
+    end
+
+    test "defaults an empty ordering to the id order" do
+      assert normalize(Module2) == %{
+               cardinality: :set,
+               entity: Module2,
+               filter: [],
+               include: %{},
+               limit: nil,
+               offset: nil,
+               order_by: [{:id, :asc}]
+             }
+    end
+
+    test "drops the ordering from counting queries" do
+      query =
+        Module2
+        |> order_by(:c)
+        |> count()
+        |> normalize()
+
+      assert query.order_by == []
+    end
+
+    test "is idempotent" do
+      normalized =
+        Module3
+        |> filter(id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        |> include(:a)
+        |> order_by(:created_at)
+        |> normalize()
+
+      assert normalize(normalized) == normalized
+    end
+
+    test "leaves orderings already keyed by id untouched" do
+      query =
+        Module2
+        |> order_by(id: :desc)
+        |> normalize()
+
+      assert query.order_by == [{:id, :desc}]
+    end
+
+    test "normalizes includes nested under a to-one include" do
+      query =
+        Module5
+        |> include(a: :a)
+        |> normalize()
+
+      nested_sub_term = query.include.a.include.a
+
+      assert query.include.a.order_by == []
+      assert nested_sub_term.order_by == [{:id, :asc}]
+    end
+
+    test "normalizes to-many sub-terms" do
+      query =
+        Module3
+        |> include(:a, &filter(&1, c: "x", a: true))
+        |> normalize()
+
+      assert query.include.a.filter == [{:a, :==, true}, {:c, :==, "x"}]
+      assert query.include.a.order_by == [{:id, :asc}]
+    end
+
+    test "skips ordering for to-one includes" do
+      query =
+        Module3
+        |> include(:c)
+        |> normalize()
+
+      assert query.include.c.order_by == []
+    end
+
+    test "sorts filter predicates canonically" do
+      query =
+        Module2
+        |> filter(c: "x", a: true)
+        |> normalize()
+
+      assert query.filter == [{:a, :==, true}, {:c, :==, "x"}]
+    end
+  end
+
   describe "offset/2" do
     test "sets the offset" do
       assert offset(Module2, 20) == %{
