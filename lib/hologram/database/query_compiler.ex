@@ -34,11 +34,14 @@ defmodule Hologram.Database.QueryCompiler do
     column_list = Enum.map_join(entity_mapping.columns, ", ", &Mapper.quote_identifier(&1.name))
 
     {where_sql, params} = where_clause(term.filter, entity_mapping)
+    order_sql = order_clause(term.order_by, entity_mapping)
+    bounds_sql = bounds_clause(term)
 
-    %{
-      params: params,
-      sql: "SELECT #{column_list} FROM #{qualified_table(entity_mapping.table)}#{where_sql}"
-    }
+    sql =
+      "SELECT #{column_list} FROM #{qualified_table(entity_mapping.table)}" <>
+        where_sql <> order_sql <> bounds_sql
+
+    %{params: params, sql: sql}
   end
 
   defp bind_slot({:param, param_name}, column, reversed_params) do
@@ -49,6 +52,13 @@ defmodule Hologram.Database.QueryCompiler do
     encoded_value = Codec.encode(literal, column.type)
 
     {"$#{length(reversed_params) + 1}", [{:value, encoded_value} | reversed_params]}
+  end
+
+  defp bounds_clause(term) do
+    limit_sql = if term.limit, do: " LIMIT #{term.limit}", else: ""
+    offset_sql = if term.offset, do: " OFFSET #{term.offset}", else: ""
+
+    limit_sql <> offset_sql
   end
 
   defp condition({name, :==, nil}, entity_mapping, reversed_params) do
@@ -145,6 +155,9 @@ defmodule Hologram.Database.QueryCompiler do
     {"#{Mapper.quote_identifier(column.name)} #{operator} #{placeholder}", new_params}
   end
 
+  defp direction_sql(:asc), do: "ASC"
+  defp direction_sql(:desc), do: "DESC"
+
   defp fetch_column!(%{columns: columns}, name) do
     column_name = Atom.to_string(name)
 
@@ -176,6 +189,17 @@ defmodule Hologram.Database.QueryCompiler do
   end
 
   defp null_inclusive(condition_sql, _column), do: condition_sql
+
+  defp order_clause([], _entity_mapping), do: ""
+
+  defp order_clause(entries, entity_mapping) do
+    rendered_entries =
+      Enum.map_join(entries, ", ", fn {name, direction} ->
+        "#{quoted_column_name(entity_mapping, name)} #{direction_sql(direction)}"
+      end)
+
+    " ORDER BY " <> rendered_entries
+  end
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"

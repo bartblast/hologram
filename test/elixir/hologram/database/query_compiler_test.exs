@@ -19,7 +19,7 @@ defmodule Hologram.Database.QueryCompilerTest do
                sql: sql
              } = compile(term, mapping)
 
-      assert String.ends_with?(sql, ~s( WHERE "c" = $1))
+      assert String.contains?(sql, ~s( WHERE "c" = $1))
     end
 
     test "compiles equality predicates into bound placeholders" do
@@ -35,7 +35,7 @@ defmodule Hologram.Database.QueryCompilerTest do
                sql:
                  ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
-                   ~s(WHERE "a" = $1 AND "b" = $2)
+                   ~s(WHERE "a" = $1 AND "b" = $2 ORDER BY "id" ASC)
              }
     end
 
@@ -48,7 +48,7 @@ defmodule Hologram.Database.QueryCompilerTest do
                sql: sql
              } = compile(term, mapping)
 
-      assert String.ends_with?(sql, ~s| WHERE "c" = ANY($1)|)
+      assert String.contains?(sql, ~s| WHERE "c" = ANY($1)|)
     end
 
     test "compiles inequality null-inclusively on optional attributes" do
@@ -60,7 +60,7 @@ defmodule Hologram.Database.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [{:value, 3}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s| WHERE ("b" != $1 OR "b" IS NULL)|)
+      assert String.contains?(sql, ~s| WHERE ("b" != $1 OR "b" IS NULL)|)
     end
 
     test "compiles inequality plainly on required attributes" do
@@ -72,7 +72,20 @@ defmodule Hologram.Database.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [{:value, false}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s( WHERE "a" != $1))
+      assert String.contains?(sql, ~s( WHERE "a" != $1))
+    end
+
+    test "compiles limit and offset as literal bounds" do
+      mapping = Mapper.derive!([Module2])
+
+      term =
+        Module2
+        |> Query.limit(50)
+        |> Query.offset(20)
+        |> Query.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s( ORDER BY "id" ASC LIMIT 50 OFFSET 20))
     end
 
     test "compiles membership as an array binding" do
@@ -84,7 +97,7 @@ defmodule Hologram.Database.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [{:value, ["x", "y"]}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s| WHERE "c" = ANY($1)|)
+      assert String.contains?(sql, ~s| WHERE "c" = ANY($1)|)
     end
 
     test "compiles negated membership null-inclusively on optional attributes" do
@@ -96,7 +109,7 @@ defmodule Hologram.Database.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [{:value, [1, 2]}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s| WHERE ("b" != ALL($1) OR "b" IS NULL)|)
+      assert String.contains?(sql, ~s| WHERE ("b" != ALL($1) OR "b" IS NULL)|)
     end
 
     test "compiles nil-holding membership into the IS NULL branch" do
@@ -104,7 +117,7 @@ defmodule Hologram.Database.QueryCompilerTest do
       term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil, 1]}]}
 
       assert %{params: [{:value, [1]}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s| WHERE ("b" = ANY($1) OR "b" IS NULL)|)
+      assert String.contains?(sql, ~s| WHERE ("b" = ANY($1) OR "b" IS NULL)|)
     end
 
     test "compiles nil-holding negated membership into the value-requiring branch" do
@@ -112,7 +125,7 @@ defmodule Hologram.Database.QueryCompilerTest do
       term = %{Query.normalize(Module2) | filter: [{:b, :not_in, [nil, 1]}]}
 
       assert %{params: [{:value, [1]}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s| WHERE ("b" != ALL($1) AND "b" IS NOT NULL)|)
+      assert String.contains?(sql, ~s| WHERE ("b" != ALL($1) AND "b" IS NOT NULL)|)
     end
 
     test "compiles nil-only membership as IS NULL without a bind slot" do
@@ -120,7 +133,7 @@ defmodule Hologram.Database.QueryCompilerTest do
       term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil]}]}
 
       assert %{params: [], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s( WHERE "b" IS NULL))
+      assert String.contains?(sql, ~s( WHERE "b" IS NULL))
     end
 
     test "compiles nil-only negated membership as IS NOT NULL without a bind slot" do
@@ -128,7 +141,7 @@ defmodule Hologram.Database.QueryCompilerTest do
       term = %{Query.normalize(Module2) | filter: [{:b, :not_in, [nil]}]}
 
       assert %{params: [], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s( WHERE "b" IS NOT NULL))
+      assert String.contains?(sql, ~s( WHERE "b" IS NOT NULL))
     end
 
     test "compiles nil equality as IS NULL without a bind slot" do
@@ -140,7 +153,7 @@ defmodule Hologram.Database.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s( WHERE "b" IS NULL))
+      assert String.contains?(sql, ~s( WHERE "b" IS NULL))
     end
 
     test "compiles nil inequality as IS NOT NULL without a bind slot" do
@@ -152,7 +165,7 @@ defmodule Hologram.Database.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s( WHERE "b" IS NOT NULL))
+      assert String.contains?(sql, ~s( WHERE "b" IS NOT NULL))
     end
 
     test "compiles ordering comparisons null-exclusively" do
@@ -164,7 +177,19 @@ defmodule Hologram.Database.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [{:value, 10}, {:value, 3}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s( WHERE "b" < $1 AND "b" >= $2))
+      assert String.contains?(sql, ~s( WHERE "b" < $1 AND "b" >= $2))
+    end
+
+    test "compiles ordering keys with directions and the id tiebreaker" do
+      mapping = Mapper.derive!([Module2])
+
+      term =
+        Module2
+        |> Query.order_by(b: :desc, c: :asc)
+        |> Query.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s( ORDER BY "b" DESC, "c" ASC, "id" ASC))
     end
 
     test "encodes literal values with the attribute's codec type" do
@@ -176,7 +201,7 @@ defmodule Hologram.Database.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [{:value, "x"}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s( WHERE "c" = $1))
+      assert String.contains?(sql, ~s( WHERE "c" = $1))
     end
 
     test "mixes literal and param bindings in placeholder order" do
@@ -192,7 +217,7 @@ defmodule Hologram.Database.QueryCompilerTest do
                sql: sql
              } = compile(term, mapping)
 
-      assert String.ends_with?(sql, ~s( WHERE "a" = $1 AND "c" = $2))
+      assert String.contains?(sql, ~s( WHERE "a" = $1 AND "c" = $2))
     end
 
     test "selects the mapped columns in physical order" do
@@ -202,7 +227,7 @@ defmodule Hologram.Database.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at" FROM "hologram_data"."test_fixtures_entity_module2")
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at" FROM "hologram_data"."test_fixtures_entity_module2" ORDER BY "id" ASC)
              }
     end
 
@@ -213,7 +238,7 @@ defmodule Hologram.Database.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s(SELECT "id", "b_id", "c_id", "created_at", "updated_at" FROM "hologram_data"."test_fixtures_entity_module3")
+                 ~s(SELECT "id", "b_id", "c_id", "created_at", "updated_at" FROM "hologram_data"."test_fixtures_entity_module3" ORDER BY "id" ASC)
              }
     end
   end
