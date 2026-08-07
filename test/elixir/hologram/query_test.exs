@@ -338,4 +338,113 @@ defmodule Hologram.QueryTest do
       end
     end
   end
+
+  describe "order_by/2" do
+    test "accepts a keyword spec with directions" do
+      query = order_by(Module2, b: :desc, c: :asc)
+
+      assert query.order_by == [{:b, :desc}, {:c, :asc}]
+    end
+
+    test "accepts a mixed list of names and direction tuples" do
+      query = order_by(Module2, [:c, {:b, :desc}])
+
+      assert query.order_by == [{:c, :asc}, {:b, :desc}]
+    end
+
+    test "appends to prior ordering" do
+      query =
+        Module2
+        |> order_by(:c)
+        |> order_by(b: :desc)
+
+      assert query.order_by == [{:c, :asc}, {:b, :desc}]
+    end
+
+    test "composes with filtering" do
+      query =
+        Module2
+        |> filter(a: true)
+        |> order_by(:c)
+
+      assert query.filter == [{:a, :==, true}]
+      assert query.order_by == [{:c, :asc}]
+    end
+
+    test "defaults a bare attribute name to ascending" do
+      assert order_by(Module2, :c) == %{
+               cardinality: :set,
+               entity: Module2,
+               filter: [],
+               include: %{},
+               limit: nil,
+               offset: nil,
+               order_by: [{:c, :asc}]
+             }
+    end
+
+    test "defaults list entries to ascending" do
+      query = order_by(Module2, [:c, :a])
+
+      assert query.order_by == [{:c, :asc}, {:a, :asc}]
+    end
+
+    test "orders by a system attribute" do
+      query = order_by(Module2, :created_at)
+
+      assert query.order_by == [{:created_at, :asc}]
+    end
+
+    test "raises on a non-atom spec" do
+      expected_msg = "order_by spec must be an attribute name or a list, got: 123"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        order_by(Module2, 123)
+      end
+    end
+
+    test "raises on a relationship name" do
+      expected_msg =
+        ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be ordered"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        order_by(Module3, :c)
+      end
+    end
+
+    test "raises on an enum attribute" do
+      expected_msg =
+        "ordering by enum attributes is not supported - attribute :c in Hologram.Test.Fixtures.Entity.Module4 has type :enum"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        order_by(Module4, :c)
+      end
+    end
+
+    test "raises on an invalid direction" do
+      expected_msg = "invalid direction :down for attribute :b - use :asc or :desc"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        order_by(Module2, b: :down)
+      end
+    end
+
+    test "raises on an invalid entry" do
+      expected_msg =
+        "invalid order_by entry 123 - use an attribute name or an {attribute, :asc | :desc} tuple"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        order_by(Module2, [123])
+      end
+    end
+
+    test "raises on an unknown attribute" do
+      expected_msg =
+        "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        order_by(Module2, :x)
+      end
+    end
+  end
 end

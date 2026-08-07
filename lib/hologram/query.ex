@@ -3,6 +3,7 @@ defmodule Hologram.Query do
 
   alias Hologram.Reflection
 
+  @directions [:asc, :desc]
   @equality_operators [:!=, :==]
   @membership_operators [:in, :not_in]
   @orderable_types [:date, :datetime, :float, :integer]
@@ -51,11 +52,38 @@ defmodule Hologram.Query do
 
     triples =
       Enum.flat_map(predicates, fn {name, value} ->
-        validate_attribute_name!(name, term.entity)
+        validate_attribute_name!(name, term.entity, "filtered")
         predicate_triples!(name, value, term.entity)
       end)
 
     %{term | filter: term.filter ++ triples}
+  end
+
+  @doc """
+  Appends ordering keys to the given query's order list and returns the resulting
+  query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The spec is an attribute name (ascending), or a list whose entries are
+  attribute names (ascending) or `{attribute, :asc | :desc}` tuples - keyword syntax
+  reads naturally (`order_by(query, title: :desc)`). Each entry becomes an
+  `{attribute, direction}` pair, appended in the given order, accumulating across calls.
+
+  Ordering by enum attributes is not supported - the two execution tiers disagree on
+  enum order (PostgreSQL uses declaration order, the client would use term order).
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, when the spec is neither an attribute name nor a list, when an entry names a
+  relationship or an unknown attribute or an enum attribute, or when a direction is
+  neither :asc nor :desc.
+  """
+  @spec order_by(module | %{atom => any}, atom | list) :: %{atom => any}
+  def order_by(query, spec) do
+    term = to_term(query)
+
+    entries = order_entries!(spec, term.entity)
+
+    %{term | order_by: term.order_by ++ entries}
   end
 
   defp attribute_names(entity_type) do
@@ -87,6 +115,43 @@ defmodule Hologram.Query do
     end
 
     {name, operator, operand}
+  end
+
+  defp order_entries!(name, entity_type) when is_atom(name) do
+    [order_entry!(name, entity_type)]
+  end
+
+  defp order_entries!(spec, entity_type) when is_list(spec) do
+    Enum.map(spec, &order_entry!(&1, entity_type))
+  end
+
+  defp order_entries!(spec, _entity_type) do
+    raise ArgumentError,
+      message: "order_by spec must be an attribute name or a list, got: #{inspect(spec)}"
+  end
+
+  defp order_entry!({name, direction}, entity_type) when is_atom(name) do
+    validate_ordered_attribute!(name, entity_type)
+
+    if direction not in @directions do
+      raise ArgumentError,
+        message:
+          "invalid direction #{inspect(direction)} for attribute #{inspect(name)} - use :asc or :desc"
+    end
+
+    {name, direction}
+  end
+
+  defp order_entry!(name, entity_type) when is_atom(name) do
+    validate_ordered_attribute!(name, entity_type)
+
+    {name, :asc}
+  end
+
+  defp order_entry!(entry, _entity_type) do
+    raise ArgumentError,
+      message:
+        "invalid order_by entry #{inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple"
   end
 
   defp ordering_triple!(name, operator, operand, entity_type) do
@@ -185,7 +250,7 @@ defmodule Hologram.Query do
     end
   end
 
-  defp validate_attribute_name!(name, entity_type) do
+  defp validate_attribute_name!(name, entity_type, usage) do
     attribute_names = attribute_names(entity_type)
 
     cond do
@@ -195,7 +260,7 @@ defmodule Hologram.Query do
       name in relationship_names(entity_type) ->
         raise ArgumentError,
           message:
-            "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered"
+            "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be #{usage}"
 
       true ->
         known = Enum.map_join(attribute_names, ", ", &inspect/1)
@@ -263,6 +328,16 @@ defmodule Hologram.Query do
       raise ArgumentError,
         message:
           "operator #{inspect(operator)} requires a numeric or temporal attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
+    end
+  end
+
+  defp validate_ordered_attribute!(name, entity_type) do
+    validate_attribute_name!(name, entity_type, "ordered")
+
+    if attribute_type(entity_type, name) == :enum do
+      raise ArgumentError,
+        message:
+          "ordering by enum attributes is not supported - attribute #{inspect(name)} in #{inspect(entity_type)} has type :enum"
     end
   end
 end
