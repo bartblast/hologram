@@ -5,7 +5,40 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
   require Logger
 
-  @attach_wait_ms 5_000
+  alias Hologram.Realtime.Handshake
+
+  # One client round trip on a slow connection: the span between a boot-time command
+  # reaching the server and the handshake it raced completing.
+  @client_round_trip_ms 3_000
+
+  # `Hologram.Realtime.SSE` redeems the handshake *before* it attaches, and that redemption
+  # blocks for up to this long. A window at or below it can be consumed entirely by the
+  # redeem wait, leaving no chance for the attach to land. Summing it in makes that floor
+  # structural instead of something to remember.
+  @redeem_wait_ms Handshake.server_wait_ms()
+
+  # Headroom for server-side queueing. After a deploy, tabs reconnect in a herd, handshake
+  # requests queue, and `redeem/2` grows likelier to burn its full wait - precisely when
+  # first connects are most numerous.
+  @server_queueing_ms 1_500
+
+  # Summed rather than picked as one figure, so each term above carries its own reason.
+  # Defined after its components because it depends on them.
+  #
+  # Only one situation truly needs this window: a tab's first connect, where a command
+  # issued during page boot reaches the server before the handshake has attached. That
+  # stream goes on to connect *successfully*, so nothing errors, the client's reconnect
+  # backoff never runs, and no retry replays the receipt. Undershooting there leaves the
+  # subscription unapplied until something unrelated breaks the stream or the user reloads,
+  # which for a short-lived tab may be never.
+  #
+  # Do NOT size this against the client's reconnect cadence (`MAX_RECONNECT_DELAY` and its
+  # backoff in sse.mjs). When a stream genuinely errors the client *is* retrying, and the
+  # receipt signed on the timeout path replays at the next handshake and attaches the
+  # binding anyway. Waiting long enough to catch that retry only withholds the command's
+  # response while a working recovery is already under way.
+  @attach_wait_ms @client_round_trip_ms + @redeem_wait_ms + @server_queueing_ms
+
   @table_name :hologram_subscriptions
 
   @doc """
@@ -102,40 +135,8 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
   @doc """
   Returns how long `apply_deltas/4` waits for a connection to attach before
-  giving up and returning its deltas unapplied.
-
-  A policy default rather than a derived constant, but bounded on both sides.
-
-  **Floor.** `Hologram.Realtime.SSE` redeems the handshake before it attaches,
-  and that redemption blocks for up to
-  `Hologram.Realtime.Handshake.server_wait_ms/0`. A window at or below that can
-  be consumed entirely by the redeem wait, leaving no chance for the attach to
-  land.
-
-  **What it is sized for.** Only one situation truly depends on this window: a
-  tab's first connect, where a command issued during page boot reaches the
-  server before the handshake has attached. That stream goes on to connect
-  *successfully*, so nothing errors, the client's reconnect backoff never runs,
-  and no retry replays the receipt. Undershooting there leaves the subscription
-  unapplied until something unrelated breaks the stream or the user reloads -
-  which for a short-lived tab may be never.
-
-  The span to cover is one client round trip, plus headroom for server-side
-  queueing. That headroom is the reason the value is not merely "a round trip":
-  after a deploy, tabs reconnect in a herd, handshake requests queue, and
-  `redeem/2` is likelier to burn its full wait - precisely when first connects
-  are most numerous.
-
-  **Ceiling.** Do not size this against the client's reconnect cadence
-  (`MAX_RECONNECT_DELAY` and its backoff in `sse.mjs`). When a stream genuinely
-  errors, the client *is* retrying, and the receipt signed on the timeout path
-  replays at the next handshake and attaches the binding anyway. Waiting long
-  enough to catch that retry only withholds the command's response while a
-  working recovery is already under way. The cost of a large value falls
-  entirely on that case, which needs it least.
-
-  Overshoot modestly, since a caller is released the instant a connection
-  attaches and the full window is paid only when none arrives at all.
+  giving up and returning its deltas unapplied. A parked caller is released as
+  soon as one attaches, so the full window is only ever paid when none arrives.
   """
   @spec attach_wait_ms() :: pos_integer
   def attach_wait_ms, do: @attach_wait_ms

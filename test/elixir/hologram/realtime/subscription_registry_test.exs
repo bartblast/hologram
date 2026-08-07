@@ -4,6 +4,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   import ExUnit.CaptureLog
   import Hologram.Realtime.SubscriptionRegistry
 
+  alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.SubscriptionRegistry
 
   # Shortened so tests exercising the timeout path don't each pay the production
@@ -549,6 +550,10 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   describe "attach_wait_ms/0" do
     test "returns the window apply_deltas/4 waits for a connection to attach" do
       assert is_integer(attach_wait_ms())
+    end
+
+    test "exceeds the handshake redeem wait it has to clear" do
+      assert attach_wait_ms() > Handshake.server_wait_ms()
     end
   end
 
