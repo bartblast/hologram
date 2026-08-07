@@ -26,6 +26,15 @@ defmodule Hologram.QueryTest do
       assert query.filter == [{:id, :==, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"}]
     end
 
+    test "accumulates repeated filters on the same attribute" do
+      query =
+        Module2
+        |> filter(b: {:>=, 3})
+        |> filter(b: {:<, 10})
+
+      assert query.filter == [{:b, :>=, 3}, {:b, :<, 10}]
+    end
+
     test "appends to an already built query term" do
       query =
         Module2
@@ -97,6 +106,12 @@ defmodule Hologram.QueryTest do
       assert query.filter == [{:b, :>=, 3}]
     end
 
+    test "builds conjunction triples from a list of operator tuples" do
+      query = filter(Module2, b: [{:>=, 3}, {:<, 10}])
+
+      assert query.filter == [{:b, :>=, 3}, {:b, :<, 10}]
+    end
+
     test "expands a range passed to the membership operator" do
       query = filter(Module2, b: {:in, 3..10})
 
@@ -153,6 +168,15 @@ defmodule Hologram.QueryTest do
     test "raises on a membership list holding an operator tuple" do
       expected_msg =
         "invalid membership list element {:>=, 3} for attribute :b - membership lists hold plain values"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, b: {:in, [1, {:>=, 3}]})
+      end
+    end
+
+    test "raises on a mixed filter list" do
+      expected_msg =
+        "invalid filter list [1, {:>=, 3}] for attribute :b - use either a membership list of plain values or a list of operator tuples"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, b: [1, {:>=, 3}])
@@ -238,12 +262,16 @@ defmodule Hologram.QueryTest do
       end
     end
 
-    test "raises on an empty membership list" do
-      expected_msg = "membership list for attribute :b must not be empty"
+    test "raises on an empty filter list" do
+      expected_msg = "filter list for attribute :b must not be empty"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, b: [])
       end
+    end
+
+    test "raises on an empty membership list" do
+      expected_msg = "membership list for attribute :b must not be empty"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, b: {:in, []})

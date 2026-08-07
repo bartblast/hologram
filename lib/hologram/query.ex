@@ -15,10 +15,13 @@ defmodule Hologram.Query do
   query term. Predicates are a keyword list of attribute names (declared or system) and
   predicate values. A predicate value is a plain value (equality), an operator tuple -
   `{:==, value}`, `{:!=, value}`, `{:in, list}`, `{:not_in, list}`, or an ordering
-  comparison `{:<, value}`, `{:<=, value}`, `{:>, value}`, `{:>=, value}` - or a bare
-  list of plain values (membership shorthand for `{:in, list}`). Each predicate becomes
-  an `{attribute, operator, value}` triple, appended in the given order. A query term is
-  a plain-data description of a query - building it never executes anything.
+  comparison `{:<, value}`, `{:<=, value}`, `{:>, value}`, `{:>=, value}` - a bare
+  list of plain values (membership shorthand for `{:in, list}`), or a list of operator
+  tuples applying all of them to the attribute (an AND conjunction, e.g.
+  `[{:>=, monday}, {:<, next_monday}]`). Lists mixing plain values and operator tuples
+  are invalid. Each predicate becomes one or more `{attribute, operator, value}`
+  triples, appended in the given order. A query term is a plain-data description of a
+  query - building it never executes anything.
 
   Ordering comparisons require a numeric or temporal attribute (date, datetime, float,
   integer) and a non-nil operand - SQL comparisons with NULL never match, so a nil
@@ -70,6 +73,10 @@ defmodule Hologram.Query do
       Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end)
 
     type
+  end
+
+  defp constraint_tuple?(value) do
+    is_tuple(value) and tuple_size(value) == 2 and is_atom(elem(value, 0))
   end
 
   defp equality_triple!(name, operator, operand) do
@@ -128,13 +135,31 @@ defmodule Hologram.Query do
       message: "invalid filter value #{inspect(value)} for attribute #{inspect(name)}"
   end
 
-  defp predicate_triples!(name, values, _entity_type) when is_list(values) do
-    validate_membership_list!(values, name, :in)
+  defp predicate_triples!(name, values, entity_type) when is_list(values) do
+    cond do
+      values == [] ->
+        raise ArgumentError,
+          message: "filter list for attribute #{inspect(name)} must not be empty"
 
-    [{name, :in, values}]
+      Enum.all?(values, &constraint_tuple?/1) ->
+        Enum.flat_map(values, fn value -> predicate_triples!(name, value, entity_type) end)
+
+      Enum.all?(values, &plain_value?/1) ->
+        validate_membership_list!(values, name, :in)
+        [{name, :in, values}]
+
+      true ->
+        raise ArgumentError,
+          message:
+            "invalid filter list #{inspect(values)} for attribute #{inspect(name)} - use either a membership list of plain values or a list of operator tuples"
+    end
   end
 
   defp predicate_triples!(name, value, _entity_type), do: [{name, :==, value}]
+
+  defp plain_value?(value) do
+    not is_tuple(value) and not is_list(value) and not is_struct(value, Range)
+  end
 
   defp relationship_names(entity_type) do
     Enum.map(entity_type.__relationships__(), fn {name, _type, _opts} -> name end)
