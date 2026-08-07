@@ -68,6 +68,12 @@ defmodule Hologram.QueryTest do
       assert query.filter == [{:b, :!=, nil}]
     end
 
+    test "accepts nil in membership lists" do
+      query = filter(Module2, b: [nil, 1])
+
+      assert query.filter == [{:b, :in, [nil, 1]}]
+    end
+
     test "accepts system attribute names" do
       query = filter(Module2, id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
 
@@ -228,15 +234,6 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, b: [1, {:>=, 3}])
-      end
-    end
-
-    test "raises on a membership list holding nil" do
-      expected_msg =
-        "nil in the membership list for attribute :b - use an equality predicate to match nil"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        filter(Module2, b: [nil, 1])
       end
     end
 

@@ -51,7 +51,7 @@ defmodule Hologram.Database.QueryCompilerTest do
       assert String.ends_with?(sql, ~s| WHERE "c" = ANY($1)|)
     end
 
-    test "compiles inequality null-exclusively" do
+    test "compiles inequality null-inclusively on optional attributes" do
       mapping = Mapper.derive!([Module2])
 
       term =
@@ -60,7 +60,19 @@ defmodule Hologram.Database.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [{:value, 3}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s( WHERE "b" != $1))
+      assert String.ends_with?(sql, ~s| WHERE ("b" != $1 OR "b" IS NULL)|)
+    end
+
+    test "compiles inequality plainly on required attributes" do
+      mapping = Mapper.derive!([Module2])
+
+      term =
+        Module2
+        |> Query.filter(a: {:!=, false})
+        |> Query.normalize()
+
+      assert %{params: [{:value, false}], sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s( WHERE "a" != $1))
     end
 
     test "compiles membership as an array binding" do
@@ -75,7 +87,7 @@ defmodule Hologram.Database.QueryCompilerTest do
       assert String.ends_with?(sql, ~s| WHERE "c" = ANY($1)|)
     end
 
-    test "compiles negated membership as an array binding" do
+    test "compiles negated membership null-inclusively on optional attributes" do
       mapping = Mapper.derive!([Module2])
 
       term =
@@ -84,7 +96,39 @@ defmodule Hologram.Database.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [{:value, [1, 2]}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s| WHERE "b" != ALL($1)|)
+      assert String.ends_with?(sql, ~s| WHERE ("b" != ALL($1) OR "b" IS NULL)|)
+    end
+
+    test "compiles nil-holding membership into the IS NULL branch" do
+      mapping = Mapper.derive!([Module2])
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil, 1]}]}
+
+      assert %{params: [{:value, [1]}], sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s| WHERE ("b" = ANY($1) OR "b" IS NULL)|)
+    end
+
+    test "compiles nil-holding negated membership into the value-requiring branch" do
+      mapping = Mapper.derive!([Module2])
+      term = %{Query.normalize(Module2) | filter: [{:b, :not_in, [nil, 1]}]}
+
+      assert %{params: [{:value, [1]}], sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s| WHERE ("b" != ALL($1) AND "b" IS NOT NULL)|)
+    end
+
+    test "compiles nil-only membership as IS NULL without a bind slot" do
+      mapping = Mapper.derive!([Module2])
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil]}]}
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s( WHERE "b" IS NULL))
+    end
+
+    test "compiles nil-only negated membership as IS NOT NULL without a bind slot" do
+      mapping = Mapper.derive!([Module2])
+      term = %{Query.normalize(Module2) | filter: [{:b, :not_in, [nil]}]}
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s( WHERE "b" IS NOT NULL))
     end
 
     test "compiles nil equality as IS NULL without a bind slot" do

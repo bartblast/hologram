@@ -19,9 +19,13 @@ defmodule Hologram.Database.QueryCompiler do
   equality compiles to `IS NULL` and nil inequality to `IS NOT NULL`, with no bind
   slot. Column selection follows the mapping's physical column order.
 
-  NULL semantics are uniform and SQL-native on both execution tiers: a missing value
-  matches no predicate - inequality, membership, and comparisons alike - except the
-  explicit nil equality (`IS NULL`).
+  Nil is a regular value for equality and membership on both execution tiers:
+  inequality matches missing values (`!=` widens with `OR IS NULL` on optional
+  attributes), membership lists may hold nil (compiled into the `IS [NOT] NULL`
+  branch alongside the stripped array), and negated membership without nil matches
+  missing values. Ordering comparisons match actual values only. Param slots never
+  bind nil at runtime - a sometimes-nil variable branches into an explicit nil
+  predicate in code.
   """
   @spec compile(%{atom => any}, %{module => %{atom => any}}) :: %{atom => any}
   def compile(term, mapping) do
@@ -70,7 +74,29 @@ defmodule Hologram.Database.QueryCompiler do
     column = fetch_column!(entity_mapping, name)
     {placeholder, new_params} = bind_slot(value, column, reversed_params)
 
-    {"#{Mapper.quote_identifier(column.name)} != #{placeholder}", new_params}
+    condition_sql = "#{Mapper.quote_identifier(column.name)} != #{placeholder}"
+
+    {null_inclusive(condition_sql, column), new_params}
+  end
+
+  defp condition({name, :in, values}, entity_mapping, reversed_params) when is_list(values) do
+    column = fetch_column!(entity_mapping, name)
+    quoted_name = Mapper.quote_identifier(column.name)
+
+    case Enum.reject(values, &is_nil/1) do
+      [] ->
+        {"#{quoted_name} IS NULL", reversed_params}
+
+      ^values ->
+        {placeholder, new_params} = membership_slot(values, column, reversed_params)
+
+        {"#{quoted_name} = ANY(#{placeholder})", new_params}
+
+      stripped_values ->
+        {placeholder, new_params} = membership_slot(stripped_values, column, reversed_params)
+
+        {null_inclusive("#{quoted_name} = ANY(#{placeholder})", column), new_params}
+    end
   end
 
   defp condition({name, :in, operand}, entity_mapping, reversed_params) do
@@ -80,11 +106,36 @@ defmodule Hologram.Database.QueryCompiler do
     {"#{Mapper.quote_identifier(column.name)} = ANY(#{placeholder})", new_params}
   end
 
+  defp condition({name, :not_in, values}, entity_mapping, reversed_params)
+       when is_list(values) do
+    column = fetch_column!(entity_mapping, name)
+    quoted_name = Mapper.quote_identifier(column.name)
+
+    case Enum.reject(values, &is_nil/1) do
+      [] ->
+        {"#{quoted_name} IS NOT NULL", reversed_params}
+
+      ^values ->
+        {placeholder, new_params} = membership_slot(values, column, reversed_params)
+
+        {null_inclusive("#{quoted_name} != ALL(#{placeholder})", column), new_params}
+
+      stripped_values ->
+        {placeholder, new_params} = membership_slot(stripped_values, column, reversed_params)
+
+        condition_sql = "#{quoted_name} != ALL(#{placeholder})"
+
+        {maybe_require_value(condition_sql, quoted_name, column), new_params}
+    end
+  end
+
   defp condition({name, :not_in, operand}, entity_mapping, reversed_params) do
     column = fetch_column!(entity_mapping, name)
     {placeholder, new_params} = membership_slot(operand, column, reversed_params)
 
-    {"#{Mapper.quote_identifier(column.name)} != ALL(#{placeholder})", new_params}
+    condition_sql = "#{Mapper.quote_identifier(column.name)} != ALL(#{placeholder})"
+
+    {null_inclusive(condition_sql, column), new_params}
   end
 
   defp condition({name, operator, value}, entity_mapping, reversed_params) do
@@ -113,6 +164,18 @@ defmodule Hologram.Database.QueryCompiler do
 
     {"$#{length(reversed_params) + 1}", [{:value, encoded_values} | reversed_params]}
   end
+
+  defp maybe_require_value(condition_sql, quoted_name, %{null: true}) do
+    "(#{condition_sql} AND #{quoted_name} IS NOT NULL)"
+  end
+
+  defp maybe_require_value(condition_sql, _quoted_name, _column), do: condition_sql
+
+  defp null_inclusive(condition_sql, %{null: true} = column) do
+    "(#{condition_sql} OR #{Mapper.quote_identifier(column.name)} IS NULL)"
+  end
+
+  defp null_inclusive(condition_sql, _column), do: condition_sql
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"

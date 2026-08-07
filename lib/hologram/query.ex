@@ -54,9 +54,9 @@ defmodule Hologram.Query do
   inclusive bounds - it expands into a `>=` triple and a `<=` triple. Ranges require
   an integer attribute, step 1, and at least one element.
 
-  Membership lists must be non-empty lists of plain values. They must not hold nil -
-  SQL membership never matches NULL, so a nil element would mean different things on
-  the two execution tiers - matching nil is an equality predicate instead.
+  Membership lists must be non-empty lists of plain values. Nil is a regular value:
+  a nil element means the membership matches missing values too (`[nil, :done]` reads
+  "done or unset"), and negated membership without nil matches missing values.
 
   Raises ArgumentError when the query is neither an entity type module nor a query term,
   when the predicates are not a keyword list, when a predicate names a relationship or
@@ -588,11 +588,6 @@ defmodule Hologram.Query do
     end
 
     Enum.each(values, fn
-      nil ->
-        raise ArgumentError,
-          message:
-            "nil in the membership list for attribute #{inspect(name)} - use an equality predicate to match nil"
-
       value when is_list(value) or is_tuple(value) ->
         raise ArgumentError,
           message:
