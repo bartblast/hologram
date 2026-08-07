@@ -60,32 +60,45 @@ defmodule Hologram.Query do
   end
 
   @doc """
-  Adds a relationship traversal to the given query's include map and returns the
+  Adds relationship traversals to the given query's include map and returns the
   resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built
-  query term. The relationship must be declared on the query's entity type - the whole
+  query term. Relationships must be declared on the query's entity type - the whole
   related entity (to-one) or entity set (to-many) is embedded in results under the
-  relationship's name. `include/3` additionally takes a one-argument sub-builder
-  function: it receives the related entity's base query term and returns a refined
-  query term for the same entity - to-many includes take nested clauses this way, and
-  nesting further `include` calls inside the sub-builder traverses deeper.
+  relationship's name.
+
+  The spec is a relationship name, or a shape list describing a traversal tree as
+  data: entries are relationship names, `{name, nested_spec}` pairs traversing deeper
+  (keyword syntax reads naturally - `include(query, project: :owner)`,
+  `include(query, [:assignee, project: :owner])`), or `{name, sub_builder}` pairs.
+  A sub-builder is a one-argument function receiving the related entity's base query
+  term and returning a refined query term for the same entity - to-many includes take
+  nested clauses this way. `include/3` passes a sub-builder for a single relationship
+  name directly.
 
   To-one includes take no clauses (a single embedded entity has nothing to filter,
-  order, or slice) - nested `include` calls are their only refinement. Traversal depth
-  is limited to 2 levels.
+  order, or slice) - nested includes are their only refinement. Traversal depth is
+  limited to 2 levels.
 
   Raises ArgumentError when the query is neither an entity type module nor a query
-  term, when the name is not a declared relationship, when the relationship is already
-  included, when the sub-builder is not a one-argument function or does not return a
-  query term for the related entity type, when a to-one include carries clauses, or
-  when the include depth exceeds 2 levels.
+  term, when the spec is invalid or empty, when a name is not a declared relationship,
+  when a relationship is already included, when a sub-builder is not a one-argument
+  function or does not return a query term for the related entity type, when a to-one
+  include carries clauses, or when the include depth exceeds 2 levels.
   """
-  @spec include(module | %{atom => any}, atom, (%{atom => any} -> %{atom => any})) ::
-          %{atom => any}
-  def include(query, name, sub_builder \\ fn related_term -> related_term end)
+  @spec include(
+          module | %{atom => any},
+          atom | list,
+          (%{atom => any} -> %{atom => any}) | nil
+        ) :: %{atom => any}
+  def include(query, spec, sub_builder \\ nil)
 
-  def include(query, name, sub_builder) when is_function(sub_builder, 1) do
+  def include(query, name, nil) when is_atom(name) do
+    include(query, name, fn related_term -> related_term end)
+  end
+
+  def include(query, name, sub_builder) when is_atom(name) and is_function(sub_builder, 1) do
     term = to_term(query)
 
     {target, kind} = validate_relationship_name!(name, term.entity)
@@ -103,10 +116,31 @@ defmodule Hologram.Query do
     %{term | include: Map.put(term.include, name, sub_term)}
   end
 
-  def include(_query, name, sub_builder) do
+  def include(query, spec, nil) when is_list(spec) do
+    if spec == [] do
+      raise ArgumentError, message: "include spec must not be empty"
+    end
+
+    term = to_term(query)
+
+    Enum.reduce(spec, term, fn entry, acc -> include_spec_entry!(acc, entry) end)
+  end
+
+  def include(_query, name, sub_builder) when is_atom(name) do
     raise ArgumentError,
       message:
         "include sub-builder for relationship #{inspect(name)} must be a one-argument function, got: #{inspect(sub_builder)}"
+  end
+
+  def include(_query, spec, _sub_builder) when is_list(spec) do
+    raise ArgumentError,
+      message:
+        "an include shape spec takes no separate sub-builder - nest it in the spec as a {name, sub_builder} pair"
+  end
+
+  def include(_query, spec, _sub_builder) do
+    raise ArgumentError,
+      message: "include spec must be a relationship name or a shape list, got: #{inspect(spec)}"
   end
 
   @doc """
@@ -212,6 +246,25 @@ defmodule Hologram.Query do
 
       1 + max_child_depth
     end
+  end
+
+  defp include_spec_entry!(term, name) when is_atom(name) do
+    include(term, name)
+  end
+
+  defp include_spec_entry!(term, {name, sub_builder})
+       when is_atom(name) and is_function(sub_builder) do
+    include(term, name, sub_builder)
+  end
+
+  defp include_spec_entry!(term, {name, sub_spec}) when is_atom(name) do
+    include(term, name, fn related_term -> include(related_term, sub_spec) end)
+  end
+
+  defp include_spec_entry!(_term, entry) do
+    raise ArgumentError,
+      message:
+        "invalid include spec entry #{inspect(entry)} - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair"
   end
 
   defp order_entries!(name, entity_type) when is_atom(name) do

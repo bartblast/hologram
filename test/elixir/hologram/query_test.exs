@@ -354,6 +354,12 @@ defmodule Hologram.QueryTest do
   end
 
   describe "include/3" do
+    test "accepts a sub-builder as a spec value" do
+      query = include(Module3, a: &filter(&1, a: true))
+
+      assert query.include == %{a: %{base_term(Module2) | filter: [{:a, :==, true}]}}
+    end
+
     test "accumulates multiple includes" do
       query =
         Module3
@@ -381,8 +387,37 @@ defmodule Hologram.QueryTest do
       assert query.include == %{c: base_term(Module1)}
     end
 
+    test "includes several relationships from a list spec" do
+      query = include(Module3, [:a, :b])
+
+      assert query.include == %{a: base_term(Module2), b: base_term(Module2)}
+    end
+
+    test "mixes flat and nested entries" do
+      query = include(Module5, [:b, a: :a])
+
+      assert query.include == %{
+               a: %{base_term(Module3) | include: %{a: base_term(Module2)}},
+               b: base_term(Module5)
+             }
+    end
+
+    test "nests a list spec" do
+      query = include(Module5, a: [:a, :b])
+
+      assert query.include == %{
+               a: %{base_term(Module3) | include: %{a: base_term(Module2), b: base_term(Module2)}}
+             }
+    end
+
     test "nests includes through the sub-builder" do
       query = include(Module5, :a, &include(&1, :a))
+
+      assert query.include == %{a: %{base_term(Module3) | include: %{a: base_term(Module2)}}}
+    end
+
+    test "nests traversal from a keyword spec" do
+      query = include(Module5, a: :a)
 
       assert query.include == %{a: %{base_term(Module3) | include: %{a: base_term(Module2)}}}
     end
@@ -423,6 +458,15 @@ defmodule Hologram.QueryTest do
       end
     end
 
+    test "raises on a separate sub-builder with a shape spec" do
+      expected_msg =
+        "an include shape spec takes no separate sub-builder - nest it in the spec as a {name, sub_builder} pair"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, [:a], fn related_query -> related_query end)
+      end
+    end
+
     test "raises on a sub-builder returning a different entity's term" do
       expected_msg =
         "include sub-builder for relationship :a must return a query term for Hologram.Test.Fixtures.Entity.Module2 - got a query term for Hologram.Test.Fixtures.Entity.Module1"
@@ -447,6 +491,31 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         include(Module2, :a)
+      end
+    end
+
+    test "raises on an empty include spec" do
+      expected_msg = "include spec must not be empty"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, [])
+      end
+    end
+
+    test "raises on an invalid include spec" do
+      expected_msg = "include spec must be a relationship name or a shape list, got: 123"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, 123)
+      end
+    end
+
+    test "raises on an invalid include spec entry" do
+      expected_msg =
+        "invalid include spec entry 123 - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, [123])
       end
     end
 
