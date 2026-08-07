@@ -1,6 +1,37 @@
 defmodule Hologram.Query.Registry do
   @moduledoc false
 
+  @id_bytes 16
+
+  @doc """
+  Builds the query registry from the given normalized query terms - a map from
+  content id to an entry holding the term and its derived param shape.
+
+  Structurally equal terms collapse into one entry.
+  """
+  @spec build(list(%{atom => any})) :: %{String.t() => %{atom => any}}
+  def build(terms) do
+    Map.new(terms, fn term ->
+      {id(term), %{param_shape: param_shape(term), term: term}}
+    end)
+  end
+
+  @doc """
+  Returns the content id of the given normalized query term - a lowercase hex string
+  of the truncated SHA-256 of the term's deterministic external representation.
+
+  Structurally equal terms share an id, across builds and machines - any change to
+  the term changes it.
+  """
+  @spec id(%{atom => any}) :: String.t()
+  def id(term) do
+    term
+    |> :erlang.term_to_binary([:deterministic])
+    |> then(&:crypto.hash(:sha256, &1))
+    |> binary_part(0, @id_bytes)
+    |> Base.encode16(case: :lower)
+  end
+
   @doc """
   Derives the param shape of the given normalized query term - a map from param name
   to the logical type the param binds as.

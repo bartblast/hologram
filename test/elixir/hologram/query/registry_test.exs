@@ -7,6 +7,48 @@ defmodule Hologram.Query.RegistryTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
 
+  describe "build/1" do
+    test "builds entries with the term and its param shape" do
+      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
+      term_id = id(term)
+
+      assert build([term]) == %{
+               term_id => %{param_shape: %{search: :string}, term: term}
+             }
+    end
+
+    test "collapses structurally equal terms into one entry" do
+      term =
+        Module2
+        |> Query.filter(a: true)
+        |> Query.normalize()
+
+      registry = build([term, term])
+
+      assert map_size(registry) == 1
+    end
+  end
+
+  describe "id/1" do
+    test "changes with the term" do
+      first_term = Query.normalize(Module2)
+
+      second_term =
+        Module2
+        |> Query.filter(a: true)
+        |> Query.normalize()
+
+      refute id(first_term) == id(second_term)
+    end
+
+    test "computes a stable lowercase hex id" do
+      term = Query.normalize(Module2)
+
+      assert id(term) == id(term)
+      assert id(term) =~ ~r/^[0-9a-f]{32}$/
+    end
+  end
+
   describe "param_shape/1" do
     test "collects params from nested includes" do
       base_term =
