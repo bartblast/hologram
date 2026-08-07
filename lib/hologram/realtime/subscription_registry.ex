@@ -94,7 +94,13 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   def apply_deltas(instance_id, adds, drops, authorizing_user_id) do
     message = {:apply_deltas, instance_id, adds, drops, authorizing_user_id}
 
-    GenServer.call(__MODULE__, message, @attach_wait_ms + 1_000)
+    # The server bounds this call on its own: a parked caller is released either by
+    # attach_connection/5 or by its own timer, so every path replies. A client-side
+    # timeout would be a second bound that has to track whatever wait `start_link/1`
+    # was given, and would cut the caller off early whenever the two drift.
+    # `GenServer.call/3` monitors the server regardless, so a dead registry still
+    # exits the caller immediately rather than hanging it.
+    GenServer.call(__MODULE__, message, :infinity)
   end
 
   @doc """
