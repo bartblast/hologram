@@ -129,11 +129,10 @@ defmodule HologramFeatureTests.RealtimeTest do
     feature "an instance, from outside a handler", %{
       sessions: [session_a1, session_a2, session_b]
     } do
-      # Connect A1 first so its instance id can be captured while it is the only
-      # registered connection. A2 is a second tab of A1's session (same session,
-      # different instance); B is a separate session.
+      # A2 is a second tab of A1's session (same session, different instance); B is
+      # a separate session.
       session_a1 = visit(session_a1, Page1)
-      instance_a1 = current_instance_id()
+      instance_a1 = current_instance_id(session_a1)
 
       session_a2 = visit_as_sibling(session_a2, session_a1, Page1)
       session_b = visit(session_b, Page1)
@@ -198,12 +197,10 @@ defmodule HologramFeatureTests.RealtimeTest do
     feature "a session, from outside a handler", %{
       sessions: [session_a1, session_a2, session_b]
     } do
-      # Connect A1 first so its session id can be captured while it is the only
-      # registered connection. A2 is a second tab of A1's session (same session
-      # id, different instance); B is a separate Wallaby session (different session
-      # id).
+      # A2 is a second tab of A1's session (same session id, different instance); B
+      # is a separate Wallaby session (different session id).
       session_a1 = visit(session_a1, Page1)
-      session_a1_id = current_session_id()
+      session_a1_id = current_session_id(session_a1)
 
       session_a2 = visit_as_sibling(session_a2, session_a1, Page1)
       session_b = visit(session_b, Page1)
@@ -380,7 +377,7 @@ defmodule HologramFeatureTests.RealtimeTest do
 
       # The server grants a {@channel_1, "page"} binding to the live connection;
       # gate on the registry reflecting it before broadcasting.
-      Realtime.subscribe({:instance, current_instance_id()}, @channel_1, "page")
+      Realtime.subscribe({:instance, current_instance_id(session)}, @channel_1, "page")
       session = wait_for_subscription(session, @channel_1)
 
       Realtime.broadcast_action(@channel_1, :show, message: "delivered on granted subscription")
@@ -421,7 +418,7 @@ defmodule HologramFeatureTests.RealtimeTest do
 
       # unsubscribe is async (announce-topic broadcast), so gate on the drop
       # landing before broadcasting.
-      Realtime.unsubscribe({:instance, current_instance_id()}, @channel_1, "page")
+      Realtime.unsubscribe({:instance, current_instance_id(session)}, @channel_1, "page")
       session = wait_for_no_subscription(session, @channel_1)
 
       Realtime.broadcast_action(@channel_1, :show_1, message: "blocked")
@@ -469,7 +466,7 @@ defmodule HologramFeatureTests.RealtimeTest do
 
       # unsubscribe is async, so gate on component_1's binding being gone before
       # broadcasting.
-      Realtime.unsubscribe({:instance, current_instance_id()}, @channel_1, "component_1")
+      Realtime.unsubscribe({:instance, current_instance_id(session)}, @channel_1, "component_1")
       session = wait_for_no_subscription(session, @channel_1, "component_1")
 
       session
@@ -491,7 +488,7 @@ defmodule HologramFeatureTests.RealtimeTest do
 
       # unsubscribe_all is async, so gate on @channel_1 being cleared before
       # broadcasting.
-      Realtime.unsubscribe_all({:instance, current_instance_id()}, @channel_1)
+      Realtime.unsubscribe_all({:instance, current_instance_id(session)}, @channel_1)
       session = wait_for_no_subscription(session, @channel_1)
 
       session
@@ -540,7 +537,7 @@ defmodule HologramFeatureTests.RealtimeTest do
     feature "survive history back from an external page", %{session: session} do
       session = visit(session, Page1)
 
-      instance_id = current_instance_id()
+      instance_id = current_instance_id(session)
 
       session =
         session
@@ -554,7 +551,7 @@ defmodule HologramFeatureTests.RealtimeTest do
       # minting a fresh one, so the registry re-attaches under the same key. A
       # different value here would mean the page was reloaded from scratch instead
       # of restored (bfcache or page-snapshot path).
-      assert current_instance_id() == instance_id
+      assert current_instance_id(session) == instance_id
 
       Realtime.broadcast_action(@channel_1, :show, message: "delivered after back navigation")
 
@@ -566,7 +563,7 @@ defmodule HologramFeatureTests.RealtimeTest do
     feature "restored after SSE reconnect with stored receipts", %{session: session} do
       session = visit(session, Page1)
 
-      simulate_sse_disconnect(current_instance_id())
+      simulate_sse_disconnect(current_instance_id(session))
 
       session =
         session
@@ -587,7 +584,7 @@ defmodule HologramFeatureTests.RealtimeTest do
       # receipt validates normally.
       session = visit(session, Page2)
 
-      instance_id = current_instance_id()
+      instance_id = current_instance_id(session)
       simulate_sse_disconnect(instance_id)
 
       # Wait for the registry GC so the subsequent wait_for_subscription/2 below
@@ -622,7 +619,7 @@ defmodule HologramFeatureTests.RealtimeTest do
       # above, where a surviving channel keeps the in-place reconnect alive).
       session = visit(session, Page1)
 
-      instance_id = current_instance_id()
+      instance_id = current_instance_id(session)
       simulate_sse_disconnect(instance_id)
 
       session = wait_for_no_subscription(session, @channel_1)
@@ -632,7 +629,7 @@ defmodule HologramFeatureTests.RealtimeTest do
 
       # The fresh instance id proves the page reloaded rather than reconnecting in
       # place, and the channel re-subscribes cleanly so broadcasts dispatch again.
-      assert current_instance_id() != instance_id
+      assert current_instance_id(session) != instance_id
 
       Realtime.broadcast_action(@channel_1, :show, message: "delivered after reload")
 
@@ -651,7 +648,7 @@ defmodule HologramFeatureTests.RealtimeTest do
       # Gate on the subscription before the first broadcast.
       session = wait_for_subscription(session, @channel_1)
 
-      instance_id = current_instance_id()
+      instance_id = current_instance_id(session)
 
       Realtime.broadcast_action(@channel_1, :show, message: "delivered while authed")
       session = assert_text(session, css("#received"), "delivered while authed")
@@ -662,7 +659,7 @@ defmodule HologramFeatureTests.RealtimeTest do
         |> wait_for_no_subscription(@channel_1)
 
       # Same instance id confirms no full page reload happened.
-      assert current_instance_id() == instance_id
+      assert current_instance_id(session) == instance_id
 
       # The dropped binding means this broadcast must never reach the client.
       # Give it time to (not) arrive before refuting that it ever showed up.
