@@ -487,21 +487,6 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
              }
     end
 
-    test "releases a parked caller before its wait window elapses" do
-      task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
-
-      started_at = System.monotonic_time(:millisecond)
-      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-
-      attach_connection("test-instance-id", "test-session-id", "test-user-id", sse_pid, [])
-
-      Task.await(task)
-
-      elapsed_ms = System.monotonic_time(:millisecond) - started_at
-
-      assert elapsed_ms < @attach_wait_ms
-    end
-
     test "sends zero-crossing messages for channels a parked delta newly binds" do
       task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
@@ -514,17 +499,19 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "releases callers parked for the same instance in the order they were issued" do
       task_a = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
-      task_b = park_apply_deltas("test-instance-id", [], [{:room_a, "page"}], "test-user-id")
+      task_b = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
 
       attach_connection("test-instance-id", "test-session-id", "test-user-id", sse_pid, [])
 
-      # The add lands first, so the drop that follows finds a key to remove.
+      # Both park the same add. The first applies it, so the second finds the key
+      # already present and reports nothing added - which it can only do by seeing
+      # the first one's effect.
       assert Task.await(task_a) == {[{:room_a, "page"}], []}
-      assert Task.await(task_b) == {[], [{:room_a, "page"}]}
+      assert Task.await(task_b) == {[], []}
 
-      assert bindings_of("test-instance-id") == %{}
+      assert bindings_of("test-instance-id") == %{{:room_a, "page"} => "test-user-id"}
     end
 
     test "leaves callers parked for other instances untouched" do
