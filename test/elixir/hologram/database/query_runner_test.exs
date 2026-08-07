@@ -1,5 +1,6 @@
 defmodule Hologram.Database.QueryRunnerTest do
   use Hologram.Test.DatabaseCase, async: true
+  use Hologram.Query
 
   import Hologram.Database.EntityOperations, only: [add_relationship: 4, create: 1]
   import Hologram.Database.QueryRunner
@@ -60,8 +61,8 @@ defmodule Hologram.Database.QueryRunnerTest do
 
       term =
         Module2
-        |> Query.filter(a: true)
-        |> Query.count()
+        |> filter(a: true)
+        |> count()
         |> Query.normalize()
 
       assert run(term, @mapping) == 2
@@ -76,10 +77,10 @@ defmodule Hologram.Database.QueryRunnerTest do
 
       term =
         Module3
-        |> Query.include(:a, fn related_query ->
+        |> include(:a, fn related_query ->
           related_query
-          |> Query.filter(a: true)
-          |> Query.order_by(:c)
+          |> filter(a: true)
+          |> order_by(:c)
         end)
         |> Query.normalize()
 
@@ -92,7 +93,7 @@ defmodule Hologram.Database.QueryRunnerTest do
 
       term =
         Module3
-        |> Query.include(:c)
+        |> include(:c)
         |> Query.normalize()
 
       assert [%Module3{id: id, c: %Module1{} = embedded_entity}] = run(term, @mapping)
@@ -106,7 +107,7 @@ defmodule Hologram.Database.QueryRunnerTest do
 
       term =
         Module3
-        |> Query.include(:b)
+        |> include(:b)
         |> Query.normalize()
 
       assert [%{b: nil}] = run(term, @mapping)
@@ -128,8 +129,8 @@ defmodule Hologram.Database.QueryRunnerTest do
 
       term =
         Module2
-        |> Query.filter(a: true)
-        |> Query.order_by(:c)
+        |> filter(a: true)
+        |> order_by(:c)
         |> Query.normalize()
 
       assert [
@@ -144,8 +145,8 @@ defmodule Hologram.Database.QueryRunnerTest do
     test "returns nil when no entity matches a single-result query" do
       term =
         Module2
-        |> Query.filter(c: "missing")
-        |> Query.one()
+        |> filter(c: "missing")
+        |> one()
         |> Query.normalize()
 
       assert run(term, @mapping) == nil
@@ -156,8 +157,8 @@ defmodule Hologram.Database.QueryRunnerTest do
 
       term =
         Module2
-        |> Query.order_by(:c)
-        |> Query.one()
+        |> order_by(:c)
+        |> one()
         |> Query.normalize()
 
       assert %{id: id, c: "apple"} = run(term, @mapping)

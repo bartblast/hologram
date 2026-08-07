@@ -1,5 +1,6 @@
 defmodule Hologram.Compiler.QueryExtractorTest do
   use Hologram.Test.BasicCase, async: true
+  use Hologram.Query
 
   import Hologram.Compiler.QueryExtractor
 
@@ -13,8 +14,8 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     test "extracts normalized terms from from_query props" do
       expected_term =
         Entity2
-        |> Query.filter(a: true)
-        |> Query.order_by(:c)
+        |> filter(a: true)
+        |> order_by(:c)
         |> Query.normalize()
 
       assert extract_module_queries(Module1) == [expected_term]

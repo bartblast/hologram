@@ -1,5 +1,6 @@
 defmodule Hologram.Query.RegistryTest do
   use Hologram.Test.BasicCase, async: true
+  use Hologram.Query
 
   import Hologram.Query.Registry
 
@@ -20,7 +21,7 @@ defmodule Hologram.Query.RegistryTest do
     test "collapses structurally equal terms into one entry" do
       term =
         Module2
-        |> Query.filter(a: true)
+        |> filter(a: true)
         |> Query.normalize()
 
       registry = build([term, term])
@@ -35,7 +36,7 @@ defmodule Hologram.Query.RegistryTest do
 
       second_term =
         Module2
-        |> Query.filter(a: true)
+        |> filter(a: true)
         |> Query.normalize()
 
       refute id(first_term) == id(second_term)
@@ -53,7 +54,7 @@ defmodule Hologram.Query.RegistryTest do
     test "collects params from nested includes" do
       base_term =
         Module3
-        |> Query.include(:a)
+        |> include(:a)
         |> Query.normalize()
 
       sub_term = %{base_term.include.a | filter: [{:c, :==, {:param, :search}}]}
@@ -95,7 +96,7 @@ defmodule Hologram.Query.RegistryTest do
     test "returns an empty shape for queries without params" do
       term =
         Module2
-        |> Query.filter(a: true)
+        |> filter(a: true)
         |> Query.normalize()
 
       assert param_shape(term) == %{}
