@@ -736,4 +736,83 @@ defmodule Hologram.QueryTest do
       end
     end
   end
+
+  describe "paginate/2" do
+    test "computes a zero offset for the first page" do
+      query = paginate(Module2, page: 1, size: 20)
+
+      assert query.limit == 20
+      assert query.offset == 0
+    end
+
+    test "sets the view bounds from page and size" do
+      assert paginate(Module2, page: 2, size: 20) == %{
+               cardinality: :set,
+               entity: Module2,
+               filter: [],
+               include: %{},
+               limit: 20,
+               offset: 20,
+               order_by: []
+             }
+    end
+
+    test "raises on a non-integer page" do
+      expected_msg = ~s(page must be a positive integer, got: "2")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        paginate(Module2, page: "2", size: 20)
+      end
+    end
+
+    test "raises on a non-positive page" do
+      expected_msg = "page must be a positive integer, got: 0"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        paginate(Module2, page: 0, size: 20)
+      end
+    end
+
+    test "raises on a non-positive size" do
+      expected_msg = "size must be a positive integer, got: 0"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        paginate(Module2, page: 1, size: 0)
+      end
+    end
+
+    test "raises on an unknown option" do
+      expected_msg = "unknown paginate option :foo - supported options: :page, :size"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        paginate(Module2, page: 1, size: 20, foo: 1)
+      end
+    end
+
+    test "raises on non-keyword options" do
+      expected_msg = "paginate options must be a keyword list, got: 5"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        paginate(Module2, 5)
+      end
+    end
+
+    test "raises when the limit is already set" do
+      expected_msg = "limit is already set to 10"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module2
+        |> limit(10)
+        |> paginate(page: 2, size: 20)
+      end
+    end
+
+    test "raises when the page option is missing" do
+      expected_msg = "paginate requires the :page option"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        paginate(Module2, size: 20)
+      end
+    end
+  end
 end

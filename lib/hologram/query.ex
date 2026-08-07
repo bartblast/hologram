@@ -203,6 +203,43 @@ defmodule Hologram.Query do
     %{term | order_by: term.order_by ++ entries}
   end
 
+  @doc """
+  Sets the given query's view bounds to the requested page and returns the resulting
+  query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. Options are `page:` (a positive integer, 1-based) and `size:` (a positive
+  integer, the number of results per page), both required. Pagination expands into the
+  offset and limit view bounds - `paginate(page: 2, size: 20)` sets offset 20 and
+  limit 20 - and slices what the query evaluates to, not the underlying data.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, when the options are not a keyword list holding exactly :page and :size, when
+  either option is not a positive integer, or when the limit or offset is already set.
+  """
+  @spec paginate(module | %{atom => any}, keyword) :: %{atom => any}
+  def paginate(query, opts) do
+    if not Keyword.keyword?(opts) do
+      raise ArgumentError,
+        message: "paginate options must be a keyword list, got: #{inspect(opts)}"
+    end
+
+    unknown_keys = Keyword.keys(opts) -- [:page, :size]
+
+    if unknown_keys != [] do
+      raise ArgumentError,
+        message:
+          "unknown paginate option #{inspect(hd(unknown_keys))} - supported options: :page, :size"
+    end
+
+    page = validate_paginate_option!(opts, :page)
+    size = validate_paginate_option!(opts, :size)
+
+    query
+    |> offset((page - 1) * size)
+    |> limit(size)
+  end
+
   defp attribute_names(entity_type) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 
@@ -510,6 +547,20 @@ defmodule Hologram.Query do
       raise ArgumentError,
         message:
           "ordering by enum attributes is not supported - attribute #{inspect(name)} in #{inspect(entity_type)} has type :enum"
+    end
+  end
+
+  defp validate_paginate_option!(opts, key) do
+    case Keyword.fetch(opts, key) do
+      {:ok, value} when is_integer(value) and value >= 1 ->
+        value
+
+      {:ok, value} ->
+        raise ArgumentError,
+          message: "#{key} must be a positive integer, got: #{inspect(value)}"
+
+      :error ->
+        raise ArgumentError, message: "paginate requires the #{inspect(key)} option"
     end
   end
 
