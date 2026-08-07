@@ -6,6 +6,7 @@ defmodule Hologram.Database.QueryRunnerTest do
 
   alias Hologram.Database.Mapper
   alias Hologram.Entity
+  alias Hologram.Entity.NotIncluded
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -66,11 +67,11 @@ defmodule Hologram.Database.QueryRunnerTest do
         end)
         |> Query.normalize()
 
-      assert [%{a: related_entities}] = run(term, @mapping)
-      assert [%{c: "banana"}, %{b: 7, c: "cherry"}] = related_entities
+      assert [%Module3{a: related_entities}] = run(term, @mapping)
+      assert [%Module2{c: "banana"}, %Module2{b: 7, c: "cherry"}] = related_entities
     end
 
-    test "decodes a to-one include as a nested entity map" do
+    test "decodes a to-one include as a nested entity struct" do
       source = create_module_3_entity()
 
       term =
@@ -78,7 +79,7 @@ defmodule Hologram.Database.QueryRunnerTest do
         |> Query.include(:c)
         |> Query.normalize()
 
-      assert [%{id: id, c: embedded_entity}] = run(term, @mapping)
+      assert [%Module3{id: id, c: %Module1{} = embedded_entity}] = run(term, @mapping)
       assert id == source.id
       assert embedded_entity.id == source.c_id
       assert %DateTime{} = embedded_entity.created_at
@@ -95,7 +96,18 @@ defmodule Hologram.Database.QueryRunnerTest do
       assert [%{b: nil}] = run(term, @mapping)
     end
 
-    test "returns entity maps filtered and ordered" do
+    test "defaults not-included relationships to the sentinel" do
+      create_module_3_entity()
+
+      term = Query.normalize(Module3)
+
+      assert [%Module3{} = entity] = run(term, @mapping)
+      assert entity.a == %NotIncluded{relationship: :a}
+      assert entity.b == %NotIncluded{relationship: :b}
+      assert entity.c == %NotIncluded{relationship: :c}
+    end
+
+    test "returns entity structs filtered and ordered" do
       {first, _second, third} = create_module_2_entities()
 
       term =
@@ -105,8 +117,8 @@ defmodule Hologram.Database.QueryRunnerTest do
         |> Query.normalize()
 
       assert [
-               %{id: first_id, a: true, b: nil, c: "banana"},
-               %{id: third_id, a: true, b: 7, c: "cherry"}
+               %Module2{id: first_id, a: true, b: nil, c: "banana"},
+               %Module2{id: third_id, a: true, b: 7, c: "cherry"}
              ] = run(term, @mapping)
 
       assert first_id == first.id

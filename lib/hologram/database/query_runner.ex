@@ -7,21 +7,22 @@ defmodule Hologram.Database.QueryRunner do
 
   @doc """
   Runs the given normalized query term against the database and returns its decoded
-  result - a list of entity maps for set queries, an entity map or nil for
+  result - a list of entity structs for set queries, an entity struct or nil for
   single-result queries, and an integer for counting queries.
 
-  Entity maps hold the mapping's fields under their declared names (to-one references
-  under the relationship name) plus one key per included relationship - a nested
-  entity map or nil for a to-one include, a list of entity maps for a to-many
-  include. Param values are given in the bindings map and encoded with the slot's
-  logical type.
+  Entity structs hold the mapping's fields under their declared names (to-one
+  references under their `<name>_id` fields). Each included relationship fills its
+  embed field - a nested entity struct or nil for a to-one include, a list of entity
+  structs for a to-many include - and relationships the query did not include keep
+  their NotIncluded defaults. Param values are given in the bindings map and encoded
+  with the slot's logical type.
 
   Raises ArgumentError when a param value is missing, or when a param value or list
   element is nil - a sometimes-nil variable branches into an explicit nil predicate
   instead.
   """
   @spec run(%{atom => any}, %{module => %{atom => any}}, %{atom => any}) ::
-          list(%{atom => any}) | %{atom => any} | integer | nil
+          list(struct) | struct | integer | nil
   def run(term, mapping, bindings \\ %{}) do
     compiled = QueryCompiler.compile(term, mapping)
     values = Enum.map(compiled.params, &resolve_param!(&1, bindings))
@@ -59,7 +60,7 @@ defmodule Hologram.Database.QueryRunner do
         {name, decode_embed(nested_value, nested_sub_term, mapping)}
       end)
 
-    Map.merge(base_fields, nested_fields)
+    struct!(sub_term.entity, Map.merge(base_fields, nested_fields))
   end
 
   defp decode_embedded_value(nil, _type), do: nil
@@ -108,7 +109,7 @@ defmodule Hologram.Database.QueryRunner do
         {name, decode_embed(value, sub_term, mapping)}
       end)
 
-    Map.merge(base_fields, include_fields)
+    struct!(term.entity, Map.merge(base_fields, include_fields))
   end
 
   defp encode_param!(values, name, {:list, type}) when is_list(values) do
@@ -129,7 +130,7 @@ defmodule Hologram.Database.QueryRunner do
 
   defp field_name(%{source: {:attribute, name}}), do: name
 
-  defp field_name(%{source: {:relationship, name}}), do: name
+  defp field_name(%{source: {:relationship, name}}), do: String.to_existing_atom("#{name}_id")
 
   defp resolve_param!({:value, encoded_value}, _bindings), do: encoded_value
 
