@@ -532,17 +532,22 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Blocks until the currently-attached SSE process records `user_id`, then
-  returns the `session`. Gates on a handler-driven identity change (login or
-  logout) having propagated to the connection before its effects are asserted -
-  e.g. before broadcasting to check whether a binding was kept or dropped.
-  Raises if the value does not appear within `@max_wait_time`.
+  Blocks until the `session`'s own SSE process records `user_id`, then returns
+  the `session`. Gates on a handler-driven identity change (login or logout)
+  having propagated to the connection before its effects are asserted - e.g.
+  before broadcasting to check whether a binding was kept or dropped. Raises if
+  the value does not appear within `@max_wait_time`.
+
+  Resolves this browser's connection specifically, so another tab of the same
+  session lingering in the registry does not affect it. A departed tab's SSE
+  process is only reaped once a write to its dead socket fails, which may not
+  happen until the next heartbeat.
   """
   def wait_for_user_id(session, user_id, start_time \\ nil) do
     start_time = start_time || current_time()
 
     cond do
-      current_user_id() == user_id ->
+      current_user_id(session) == user_id ->
         session
 
       timed_out?(start_time) ->
