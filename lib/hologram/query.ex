@@ -110,6 +110,39 @@ defmodule Hologram.Query do
   end
 
   @doc """
+  Sets the given query's limit - the maximum number of results the query evaluates
+  to - and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The limit is a non-negative integer. It bounds what the query evaluates
+  to, not the underlying data.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, when the limit is not a non-negative integer, or when the limit is already set.
+  """
+  @spec limit(module | %{atom => any}, non_neg_integer) :: %{atom => any}
+  def limit(query, value) do
+    set_view_bound!(query, :limit, value)
+  end
+
+  @doc """
+  Sets the given query's offset - the number of results skipped before the query's
+  results begin - and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The offset is a non-negative integer. It slices what the query evaluates
+  to, not the underlying data.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, when the offset is not a non-negative integer, or when the offset is already
+  set.
+  """
+  @spec offset(module | %{atom => any}, non_neg_integer) :: %{atom => any}
+  def offset(query, value) do
+    set_view_bound!(query, :offset, value)
+  end
+
+  @doc """
   Appends ordering keys to the given query's order list and returns the resulting
   query term.
 
@@ -292,6 +325,23 @@ defmodule Hologram.Query do
 
   defp relationship_names(entity_type) do
     Enum.map(entity_type.__relationships__(), fn {name, _type, _opts} -> name end)
+  end
+
+  defp set_view_bound!(query, field, value) do
+    term = to_term(query)
+
+    if not is_integer(value) or value < 0 do
+      raise ArgumentError,
+        message: "#{field} must be a non-negative integer, got: #{inspect(value)}"
+    end
+
+    current_value = Map.fetch!(term, field)
+
+    if current_value != nil do
+      raise ArgumentError, message: "#{field} is already set to #{current_value}"
+    end
+
+    Map.put(term, field, value)
   end
 
   defp sub_term_has_clauses?(sub_term) do

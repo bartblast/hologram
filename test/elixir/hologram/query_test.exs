@@ -481,6 +481,84 @@ defmodule Hologram.QueryTest do
     end
   end
 
+  describe "limit/2" do
+    test "accepts zero" do
+      query = limit(Module2, 0)
+
+      assert query.limit == 0
+    end
+
+    test "composes with other stages" do
+      query =
+        Module2
+        |> filter(a: true)
+        |> limit(50)
+
+      assert query.filter == [{:a, :==, true}]
+      assert query.limit == 50
+    end
+
+    test "sets the limit" do
+      assert limit(Module2, 50) == %{
+               cardinality: :set,
+               entity: Module2,
+               filter: [],
+               include: %{},
+               limit: 50,
+               offset: nil,
+               order_by: []
+             }
+    end
+
+    test "raises on a negative limit" do
+      expected_msg = "limit must be a non-negative integer, got: -5"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        limit(Module2, -5)
+      end
+    end
+
+    test "raises on a non-integer limit" do
+      expected_msg = "limit must be a non-negative integer, got: 5.0"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        limit(Module2, 5.0)
+      end
+    end
+
+    test "raises when the limit is already set" do
+      expected_msg = "limit is already set to 50"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module2
+        |> limit(50)
+        |> limit(100)
+      end
+    end
+  end
+
+  describe "offset/2" do
+    test "sets the offset" do
+      assert offset(Module2, 20) == %{
+               cardinality: :set,
+               entity: Module2,
+               filter: [],
+               include: %{},
+               limit: nil,
+               offset: 20,
+               order_by: []
+             }
+    end
+
+    test "raises on a negative offset" do
+      expected_msg = "offset must be a non-negative integer, got: -5"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        offset(Module2, -5)
+      end
+    end
+  end
+
   describe "order_by/2" do
     test "accepts a keyword spec with directions" do
       query = order_by(Module2, b: :desc, c: :asc)
