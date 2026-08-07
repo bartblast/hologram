@@ -3,6 +3,7 @@ defmodule HologramFeatureTests.Helpers do
   import Hologram.Commons.Guards, only: [is_regex: 1]
   import Hologram.Test.FeatureHelpers, only: [visit: 2, visit: 3]
 
+  alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
   alias Wallaby.Browser
   alias Wallaby.Element
@@ -346,6 +347,27 @@ defmodule HologramFeatureTests.Helpers do
   def send_keys(session, keys) do
     # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
     Browser.send_keys(session, List.wrap(keys) ++ [:null])
+  end
+
+  @doc """
+  Arms a delay on this browser's next SSE attach, then returns the `session` so
+  the helper can be piped.
+
+  Holds the stream open long enough for a command dispatched during page boot to
+  reach the server while the instance still has no `SubscriptionRegistry` entry.
+  That race is real but unreproducible over a local loop, where the attach always
+  wins: the client calls `Sse.connect()` synchronously at mount while the action
+  queued by `init/3` is dispatched a tick later.
+
+  Scoped by cookie, so concurrently running test files are unaffected. Navigates
+  to a blank page first, since a cookie cannot be set before the browser holds a
+  document.
+  """
+  @spec simulate_slow_sse_attach(Wallaby.Session.t(), pos_integer) :: Wallaby.Session.t()
+  def simulate_slow_sse_attach(session, delay_ms) do
+    session
+    |> visit("/external")
+    |> Browser.set_cookie(SSE.attach_delay_cookie(), to_string(delay_ms))
   end
 
   @doc """
