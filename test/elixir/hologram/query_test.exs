@@ -488,7 +488,7 @@ defmodule Hologram.QueryTest do
         "include sub-builder for relationship :a must be a one-argument function, got: 5"
 
       assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, :a, 5)
+        include(Module3, :a, wrap_term(5))
       end
     end
 
@@ -497,7 +497,7 @@ defmodule Hologram.QueryTest do
         "an include shape spec takes no separate sub-builder - nest it in the spec as a {name, sub_builder} pair"
 
       assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, [:a], fn related_query -> related_query end)
+        include(Module3, wrap_term([:a]), fn related_query -> related_query end)
       end
     end
 
@@ -532,7 +532,7 @@ defmodule Hologram.QueryTest do
       expected_msg = "include spec must not be empty"
 
       assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, [])
+        include(Module3, wrap_term([]))
       end
     end
 
@@ -540,7 +540,7 @@ defmodule Hologram.QueryTest do
       expected_msg = "include spec must be a relationship name or a shape list, got: 123"
 
       assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, 123)
+        include(Module3, wrap_term(123))
       end
     end
 
@@ -625,7 +625,7 @@ defmodule Hologram.QueryTest do
       expected_msg = "limit must be a non-negative integer, got: 5.0"
 
       assert_error ArgumentError, expected_msg, fn ->
-        limit(Module2, 5.0)
+        limit(Module2, wrap_term(5.0))
       end
     end
 
@@ -870,7 +870,7 @@ defmodule Hologram.QueryTest do
       expected_msg = "paginate options must be a keyword list, got: 5"
 
       assert_error ArgumentError, expected_msg, fn ->
-        paginate(Module2, 5)
+        paginate(Module2, wrap_term(5))
       end
     end
 
