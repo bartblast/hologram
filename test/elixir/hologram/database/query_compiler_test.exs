@@ -51,6 +51,18 @@ defmodule Hologram.Database.QueryCompilerTest do
       assert String.ends_with?(sql, ~s| WHERE "c" = ANY($1)|)
     end
 
+    test "compiles inequality null-exclusively" do
+      mapping = Mapper.derive!([Module2])
+
+      term =
+        Module2
+        |> Query.filter(b: {:!=, 3})
+        |> Query.normalize()
+
+      assert %{params: [{:value, 3}], sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s( WHERE "b" != $1))
+    end
+
     test "compiles membership as an array binding" do
       mapping = Mapper.derive!([Module2])
 
@@ -63,7 +75,7 @@ defmodule Hologram.Database.QueryCompilerTest do
       assert String.ends_with?(sql, ~s| WHERE "c" = ANY($1)|)
     end
 
-    test "compiles negated membership null-inclusively on optional attributes" do
+    test "compiles negated membership as an array binding" do
       mapping = Mapper.derive!([Module2])
 
       term =
@@ -72,7 +84,7 @@ defmodule Hologram.Database.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [{:value, [1, 2]}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s| WHERE ("b" != ALL($1) OR "b" IS NULL)|)
+      assert String.ends_with?(sql, ~s| WHERE "b" != ALL($1)|)
     end
 
     test "compiles nil equality as IS NULL without a bind slot" do
@@ -123,18 +135,6 @@ defmodule Hologram.Database.QueryCompilerTest do
       assert String.ends_with?(sql, ~s( WHERE "c" = $1))
     end
 
-    test "keeps inequality strict on required attributes" do
-      mapping = Mapper.derive!([Module2])
-
-      term =
-        Module2
-        |> Query.filter(a: {:!=, false})
-        |> Query.normalize()
-
-      assert %{params: [{:value, false}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s( WHERE "a" != $1))
-    end
-
     test "mixes literal and param bindings in placeholder order" do
       mapping = Mapper.derive!([Module2])
 
@@ -171,18 +171,6 @@ defmodule Hologram.Database.QueryCompilerTest do
                sql:
                  ~s(SELECT "id", "b_id", "c_id", "created_at", "updated_at" FROM "hologram_data"."test_fixtures_entity_module3")
              }
-    end
-
-    test "widens inequality on optional attributes to include NULL" do
-      mapping = Mapper.derive!([Module2])
-
-      term =
-        Module2
-        |> Query.filter(b: {:!=, 3})
-        |> Query.normalize()
-
-      assert %{params: [{:value, 3}], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s| WHERE ("b" != $1 OR "b" IS NULL)|)
     end
   end
 end
