@@ -15,7 +15,11 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module15
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module16
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module17
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module18
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module2
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module20
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module21
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module22
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
@@ -23,6 +27,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
 
   describe "extract_module_queries/1" do
     test "extracts a guarded capture ignoring the guard" do
@@ -50,6 +55,15 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Query.normalize()
 
       assert extract_module_queries(Module12) == [expected_term]
+    end
+
+    test "extracts an anonymous sub-builder include" do
+      expected_term =
+        Entity3
+        |> include(:a, fn sub -> filter(sub, b: {:>=, %Param{name: :min_b}}) end)
+        |> Query.normalize()
+
+      assert extract_module_queries(Module20) == [expected_term]
     end
 
     test "extracts each clause of a multi-clause capture as a variant" do
@@ -92,6 +106,29 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Query.normalize()
 
       assert extract_module_queries(Module6) == [expected_term]
+    end
+
+    test "extracts through a cross-module helper forking its clauses" do
+      nil_clause_term =
+        Entity2
+        |> filter(a: true)
+        |> Query.normalize()
+
+      bound_clause_term =
+        Entity2
+        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module18) == [nil_clause_term, bound_clause_term]
+    end
+
+    test "extracts through a local helper" do
+      expected_term =
+        Entity2
+        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module14) == [expected_term]
     end
 
     test "extracts through variable binds and concrete native calls" do
@@ -156,15 +193,6 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       end
     end
 
-    test "raises on a local function call in a parameterized capture" do
-      expected_msg =
-        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module14 calls local function bounded_query/1 - helper composition is not extractable yet"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module14)
-      end
-    end
-
     test "raises on a non-capture from_query value" do
       expected_msg =
         "from_query for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3 must be a function capture, got: 123"
@@ -183,12 +211,30 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       end
     end
 
+    test "raises on a recursive helper" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module21 recursively calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module21.entities_query/1 - recursive helpers are not extractable"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module21)
+      end
+    end
+
     test "raises on an argument passed to a non-stage call" do
       expected_msg =
         "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module13 passes an argument to String.downcase/1 - arguments must flow directly into query stage calls, computing on them is not extractable yet"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module13)
+      end
+    end
+
+    test "raises on branching inside an anonymous sub-builder" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module22 branches inside an anonymous function - not extractable yet"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module22)
       end
     end
   end

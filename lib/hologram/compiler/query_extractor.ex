@@ -20,21 +20,28 @@ defmodule Hologram.Compiler.QueryExtractor do
   symbolically over its IR - each argument becomes a param sentinel flowing into
   the term as a `{:param, name}` leaf named after the argument, resolving through
   the generated from_query shim when the capture points at one. Branching forks
-  the evaluation: every case/cond clause and every capture head clause yields
-  its own variant term, all variants are extracted (deduplicated per capture),
-  and clause guards are never evaluated - a variant that cannot occur at runtime
-  is over-approximation, costing a registry entry, never correctness. A literal
-  head pattern fixes its argument concretely in that variant. Straight-line
-  evaluation covers literals, data construction, variable binds, and function
-  calls - calls run natively, and sentinels may only flow into query stage
-  calls. Modules without prop declarations declare no queries.
+  the evaluation: every case/cond clause, every capture head clause, and every
+  clause of a multi-clause helper yields its own variant term, all variants are
+  extracted (deduplicated per capture), and clause guards are never evaluated -
+  a variant that cannot occur at runtime is over-approximation, costing a
+  registry entry, never correctness. A literal head pattern fixes its argument
+  concretely in that variant.
+
+  Calls interpret transitively: local helpers and sentinel-receiving functions
+  compiled into the project build evaluate over their own IR (recursion is
+  rejected), sentinel-free remote calls and query stage calls run natively, and
+  single-clause anonymous functions evaluate on invocation with their captured
+  scope (branch-free bodies only). A sentinel reaching a call outside the
+  project build raises - computing on a param cannot yield a static term.
 
   Raises Hologram.CompileError when a from_query value is not a function capture,
   when a capture argument is destructured instead of a plain name, when a capture
-  argument is named vars (reserved), when a case clause uses a composite pattern,
-  or when a body calls a local function, passes a sentinel to a non-stage call,
-  or uses a construct symbolic evaluation does not cover. Zero-arity captures
-  are free of these limits - they evaluate concretely at build time.
+  argument is named vars (reserved), when a case clause or function head uses a
+  composite pattern, when a helper recurses, when an anonymous function has
+  multiple clauses, arity above 3, or branches, when a sentinel is passed to a
+  call outside the project build, or when a body uses a construct symbolic
+  evaluation does not cover. Zero-arity captures are free of these limits - they
+  evaluate concretely at build time.
   """
   @spec extract_module_queries(module) :: list(%{atom => any})
   def extract_module_queries(module) do
@@ -54,6 +61,57 @@ defmodule Hologram.Compiler.QueryExtractor do
     Enum.flat_map(modules, &extract_module_queries/1)
   end
 
+  # A closure evaluates with choices :none - a fork inside would restart the
+  # whole body with a stale choice list, so branching inside raises instead.
+  defp anonymous_closure!(1, clause, closure_env, context) do
+    fn arg_1 -> interpret_anonymous!(clause, [arg_1], closure_env, context) end
+  end
+
+  defp anonymous_closure!(2, clause, closure_env, context) do
+    fn arg_1, arg_2 -> interpret_anonymous!(clause, [arg_1, arg_2], closure_env, context) end
+  end
+
+  defp anonymous_closure!(3, clause, closure_env, context) do
+    fn arg_1, arg_2, arg_3 ->
+      interpret_anonymous!(clause, [arg_1, arg_2, arg_3], closure_env, context)
+    end
+  end
+
+  defp anonymous_closure!(arity, _clause, _closure_env, context) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses an anonymous function of arity #{arity} - only arities 1-3 are extractable yet"
+  end
+
+  defp call_binding!(%IR.Variable{name: name}, value, _context), do: {name, value}
+
+  defp call_binding!(%IR.AtomType{}, _value, _context), do: nil
+
+  defp call_binding!(%IR.FloatType{}, _value, _context), do: nil
+
+  defp call_binding!(%IR.IntegerType{}, _value, _context), do: nil
+
+  defp call_binding!(%IR.MatchPlaceholder{}, _value, _context), do: nil
+
+  defp call_binding!(%IR.StringType{}, _value, _context), do: nil
+
+  defp call_binding!(_param_ir, _value, context) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} calls a function whose head destructures a parameter - only plain names, literals, and _ are extractable yet"
+  end
+
+  defp call_env!(params, arg_values, base_env, context) do
+    params
+    |> Enum.zip(arg_values)
+    |> Enum.reduce(base_env, fn {param_ir, value}, env ->
+      case call_binding!(param_ir, value, context) do
+        {name, bound_value} -> Map.put(env, name, bound_value)
+        nil -> env
+      end
+    end)
+  end
+
   defp case_clause_env!(%IR.Variable{name: name}, condition_value, env, _context) do
     Map.put(env, name, condition_value)
   end
@@ -68,10 +126,10 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp case_clause_env!(%IR.StringType{}, _condition_value, env, _context), do: env
 
-  defp case_clause_env!(_pattern_ir, _condition_value, _env, {module, prop_name}) do
+  defp case_clause_env!(_pattern_ir, _condition_value, _env, context) do
     raise Hologram.CompileError,
       message:
-        "query capture for prop #{inspect(prop_name)} in #{inspect(module)} uses a composite case pattern - only variables, literals, and _ are extractable yet"
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses a composite case pattern - only variables, literals, and _ are extractable yet"
   end
 
   defp contains_symbol?(%Param{}), do: true
@@ -94,6 +152,16 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp contains_symbol?(_other), do: false
 
+  defp evaluate!(%IR.AnonymousFunctionType{arity: arity, clauses: [clause]}, state, context) do
+    {anonymous_closure!(arity, clause, state.env, context), state}
+  end
+
+  defp evaluate!(%IR.AnonymousFunctionType{}, _state, context) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses a multi-clause anonymous function - not extractable yet"
+  end
+
   defp evaluate!(%IR.AtomType{value: value}, state, _context), do: {value, state}
 
   defp evaluate!(%IR.Block{expressions: expressions}, state, context) do
@@ -107,7 +175,8 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp evaluate!(%IR.Case{condition: condition, clauses: clauses}, state, context) do
     {condition_value, state_after_condition} = evaluate!(condition, state, context)
 
-    {choice, state_after_choice} = take_choice!(state_after_condition, length(clauses))
+    {choice, state_after_choice} =
+      take_choice!(state_after_condition, length(clauses), context)
 
     clause = Enum.at(clauses, choice)
     clause_env = case_clause_env!(clause.match, condition_value, state_after_choice.env, context)
@@ -130,14 +199,10 @@ defmodule Hologram.Compiler.QueryExtractor do
     evaluate_enum!(data, state, context)
   end
 
-  # TODO: transitive interpretation evaluates helper bodies - until then, helper
-  # calls in parameterized builders fail the build.
-  defp evaluate!(%IR.LocalFunctionCall{function: function, args: args}, _env, context) do
-    {module, prop_name} = context
+  defp evaluate!(%IR.LocalFunctionCall{function: function, args: args}, state, context) do
+    {arg_values, state_after_args} = evaluate_enum!(args, state, context)
 
-    raise Hologram.CompileError,
-      message:
-        "query capture for prop #{inspect(prop_name)} in #{inspect(module)} calls local function #{function}/#{length(args)} - helper composition is not extractable yet"
+    interpret_call!(context.current_module, function, arg_values, state_after_args, context)
   end
 
   defp evaluate!(%IR.MapType{data: data}, state, context) do
@@ -158,12 +223,10 @@ defmodule Hologram.Compiler.QueryExtractor do
     {value, %{new_state | env: Map.put(new_state.env, name, value)}}
   end
 
-  defp evaluate!(%IR.MatchOperator{}, _env, context) do
-    {module, prop_name} = context
-
+  defp evaluate!(%IR.MatchOperator{}, _state, context) do
     raise Hologram.CompileError,
       message:
-        "query capture for prop #{inspect(prop_name)} in #{inspect(module)} pattern-matches in its body - only plain variable binds are extractable yet"
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} pattern-matches in its body - only plain variable binds are extractable yet"
   end
 
   defp evaluate!(
@@ -172,11 +235,23 @@ defmodule Hologram.Compiler.QueryExtractor do
          context
        ) do
     {target_module, state_after_module} = evaluate!(module_ir, state, context)
-    {arg_values, new_state} = evaluate_enum!(args, state_after_module, context)
+    {arg_values, state_after_args} = evaluate_enum!(args, state_after_module, context)
 
-    validate_symbol_flow!(target_module, function, arg_values, context)
+    cond do
+      target_module == Query ->
+        {apply(target_module, function, arg_values), state_after_args}
 
-    {apply(target_module, function, arg_values), new_state}
+      not contains_symbol?(arg_values) ->
+        {apply(target_module, function, arg_values), state_after_args}
+
+      interpretable_module?(target_module) ->
+        interpret_call!(target_module, function, arg_values, state_after_args, context)
+
+      true ->
+        raise Hologram.CompileError,
+          message:
+            "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} passes an argument to #{inspect(target_module)}.#{function}/#{length(arg_values)} - arguments must flow directly into query stage calls, computing on them is not extractable yet"
+    end
   end
 
   defp evaluate!(%IR.StringType{value: value}, state, _context), do: {value, state}
@@ -191,10 +266,10 @@ defmodule Hologram.Compiler.QueryExtractor do
     {Map.fetch!(state.env, name), state}
   end
 
-  defp evaluate!(ir, _state, {module, prop_name}) do
+  defp evaluate!(ir, _state, context) do
     raise Hologram.CompileError,
       message:
-        "query capture for prop #{inspect(prop_name)} in #{inspect(module)} uses #{inspect(ir.__struct__)} - the construct is not extractable yet"
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses #{inspect(ir.__struct__)} - the construct is not extractable yet"
   end
 
   defp evaluate_cond!([], _state, _context) do
@@ -204,7 +279,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp evaluate_cond!([clause | rest], state, context) do
     {_condition_value, state_after_condition} = evaluate!(clause.condition, state, context)
 
-    {choice, state_after_choice} = take_choice!(state_after_condition, 2)
+    {choice, state_after_choice} = take_choice!(state_after_condition, 2, context)
 
     if choice == 0 do
       {value, state_after_body} = evaluate!(clause.body, state_after_choice, context)
@@ -229,7 +304,8 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp evaluate_variants!(body, env, context, choices) do
     result =
       try do
-        {term, _state} = evaluate!(body, %{choices: choices, env: env}, context)
+        {term, _state} =
+          evaluate!(body, %{choices: choices, env: env, funs_cache: %{}}, context)
 
         {:term, term}
       catch
@@ -288,10 +364,78 @@ defmodule Hologram.Compiler.QueryExtractor do
     end)
   end
 
+  defp interpret_anonymous!(clause, arg_values, closure_env, context) do
+    call_env = call_env!(clause.params, arg_values, closure_env, context)
+
+    state = %{choices: :none, env: call_env, funs_cache: %{}}
+
+    {value, _state} = evaluate!(clause.body, state, context)
+
+    value
+  end
+
+  defp interpret_call!(module, function, arg_values, state, context) do
+    arity = length(arg_values)
+    frame = {module, function, arity}
+
+    if frame in context.stack do
+      raise Hologram.CompileError,
+        message:
+          "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} recursively calls #{inspect(module)}.#{function}/#{arity} - recursive helpers are not extractable"
+    end
+
+    {funs, state_after_funs} = module_funs_cached(module, state)
+    fun_key = {function, arity}
+
+    {^fun_key, {_visibility, clauses}} = List.keyfind(funs, fun_key, 0)
+
+    {choice, state_after_choice} =
+      case clauses do
+        [_single_clause] -> {0, state_after_funs}
+        _multiple_clauses -> take_choice!(state_after_funs, length(clauses), context)
+      end
+
+    clause = Enum.at(clauses, choice)
+    call_env = call_env!(clause.params, arg_values, %{}, context)
+    new_context = %{context | current_module: module, stack: [frame | context.stack]}
+
+    {value, state_after_body} =
+      evaluate!(clause.body, %{state_after_choice | env: call_env}, new_context)
+
+    {value, %{state_after_body | env: state_after_choice.env}}
+  end
+
+  # Only modules compiled into the project build are interpreted - a sentinel
+  # inside stdlib or native code cannot yield a param leaf, and the flow raise
+  # then names the call the developer wrote instead of its internals.
+  defp interpretable_module?(module) do
+    case :code.which(module) do
+      beam_path when is_list(beam_path) ->
+        beam_path
+        |> List.to_string()
+        |> String.starts_with?(Mix.Project.build_path())
+
+      _other ->
+        false
+    end
+  end
+
   defp module_funs(module) do
     module
     |> IR.for_module()
     |> IR.aggregate_module_funs()
+  end
+
+  defp module_funs_cached(module, state) do
+    case state.funs_cache do
+      %{^module => funs} ->
+        {funs, state}
+
+      _missing ->
+        funs = module_funs(module)
+
+        {funs, %{state | funs_cache: Map.put(state.funs_cache, module, funs)}}
+    end
   end
 
   defp prop_queries!(module, {name, _type, opts}) do
@@ -306,10 +450,16 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp prop_query!(module, prop_name, capture) when is_function(capture) do
-    context = {module, prop_name}
+    {target_module, clauses} = resolve_capture_clauses!(module, prop_name, capture)
 
-    module
-    |> resolve_capture_clauses!(prop_name, capture)
+    context = %{
+      current_module: target_module,
+      prop_module: module,
+      prop_name: prop_name,
+      stack: []
+    }
+
+    clauses
     |> Enum.flat_map(fn clause ->
       env = head_env!(module, prop_name, clause)
 
@@ -327,14 +477,15 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp resolve_capture_clauses!(module, prop_name, capture) do
     capture_info = Function.info(capture)
-    funs = module_funs(capture_info[:module])
+    target_module = capture_info[:module]
+    funs = module_funs(target_module)
 
     fun_name = shim_target(funs, module, prop_name, capture_info)
     fun_key = {fun_name, capture_info[:arity]}
 
     {^fun_key, {_visibility, clauses}} = List.keyfind(funs, fun_key, 0)
 
-    clauses
+    {target_module, clauses}
   end
 
   defp shim_target(funs, module, prop_name, capture_info) do
@@ -357,25 +508,17 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
-  defp take_choice!(%{choices: [choice | rest]} = state, _clause_count) do
+  defp take_choice!(%{choices: [choice | rest]} = state, _clause_count, _context) do
     {choice, %{state | choices: rest}}
   end
 
-  defp take_choice!(%{choices: []}, clause_count) do
+  defp take_choice!(%{choices: []}, clause_count, _context) do
     throw({@fork_signal, clause_count})
   end
 
-  # TODO: transitive interpretation lets sentinels flow into interpreted helper
-  # bodies - until then, sentinels may only reach query stage calls.
-  defp validate_symbol_flow!(Query, _function, _arg_values, _context), do: :ok
-
-  defp validate_symbol_flow!(target_module, function, arg_values, {module, prop_name}) do
-    if contains_symbol?(arg_values) do
-      raise Hologram.CompileError,
-        message:
-          "query capture for prop #{inspect(prop_name)} in #{inspect(module)} passes an argument to #{inspect(target_module)}.#{function}/#{length(arg_values)} - arguments must flow directly into query stage calls, computing on them is not extractable yet"
-    end
-
-    :ok
+  defp take_choice!(%{choices: :none}, _clause_count, context) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} branches inside an anonymous function - not extractable yet"
   end
 end
