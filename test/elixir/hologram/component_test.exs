@@ -32,6 +32,8 @@ defmodule Hologram.ComponentTest do
   end
 
   test "__from_query_delegations__/0 is absent for inline-only from_query functions" do
+    Code.ensure_loaded!(Module10)
+
     refute function_exported?(Module10, :__from_query_delegations__, 0)
   end
 
