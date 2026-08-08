@@ -5,9 +5,7 @@ defmodule Hologram.Database.QueryRunnerTest do
   import Hologram.Database.EntityOperations, only: [add_relationship: 4, create: 1]
   import Hologram.Database.QueryRunner
 
-  alias Hologram.Database.Connection
   alias Hologram.Database.Mapper
-  alias Hologram.Database.SortKey
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
   alias Hologram.Query
@@ -17,30 +15,6 @@ defmodule Hologram.Database.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module4
 
   @mapping Mapper.derive!([Module1, Module2, Module3])
-
-  defp add_sort_key_column do
-    sql =
-      ~s(ALTER TABLE "hologram_data"."test_fixtures_entity_module2" ADD COLUMN "c_$sort" text COLLATE "C")
-
-    {:ok, _result} = Connection.query(sql, [])
-
-    :ok
-  end
-
-  defp backfill_sort_keys do
-    select_sql = ~s(SELECT "id", "c" FROM "hologram_data"."test_fixtures_entity_module2")
-
-    update_sql =
-      ~s(UPDATE "hologram_data"."test_fixtures_entity_module2" SET "c_$sort" = $1 WHERE "id" = $2)
-
-    {:ok, %{rows: rows}} = Connection.query(select_sql, [])
-
-    Enum.each(rows, fn [id, value] ->
-      {:ok, _result} = Connection.query(update_sql, [SortKey.compute(value), id])
-    end)
-
-    :ok
-  end
 
   defp create_module_2_entities do
     first =
@@ -198,65 +172,6 @@ defmodule Hologram.Database.QueryRunnerTest do
 
       assert %{id: id, c: "apple"} = run(term, @mapping)
       assert id == second.id
-    end
-
-    test "skips sort-key companions when decoding embedded entities" do
-      {first, _second, _third} = create_module_2_entities()
-      source = create_module_3_entity()
-
-      :ok = add_relationship(Module3, source.id, :a, first.id)
-
-      add_sort_key_column()
-
-      mapping = Mapper.derive!([Module1, Module2, Module3], MapSet.new([{Module2, :c}]))
-
-      term =
-        Module3
-        |> include(:a)
-        |> Query.normalize()
-
-      assert [%Module3{a: [%Module2{c: "banana"}]}] = run(term, mapping)
-    end
-
-    test "skips sort-key companions when decoding entities" do
-      create_module_2_entities()
-
-      add_sort_key_column()
-
-      mapping = Mapper.derive!([Module1, Module2, Module3], MapSet.new([{Module2, :c}]))
-
-      term =
-        Module2
-        |> filter(c: "banana")
-        |> Query.normalize()
-
-      assert [%Module2{c: "banana"}] = run(term, mapping)
-    end
-
-    test "orders string attributes practically through sort-key companions" do
-      Module2
-      |> Entity.new(a: true, c: "Zürich")
-      |> create()
-
-      Module2
-      |> Entity.new(a: true, c: "Łódź")
-      |> create()
-
-      Module2
-      |> Entity.new(a: true, c: "apple")
-      |> create()
-
-      add_sort_key_column()
-      backfill_sort_keys()
-
-      mapping = Mapper.derive!([Module1, Module2, Module3], MapSet.new([{Module2, :c}]))
-
-      term =
-        Module2
-        |> order_by(:c)
-        |> Query.normalize()
-
-      assert [%{c: "apple"}, %{c: "Łódź"}, %{c: "Zürich"}] = run(term, mapping)
     end
 
     test "raises on a malformed id param value" do

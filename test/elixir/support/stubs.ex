@@ -10,6 +10,7 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.ProcessUtils
+  alias Hologram.Database
   alias Hologram.Database.QueryCache
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
@@ -86,6 +87,12 @@ defmodule Hologram.Test.Stubs do
     stub_with(QueryCacheMock, stub)
 
     :persistent_term.erase(stub.persistent_term_key())
+
+    original_mapping = Database.mapping()
+
+    ExUnit.Callbacks.on_exit(fn ->
+      :persistent_term.put(Database.mapping_key(), original_mapping)
+    end)
 
     if start_link do
       QueryCache.start_link([])

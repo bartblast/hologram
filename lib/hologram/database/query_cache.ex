@@ -5,7 +5,11 @@ defmodule Hologram.Database.QueryCache do
 
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.Database
+  alias Hologram.Database.Connection
+  alias Hologram.Database.Mapper
   alias Hologram.Database.QueryCompiler
+  alias Hologram.Database.SchemaReconciler
+  alias Hologram.Database.SortKey
   alias Hologram.Query.Registry
   alias Hologram.Reflection
 
@@ -92,17 +96,81 @@ defmodule Hologram.Database.QueryCache do
     :ok
   end
 
+  # sobelow_skip ["SQL.Query"]
+  defp backfill_column!(table, companion_name, source_name) do
+    select_sql =
+      ~s(SELECT "id", #{Mapper.quote_identifier(source_name)} FROM #{qualified_table(table)})
+
+    update_sql =
+      ~s(UPDATE #{qualified_table(table)} SET #{Mapper.quote_identifier(companion_name)} = $1 WHERE "id" = $2)
+
+    {:ok, %{rows: rows}} = Connection.query(select_sql, [])
+
+    Enum.each(rows, fn
+      [_id, nil] ->
+        :ok
+
+      [id, value] ->
+        {:ok, _result} = Connection.query(update_sql, [SortKey.compute(value), id])
+    end)
+  end
+
+  defp backfill_sort_keys!(ops, mapping) do
+    ops
+    |> Enum.filter(&match?(%{op: :add_column}, &1))
+    |> Enum.each(&maybe_backfill_op!(&1, mapping))
+  end
+
+  # The registered queries' ordered pairs enrich the mapping with sort-key
+  # companions - the cache owns this derivation because extraction needs no
+  # mapping and the cache boots right after the database. With no pairs the boot
+  # mapping stands, and orphaned companions drop on the next model
+  # reconciliation, which targets the plain mapping.
+  defp ensure_mapping(terms) do
+    ordered_pairs = Registry.ordered_string_pairs(terms)
+
+    if MapSet.size(ordered_pairs) == 0 do
+      Database.mapping()
+    else
+      mapping = Mapper.derive!(Reflection.list_entities(), ordered_pairs)
+      :persistent_term.put(Database.mapping_key(), mapping)
+
+      reconcile_result = SchemaReconciler.reconcile(Database.reconciliation_context())
+      backfill_sort_keys!(reconcile_result.ops, mapping)
+
+      mapping
+    end
+  end
+
   defp impl do
     Application.get_env(:hologram, :query_cache_impl, __MODULE__)
   end
 
+  defp maybe_backfill_op!(op, mapping) do
+    {_entity_type, entity_mapping} =
+      Enum.find(mapping, fn {_entity_type, table_mapping} -> table_mapping.table == op.table end)
+
+    column = Enum.find(entity_mapping.columns, &(&1.name == op.column))
+
+    case column do
+      %{source: {:sort_key, attribute_name}} ->
+        source_column =
+          Enum.find(entity_mapping.columns, &(&1.source == {:attribute, attribute_name}))
+
+        backfill_column!(entity_mapping.table, column.name, source_column.name)
+
+      _other_column ->
+        :ok
+    end
+  end
+
   defp populate do
-    mapping = Database.mapping()
     modules = impl().component_modules()
+    terms = QueryExtractor.extract_queries(modules)
+    mapping = ensure_mapping(terms)
 
     entries =
-      modules
-      |> QueryExtractor.extract_queries()
+      terms
       |> Registry.build()
       |> Map.new(fn {id, entry} ->
         {id, Map.put(entry, :compiled, QueryCompiler.compile(entry.term, mapping))}
@@ -120,5 +188,9 @@ defmodule Hologram.Database.QueryCache do
     data = %{entries: entries, prop_params: prop_params}
 
     :persistent_term.put(impl().persistent_term_key(), data)
+  end
+
+  defp qualified_table(table) do
+    ~s("hologram_data".#{Mapper.quote_identifier(table)})
   end
 end

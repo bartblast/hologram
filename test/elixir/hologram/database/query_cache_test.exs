@@ -1,17 +1,17 @@
 defmodule Hologram.Database.QueryCacheTest do
-  use Hologram.Test.BasicCase, async: false
+  use Hologram.Test.DatabaseCase, async: false
   use Hologram.Query
 
   import Hologram.Database.QueryCache
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Database
-  alias Hologram.Database.QueryCache
+  alias Hologram.Database.Mapper
   alias Hologram.Database.QueryCompiler
   alias Hologram.Query
   alias Hologram.Query.Param
   alias Hologram.Query.Registry
+  alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Component.Module11
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
@@ -39,10 +39,13 @@ defmodule Hologram.Database.QueryCacheTest do
       |> filter(b: {:>=, %Param{name: :min_b}})
       |> Query.normalize()
 
+    ordered_pairs = MapSet.new([{Entity2, :c}])
+    mapping = Mapper.derive!(Reflection.list_entities(), ordered_pairs)
+
     [module_1_term, module_11_term]
     |> Registry.build()
     |> Map.new(fn {id, entry} ->
-      {id, Map.put(entry, :compiled, QueryCompiler.compile(entry.term, Database.mapping()))}
+      {id, Map.put(entry, :compiled, QueryCompiler.compile(entry.term, mapping))}
     end)
   end
 
@@ -89,7 +92,7 @@ defmodule Hologram.Database.QueryCacheTest do
   end
 
   test "reload/0" do
-    QueryCache.start_link([])
+    init(nil)
 
     key = QueryCacheStub.persistent_term_key()
     :persistent_term.put(key, :dummy_value)

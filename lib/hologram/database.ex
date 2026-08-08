@@ -180,8 +180,10 @@ defmodule Hologram.Database do
 
   @impl Supervisor
   def init(opts) do
-    # TODO: schema reconciliation wires the registry's ordered pairs here, so the
-    # mapping carries the sort-key companions the registered queries order by.
+    # The query cache re-derives the mapping with the registered queries'
+    # sort-key companions right after boot - this plain derivation stands until
+    # then, and is the reconciliation target that drops orphaned companions
+    # when queries disappear.
     mapping = Mapper.derive!(Reflection.list_entities())
     :persistent_term.put(@mapping_key, mapping)
 

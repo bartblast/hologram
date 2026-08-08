@@ -25,6 +25,10 @@ defmodule Hologram.ApplicationTest do
 
     setup_query_cache(QueryCacheStub, false)
 
+    # The supervisor-started cache populates from its own process, outside the
+    # test's sandboxed connection - an empty sweep keeps it off the database.
+    stub(QueryCacheMock, :component_modules, fn -> [] end)
+
     on_exit(fn ->
       if original_hologram_start_flag do
         System.put_env("HOLOGRAM_START", original_hologram_start_flag)
