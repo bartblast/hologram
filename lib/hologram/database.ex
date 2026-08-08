@@ -174,6 +174,8 @@ defmodule Hologram.Database do
 
   @impl Supervisor
   def init(opts) do
+    # TODO: schema reconciliation wires the registry's ordered pairs here, so the
+    # mapping carries the sort-key companions the registered queries order by.
     mapping = Mapper.derive!(Reflection.list_entities())
     :persistent_term.put(@mapping_key, mapping)
 

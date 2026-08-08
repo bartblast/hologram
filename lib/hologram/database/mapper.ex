@@ -26,11 +26,15 @@ defmodule Hologram.Database.Mapper do
   automatically), and :source (:system, or the declaration the column is derived from).
   To-many relationships derive no columns - they live in join tables.
 
+  Each {entity type, attribute name} pair in ordered_pairs naming this entity derives a
+  nullable `<attribute>_$sort` companion column (source `{:sort_key, name}`) holding the
+  attribute's derived sort key. Without pairs no companions derive.
+
   Raises Hologram.CompileError when two declarations derive the same column name (an attribute
   named x_id collides with a to-one relationship named x).
   """
-  @spec columns(module) :: list(%{atom => any})
-  def columns(entity_type) do
+  @spec columns(module, MapSet.t()) :: list(%{atom => any})
+  def columns(entity_type, ordered_pairs \\ MapSet.new()) do
     table_name = table_name(entity_type)
 
     attribute_columns =
@@ -69,7 +73,10 @@ defmodule Hologram.Database.Mapper do
         }
       end)
 
-    columns = [id_column() | attribute_columns] ++ to_one_columns ++ timestamp_columns()
+    sort_columns = sort_key_columns(entity_type, table_name, ordered_pairs)
+
+    columns =
+      [id_column() | attribute_columns] ++ to_one_columns ++ timestamp_columns() ++ sort_columns
 
     validate_column_names!(entity_type, columns)
 
@@ -84,10 +91,11 @@ defmodule Hologram.Database.Mapper do
   tables and enum types, whose single-underscore seams can merge to the same name across
   entities) - and returns a map from entity type module to its mapping: :table (the table
   name), :pk_constraint (the derived `<table>_$pk` constraint name), :columns (as returned
-  by columns/1), and :join_tables (as returned by join_tables/1).
+  by columns/2, sort-key companions included for the given ordered pairs), and :join_tables
+  (as returned by join_tables/1).
   """
-  @spec derive!(list(module)) :: %{module => %{atom => any}}
-  def derive!(entity_types) do
+  @spec derive!(list(module), MapSet.t()) :: %{module => %{atom => any}}
+  def derive!(entity_types, ordered_pairs \\ MapSet.new()) do
     validate_table_names!(entity_types)
     validate_required_to_one_cycles!(entity_types)
 
@@ -99,7 +107,7 @@ defmodule Hologram.Database.Mapper do
          %{
            table: table_name,
            pk_constraint: fit_identifier("#{table_name}_$pk"),
-           columns: columns(entity_type),
+           columns: columns(entity_type, ordered_pairs),
            join_tables: join_tables(entity_type)
          }}
       end)
@@ -364,6 +372,27 @@ defmodule Hologram.Database.Mapper do
       is_list(type) or Keyword.get(opts, :optional) == true
     end)
     |> Enum.map(fn {name, target, _opts} -> {name, target} end)
+  end
+
+  defp sort_key_columns(entity_type, table_name, ordered_pairs) do
+    ordered_pairs
+    |> Enum.filter(fn {pair_entity, _name} -> pair_entity == entity_type end)
+    |> Enum.sort()
+    |> Enum.map(fn {_entity, name} ->
+      %{
+        name: fit_identifier("#{name}_$sort"),
+        type: :string,
+        sql_type: sql_type(:string, table_name, name),
+        collation: collation(:string),
+        enum_values: nil,
+        default: nil,
+        null: true,
+        references: nil,
+        fk_constraint: nil,
+        fk_index: nil,
+        source: {:sort_key, name}
+      }
+    end)
   end
 
   defp sql_type(:boolean, _table_name, _name), do: "boolean"
