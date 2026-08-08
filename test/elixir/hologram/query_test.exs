@@ -332,6 +332,22 @@ defmodule Hologram.QueryTest do
       end
     end
 
+    test "raises on a range operand for an equality operator" do
+      expected_msg = "invalid operand 1..5 for operator :== on attribute :b"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, b: {:==, 1..5})
+      end
+    end
+
+    test "raises on a range operand for an ordering comparison" do
+      expected_msg = "invalid operand 1..5 for operator :> on attribute :b"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, b: {:>, 1..5})
+      end
+    end
+
     test "raises on a stepped range" do
       expected_msg =
         "stepped range 3..10//2 for attribute :b is not supported - membership ranges use step 1"

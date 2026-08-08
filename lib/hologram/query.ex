@@ -347,7 +347,7 @@ defmodule Hologram.Query do
   end
 
   defp equality_triple!(name, operator, operand) do
-    if is_list(operand) or is_tuple(operand) do
+    if is_list(operand) or is_tuple(operand) or is_struct(operand, Range) do
       raise ArgumentError,
         message:
           "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect(name)}"
@@ -460,7 +460,7 @@ defmodule Hologram.Query do
   defp ordering_triple!(name, operator, operand, entity_type) do
     validate_orderable_attribute!(name, entity_type, operator)
 
-    if is_nil(operand) or is_list(operand) or is_tuple(operand) do
+    if is_nil(operand) or is_list(operand) or is_tuple(operand) or is_struct(operand, Range) do
       raise ArgumentError,
         message:
           "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect(name)}"
