@@ -269,6 +269,20 @@ defmodule Hologram.Database.QueryRunnerTest do
       end
     end
 
+    test "raises on a param binding with conflicting types" do
+      term = %{
+        Query.normalize(Module2)
+        | filter: [{:b, :==, {:param, :x}}, {:b, :in, {:param, :x}}]
+      }
+
+      expected_msg =
+        "param :x binds as :integer and {:list, :integer} - rename one of the conflicting variables"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{x: 5})
+      end
+    end
+
     test "raises on a param value of the wrong type" do
       term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
 

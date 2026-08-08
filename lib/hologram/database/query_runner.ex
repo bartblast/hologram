@@ -50,6 +50,12 @@ defmodule Hologram.Database.QueryRunner do
     {type, opts}
   end
 
+  # Conflicts mirror the registry's param-shape rule: one param name binds one
+  # logical type - identical rebinding is reuse, a differing kind or type raises.
+  defp binding_description(:list, type), do: inspect({:list, type})
+
+  defp binding_description(:scalar, type), do: inspect(type)
+
   defp collect_param_definitions(term, acc) do
     acc_with_filters =
       Enum.reduce(term.filter, acc, fn
@@ -57,7 +63,18 @@ defmodule Hologram.Database.QueryRunner do
           {type, opts} = attribute_definition(term.entity, attribute_name)
           kind = if operator in [:in, :not_in], do: :list, else: :scalar
 
-          Map.put_new(inner_acc, param_name, {kind, type, opts})
+          case Map.fetch(inner_acc, param_name) do
+            {:ok, {^kind, ^type, _opts}} ->
+              inner_acc
+
+            {:ok, {existing_kind, existing_type, _opts}} ->
+              raise ArgumentError,
+                message:
+                  "param #{inspect(param_name)} binds as #{binding_description(existing_kind, existing_type)} and #{binding_description(kind, type)} - rename one of the conflicting variables"
+
+            :error ->
+              Map.put(inner_acc, param_name, {kind, type, opts})
+          end
 
         _triple, inner_acc ->
           inner_acc
