@@ -23,6 +23,15 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
+  @doc """
+  Extracts the registered query terms declared by the given modules - the
+  concatenated extract_module_queries/1 results in module order.
+  """
+  @spec extract_queries(list(module)) :: list(%{atom => any})
+  def extract_queries(modules) do
+    Enum.flat_map(modules, &extract_module_queries/1)
+  end
+
   defp prop_queries!(module, {name, _type, opts}) do
     case Keyword.fetch(opts, :from_query) do
       {:ok, capture} -> [prop_query!(module, name, capture)]
