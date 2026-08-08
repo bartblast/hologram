@@ -325,12 +325,18 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "fails the build on mapping errors even when compilation is skipped", %{opts: opts} do
       System.delete_env("HOLOGRAM_START")
 
+      # Bare entity reflection functions instead of use Hologram.Entity - the
+      # entity validator now rejects this collision at declaration time, and this
+      # test exercises the task's mapping-error path behind it.
       defmodule InvalidMappingEntityFixture do
-        use Hologram.Entity
+        @spec __is_hologram_entity__() :: boolean
+        def __is_hologram_entity__, do: true
 
-        attribute :owner_id, :string
+        @spec __attributes__() :: list(tuple)
+        def __attributes__, do: [{:owner_id, :string, []}]
 
-        relationship :owner, Hologram.Test.Fixtures.Entity.Module1
+        @spec __relationships__() :: list(tuple)
+        def __relationships__, do: [{:owner, Hologram.Test.Fixtures.Entity.Module1, []}]
       end
 
       # Register a fake loaded OTP app whose spec lists the entity type module with the
