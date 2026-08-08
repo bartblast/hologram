@@ -96,23 +96,32 @@ defmodule Hologram.Database.QueryCache do
     :ok
   end
 
+  # The transaction and row locks serialize the backfill against concurrent
+  # entity updates - a live-reload backfill runs while the endpoint serves, and
+  # an update slipping between the read and the companion write would get its
+  # fresh companion value overwritten from the stale source read.
   # sobelow_skip ["SQL.Query"]
   defp backfill_column!(table, companion_name, source_name) do
     select_sql =
-      ~s(SELECT "id", #{Mapper.quote_identifier(source_name)} FROM #{qualified_table(table)})
+      ~s(SELECT "id", #{Mapper.quote_identifier(source_name)} FROM #{qualified_table(table)} FOR UPDATE)
 
     update_sql =
       ~s(UPDATE #{qualified_table(table)} SET #{Mapper.quote_identifier(companion_name)} = $1 WHERE "id" = $2)
 
-    {:ok, %{rows: rows}} = Connection.query(select_sql, [])
+    {:ok, :ok} =
+      Connection.transaction(fn ->
+        {:ok, %{rows: rows}} = Connection.query(select_sql, [])
 
-    Enum.each(rows, fn
-      [_id, nil] ->
-        :ok
+        Enum.each(rows, fn
+          [_id, nil] ->
+            :ok
 
-      [id, value] ->
-        {:ok, _result} = Connection.query(update_sql, [SortKey.compute(value), id])
-    end)
+          [id, value] ->
+            {:ok, _result} = Connection.query(update_sql, [SortKey.compute(value), id])
+        end)
+      end)
+
+    :ok
   end
 
   defp backfill_sort_keys!(ops, mapping) do
