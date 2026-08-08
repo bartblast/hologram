@@ -42,13 +42,11 @@ defmodule Hologram.Entity.Validator do
 
   def attribute_value_valid?(value, :string, _opts), do: is_binary(value) and String.valid?(value)
 
+  # Only the canonical lowercase 8-4-4-4-12 form is valid - the framework
+  # generates and stores ids in that spelling, and the client tier compares ids
+  # as strings, so any alternative spelling would match on one tier only.
   def attribute_value_valid?(value, :uuid, _opts) when is_binary(value) do
-    hex = String.replace(value, "-", "")
-
-    case Base.decode16(hex, case: :lower) do
-      {:ok, decoded} -> byte_size(decoded) == 16
-      :error -> false
-    end
+    String.match?(value, ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
   end
 
   def attribute_value_valid?(_value, :uuid, _opts), do: false

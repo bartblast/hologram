@@ -68,7 +68,8 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "validates :uuid values" do
       assert attribute_value_valid?("018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f", :uuid)
-      assert attribute_value_valid?("018f4571a1b27c3d8e4f5a6b7c8d9e0f", :uuid)
+      refute attribute_value_valid?("018f4571a1b27c3d8e4f5a6b7c8d9e0f", :uuid)
+      refute attribute_value_valid?("018f45-71a1b2-7c3d-8e4f-5a6b7c8d9e0f", :uuid)
       refute attribute_value_valid?("018F4571-A1B2-7C3D-8E4F-5A6B7C8D9E0F", :uuid)
       refute attribute_value_valid?("018f4571-a1b2-7c3d-8e4f", :uuid)
       refute attribute_value_valid?("not-a-uuid", :uuid)
