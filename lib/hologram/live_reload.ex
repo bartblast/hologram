@@ -202,16 +202,19 @@ defmodule Hologram.LiveReload do
     # Elixir prints that rather than returning it.
   end
 
-  # Reconciliation failures surface like compilation errors - logged loudly and
-  # broadcast to connected clients.
+  # Data-layer reload failures surface like compilation errors - logged loudly
+  # and broadcast to connected clients. The query cache reloads here rather than
+  # with the runtime registries because it can fail on developer input (invalid
+  # query builders raise at extraction, and companion reconciliation runs DDL).
   defp reload_database do
     Database.reload()
+    QueryCache.reload()
 
     :ok
   rescue
     error ->
       message = Exception.message(error)
-      Logger.error("Hologram: schema reconciliation failed: #{message}")
+      Logger.error("Hologram: data layer reload failed: #{message}")
 
       {:error, message}
   end
@@ -221,7 +224,6 @@ defmodule Hologram.LiveReload do
     PathRegistry.reload()
     ManifestCache.reload()
     PageDigestRegistry.reload()
-    QueryCache.reload()
   end
 
   # Determines whether to process a file event and returns the target file to reload
