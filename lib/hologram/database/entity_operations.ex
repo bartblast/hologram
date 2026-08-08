@@ -101,7 +101,9 @@ defmodule Hologram.Database.EntityOperations do
   def get(entity_type, id) do
     %{table: table, columns: columns} = Map.fetch!(Database.mapping(), entity_type)
 
-    column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
+    persisted_columns = Enum.reject(columns, &match?({:sort_key, _name}, &1.source))
+
+    column_list = Enum.map_join(persisted_columns, ", ", &Mapper.quote_identifier(&1.name))
     statement = ~s|SELECT #{column_list} FROM #{qualified_table(table)} WHERE "id" = $1|
 
     encoded_id = Codec.encode(id, :uuid)
@@ -112,7 +114,7 @@ defmodule Hologram.Database.EntityOperations do
 
       {:ok, %Postgrex.Result{rows: [row]}} ->
         fields =
-          columns
+          persisted_columns
           |> Enum.zip(row)
           |> Enum.map(fn {column, value} ->
             {field_name(column), Codec.decode(value, column.type)}

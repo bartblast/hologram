@@ -1,7 +1,7 @@
 defmodule Hologram.Database.EntityOperationsSortKeyTest do
   use Hologram.Test.DatabaseCase, async: false
 
-  import Hologram.Database.EntityOperations, only: [create: 1, update: 3]
+  import Hologram.Database.EntityOperations, only: [create: 1, get: 2, update: 3]
 
   alias Hologram.Database
   alias Hologram.Database.Codec
@@ -59,6 +59,17 @@ defmodule Hologram.Database.EntityOperationsSortKeyTest do
         |> create()
 
       assert companion_value("test_fixtures_entity_module2", entity.id) == "lodz"
+    end
+  end
+
+  describe "get/2" do
+    test "returns the entity without its sort-key companion" do
+      entity =
+        Module2
+        |> Entity.new(c: "Łódź")
+        |> create()
+
+      assert get(Module2, entity.id) == entity
     end
   end
 
