@@ -17,8 +17,10 @@ defmodule Hologram.Compiler.QueryExtractor do
   capture points at one. Modules without prop declarations declare no queries.
 
   Raises Hologram.CompileError when a from_query value is not a function capture,
-  when a capture argument is destructured instead of a plain name, or when a
-  capture argument is named vars (reserved).
+  when a capture argument is destructured instead of a plain name, when a capture
+  argument is named vars (reserved), or when a parameterized capture branches -
+  multiple clauses, a guarded clause, or a branching construct in its body.
+  Zero-arity captures branch freely - they evaluate concretely at build time.
   """
   @spec extract_module_queries(module) :: list(%{atom => any})
   def extract_module_queries(module) do
@@ -45,10 +47,37 @@ defmodule Hologram.Compiler.QueryExtractor do
     fun_name = shim_target(funs, module, prop_name, capture_info)
     fun_key = {fun_name, capture_info[:arity]}
 
-    {^fun_key, {_visibility, [first_clause | _other_clauses]}} = List.keyfind(funs, fun_key, 0)
+    {^fun_key, {_visibility, clauses}} = List.keyfind(funs, fun_key, 0)
 
-    Enum.map(first_clause.params, &param_name!(module, prop_name, &1))
+    clause = validate_straight_line!(module, prop_name, clauses)
+
+    Enum.map(clause.params, &param_name!(module, prop_name, &1))
   end
+
+  defp contains_branching?(%IR.AnonymousFunctionType{clauses: [_clause_1, _clause_2 | _rest]}) do
+    true
+  end
+
+  defp contains_branching?(%IR.Case{}), do: true
+
+  defp contains_branching?(%IR.Cond{}), do: true
+
+  defp contains_branching?(%IR.Try{}), do: true
+
+  defp contains_branching?(%IR.With{}), do: true
+
+  defp contains_branching?(ir) when is_struct(ir) do
+    ir
+    |> Map.from_struct()
+    |> Map.values()
+    |> Enum.any?(&contains_branching?/1)
+  end
+
+  defp contains_branching?(list) when is_list(list) do
+    Enum.any?(list, &contains_branching?/1)
+  end
+
+  defp contains_branching?(_other), do: false
 
   defp module_funs(module) do
     module
@@ -118,5 +147,30 @@ defmodule Hologram.Compiler.QueryExtractor do
     else
       fun_name
     end
+  end
+
+  # TODO: branch forking over the IR registers every variant of a branching
+  # builder - until then, branching parameterized builders fail the build.
+  defp validate_straight_line!(module, prop_name, [_clause_1, _clause_2 | _rest]) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(prop_name)} in #{inspect(module)} has multiple clauses - branching parameterized builders are not extractable yet"
+  end
+
+  defp validate_straight_line!(module, prop_name, [%IR.FunctionClause{guards: guards}])
+       when guards != [] do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(prop_name)} in #{inspect(module)} has a guarded clause - branching parameterized builders are not extractable yet"
+  end
+
+  defp validate_straight_line!(module, prop_name, [clause]) do
+    if contains_branching?(clause.body) do
+      raise Hologram.CompileError,
+        message:
+          "query capture for prop #{inspect(prop_name)} in #{inspect(module)} branches in its body - branching parameterized builders are not extractable yet"
+    end
+
+    clause
   end
 end

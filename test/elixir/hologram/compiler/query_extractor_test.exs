@@ -13,6 +13,10 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module10
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module11
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module12
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
   describe "extract_module_queries/1" do
@@ -23,6 +27,15 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Query.normalize()
 
       assert extract_module_queries(Module4) == [expected_term]
+    end
+
+    test "extracts a zero-arity capture branching on compile-time values" do
+      expected_term =
+        Entity2
+        |> filter(b: {:>=, 17})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module12) == [expected_term]
     end
 
     test "extracts normalized terms from from_query props" do
@@ -63,6 +76,24 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module8)
+      end
+    end
+
+    test "raises on a guarded parameterized capture clause" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module10 has a guarded clause - branching parameterized builders are not extractable yet"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module10)
+      end
+    end
+
+    test "raises on a multi-clause parameterized capture" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9 has multiple clauses - branching parameterized builders are not extractable yet"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module9)
       end
     end
 
