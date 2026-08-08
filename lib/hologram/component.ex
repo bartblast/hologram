@@ -140,9 +140,10 @@ defmodule Hologram.Component do
         def __props__, do: Enum.reverse(@__props__)
       end
 
+    delegations_clause = build_from_query_delegations_clause(env)
     shim_clauses = build_from_query_shim_clauses(env)
 
-    [template_clause, props_clause | shim_clauses]
+    [template_clause, props_clause, delegations_clause | shim_clauses]
   end
 
   @doc """
@@ -224,10 +225,15 @@ defmodule Hologram.Component do
   that delegates to the local one, because local functions are not callable at
   module-body scope. The delegation allows the query function to be private.
   A capture resolving to an import stays on its source module.
+
+  An inline `fn` literal given as the :from_query option is hoisted into the
+  generated function - its clauses become the function's clauses, so the fn's
+  argument names are the authored param names. The `&(...)` capture shorthand
+  is not accepted - it raises with fn syntax as the alternative.
   """
   @spec prop(atom, atom, T.opts()) :: Macro.t()
   defmacro prop(name, type, opts \\ []) do
-    {opts, shim} = rewrite_from_query_local_capture(opts, name, __CALLER__)
+    {opts, shim} = rewrite_from_query_value(opts, name, __CALLER__)
 
     accumulate_prop =
       quote do
@@ -487,22 +493,70 @@ defmodule Hologram.Component do
     %{server | broadcasts: [broadcast | server.broadcasts]}
   end
 
+  defp build_from_query_delegations_clause(env) do
+    delegations =
+      env.module
+      |> Module.get_attribute(:__from_query_shims__)
+      |> Enum.flat_map(fn
+        {:delegate, shim_name, fun_name, _arity} -> [{shim_name, fun_name}]
+        {:inline, _shim_name, _fn_clauses} -> []
+      end)
+
+    if delegations != [] do
+      quote do
+        @doc false
+        @spec __from_query_delegations__() :: keyword(atom)
+        def __from_query_delegations__, do: unquote(delegations)
+      end
+    end
+  end
+
+  defp build_from_query_shim({:delegate, shim_name, fun_name, arity}, env) do
+    args = Macro.generate_arguments(arity, env.module)
+
+    quote do
+      @doc false
+      def unquote(shim_name)(unquote_splicing(args)) do
+        unquote(fun_name)(unquote_splicing(args))
+      end
+    end
+  end
+
+  defp build_from_query_shim({:inline, shim_name, fn_clauses}, _env) do
+    Enum.map(fn_clauses, &build_inline_shim_clause(shim_name, &1))
+  end
+
   defp build_from_query_shim_clauses(env) do
     env.module
     |> Module.get_attribute(:__from_query_shims__)
-    |> Enum.map(fn {shim_name, fun_name, arity} ->
-      args = Macro.generate_arguments(arity, env.module)
-
-      quote do
-        @doc false
-        def unquote(shim_name)(unquote_splicing(args)) do
-          unquote(fun_name)(unquote_splicing(args))
-        end
-      end
-    end)
+    |> Enum.map(&build_from_query_shim(&1, env))
+    |> List.flatten()
   end
 
-  defp classify_capture(
+  defp build_inline_shim_clause(
+         shim_name,
+         {:->, _clause_meta, [[{:when, _when_meta, params_and_guard}], body]}
+       ) do
+    {params, [guard]} = Enum.split(params_and_guard, -1)
+
+    quote do
+      @doc false
+      def unquote(shim_name)(unquote_splicing(params)) when unquote(guard) do
+        unquote(body)
+      end
+    end
+  end
+
+  defp build_inline_shim_clause(shim_name, {:->, _clause_meta, [params, body]}) do
+    quote do
+      @doc false
+      def unquote(shim_name)(unquote_splicing(params)) do
+        unquote(body)
+      end
+    end
+  end
+
+  defp classify_from_query_value(
          {:&, _capture_meta, [{:/, _slash_meta, [{fun_name, _fun_meta, context}, arity]}]},
          env
        )
@@ -514,32 +568,65 @@ defmodule Hologram.Component do
     end
   end
 
-  defp classify_capture(_value, _env), do: :other
+  defp classify_from_query_value({:&, _capture_meta, [{:/, _slash_meta, _target}]}, _env) do
+    :remote
+  end
+
+  defp classify_from_query_value({:&, _capture_meta, [_shorthand_body]}, _env), do: :shorthand
+
+  defp classify_from_query_value({:fn, _fn_meta, fn_clauses}, _env) do
+    {:inline, fn_clauses, inline_arity(hd(fn_clauses))}
+  end
+
+  defp classify_from_query_value(_value, _env), do: :other
+
+  defp inline_arity({:->, _clause_meta, [[{:when, _when_meta, params_and_guard}], _body]}) do
+    length(params_and_guard) - 1
+  end
+
+  defp inline_arity({:->, _clause_meta, [params, _body]}), do: length(params)
 
   defp normalize_except({_kind, _id} = identity), do: [identity]
 
   defp normalize_except(list) when is_list(list), do: list
 
   # sobelow_skip ["DOS.BinToAtom"]
-  defp rewrite_from_query_local_capture(opts, prop_name, env)
+  defp rewrite_from_query_value(opts, prop_name, env)
        when is_list(opts) and is_atom(prop_name) do
-    with {:from_query, value} <- List.keyfind(opts, :from_query, 0),
-         {:local, fun_name, arity} <- classify_capture(value, env) do
-      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-      shim_name = :"__#{prop_name}_from_query__"
+    case List.keyfind(opts, :from_query, 0) do
+      {:from_query, value} ->
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        shim_name = :"__#{prop_name}_from_query__"
 
-      shim_capture =
-        quote do
-          &(__MODULE__.unquote(shim_name) / unquote(arity))
+        case classify_from_query_value(value, env) do
+          {:local, fun_name, arity} ->
+            {shim_opts(opts, shim_name, arity), {:delegate, shim_name, fun_name, arity}}
+
+          {:inline, fn_clauses, arity} ->
+            {shim_opts(opts, shim_name, arity), {:inline, shim_name, fn_clauses}}
+
+          :shorthand ->
+            raise Hologram.CompileError,
+              message:
+                "from_query for prop #{inspect(prop_name)} uses the &(...) capture shorthand - use fn syntax or a &fun/arity capture instead"
+
+          _imported_or_other ->
+            {opts, nil}
         end
 
-      new_opts = List.keyreplace(opts, :from_query, 0, {:from_query, shim_capture})
-
-      {new_opts, {shim_name, fun_name, arity}}
-    else
-      _no_local_capture -> {opts, nil}
+      nil ->
+        {opts, nil}
     end
   end
 
-  defp rewrite_from_query_local_capture(opts, _prop_name, _env), do: {opts, nil}
+  defp rewrite_from_query_value(opts, _prop_name, _env), do: {opts, nil}
+
+  defp shim_opts(opts, shim_name, arity) do
+    shim_capture =
+      quote do
+        &(__MODULE__.unquote(shim_name) / unquote(arity))
+      end
+
+    List.keyreplace(opts, :from_query, 0, {:from_query, shim_capture})
+  end
 end

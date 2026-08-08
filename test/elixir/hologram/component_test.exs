@@ -11,6 +11,7 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Server
   alias Hologram.Server.Broadcast
   alias Hologram.Test.Fixtures.Component.Module1
+  alias Hologram.Test.Fixtures.Component.Module10
   alias Hologram.Test.Fixtures.Component.Module2
   alias Hologram.Test.Fixtures.Component.Module3
   alias Hologram.Test.Fixtures.Component.Module4
@@ -24,6 +25,18 @@ defmodule Hologram.ComponentTest do
 
   test "__entities_from_query__/0 shim delegates to the private query function" do
     assert Module7.__entities_from_query__() == filter(Entity2, a: true)
+  end
+
+  test "__entities_from_query__/0 shim evaluates an inline from_query function" do
+    assert Module10.__entities_from_query__() == filter(Entity2, a: true)
+  end
+
+  test "__from_query_delegations__/0 is absent for inline-only from_query functions" do
+    refute function_exported?(Module10, :__from_query_delegations__, 0)
+  end
+
+  test "__from_query_delegations__/0 maps delegation shims to their targets" do
+    assert Module7.__from_query_delegations__() == [__entities_from_query__: :entities_query]
   end
 
   test "__is_hologram_component__/0" do
@@ -43,6 +56,12 @@ defmodule Hologram.ComponentTest do
   test "__props__/0 rewrites a local from_query capture to a generated shim capture" do
     assert Module7.__props__() == [
              {:entities, [Entity2], [from_query: &Module7.__entities_from_query__/0]}
+           ]
+  end
+
+  test "__props__/0 rewrites an inline from_query function to a generated shim capture" do
+    assert Module10.__props__() == [
+             {:entities, [Entity2], [from_query: &Module10.__entities_from_query__/0]}
            ]
   end
 
@@ -124,6 +143,30 @@ defmodule Hologram.ComponentTest do
 
     test "invalid template path" do
       refute maybe_register_colocated_template_markup("/my_invalid_template_path.holo")
+    end
+  end
+
+  test "prop/3 raises on the from_query capture shorthand" do
+    code = ~s'''
+    defmodule Hologram.ComponentTest.ShorthandFixture do
+      use Hologram.Component
+
+      alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+      prop :entities, [Entity2], from_query: &Enum.member?([&1], &1)
+
+      @impl Component
+      def template do
+        ~HOLO""
+      end
+    end
+    '''
+
+    expected_msg =
+      "from_query for prop :entities uses the &(...) capture shorthand - use fn syntax or a &fun/arity capture instead"
+
+    assert_error Hologram.CompileError, expected_msg, fn ->
+      Code.compile_string(code)
     end
   end
 

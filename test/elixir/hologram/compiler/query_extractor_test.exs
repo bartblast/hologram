@@ -20,6 +20,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module20
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module21
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module22
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module23
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
@@ -106,6 +107,15 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Query.normalize()
 
       assert extract_module_queries(Module6) == [expected_term]
+    end
+
+    test "extracts params from an inline from_query function" do
+      expected_term =
+        Entity2
+        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module23) == [expected_term]
     end
 
     test "extracts through a cross-module helper forking its clauses" do

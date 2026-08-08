@@ -450,7 +450,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp prop_query!(module, prop_name, capture) when is_function(capture) do
-    {target_module, clauses} = resolve_capture_clauses!(module, prop_name, capture)
+    {target_module, clauses} = resolve_capture_clauses!(capture)
 
     context = %{
       current_module: target_module,
@@ -475,34 +475,26 @@ defmodule Hologram.Compiler.QueryExtractor do
         "from_query for prop #{inspect(prop_name)} in #{inspect(module)} must be a function capture, got: #{inspect(value)}"
   end
 
-  defp resolve_capture_clauses!(module, prop_name, capture) do
+  defp resolve_capture_clauses!(capture) do
     capture_info = Function.info(capture)
     target_module = capture_info[:module]
-    funs = module_funs(target_module)
 
-    fun_name = shim_target(funs, module, prop_name, capture_info)
+    fun_name = shim_target(target_module, capture_info[:name])
     fun_key = {fun_name, capture_info[:arity]}
+
+    funs = module_funs(target_module)
 
     {^fun_key, {_visibility, clauses}} = List.keyfind(funs, fun_key, 0)
 
     {target_module, clauses}
   end
 
-  defp shim_target(funs, module, prop_name, capture_info) do
-    fun_name = capture_info[:name]
-
-    shim? =
-      capture_info[:module] == module and
-        Atom.to_string(fun_name) == "__#{prop_name}_from_query__"
-
-    if shim? do
-      fun_key = {fun_name, capture_info[:arity]}
-
-      {^fun_key, {_visibility, [shim_clause]}} = List.keyfind(funs, fun_key, 0)
-
-      %IR.Block{expressions: [%IR.LocalFunctionCall{function: target_name}]} = shim_clause.body
-
-      target_name
+  # A generated delegation shim hides the authored builder - the component's
+  # delegations reflection maps it back. An inline-hoisted shim is the authored
+  # builder itself and is not listed there.
+  defp shim_target(module, fun_name) do
+    if function_exported?(module, :__from_query_delegations__, 0) do
+      Keyword.get(module.__from_query_delegations__(), fun_name, fun_name)
     else
       fun_name
     end
