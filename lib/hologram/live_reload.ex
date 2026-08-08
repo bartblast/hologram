@@ -9,6 +9,7 @@ defmodule Hologram.LiveReload do
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
   alias Hologram.Database
+  alias Hologram.Database.QueryCache
   alias Hologram.LiveReload.Diagnostic
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
@@ -220,6 +221,7 @@ defmodule Hologram.LiveReload do
     PathRegistry.reload()
     ManifestCache.reload()
     PageDigestRegistry.reload()
+    QueryCache.reload()
   end
 
   # Determines whether to process a file event and returns the target file to reload
