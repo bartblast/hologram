@@ -95,6 +95,12 @@ defmodule Hologram.Query.RegistryTest do
   end
 
   describe "param_shape/1" do
+    test "binds membership element params with the attribute type" do
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:param, :bound}, 1]}]}
+
+      assert param_shape(term) == %{bound: :integer}
+    end
+
     test "collects params from nested includes" do
       base_term =
         Module3

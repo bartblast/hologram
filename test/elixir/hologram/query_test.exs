@@ -63,10 +63,22 @@ defmodule Hologram.QueryTest do
       assert query.filter == [{:b, :==, {:param, :bound}}]
     end
 
+    test "accepts a param sentinel as a membership list element" do
+      query = filter(Module2, b: [%Param{name: :bound}, 1])
+
+      assert query.filter == [{:b, :in, [{:param, :bound}, 1]}]
+    end
+
     test "accepts a param sentinel as a membership operand" do
       query = filter(Module2, b: {:in, %Param{name: :ids}})
 
       assert query.filter == [{:b, :in, {:param, :ids}}]
+    end
+
+    test "accepts a param sentinel as a membership operator element" do
+      query = filter(Module2, b: {:in, [%Param{name: :bound}, 1]})
+
+      assert query.filter == [{:b, :in, [{:param, :bound}, 1]}]
     end
 
     test "accepts a param sentinel in an inequality operator tuple" do
@@ -320,6 +332,15 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, x: 1)
+      end
+    end
+
+    test "raises on a range inside a membership operand" do
+      expected_msg =
+        "invalid membership list element 1..3 for attribute :b - membership lists hold plain values"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, b: {:in, [1..3, 5]})
       end
     end
 

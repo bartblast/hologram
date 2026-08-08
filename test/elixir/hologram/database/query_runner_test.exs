@@ -49,6 +49,15 @@ defmodule Hologram.Database.QueryRunnerTest do
   end
 
   describe "run/3" do
+    test "binds membership element params" do
+      {_first, _second, third} = create_module_2_entities()
+
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:param, :bound}, 3]}]}
+
+      assert [%{id: id, b: 7}] = run(term, @mapping, %{bound: 7})
+      assert id == third.id
+    end
+
     test "binds param values with the slot's type" do
       {first, _second, _third} = create_module_2_entities()
 

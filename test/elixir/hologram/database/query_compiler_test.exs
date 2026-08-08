@@ -78,6 +78,23 @@ defmodule Hologram.Database.QueryCompilerTest do
              )
     end
 
+    test "binds membership element params as scalar slots in an array constructor" do
+      mapping = Mapper.derive!([Module2])
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:param, :bound}, 1]}]}
+
+      assert %{params: params, sql: sql} = compile(term, mapping)
+      assert params == [{:param, :bound, :integer}, {:value, 1}]
+      assert String.contains?(sql, ~s|WHERE "b" = ANY(ARRAY[$1, $2]::int8[])|)
+    end
+
+    test "binds membership element params under the nil-inclusive branch" do
+      mapping = Mapper.derive!([Module2])
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil, {:param, :bound}]}]}
+
+      assert %{params: [{:param, :bound, :integer}], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s|("b" = ANY(ARRAY[$1]::int8[]) OR "b" IS NULL)|)
+    end
+
     test "binds membership params with list types" do
       mapping = Mapper.derive!([Module2])
       term = %{Query.normalize(Module2) | filter: [{:c, :in, {:param, :names}}]}

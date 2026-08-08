@@ -15,7 +15,9 @@ defmodule Hologram.Database.QueryCompiler do
   value binds as a placeholder - literal values are Codec-encoded at compilation into
   `{:value, encoded}` slots (membership lists encode element-wise into one array
   slot), param leaves become `{:param, name, type}` slots carrying the attribute's
-  logical type for runtime encoding (`{:list, type}` for membership operands). Nil
+  logical type for runtime encoding (`{:list, type}` for membership operands). A
+  membership list holding param elements binds one slot per element inside a cast
+  ARRAY constructor instead - each element param is a scalar slot. Nil
   equality compiles to `IS NULL` and nil inequality to `IS NOT NULL`, with no bind
   slot. Column selection follows the mapping's physical column order.
 
@@ -71,6 +73,14 @@ defmodule Hologram.Database.QueryCompiler do
 
     " ORDER BY " <> rendered_entries
   end
+
+  # Bind slots inside an ARRAY constructor carry no type context of their own -
+  # without the cast Postgres resolves them to text.
+  defp array_type(%{type: :enum, sql_type: sql_type}) do
+    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(sql_type)}[]"
+  end
+
+  defp array_type(%{sql_type: sql_type}), do: "#{sql_type}[]"
 
   defp bind_slot({:param, param_name}, column, reversed_params) do
     {"$#{length(reversed_params) + 1}", [{:param, param_name, column.type} | reversed_params]}
@@ -210,10 +220,28 @@ defmodule Hologram.Database.QueryCompiler do
      [{:param, param_name, {:list, column.type}} | reversed_params]}
   end
 
+  # A list holding param elements binds one slot per element inside an ARRAY
+  # constructor - each element param is a scalar slot of the attribute's type.
   defp membership_slot(values, column, reversed_params) do
-    encoded_values = Enum.map(values, &Codec.encode(&1, column.type))
+    if Enum.any?(values, &match?({:param, _param_name}, &1)) do
+      {reversed_placeholders, new_params} =
+        Enum.reduce(values, {[], reversed_params}, fn value, {acc_placeholders, acc_params} ->
+          {placeholder, next_params} = bind_slot(value, column, acc_params)
 
-    {"$#{length(reversed_params) + 1}", [{:value, encoded_values} | reversed_params]}
+          {[placeholder | acc_placeholders], next_params}
+        end)
+
+      placeholders =
+        reversed_placeholders
+        |> Enum.reverse()
+        |> Enum.join(", ")
+
+      {"ARRAY[#{placeholders}]::#{array_type(column)}", new_params}
+    else
+      encoded_values = Enum.map(values, &Codec.encode(&1, column.type))
+
+      {"$#{length(reversed_params) + 1}", [{:value, encoded_values} | reversed_params]}
+    end
   end
 
   defp include_expression({name, sub_term}, parent_mapping, mapping, parent_prefix, acc) do

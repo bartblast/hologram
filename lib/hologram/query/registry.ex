@@ -53,9 +53,10 @@ defmodule Hologram.Query.Registry do
   to the logical type the param binds as.
 
   The term's filter predicates are walked recursively through its includes. A param
-  bound by a membership operator binds as a list of the attribute's logical type -
-  `{:list, type}` - any other operator binds the attribute's type directly. A param
-  met several times with one type appears once.
+  bound as a whole membership operand binds as a list of the attribute's logical
+  type - `{:list, type}` - a param as a membership list element or under any other
+  operator binds the attribute's type directly. A param met several times with one
+  type appears once.
 
   Raises Hologram.CompileError when one param name meets conflicting types.
   """
@@ -92,6 +93,24 @@ defmodule Hologram.Query.Registry do
     base_type = attribute_type(entity_type, name)
     type = if operator in [:in, :not_in], do: {:list, base_type}, else: base_type
 
+    collect_param_type(acc, param_name, type)
+  end
+
+  # A param as a membership list element binds a single value of the
+  # attribute's type.
+  defp collect_param({name, _operator, values}, entity_type, acc) when is_list(values) do
+    base_type = attribute_type(entity_type, name)
+
+    values
+    |> Enum.filter(&match?({:param, _param_name}, &1))
+    |> Enum.reduce(acc, fn {:param, param_name}, inner_acc ->
+      collect_param_type(inner_acc, param_name, base_type)
+    end)
+  end
+
+  defp collect_param(_triple, _entity_type, acc), do: acc
+
+  defp collect_param_type(acc, param_name, type) do
     case acc do
       %{^param_name => ^type} ->
         acc
@@ -105,8 +124,6 @@ defmodule Hologram.Query.Registry do
         Map.put(acc, param_name, type)
     end
   end
-
-  defp collect_param(_triple, _entity_type, acc), do: acc
 
   defp collect_params(term, acc) do
     filter_acc =

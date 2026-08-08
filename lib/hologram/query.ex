@@ -76,11 +76,12 @@ defmodule Hologram.Query do
   a nil element means the membership matches missing values too (`[nil, :done]` reads
   "done or unset"), and negated membership without nil matches missing values.
 
-  A `Hologram.Query.Param` struct in a value position - bare or as an operator-tuple
-  operand - stands for a runtime-bound value: the triple stores a `{:param, name}`
-  leaf instead of a concrete value, and value validation is skipped (the concrete
-  value is validated when the param binds at execution). Ordering comparisons still
-  require an orderable attribute.
+  A `Hologram.Query.Param` struct in a value position - bare, as an operator-tuple
+  operand, or as a membership list element - stands for a runtime-bound value: the
+  triple stores a `{:param, name}` leaf instead of a concrete value, and value
+  validation is skipped (the concrete value is validated when the param binds at
+  execution). A membership-element param binds a single value of the attribute's
+  type. Ordering comparisons still require an orderable attribute.
 
   Raises ArgumentError when the query is neither an entity type module nor a query term,
   when the predicates are not a keyword list, when a predicate names a relationship or
@@ -433,6 +434,13 @@ defmodule Hologram.Query do
       message: "order_by spec must be an attribute name or a list, got: #{inspect(spec)}"
   end
 
+  defp normalize_membership_values(values) do
+    Enum.map(values, fn
+      %Param{name: param_name} -> {:param, param_name}
+      value -> value
+    end)
+  end
+
   defp order_entry!({name, direction}, entity_type) when is_atom(name) do
     validate_ordered_attribute!(name, entity_type)
 
@@ -505,7 +513,7 @@ defmodule Hologram.Query do
 
       operator in @membership_operators ->
         validate_membership_list!(operand, name, operator)
-        [{name, operator, operand}]
+        [{name, operator, normalize_membership_values(operand)}]
 
       operator in @ordering_operators ->
         [ordering_triple!(name, operator, operand, entity_type)]
@@ -531,7 +539,7 @@ defmodule Hologram.Query do
 
       Enum.all?(values, &plain_value?/1) ->
         validate_membership_list!(values, name, :in)
-        [{name, :in, values}]
+        [{name, :in, normalize_membership_values(values)}]
 
       true ->
         raise ArgumentError,
@@ -633,6 +641,11 @@ defmodule Hologram.Query do
 
     Enum.each(values, fn
       value when is_list(value) or is_tuple(value) ->
+        raise ArgumentError,
+          message:
+            "invalid membership list element #{inspect(value)} for attribute #{inspect(name)} - membership lists hold plain values"
+
+      %Range{} = value ->
         raise ArgumentError,
           message:
             "invalid membership list element #{inspect(value)} for attribute #{inspect(name)} - membership lists hold plain values"
