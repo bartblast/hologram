@@ -100,6 +100,21 @@ defmodule Hologram.Compiler.QueryExtractor do
         "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses an anonymous function of arity #{arity} - only arities 1-3 are extractable yet"
   end
 
+  # A cover-compiled module (coverage runs) is loaded from instrumented code,
+  # but its beam still lives on disk in the code path.
+  defp beam_path(module) do
+    case :code.which(module) do
+      :cover_compiled ->
+        case :code.get_object_code(module) do
+          {^module, _binary, path} -> path
+          :error -> :error
+        end
+
+      other ->
+        other
+    end
+  end
+
   defp call_binding!(%IR.Variable{name: name}, value, _context), do: {name, value}
 
   defp call_binding!(%IR.AtomType{}, _value, _context), do: nil
@@ -437,9 +452,9 @@ defmodule Hologram.Compiler.QueryExtractor do
   # inside stdlib or native code cannot yield a param leaf, and the flow raise
   # then names the call the developer wrote instead of its internals.
   defp interpretable_module?(module) do
-    case :code.which(module) do
-      beam_path when is_list(beam_path) ->
-        beam_path
+    case beam_path(module) do
+      path when is_list(path) ->
+        path
         |> List.to_string()
         |> String.starts_with?(Mix.Project.build_path())
 
@@ -455,8 +470,14 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp module_funs(module) do
+    beam_source =
+      case beam_path(module) do
+        path when is_list(path) -> path
+        _other -> nil
+      end
+
     module
-    |> IR.for_module()
+    |> IR.for_module(beam_source)
     |> IR.aggregate_module_funs()
   end
 

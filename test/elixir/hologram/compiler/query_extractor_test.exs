@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module16
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module17
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module18
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module2
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module20
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module21
@@ -120,6 +121,29 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Query.normalize()
 
       assert extract_module_queries(Module23) == [expected_term]
+    end
+
+    test "extracts through a cover-compiled helper module" do
+      case :cover.start() do
+        {:ok, _pid} -> :ok
+        {:error, {:already_started, _pid}} -> :ok
+      end
+
+      on_exit(fn -> :cover.stop() end)
+
+      {:ok, _cover_compiled} = :cover.compile_beam(Module19)
+
+      nil_clause_term =
+        Entity2
+        |> filter(a: true)
+        |> Query.normalize()
+
+      bound_clause_term =
+        Entity2
+        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module18) == [nil_clause_term, bound_clause_term]
     end
 
     test "extracts through a cross-module helper forking its clauses" do

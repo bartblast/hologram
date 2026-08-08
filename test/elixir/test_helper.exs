@@ -25,6 +25,10 @@ exclude_opts =
     {:win32, _name} -> [:skip_on_windows]
   end
 
+# Make OTP's :cover available (tools app) - the extractor tests exercise
+# cover-compiled modules, and the reference must resolve at test compile time.
+Mix.ensure_application!(:tools)
+
 ExUnit.start(exclude: exclude_opts)
 
 # Boot the database gateway for the whole suite with a per-process ownership pool, so that
