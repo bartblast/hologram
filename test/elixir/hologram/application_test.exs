@@ -9,6 +9,7 @@ defmodule Hologram.ApplicationTest do
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
+  use_module_stub :query_cache
 
   setup :set_mox_global
 
@@ -21,6 +22,8 @@ defmodule Hologram.ApplicationTest do
     setup_page_digest_registry(PageDigestRegistryStub, false)
 
     setup_page_module_resolver(PageModuleResolverStub, false)
+
+    setup_query_cache(QueryCacheStub, false)
 
     on_exit(fn ->
       if original_hologram_start_flag do
@@ -45,6 +48,7 @@ defmodule Hologram.ApplicationTest do
       # The child yields to the suite-wide gateway instance (database singleton semantics),
       # so it is listed without a pid and nothing here disturbs concurrent database tests.
       assert Hologram.Database in child_modules
+      assert Hologram.Database.QueryCache in child_modules
 
       assert Hologram.Assets.PageDigestRegistry in child_modules
       assert Hologram.Assets.PathRegistry in child_modules
