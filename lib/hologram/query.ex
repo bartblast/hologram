@@ -1,6 +1,7 @@
 defmodule Hologram.Query do
   @moduledoc false
 
+  alias Hologram.Query.Param
   alias Hologram.Reflection
 
   defmacro __using__(_opts) do
@@ -74,6 +75,12 @@ defmodule Hologram.Query do
   Membership lists must be non-empty lists of plain values. Nil is a regular value:
   a nil element means the membership matches missing values too (`[nil, :done]` reads
   "done or unset"), and negated membership without nil matches missing values.
+
+  A `Hologram.Query.Param` struct in a value position - bare or as an operator-tuple
+  operand - stands for a runtime-bound value: the triple stores a `{:param, name}`
+  leaf instead of a concrete value, and value validation is skipped (the concrete
+  value is validated when the param binds at execution). Ordering comparisons still
+  require an orderable attribute.
 
   Raises ArgumentError when the query is neither an entity type module nor a query term,
   when the predicates are not a keyword list, when a predicate names a relationship or
@@ -472,6 +479,25 @@ defmodule Hologram.Query do
     [{name, :>=, range.first}, {name, :<=, range.last}]
   end
 
+  defp predicate_triples!(name, %Param{name: param_name}, _entity_type) do
+    [{name, :==, {:param, param_name}}]
+  end
+
+  defp predicate_triples!(name, {operator, %Param{name: param_name}}, entity_type)
+       when is_atom(operator) do
+    cond do
+      operator in @equality_operators or operator in @membership_operators ->
+        [{name, operator, {:param, param_name}}]
+
+      operator in @ordering_operators ->
+        validate_orderable_attribute!(name, entity_type, operator)
+        [{name, operator, {:param, param_name}}]
+
+      true ->
+        raise_unknown_operator!(operator, name)
+    end
+  end
+
   defp predicate_triples!(name, {operator, operand}, entity_type) when is_atom(operator) do
     cond do
       operator in @equality_operators ->
@@ -485,9 +511,7 @@ defmodule Hologram.Query do
         [ordering_triple!(name, operator, operand, entity_type)]
 
       true ->
-        raise ArgumentError,
-          message:
-            "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
+        raise_unknown_operator!(operator, name)
     end
   end
 
@@ -520,6 +544,12 @@ defmodule Hologram.Query do
 
   defp plain_value?(value) do
     not is_tuple(value) and not is_list(value) and not is_struct(value, Range)
+  end
+
+  defp raise_unknown_operator!(operator, name) do
+    raise ArgumentError,
+      message:
+        "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
   end
 
   defp relationship_kind(entity_type, name) do

@@ -3,6 +3,7 @@ defmodule Hologram.QueryTest do
 
   import Hologram.Query
 
+  alias Hologram.Query.Param
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
@@ -56,6 +57,30 @@ defmodule Hologram.QueryTest do
   end
 
   describe "filter/2" do
+    test "accepts a param sentinel as a bare equality value" do
+      query = filter(Module2, b: %Param{name: :bound})
+
+      assert query.filter == [{:b, :==, {:param, :bound}}]
+    end
+
+    test "accepts a param sentinel as a membership operand" do
+      query = filter(Module2, b: {:in, %Param{name: :ids}})
+
+      assert query.filter == [{:b, :in, {:param, :ids}}]
+    end
+
+    test "accepts a param sentinel in an inequality operator tuple" do
+      query = filter(Module2, c: {:!=, %Param{name: :search}})
+
+      assert query.filter == [{:c, :!=, {:param, :search}}]
+    end
+
+    test "accepts a param sentinel in an ordering operator tuple" do
+      query = filter(Module2, b: {:>=, %Param{name: :min}})
+
+      assert query.filter == [{:b, :>=, {:param, :min}}]
+    end
+
     test "accepts an explicit equality operator tuple" do
       query = filter(Module2, a: {:==, true})
 
@@ -271,6 +296,15 @@ defmodule Hologram.QueryTest do
       end
     end
 
+    test "raises on a param ordering comparison on a string attribute" do
+      expected_msg =
+        "operator :>= requires a numeric or temporal attribute - attribute :c in Hologram.Test.Fixtures.Entity.Module2 has type :string"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, c: {:>=, %Param{name: :min}})
+      end
+    end
+
     test "raises on a predicate naming a relationship" do
       expected_msg =
         ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered"
@@ -372,6 +406,15 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, b: {:like, "x"})
+      end
+    end
+
+    test "raises on an unknown operator with a param operand" do
+      expected_msg =
+        "unknown operator :like in the filter predicate for attribute :b - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, b: {:like, %Param{name: :x}})
       end
     end
 
