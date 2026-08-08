@@ -6,6 +6,11 @@ defmodule Hologram.Compiler.QueryExtractor do
   alias Hologram.Query.Param
   alias Hologram.Reflection
 
+  # The applications shipped with Elixir itself - their modules are never
+  # interpreted, so a sentinel reaching them raises the flow error naming the
+  # call the developer wrote instead of its internals.
+  @elixir_apps [:eex, :elixir, :ex_unit, :iex, :logger, :mix]
+
   # Fork enumeration uses throw for non-local exit: on an undecided branch the
   # evaluation aborts, and the driver restarts it from the body with one more
   # branch choice appended (depth-first over the choice tree).
@@ -449,18 +454,14 @@ defmodule Hologram.Compiler.QueryExtractor do
     {value, %{state_after_body | env: state_after_choice.env}}
   end
 
-  # Only modules compiled into the project build are interpreted - a sentinel
-  # inside stdlib or native code cannot yield a param leaf, and the flow raise
-  # then names the call the developer wrote instead of its internals.
+  # Only application-owned Elixir modules outside the Elixir-shipped apps are
+  # interpreted - a sentinel inside stdlib or native code cannot yield a param
+  # leaf. Classified through loaded application specs, never through Mix, which
+  # releases do not ship.
   defp interpretable_module?(module) do
-    case beam_path(module) do
-      path when is_list(path) ->
-        path
-        |> List.to_string()
-        |> String.starts_with?(Mix.Project.build_path())
-
-      _other ->
-        false
+    case :application.get_application(module) do
+      {:ok, app} -> app not in @elixir_apps and Reflection.elixir_module?(module)
+      :undefined -> false
     end
   end
 
