@@ -7,6 +7,10 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
   alias Hologram.Component
+  alias Hologram.Database
+  alias Hologram.Database.QueryCache
+  alias Hologram.Database.QueryRunner
+  alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.Server
   alias Hologram.Template.DOM
@@ -82,6 +86,7 @@ defmodule Hologram.Template.Renderer do
       |> cast_props(module)
       |> inject_props_from_context(module, env.context)
       |> inject_default_prop_values(module)
+      |> inject_props_from_query(module)
 
     if has_cid_prop?(props) do
       render_stateful_component(module, props, expanded_children_dom, env.context, server_struct)
@@ -434,12 +439,46 @@ defmodule Hologram.Template.Renderer do
   defp filter_allowed_props(props_dom, module) do
     registered_prop_names =
       module.__props__()
-      |> Enum.reject(fn {_name, _type, opts} -> opts[:from_context] end)
+      |> Enum.reject(fn {_name, _type, opts} -> opts[:from_context] || opts[:from_query] end)
       |> Enum.map(fn {name, _type, _opts} -> to_string(name) end)
 
     allowed_prop_names = ["cid" | registered_prop_names]
 
     Enum.filter(props_dom, fn {name, _value_dom} -> name in allowed_prop_names end)
+  end
+
+  defp from_query_arg!(module, prop_name, nil, _props) do
+    raise ArgumentError,
+      message:
+        "from_query capture for prop #{inspect(prop_name)} in #{inspect(module)} has an argument position no clause names - it cannot bind a prop"
+  end
+
+  defp from_query_arg!(module, prop_name, param_name, props) do
+    case Map.fetch(props, param_name) do
+      {:ok, value} ->
+        value
+
+      :error ->
+        raise ArgumentError,
+          message:
+            "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(param_name)} - no like-named prop is set"
+    end
+  end
+
+  defp from_query_args!(_module, _prop_name, capture, _props) when is_function(capture, 0) do
+    []
+  end
+
+  defp from_query_args!(module, prop_name, _capture, props) do
+    param_names = QueryCache.prop_params(module, prop_name)
+
+    if param_names == nil do
+      raise ArgumentError,
+        message:
+          "no registered params for from_query prop #{inspect(prop_name)} in #{inspect(module)} - the query cache holds no entry for it"
+    end
+
+    Enum.map(param_names, &from_query_arg!(module, prop_name, &1, props))
   end
 
   defp has_cid_prop?(props) do
@@ -489,6 +528,16 @@ defmodule Hologram.Template.Renderer do
       |> Enum.into(%{})
 
     Map.merge(props, props_from_context)
+  end
+
+  # Runs after the other prop sources - a parameterized query capture binds
+  # like-named props, which template values, context, and defaults supply.
+  defp inject_props_from_query(props, module) do
+    module.__props__()
+    |> Enum.filter(fn {_name, _type, opts} -> opts[:from_query] end)
+    |> Enum.reduce(props, fn {name, _type, opts}, acc ->
+      Map.put(acc, name, run_prop_query!(module, name, opts[:from_query], acc))
+    end)
   end
 
   defp interpolate_asset_manifest_js(html) do
@@ -661,6 +710,17 @@ defmodule Hologram.Template.Renderer do
     vars
     |> module.template().()
     |> render_dom(%Env{context: context, slots: [default: children_dom]}, server_struct)
+  end
+
+  defp run_prop_query!(module, prop_name, capture, props) do
+    args = from_query_args!(module, prop_name, capture, props)
+
+    term =
+      capture
+      |> apply(args)
+      |> Query.normalize()
+
+    QueryRunner.run(term, Database.mapping())
   end
 
   defp spread_entries(value)
