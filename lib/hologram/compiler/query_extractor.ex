@@ -53,6 +53,23 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   @doc """
+  Extracts the ordered argument names of every parameterized from_query capture
+  on the given module's prop declarations. Names merge positionally across the
+  capture target's clauses (resolving through the generated from_query shim when
+  the capture points at one) - a position no clause binds as a plain variable
+  yields nil. Zero-arity captures and modules without prop declarations yield no
+  entries.
+  """
+  @spec extract_prop_params(module) :: keyword(list(atom | nil))
+  def extract_prop_params(module) do
+    if function_exported?(module, :__props__, 0) do
+      Enum.flat_map(module.__props__(), &prop_params(&1))
+    else
+      []
+    end
+  end
+
+  @doc """
   Extracts the registered query terms declared by the given modules - the
   concatenated extract_module_queries/1 results in module order.
   """
@@ -420,10 +437,35 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
+  defp merged_param_names(clauses, arity) do
+    Enum.map(0..(arity - 1), fn index ->
+      Enum.find_value(clauses, &param_name(&1, index))
+    end)
+  end
+
   defp module_funs(module) do
     module
     |> IR.for_module()
     |> IR.aggregate_module_funs()
+  end
+
+  defp param_name(clause, index) do
+    case Enum.at(clause.params, index) do
+      %IR.Variable{name: name} -> name
+      _pattern -> nil
+    end
+  end
+
+  defp prop_params({name, _type, opts}) do
+    with {:ok, capture} <- Keyword.fetch(opts, :from_query),
+         true <- is_function(capture) and not is_function(capture, 0) do
+      {_target_module, clauses} = resolve_capture_clauses!(capture)
+      arity = Function.info(capture)[:arity]
+
+      [{name, merged_param_names(clauses, arity)}]
+    else
+      _absent_zero_arity_or_non_capture -> []
+    end
   end
 
   defp module_funs_cached(module, state) do

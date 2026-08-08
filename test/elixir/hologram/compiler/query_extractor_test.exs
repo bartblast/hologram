@@ -27,6 +27,9 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9
+  alias Hologram.Test.Fixtures.Component.Module11, as: Component11
+  alias Hologram.Test.Fixtures.Component.Module12, as: Component12
+  alias Hologram.Test.Fixtures.Component.Module14, as: Component14
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
 
@@ -246,6 +249,28 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module22)
       end
+    end
+  end
+
+  describe "extract_prop_params/1" do
+    test "names arguments of a local parameterized capture through its shim" do
+      assert extract_prop_params(Component11) == [entities: [:min_b]]
+    end
+
+    test "names arguments of a remote parameterized capture merging clauses" do
+      assert extract_prop_params(Component14) == [entities: [:min_b]]
+    end
+
+    test "names arguments of an inline parameterized function" do
+      assert extract_prop_params(Component12) == [entities: [:min_b]]
+    end
+
+    test "yields no entries for modules without prop declarations" do
+      assert extract_prop_params(Entity2) == []
+    end
+
+    test "yields no entries for zero-arity captures" do
+      assert extract_prop_params(Module1) == []
     end
   end
 

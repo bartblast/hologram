@@ -186,7 +186,12 @@ defmodule Hologram.Test.Stubs do
       defmodule alias!(unquote(random_module).QueryCacheStub) do
         @behaviour QueryCache
 
-        def component_modules, do: [Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1]
+        def component_modules do
+          [
+            Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1,
+            Hologram.Test.Fixtures.Component.Module11
+          ]
+        end
 
         def persistent_term_key, do: unquote(random_atom())
       end

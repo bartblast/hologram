@@ -47,7 +47,7 @@ defmodule Hologram.Database.QueryCache do
   """
   @spec entries() :: %{String.t() => %{atom => any}}
   def entries do
-    :persistent_term.get(impl().persistent_term_key())
+    :persistent_term.get(impl().persistent_term_key()).entries
   end
 
   @doc """
@@ -65,6 +65,17 @@ defmodule Hologram.Database.QueryCache do
   @spec persistent_term_key() :: any
   def persistent_term_key do
     __MODULE__
+  end
+
+  @doc """
+  Returns the ordered argument names of the parameterized from_query capture
+  declared for the given component prop, or nil when the prop declares none.
+  """
+  @spec prop_params(module, atom) :: list(atom | nil) | nil
+  def prop_params(module, prop_name) do
+    key = impl().persistent_term_key()
+
+    Map.get(:persistent_term.get(key).prop_params, {module, prop_name})
   end
 
   @doc """
@@ -97,6 +108,17 @@ defmodule Hologram.Database.QueryCache do
         {id, Map.put(entry, :compiled, QueryCompiler.compile(entry.term, mapping))}
       end)
 
-    :persistent_term.put(impl().persistent_term_key(), entries)
+    prop_params =
+      modules
+      |> Enum.flat_map(fn module ->
+        module
+        |> QueryExtractor.extract_prop_params()
+        |> Enum.map(fn {prop_name, param_names} -> {{module, prop_name}, param_names} end)
+      end)
+      |> Map.new()
+
+    data = %{entries: entries, prop_params: prop_params}
+
+    :persistent_term.put(impl().persistent_term_key(), data)
   end
 end
