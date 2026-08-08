@@ -51,7 +51,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     test "extracts a zero-arity capture branching on compile-time values" do
       expected_term =
         Entity2
-        |> filter(b: {:>=, 17})
+        |> filter(b: {:>=, 100})
         |> Query.normalize()
 
       assert extract_module_queries(Module12) == [expected_term]

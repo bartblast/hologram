@@ -13,9 +13,9 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module12 do
   end
 
   def entities_query do
-    min_b = String.length("three-digit bound")
+    min_b = 100
 
-    if min_b > 10 do
+    if Enum.member?([50, 100], min_b) do
       filter(Entity2, b: {:>=, min_b})
     else
       filter(Entity2, a: true)
