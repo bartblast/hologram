@@ -42,6 +42,11 @@ defmodule Hologram.Database.SortKeyTest do
       assert compute("كَتَبَ") == "كتب"
     end
 
+    test "strips hebrew vowel points" do
+      assert compute("שָׁלוֹם") == "שׁלום"
+      assert compute("כׇל") == "כל"
+    end
+
     test "strips diacritics via canonical decomposition" do
       assert compute("Zürich") == "zurich"
       assert compute("Łódź") == "lodz"
