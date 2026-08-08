@@ -38,6 +38,17 @@ defmodule Hologram.Query.Registry do
   end
 
   @doc """
+  Returns the set of {entity type, attribute name} pairs the given normalized
+  query terms order by on :string attributes - the pairs whose practical ordering
+  needs a derived sort-key companion. Includes are walked recursively. Attributes
+  of other types order natively and yield no pairs.
+  """
+  @spec ordered_string_pairs(list(%{atom => any})) :: MapSet.t()
+  def ordered_string_pairs(terms) do
+    Enum.reduce(terms, MapSet.new(), &collect_ordered_pairs/2)
+  end
+
+  @doc """
   Derives the param shape of the given normalized query term - a map from param name
   to the logical type the param binds as.
 
@@ -60,6 +71,21 @@ defmodule Hologram.Query.Registry do
       Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end)
 
     type
+  end
+
+  defp collect_ordered_pairs(term, acc) do
+    acc_with_own_pairs =
+      Enum.reduce(term.order_by, acc, fn {attribute_name, _direction}, inner_acc ->
+        if attribute_type(term.entity, attribute_name) == :string do
+          MapSet.put(inner_acc, {term.entity, attribute_name})
+        else
+          inner_acc
+        end
+      end)
+
+    term.include
+    |> Map.values()
+    |> Enum.reduce(acc_with_own_pairs, &collect_ordered_pairs/2)
   end
 
   defp collect_param({name, operator, {:param, param_name}}, entity_type, acc) do
