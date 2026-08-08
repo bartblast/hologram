@@ -186,7 +186,6 @@ defmodule Hologram.Database.EntityOperations do
     end
   end
 
-  # sobelow_skip ["SQL.Query"]
   defp companion_entries(columns, sorted_changes) do
     changes_map = Map.new(sorted_changes)
 
@@ -210,6 +209,7 @@ defmodule Hologram.Database.EntityOperations do
 
   defp compute_sort_key(value), do: SortKey.compute(value)
 
+  # sobelow_skip ["SQL.Query"]
   defp delete_entity_row(entity_type, table, id, encoded_id) do
     statement = ~s|DELETE FROM #{qualified_table(table)} WHERE "id" = $1|
 
