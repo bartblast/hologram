@@ -1,0 +1,598 @@
+defmodule Hologram.Compiler.QueryExtractor do
+  @moduledoc false
+
+  alias Hologram.Compiler.IR
+  alias Hologram.Query
+  alias Hologram.Query.Param
+  alias Hologram.Reflection
+
+  # The applications shipped with Elixir itself - their modules are never
+  # interpreted, so a sentinel reaching them raises the flow error naming the
+  # call the developer wrote instead of its internals.
+  @elixir_apps [:eex, :elixir, :ex_unit, :iex, :logger, :mix]
+
+  # Fork enumeration uses throw for non-local exit: on an undecided branch the
+  # evaluation aborts, and the driver restarts it from the body with one more
+  # branch choice appended (depth-first over the choice tree).
+  @fork_signal :hologram_query_extractor_fork
+  @prune_signal :hologram_query_extractor_prune
+
+  @doc """
+  Extracts the registered query terms declared by the given module - the normalized
+  terms of every `from_query:` capture on the module's prop declarations.
+
+  A zero-arity capture is invoked at build time (query builders are pure term
+  constructors) and its result normalized. A capture with arguments is evaluated
+  symbolically over its IR - each argument becomes a param sentinel flowing into
+  the term as a `{:param, name}` leaf named after the argument, resolving through
+  the generated from_query shim when the capture points at one. Branching forks
+  the evaluation: every case/cond clause, every capture head clause, and every
+  clause of a multi-clause helper yields its own variant term, all variants are
+  extracted (deduplicated per capture), and clause guards are never evaluated -
+  a variant that cannot occur at runtime is over-approximation, costing a
+  registry entry, never correctness. A literal head pattern fixes its argument
+  concretely in that variant.
+
+  Calls interpret transitively: local helpers and sentinel-receiving functions
+  compiled into the project build evaluate over their own IR (recursion is
+  rejected), sentinel-free remote calls and query stage calls run natively, and
+  single-clause anonymous functions evaluate on invocation with their captured
+  scope (branch-free bodies only). A sentinel reaching a call outside the
+  project build raises - computing on a param cannot yield a static term.
+
+  Raises Hologram.CompileError when a from_query value is not a function capture,
+  when a capture argument is destructured instead of a plain name, when a capture
+  argument is named vars (reserved), when a case clause or function head uses a
+  composite pattern, when a helper recurses, when an anonymous function has
+  multiple clauses, arity above 3, or branches, when a sentinel is passed to a
+  call outside the project build, or when a body uses a construct symbolic
+  evaluation does not cover. Zero-arity captures are free of these limits - they
+  evaluate concretely at build time.
+  """
+  @spec extract_module_queries(module) :: list(%{atom => any})
+  def extract_module_queries(module) do
+    if Reflection.has_function?(module, :__props__, 0) do
+      Enum.flat_map(module.__props__(), &prop_queries!(module, &1))
+    else
+      []
+    end
+  end
+
+  @doc """
+  Extracts the ordered argument names of every parameterized from_query capture
+  on the given module's prop declarations. Names merge positionally across the
+  capture target's clauses (resolving through the generated from_query shim when
+  the capture points at one) - a position no clause binds as a plain variable
+  yields nil. Zero-arity captures and modules without prop declarations yield no
+  entries.
+  """
+  @spec extract_prop_params(module) :: keyword(list(atom | nil))
+  def extract_prop_params(module) do
+    if Reflection.has_function?(module, :__props__, 0) do
+      Enum.flat_map(module.__props__(), &prop_params(module, &1))
+    else
+      []
+    end
+  end
+
+  @doc """
+  Extracts the registered query terms declared by the given modules - the
+  concatenated extract_module_queries/1 results in module order.
+  """
+  @spec extract_queries(list(module)) :: list(%{atom => any})
+  def extract_queries(modules) do
+    Enum.flat_map(modules, &extract_module_queries/1)
+  end
+
+  # A closure evaluates with choices :none - a fork inside would restart the
+  # whole body with a stale choice list, so branching inside raises instead.
+  defp anonymous_closure!(1, clause, closure_env, context) do
+    fn arg_1 -> interpret_anonymous!(clause, [arg_1], closure_env, context) end
+  end
+
+  defp anonymous_closure!(2, clause, closure_env, context) do
+    fn arg_1, arg_2 -> interpret_anonymous!(clause, [arg_1, arg_2], closure_env, context) end
+  end
+
+  defp anonymous_closure!(3, clause, closure_env, context) do
+    fn arg_1, arg_2, arg_3 ->
+      interpret_anonymous!(clause, [arg_1, arg_2, arg_3], closure_env, context)
+    end
+  end
+
+  defp anonymous_closure!(arity, _clause, _closure_env, context) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses an anonymous function of arity #{arity} - only arities 1-3 are extractable yet"
+  end
+
+  # A cover-compiled module (coverage runs) is loaded from instrumented code,
+  # but its beam still lives on disk in the code path.
+  defp beam_path(module) do
+    case :code.which(module) do
+      :cover_compiled ->
+        case :code.get_object_code(module) do
+          {^module, _binary, path} -> path
+          :error -> :error
+        end
+
+      other ->
+        other
+    end
+  end
+
+  defp call_binding!(%IR.Variable{name: name}, value, _context), do: {name, value}
+
+  defp call_binding!(%IR.AtomType{}, _value, _context), do: nil
+
+  defp call_binding!(%IR.FloatType{}, _value, _context), do: nil
+
+  defp call_binding!(%IR.IntegerType{}, _value, _context), do: nil
+
+  defp call_binding!(%IR.MatchPlaceholder{}, _value, _context), do: nil
+
+  defp call_binding!(%IR.StringType{}, _value, _context), do: nil
+
+  defp call_binding!(_param_ir, _value, context) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} calls a function whose head destructures a parameter - only plain names, literals, and _ are extractable yet"
+  end
+
+  defp call_env!(params, arg_values, base_env, context) do
+    params
+    |> Enum.zip(arg_values)
+    |> Enum.reduce(base_env, fn {param_ir, value}, env ->
+      case call_binding!(param_ir, value, context) do
+        {name, bound_value} -> Map.put(env, name, bound_value)
+        nil -> env
+      end
+    end)
+  end
+
+  defp case_clause_env!(%IR.Variable{name: name}, condition_value, env, _context) do
+    Map.put(env, name, condition_value)
+  end
+
+  defp case_clause_env!(%IR.AtomType{}, _condition_value, env, _context), do: env
+
+  defp case_clause_env!(%IR.FloatType{}, _condition_value, env, _context), do: env
+
+  defp case_clause_env!(%IR.IntegerType{}, _condition_value, env, _context), do: env
+
+  defp case_clause_env!(%IR.MatchPlaceholder{}, _condition_value, env, _context), do: env
+
+  defp case_clause_env!(%IR.StringType{}, _condition_value, env, _context), do: env
+
+  defp case_clause_env!(_pattern_ir, _condition_value, _env, context) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses a composite case pattern - only variables, literals, and _ are extractable yet"
+  end
+
+  defp contains_symbol?(%Param{}), do: true
+
+  defp contains_symbol?(list) when is_list(list) do
+    Enum.any?(list, &contains_symbol?/1)
+  end
+
+  defp contains_symbol?(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> Enum.any?(&contains_symbol?/1)
+  end
+
+  defp contains_symbol?(map) when is_map(map) do
+    map
+    |> Map.to_list()
+    |> Enum.any?(&contains_symbol?/1)
+  end
+
+  defp contains_symbol?(_other), do: false
+
+  defp evaluate!(%IR.AnonymousFunctionType{arity: arity, clauses: [clause]}, state, context) do
+    {anonymous_closure!(arity, clause, state.env, context), state}
+  end
+
+  defp evaluate!(%IR.AnonymousFunctionType{}, _state, context) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses a multi-clause anonymous function - not extractable yet"
+  end
+
+  defp evaluate!(%IR.AtomType{value: value}, state, _context), do: {value, state}
+
+  defp evaluate!(%IR.Block{expressions: expressions}, state, context) do
+    Enum.reduce(expressions, {nil, state}, fn expression, {_value, acc_state} ->
+      evaluate!(expression, acc_state, context)
+    end)
+  end
+
+  # Clause guards are deliberately never evaluated at a fork - every clause
+  # forks a variant regardless of satisfiability (over-approximation).
+  defp evaluate!(%IR.Case{condition: condition, clauses: clauses}, state, context) do
+    {condition_value, state_after_condition} = evaluate!(condition, state, context)
+
+    {choice, state_after_choice} =
+      take_choice!(state_after_condition, length(clauses), context)
+
+    clause = Enum.at(clauses, choice)
+    clause_env = case_clause_env!(clause.match, condition_value, state_after_choice.env, context)
+
+    {value, state_after_body} =
+      evaluate!(clause.body, %{state_after_choice | env: clause_env}, context)
+
+    {value, %{state_after_body | env: state_after_choice.env}}
+  end
+
+  defp evaluate!(%IR.Cond{clauses: clauses}, state, context) do
+    evaluate_cond!(clauses, state, context)
+  end
+
+  defp evaluate!(%IR.FloatType{value: value}, state, _context), do: {value, state}
+
+  defp evaluate!(%IR.IntegerType{value: value}, state, _context), do: {value, state}
+
+  defp evaluate!(%IR.ListType{data: data}, state, context) do
+    evaluate_enum!(data, state, context)
+  end
+
+  defp evaluate!(%IR.LocalFunctionCall{function: function, args: args}, state, context) do
+    {arg_values, state_after_args} = evaluate_enum!(args, state, context)
+
+    interpret_call!(context.current_module, function, arg_values, state_after_args, context)
+  end
+
+  defp evaluate!(%IR.MapType{data: data}, state, context) do
+    {pairs, new_state} =
+      Enum.reduce(data, {[], state}, fn {key_ir, value_ir}, {acc_pairs, acc_state} ->
+        {key, state_after_key} = evaluate!(key_ir, acc_state, context)
+        {value, state_after_value} = evaluate!(value_ir, state_after_key, context)
+
+        {[{key, value} | acc_pairs], state_after_value}
+      end)
+
+    {Map.new(pairs), new_state}
+  end
+
+  defp evaluate!(%IR.MatchOperator{left: %IR.Variable{name: name}, right: right}, state, context) do
+    {value, new_state} = evaluate!(right, state, context)
+
+    {value, %{new_state | env: Map.put(new_state.env, name, value)}}
+  end
+
+  defp evaluate!(%IR.MatchOperator{}, _state, context) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} pattern-matches in its body - only plain variable binds are extractable yet"
+  end
+
+  defp evaluate!(
+         %IR.RemoteFunctionCall{module: module_ir, function: function, args: args},
+         state,
+         context
+       ) do
+    {target_module, state_after_module} = evaluate!(module_ir, state, context)
+    {arg_values, state_after_args} = evaluate_enum!(args, state_after_module, context)
+
+    cond do
+      target_module == Query ->
+        {apply(target_module, function, arg_values), state_after_args}
+
+      not contains_symbol?(arg_values) ->
+        {apply(target_module, function, arg_values), state_after_args}
+
+      interpretable_module?(target_module) ->
+        interpret_call!(target_module, function, arg_values, state_after_args, context)
+
+      true ->
+        raise Hologram.CompileError,
+          message:
+            "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} passes an argument to #{inspect(target_module)}.#{function}/#{length(arg_values)} - arguments must flow directly into query stage calls, computing on them is not extractable yet"
+    end
+  end
+
+  defp evaluate!(%IR.StringType{value: value}, state, _context), do: {value, state}
+
+  defp evaluate!(%IR.TupleType{data: data}, state, context) do
+    {values, new_state} = evaluate_enum!(data, state, context)
+
+    {List.to_tuple(values), new_state}
+  end
+
+  defp evaluate!(%IR.Variable{name: name}, state, _context) do
+    {Map.fetch!(state.env, name), state}
+  end
+
+  defp evaluate!(ir, _state, context) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses #{inspect(ir.__struct__)} - the construct is not extractable yet"
+  end
+
+  defp evaluate_cond!([], _state, _context) do
+    throw(@prune_signal)
+  end
+
+  defp evaluate_cond!([clause | rest], state, context) do
+    {_condition_value, state_after_condition} = evaluate!(clause.condition, state, context)
+
+    {choice, state_after_choice} = take_choice!(state_after_condition, 2, context)
+
+    if choice == 0 do
+      {value, state_after_body} = evaluate!(clause.body, state_after_choice, context)
+
+      {value, %{state_after_body | env: state_after_choice.env}}
+    else
+      evaluate_cond!(rest, state_after_choice, context)
+    end
+  end
+
+  defp evaluate_enum!(irs, state, context) do
+    {reversed_values, new_state} =
+      Enum.reduce(irs, {[], state}, fn ir, {acc_values, acc_state} ->
+        {value, next_state} = evaluate!(ir, acc_state, context)
+
+        {[value | acc_values], next_state}
+      end)
+
+    {Enum.reverse(reversed_values), new_state}
+  end
+
+  defp evaluate_variants!(body, env, context, choices) do
+    result =
+      try do
+        {term, _state} =
+          evaluate!(body, %{choices: choices, env: env, funs_cache: %{}}, context)
+
+        {:term, term}
+      catch
+        {@fork_signal, clause_count} -> {:fork, clause_count}
+        @prune_signal -> :prune
+      end
+
+    case result do
+      {:term, term} ->
+        [term]
+
+      :prune ->
+        []
+
+      {:fork, clause_count} ->
+        Enum.flat_map(0..(clause_count - 1), fn choice ->
+          evaluate_variants!(body, env, context, List.insert_at(choices, -1, choice))
+        end)
+    end
+  end
+
+  defp fetch_function_clauses!(funs, module, function, arity, context) do
+    case List.keyfind(funs, {function, arity}, 0) do
+      {_fun_key, {_visibility, clauses}} ->
+        clauses
+
+      nil ->
+        raise Hologram.CompileError,
+          message:
+            "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} calls undefined function #{inspect(module)}.#{function}/#{arity}"
+    end
+  end
+
+  # TODO: an argument named vars will bind the full assigns bag once that
+  # convention lands - until then the name is reserved.
+  defp head_binding!(module, prop_name, %IR.Variable{name: :vars}) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(prop_name)} in #{inspect(module)} names an argument vars - the name is reserved, name arguments after the component assigns they bind to"
+  end
+
+  defp head_binding!(_module, _prop_name, %IR.Variable{name: name}) do
+    {name, %Param{name: name}}
+  end
+
+  defp head_binding!(_module, _prop_name, %IR.AtomType{}), do: nil
+
+  defp head_binding!(_module, _prop_name, %IR.FloatType{}), do: nil
+
+  defp head_binding!(_module, _prop_name, %IR.IntegerType{}), do: nil
+
+  defp head_binding!(_module, _prop_name, %IR.MatchPlaceholder{}), do: nil
+
+  defp head_binding!(_module, _prop_name, %IR.StringType{}), do: nil
+
+  defp head_binding!(module, prop_name, _param_ir) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(prop_name)} in #{inspect(module)} destructures an argument - arguments must be plain names, each binding to the like-named component assign"
+  end
+
+  defp head_env!(module, prop_name, clause) do
+    Enum.reduce(clause.params, %{}, fn param_ir, env ->
+      case head_binding!(module, prop_name, param_ir) do
+        {name, value} -> Map.put(env, name, value)
+        nil -> env
+      end
+    end)
+  end
+
+  defp interpret_anonymous!(clause, arg_values, closure_env, context) do
+    call_env = call_env!(clause.params, arg_values, closure_env, context)
+
+    state = %{choices: :none, env: call_env, funs_cache: %{}}
+
+    {value, _state} = evaluate!(clause.body, state, context)
+
+    value
+  end
+
+  defp interpret_call!(module, function, arg_values, state, context) do
+    arity = length(arg_values)
+    frame = {module, function, arity}
+
+    if frame in context.stack do
+      raise Hologram.CompileError,
+        message:
+          "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} recursively calls #{inspect(module)}.#{function}/#{arity} - recursive helpers are not extractable"
+    end
+
+    {funs, state_after_funs} = module_funs_cached(module, state)
+
+    clauses = fetch_function_clauses!(funs, module, function, arity, context)
+
+    {choice, state_after_choice} =
+      case clauses do
+        [_single_clause] -> {0, state_after_funs}
+        _multiple_clauses -> take_choice!(state_after_funs, length(clauses), context)
+      end
+
+    clause = Enum.at(clauses, choice)
+    call_env = call_env!(clause.params, arg_values, %{}, context)
+    new_context = %{context | current_module: module, stack: [frame | context.stack]}
+
+    {value, state_after_body} =
+      evaluate!(clause.body, %{state_after_choice | env: call_env}, new_context)
+
+    {value, %{state_after_body | env: state_after_choice.env}}
+  end
+
+  # Only application-owned Elixir modules outside the Elixir-shipped apps are
+  # interpreted - a sentinel inside stdlib or native code cannot yield a param
+  # leaf. Classified through loaded application specs, never through Mix, which
+  # releases do not ship.
+  defp interpretable_module?(module) do
+    case :application.get_application(module) do
+      {:ok, app} -> app not in @elixir_apps and Reflection.elixir_module?(module)
+      :undefined -> false
+    end
+  end
+
+  defp merged_param_names(clauses, arity) do
+    Enum.map(0..(arity - 1), fn index ->
+      Enum.find_value(clauses, &param_name(&1, index))
+    end)
+  end
+
+  defp module_funs(module) do
+    beam_source =
+      case beam_path(module) do
+        path when is_list(path) -> path
+        _other -> nil
+      end
+
+    module
+    |> IR.for_module(beam_source)
+    |> IR.aggregate_module_funs()
+  end
+
+  defp param_name(clause, index) do
+    case Enum.at(clause.params, index) do
+      %IR.Variable{name: name} -> name
+      _pattern -> nil
+    end
+  end
+
+  defp prop_params(module, {name, _type, opts}) do
+    with {:ok, capture} <- Keyword.fetch(opts, :from_query),
+         true <- is_function(capture) and not is_function(capture, 0) do
+      {_target_module, clauses} = resolve_capture_clauses!(module, name, capture)
+      arity = Function.info(capture)[:arity]
+
+      [{name, merged_param_names(clauses, arity)}]
+    else
+      _absent_zero_arity_or_non_capture -> []
+    end
+  end
+
+  defp module_funs_cached(module, state) do
+    case state.funs_cache do
+      %{^module => funs} ->
+        {funs, state}
+
+      _missing ->
+        funs = module_funs(module)
+
+        {funs, %{state | funs_cache: Map.put(state.funs_cache, module, funs)}}
+    end
+  end
+
+  defp prop_queries!(module, {name, _type, opts}) do
+    case Keyword.fetch(opts, :from_query) do
+      {:ok, capture} -> prop_query!(module, name, capture)
+      :error -> []
+    end
+  end
+
+  defp prop_query!(_module, _prop_name, capture) when is_function(capture, 0) do
+    [Query.normalize(capture.())]
+  end
+
+  defp prop_query!(module, prop_name, capture) when is_function(capture) do
+    {target_module, clauses} = resolve_capture_clauses!(module, prop_name, capture)
+
+    context = %{
+      current_module: target_module,
+      prop_module: module,
+      prop_name: prop_name,
+      stack: []
+    }
+
+    clauses
+    |> Enum.flat_map(fn clause ->
+      env = head_env!(module, prop_name, clause)
+
+      evaluate_variants!(clause.body, env, context, [])
+    end)
+    |> Enum.map(&Query.normalize/1)
+    |> Enum.uniq()
+  end
+
+  defp prop_query!(module, prop_name, value) do
+    raise Hologram.CompileError,
+      message:
+        "from_query for prop #{inspect(prop_name)} in #{inspect(module)} must be a function capture, got: #{inspect(value)}"
+  end
+
+  defp resolve_capture_clauses!(prop_module, prop_name, capture) do
+    capture_info = Function.info(capture)
+    target_module = capture_info[:module]
+
+    fun_name = shim_target(target_module, capture_info[:name])
+    arity = capture_info[:arity]
+
+    funs = module_funs(target_module)
+
+    case List.keyfind(funs, {fun_name, arity}, 0) do
+      {_fun_key, {_visibility, clauses}} ->
+        {target_module, clauses}
+
+      nil ->
+        raise Hologram.CompileError,
+          message:
+            "query capture for prop #{inspect(prop_name)} in #{inspect(prop_module)} targets undefined function #{inspect(target_module)}.#{fun_name}/#{arity}"
+    end
+  end
+
+  # A generated delegation shim hides the authored builder - the component's
+  # delegations reflection maps it back. An inline-hoisted shim is the authored
+  # builder itself and is not listed there.
+  defp shim_target(module, fun_name) do
+    if function_exported?(module, :__from_query_delegations__, 0) do
+      Keyword.get(module.__from_query_delegations__(), fun_name, fun_name)
+    else
+      fun_name
+    end
+  end
+
+  defp take_choice!(%{choices: [choice | rest]} = state, _clause_count, _context) do
+    {choice, %{state | choices: rest}}
+  end
+
+  defp take_choice!(%{choices: []}, clause_count, _context) do
+    throw({@fork_signal, clause_count})
+  end
+
+  defp take_choice!(%{choices: :none}, _clause_count, context) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} branches inside an anonymous function - not extractable yet"
+  end
+end

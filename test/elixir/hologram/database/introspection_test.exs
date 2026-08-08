@@ -1,5 +1,8 @@
 defmodule Hologram.Database.IntrospectionTest do
-  use Hologram.Test.DatabaseCase, async: true
+  # async: false - the sandbox isolates data, not locks: DDL on shared relations
+  # takes AccessExclusiveLock, which deadlocks with row locks that concurrent
+  # sandboxed tests hold until rollback.
+  use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.Database.Introspection
 
@@ -17,7 +20,14 @@ defmodule Hologram.Database.IntrospectionTest do
                "test_fixtures_entity_module2",
                "test_fixtures_entity_module3",
                "test_fixtures_entity_module3_a_$join",
-               "test_fixtures_entity_module4"
+               "test_fixtures_entity_module4",
+               "test_fixtures_entity_module5",
+               "test_fixtures_entity_module6",
+               "test_fixtures_entity_module6_a_$join",
+               "test_fixtures_entity_module7",
+               "test_fixtures_entity_module8",
+               "test_fixtures_entity_module9",
+               "test_fixtures_entity_module9_a_$join"
              ]
     end
 

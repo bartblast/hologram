@@ -12,6 +12,7 @@ defmodule Hologram.Database.EntityOperations do
   alias Hologram.Database.Codec
   alias Hologram.Database.Connection
   alias Hologram.Database.Mapper
+  alias Hologram.Database.SortKey
 
   @data_schema "hologram_data"
 
@@ -43,12 +44,7 @@ defmodule Hologram.Database.EntityOperations do
     now = DateTime.utc_now(:microsecond)
     stamped_entity = %{entity | created_at: now, updated_at: now}
 
-    encoded_values =
-      Enum.map(columns, fn column ->
-        stamped_entity
-        |> Map.fetch!(field_name(column))
-        |> Codec.encode(column.type)
-      end)
+    encoded_values = Enum.map(columns, &encoded_column_value(stamped_entity, &1))
 
     column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
     placeholder_list = Enum.map_join(1..length(columns), ", ", &"$#{&1}")
@@ -105,7 +101,9 @@ defmodule Hologram.Database.EntityOperations do
   def get(entity_type, id) do
     %{table: table, columns: columns} = Map.fetch!(Database.mapping(), entity_type)
 
-    column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
+    persisted_columns = Enum.reject(columns, &match?({:sort_key, _name}, &1.source))
+
+    column_list = Enum.map_join(persisted_columns, ", ", &Mapper.quote_identifier(&1.name))
     statement = ~s|SELECT #{column_list} FROM #{qualified_table(table)} WHERE "id" = $1|
 
     encoded_id = Codec.encode(id, :uuid)
@@ -116,7 +114,7 @@ defmodule Hologram.Database.EntityOperations do
 
       {:ok, %Postgrex.Result{rows: [row]}} ->
         fields =
-          columns
+          persisted_columns
           |> Enum.zip(row)
           |> Enum.map(fn {column, value} ->
             {field_name(column), Codec.decode(value, column.type)}
@@ -137,7 +135,7 @@ defmodule Hologram.Database.EntityOperations do
 
     columns_by_field =
       columns
-      |> Enum.reject(&(&1.source == :system))
+      |> Enum.reject(&(&1.source == :system or match?({:sort_key, _name}, &1.source)))
       |> Map.new(&{field_name(&1), &1})
 
     sorted_changes =
@@ -147,23 +145,29 @@ defmodule Hologram.Database.EntityOperations do
 
     validate_changes!(entity_type, sorted_changes, columns_by_field)
 
-    set_list =
-      sorted_changes
-      |> Enum.with_index(1)
-      |> Enum.map_join(", ", fn {{name, _value}, index} ->
-        "#{Mapper.quote_identifier(columns_by_field[name].name)} = $#{index}"
+    change_entries =
+      Enum.map(sorted_changes, fn {name, value} ->
+        column = columns_by_field[name]
+
+        {column, Codec.encode(value, column.type)}
       end)
 
-    updated_at_placeholder = length(sorted_changes) + 1
-    id_placeholder = length(sorted_changes) + 2
+    set_entries = change_entries ++ companion_entries(columns, sorted_changes)
+
+    set_list =
+      set_entries
+      |> Enum.with_index(1)
+      |> Enum.map_join(", ", fn {{column, _value}, index} ->
+        "#{Mapper.quote_identifier(column.name)} = $#{index}"
+      end)
+
+    updated_at_placeholder = length(set_entries) + 1
+    id_placeholder = length(set_entries) + 2
 
     statement =
       ~s|UPDATE #{qualified_table(table)} SET #{set_list}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder}|
 
-    changed_values =
-      Enum.map(sorted_changes, fn {name, value} ->
-        Codec.encode(value, columns_by_field[name].type)
-      end)
+    changed_values = Enum.map(set_entries, fn {_column, value} -> value end)
 
     updated_at = DateTime.utc_now(:microsecond)
     encoded_updated_at = Codec.encode(updated_at, :datetime)
@@ -181,6 +185,29 @@ defmodule Hologram.Database.EntityOperations do
         raise error
     end
   end
+
+  defp companion_entries(columns, sorted_changes) do
+    changes_map = Map.new(sorted_changes)
+
+    columns
+    |> Enum.filter(fn column ->
+      match?({:sort_key, _name}, column.source) and
+        Map.has_key?(changes_map, elem(column.source, 1))
+    end)
+    |> Enum.map(fn %{source: {:sort_key, attribute_name}} = column ->
+      encoded_key =
+        changes_map
+        |> Map.fetch!(attribute_name)
+        |> compute_sort_key()
+        |> Codec.encode(column.type)
+
+      {column, encoded_key}
+    end)
+  end
+
+  defp compute_sort_key(nil), do: nil
+
+  defp compute_sort_key(value), do: SortKey.compute(value)
 
   # sobelow_skip ["SQL.Query"]
   defp delete_entity_row(entity_type, table, id, encoded_id) do
@@ -210,6 +237,19 @@ defmodule Hologram.Database.EntityOperations do
     end)
   end
 
+  defp encoded_column_value(entity, %{source: {:sort_key, attribute_name}} = column) do
+    entity
+    |> Map.fetch!(attribute_name)
+    |> compute_sort_key()
+    |> Codec.encode(column.type)
+  end
+
+  defp encoded_column_value(entity, column) do
+    entity
+    |> Map.fetch!(field_name(column))
+    |> Codec.encode(column.type)
+  end
+
   defp fetch_join_table!(entity_type, relationship_name) do
     %{join_tables: join_tables} = Map.fetch!(Database.mapping(), entity_type)
 
@@ -227,7 +267,7 @@ defmodule Hologram.Database.EntityOperations do
 
   defp field_name(%{source: {:attribute, name}}), do: name
 
-  defp field_name(%{source: {:relationship, name}}), do: name
+  defp field_name(%{source: {:relationship, name}}), do: String.to_existing_atom("#{name}_id")
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"

@@ -1,15 +1,12 @@
 "use strict";
 
-import {
-  assert,
-  defineGlobalErlangAndElixirModules,
-} from "../../support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "../../support/helpers.mjs";
 
 import Bitstring from "../../../../assets/js/bitstring.mjs";
 import Elixir_Hologram_Entity from "../../../../assets/js/elixir/hologram/entity.mjs";
 import Type from "../../../../assets/js/type.mjs";
 
-defineGlobalErlangAndElixirModules();
+defineRuntimeGlobals();
 
 // IMPORTANT!
 // The tests mirroring the Elixir tests of Hologram.Entity.generate_id/0 are NOT in this file.

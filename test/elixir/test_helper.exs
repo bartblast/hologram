@@ -1,6 +1,7 @@
 alias Hologram.Assets.ManifestCache, as: AssetManifestCache
 alias Hologram.Assets.PageDigestRegistry
 alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
+alias Hologram.Database.QueryCache
 alias Hologram.LiveReload
 alias Hologram.Reflection
 alias Hologram.Router.PageModuleResolver
@@ -23,6 +24,10 @@ exclude_opts =
     {:unix, _name} -> [:skip_on_unix]
     {:win32, _name} -> [:skip_on_windows]
   end
+
+# Make OTP's :cover available (tools app) - the extractor tests exercise
+# cover-compiled modules, and the reference must resolve at test compile time.
+Mix.ensure_application!(:tools)
 
 ExUnit.start(exclude: exclude_opts)
 
@@ -49,3 +54,6 @@ Application.put_env(:hologram, :page_module_resolver_impl, PageModuleResolverMoc
 
 Mox.defmock(PageDigestRegistryMock, for: PageDigestRegistry)
 Application.put_env(:hologram, :page_digest_registry_impl, PageDigestRegistryMock)
+
+Mox.defmock(QueryCacheMock, for: QueryCache)
+Application.put_env(:hologram, :query_cache_impl, QueryCacheMock)

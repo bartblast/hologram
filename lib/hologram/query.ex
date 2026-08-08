@@ -1,0 +1,780 @@
+defmodule Hologram.Query do
+  @moduledoc false
+
+  alias Hologram.Query.Param
+  alias Hologram.Reflection
+
+  defmacro __using__(_opts) do
+    quote do
+      import Hologram.Query,
+        only: [
+          count: 1,
+          filter: 2,
+          include: 2,
+          include: 3,
+          limit: 2,
+          offset: 2,
+          one: 1,
+          order_by: 2,
+          paginate: 2
+        ]
+    end
+  end
+
+  @directions [:asc, :desc]
+  @equality_operators [:!=, :==]
+  @membership_operators [:in, :not_in]
+  @orderable_types [:date, :datetime, :float, :integer]
+  @ordering_operators [:<, :<=, :>, :>=]
+
+  @doc """
+  Marks the given query as counting and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. A counting query evaluates to a non-negative integer - the number of
+  results the query otherwise evaluates to, view bounds included.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, or when a cardinality is already marked.
+  """
+  @spec count(module | %{atom => any}) :: %{atom => any}
+  def count(query) do
+    term = to_term(query)
+
+    if term.cardinality != :set do
+      raise ArgumentError,
+        message: "cardinality is already set to #{inspect(term.cardinality)}"
+    end
+
+    %{term | cardinality: :count}
+  end
+
+  @doc """
+  Appends predicates to the given query's filter list and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. Predicates are a keyword list of attribute names (declared or system) and
+  predicate values. A predicate value is a plain value (equality), an operator tuple -
+  `{:==, value}`, `{:!=, value}`, `{:in, list}`, `{:not_in, list}`, or an ordering
+  comparison `{:<, value}`, `{:<=, value}`, `{:>, value}`, `{:>=, value}` - a bare
+  list of plain values (membership shorthand for `{:in, list}`), or a list of operator
+  tuples applying all of them to the attribute (an AND conjunction, e.g.
+  `[{:>=, monday}, {:<, next_monday}]`). Lists mixing plain values and operator tuples
+  are invalid. Each predicate becomes one or more `{attribute, operator, value}`
+  triples, appended in the given order. A query term is a plain-data description of a
+  query - building it never executes anything.
+
+  Ordering comparisons require a numeric or temporal attribute (date, datetime, float,
+  integer) and a non-nil operand - SQL comparisons with NULL never match, so a nil
+  operand would mean different things on the two execution tiers.
+
+  An integer Range value (`3..10`, bare or as `{:in, range}`) is shorthand for the
+  inclusive bounds - it expands into a `>=` triple and a `<=` triple. Ranges require
+  an integer attribute, step 1, and at least one element.
+
+  Membership lists must be non-empty lists of plain values. Nil is a regular value:
+  a nil element means the membership matches missing values too (`[nil, :done]` reads
+  "done or unset"), and negated membership without nil matches missing values.
+
+  A `Hologram.Query.Param` struct in a value position - bare, as an operator-tuple
+  operand, or as a membership list element - stands for a runtime-bound value: the
+  triple stores a `{:param, name}` leaf instead of a concrete value, and value
+  validation is skipped (the concrete value is validated when the param binds at
+  execution). A membership-element param binds a single value of the attribute's
+  type. Ordering comparisons still require an orderable attribute.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query term,
+  when the predicates are not a keyword list, when a predicate names a relationship or
+  an unknown attribute, or when a predicate value is invalid (unknown operator, invalid
+  membership list, list or tuple operand for an equality operator).
+  """
+  @spec filter(module | %{atom => any}, keyword) :: %{atom => any}
+  def filter(query, predicates) do
+    term = to_term(query)
+
+    if not Keyword.keyword?(predicates) do
+      raise ArgumentError,
+        message: "filter predicates must be a keyword list, got: #{inspect(predicates)}"
+    end
+
+    triples =
+      Enum.flat_map(predicates, fn {name, value} ->
+        validate_attribute_name!(name, term.entity, "filtered")
+        predicate_triples!(name, value, term.entity)
+      end)
+
+    %{term | filter: term.filter ++ triples}
+  end
+
+  @doc """
+  Adds relationship traversals to the given query's include map and returns the
+  resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. Relationships must be declared on the query's entity type - the whole
+  related entity (to-one) or entity set (to-many) is embedded in results under the
+  relationship's name.
+
+  The spec is a relationship name, or a shape list describing a traversal tree as
+  data: entries are relationship names, `{name, nested_spec}` pairs traversing deeper
+  (keyword syntax reads naturally - `include(query, project: :owner)`,
+  `include(query, [:assignee, project: :owner])`), or `{name, sub_builder}` pairs.
+  A sub-builder is a one-argument function receiving the related entity's base query
+  term and returning a refined query term for the same entity - to-many includes take
+  nested clauses this way. `include/3` passes a sub-builder for a single relationship
+  name directly.
+
+  To-one includes take no clauses (a single embedded entity has nothing to filter,
+  order, or slice) - nested includes are their only refinement. Traversal depth is
+  limited to 2 levels.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, when the spec is invalid or empty, when a name is not a declared relationship,
+  when a relationship is already included, when a sub-builder is not a one-argument
+  function or does not return a query term for the related entity type, when a to-one
+  include carries clauses, or when the include depth exceeds 2 levels.
+  """
+  @spec include(
+          module | %{atom => any},
+          atom | list,
+          (%{atom => any} -> %{atom => any}) | nil
+        ) :: %{atom => any}
+  def include(query, spec, sub_builder \\ nil)
+
+  def include(query, name, nil) when is_atom(name) do
+    include(query, name, fn related_term -> related_term end)
+  end
+
+  def include(query, name, sub_builder) when is_atom(name) and is_function(sub_builder, 1) do
+    term = to_term(query)
+
+    {target, kind} = validate_relationship_name!(name, term.entity)
+
+    if Map.has_key?(term.include, name) do
+      raise ArgumentError,
+        message: "relationship #{inspect(name)} is already included"
+    end
+
+    related_base_term = to_term(target)
+    sub_term = sub_builder.(related_base_term)
+
+    validate_sub_term!(sub_term, name, target, kind)
+
+    %{term | include: Map.put(term.include, name, sub_term)}
+  end
+
+  def include(query, spec, nil) when is_list(spec) do
+    if spec == [] do
+      raise ArgumentError, message: "include spec must not be empty"
+    end
+
+    term = to_term(query)
+
+    Enum.reduce(spec, term, fn entry, acc -> include_spec_entry!(acc, entry) end)
+  end
+
+  def include(_query, name, sub_builder) when is_atom(name) do
+    raise ArgumentError,
+      message:
+        "include sub-builder for relationship #{inspect(name)} must be a one-argument function, got: #{inspect(sub_builder)}"
+  end
+
+  def include(_query, spec, _sub_builder) when is_list(spec) do
+    raise ArgumentError,
+      message:
+        "an include shape spec takes no separate sub-builder - nest it in the spec as a {name, sub_builder} pair"
+  end
+
+  def include(_query, spec, _sub_builder) do
+    raise ArgumentError,
+      message: "include spec must be a relationship name or a shape list, got: #{inspect(spec)}"
+  end
+
+  @doc """
+  Sets the given query's limit - the maximum number of results the query evaluates
+  to - and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The limit is a non-negative integer. It bounds what the query evaluates
+  to, not the underlying data.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, when the limit is not a non-negative integer, or when the limit is already set.
+  """
+  @spec limit(module | %{atom => any}, non_neg_integer) :: %{atom => any}
+  def limit(query, value) do
+    set_view_bound!(query, :limit, value)
+  end
+
+  # Returns the canonical form of the given query - the form executors run literally
+  # and the registry hashes. Normalization: sorts filter predicates into canonical
+  # order (conjunction is commutative), gives every set-returning shape a total
+  # deterministic order by appending an ascending id tiebreaker (or the id ordering
+  # itself when no ordering is set) unless id is already among the ordering keys,
+  # drops the ordering from counting queries (counts are order-invariant, view bounds
+  # included), and normalizes included sub-terms recursively - to-one includes embed
+  # a single entity and carry no ordering. Idempotent.
+  @doc false
+  @spec normalize(module | %{atom => any}) :: %{atom => any}
+  def normalize(query) do
+    query
+    |> to_term()
+    |> normalized_term()
+  end
+
+  @doc """
+  Sets the given query's offset - the number of results skipped before the query's
+  results begin - and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The offset is a non-negative integer. It slices what the query evaluates
+  to, not the underlying data.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, when the offset is not a non-negative integer, or when the offset is already
+  set.
+  """
+  @spec offset(module | %{atom => any}, non_neg_integer) :: %{atom => any}
+  def offset(query, value) do
+    set_view_bound!(query, :offset, value)
+  end
+
+  @doc """
+  Marks the given query as single-result and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. A single-result query evaluates to the first entity under the query's
+  total order, or nil when no entity matches - never an error on multiplicity, since
+  live re-evaluation makes transient multiplicity a normal state.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, or when a cardinality is already marked.
+  """
+  @spec one(module | %{atom => any}) :: %{atom => any}
+  def one(query) do
+    term = to_term(query)
+
+    if term.cardinality != :set do
+      raise ArgumentError,
+        message: "cardinality is already set to #{inspect(term.cardinality)}"
+    end
+
+    %{term | cardinality: :one}
+  end
+
+  @doc """
+  Appends ordering keys to the given query's order list and returns the resulting
+  query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The spec is an attribute name (ascending), or a list whose entries are
+  attribute names (ascending) or `{attribute, :asc | :desc}` tuples - keyword syntax
+  reads naturally (`order_by(query, title: :desc)`). Each entry becomes an
+  `{attribute, direction}` pair, appended in the given order, accumulating across calls.
+
+  Ordering by enum attributes is not supported - the two execution tiers disagree on
+  enum order (PostgreSQL uses declaration order, the client would use term order).
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, when the spec is neither an attribute name nor a list, when an entry names a
+  relationship or an unknown attribute or an enum attribute, or when a direction is
+  neither :asc nor :desc.
+  """
+  @spec order_by(module | %{atom => any}, atom | list) :: %{atom => any}
+  def order_by(query, spec) do
+    term = to_term(query)
+
+    entries = order_entries!(spec, term.entity)
+
+    %{term | order_by: term.order_by ++ entries}
+  end
+
+  @doc """
+  Sets the given query's view bounds to the requested page and returns the resulting
+  query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. Options are `page:` (a positive integer, 1-based) and `size:` (a positive
+  integer, the number of results per page), both required. Pagination expands into the
+  offset and limit view bounds - `paginate(page: 2, size: 20)` sets offset 20 and
+  limit 20 - and slices what the query evaluates to, not the underlying data.
+
+  Raises ArgumentError when the query is neither an entity type module nor a query
+  term, when the options are not a keyword list holding exactly :page and :size, when
+  either option is not a positive integer, or when the limit or offset is already set.
+  """
+  @spec paginate(module | %{atom => any}, keyword) :: %{atom => any}
+  def paginate(query, opts) do
+    if not Keyword.keyword?(opts) do
+      raise ArgumentError,
+        message: "paginate options must be a keyword list, got: #{inspect(opts)}"
+    end
+
+    unknown_keys = Keyword.keys(opts) -- [:page, :size]
+
+    if unknown_keys != [] do
+      raise ArgumentError,
+        message:
+          "unknown paginate option #{inspect(hd(unknown_keys))} - supported options: :page, :size"
+    end
+
+    page = validate_paginate_option!(opts, :page)
+    size = validate_paginate_option!(opts, :size)
+
+    query
+    |> offset((page - 1) * size)
+    |> limit(size)
+  end
+
+  defp attribute_names(entity_type) do
+    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+
+    definitions
+    |> Enum.map(fn {name, _type, _opts} -> name end)
+    |> Enum.sort()
+  end
+
+  defp attribute_type(entity_type, name) do
+    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+
+    {_name, type, _opts} =
+      Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end)
+
+    type
+  end
+
+  defp constraint_tuple?(value) do
+    is_tuple(value) and tuple_size(value) == 2 and is_atom(elem(value, 0))
+  end
+
+  defp equality_triple!(name, operator, operand) do
+    if is_list(operand) or is_tuple(operand) or is_struct(operand, Range) do
+      raise ArgumentError,
+        message:
+          "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect(name)}"
+    end
+
+    {name, operator, operand}
+  end
+
+  defp include_depth(term) do
+    if term.include == %{} do
+      0
+    else
+      max_child_depth =
+        term.include
+        |> Map.values()
+        |> Enum.map(&include_depth/1)
+        |> Enum.max()
+
+      1 + max_child_depth
+    end
+  end
+
+  defp include_spec_entry!(term, name) when is_atom(name) do
+    include(term, name)
+  end
+
+  defp include_spec_entry!(term, {name, sub_builder})
+       when is_atom(name) and is_function(sub_builder) do
+    include(term, name, sub_builder)
+  end
+
+  defp include_spec_entry!(term, {name, sub_spec}) when is_atom(name) do
+    include(term, name, fn related_term -> include(related_term, sub_spec) end)
+  end
+
+  defp include_spec_entry!(_term, entry) do
+    raise ArgumentError,
+      message:
+        "invalid include spec entry #{inspect(entry)} - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair"
+  end
+
+  defp normalized_includes(term) do
+    Map.new(term.include, fn {name, sub_term} ->
+      {name, normalized_sub_term(sub_term, relationship_kind(term.entity, name))}
+    end)
+  end
+
+  defp normalized_order(term) do
+    ordering_keys = Enum.map(term.order_by, fn {name, _direction} -> name end)
+
+    cond do
+      term.cardinality == :count -> []
+      :id in ordering_keys -> term.order_by
+      true -> List.insert_at(term.order_by, -1, {:id, :asc})
+    end
+  end
+
+  defp normalized_sub_term(sub_term, :to_many), do: normalized_term(sub_term)
+
+  defp normalized_sub_term(sub_term, :to_one) do
+    %{sub_term | include: normalized_includes(sub_term)}
+  end
+
+  defp normalized_term(term) do
+    %{
+      term
+      | filter: Enum.sort(term.filter),
+        include: normalized_includes(term),
+        order_by: normalized_order(term)
+    }
+  end
+
+  defp order_entries!(name, entity_type) when is_atom(name) do
+    [order_entry!(name, entity_type)]
+  end
+
+  defp order_entries!(spec, entity_type) when is_list(spec) do
+    Enum.map(spec, &order_entry!(&1, entity_type))
+  end
+
+  defp order_entries!(spec, _entity_type) do
+    raise ArgumentError,
+      message: "order_by spec must be an attribute name or a list, got: #{inspect(spec)}"
+  end
+
+  defp normalize_membership_values(values) do
+    Enum.map(values, fn
+      %Param{name: param_name} -> {:param, param_name}
+      value -> value
+    end)
+  end
+
+  defp order_entry!({name, direction}, entity_type) when is_atom(name) do
+    validate_ordered_attribute!(name, entity_type)
+
+    if direction not in @directions do
+      raise ArgumentError,
+        message:
+          "invalid direction #{inspect(direction)} for attribute #{inspect(name)} - use :asc or :desc"
+    end
+
+    {name, direction}
+  end
+
+  defp order_entry!(name, entity_type) when is_atom(name) do
+    validate_ordered_attribute!(name, entity_type)
+
+    {name, :asc}
+  end
+
+  defp order_entry!(entry, _entity_type) do
+    raise ArgumentError,
+      message:
+        "invalid order_by entry #{inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple"
+  end
+
+  defp ordering_triple!(name, operator, operand, entity_type) do
+    validate_orderable_attribute!(name, entity_type, operator)
+
+    if is_nil(operand) or is_list(operand) or is_tuple(operand) or is_struct(operand, Range) do
+      raise ArgumentError,
+        message:
+          "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect(name)}"
+    end
+
+    {name, operator, operand}
+  end
+
+  defp predicate_triples!(name, {:in, %Range{} = range}, entity_type) do
+    predicate_triples!(name, range, entity_type)
+  end
+
+  defp predicate_triples!(name, %Range{} = range, entity_type) do
+    validate_membership_range!(range, name, entity_type)
+
+    [{name, :>=, range.first}, {name, :<=, range.last}]
+  end
+
+  defp predicate_triples!(name, %Param{name: param_name}, _entity_type) do
+    [{name, :==, {:param, param_name}}]
+  end
+
+  defp predicate_triples!(name, {operator, %Param{name: param_name}}, entity_type)
+       when is_atom(operator) do
+    cond do
+      operator in @equality_operators or operator in @membership_operators ->
+        [{name, operator, {:param, param_name}}]
+
+      operator in @ordering_operators ->
+        validate_orderable_attribute!(name, entity_type, operator)
+        [{name, operator, {:param, param_name}}]
+
+      true ->
+        raise_unknown_operator!(operator, name)
+    end
+  end
+
+  defp predicate_triples!(name, {operator, operand}, entity_type) when is_atom(operator) do
+    cond do
+      operator in @equality_operators ->
+        [equality_triple!(name, operator, operand)]
+
+      operator in @membership_operators ->
+        validate_membership_list!(operand, name, operator)
+        [{name, operator, normalize_membership_values(operand)}]
+
+      operator in @ordering_operators ->
+        [ordering_triple!(name, operator, operand, entity_type)]
+
+      true ->
+        raise_unknown_operator!(operator, name)
+    end
+  end
+
+  defp predicate_triples!(name, value, _entity_type) when is_tuple(value) do
+    raise ArgumentError,
+      message: "invalid filter value #{inspect(value)} for attribute #{inspect(name)}"
+  end
+
+  defp predicate_triples!(name, values, entity_type) when is_list(values) do
+    cond do
+      values == [] ->
+        raise ArgumentError,
+          message: "filter list for attribute #{inspect(name)} must not be empty"
+
+      Enum.all?(values, &constraint_tuple?/1) ->
+        Enum.flat_map(values, fn value -> predicate_triples!(name, value, entity_type) end)
+
+      Enum.all?(values, &plain_value?/1) ->
+        validate_membership_list!(values, name, :in)
+        [{name, :in, normalize_membership_values(values)}]
+
+      true ->
+        raise ArgumentError,
+          message:
+            "invalid filter list #{inspect(values)} for attribute #{inspect(name)} - use either a membership list of plain values or a list of operator tuples"
+    end
+  end
+
+  defp predicate_triples!(name, value, _entity_type), do: [{name, :==, value}]
+
+  defp plain_value?(value) do
+    not is_tuple(value) and not is_list(value) and not is_struct(value, Range)
+  end
+
+  defp raise_unknown_operator!(operator, name) do
+    raise ArgumentError,
+      message:
+        "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
+  end
+
+  defp relationship_kind(entity_type, name) do
+    {_target, kind} = validate_relationship_name!(name, entity_type)
+
+    kind
+  end
+
+  defp relationship_names(entity_type) do
+    Enum.map(entity_type.__relationships__(), fn {name, _type, _opts} -> name end)
+  end
+
+  defp set_view_bound!(query, field, value) do
+    term = to_term(query)
+
+    if not is_integer(value) or value < 0 do
+      raise ArgumentError,
+        message: "#{field} must be a non-negative integer, got: #{inspect(value)}"
+    end
+
+    current_value = Map.fetch!(term, field)
+
+    if current_value != nil do
+      raise ArgumentError, message: "#{field} is already set to #{current_value}"
+    end
+
+    Map.put(term, field, value)
+  end
+
+  defp sub_term_has_clauses?(sub_term) do
+    sub_term.filter != [] or sub_term.order_by != [] or sub_term.limit != nil or
+      sub_term.offset != nil
+  end
+
+  defp to_term(%{entity: _entity_type} = term), do: term
+
+  defp to_term(query) do
+    if Reflection.entity?(query) do
+      %{
+        cardinality: :set,
+        entity: query,
+        filter: [],
+        include: %{},
+        limit: nil,
+        offset: nil,
+        order_by: []
+      }
+    else
+      raise ArgumentError,
+        message:
+          "#{inspect(query)} is not an entity type module or a query term - a query starts from a module with the \"use Hologram.Entity\" directive"
+    end
+  end
+
+  defp validate_attribute_name!(name, entity_type, usage) do
+    attribute_names = attribute_names(entity_type)
+
+    cond do
+      name in attribute_names ->
+        :ok
+
+      name in relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be #{usage}"
+
+      true ->
+        known = Enum.map_join(attribute_names, ", ", &inspect/1)
+
+        raise ArgumentError,
+          message:
+            "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known attributes: #{known}"
+    end
+  end
+
+  defp validate_membership_list!(values, name, _operator) when is_list(values) do
+    if values == [] do
+      raise ArgumentError,
+        message: "membership list for attribute #{inspect(name)} must not be empty"
+    end
+
+    Enum.each(values, fn
+      value when is_list(value) or is_tuple(value) ->
+        raise ArgumentError,
+          message:
+            "invalid membership list element #{inspect(value)} for attribute #{inspect(name)} - membership lists hold plain values"
+
+      %Range{} = value ->
+        raise ArgumentError,
+          message:
+            "invalid membership list element #{inspect(value)} for attribute #{inspect(name)} - membership lists hold plain values"
+
+      _value ->
+        :ok
+    end)
+  end
+
+  defp validate_membership_list!(operand, name, operator) do
+    raise ArgumentError,
+      message:
+        "operator #{inspect(operator)} on attribute #{inspect(name)} requires a list operand, got: #{inspect(operand)}"
+  end
+
+  defp validate_membership_range!(range, name, entity_type) do
+    type = attribute_type(entity_type, name)
+
+    if type != :integer do
+      raise ArgumentError,
+        message:
+          "range #{inspect(range)} requires an integer attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
+    end
+
+    if range.step != 1 do
+      raise ArgumentError,
+        message:
+          "stepped range #{inspect(range)} for attribute #{inspect(name)} is not supported - membership ranges use step 1"
+    end
+
+    if Range.size(range) == 0 do
+      raise ArgumentError,
+        message:
+          "range #{inspect(range)} for attribute #{inspect(name)} is empty - it would match nothing"
+    end
+  end
+
+  defp validate_orderable_attribute!(name, entity_type, operator) do
+    type = attribute_type(entity_type, name)
+
+    if type not in @orderable_types do
+      raise ArgumentError,
+        message:
+          "operator #{inspect(operator)} requires a numeric or temporal attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
+    end
+  end
+
+  defp validate_ordered_attribute!(name, entity_type) do
+    validate_attribute_name!(name, entity_type, "ordered")
+
+    if attribute_type(entity_type, name) == :enum do
+      raise ArgumentError,
+        message:
+          "ordering by enum attributes is not supported - attribute #{inspect(name)} in #{inspect(entity_type)} has type :enum"
+    end
+  end
+
+  defp validate_paginate_option!(opts, key) do
+    case Keyword.fetch(opts, key) do
+      {:ok, value} when is_integer(value) and value >= 1 ->
+        value
+
+      {:ok, value} ->
+        raise ArgumentError,
+          message: "#{key} must be a positive integer, got: #{inspect(value)}"
+
+      :error ->
+        raise ArgumentError, message: "paginate requires the #{inspect(key)} option"
+    end
+  end
+
+  defp validate_relationship_name!(name, entity_type) do
+    definitions = entity_type.__relationships__()
+
+    case Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end) do
+      {_name, [target], _opts} ->
+        {target, :to_many}
+
+      {_name, target, _opts} ->
+        {target, :to_one}
+
+      nil ->
+        if name in attribute_names(entity_type) do
+          raise ArgumentError,
+            message:
+              "#{inspect(name)} is an attribute in #{inspect(entity_type)} - only relationships can be included"
+        end
+
+        relationship_names = relationship_names(entity_type)
+        known = Enum.map_join(relationship_names, ", ", &inspect/1)
+
+        raise ArgumentError,
+          message:
+            "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known relationships: #{known}"
+    end
+  end
+
+  defp validate_sub_term!(sub_term, name, target, kind) do
+    validate_sub_term_entity!(sub_term, name, target)
+
+    if sub_term.cardinality != :set do
+      raise ArgumentError,
+        message:
+          "include sub-terms take no cardinality marker - the relationship declaration governs cardinality"
+    end
+
+    if kind == :to_one and sub_term_has_clauses?(sub_term) do
+      raise ArgumentError,
+        message:
+          "to-one relationship #{inspect(name)} takes no clauses - clauses apply to to-many includes"
+    end
+
+    if include_depth(sub_term) > 1 do
+      raise ArgumentError,
+        message: "including #{inspect(name)} exceeds the traversal depth limit of 2 levels"
+    end
+  end
+
+  defp validate_sub_term_entity!(%{entity: target}, _name, target), do: :ok
+
+  defp validate_sub_term_entity!(%{entity: other_entity_type}, name, target) do
+    raise ArgumentError,
+      message:
+        "include sub-builder for relationship #{inspect(name)} must return a query term for #{inspect(target)} - got a query term for #{inspect(other_entity_type)}"
+  end
+
+  defp validate_sub_term_entity!(sub_term, name, target) do
+    raise ArgumentError,
+      message:
+        "include sub-builder for relationship #{inspect(name)} must return a query term for #{inspect(target)}, got: #{inspect(sub_term)}"
+  end
+end

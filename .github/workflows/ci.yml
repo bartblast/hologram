@@ -433,6 +433,14 @@ jobs:
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
         run: mix holo.test.check_file_names test
 
+      # Step: Start the runner image's preinstalled Postgres server, aligned with the
+      # zero-config test defaults (localhost:5432, postgres/postgres) - the feature app
+      # declares entities, which activates the Hologram database.
+      - name: Start Postgres
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+
       # Step: Execute feature tests app Elixir tests.
       - name: Run feature tests app Elixir tests
         run: mix test --warnings-as-errors

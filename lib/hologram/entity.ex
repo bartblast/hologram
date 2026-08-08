@@ -2,6 +2,7 @@ defmodule Hologram.Entity do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Entity
+  alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.Validator
 
   @system_attributes [
@@ -40,7 +41,10 @@ defmodule Hologram.Entity do
       |> Enum.sort()
       |> Macro.escape()
 
-    struct_fields = struct_fields(env.module)
+    struct_fields =
+      env.module
+      |> struct_fields()
+      |> Macro.escape()
 
     quote do
       defstruct unquote(struct_fields)
@@ -116,9 +120,14 @@ defmodule Hologram.Entity do
   @doc """
   Builds a new entity struct of the given entity type from the given values (a map or a keyword list).
   The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
+  To-one references are set via their `<name>_id` fields - relationship values themselves cannot be assigned at construction.
   """
   @spec new(module, %{optional(atom) => any} | keyword) :: struct
   def new(entity_type, values \\ %{}) do
+    values_map = Map.new(values)
+
+    validate_construction_values!(entity_type, values_map)
+
     declared_defaults =
       entity_type.__attributes__()
       |> Enum.filter(fn {_name, _type, opts} -> Keyword.has_key?(opts, :default) end)
@@ -127,7 +136,7 @@ defmodule Hologram.Entity do
     fields =
       declared_defaults
       |> Map.put(:id, generate_id())
-      |> Map.merge(Map.new(values))
+      |> Map.merge(values_map)
 
     struct!(entity_type, fields)
   end
@@ -149,21 +158,45 @@ defmodule Hologram.Entity do
   end
 
   @doc false
-  @spec struct_fields(module) :: list(atom)
+  # sobelow_skip ["DOS.BinToAtom"]
+  @spec struct_fields(module) :: list({atom, any})
   def struct_fields(module) do
-    system_attribute_names = Enum.map(@system_attributes, fn {name, _type, _opts} -> name end)
+    system_attribute_fields =
+      Enum.map(@system_attributes, fn {name, _type, _opts} -> {name, nil} end)
 
-    attribute_names =
+    attribute_fields =
       module
       |> Module.get_attribute(:__attributes__)
-      |> Enum.map(fn {name, _type, _opts} -> name end)
+      |> Enum.map(fn {name, _type, _opts} -> {name, nil} end)
 
-    to_one_relationship_names =
+    relationship_fields =
       module
       |> Module.get_attribute(:__relationships__)
-      |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
-      |> Enum.map(fn {name, _type, _opts} -> name end)
+      |> Enum.flat_map(fn
+        {name, [_target], _opts} ->
+          [{name, %NotIncluded{relationship: name}}]
 
-    Enum.sort(system_attribute_names ++ attribute_names ++ to_one_relationship_names)
+        {name, _target, _opts} ->
+          # Compile-time atom creation - the reference field atoms are being defined here.
+          # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+          [{:"#{name}_id", nil}, {name, %NotIncluded{relationship: name}}]
+      end)
+
+    Enum.sort(system_attribute_fields ++ attribute_fields ++ relationship_fields)
+  end
+
+  defp validate_construction_values!(entity_type, values_map) do
+    assigned_relationship_name =
+      entity_type.__relationships__()
+      |> Enum.map(fn {name, _type, _opts} -> name end)
+      |> Enum.find(&Map.has_key?(values_map, &1))
+
+    if assigned_relationship_name do
+      raise ArgumentError,
+        message:
+          "relationship #{inspect(assigned_relationship_name)} of #{inspect(entity_type)} cannot be assigned at construction - set a to-one reference via the :#{assigned_relationship_name}_id field, to-many edges via add_relationship"
+    end
+
+    :ok
   end
 end

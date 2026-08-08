@@ -9,6 +9,7 @@ defmodule Hologram.ApplicationTest do
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
+  use_module_stub :query_cache
 
   setup :set_mox_global
 
@@ -21,6 +22,12 @@ defmodule Hologram.ApplicationTest do
     setup_page_digest_registry(PageDigestRegistryStub, false)
 
     setup_page_module_resolver(PageModuleResolverStub, false)
+
+    setup_query_cache(QueryCacheStub, false)
+
+    # The supervisor-started cache populates from its own process, outside the
+    # test's sandboxed connection - an empty sweep keeps it off the database.
+    stub(QueryCacheMock, :component_modules, fn -> [] end)
 
     on_exit(fn ->
       if original_hologram_start_flag do
@@ -41,10 +48,10 @@ defmodule Hologram.ApplicationTest do
       children = Supervisor.which_children(pid)
       child_modules = Enum.map(children, fn {module, _pid, _type, _modules} -> module end)
 
-      # The entity fixture modules activate the database child (test env declares entities).
-      # The child yields to the suite-wide gateway instance (database singleton semantics),
-      # so it is listed without a pid and nothing here disturbs concurrent database tests.
-      assert Hologram.Database in child_modules
+      # The entity fixture modules activate the database unit (test env declares entities).
+      # Inside it, the database child yields to the suite-wide gateway instance (database
+      # singleton semantics), so nothing here disturbs concurrent database tests.
+      assert Hologram.Database.Supervisor in child_modules
 
       assert Hologram.Assets.PageDigestRegistry in child_modules
       assert Hologram.Assets.PathRegistry in child_modules

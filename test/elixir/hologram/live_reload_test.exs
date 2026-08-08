@@ -12,6 +12,11 @@ defmodule Hologram.LiveReloadTest do
   @debounce_delay LiveReload.debounce_delay()
   @file_path Path.join([@fixtures_dir, "live_reload", "module_1.ex"])
 
+  # Scheduling slack on top of the debounce delay. The timer cannot fire early,
+  # but a loaded runner can deliver late - costs nothing on a healthy run, since
+  # assert_receive returns as soon as the message arrives.
+  @timer_slack 1_000
+
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
@@ -100,7 +105,7 @@ defmodule Hologram.LiveReloadTest do
       LiveReload.handle_info({:file_event, self(), {@file_path, [:modified]}}, state)
 
       # For .ex files, the target file is the same as the original file
-      assert_receive {:debounced_reload, @file_path}, @debounce_delay + 100
+      assert_receive {:debounced_reload, @file_path}, @debounce_delay + @timer_slack
     end
 
     test "debounce timer sends debounced_reload message with .ex target for .holo files", %{
@@ -112,7 +117,7 @@ defmodule Hologram.LiveReloadTest do
       LiveReload.handle_info({:file_event, self(), {holo_file, [:modified]}}, state)
 
       # For .holo files, the target file should be the corresponding .ex file
-      assert_receive {:debounced_reload, ^ex_file}, @debounce_delay + 100
+      assert_receive {:debounced_reload, ^ex_file}, @debounce_delay + @timer_slack
     end
 
     test "multiple file events are debounced", %{state: state_0} do
@@ -132,7 +137,7 @@ defmodule Hologram.LiveReloadTest do
       assert is_reference(timer_ref_2)
 
       # Should receive only one debounced message
-      assert_receive {:debounced_reload, @file_path}, @debounce_delay + 100
+      assert_receive {:debounced_reload, @file_path}, @debounce_delay + @timer_slack
       refute_receive {:debounced_reload, @file_path}, 100
     end
   end

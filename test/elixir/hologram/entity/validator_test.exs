@@ -66,6 +66,16 @@ defmodule Hologram.Entity.ValidatorTest do
       refute attribute_value_valid?(:abc, :string)
     end
 
+    test "validates :uuid values" do
+      assert attribute_value_valid?("018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f", :uuid)
+      refute attribute_value_valid?("018f4571a1b27c3d8e4f5a6b7c8d9e0f", :uuid)
+      refute attribute_value_valid?("018f45-71a1b2-7c3d-8e4f-5a6b7c8d9e0f", :uuid)
+      refute attribute_value_valid?("018F4571-A1B2-7C3D-8E4F-5A6B7C8D9E0F", :uuid)
+      refute attribute_value_valid?("018f4571-a1b2-7c3d-8e4f", :uuid)
+      refute attribute_value_valid?("not-a-uuid", :uuid)
+      refute attribute_value_valid?(5, :uuid)
+    end
+
     test "accepts nil only when the optional option is true" do
       assert attribute_value_valid?(nil, :string, optional: true)
       refute attribute_value_valid?(nil, :string)
@@ -231,6 +241,20 @@ defmodule Hologram.Entity.ValidatorTest do
 
           attribute :title, :string
           attribute :title, :integer
+        end
+      end
+    end
+
+    test "rejects attribute colliding with a to-one reference field" do
+      expected_msg =
+        "attribute :owner_id in Hologram.Entity.ValidatorTest.InlineEntityFixture26 derives entity field :owner_id, which collides with relationship :owner - every declaration must derive distinct fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture26 do
+          use Hologram.Entity
+
+          relationship :owner, Module1
+          attribute :owner_id, :string
         end
       end
     end
@@ -420,6 +444,20 @@ defmodule Hologram.Entity.ValidatorTest do
   end
 
   describe "validate_relationship!/4" do
+    test "rejects a to-one reference field colliding with an attribute" do
+      expected_msg =
+        "relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture27 derives entity field :owner_id, which collides with attribute :owner_id - every declaration must derive distinct fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture27 do
+          use Hologram.Entity
+
+          attribute :owner_id, :string
+          relationship :owner, Module1
+        end
+      end
+    end
+
     test "rejects duplicate relationship name" do
       expected_msg =
         "duplicate name :owner used for relationship in Hologram.Entity.ValidatorTest.InlineEntityFixture5 - attribute and relationship names share one namespace and must be unique"

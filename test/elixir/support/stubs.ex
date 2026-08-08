@@ -10,6 +10,8 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.ProcessUtils
+  alias Hologram.Database
+  alias Hologram.Database.QueryCache
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
 
@@ -76,6 +78,24 @@ defmodule Hologram.Test.Stubs do
 
     if start_link do
       PageModuleResolver.start_link([])
+    end
+
+    :ok
+  end
+
+  def setup_query_cache(stub, start_link \\ true) do
+    stub_with(QueryCacheMock, stub)
+
+    :persistent_term.erase(stub.persistent_term_key())
+
+    original_mapping = Database.mapping()
+
+    ExUnit.Callbacks.on_exit(fn ->
+      :persistent_term.put(Database.mapping_key(), original_mapping)
+    end)
+
+    if start_link do
+      QueryCache.start_link([])
     end
 
     :ok
@@ -163,6 +183,27 @@ defmodule Hologram.Test.Stubs do
       end
 
       alias alias!(unquote(random_module).PageModuleResolverStub)
+    end
+  end
+
+  defmacro use_module_stub(:query_cache) do
+    random_module = random_module()
+
+    quote do
+      defmodule alias!(unquote(random_module).QueryCacheStub) do
+        @behaviour QueryCache
+
+        def component_modules do
+          [
+            Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1,
+            Hologram.Test.Fixtures.Component.Module11
+          ]
+        end
+
+        def persistent_term_key, do: unquote(random_atom())
+      end
+
+      alias alias!(unquote(random_module).QueryCacheStub)
     end
   end
 

@@ -105,6 +105,12 @@ defmodule Hologram.Database do
   end
 
   @doc """
+  Returns the key of the persistent term holding the mapping.
+  """
+  @spec mapping_key() :: any
+  def mapping_key, do: @mapping_key
+
+  @doc """
   Returns the name of the connection pool process.
   """
   @spec pool_name() :: atom
@@ -174,6 +180,10 @@ defmodule Hologram.Database do
 
   @impl Supervisor
   def init(opts) do
+    # The query cache re-derives the mapping with the registered queries'
+    # sort-key companions right after boot - this plain derivation stands until
+    # then, and is the reconciliation target that drops orphaned companions
+    # when queries disappear.
     mapping = Mapper.derive!(Reflection.list_entities())
     :persistent_term.put(@mapping_key, mapping)
 

@@ -42,6 +42,15 @@ defmodule Hologram.Entity.Validator do
 
   def attribute_value_valid?(value, :string, _opts), do: is_binary(value) and String.valid?(value)
 
+  # Only the canonical lowercase 8-4-4-4-12 form is valid - the framework
+  # generates and stores ids in that spelling, and the client tier compares ids
+  # as strings, so any alternative spelling would match on one tier only.
+  def attribute_value_valid?(value, :uuid, _opts) when is_binary(value) do
+    String.match?(value, ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+  end
+
+  def attribute_value_valid?(_value, :uuid, _opts), do: false
+
   @doc """
   Validates the given data map against the given entity type's declared attributes.
   Returns :ok, or {:error, errors} where errors is a name-sorted list of {name, reason} tuples with reason being :invalid, :missing or :unknown.
@@ -78,6 +87,7 @@ defmodule Hologram.Entity.Validator do
     validate_attribute_opts!(module, name, opts)
     validate_attribute_values!(module, name, type, opts)
     validate_attribute_default!(module, name, type, opts)
+    validate_field_collision!(module, "attribute", name, [Atom.to_string(name)])
     :ok
   end
 
@@ -117,6 +127,7 @@ defmodule Hologram.Entity.Validator do
     validate_relationship_name!(module, name)
     validate_relationship_type!(module, name, type)
     validate_relationship_opts!(module, name, opts)
+    validate_field_collision!(module, "relationship", name, relationship_field_names(name, type))
     :ok
   end
 
@@ -129,6 +140,30 @@ defmodule Hologram.Entity.Validator do
         if Keyword.get(opts, :optional) == true, do: [], else: [{name, :missing}]
     end
   end
+
+  defp declared_fields(module) do
+    attribute_fields =
+      module
+      |> Module.get_attribute(:__attributes__)
+      |> Enum.map(fn {name, _type, _opts} ->
+        {Atom.to_string(name), "attribute #{inspect(name)}"}
+      end)
+
+    relationship_fields =
+      module
+      |> Module.get_attribute(:__relationships__)
+      |> Enum.flat_map(fn {name, type, _opts} ->
+        name
+        |> relationship_field_names(type)
+        |> Enum.map(&{&1, "relationship #{inspect(name)}"})
+      end)
+
+    attribute_fields ++ relationship_fields
+  end
+
+  defp relationship_field_names(name, [_target]), do: [Atom.to_string(name)]
+
+  defp relationship_field_names(name, _target), do: [Atom.to_string(name), "#{name}_id"]
 
   defp relationship_target([target]), do: target
 
@@ -242,6 +277,22 @@ defmodule Hologram.Entity.Validator do
         message:
           "invalid values option #{inspect(values)} for enum attribute #{inspect(name)} in #{inspect(module)} - the values option must be a non-empty list of unique non-nil atoms"
     end
+  end
+
+  defp validate_field_collision!(module, kind, name, field_names) do
+    declared = declared_fields(module)
+
+    Enum.each(field_names, fn field_name ->
+      case List.keyfind(declared, field_name, 0) do
+        {_field_name, declaration} ->
+          raise Hologram.CompileError,
+            message:
+              "#{kind} #{inspect(name)} in #{inspect(module)} derives entity field :#{field_name}, which collides with #{declaration} - every declaration must derive distinct fields"
+
+        nil ->
+          :ok
+      end
+    end)
   end
 
   defp validate_known_opts!(module, kind, name, opts, valid_opts) do

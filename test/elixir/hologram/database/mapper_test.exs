@@ -14,7 +14,7 @@ defmodule Hologram.Database.MapperTest do
     |> Enum.find(&(&1.name == name))
   end
 
-  describe "columns/1" do
+  describe "columns/2" do
     test "derives only system columns for entity type with no declarations" do
       assert columns(Module1) == [
                %{
@@ -157,6 +157,31 @@ defmodule Hologram.Database.MapperTest do
       assert column(Module4, "a").enum_values == nil
     end
 
+    test "derives no sort-key companions for pairs naming other entities" do
+      assert columns(Module2, MapSet.new([{Module3, :c}])) == columns(Module2)
+    end
+
+    test "derives sort-key companion columns for ordered pairs naming the entity" do
+      companion =
+        Module2
+        |> columns(MapSet.new([{Module2, :c}]))
+        |> List.last()
+
+      assert companion == %{
+               name: "c_$sort",
+               type: :string,
+               sql_type: "text",
+               collation: "C",
+               enum_values: nil,
+               default: nil,
+               null: true,
+               references: nil,
+               fk_constraint: nil,
+               fk_index: nil,
+               source: {:sort_key, :c}
+             }
+    end
+
     test "derives to-one relationship reference columns and excludes to-many relationships" do
       relationship_columns =
         Module3
@@ -216,11 +241,15 @@ defmodule Hologram.Database.MapperTest do
     end
 
     test "rejects declarations deriving the same column name" do
+      # Bare reflection functions instead of use Hologram.Entity - the entity
+      # validator now rejects this collision at declaration time, and the
+      # mapper's own check guards the standalone mapper API contract.
       defmodule InlineEntityFixture1 do
-        use Hologram.Entity
+        @spec __attributes__() :: list(tuple)
+        def __attributes__, do: [{:project_id, :string, []}]
 
-        attribute :project_id, :string
-        relationship :project, Module1
+        @spec __relationships__() :: list(tuple)
+        def __relationships__, do: [{:project, Hologram.Test.Fixtures.Entity.Module1, []}]
       end
 
       expected_msg =
@@ -235,7 +264,13 @@ defmodule Hologram.Database.MapperTest do
     end
   end
 
-  describe "derive!/1" do
+  describe "derive!/2" do
+    test "carries sort-key companions for the given ordered pairs" do
+      mapping = derive!([Module2], MapSet.new([{Module2, :c}]))
+
+      assert List.last(mapping[Module2].columns).source == {:sort_key, :c}
+    end
+
     test "returns the mapping keyed by entity type" do
       assert derive!([Module1, Module3]) == %{
                Module1 => %{
