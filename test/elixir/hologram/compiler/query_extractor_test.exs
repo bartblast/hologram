@@ -21,6 +21,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module21
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module22
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module23
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module24
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
@@ -195,6 +196,45 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
     test "yields no terms for modules without prop declarations" do
       assert extract_module_queries(Entity2) == []
+    end
+
+    test "raises on a call to an undefined function" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module24 calls undefined function Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19.missing_helper/1"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module24)
+      end
+    end
+
+    test "raises on a capture targeting an undefined function" do
+      # Defined at runtime - a compile-time fixture cannot hold a missing-target
+      # capture, because the fun value inlined into __props__/0 trips the
+      # compiler's undefined-remote warning.
+      code = ~s'''
+      defmodule Hologram.Compiler.QueryExtractorTest.UndefinedTargetFixture do
+        use Hologram.Component
+
+        alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19
+        alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+        prop :entities, [Entity2], from_query: Function.capture(Module19, :missing_query, 1)
+
+        @impl Component
+        def template do
+          ~HOLO""
+        end
+      end
+      '''
+
+      {_result, _diagnostics} = Code.with_diagnostics(fn -> Code.compile_string(code) end)
+
+      expected_msg =
+        "query capture for prop :entities in Hologram.Compiler.QueryExtractorTest.UndefinedTargetFixture targets undefined function Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19.missing_query/1"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Hologram.Compiler.QueryExtractorTest.UndefinedTargetFixture)
+      end
     end
 
     test "raises on a destructured query capture argument" do

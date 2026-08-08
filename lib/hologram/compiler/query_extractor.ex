@@ -63,7 +63,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   @spec extract_prop_params(module) :: keyword(list(atom | nil))
   def extract_prop_params(module) do
     if function_exported?(module, :__props__, 0) do
-      Enum.flat_map(module.__props__(), &prop_params(&1))
+      Enum.flat_map(module.__props__(), &prop_params(module, &1))
     else
       []
     end
@@ -344,6 +344,18 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
+  defp fetch_function_clauses!(funs, module, function, arity, context) do
+    case List.keyfind(funs, {function, arity}, 0) do
+      {_fun_key, {_visibility, clauses}} ->
+        clauses
+
+      nil ->
+        raise Hologram.CompileError,
+          message:
+            "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} calls undefined function #{inspect(module)}.#{function}/#{arity}"
+    end
+  end
+
   # TODO: an argument named vars will bind the full assigns bag once that
   # convention lands - until then the name is reserved.
   defp head_binding!(module, prop_name, %IR.Variable{name: :vars}) do
@@ -402,9 +414,8 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
 
     {funs, state_after_funs} = module_funs_cached(module, state)
-    fun_key = {function, arity}
 
-    {^fun_key, {_visibility, clauses}} = List.keyfind(funs, fun_key, 0)
+    clauses = fetch_function_clauses!(funs, module, function, arity, context)
 
     {choice, state_after_choice} =
       case clauses do
@@ -456,10 +467,10 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
-  defp prop_params({name, _type, opts}) do
+  defp prop_params(module, {name, _type, opts}) do
     with {:ok, capture} <- Keyword.fetch(opts, :from_query),
          true <- is_function(capture) and not is_function(capture, 0) do
-      {_target_module, clauses} = resolve_capture_clauses!(capture)
+      {_target_module, clauses} = resolve_capture_clauses!(module, name, capture)
       arity = Function.info(capture)[:arity]
 
       [{name, merged_param_names(clauses, arity)}]
@@ -492,7 +503,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp prop_query!(module, prop_name, capture) when is_function(capture) do
-    {target_module, clauses} = resolve_capture_clauses!(capture)
+    {target_module, clauses} = resolve_capture_clauses!(module, prop_name, capture)
 
     context = %{
       current_module: target_module,
@@ -517,18 +528,24 @@ defmodule Hologram.Compiler.QueryExtractor do
         "from_query for prop #{inspect(prop_name)} in #{inspect(module)} must be a function capture, got: #{inspect(value)}"
   end
 
-  defp resolve_capture_clauses!(capture) do
+  defp resolve_capture_clauses!(prop_module, prop_name, capture) do
     capture_info = Function.info(capture)
     target_module = capture_info[:module]
 
     fun_name = shim_target(target_module, capture_info[:name])
-    fun_key = {fun_name, capture_info[:arity]}
+    arity = capture_info[:arity]
 
     funs = module_funs(target_module)
 
-    {^fun_key, {_visibility, clauses}} = List.keyfind(funs, fun_key, 0)
+    case List.keyfind(funs, {fun_name, arity}, 0) do
+      {_fun_key, {_visibility, clauses}} ->
+        {target_module, clauses}
 
-    {target_module, clauses}
+      nil ->
+        raise Hologram.CompileError,
+          message:
+            "query capture for prop #{inspect(prop_name)} in #{inspect(prop_module)} targets undefined function #{inspect(target_module)}.#{fun_name}/#{arity}"
+    end
   end
 
   # A generated delegation shim hides the authored builder - the component's
