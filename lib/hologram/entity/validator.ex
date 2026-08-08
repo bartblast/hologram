@@ -42,6 +42,17 @@ defmodule Hologram.Entity.Validator do
 
   def attribute_value_valid?(value, :string, _opts), do: is_binary(value) and String.valid?(value)
 
+  def attribute_value_valid?(value, :uuid, _opts) when is_binary(value) do
+    hex = String.replace(value, "-", "")
+
+    case Base.decode16(hex, case: :lower) do
+      {:ok, decoded} -> byte_size(decoded) == 16
+      :error -> false
+    end
+  end
+
+  def attribute_value_valid?(_value, :uuid, _opts), do: false
+
   @doc """
   Validates the given data map against the given entity type's declared attributes.
   Returns :ok, or {:error, errors} where errors is a name-sorted list of {name, reason} tuples with reason being :invalid, :missing or :unknown.

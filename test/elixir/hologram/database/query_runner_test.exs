@@ -12,6 +12,7 @@ defmodule Hologram.Database.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module4
 
   @mapping Mapper.derive!([Module1, Module2, Module3])
 
@@ -124,6 +125,14 @@ defmodule Hologram.Database.QueryRunnerTest do
       assert entity.c == %NotIncluded{relationship: :c}
     end
 
+    test "matches nothing for an empty membership list binding" do
+      create_module_2_entities()
+
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:param, :ids}}]}
+
+      assert run(term, @mapping, %{ids: []}) == []
+    end
+
     test "returns entity structs filtered and ordered" do
       {first, _second, third} = create_module_2_entities()
 
@@ -165,11 +174,53 @@ defmodule Hologram.Database.QueryRunnerTest do
       assert id == second.id
     end
 
+    test "raises on a malformed id param value" do
+      term = %{Query.normalize(Module2) | filter: [{:id, :==, {:param, :entity_id}}]}
+
+      expected_msg = ~s(invalid value "not-a-uuid" for param :entity_id - expected a :uuid value)
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{entity_id: "not-a-uuid"})
+      end
+    end
+
+    test "raises on a membership binding that is not a list" do
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:param, :ids}}]}
+
+      expected_msg = "non-list value 5 for param :ids - the param binds a membership list"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{ids: 5})
+      end
+    end
+
+    test "raises on a membership element of the wrong type" do
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:param, :ids}}]}
+
+      expected_msg =
+        ~s(invalid element "x" in the list for param :ids - expected a :integer value)
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{ids: [1, "x"]})
+      end
+    end
+
     test "raises on a missing param value" do
       term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
 
       assert_error ArgumentError, "missing value for param :search", fn ->
         run(term, @mapping)
+      end
+    end
+
+    test "raises on a nil membership element" do
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:param, :ids}}]}
+
+      expected_msg =
+        "nil element in the list for param :ids - use an explicit nil predicate instead"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{ids: [1, nil]})
       end
     end
 
@@ -180,6 +231,36 @@ defmodule Hologram.Database.QueryRunnerTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{search: nil})
+      end
+    end
+
+    test "raises on a param value of the wrong type" do
+      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
+
+      expected_msg = "invalid value 123 for param :search - expected a :string value"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{search: 123})
+      end
+    end
+
+    test "raises on an enum param value outside the declared set" do
+      term = %{Query.normalize(Module4) | filter: [{:c, :==, {:param, :choice}}]}
+
+      expected_msg = "invalid value :z for param :choice - expected one of [:x, :y]"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{choice: :z})
+      end
+    end
+
+    test "raises on an unknown binding name" do
+      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
+
+      expected_msg = "unknown param :serach in bindings - the query defines params [:search]"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{search: "x", serach: "y"})
       end
     end
   end

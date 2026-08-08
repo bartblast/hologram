@@ -4,6 +4,7 @@ defmodule Hologram.Database.QueryRunner do
   alias Hologram.Database.Codec
   alias Hologram.Database.Connection
   alias Hologram.Database.QueryCompiler
+  alias Hologram.Entity.Validator
 
   @doc """
   Runs the given normalized query term against the database and returns its decoded
@@ -17,13 +18,20 @@ defmodule Hologram.Database.QueryRunner do
   their NotIncluded defaults. Param values are given in the bindings map and encoded
   with the slot's logical type.
 
-  Raises ArgumentError when a param value is missing, or when a param value or list
-  element is nil - a sometimes-nil variable branches into an explicit nil predicate
-  instead.
+  Bindings are validated before execution: a binding for a param the query does not
+  define raises, and each given value must match the logical type of the attribute
+  its param meets, enum membership included. A membership param takes a list whose
+  elements are validated the same way - an empty list is legal and matches nothing.
+
+  Raises ArgumentError when a binding is invalid, when a param value is missing, or
+  when a param value or list element is nil - a sometimes-nil variable branches into
+  an explicit nil predicate instead.
   """
   @spec run(%{atom => any}, %{module => %{atom => any}}, %{atom => any}) ::
           list(struct) | struct | integer | nil
   def run(term, mapping, bindings \\ %{}) do
+    validate_bindings!(term, bindings)
+
     compiled = QueryCompiler.compile(term, mapping)
     values = Enum.map(compiled.params, &resolve_param!(&1, bindings))
 
@@ -31,6 +39,35 @@ defmodule Hologram.Database.QueryRunner do
       {:ok, result} -> decode_result(result, term, mapping)
       {:error, error} -> raise error
     end
+  end
+
+  defp attribute_definition(entity_type, attribute_name) do
+    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+
+    {_name, type, opts} =
+      Enum.find(definitions, fn {name, _type, _opts} -> name == attribute_name end)
+
+    {type, opts}
+  end
+
+  defp collect_param_definitions(term, acc) do
+    acc_with_filters =
+      Enum.reduce(term.filter, acc, fn
+        {attribute_name, operator, {:param, param_name}}, inner_acc ->
+          {type, opts} = attribute_definition(term.entity, attribute_name)
+          kind = if operator in [:in, :not_in], do: :list, else: :scalar
+
+          Map.put_new(inner_acc, param_name, {kind, type, opts})
+
+        _triple, inner_acc ->
+          inner_acc
+      end)
+
+    term.include
+    |> Map.values()
+    |> Enum.reduce(acc_with_filters, fn sub_term, inner_acc ->
+      collect_param_definitions(sub_term, inner_acc)
+    end)
   end
 
   defp decode_embed(nil, _sub_term, _mapping), do: nil
@@ -126,6 +163,12 @@ defmodule Hologram.Database.QueryRunner do
 
   defp encode_param!(value, _name, type), do: Codec.encode(value, type)
 
+  defp expected_description(:enum, opts) do
+    "one of #{inspect(Keyword.fetch!(opts, :values))}"
+  end
+
+  defp expected_description(type, _opts), do: "a #{inspect(type)} value"
+
   defp field_name(%{source: :system, name: name}), do: String.to_existing_atom(name)
 
   defp field_name(%{source: {:attribute, name}}), do: name
@@ -146,5 +189,78 @@ defmodule Hologram.Database.QueryRunner do
       {:ok, value} ->
         encode_param!(value, name, type)
     end
+  end
+
+  defp validate_binding!(name, values, :list, type, opts) when is_list(values) do
+    Enum.each(values, fn
+      nil ->
+        :ok
+
+      value ->
+        if not Validator.attribute_value_valid?(value, type, opts) do
+          raise ArgumentError,
+            message:
+              "invalid element #{inspect(value)} in the list for param #{inspect(name)} - expected #{expected_description(type, opts)}"
+        end
+    end)
+  end
+
+  defp validate_binding!(name, value, :list, _type, _opts) do
+    raise ArgumentError,
+      message:
+        "non-list value #{inspect(value)} for param #{inspect(name)} - the param binds a membership list"
+  end
+
+  defp validate_binding!(name, value, :scalar, type, opts) do
+    if not Validator.attribute_value_valid?(value, type, opts) do
+      raise ArgumentError,
+        message:
+          "invalid value #{inspect(value)} for param #{inspect(name)} - expected #{expected_description(type, opts)}"
+    end
+
+    :ok
+  end
+
+  # Nil values are skipped here on purpose - resolve_param! and encode_param!
+  # raise their dedicated messages for them.
+  defp validate_bindings!(term, bindings) do
+    param_definitions = collect_param_definitions(term, %{})
+
+    validate_known_params!(bindings, param_definitions)
+
+    Enum.each(param_definitions, fn {name, {kind, type, opts}} ->
+      case Map.fetch(bindings, name) do
+        {:ok, nil} -> :ok
+        {:ok, value} -> validate_binding!(name, value, kind, type, opts)
+        :error -> :ok
+      end
+    end)
+  end
+
+  defp validate_known_params!(bindings, param_definitions) do
+    unknown_names =
+      bindings
+      |> Map.keys()
+      |> Enum.reject(&Map.has_key?(param_definitions, &1))
+      |> Enum.sort()
+
+    if unknown_names != [] do
+      defined_names =
+        param_definitions
+        |> Map.keys()
+        |> Enum.sort()
+
+      description =
+        if defined_names == [] do
+          "the query defines no params"
+        else
+          "the query defines params #{inspect(defined_names)}"
+        end
+
+      raise ArgumentError,
+        message: "unknown param #{inspect(hd(unknown_names))} in bindings - #{description}"
+    end
+
+    :ok
   end
 end
