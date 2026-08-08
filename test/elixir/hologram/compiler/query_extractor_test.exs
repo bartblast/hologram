@@ -5,10 +5,14 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   import Hologram.Compiler.QueryExtractor
 
   alias Hologram.Query
+  alias Hologram.Query.Param
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module2
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
   describe "extract_module_queries/1" do
@@ -31,8 +35,35 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert extract_module_queries(Module1) == [expected_term]
     end
 
+    test "extracts params from a local parameterized capture through its shim" do
+      expected_term =
+        Entity2
+        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module2) == [expected_term]
+    end
+
+    test "extracts params from a remote parameterized capture in argument order" do
+      expected_term =
+        Entity2
+        |> filter(b: {:>=, %Param{name: :min_b}}, c: %Param{name: :search})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module6) == [expected_term]
+    end
+
     test "yields no terms for modules without prop declarations" do
       assert extract_module_queries(Entity2) == []
+    end
+
+    test "raises on a destructured query capture argument" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8 destructures an argument - arguments must be plain names, each binding to the like-named component assign"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module8)
+      end
     end
 
     test "raises on a non-capture from_query value" do
@@ -44,12 +75,12 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       end
     end
 
-    test "raises on a parameterized query capture" do
+    test "raises on a query capture argument named vars" do
       expected_msg =
-        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module2 takes arguments - parameterized query captures are not extractable yet"
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7 names an argument vars - the name is reserved, name arguments after the component assigns they bind to"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module2)
+        extract_module_queries(Module7)
       end
     end
   end

@@ -1,5 +1,5 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module2 do
+defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8 do
   use Hologram.Component
   use Hologram.Query
 
@@ -12,7 +12,7 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module2 do
     ~HOLO""
   end
 
-  defp entities_query(min_b) do
-    filter(Entity2, b: {:>=, min_b})
+  defp entities_query(%{min: min_b}) do
+    filter(Entity2, b: min_b)
   end
 end
