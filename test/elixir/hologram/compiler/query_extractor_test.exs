@@ -7,6 +7,14 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Query
   alias Hologram.Query.Param
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module10
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module11
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module12
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module13
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module14
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module15
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module16
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module17
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module2
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
@@ -14,15 +22,18 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module10
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module11
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module12
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module13
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module14
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module15
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
   describe "extract_module_queries/1" do
+    test "extracts a guarded capture ignoring the guard" do
+      expected_term =
+        Entity2
+        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module10) == [expected_term]
+    end
+
     test "extracts a query registered through a cross-module capture" do
       expected_term =
         Entity2
@@ -39,6 +50,20 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Query.normalize()
 
       assert extract_module_queries(Module12) == [expected_term]
+    end
+
+    test "extracts each clause of a multi-clause capture as a variant" do
+      nil_clause_term =
+        Entity2
+        |> filter(a: true)
+        |> Query.normalize()
+
+      bound_clause_term =
+        Entity2
+        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module9) == [nil_clause_term, bound_clause_term]
     end
 
     test "extracts normalized terms from from_query props" do
@@ -79,6 +104,45 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert extract_module_queries(Module15) == [expected_term]
     end
 
+    test "forks a case on a param into per-clause variants" do
+      any_clause_term = Query.normalize(Entity2)
+
+      other_clause_term =
+        Entity2
+        |> filter(c: %Param{name: :status})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module17) == [any_clause_term, other_clause_term]
+    end
+
+    test "forks a cond into per-clause variants" do
+      bound_clause_term =
+        Entity2
+        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> Query.normalize()
+
+      fallback_clause_term =
+        Entity2
+        |> filter(a: true)
+        |> Query.normalize()
+
+      assert extract_module_queries(Module16) == [bound_clause_term, fallback_clause_term]
+    end
+
+    test "forks an if into per-branch variants" do
+      else_branch_term =
+        Entity2
+        |> filter(a: true)
+        |> Query.normalize()
+
+      then_branch_term =
+        Entity2
+        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module11) == [else_branch_term, then_branch_term]
+    end
+
     test "yields no terms for modules without prop declarations" do
       assert extract_module_queries(Entity2) == []
     end
@@ -92,15 +156,6 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       end
     end
 
-    test "raises on a guarded parameterized capture clause" do
-      expected_msg =
-        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module10 has a guarded clause - branching parameterized builders are not extractable yet"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module10)
-      end
-    end
-
     test "raises on a local function call in a parameterized capture" do
       expected_msg =
         "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module14 calls local function bounded_query/1 - helper composition is not extractable yet"
@@ -110,30 +165,12 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       end
     end
 
-    test "raises on a multi-clause parameterized capture" do
-      expected_msg =
-        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9 has multiple clauses - branching parameterized builders are not extractable yet"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module9)
-      end
-    end
-
     test "raises on a non-capture from_query value" do
       expected_msg =
         "from_query for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3 must be a function capture, got: 123"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module3)
-      end
-    end
-
-    test "raises on a parameterized capture branching in its body" do
-      expected_msg =
-        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module11 branches in its body - branching parameterized builders are not extractable yet"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module11)
       end
     end
 
