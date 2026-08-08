@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   alias Hologram.Compiler.IR
   alias Hologram.Query
   alias Hologram.Query.Param
+  alias Hologram.Reflection
 
   # Fork enumeration uses throw for non-local exit: on an undecided branch the
   # evaluation aborts, and the driver restarts it from the body with one more
@@ -45,7 +46,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   """
   @spec extract_module_queries(module) :: list(%{atom => any})
   def extract_module_queries(module) do
-    if function_exported?(module, :__props__, 0) do
+    if Reflection.has_function?(module, :__props__, 0) do
       Enum.flat_map(module.__props__(), &prop_queries!(module, &1))
     else
       []
@@ -62,7 +63,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   """
   @spec extract_prop_params(module) :: keyword(list(atom | nil))
   def extract_prop_params(module) do
-    if function_exported?(module, :__props__, 0) do
+    if Reflection.has_function?(module, :__props__, 0) do
       Enum.flat_map(module.__props__(), &prop_params(module, &1))
     else
       []
