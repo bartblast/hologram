@@ -13,6 +13,8 @@ defmodule Hologram.Database.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module8
+  alias Hologram.Test.Fixtures.Entity.Module9
 
   @mapping Mapper.derive!([Module1, Module2, Module3])
 
@@ -123,6 +125,39 @@ defmodule Hologram.Database.QueryRunnerTest do
       assert entity.a == %NotIncluded{relationship: :a}
       assert entity.b == %NotIncluded{relationship: :b}
       assert entity.c == %NotIncluded{relationship: :c}
+    end
+
+    test "filters and orders a to-many include whose target names columns like the join table" do
+      source =
+        Module9
+        |> Entity.new()
+        |> create()
+
+      first_target =
+        Module8
+        |> Entity.new(source_id: 5)
+        |> create()
+
+      second_target =
+        Module8
+        |> Entity.new(source_id: 1)
+        |> create()
+
+      :ok = add_relationship(Module9, source.id, :a, first_target.id)
+      :ok = add_relationship(Module9, source.id, :a, second_target.id)
+
+      mapping = Mapper.derive!([Module8, Module9])
+
+      term =
+        Module9
+        |> include(:a, fn related_query ->
+          related_query
+          |> filter(source_id: {:>=, 2})
+          |> order_by(:source_id)
+        end)
+        |> Query.normalize()
+
+      assert [%Module9{a: [%Module8{source_id: 5}]}] = run(term, mapping)
     end
 
     test "matches nothing for an empty membership list binding" do

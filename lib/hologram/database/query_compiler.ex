@@ -377,12 +377,17 @@ defmodule Hologram.Database.QueryCompiler do
         {filtered_params, index + 1}
       )
 
+    # The edge scan is a nested subselect (not a join) so that only the target
+    # table is in scope where the sub-term's filter and ordering render their
+    # unqualified identifiers - a join would make target columns named like the
+    # join-table columns (source_id/target_id) ambiguous.
     inner_sql =
       "SELECT #{quoted_target}.* " <>
+        "FROM #{qualified_table(target_mapping.table)} AS #{quoted_target} " <>
+        ~s|WHERE #{quoted_target}."id" IN | <>
+        ~s|(SELECT #{quoted_join}."target_id" | <>
         "FROM #{qualified_table(join_table.name)} AS #{quoted_join} " <>
-        "JOIN #{qualified_table(target_mapping.table)} AS #{quoted_target} " <>
-        ~s|ON #{quoted_target}."id" = #{quoted_join}."target_id" | <>
-        ~s|WHERE #{quoted_join}."source_id" = #{parent_prefix}."id"| <>
+        ~s|WHERE #{quoted_join}."source_id" = #{parent_prefix}."id")| <>
         filter_sql <>
         order_clause(sub_term.order_by, target_mapping) <>
         bounds_clause(sub_term)
