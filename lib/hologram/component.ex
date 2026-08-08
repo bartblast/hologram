@@ -123,6 +123,7 @@ defmodule Hologram.Component do
         defoverridable init: 3
       end,
       maybe_register_colocated_template_markup(template_path),
+      register_from_query_shims_accumulator(),
       register_props_accumulator()
     ]
   end
@@ -139,7 +140,9 @@ defmodule Hologram.Component do
         def __props__, do: Enum.reverse(@__props__)
       end
 
-    [template_clause, props_clause]
+    shim_clauses = build_from_query_shim_clauses(env)
+
+    [template_clause, props_clause | shim_clauses]
   end
 
   @doc """
@@ -215,11 +218,33 @@ defmodule Hologram.Component do
 
   @doc """
   Accumulates the given property definition in __props__ module attribute.
+
+  A local function capture given as the :from_query option is replaced with a
+  capture of a generated public function (named `__<prop name>_from_query__`)
+  that delegates to the local one, because local functions are not callable at
+  module-body scope. The delegation allows the query function to be private.
+  A capture resolving to an import stays on its source module.
   """
   @spec prop(atom, atom, T.opts()) :: Macro.t()
   defmacro prop(name, type, opts \\ []) do
-    quote do
-      Module.put_attribute(__MODULE__, :__props__, {unquote(name), unquote(type), unquote(opts)})
+    {opts, shim} = rewrite_from_query_local_capture(opts, name, __CALLER__)
+
+    accumulate_prop =
+      quote do
+        Module.put_attribute(
+          __MODULE__,
+          :__props__,
+          {unquote(name), unquote(type), unquote(opts)}
+        )
+      end
+
+    if shim do
+      quote do
+        Module.put_attribute(__MODULE__, :__from_query_shims__, unquote(Macro.escape(shim)))
+        unquote(accumulate_prop)
+      end
+    else
+      accumulate_prop
     end
   end
 
@@ -428,6 +453,18 @@ defmodule Hologram.Component do
   end
 
   @doc """
+  Returns the AST of code that registers __from_query_shims__ module attribute,
+  which accumulates the specs of delegation functions to generate for local
+  from_query captures.
+  """
+  @spec register_from_query_shims_accumulator() :: AST.t()
+  def register_from_query_shims_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__from_query_shims__, accumulate: true)
+    end
+  end
+
+  @doc """
   Returns the AST of code that registers __props__ module attribute.
   """
   @spec register_props_accumulator() :: AST.t()
@@ -450,7 +487,58 @@ defmodule Hologram.Component do
     %{server | broadcasts: [broadcast | server.broadcasts]}
   end
 
+  defp build_from_query_shim_clauses(env) do
+    env.module
+    |> Module.get_attribute(:__from_query_shims__)
+    |> Enum.map(fn {shim_name, fun_name, arity} ->
+      args = Macro.generate_arguments(arity, env.module)
+
+      quote do
+        @doc false
+        def unquote(shim_name)(unquote_splicing(args)) do
+          unquote(fun_name)(unquote_splicing(args))
+        end
+      end
+    end)
+  end
+
+  defp classify_capture(
+         {:&, _capture_meta, [{:/, _slash_meta, [{fun_name, _fun_meta, context}, arity]}]},
+         env
+       )
+       when is_atom(fun_name) and is_atom(context) and is_integer(arity) do
+    if Macro.Env.lookup_import(env, {fun_name, arity}) == [] do
+      {:local, fun_name, arity}
+    else
+      :imported
+    end
+  end
+
+  defp classify_capture(_value, _env), do: :other
+
   defp normalize_except({_kind, _id} = identity), do: [identity]
 
   defp normalize_except(list) when is_list(list), do: list
+
+  defp rewrite_from_query_local_capture(opts, prop_name, env)
+       when is_list(opts) and is_atom(prop_name) do
+    with {:from_query, value} <- List.keyfind(opts, :from_query, 0),
+         {:local, fun_name, arity} <- classify_capture(value, env) do
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      shim_name = :"__#{prop_name}_from_query__"
+
+      shim_capture =
+        quote do
+          &(__MODULE__.unquote(shim_name) / unquote(arity))
+        end
+
+      new_opts = List.keyreplace(opts, :from_query, 0, {:from_query, shim_capture})
+
+      {new_opts, {shim_name, fun_name, arity}}
+    else
+      _no_local_capture -> {opts, nil}
+    end
+  end
+
+  defp rewrite_from_query_local_capture(opts, _prop_name, _env), do: {opts, nil}
 end

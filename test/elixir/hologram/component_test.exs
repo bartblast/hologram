@@ -1,5 +1,6 @@
 defmodule Hologram.ComponentTest do
   use Hologram.Test.BasicCase, async: true
+  use Hologram.Query
 
   import Hologram.Component
 
@@ -14,8 +15,16 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Test.Fixtures.Component.Module3
   alias Hologram.Test.Fixtures.Component.Module4
   alias Hologram.Test.Fixtures.Component.Module5
+  alias Hologram.Test.Fixtures.Component.Module7
+  alias Hologram.Test.Fixtures.Component.Module8
+  alias Hologram.Test.Fixtures.Component.Module9
+  alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
   @server %Server{cid: "page"}
+
+  test "__entities_from_query__/0 shim delegates to the private query function" do
+    assert Module7.__entities_from_query__() == filter(Entity2, a: true)
+  end
 
   test "__is_hologram_component__/0" do
     assert Module1.__is_hologram_component__()
@@ -23,6 +32,18 @@ defmodule Hologram.ComponentTest do
 
   test "__props__/0" do
     assert Module4.__props__() == [{:a, :string, []}, {:b, :integer, [opt_1: 111, opt_2: 222]}]
+  end
+
+  test "__props__/0 keeps an imported from_query capture on its source module" do
+    assert Module8.__props__() == [
+             {:entities, [Entity2], [from_query: &Module9.shared_query/0]}
+           ]
+  end
+
+  test "__props__/0 rewrites a local from_query capture to a generated shim capture" do
+    assert Module7.__props__() == [
+             {:entities, [Entity2], [from_query: &Module7.__entities_from_query__/0]}
+           ]
   end
 
   test "colocated_template_path/1" do
