@@ -241,11 +241,15 @@ defmodule Hologram.Database.MapperTest do
     end
 
     test "rejects declarations deriving the same column name" do
+      # Bare reflection functions instead of use Hologram.Entity - the entity
+      # validator now rejects this collision at declaration time, and the
+      # mapper's own check guards the standalone mapper API contract.
       defmodule InlineEntityFixture1 do
-        use Hologram.Entity
+        @spec __attributes__() :: list(tuple)
+        def __attributes__, do: [{:project_id, :string, []}]
 
-        attribute :project_id, :string
-        relationship :project, Module1
+        @spec __relationships__() :: list(tuple)
+        def __relationships__, do: [{:project, Hologram.Test.Fixtures.Entity.Module1, []}]
       end
 
       expected_msg =

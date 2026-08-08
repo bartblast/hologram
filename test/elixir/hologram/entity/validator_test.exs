@@ -244,6 +244,20 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects attribute colliding with a to-one reference field" do
+      expected_msg =
+        "attribute :owner_id in Hologram.Entity.ValidatorTest.InlineEntityFixture26 derives entity field :owner_id, which collides with relationship :owner - every declaration must derive distinct fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture26 do
+          use Hologram.Entity
+
+          relationship :owner, Module1
+          attribute :owner_id, :string
+        end
+      end
+    end
+
     test "rejects attribute name already used by relationship" do
       expected_msg =
         "duplicate name :owner used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture4 - attribute and relationship names share one namespace and must be unique"
@@ -429,6 +443,20 @@ defmodule Hologram.Entity.ValidatorTest do
   end
 
   describe "validate_relationship!/4" do
+    test "rejects a to-one reference field colliding with an attribute" do
+      expected_msg =
+        "relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture27 derives entity field :owner_id, which collides with attribute :owner_id - every declaration must derive distinct fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture27 do
+          use Hologram.Entity
+
+          attribute :owner_id, :string
+          relationship :owner, Module1
+        end
+      end
+    end
+
     test "rejects duplicate relationship name" do
       expected_msg =
         "duplicate name :owner used for relationship in Hologram.Entity.ValidatorTest.InlineEntityFixture5 - attribute and relationship names share one namespace and must be unique"
