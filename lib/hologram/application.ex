@@ -47,13 +47,14 @@ defmodule Hologram.Application do
   end
 
   # The database is activated by the data model: it starts exactly when the app declares
-  # entity types, with no host-app ceremony. The query cache starts right after it - the
-  # cache compiles registered queries against the mapping the database derives at boot.
+  # entity types, with no host-app ceremony. The database and the query cache start as a
+  # restart-ordered unit - the cache compiles registered queries against the mapping the
+  # database derives, and must repopulate whenever the database restarts.
   defp database_children do
     if Reflection.list_entities() == [] do
       []
     else
-      [Hologram.Database, Hologram.Database.QueryCache]
+      [Hologram.Database.Supervisor]
     end
   end
 end

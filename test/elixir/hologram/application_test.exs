@@ -48,11 +48,10 @@ defmodule Hologram.ApplicationTest do
       children = Supervisor.which_children(pid)
       child_modules = Enum.map(children, fn {module, _pid, _type, _modules} -> module end)
 
-      # The entity fixture modules activate the database child (test env declares entities).
-      # The child yields to the suite-wide gateway instance (database singleton semantics),
-      # so it is listed without a pid and nothing here disturbs concurrent database tests.
-      assert Hologram.Database in child_modules
-      assert Hologram.Database.QueryCache in child_modules
+      # The entity fixture modules activate the database unit (test env declares entities).
+      # Inside it, the database child yields to the suite-wide gateway instance (database
+      # singleton semantics), so nothing here disturbs concurrent database tests.
+      assert Hologram.Database.Supervisor in child_modules
 
       assert Hologram.Assets.PageDigestRegistry in child_modules
       assert Hologram.Assets.PathRegistry in child_modules
