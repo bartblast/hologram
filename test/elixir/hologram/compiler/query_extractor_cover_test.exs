@@ -14,12 +14,12 @@ defmodule Hologram.Compiler.QueryExtractorCoverTest do
 
   describe "extract_module_queries/1" do
     test "extracts through a cover-compiled helper module" do
+      # Stop the cover server only when this test started it - an externally
+      # started server (mix test --cover) owns its lifecycle and data.
       case :cover.start() do
-        {:ok, _pid} -> :ok
+        {:ok, _pid} -> on_exit(fn -> :cover.stop() end)
         {:error, {:already_started, _pid}} -> :ok
       end
-
-      on_exit(fn -> :cover.stop() end)
 
       {:ok, _cover_compiled} = :cover.compile_beam(Module19)
 
