@@ -65,6 +65,10 @@ defmodule Hologram.Database.SortKey do
   @doc """
   Returns the version of the sort-key rule set.
   """
+  # TODO: reconciliation bookkeeps this version in hologram_system and
+  # regenerates stale companions on a mismatch (clients regenerate their stored
+  # keys the same way) - the version must not bump before that wiring exists,
+  # or existing rows would keep keys computed under the old rules.
   @spec version() :: pos_integer
   def version, do: 1
 
