@@ -105,6 +105,12 @@ defmodule Hologram.Database do
   end
 
   @doc """
+  Returns the key of the persistent term holding the mapping.
+  """
+  @spec mapping_key() :: any
+  def mapping_key, do: @mapping_key
+
+  @doc """
   Returns the name of the connection pool process.
   """
   @spec pool_name() :: atom
