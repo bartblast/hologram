@@ -62,9 +62,11 @@ defmodule Hologram.Database.QueryCompiler do
   defp aggregate_order(entries, target_mapping, quoted_alias) do
     rendered_entries =
       Enum.map_join(entries, ", ", fn {name, direction} ->
-        column = fetch_column!(target_mapping, name)
-
-        "#{quoted_alias}.#{Mapper.quote_identifier(column.name)} #{direction_sql(direction)}"
+        target_mapping
+        |> order_column_names(name)
+        |> Enum.map_join(", ", fn column_name ->
+          "#{quoted_alias}.#{Mapper.quote_identifier(column_name)} #{direction_sql(direction)}"
+        end)
       end)
 
     " ORDER BY " <> rendered_entries
@@ -276,15 +278,36 @@ defmodule Hologram.Database.QueryCompiler do
 
   defp null_inclusive(condition_sql, _column), do: condition_sql
 
+  # A :string ordering whose mapping carries a `<attribute>_$sort` companion
+  # orders by the companion first and the original column right after it (ties
+  # past the key cap break on the full original bytes), both in the entry's
+  # direction. Without a companion the raw column orders alone.
   defp order_clause([], _entity_mapping), do: ""
 
   defp order_clause(entries, entity_mapping) do
     rendered_entries =
       Enum.map_join(entries, ", ", fn {name, direction} ->
-        "#{quoted_column_name(entity_mapping, name)} #{direction_sql(direction)}"
+        entity_mapping
+        |> order_column_names(name)
+        |> Enum.map_join(", ", fn column_name ->
+          "#{Mapper.quote_identifier(column_name)} #{direction_sql(direction)}"
+        end)
       end)
 
     " ORDER BY " <> rendered_entries
+  end
+
+  defp order_column_names(entity_mapping, name) do
+    column = fetch_column!(entity_mapping, name)
+
+    companion =
+      Enum.find(entity_mapping.columns, &(&1.source == {:sort_key, name}))
+
+    if companion do
+      [companion.name, column.name]
+    else
+      [column.name]
+    end
   end
 
   defp qualified_table(table) do

@@ -61,6 +61,23 @@ defmodule Hologram.Database.QueryCompilerTest do
       assert String.contains?(sql, ~s|ORDER BY "i1"."c" ASC, "i1"."id" ASC), '[]'::jsonb|)
     end
 
+    test "applies the sort-key companion to a to-many include ordering" do
+      ordered_pairs = MapSet.new([{Module2, :c}])
+      mapping = Mapper.derive!([Module1, Module2, Module3], ordered_pairs)
+
+      term =
+        Module3
+        |> include(:a, fn related_query -> order_by(related_query, :c) end)
+        |> Query.normalize()
+
+      assert %{sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|ORDER BY "i1"."c_$sort" ASC, "i1"."c" ASC, "i1"."id" ASC), '[]'::jsonb|
+             )
+    end
+
     test "binds membership params with list types" do
       mapping = Mapper.derive!([Module2])
       term = %{Query.normalize(Module2) | filter: [{:c, :in, {:param, :names}}]}
@@ -339,6 +356,19 @@ defmodule Hologram.Database.QueryCompilerTest do
 
       assert %{params: [], sql: sql} = compile(term, mapping)
       assert String.ends_with?(sql, ~s( ORDER BY "b" DESC, "c" ASC, "id" ASC))
+    end
+
+    test "compiles string ordering through the sort-key companion" do
+      ordered_pairs = MapSet.new([{Module2, :c}])
+      mapping = Mapper.derive!([Module2], ordered_pairs)
+
+      term =
+        Module2
+        |> order_by(c: :desc)
+        |> Query.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s( ORDER BY "c_$sort" DESC, "c" DESC, "id" ASC))
     end
 
     test "compiles single-result queries with a zero limit as zero" do
