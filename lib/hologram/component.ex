@@ -520,6 +520,7 @@ defmodule Hologram.Component do
 
   defp normalize_except(list) when is_list(list), do: list
 
+  # sobelow_skip ["DOS.BinToAtom"]
   defp rewrite_from_query_local_capture(opts, prop_name, env)
        when is_list(opts) and is_atom(prop_name) do
     with {:from_query, value} <- List.keyfind(opts, :from_query, 0),

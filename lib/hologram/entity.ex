@@ -158,6 +158,7 @@ defmodule Hologram.Entity do
   end
 
   @doc false
+  # sobelow_skip ["DOS.BinToAtom"]
   @spec struct_fields(module) :: list({atom, any})
   def struct_fields(module) do
     system_attribute_fields =
