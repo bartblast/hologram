@@ -17,6 +17,9 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module10
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module11
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module12
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module13
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module14
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module15
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
   describe "extract_module_queries/1" do
@@ -66,6 +69,16 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert extract_module_queries(Module6) == [expected_term]
     end
 
+    test "extracts through variable binds and concrete native calls" do
+      expected_term =
+        Entity2
+        |> filter(a: true)
+        |> filter(b: {:>=, %Param{name: :min_b}}, c: "ABC")
+        |> Query.normalize()
+
+      assert extract_module_queries(Module15) == [expected_term]
+    end
+
     test "yields no terms for modules without prop declarations" do
       assert extract_module_queries(Entity2) == []
     end
@@ -88,6 +101,15 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       end
     end
 
+    test "raises on a local function call in a parameterized capture" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module14 calls local function bounded_query/1 - helper composition is not extractable yet"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module14)
+      end
+    end
+
     test "raises on a multi-clause parameterized capture" do
       expected_msg =
         "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9 has multiple clauses - branching parameterized builders are not extractable yet"
@@ -106,12 +128,30 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       end
     end
 
+    test "raises on a parameterized capture branching in its body" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module11 branches in its body - branching parameterized builders are not extractable yet"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module11)
+      end
+    end
+
     test "raises on a query capture argument named vars" do
       expected_msg =
         "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7 names an argument vars - the name is reserved, name arguments after the component assigns they bind to"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module7)
+      end
+    end
+
+    test "raises on an argument passed to a non-stage call" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module13 passes an argument to String.downcase/1 - arguments must flow directly into query stage calls, computing on them is not extractable yet"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module13)
       end
     end
   end

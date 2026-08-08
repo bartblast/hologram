@@ -1,0 +1,20 @@
+# credo:disable-for-this-file Credo.Check.Readability.Specs
+defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module15 do
+  use Hologram.Component
+  use Hologram.Query
+
+  alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+  prop :entities, [Entity2], from_query: &entities_query/1
+
+  @impl Component
+  def template do
+    ~HOLO""
+  end
+
+  defp entities_query(min_b) do
+    base = filter(Entity2, a: true)
+
+    filter(base, b: {:>=, min_b}, c: String.upcase("abc"))
+  end
+end
