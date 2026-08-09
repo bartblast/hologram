@@ -545,6 +545,19 @@ defmodule Hologram.Query do
     end
   end
 
+  defp predicate_triples!(name, {:actor}, entity_type) do
+    validate_actor_attribute!(name, entity_type)
+
+    [{name, :==, {:actor}}]
+  end
+
+  defp predicate_triples!(name, {operator, {:actor}}, entity_type)
+       when operator in @equality_operators do
+    validate_actor_attribute!(name, entity_type)
+
+    [{name, operator, {:actor}}]
+  end
+
   defp predicate_triples!(name, {operator, operand}, entity_type) when is_atom(operator) do
     cond do
       operator in @equality_operators ->
@@ -660,6 +673,18 @@ defmodule Hologram.Query do
       raise ArgumentError,
         message:
           "#{inspect(query)} is not an entity type module or a query term - a query starts from a module with the \"use Hologram.Entity\" directive"
+    end
+  end
+
+  # The actor leaf carries the acting user's entity id, so it compares only against names
+  # holding an entity id - any other type would compile a comparison that never matches.
+  defp validate_actor_attribute!(name, entity_type) do
+    type = attribute_type(entity_type, name)
+
+    if type != :uuid do
+      raise ArgumentError,
+        message:
+          "user_id() requires a uuid attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
     end
   end
 

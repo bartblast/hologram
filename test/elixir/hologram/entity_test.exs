@@ -126,6 +126,41 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "allow/2" do
+    test "replaces a user_id() call with the actor sentinel" do
+      defmodule InlineEntityFixture1 do
+        use Hologram.Entity
+
+        allow :read, id: user_id()
+      end
+
+      assert InlineEntityFixture1.__policies__() == [{:read, nil, nil, [id: {:actor}]}]
+    end
+
+    test "replaces a user_id() call inside an operator tuple" do
+      defmodule InlineEntityFixture2 do
+        use Hologram.Entity
+
+        allow :update, id: {:!=, user_id()}
+      end
+
+      assert InlineEntityFixture2.__policies__() == [{:update, nil, nil, [id: {:!=, {:actor}}]}]
+    end
+
+    test "rejects paren-less user_id" do
+      expected_msg =
+        "paren-less user_id in a policy in Hologram.EntityTest.InlineEntityFixture3 - did you mean user_id()?"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture3 do
+          use Hologram.Entity
+
+          allow :read, id: user_id
+        end
+      end
+    end
+  end
+
   describe "attribute/3" do
     test "accepts all valid attribute types" do
       assert Module4.__attributes__() == [

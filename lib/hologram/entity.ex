@@ -98,9 +98,12 @@ defmodule Hologram.Entity do
   @doc """
   Accumulates the given policy definition in __policies__ module attribute.
   A policy line grants the given action when its predicates hold and its grant reference (the to option) or delegation (the via option) is satisfied - a line with no options grants the action unconditionally.
+  A `user_id()` call in a predicate value position stands for the acting user's entity id and is stored as the actor sentinel.
   """
   @spec allow(atom, T.opts()) :: Macro.t()
   defmacro allow(action, spec \\ []) do
+    spec = replace_actor_leaves!(spec, __CALLER__.module)
+
     quote do
       action = unquote(action)
       spec = unquote(spec)
@@ -328,6 +331,24 @@ defmodule Hologram.Entity do
       Enum.group_by(errors, fn {name, _reason} -> name end, fn {_name, reason} -> reason end)
 
     {:error, grouped}
+  end
+
+  # The replacement happens on the AST, before the spec is evaluated in the module body -
+  # a real user_id() call would be an undefined function there. Policies have no variable
+  # scope, so a paren-less user_id can only be the call written without its parens.
+  defp replace_actor_leaves!(spec, module) do
+    Macro.prewalk(spec, fn
+      {:user_id, _meta, []} ->
+        Macro.escape({:actor})
+
+      {:user_id, _meta, context} when is_atom(context) ->
+        raise Hologram.CompileError,
+          message:
+            "paren-less user_id in a policy in #{inspect(module)} - did you mean user_id()?"
+
+      node ->
+        node
+    end)
   end
 
   defp validate_construction_values!(entity_type, values_map) do

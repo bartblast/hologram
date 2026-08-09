@@ -54,6 +54,36 @@ defmodule Hologram.PolicyTest do
       assert validate_model!([InlinePolicyFixture2]) == :ok
     end
 
+    test "returns :ok for actor leaves on uuid-carrying names" do
+      defmodule InlinePolicyFixture7 do
+        use Hologram.Entity
+
+        relationship :parent, Module1
+
+        allow :read, id: user_id()
+        allow :update, parent_id: {:!=, user_id()}
+      end
+
+      assert validate_model!([InlinePolicyFixture7]) == :ok
+    end
+
+    test "rejects an actor leaf on a non-uuid attribute" do
+      defmodule InlinePolicyFixture8 do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        allow :read, title: user_id()
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.PolicyTest.InlinePolicyFixture8 - user_id() requires a uuid attribute - attribute :title in Hologram.PolicyTest.InlinePolicyFixture8 has type :string"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture8])
+      end
+    end
+
     test "rejects a predicate naming an unknown attribute" do
       defmodule InlinePolicyFixture3 do
         use Hologram.Entity
