@@ -897,6 +897,42 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "accepts attribute named user_id" do
+      defmodule InlineEntityFixture75 do
+        use Hologram.Entity
+
+        attribute :user_id, :string
+      end
+
+      assert InlineEntityFixture75.__attributes__() == [{:user_id, :string, []}]
+    end
+
+    test "rejects attribute named to" do
+      expected_msg =
+        "reserved name :to used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture76 - :to and :via are allow line options and can't be attribute names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture76 do
+          use Hologram.Entity
+
+          attribute :to, :string
+        end
+      end
+    end
+
+    test "rejects attribute named via" do
+      expected_msg =
+        "reserved name :via used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture77 - :to and :via are allow line options and can't be attribute names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture77 do
+          use Hologram.Entity
+
+          attribute :via, :string
+        end
+      end
+    end
+
     test "rejects enum attribute without values option" do
       expected_msg =
         "missing values option for enum attribute :status in Hologram.Entity.ValidatorTest.InlineEntityFixture7 - enum attributes require a values option with a non-empty list of unique non-nil atoms"

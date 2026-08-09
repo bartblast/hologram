@@ -10,6 +10,8 @@ defmodule Hologram.Entity.Validator do
   @max_integer 9_223_372_036_854_775_807
   @min_integer -9_223_372_036_854_775_808
 
+  @policy_option_names [:to, :via]
+
   @reserved_names [:created_at, :id, :updated_at]
 
   @valid_attribute_opts [
@@ -584,6 +586,7 @@ defmodule Hologram.Entity.Validator do
 
   defp validate_attribute_name!(module, name) do
     validate_declaration_name!(module, "attribute", name)
+    validate_policy_option_name!(module, name)
   end
 
   defp validate_attribute_opts!(module, name, opts) do
@@ -892,6 +895,18 @@ defmodule Hologram.Entity.Validator do
       raise Hologram.CompileError,
         message:
           "invalid options #{inspect(opts)} for #{kind} #{inspect(name)} in #{inspect(module)} - options must be a keyword list"
+    end
+  end
+
+  # On an allow line every key that is not an option is a predicate naming an attribute, so an
+  # attribute named after an option could never be reached in predicate position.
+  defp validate_policy_option_name!(module, name) do
+    if name in @policy_option_names do
+      policy_option_names = Enum.map_join(@policy_option_names, " and ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "reserved name #{inspect(name)} used for attribute in #{inspect(module)} - #{policy_option_names} are allow line options and can't be attribute names"
     end
   end
 
