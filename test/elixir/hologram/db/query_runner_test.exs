@@ -10,6 +10,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Entity.NotIncluded
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -56,6 +57,20 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       assert [%{id: id, b: 7}] = run(term, @mapping, %{bound: 7})
       assert id == third.id
+    end
+
+    # Constraint options are write-side semantics - a param binding checks the type
+    # only, and an out-of-constraint value is a query matching nothing, not an
+    # invalid query.
+    test "binds param values violating declared constraint options" do
+      Module10
+      |> Entity.new(count: 5)
+      |> create()
+
+      mapping = Mapper.derive!([Module10])
+      term = %{Query.normalize(Module10) | filter: [{:count, :==, {:param, :count}}]}
+
+      assert run(term, mapping, %{count: 999}) == []
     end
 
     test "binds param values with the slot's type" do
