@@ -1212,6 +1212,30 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture55.__roles__() == [{:owner, []}]
     end
 
+    test "accepts creator option" do
+      defmodule InlineEntityFixture68 do
+        use Hologram.Entity
+
+        role :owner, creator: true
+      end
+
+      assert InlineEntityFixture68.__roles__() == [{:owner, [creator: true]}]
+    end
+
+    test "accepts creator option on several roles of one entity type" do
+      defmodule InlineEntityFixture69 do
+        use Hologram.Entity
+
+        role :author, creator: true
+        role :owner, creator: true
+      end
+
+      assert InlineEntityFixture69.__roles__() == [
+               {:author, [creator: true]},
+               {:owner, [creator: true]}
+             ]
+    end
+
     test "accepts scope option" do
       defmodule InlineEntityFixture65 do
         use Hologram.Entity
@@ -1234,6 +1258,19 @@ defmodule Hologram.Entity.ValidatorTest do
                {:admin, [extends: :auditor, scope: :global]},
                {:auditor, []}
              ]
+    end
+
+    test "rejects creator option other than true" do
+      expected_msg =
+        "invalid creator option false for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture70 - the creator option must be true"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture70 do
+          use Hologram.Entity
+
+          role :owner, creator: false
+        end
+      end
     end
 
     test "rejects duplicate role name" do

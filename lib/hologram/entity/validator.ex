@@ -214,7 +214,7 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the given role declaration at compile time.
 
-  Returns :ok, or raises Hologram.CompileError on the first violated rule (name, option keys, scope option).
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (name, option keys, creator and scope options).
   The extends option is checked separately, because its targets may be declared further down the module body.
   """
   @spec validate_role!(module, atom, T.opts()) :: :ok
@@ -635,6 +635,18 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
+  defp validate_creator_opt!(module, name, opts) do
+    case Keyword.fetch(opts, :creator) do
+      {:ok, value} when value != true ->
+        raise Hologram.CompileError,
+          message:
+            "invalid creator option #{inspect(value)} for role #{inspect(name)} in #{inspect(module)} - the creator option must be true"
+
+      _fetch_result ->
+        :ok
+    end
+  end
+
   defp validate_declaration_name!(module, kind, name) do
     validate_name_type!(module, kind, name)
 
@@ -924,6 +936,7 @@ defmodule Hologram.Entity.Validator do
   defp validate_role_opts!(module, name, opts) do
     validate_opts_shape!(module, "role", name, opts)
     validate_known_opts!(module, "role", name, opts, @valid_role_opts)
+    validate_creator_opt!(module, name, opts)
     validate_scope_opt!(module, name, opts)
   end
 
