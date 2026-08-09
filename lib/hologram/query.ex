@@ -1,6 +1,8 @@
 defmodule Hologram.Query do
   @moduledoc false
 
+  alias Hologram.Database
+  alias Hologram.Database.QueryRunner
   alias Hologram.Query.Param
   alias Hologram.Reflection
 
@@ -16,7 +18,8 @@ defmodule Hologram.Query do
           offset: 2,
           one: 1,
           order_by: 2,
-          paginate: 2
+          paginate: 2,
+          run: 1
         ]
     end
   end
@@ -326,6 +329,40 @@ defmodule Hologram.Query do
     |> limit(size)
   end
 
+  @doc """
+  Runs the given query directly against the database and returns its result - a list
+  of entity structs for set queries, an entity struct or nil for single-result
+  queries, and an integer for counting queries.
+
+  The query is an entity type module (the whole entity set) or an already built query
+  term. Directly executed query terms embed concrete runtime values - the registry is
+  never involved. A term containing param leaves raises ArgumentError: params exist
+  only in compiler-registered queries.
+
+  A :string ordering falls back to byte order when the attribute has no sort-key
+  companion column - companions are derived from registered query orderings.
+  """
+  @spec run(module | %{atom => any}) :: list(struct) | struct | integer | nil
+  def run(query) do
+    term = normalize(query)
+
+    assert_no_params!(term)
+
+    QueryRunner.run(term, Database.mapping())
+  end
+
+  defp assert_no_params!(term) do
+    case param_names(term) do
+      [] ->
+        :ok
+
+      [name | _rest] ->
+        raise ArgumentError,
+          message:
+            "cannot run a query term containing params - param #{inspect(name)} has no value: directly executed queries embed concrete runtime values, params exist only in compiler-registered queries"
+    end
+  end
+
   defp attribute_names(entity_type) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 
@@ -549,6 +586,21 @@ defmodule Hologram.Query do
   end
 
   defp predicate_triples!(name, value, _entity_type), do: [{name, :==, value}]
+
+  defp param_names(term) do
+    filter_names =
+      term
+      |> Map.get(:filter, [])
+      |> Enum.flat_map(fn {_name, _operator, value} -> value_param_names(value) end)
+
+    include_names =
+      term
+      |> Map.get(:include, %{})
+      |> Map.values()
+      |> Enum.flat_map(&param_names/1)
+
+    filter_names ++ include_names
+  end
 
   defp plain_value?(value) do
     not is_tuple(value) and not is_list(value) and not is_struct(value, Range)
@@ -777,4 +829,11 @@ defmodule Hologram.Query do
       message:
         "include sub-builder for relationship #{inspect(name)} must return a query term for #{inspect(target)}, got: #{inspect(sub_term)}"
   end
+
+  defp value_param_names({:param, name}), do: [name]
+
+  defp value_param_names(values) when is_list(values),
+    do: Enum.flat_map(values, &value_param_names/1)
+
+  defp value_param_names(_value), do: []
 end
