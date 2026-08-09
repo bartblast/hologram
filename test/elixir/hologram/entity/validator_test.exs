@@ -141,7 +141,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown attribute option" do
       expected_msg =
-        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :in, :max, :min, :optional, :values"
+        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :in, :length, :max, :max_length, :min, :min_length, :optional, :values"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture10 do
@@ -438,6 +438,100 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           attribute :count, :integer, in: 1..10, min: 1
+        end
+      end
+    end
+
+    test "accepts length options on string attributes" do
+      defmodule InlineEntityFixture44 do
+        use Hologram.Entity
+
+        attribute :bio, :string, max_length: 500
+        attribute :country_code, :string, length: 2
+        attribute :username, :string, min_length: 3, max_length: 32
+      end
+
+      assert InlineEntityFixture44.__attributes__() == [
+               {:bio, :string, [max_length: 500]},
+               {:country_code, :string, [length: 2]},
+               {:username, :string, [min_length: 3, max_length: 32]}
+             ]
+    end
+
+    test "rejects length option on non-string attribute type" do
+      expected_msg =
+        "length option not allowed for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture45 - length options apply only to string attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture45 do
+          use Hologram.Entity
+
+          attribute :count, :integer, length: 2
+        end
+      end
+    end
+
+    test "rejects max_length option on non-string attribute type" do
+      expected_msg =
+        "max_length option not allowed for attribute :held_at in Hologram.Entity.ValidatorTest.InlineEntityFixture46 - length options apply only to string attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture46 do
+          use Hologram.Entity
+
+          attribute :held_at, :datetime, max_length: 10
+        end
+      end
+    end
+
+    test "rejects non-integer length option" do
+      expected_msg =
+        "invalid length option \"2\" for attribute :country_code in Hologram.Entity.ValidatorTest.InlineEntityFixture47 - the length option must be a non-negative integer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture47 do
+          use Hologram.Entity
+
+          attribute :country_code, :string, length: "2"
+        end
+      end
+    end
+
+    test "rejects negative min_length option" do
+      expected_msg =
+        "invalid min_length option -1 for attribute :username in Hologram.Entity.ValidatorTest.InlineEntityFixture48 - the min_length option must be a non-negative integer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture48 do
+          use Hologram.Entity
+
+          attribute :username, :string, min_length: -1
+        end
+      end
+    end
+
+    test "rejects length option combined with min_length and max_length options" do
+      expected_msg =
+        "conflicting options for attribute :username in Hologram.Entity.ValidatorTest.InlineEntityFixture49 - the length option can't be combined with the min_length and max_length options"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture49 do
+          use Hologram.Entity
+
+          attribute :username, :string, length: 2, max_length: 5
+        end
+      end
+    end
+
+    test "rejects min_length greater than max_length" do
+      expected_msg =
+        "conflicting min_length and max_length options for attribute :username in Hologram.Entity.ValidatorTest.InlineEntityFixture50 - min_length 10 must be less than or equal to max_length 1"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture50 do
+          use Hologram.Entity
+
+          attribute :username, :string, min_length: 10, max_length: 1
         end
       end
     end

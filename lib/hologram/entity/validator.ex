@@ -12,7 +12,17 @@ defmodule Hologram.Entity.Validator do
 
   @reserved_names [:created_at, :id, :updated_at]
 
-  @valid_attribute_opts [:default, :in, :max, :min, :optional, :values]
+  @valid_attribute_opts [
+    :default,
+    :in,
+    :length,
+    :max,
+    :max_length,
+    :min,
+    :min_length,
+    :optional,
+    :values
+  ]
 
   @valid_attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string]
 
@@ -90,6 +100,7 @@ defmodule Hologram.Entity.Validator do
     validate_attribute_values!(module, name, type, opts)
     validate_attribute_bounds!(module, name, type, opts)
     validate_attribute_in!(module, name, type, opts)
+    validate_attribute_lengths!(module, name, type, opts)
     validate_attribute_default!(module, name, type, opts)
     validate_field_collision!(module, "attribute", name, [Atom.to_string(name)])
     :ok
@@ -229,6 +240,16 @@ defmodule Hologram.Entity.Validator do
       :error ->
         :ok
     end
+  end
+
+  defp validate_attribute_lengths!(module, name, type, opts) do
+    Enum.each(
+      [:length, :min_length, :max_length],
+      &validate_length_opt!(module, name, type, opts, &1)
+    )
+
+    validate_length_conflict!(module, name, opts)
+    validate_lengths_order!(module, name, opts)
   end
 
   defp validate_attribute_name!(module, name) do
@@ -407,6 +428,47 @@ defmodule Hologram.Entity.Validator do
             "unknown option #{inspect(key)} for #{kind} #{inspect(name)} in #{inspect(module)} - valid #{kind} options are: #{valid_opts_list}"
       end
     end)
+  end
+
+  defp validate_length_conflict!(module, name, opts) do
+    if Keyword.has_key?(opts, :length) and
+         (Keyword.has_key?(opts, :min_length) or Keyword.has_key?(opts, :max_length)) do
+      raise Hologram.CompileError,
+        message:
+          "conflicting options for attribute #{inspect(name)} in #{inspect(module)} - the length option can't be combined with the min_length and max_length options"
+    end
+  end
+
+  defp validate_length_opt!(module, name, type, opts, key) do
+    case Keyword.fetch(opts, key) do
+      {:ok, _value} when type != :string ->
+        raise Hologram.CompileError,
+          message:
+            "#{key} option not allowed for attribute #{inspect(name)} in #{inspect(module)} - length options apply only to string attributes"
+
+      {:ok, value} ->
+        if not (is_integer(value) and value >= 0) do
+          raise Hologram.CompileError,
+            message:
+              "invalid #{key} option #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the #{key} option must be a non-negative integer"
+        end
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp validate_lengths_order!(module, name, opts) do
+    min = Keyword.get(opts, :min_length)
+    max = Keyword.get(opts, :max_length)
+
+    if min != nil and max != nil and min > max do
+      raise Hologram.CompileError,
+        message:
+          "conflicting min_length and max_length options for attribute #{inspect(name)} in #{inspect(module)} - min_length #{inspect(min)} must be less than or equal to max_length #{inspect(max)}"
+    end
+
+    :ok
   end
 
   defp validate_name_uniqueness!(module, kind, name) do
