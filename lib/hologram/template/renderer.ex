@@ -7,9 +7,9 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
   alias Hologram.Component
-  alias Hologram.Database
-  alias Hologram.Database.QueryCache
-  alias Hologram.Database.QueryRunner
+  alias Hologram.DB
+  alias Hologram.DB.QueryCache
+  alias Hologram.DB.QueryRunner
   alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.Server
@@ -720,7 +720,7 @@ defmodule Hologram.Template.Renderer do
       |> apply(args)
       |> Query.normalize()
 
-    QueryRunner.run(term, Database.mapping())
+    QueryRunner.run(term, DB.mapping())
   end
 
   defp spread_entries(value)

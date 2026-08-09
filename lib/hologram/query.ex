@@ -1,8 +1,8 @@
 defmodule Hologram.Query do
   @moduledoc false
 
-  alias Hologram.Database
-  alias Hologram.Database.QueryRunner
+  alias Hologram.DB
+  alias Hologram.DB.QueryRunner
   alias Hologram.Entity.Validator
   alias Hologram.Query.Param
   alias Hologram.Reflection
@@ -372,7 +372,7 @@ defmodule Hologram.Query do
 
     assert_no_params!(term)
 
-    QueryRunner.run(term, Database.mapping())
+    QueryRunner.run(term, DB.mapping())
   end
 
   defp assert_no_params!(term) do

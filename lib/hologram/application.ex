@@ -54,7 +54,7 @@ defmodule Hologram.Application do
     if Reflection.list_entities() == [] do
       []
     else
-      [Hologram.Database.Supervisor]
+      [Hologram.DB.Supervisor]
     end
   end
 end

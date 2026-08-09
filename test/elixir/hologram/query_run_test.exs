@@ -3,7 +3,7 @@ defmodule Hologram.QueryRunTest do
 
   import Hologram.Query
 
-  alias Hologram.Database
+  alias Hologram.DB
   alias Hologram.Entity
   alias Hologram.Query.Param
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -11,7 +11,7 @@ defmodule Hologram.QueryRunTest do
   defp create_module_2_entity(values) do
     Module2
     |> Entity.new(values)
-    |> Database.create()
+    |> DB.create()
   end
 
   describe "get/2" do

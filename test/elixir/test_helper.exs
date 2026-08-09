@@ -1,7 +1,7 @@
 alias Hologram.Assets.ManifestCache, as: AssetManifestCache
 alias Hologram.Assets.PageDigestRegistry
 alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
-alias Hologram.Database.QueryCache
+alias Hologram.DB.QueryCache
 alias Hologram.LiveReload
 alias Hologram.Reflection
 alias Hologram.Router.PageModuleResolver
@@ -34,11 +34,11 @@ ExUnit.start(exclude: exclude_opts)
 # Boot the database gateway for the whole suite with a per-process ownership pool, so that
 # every test process transparently gets its own connection. Positioned after ExUnit.start,
 # because environment detection recognizes the test env by the running ExUnit server.
-{:ok, _database_pid} = Hologram.Database.start_link(pool: DBConnection.Ownership)
+{:ok, _database_pid} = Hologram.DB.start_link(pool: DBConnection.Ownership)
 
 # Create the fixture schema layout from scratch: reconciliation claims the virgin database
 # and converges it to the fixture entity model - the suite is auto-sync's first consumer.
-Hologram.Database.SchemaReconciler.reconcile(Hologram.Database.reconciliation_context())
+Hologram.DB.SchemaReconciler.reconcile(Hologram.DB.reconciliation_context())
 
 Mox.defmock(AssetManifestCacheMock, for: AssetManifestCache)
 Application.put_env(:hologram, :asset_manifest_cache_impl, AssetManifestCacheMock)
