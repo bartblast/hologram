@@ -198,6 +198,22 @@ defmodule Hologram.Entity.ValidatorTest do
                {:error, [{:country_code, {:length, 2}}]}
     end
 
+    test "reports format violations with the declared pattern" do
+      assert validate(Module10, %{count: 5, email: "a@b.com"}) == :ok
+
+      assert {:error, [{:email, {:format, format}}]} =
+               validate(Module10, %{count: 5, email: "nope"})
+
+      assert Regex.source(format) == "@"
+    end
+
+    test "accumulates multiple constraint violations per attribute" do
+      assert {:error, [{:handle, {:format, format}}, {:handle, {:min_length, 3}}]} =
+               validate(Module10, %{count: 5, handle: "A?"})
+
+      assert Regex.source(format) == "^[a-z_]+$"
+    end
+
     test "type violation suppresses constraint checks" do
       assert validate(Module10, %{count: "5"}) == {:error, [{:count, {:type, :integer}}]}
     end
