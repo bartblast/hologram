@@ -40,10 +40,9 @@ defmodule Hologram.Database.EntityOperations do
   # sobelow_skip ["SQL.Query"]
   def create(entity) do
     entity_type = entity.__struct__
-
-    validate_entity!(entity_type, entity)
-
     %{table: table, columns: columns} = Map.fetch!(Database.mapping(), entity_type)
+
+    validate_entity!(entity_type, entity, columns)
 
     now = DateTime.utc_now(:microsecond)
     stamped_entity = %{entity | created_at: now, updated_at: now}
@@ -279,19 +278,14 @@ defmodule Hologram.Database.EntityOperations do
   end
 
   defp validate_change_values!(entity_type, sorted_changes) do
-    attribute_names = Enum.map(entity_type.__attributes__(), fn {name, _type, _opts} -> name end)
+    changes_map = Map.new(sorted_changes)
 
-    attribute_changes =
-      sorted_changes
-      |> Map.new()
-      |> Map.take(attribute_names)
-
-    case Validator.validate_changes(entity_type, attribute_changes) do
+    case Validator.validate_changes(entity_type, changes_map) do
       :ok ->
         :ok
 
       {:error, errors} ->
-        raise ArgumentError, Validator.error_message(entity_type, attribute_changes, errors)
+        raise ArgumentError, Validator.error_message(entity_type, changes_map, errors)
     end
   end
 
@@ -316,9 +310,13 @@ defmodule Hologram.Database.EntityOperations do
     :ok
   end
 
-  defp validate_entity!(entity_type, entity) do
-    attribute_names = Enum.map(entity_type.__attributes__(), fn {name, _type, _opts} -> name end)
-    data = Map.take(entity, attribute_names)
+  defp validate_entity!(entity_type, entity, columns) do
+    field_names =
+      columns
+      |> Enum.reject(&(&1.source == :system or match?({:sort_key, _name}, &1.source)))
+      |> Enum.map(&field_name/1)
+
+    data = Map.take(entity, field_names)
 
     case Validator.validate(entity_type, data) do
       :ok ->

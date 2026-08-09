@@ -69,7 +69,13 @@ defmodule Hologram.Entity.Validator do
   """
   @spec error_message(module, %{atom => any}, list({atom, atom | {atom, any}})) :: String.t()
   def error_message(entity_type, data, errors) do
-    descriptions = Enum.map_join(errors, "\n", &violation_description(data, &1))
+    reference_names =
+      entity_type
+      |> reference_definitions()
+      |> Enum.map(fn {field, _optional?} -> field end)
+
+    descriptions =
+      Enum.map_join(errors, "\n", &violation_description(reference_names, data, &1))
 
     "invalid data for #{inspect(entity_type)}:\n#{descriptions}"
   end
@@ -82,21 +88,26 @@ defmodule Hologram.Entity.Validator do
   Constraint options are checked only on type-valid values - a type violation suppresses the attribute's constraint checks.
   A non-optional attribute must be present regardless of its declared default - defaults are not applied here.
   An absent or nil optional attribute is valid.
+  To-one reference fields (`<name>_id`) validate alongside attributes: a non-optional reference must be present and non-nil (:required), and a present value must be a canonical entity id ({:type, :uuid}).
   """
   @spec validate(module, %{atom => any}) :: :ok | {:error, list({atom, atom | {atom, any}})}
   def validate(entity_type, data) do
     attributes = entity_type.__attributes__()
     attribute_names = Enum.map(attributes, fn {name, _type, _opts} -> name end)
+    references = reference_definitions(entity_type)
+    reference_names = Enum.map(references, fn {field, _optional?} -> field end)
+    known_names = attribute_names ++ reference_names
 
     unknown_errors =
       data
       |> Map.keys()
-      |> Enum.reject(&(&1 in attribute_names))
+      |> Enum.reject(&(&1 in known_names))
       |> Enum.map(&{&1, :unknown})
 
     attribute_errors = Enum.flat_map(attributes, &attribute_data_errors(data, &1))
+    reference_errors = Enum.flat_map(references, &reference_data_errors(data, &1))
 
-    case Enum.sort(unknown_errors ++ attribute_errors) do
+    case Enum.sort(unknown_errors ++ attribute_errors ++ reference_errors) do
       [] -> :ok
       errors -> {:error, errors}
     end
@@ -125,6 +136,7 @@ defmodule Hologram.Entity.Validator do
   Validates the given partial changes map against the given entity type's declared attributes.
   Returns :ok, or {:error, errors} in the validate/2 shape and reason vocabulary.
   Only present pairs are validated - absence is legal in a partial map. A nil value for a non-optional attribute reports :required - a nil value for an optional attribute is valid (clearing).
+  To-one reference field pairs (`<name>_id`) follow the same rules: nil is valid only for an optional relationship, and a present value must be a canonical entity id.
   """
   @spec validate_changes(module, %{atom => any}) ::
           :ok | {:error, list({atom, atom | {atom, any}})}
@@ -132,12 +144,24 @@ defmodule Hologram.Entity.Validator do
     attributes_by_name =
       Map.new(entity_type.__attributes__(), fn {name, type, opts} -> {name, {type, opts}} end)
 
+    references_by_field =
+      entity_type
+      |> reference_definitions()
+      |> Map.new()
+
     errors =
       changes
       |> Enum.flat_map(fn {name, value} ->
-        case Map.fetch(attributes_by_name, name) do
-          {:ok, {type, opts}} -> change_errors(name, value, type, opts)
-          :error -> [{name, :unknown}]
+        cond do
+          Map.has_key?(attributes_by_name, name) ->
+            {type, opts} = attributes_by_name[name]
+            change_errors(name, value, type, opts)
+
+          Map.has_key?(references_by_field, name) ->
+            reference_change_errors(name, value, references_by_field[name])
+
+          true ->
+            [{name, :unknown}]
         end
       end)
       |> Enum.sort()
@@ -305,6 +329,35 @@ defmodule Hologram.Entity.Validator do
   defp length_satisfied?(count, :min_length, bound), do: count >= bound
 
   defp length_satisfied?(count, :max_length, bound), do: count <= bound
+
+  defp reference_change_errors(field, nil, optional?) do
+    if optional?, do: [], else: [{field, :required}]
+  end
+
+  defp reference_change_errors(field, value, _optional?) do
+    if attribute_value_valid?(value, :uuid), do: [], else: [{field, {:type, :uuid}}]
+  end
+
+  defp reference_data_errors(data, {field, optional?}) do
+    case Map.fetch(data, field) do
+      {:ok, nil} ->
+        if optional?, do: [], else: [{field, :required}]
+
+      {:ok, value} ->
+        if attribute_value_valid?(value, :uuid), do: [], else: [{field, {:type, :uuid}}]
+
+      :error ->
+        if optional?, do: [], else: [{field, :required}]
+    end
+  end
+
+  defp reference_definitions(entity_type) do
+    entity_type.__relationships__()
+    |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
+    |> Enum.map(fn {name, _type, opts} ->
+      {String.to_existing_atom("#{name}_id"), Keyword.get(opts, :optional) == true}
+    end)
+  end
 
   defp relationship_field_names(name, [_target]), do: [Atom.to_string(name)]
 
@@ -712,15 +765,23 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp violation_description(_data, {name, :required}) do
-    "  * attribute #{inspect(name)} is required"
+  defp violation_description(reference_names, _data, {name, :required}) do
+    kind_word = if name in reference_names, do: "reference", else: "attribute"
+
+    "  * #{kind_word} #{inspect(name)} is required"
   end
 
-  defp violation_description(_data, {name, :unknown}) do
-    "  * #{inspect(name)} is not a declared attribute"
+  defp violation_description(_reference_names, _data, {name, :unknown}) do
+    "  * #{inspect(name)} is not a declared attribute or to-one reference"
   end
 
-  defp violation_description(data, {name, reason}) do
-    "  * attribute #{inspect(name)} #{requirement_description(reason)}, got: #{inspect(Map.get(data, name))}"
+  defp violation_description(reference_names, data, {name, reason}) do
+    received = inspect(Map.get(data, name))
+
+    if name in reference_names do
+      "  * reference #{inspect(name)} must be a valid entity id, got: #{received}"
+    else
+      "  * attribute #{inspect(name)} #{requirement_description(reason)}, got: #{received}"
+    end
   end
 end

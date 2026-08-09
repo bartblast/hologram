@@ -204,6 +204,26 @@ defmodule Hologram.Database.EntityOperationsTest do
 
       assert_error ArgumentError, expected_msg, fn -> create(entity) end
     end
+
+    test "raises on reference violations" do
+      expected_required_msg = """
+      invalid data for Hologram.Test.Fixtures.Entity.Module3:
+        * reference :c_id is required\
+      """
+
+      assert_error ArgumentError, expected_required_msg, fn ->
+        Module3 |> Entity.new() |> create()
+      end
+
+      expected_invalid_msg = """
+      invalid data for Hologram.Test.Fixtures.Entity.Module3:
+        * reference :c_id must be a valid entity id, got: "garbage"\
+      """
+
+      assert_error ArgumentError, expected_invalid_msg, fn ->
+        Module3 |> Entity.new(c_id: "garbage") |> create()
+      end
+    end
   end
 
   describe "delete/2" do
@@ -497,6 +517,36 @@ defmodule Hologram.Database.EntityOperationsTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         update(Module10, created_entity.id, %{count: 0})
+      end
+    end
+
+    test "raises on reference change violations" do
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      created_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      expected_nil_msg = """
+      invalid data for Hologram.Test.Fixtures.Entity.Module3:
+        * reference :c_id is required\
+      """
+
+      assert_error ArgumentError, expected_nil_msg, fn ->
+        update(Module3, created_entity.id, %{c_id: nil})
+      end
+
+      expected_invalid_msg = """
+      invalid data for Hologram.Test.Fixtures.Entity.Module3:
+        * reference :c_id must be a valid entity id, got: "garbage"\
+      """
+
+      assert_error ArgumentError, expected_invalid_msg, fn ->
+        update(Module3, created_entity.id, %{c_id: "garbage"})
       end
     end
   end
