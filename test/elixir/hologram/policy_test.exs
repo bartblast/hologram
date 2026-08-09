@@ -5,6 +5,7 @@ defmodule Hologram.PolicyTest do
 
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module13
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
 
   describe "validate_model!/1" do
@@ -35,7 +36,7 @@ defmodule Hologram.PolicyTest do
     end
 
     test "returns :ok for a predicate on a to-one reference field" do
-      assert validate_model!([Module13]) == :ok
+      assert validate_model!([Module13, Module14]) == :ok
     end
 
     test "returns :ok for bare allow lines" do
@@ -51,7 +52,7 @@ defmodule Hologram.PolicyTest do
         allow :publish, via: :parent
       end
 
-      assert validate_model!([InlinePolicyFixture2]) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture2]) == :ok
     end
 
     test "returns :ok for a to option naming a declared role" do
@@ -63,7 +64,7 @@ defmodule Hologram.PolicyTest do
         allow :update, to: :owner
       end
 
-      assert validate_model!([InlinePolicyFixture9]) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture9]) == :ok
     end
 
     test "returns :ok for a to option listing declared roles" do
@@ -76,7 +77,7 @@ defmodule Hologram.PolicyTest do
         allow :update, to: [:editor, :owner]
       end
 
-      assert validate_model!([InlinePolicyFixture10]) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture10]) == :ok
     end
 
     test "returns :ok for a to option referencing a role of another entity type" do
@@ -86,7 +87,7 @@ defmodule Hologram.PolicyTest do
         allow :update, to: {Module13, :editor}
       end
 
-      assert validate_model!([InlinePolicyFixture13]) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture13]) == :ok
     end
 
     test "returns :ok for a to option mixing role names and namespaced references" do
@@ -98,7 +99,7 @@ defmodule Hologram.PolicyTest do
         allow :update, to: [:owner, {Module13, :editor}]
       end
 
-      assert validate_model!([InlinePolicyFixture14]) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture14]) == :ok
     end
 
     test "returns :ok for a to option referencing a role on a to-one relationship target" do
@@ -110,7 +111,7 @@ defmodule Hologram.PolicyTest do
         allow :update, to: {:parent, :editor}
       end
 
-      assert validate_model!([InlinePolicyFixture17]) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture17]) == :ok
     end
 
     test "returns :ok for a via option delegating to a to-one relationship" do
@@ -138,6 +139,53 @@ defmodule Hologram.PolicyTest do
       end
 
       assert validate_model!([InlinePolicyFixture7]) == :ok
+    end
+
+    test "rejects multiple user entity designations" do
+      defmodule InlinePolicyFixture27 do
+        use Hologram.Entity, user: true
+      end
+
+      defmodule InlinePolicyFixture28 do
+        use Hologram.Entity, user: true
+      end
+
+      expected_msg =
+        "multiple user entity designations in the data model: Hologram.PolicyTest.InlinePolicyFixture27, Hologram.PolicyTest.InlinePolicyFixture28 - exactly one entity type can be designated with use Hologram.Entity, user: true"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture28, InlinePolicyFixture27])
+      end
+    end
+
+    test "rejects role declarations without a user entity designation" do
+      defmodule InlinePolicyFixture29 do
+        use Hologram.Entity
+
+        role :owner
+      end
+
+      expected_msg =
+        "Hologram.PolicyTest.InlinePolicyFixture29 declares roles or policy grant references, but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture29])
+      end
+    end
+
+    test "rejects a to option without a user entity designation" do
+      defmodule InlinePolicyFixture30 do
+        use Hologram.Entity
+
+        allow :update, to: {Module13, :editor}
+      end
+
+      expected_msg =
+        "Hologram.PolicyTest.InlinePolicyFixture30 declares roles or policy grant references, but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture30])
+      end
     end
 
     test "rejects an actor leaf on a non-uuid attribute" do
@@ -171,7 +219,7 @@ defmodule Hologram.PolicyTest do
         "unknown role :publisher in the to option of allow :update in Hologram.PolicyTest.InlinePolicyFixture11 - declared roles are: :editor, :owner"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture11])
+        validate_model!([Module14, InlinePolicyFixture11])
       end
     end
 
@@ -186,7 +234,7 @@ defmodule Hologram.PolicyTest do
         "invalid to option {Hologram.Reflection, :editor} for allow :update in Hologram.PolicyTest.InlinePolicyFixture15 - Hologram.Reflection is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture15])
+        validate_model!([Module14, InlinePolicyFixture15])
       end
     end
 
@@ -201,7 +249,7 @@ defmodule Hologram.PolicyTest do
         "unknown role :publisher in the to option of allow :update in Hologram.PolicyTest.InlinePolicyFixture16 - declared roles of Hologram.Test.Fixtures.Entity.Module13 are: :editor, :owner"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture16])
+        validate_model!([Module14, InlinePolicyFixture16])
       end
     end
 
@@ -218,7 +266,7 @@ defmodule Hologram.PolicyTest do
         "unknown relationship :project in the to option of allow :update in Hologram.PolicyTest.InlinePolicyFixture18 - declared relationships are: :parent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture18])
+        validate_model!([Module14, InlinePolicyFixture18])
       end
     end
 
@@ -235,7 +283,7 @@ defmodule Hologram.PolicyTest do
         "invalid to option {:children, :editor} for allow :update in Hologram.PolicyTest.InlinePolicyFixture19 - relationship :children is to-many, but a role reference requires a to-one relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture19])
+        validate_model!([Module14, InlinePolicyFixture19])
       end
     end
 
@@ -252,7 +300,7 @@ defmodule Hologram.PolicyTest do
         "unknown role :publisher in the to option of allow :update in Hologram.PolicyTest.InlinePolicyFixture20 - declared roles of Hologram.Test.Fixtures.Entity.Module13 are: :editor, :owner"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture20])
+        validate_model!([Module14, InlinePolicyFixture20])
       end
     end
 
@@ -269,7 +317,7 @@ defmodule Hologram.PolicyTest do
         "invalid to option \"owner\" for allow :update in Hologram.PolicyTest.InlinePolicyFixture12 - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture12])
+        validate_model!([Module14, InlinePolicyFixture12])
       end
     end
 

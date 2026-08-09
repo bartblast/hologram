@@ -12,6 +12,8 @@ defmodule Hologram.Policy do
   """
   @spec validate_model!(list(module)) :: :ok
   def validate_model!(entity_types) do
+    validate_user_entity!(entity_types)
+
     Enum.each(entity_types, fn entity_type ->
       Enum.each(entity_type.__policies__(), fn {action, to, via, predicates} ->
         validate_to!(entity_type, action, to)
@@ -55,6 +57,13 @@ defmodule Hologram.Policy do
   # taken to reach the current entity type (most recent first) - reaching an entity type
   # already on the path closes a cycle. Fully explored entity types are marked visited and
   # never re-entered, so each cycle is reported once.
+  # TODO: identity features are detected through declarations only - grant_role and can?
+  # callsites are not scanned yet, which the compiler's whole-program call graph analysis covers.
+  defp declares_identity_features?(entity_type) do
+    entity_type.__roles__() != [] or
+      Enum.any?(entity_type.__policies__(), fn {_action, to, _via, _predicates} -> to != nil end)
+  end
+
   defp find_via_cycles(entity_type, path, edges, {cycles, visited}) do
     if MapSet.member?(visited, entity_type) do
       {cycles, visited}
@@ -197,6 +206,41 @@ defmodule Hologram.Policy do
     end
 
     validate_target_role!(entity_type, action, target_type, role_name)
+  end
+
+  defp validate_user_entity!(entity_types) do
+    designated =
+      entity_types
+      |> Enum.filter(&Reflection.user_entity?/1)
+      |> Enum.sort_by(&inspect/1)
+
+    cond do
+      length(designated) > 1 ->
+        modules = Enum.map_join(designated, ", ", &inspect/1)
+
+        raise Hologram.CompileError,
+          message:
+            "multiple user entity designations in the data model: #{modules} - exactly one entity type can be designated with use Hologram.Entity, user: true"
+
+      designated == [] ->
+        validate_user_entity_requirement!(entity_types)
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_user_entity_requirement!(entity_types) do
+    entity_type =
+      entity_types
+      |> Enum.sort_by(&inspect/1)
+      |> Enum.find(&declares_identity_features?/1)
+
+    if entity_type do
+      raise Hologram.CompileError,
+        message:
+          "#{inspect(entity_type)} declares roles or policy grant references, but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+    end
   end
 
   defp validate_via!(_entity_type, _action, nil), do: :ok
