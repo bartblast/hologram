@@ -17,6 +17,7 @@ defmodule Hologram.Database.IntrospectionTest do
 
       assert table_names == [
                "test_fixtures_entity_module1",
+               "test_fixtures_entity_module10",
                "test_fixtures_entity_module2",
                "test_fixtures_entity_module3",
                "test_fixtures_entity_module3_a_$join",
