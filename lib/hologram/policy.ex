@@ -1,8 +1,62 @@
 defmodule Hologram.Policy do
   @moduledoc false
 
+  alias Hologram.Entity
   alias Hologram.Query
   alias Hologram.Reflection
+
+  @doc """
+  Builds the compiled policy of the given entity type: a map of action to the list of rules granting it, in declaration order.
+
+  A rule holds the predicate triples of its allow line, its grant references, and its delegation.
+  Predicates carry the actor sentinel in value position where the declaration called user_id().
+  Grant references are extends-expanded, so a reference to a role also names every role carrying it:
+  own roles as {:own, role names}, another entity type's roles as {:type, entity type, role names},
+  and a related instance's roles as {:rel, relationship name, role names} - nil when the line has none.
+  A rule grants its action when its predicates hold, one of its grant references is held, and its
+  delegation grants the same action - and a policy grants its action when any of its rules does.
+  """
+  @spec build(module) :: %{
+          atom => list(%{predicates: list(tuple), to: list(tuple) | nil, via: atom | nil})
+        }
+  def build(entity_type) do
+    entity_type.__policies__()
+    |> Enum.map(fn {action, to, via, predicates} ->
+      rule = %{
+        predicates: Query.predicate_triples!(entity_type, predicates),
+        to: build_to(entity_type, to),
+        via: via
+      }
+
+      {action, rule}
+    end)
+    |> Enum.group_by(fn {action, _rule} -> action end, fn {_action, rule} -> rule end)
+  end
+
+  @doc """
+  Returns the own roles qualifying their holders to manage the grants of the given entity type, sorted.
+
+  These are the extends-expanded own roles of its allow :manage_roles rules - empty when the entity
+  type declares none, which leaves granting on it to the trusted tier.
+  """
+  @spec manage_roles_qualifying_roles(module) :: list(atom)
+  def manage_roles_qualifying_roles(entity_type) do
+    own_role_names(entity_type, :manage_roles)
+  end
+
+  @doc """
+  Returns the own roles whose holders see the grants others hold on the given entity type, sorted.
+
+  These are the extends-expanded own roles of its allow :read_grants rules, defaulting to the roles
+  qualifying to manage grants when the entity type declares no read_grants rule.
+  """
+  @spec read_grants_roles(module) :: list(atom)
+  def read_grants_roles(entity_type) do
+    case own_role_names(entity_type, :read_grants) do
+      [] -> manage_roles_qualifying_roles(entity_type)
+      role_names -> role_names
+    end
+  end
 
   @doc """
   Validates the policy declarations of the given entity type modules as a whole.
@@ -23,6 +77,42 @@ defmodule Hologram.Policy do
     end)
 
     validate_via_cycles!(entity_types)
+  end
+
+  defp build_own_reference(_entity_type, []), do: []
+
+  defp build_own_reference(entity_type, role_names) do
+    expanded_names =
+      role_names
+      |> Enum.flat_map(&Entity.expand_role(entity_type, &1))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    [{:own, expanded_names}]
+  end
+
+  defp build_to(_entity_type, nil), do: nil
+
+  defp build_to(entity_type, to) do
+    {role_names, typed_references} =
+      to
+      |> List.wrap()
+      |> Enum.split_with(&is_atom/1)
+
+    own_reference = build_own_reference(entity_type, role_names)
+    typed = Enum.map(typed_references, &build_typed_reference(entity_type, &1))
+
+    own_reference ++ typed
+  end
+
+  defp build_typed_reference(entity_type, {reference, role_name}) do
+    if Reflection.alias?(reference) do
+      {:type, reference, Entity.expand_role(reference, role_name)}
+    else
+      target_type = relationship_target(entity_type, reference)
+
+      {:rel, reference, Entity.expand_role(target_type, role_name)}
+    end
   end
 
   # Rotates the cycle to start at its alphabetically first entity type, so that the same
@@ -53,10 +143,6 @@ defmodule Hologram.Policy do
     "  * #{hops} -> #{inspect(first_entity_type)}"
   end
 
-  # Depth-first traversal over the delegation edges of one action. The path holds the hops
-  # taken to reach the current entity type (most recent first) - reaching an entity type
-  # already on the path closes a cycle. Fully explored entity types are marked visited and
-  # never re-entered, so each cycle is reported once.
   # TODO: identity features are detected through declarations only - grant_role and can?
   # callsites are not scanned yet, which the compiler's whole-program call graph analysis covers.
   defp declares_identity_features?(entity_type) do
@@ -64,6 +150,10 @@ defmodule Hologram.Policy do
       Enum.any?(entity_type.__policies__(), fn {_action, to, _via, _predicates} -> to != nil end)
   end
 
+  # Depth-first traversal over the delegation edges of one action. The path holds the hops
+  # taken to reach the current entity type (most recent first) - reaching an entity type
+  # already on the path closes a cycle. Fully explored entity types are marked visited and
+  # never re-entered, so each cycle is reported once.
   defp find_via_cycles(entity_type, path, edges, {cycles, visited}) do
     if MapSet.member?(visited, entity_type) do
       {cycles, visited}
@@ -95,6 +185,24 @@ defmodule Hologram.Policy do
     else
       find_via_cycles(target_type, new_path, edges, {cycles, visited})
     end
+  end
+
+  defp own_reference_names(%{to: nil}), do: []
+
+  defp own_reference_names(%{to: references}) do
+    Enum.flat_map(references, fn
+      {:own, role_names} -> role_names
+      _other_reference -> []
+    end)
+  end
+
+  defp own_role_names(entity_type, action) do
+    entity_type
+    |> build()
+    |> Map.get(action, [])
+    |> Enum.flat_map(&own_reference_names/1)
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   defp relationship_target(entity_type, relationship_name) do

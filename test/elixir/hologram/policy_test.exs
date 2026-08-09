@@ -7,6 +7,61 @@ defmodule Hologram.PolicyTest do
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Policy
+
+  describe "build/1" do
+    test "returns empty map for entity type without policy declarations" do
+      assert build(Module1) == %{}
+    end
+
+    test "builds rules per action, keeping declaration order" do
+      assert build(Policy.Module1) == %{
+               archive: [
+                 %{predicates: [{:author_id, :==, {:actor}}], to: nil, via: nil}
+               ],
+               delete: [
+                 %{predicates: [], to: [{:rel, :parent, [:admin]}], via: nil}
+               ],
+               manage_roles: [
+                 %{predicates: [], to: [{:own, [:owner]}], via: nil}
+               ],
+               publish: [
+                 %{predicates: [], to: nil, via: :parent}
+               ],
+               read: [
+                 %{predicates: [{:public, :==, true}], to: nil, via: nil},
+                 %{
+                   predicates: [],
+                   to: [{:own, [:viewer]}, {:type, Policy.Module2, [:admin]}],
+                   via: nil
+                 }
+               ],
+               update: [
+                 %{predicates: [{:priority, :>=, 3}], to: [{:own, [:editor, :owner]}], via: nil}
+               ]
+             }
+    end
+  end
+
+  describe "manage_roles_qualifying_roles/1" do
+    test "returns the expanded own roles of the manage_roles rules" do
+      assert manage_roles_qualifying_roles(Policy.Module1) == [:owner]
+    end
+
+    test "returns empty list when the entity type declares no manage_roles rule" do
+      assert manage_roles_qualifying_roles(Policy.Module2) == []
+    end
+  end
+
+  describe "read_grants_roles/1" do
+    test "returns the expanded own roles of the read_grants rules" do
+      assert read_grants_roles(Policy.Module2) == [:member]
+    end
+
+    test "defaults to the roles qualifying to manage grants" do
+      assert read_grants_roles(Policy.Module1) == [:owner]
+    end
+  end
 
   describe "validate_model!/1" do
     test "returns :ok for empty model" do
