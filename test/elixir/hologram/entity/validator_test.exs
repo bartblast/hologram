@@ -141,7 +141,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown attribute option" do
       expected_msg =
-        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :optional, :values"
+        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :max, :min, :optional, :values"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture10 do
@@ -227,6 +227,138 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           attribute :count, :integer, default: 9_223_372_036_854_775_808
+        end
+      end
+    end
+
+    test "accepts min and max options on bounded attribute types" do
+      defmodule InlineEntityFixture28 do
+        use Hologram.Entity
+
+        attribute :count, :integer, min: 1, max: 10
+        attribute :held_at, :datetime, min: ~U[2026-01-01 00:00:00Z]
+        attribute :price, :float, min: 0, max: 99.5
+        attribute :released_on, :date, max: ~D[2030-12-31]
+      end
+
+      assert InlineEntityFixture28.__attributes__() == [
+               {:count, :integer, [min: 1, max: 10]},
+               {:held_at, :datetime, [min: ~U[2026-01-01 00:00:00Z]]},
+               {:price, :float, [min: 0, max: 99.5]},
+               {:released_on, :date, [max: ~D[2030-12-31]]}
+             ]
+    end
+
+    test "accepts equal min and max options" do
+      defmodule InlineEntityFixture29 do
+        use Hologram.Entity
+
+        attribute :count, :integer, min: 5, max: 5
+      end
+
+      assert InlineEntityFixture29.__attributes__() == [{:count, :integer, [min: 5, max: 5]}]
+    end
+
+    test "rejects min option on unbounded attribute type" do
+      expected_msg =
+        "min option not allowed for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture30 - min and max options apply only to integer, float, date and datetime attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture30 do
+          use Hologram.Entity
+
+          attribute :title, :string, min: 1
+        end
+      end
+    end
+
+    test "rejects max option on unbounded attribute type" do
+      expected_msg =
+        "max option not allowed for attribute :archived in Hologram.Entity.ValidatorTest.InlineEntityFixture31 - min and max options apply only to integer, float, date and datetime attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture31 do
+          use Hologram.Entity
+
+          attribute :archived, :boolean, max: true
+        end
+      end
+    end
+
+    test "rejects min option not matching attribute type" do
+      expected_msg =
+        "invalid min option 1.5 for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture32 - the min option must match the attribute type :integer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture32 do
+          use Hologram.Entity
+
+          attribute :count, :integer, min: 1.5
+        end
+      end
+    end
+
+    test "rejects max option not matching attribute type" do
+      expected_msg =
+        "invalid max option \"2030-12-31\" for attribute :released_on in Hologram.Entity.ValidatorTest.InlineEntityFixture33 - the max option must match the attribute type :date"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture33 do
+          use Hologram.Entity
+
+          attribute :released_on, :date, max: "2030-12-31"
+        end
+      end
+    end
+
+    test "rejects non-number min option on float attribute" do
+      expected_msg =
+        "invalid min option \"0\" for attribute :price in Hologram.Entity.ValidatorTest.InlineEntityFixture34 - the min option must be a number"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture34 do
+          use Hologram.Entity
+
+          attribute :price, :float, min: "0"
+        end
+      end
+    end
+
+    test "rejects min option beyond integer type bounds" do
+      expected_msg =
+        "invalid min option 9223372036854775808 for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture35 - the min option must match the attribute type :integer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture35 do
+          use Hologram.Entity
+
+          attribute :count, :integer, min: 9_223_372_036_854_775_808
+        end
+      end
+    end
+
+    test "rejects min greater than max" do
+      expected_msg =
+        "conflicting min and max options for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture36 - min 10 must be less than or equal to max 1"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture36 do
+          use Hologram.Entity
+
+          attribute :count, :integer, min: 10, max: 1
+        end
+      end
+    end
+
+    test "rejects min greater than max on temporal attribute" do
+      expected_msg =
+        "conflicting min and max options for attribute :released_on in Hologram.Entity.ValidatorTest.InlineEntityFixture37 - min ~D[2030-01-01] must be less than or equal to max ~D[2020-01-01]"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture37 do
+          use Hologram.Entity
+
+          attribute :released_on, :date, min: ~D[2030-01-01], max: ~D[2020-01-01]
         end
       end
     end

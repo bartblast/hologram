@@ -4,13 +4,15 @@ defmodule Hologram.Entity.Validator do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Reflection
 
+  @bounded_attribute_types [:date, :datetime, :float, :integer]
+
   # Postgres int8 column bounds
   @max_integer 9_223_372_036_854_775_807
   @min_integer -9_223_372_036_854_775_808
 
   @reserved_names [:created_at, :id, :updated_at]
 
-  @valid_attribute_opts [:default, :optional, :values]
+  @valid_attribute_opts [:default, :max, :min, :optional, :values]
 
   @valid_attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string]
 
@@ -78,7 +80,7 @@ defmodule Hologram.Entity.Validator do
 
   @doc """
   Validates the given attribute declaration at compile time.
-  Returns :ok, or raises Hologram.CompileError on the first violated rule (name, type, options, enum values, default).
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (name, type, options, enum values, bounds, default).
   """
   @spec validate_attribute!(module, atom, any, T.opts()) :: :ok
   def validate_attribute!(module, name, type, opts) do
@@ -86,6 +88,7 @@ defmodule Hologram.Entity.Validator do
     validate_attribute_type!(module, name, type)
     validate_attribute_opts!(module, name, opts)
     validate_attribute_values!(module, name, type, opts)
+    validate_attribute_bounds!(module, name, type, opts)
     validate_attribute_default!(module, name, type, opts)
     validate_field_collision!(module, "attribute", name, [Atom.to_string(name)])
     :ok
@@ -141,6 +144,20 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  defp bound_requirement(:float), do: "must be a number"
+
+  defp bound_requirement(type), do: "must match the attribute type #{inspect(type)}"
+
+  defp bound_value_valid?(value, :float), do: is_number(value)
+
+  defp bound_value_valid?(value, type), do: attribute_value_valid?(value, type, [])
+
+  defp bounds_ordered?(min, max, :date), do: Date.compare(min, max) != :gt
+
+  defp bounds_ordered?(min, max, :datetime), do: DateTime.compare(min, max) != :gt
+
+  defp bounds_ordered?(min, max, _type), do: min <= max
+
   defp declared_fields(module) do
     attribute_fields =
       module
@@ -181,6 +198,11 @@ defmodule Hologram.Entity.Validator do
   defp relationship_type_valid?([type]), do: Reflection.alias?(type)
 
   defp relationship_type_valid?(_type), do: false
+
+  defp validate_attribute_bounds!(module, name, type, opts) do
+    Enum.each([:min, :max], &validate_bound_opt!(module, name, type, opts, &1))
+    validate_bounds_order!(module, name, type, opts)
+  end
 
   defp validate_attribute_default!(module, name, type, opts) do
     case Keyword.fetch(opts, :default) do
@@ -230,6 +252,38 @@ defmodule Hologram.Entity.Validator do
         message:
           "values option not allowed for attribute #{inspect(name)} in #{inspect(module)} - the values option applies only to enum attributes"
     end
+  end
+
+  defp validate_bound_opt!(module, name, type, opts, key) do
+    case Keyword.fetch(opts, key) do
+      {:ok, _value} when type not in @bounded_attribute_types ->
+        raise Hologram.CompileError,
+          message:
+            "#{key} option not allowed for attribute #{inspect(name)} in #{inspect(module)} - min and max options apply only to integer, float, date and datetime attributes"
+
+      {:ok, value} ->
+        if not bound_value_valid?(value, type) do
+          raise Hologram.CompileError,
+            message:
+              "invalid #{key} option #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the #{key} option #{bound_requirement(type)}"
+        end
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp validate_bounds_order!(module, name, type, opts) do
+    min = Keyword.get(opts, :min)
+    max = Keyword.get(opts, :max)
+
+    if min != nil and max != nil and not bounds_ordered?(min, max, type) do
+      raise Hologram.CompileError,
+        message:
+          "conflicting min and max options for attribute #{inspect(name)} in #{inspect(module)} - min #{inspect(min)} must be less than or equal to max #{inspect(max)}"
+    end
+
+    :ok
   end
 
   defp validate_declaration_name!(module, kind, name) do
