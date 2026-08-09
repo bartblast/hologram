@@ -3,6 +3,7 @@ defmodule Hologram.Query do
 
   alias Hologram.Database
   alias Hologram.Database.QueryRunner
+  alias Hologram.Entity.Validator
   alias Hologram.Query.Param
   alias Hologram.Reflection
 
@@ -12,6 +13,7 @@ defmodule Hologram.Query do
         only: [
           count: 1,
           filter: 2,
+          get: 2,
           include: 2,
           include: 3,
           limit: 2,
@@ -107,6 +109,28 @@ defmodule Hologram.Query do
       end)
 
     %{term | filter: term.filter ++ triples}
+  end
+
+  @doc """
+  Returns the entity of the given type with the given id, or nil when no entity
+  matches - sugar for filtering on id with single-result cardinality, executed
+  directly against the database.
+
+  Raises ArgumentError when the id is not a canonical entity id (a lowercase
+  8-4-4-4-12 UUID string).
+  """
+  @spec get(module, String.t()) :: struct | nil
+  def get(entity_type, id) do
+    if not Validator.attribute_value_valid?(id, :uuid) do
+      raise ArgumentError,
+        message:
+          "invalid id #{inspect(id)} for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+    end
+
+    entity_type
+    |> filter(id: id)
+    |> one()
+    |> run()
   end
 
   @doc """
