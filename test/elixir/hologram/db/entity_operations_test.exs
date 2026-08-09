@@ -185,11 +185,12 @@ defmodule Hologram.DB.EntityOperationsTest do
     test "raises naming every validation violation before touching the database" do
       entity = Entity.new(Module2, b: "nope")
 
-      expected_msg = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module2:
-        * attribute :b must be of type :integer, got: "nope"
-        * attribute :c is required\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module2:
+          * attribute :b must be of type :integer, got: "nope"
+          * attribute :c is required\
+        """)
 
       assert_error ArgumentError, expected_msg, fn -> create(entity) end
     end
@@ -197,19 +198,21 @@ defmodule Hologram.DB.EntityOperationsTest do
     test "raises on declared constraint option violations" do
       entity = Entity.new(Module10, count: 0)
 
-      expected_msg = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module10:
-        * attribute :count must be at least 1, got: 0\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module10:
+          * attribute :count must be at least 1, got: 0\
+        """)
 
       assert_error ArgumentError, expected_msg, fn -> create(entity) end
     end
 
     test "raises on reference violations" do
-      expected_required_msg = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module3:
-        * reference :c_id is required\
-      """
+      expected_required_msg =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module3:
+          * reference :c_id is required\
+        """)
 
       assert_error ArgumentError, expected_required_msg, fn ->
         Module3
@@ -217,10 +220,11 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> create()
       end
 
-      expected_invalid_msg = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module3:
-        * reference :c_id must be a valid entity id, got: "garbage"\
-      """
+      expected_invalid_msg =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module3:
+          * reference :c_id must be a valid entity id, got: "garbage"\
+        """)
 
       assert_error ArgumentError, expected_invalid_msg, fn ->
         Module3
@@ -497,11 +501,12 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> Entity.new(a: true, c: "some text")
         |> create()
 
-      expected_msg = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module2:
-        * attribute :b must be of type :integer, got: "nope"
-        * attribute :c is required\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module2:
+          * attribute :b must be of type :integer, got: "nope"
+          * attribute :c is required\
+        """)
 
       assert_error ArgumentError, expected_msg, fn ->
         update(Module2, created_entity.id, %{b: "nope", c: nil})
@@ -514,10 +519,11 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> Entity.new(count: 5)
         |> create()
 
-      expected_msg = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module10:
-        * attribute :count must be at least 1, got: 0\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module10:
+          * attribute :count must be at least 1, got: 0\
+        """)
 
       assert_error ArgumentError, expected_msg, fn ->
         update(Module10, created_entity.id, %{count: 0})
@@ -535,19 +541,21 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> Entity.new(c_id: required_target.id)
         |> create()
 
-      expected_nil_msg = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module3:
-        * reference :c_id is required\
-      """
+      expected_nil_msg =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module3:
+          * reference :c_id is required\
+        """)
 
       assert_error ArgumentError, expected_nil_msg, fn ->
         update(Module3, created_entity.id, %{c_id: nil})
       end
 
-      expected_invalid_msg = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module3:
-        * reference :c_id must be a valid entity id, got: "garbage"\
-      """
+      expected_invalid_msg =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module3:
+          * reference :c_id must be a valid entity id, got: "garbage"\
+        """)
 
       assert_error ArgumentError, expected_invalid_msg, fn ->
         update(Module3, created_entity.id, %{c_id: "garbage"})

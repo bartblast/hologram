@@ -90,11 +90,12 @@ defmodule Hologram.Entity.ValidatorTest do
       data = %{count: 0, priority: 9}
       {:error, errors} = validate(Module10, data)
 
-      expected = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module10:
-        * attribute :count must be at least 1, got: 0
-        * attribute :priority must be in 1..5, got: 9\
-      """
+      expected =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module10:
+          * attribute :count must be at least 1, got: 0
+          * attribute :priority must be in 1..5, got: 9\
+        """)
 
       assert error_message(Module10, data, errors) == expected
     end
@@ -103,12 +104,13 @@ defmodule Hologram.Entity.ValidatorTest do
       data = %{b: 1, e: 2}
       {:error, errors} = validate(Module2, data)
 
-      expected = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module2:
-        * attribute :a is required
-        * attribute :c is required
-        * :e is not a declared attribute or to-one reference\
-      """
+      expected =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module2:
+          * attribute :a is required
+          * attribute :c is required
+          * :e is not a declared attribute or to-one reference\
+        """)
 
       assert error_message(Module2, data, errors) == expected
     end
@@ -117,20 +119,22 @@ defmodule Hologram.Entity.ValidatorTest do
       required_data = %{}
       {:error, required_errors} = validate(Module3, required_data)
 
-      expected_required = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module3:
-        * reference :c_id is required\
-      """
+      expected_required =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module3:
+          * reference :c_id is required\
+        """)
 
       assert error_message(Module3, required_data, required_errors) == expected_required
 
       invalid_data = %{c_id: "garbage"}
       {:error, invalid_errors} = validate(Module3, invalid_data)
 
-      expected_invalid = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module3:
-        * reference :c_id must be a valid entity id, got: "garbage"\
-      """
+      expected_invalid =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module3:
+          * reference :c_id must be a valid entity id, got: "garbage"\
+        """)
 
       assert error_message(Module3, invalid_data, invalid_errors) == expected_invalid
     end
@@ -156,16 +160,17 @@ defmodule Hologram.Entity.ValidatorTest do
         {:username, {:min_length, 3}}
       ]
 
-      expected = """
-      invalid data for Hologram.Test.Fixtures.Entity.Module10:
-        * attribute :bio must be at most 10 characters, got: "01234567890"
-        * attribute :country_code must be exactly 2 characters, got: "USA"
-        * attribute :email must match ~r/@/, got: "nope"
-        * attribute :held_at must be at most ~U[2026-12-31 23:59:59Z], got: ~U[2027-01-01 00:00:00Z]
-        * attribute :rating must be of type :float, got: "high"
-        * attribute :status must be one of [:draft, :published], got: "x"
-        * attribute :username must be at least 3 characters, got: "ab"\
-      """
+      expected =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module10:
+          * attribute :bio must be at most 10 characters, got: "01234567890"
+          * attribute :country_code must be exactly 2 characters, got: "USA"
+          * attribute :email must match ~r/@/, got: "nope"
+          * attribute :held_at must be at most ~U[2026-12-31 23:59:59Z], got: ~U[2027-01-01 00:00:00Z]
+          * attribute :rating must be of type :float, got: "high"
+          * attribute :status must be one of [:draft, :published], got: "x"
+          * attribute :username must be at least 3 characters, got: "ab"\
+        """)
 
       assert error_message(Module10, data, errors) == expected
     end
