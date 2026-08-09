@@ -185,6 +185,42 @@ defmodule Hologram.Entity do
     Enum.sort(system_attribute_fields ++ attribute_fields ++ relationship_fields)
   end
 
+  @doc """
+  Validates the given entity struct against its entity type's declarations - attribute types, enum values, required presence, the declared constraint options, and to-one references (required presence, canonical entity id format).
+  Returns :ok, or {:error, violations} where violations maps each violating field name to the list of its violation reasons, all violations accumulated.
+  """
+  @spec validate(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
+  def validate(entity) when is_struct(entity) do
+    entity_type = entity.__struct__
+    data = Map.take(entity, validated_field_names(entity_type))
+
+    entity_type
+    |> Validator.validate(data)
+    |> group_errors()
+  end
+
+  @doc """
+  Validates the given partial changes (a map or keyword list) against the given entity type's declarations.
+  Only present pairs are validated - absence is legal in a partial map, and a nil value is a violation only for a non-optional attribute or reference.
+  Returns :ok, or {:error, violations} in the validate/1 shape, all violations accumulated.
+  """
+  @spec validate(module, %{atom => any} | keyword) ::
+          :ok | {:error, %{atom => list(atom | {atom, any})}}
+  def validate(entity_type, changes) do
+    entity_type
+    |> Validator.validate_changes(Map.new(changes))
+    |> group_errors()
+  end
+
+  defp group_errors(:ok), do: :ok
+
+  defp group_errors({:error, errors}) do
+    grouped =
+      Enum.group_by(errors, fn {name, _reason} -> name end, fn {_name, reason} -> reason end)
+
+    {:error, grouped}
+  end
+
   defp validate_construction_values!(entity_type, values_map) do
     assigned_relationship_name =
       entity_type.__relationships__()
@@ -198,5 +234,16 @@ defmodule Hologram.Entity do
     end
 
     :ok
+  end
+
+  defp validated_field_names(entity_type) do
+    attribute_names = Enum.map(entity_type.__attributes__(), fn {name, _type, _opts} -> name end)
+
+    reference_names =
+      entity_type.__relationships__()
+      |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
+      |> Enum.map(fn {name, _type, _opts} -> String.to_existing_atom("#{name}_id") end)
+
+    attribute_names ++ reference_names
   end
 end

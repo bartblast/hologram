@@ -5,6 +5,7 @@ defmodule Hologram.EntityTest do
 
   alias Hologram.Entity.NotIncluded
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -184,6 +185,48 @@ defmodule Hologram.EntityTest do
       assert_error ArgumentError, expected_msg, fn ->
         new(Module3, %{c: "id_2"})
       end
+    end
+  end
+
+  describe "validate/1" do
+    test "returns :ok for a valid entity struct" do
+      assert Module10 |> new(count: 5) |> validate() == :ok
+    end
+
+    test "reports violations grouped by field name" do
+      assert Module2 |> new(b: "nope") |> validate() ==
+               {:error, %{b: [{:type, :integer}], c: [:required]}}
+    end
+
+    test "accumulates multiple reasons per field" do
+      assert {:error, %{handle: [format_reason, {:min_length, 3}]}} =
+               Module10 |> new(count: 5, handle: "A?") |> validate()
+
+      assert {:format, format} = format_reason
+      assert Regex.source(format) == "^[a-z_]+$"
+    end
+
+    test "reports missing required reference" do
+      assert Module3 |> new() |> validate() == {:error, %{c_id: [:required]}}
+    end
+  end
+
+  describe "validate/2" do
+    test "returns :ok for valid changes given as a keyword list" do
+      assert validate(Module10, count: 5) == :ok
+    end
+
+    test "does not require absent fields" do
+      assert validate(Module2, %{}) == :ok
+    end
+
+    test "reports violations grouped by field name" do
+      assert validate(Module10, %{count: 0, username: 5}) ==
+               {:error, %{count: [{:min, 1}], username: [{:type, :string}]}}
+    end
+
+    test "reports nil for non-optional attribute as required" do
+      assert validate(Module2, %{c: nil}) == {:error, %{c: [:required]}}
     end
   end
 end
