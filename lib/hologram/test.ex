@@ -1,4 +1,41 @@
 defmodule Hologram.Test do
+  alias Hologram.AuthContext
+
+  @doc """
+  Runs the rest of the calling process as the given user and returns that user unchanged,
+  which makes it usable directly in a setup block:
+
+      setup do
+        {:ok, user: as_user(create_user())}
+      end
+
+  Takes the user entity or a bare user id. A test that sets no actor runs as an anonymous
+  session.
+  """
+  @spec as_user(struct | String.t()) :: struct | String.t()
+  def as_user(user_or_id) do
+    user_or_id
+    |> actor_user_id()
+    |> AuthContext.put_actor()
+
+    user_or_id
+  end
+
+  @doc """
+  Runs the given function as the given user and returns its result, restoring the previous
+  actor afterwards - the form for scenes with several actors:
+
+      as_user(author, fn -> DB.create(post) end)
+
+  Takes the user entity or a bare user id.
+  """
+  @spec as_user(struct | String.t(), (-> any)) :: any
+  def as_user(user_or_id, fun) do
+    user_id = actor_user_id(user_or_id)
+
+    AuthContext.with_actor(user_id, fun)
+  end
+
   @doc """
   Starts Hologram for feature/browser tests.
 
@@ -19,4 +56,8 @@ defmodule Hologram.Test do
     Application.stop(:hologram)
     Application.ensure_all_started(:hologram)
   end
+
+  defp actor_user_id(%{id: id}), do: id
+
+  defp actor_user_id(id), do: id
 end

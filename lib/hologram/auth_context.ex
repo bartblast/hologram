@@ -1,9 +1,9 @@
 defmodule Hologram.AuthContext do
   @moduledoc false
 
-  # The ambient actor of the current process. Framework wrappers (the renderer, and the
-  # test helpers) set it around the work they run - there is no public setter, so app
-  # code can never present itself as a different user than the session it runs under.
+  # The ambient actor of the current process. Framework wrappers set it around the work
+  # they run, and Hologram.Test.as_user/1,2 is the sanctioned test-only door - app code
+  # gets no setter, so it can never present itself as a different user than its session.
 
   @actor_key {__MODULE__, :actor_user_id}
 
@@ -13,6 +13,14 @@ defmodule Hologram.AuthContext do
   @spec actor_user_id() :: String.t() | nil
   def actor_user_id do
     Process.get(@actor_key)
+  end
+
+  @doc false
+  @spec put_actor(String.t() | nil) :: :ok
+  def put_actor(user_id) do
+    Process.put(@actor_key, user_id)
+
+    :ok
   end
 
   @doc """
