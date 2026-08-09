@@ -14,6 +14,7 @@ defmodule Hologram.Entity.Validator do
 
   @valid_attribute_opts [
     :default,
+    :format,
     :in,
     :length,
     :max,
@@ -101,6 +102,7 @@ defmodule Hologram.Entity.Validator do
     validate_attribute_bounds!(module, name, type, opts)
     validate_attribute_in!(module, name, type, opts)
     validate_attribute_lengths!(module, name, type, opts)
+    validate_attribute_format!(module, name, type, opts)
     validate_attribute_default!(module, name, type, opts)
     validate_field_collision!(module, "attribute", name, [Atom.to_string(name)])
     :ok
@@ -220,6 +222,25 @@ defmodule Hologram.Entity.Validator do
     case Keyword.fetch(opts, :default) do
       {:ok, value} ->
         validate_default_value!(module, name, type, opts, value)
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp validate_attribute_format!(module, name, type, opts) do
+    case Keyword.fetch(opts, :format) do
+      {:ok, _value} when type != :string ->
+        raise Hologram.CompileError,
+          message:
+            "format option not allowed for attribute #{inspect(name)} in #{inspect(module)} - the format option applies only to string attributes"
+
+      {:ok, value} ->
+        if not is_struct(value, Regex) do
+          raise Hologram.CompileError,
+            message:
+              "invalid format option #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the format option must be a Regex"
+        end
 
       :error ->
         :ok

@@ -141,7 +141,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown attribute option" do
       expected_msg =
-        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :in, :length, :max, :max_length, :min, :min_length, :optional, :values"
+        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :format, :in, :length, :max, :max_length, :min, :min_length, :optional, :values"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture10 do
@@ -532,6 +532,49 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           attribute :username, :string, min_length: 10, max_length: 1
+        end
+      end
+    end
+
+    test "accepts format option on string attribute" do
+      defmodule InlineEntityFixture51 do
+        use Hologram.Entity
+
+        attribute :email, :string, format: ~r/@/
+        attribute :username, :string, format: ~r/^[a-z_]+$/, max_length: 32
+      end
+
+      assert [
+               {:email, :string, [format: email_format]},
+               {:username, :string, [format: username_format, max_length: 32]}
+             ] = InlineEntityFixture51.__attributes__()
+
+      assert Regex.source(email_format) == "@"
+      assert Regex.source(username_format) == "^[a-z_]+$"
+    end
+
+    test "rejects format option on non-string attribute type" do
+      expected_msg =
+        "format option not allowed for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture52 - the format option applies only to string attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture52 do
+          use Hologram.Entity
+
+          attribute :count, :integer, format: ~r/\d+/
+        end
+      end
+    end
+
+    test "rejects non-regex format option" do
+      expected_msg =
+        "invalid format option \"@\" for attribute :email in Hologram.Entity.ValidatorTest.InlineEntityFixture53 - the format option must be a Regex"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture53 do
+          use Hologram.Entity
+
+          attribute :email, :string, format: "@"
         end
       end
     end
