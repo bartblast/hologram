@@ -33,6 +33,8 @@ defmodule Hologram.Entity.Validator do
 
   @valid_role_opts [:creator, :extends, :scope]
 
+  @valid_use_opts [:user]
+
   @doc """
   Returns true if the given value is a valid value for the given attribute type and declaration options, or false otherwise.
   A nil value is valid only when the optional option is true.
@@ -265,6 +267,25 @@ defmodule Hologram.Entity.Validator do
     end)
 
     validate_role_extension_cycles!(module, roles)
+
+    :ok
+  end
+
+  @doc """
+  Validates the options given to the use Hologram.Entity directive at compile time.
+
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys, user option).
+  """
+  @spec validate_use_opts!(module, T.opts()) :: :ok
+  def validate_use_opts!(module, opts) do
+    if not Keyword.keyword?(opts) do
+      raise Hologram.CompileError,
+        message:
+          "invalid options #{inspect(opts)} for use Hologram.Entity in #{inspect(module)} - options must be a keyword list"
+    end
+
+    validate_use_opt_keys!(module, opts)
+    validate_user_opt!(module, opts)
 
     :ok
   end
@@ -980,6 +1001,30 @@ defmodule Hologram.Entity.Validator do
         raise Hologram.CompileError,
           message:
             "invalid scope option #{inspect(value)} for role #{inspect(name)} in #{inspect(module)} - the scope option must be :global"
+
+      _fetch_result ->
+        :ok
+    end
+  end
+
+  defp validate_use_opt_keys!(module, opts) do
+    Enum.each(opts, fn {key, _value} ->
+      if key not in @valid_use_opts do
+        valid_opts = Enum.map_join(@valid_use_opts, ", ", &inspect/1)
+
+        raise Hologram.CompileError,
+          message:
+            "unknown option #{inspect(key)} for use Hologram.Entity in #{inspect(module)} - valid options are: #{valid_opts}"
+      end
+    end)
+  end
+
+  defp validate_user_opt!(module, opts) do
+    case Keyword.fetch(opts, :user) do
+      {:ok, value} when value != true ->
+        raise Hologram.CompileError,
+          message:
+            "invalid user option #{inspect(value)} for use Hologram.Entity in #{inspect(module)} - the user option must be true"
 
       _fetch_result ->
         :ok

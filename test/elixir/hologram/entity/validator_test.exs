@@ -1500,4 +1500,47 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
   end
+
+  describe "validate_use_opts!/2" do
+    test "accepts the user option" do
+      defmodule InlineEntityFixture78 do
+        use Hologram.Entity, user: true
+      end
+
+      assert InlineEntityFixture78.__is_hologram_user_entity__()
+    end
+
+    test "rejects options that are not a keyword list" do
+      expected_msg =
+        "invalid options [1, 2] for use Hologram.Entity in Hologram.Entity.ValidatorTest.InlineEntityFixture79 - options must be a keyword list"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture79 do
+          use Hologram.Entity, [1, 2]
+        end
+      end
+    end
+
+    test "rejects unknown option" do
+      expected_msg =
+        "unknown option :usr for use Hologram.Entity in Hologram.Entity.ValidatorTest.InlineEntityFixture80 - valid options are: :user"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture80 do
+          use Hologram.Entity, usr: true
+        end
+      end
+    end
+
+    test "rejects user option other than true" do
+      expected_msg =
+        "invalid user option false for use Hologram.Entity in Hologram.Entity.ValidatorTest.InlineEntityFixture81 - the user option must be true"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture81 do
+          use Hologram.Entity, user: false
+        end
+      end
+    end
+  end
 end

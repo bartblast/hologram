@@ -823,4 +823,22 @@ defmodule Hologram.ReflectionTest do
       assert result == true
     end
   end
+
+  test "user_entity/0" do
+    assert user_entity() == Entity.Module14
+  end
+
+  describe "user_entity?/1" do
+    test "entity type designated as the user entity type" do
+      assert user_entity?(Entity.Module14)
+    end
+
+    test "entity type not designated as the user entity type" do
+      refute user_entity?(Entity.Module1)
+    end
+
+    test "module that is not an entity type" do
+      refute user_entity?(Hologram.Reflection)
+    end
+  end
 end

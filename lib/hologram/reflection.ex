@@ -735,6 +735,30 @@ defmodule Hologram.Reflection do
       Enum.any?(Mix.Dep.cached(), & &1.opts[:in_umbrella])
   end
 
+  @doc """
+  Returns the entity type module designated as the project's user entity type, or nil when no entity type is designated.
+  """
+  @spec user_entity() :: module | nil
+  def user_entity do
+    Enum.find(list_entities(), &user_entity?/1)
+  end
+
+  @doc """
+  Returns true if the given term is the entity type module designated as the project's user entity type, or false otherwise.
+
+  ## Examples
+
+      iex> user_entity?(MyUser)
+      true
+
+      iex> user_entity?(MyPost)
+      false
+  """
+  @spec user_entity?(term) :: boolean
+  def user_entity?(term) do
+    entity?(term) && has_function?(term, :__is_hologram_user_entity__, 0)
+  end
+
   defp apps_depending_on_hologram do
     apps =
       for {app, _description, _version} <- Application.loaded_applications(),

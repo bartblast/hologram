@@ -21,6 +21,7 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_entity_module11",
                "test_fixtures_entity_module12",
                "test_fixtures_entity_module13",
+               "test_fixtures_entity_module14",
                "test_fixtures_entity_module2",
                "test_fixtures_entity_module3",
                "test_fixtures_entity_module3_a_$join",

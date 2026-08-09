@@ -11,7 +11,9 @@ defmodule Hologram.Entity do
     {:updated_at, :datetime, []}
   ]
 
-  defmacro __using__(_opts) do
+  defmacro __using__(opts) do
+    Validator.validate_use_opts!(__CALLER__.module, opts)
+
     [
       quote do
         import Hologram.Entity,
@@ -43,7 +45,7 @@ defmodule Hologram.Entity do
       register_policies_accumulator(),
       register_relationships_accumulator(),
       register_roles_accumulator()
-    ]
+    ] ++ user_entity_marker(opts)
   end
 
   defmacro __before_compile__(env) do
@@ -349,6 +351,27 @@ defmodule Hologram.Entity do
       node ->
         node
     end)
+  end
+
+  defp user_entity_marker(opts) do
+    if Keyword.get(opts, :user) == true do
+      [
+        quote do
+          @doc """
+          Returns true to indicate that the callee module is the project's user entity type module (has "use Hologram.Entity, user: true" directive).
+
+          ## Examples
+
+              iex> __is_hologram_user_entity__()
+              true
+          """
+          @spec __is_hologram_user_entity__() :: boolean
+          def __is_hologram_user_entity__, do: true
+        end
+      ]
+    else
+      []
+    end
   end
 
   defp validate_construction_values!(entity_type, values_map) do

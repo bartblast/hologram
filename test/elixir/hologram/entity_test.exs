@@ -9,6 +9,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module11
   alias Hologram.Test.Fixtures.Entity.Module12
   alias Hologram.Test.Fixtures.Entity.Module13
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -29,6 +30,16 @@ defmodule Hologram.EntityTest do
 
   test "__is_hologram_entity__/0" do
     assert Module1.__is_hologram_entity__()
+  end
+
+  describe "__is_hologram_user_entity__/0" do
+    test "is defined by the user option" do
+      assert Module14.__is_hologram_user_entity__()
+    end
+
+    test "is not defined without the user option" do
+      refute function_exported?(Module1, :__is_hologram_user_entity__, 0)
+    end
   end
 
   describe "__policies__/0" do
