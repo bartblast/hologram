@@ -103,16 +103,23 @@ defmodule Hologram.Entity.ValidatorTest do
       assert validate(Module4, data) == :ok
     end
 
-    test "reports missing non-optional attributes regardless of declared defaults" do
-      assert validate(Module2, %{b: 1}) == {:error, [{:a, :missing}, {:c, :missing}]}
+    test "reports required violations for absent non-optional attributes regardless of declared defaults" do
+      assert validate(Module2, %{b: 1}) == {:error, [{:a, :required}, {:c, :required}]}
     end
 
-    test "reports invalid attribute values" do
-      assert validate(Module2, %{a: 5, c: "x"}) == {:error, [{:a, :invalid}]}
+    test "reports required violation for nil non-optional attribute" do
+      assert validate(Module2, %{a: true, b: nil, c: nil}) == {:error, [{:c, :required}]}
     end
 
-    test "reports nil for non-optional attribute as invalid" do
-      assert validate(Module2, %{a: true, b: nil, c: nil}) == {:error, [{:c, :invalid}]}
+    test "reports type violations with the expected type" do
+      assert validate(Module2, %{a: 5, c: "x"}) == {:error, [{:a, {:type, :boolean}}]}
+    end
+
+    test "reports values violations for enum attributes" do
+      data = %{a: ~D[2026-07-17], b: ~U[2026-07-17 12:00:00Z], d: 1.5}
+
+      assert validate(Module4, Map.put(data, :c, :z)) == {:error, [{:c, {:values, [:x, :y]}}]}
+      assert validate(Module4, Map.put(data, :c, "x")) == {:error, [{:c, {:values, [:x, :y]}}]}
     end
 
     test "reports unknown keys" do
@@ -121,7 +128,8 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "accumulates all errors sorted by name" do
       assert validate(Module2, %{b: "nope", e: 1}) ==
-               {:error, [{:a, :missing}, {:b, :invalid}, {:c, :missing}, {:e, :unknown}]}
+               {:error,
+                [{:a, :required}, {:b, {:type, :integer}}, {:c, :required}, {:e, :unknown}]}
     end
   end
 

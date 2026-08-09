@@ -66,11 +66,12 @@ defmodule Hologram.Entity.Validator do
 
   @doc """
   Validates the given data map against the given entity type's declared attributes.
-  Returns :ok, or {:error, errors} where errors is a name-sorted list of {name, reason} tuples with reason being :invalid, :missing or :unknown.
+  Returns :ok, or {:error, errors} where errors is a name-sorted list of {name, reason} pairs.
+  Reasons: :required (a non-optional attribute is absent or nil), :unknown (an undeclared name), {:type, type} (a value not matching the attribute type), {:values, values} (an enum value outside the declared values).
   A non-optional attribute must be present regardless of its declared default - defaults are not applied here.
-  An absent optional attribute is valid.
+  An absent or nil optional attribute is valid.
   """
-  @spec validate(module, %{atom => any}) :: :ok | {:error, list({atom, atom})}
+  @spec validate(module, %{atom => any}) :: :ok | {:error, list({atom, atom | {atom, any}})}
   def validate(entity_type, data) do
     attributes = entity_type.__attributes__()
     attribute_names = Enum.map(attributes, fn {name, _type, _opts} -> name end)
@@ -149,12 +150,17 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp attribute_data_errors(data, {name, type, opts}) do
+    optional? = Keyword.get(opts, :optional) == true
+
     case Map.fetch(data, name) do
+      {:ok, nil} ->
+        if optional?, do: [], else: [{name, :required}]
+
       {:ok, value} ->
-        if attribute_value_valid?(value, type, opts), do: [], else: [{name, :invalid}]
+        value_errors(name, value, type, opts)
 
       :error ->
-        if Keyword.get(opts, :optional) == true, do: [], else: [{name, :missing}]
+        if optional?, do: [], else: [{name, :required}]
     end
   end
 
@@ -542,5 +548,19 @@ defmodule Hologram.Entity.Validator do
         message:
           "invalid type #{inspect(type)} for relationship #{inspect(name)} in #{inspect(module)} - the relationship type must be an entity type module (to-one) or a one-element list wrapping an entity type module (to-many)"
     end
+  end
+
+  defp value_errors(name, value, :enum, opts) do
+    values = Keyword.fetch!(opts, :values)
+
+    if is_atom(value) and value in values do
+      []
+    else
+      [{name, {:values, values}}]
+    end
+  end
+
+  defp value_errors(name, value, type, _opts) do
+    if attribute_value_valid?(value, type), do: [], else: [{name, {:type, type}}]
   end
 end
