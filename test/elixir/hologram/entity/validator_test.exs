@@ -4,6 +4,7 @@ defmodule Hologram.Entity.ValidatorTest do
   import Hologram.Entity.Validator
 
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -120,6 +121,39 @@ defmodule Hologram.Entity.ValidatorTest do
 
       assert validate(Module4, Map.put(data, :c, :z)) == {:error, [{:c, {:values, [:x, :y]}}]}
       assert validate(Module4, Map.put(data, :c, "x")) == {:error, [{:c, {:values, [:x, :y]}}]}
+    end
+
+    test "returns :ok for values on the declared bounds" do
+      data = %{
+        count: 1,
+        held_at: ~U[2026-01-01 00:00:00Z],
+        rating: 0.0,
+        released_on: ~D[2030-12-31]
+      }
+
+      assert validate(Module10, data) == :ok
+    end
+
+    test "reports min violations with the declared minimum" do
+      assert validate(Module10, %{count: 0}) == {:error, [{:count, {:min, 1}}]}
+
+      assert validate(Module10, %{count: 5, held_at: ~U[2025-12-31 23:59:59Z]}) ==
+               {:error, [{:held_at, {:min, ~U[2026-01-01 00:00:00Z]}}]}
+
+      assert validate(Module10, %{count: 5, rating: -0.5}) == {:error, [{:rating, {:min, 0}}]}
+    end
+
+    test "reports max violations with the declared maximum" do
+      assert validate(Module10, %{count: 11}) == {:error, [{:count, {:max, 10}}]}
+
+      assert validate(Module10, %{count: 5, rating: 5.5}) == {:error, [{:rating, {:max, 5.0}}]}
+
+      assert validate(Module10, %{count: 5, released_on: ~D[2031-01-01]}) ==
+               {:error, [{:released_on, {:max, ~D[2030-12-31]}}]}
+    end
+
+    test "type violation suppresses constraint checks" do
+      assert validate(Module10, %{count: "5"}) == {:error, [{:count, {:type, :integer}}]}
     end
 
     test "reports unknown keys" do
@@ -583,6 +617,19 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           attribute :email, :string, format: "@"
+        end
+      end
+    end
+
+    test "rejects default violating declared constraints" do
+      expected_msg =
+        "invalid default value 0 for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture54 - the default value doesn't satisfy the min option 1"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture54 do
+          use Hologram.Entity
+
+          attribute :count, :integer, min: 1, default: 0
         end
       end
     end

@@ -67,7 +67,8 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the given data map against the given entity type's declared attributes.
   Returns :ok, or {:error, errors} where errors is a name-sorted list of {name, reason} pairs.
-  Reasons: :required (a non-optional attribute is absent or nil), :unknown (an undeclared name), {:type, type} (a value not matching the attribute type), {:values, values} (an enum value outside the declared values).
+  Reasons: :required (a non-optional attribute is absent or nil), :unknown (an undeclared name), {:type, type} (a value not matching the attribute type), {:values, values} (an enum value outside the declared values), {:min, min} (a value below the declared minimum), {:max, max} (a value above the declared maximum).
+  Constraint options are checked only on type-valid values - a type violation suppresses the attribute's constraint checks.
   A non-optional attribute must be present regardless of its declared default - defaults are not applied here.
   An absent or nil optional attribute is valid.
   """
@@ -164,9 +165,27 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  defp bound_errors(name, value, type, opts) do
+    Enum.flat_map([:min, :max], &bound_key_errors(name, value, type, opts, &1))
+  end
+
+  defp bound_key_errors(name, value, type, opts, key) do
+    case Keyword.fetch(opts, key) do
+      {:ok, bound} ->
+        if bound_satisfied?(value, bound, key, type), do: [], else: [{name, {key, bound}}]
+
+      :error ->
+        []
+    end
+  end
+
   defp bound_requirement(:float), do: "must be a number"
 
   defp bound_requirement(type), do: "must match the attribute type #{inspect(type)}"
+
+  defp bound_satisfied?(value, bound, :min, type), do: bounds_ordered?(bound, value, type)
+
+  defp bound_satisfied?(value, bound, :max, type), do: bounds_ordered?(value, bound, type)
 
   defp bound_value_valid?(value, :float), do: is_number(value)
 
@@ -177,6 +196,10 @@ defmodule Hologram.Entity.Validator do
   defp bounds_ordered?(min, max, :datetime), do: DateTime.compare(min, max) != :gt
 
   defp bounds_ordered?(min, max, _type), do: min <= max
+
+  defp constraint_errors(name, value, type, opts) do
+    bound_errors(name, value, type, opts)
+  end
 
   defp declared_fields(module) do
     attribute_fields =
@@ -369,6 +392,20 @@ defmodule Hologram.Entity.Validator do
     validate_name_uniqueness!(module, kind, name)
   end
 
+  defp validate_default_constraints!(_module, _name, _type, _opts, nil), do: :ok
+
+  defp validate_default_constraints!(module, name, type, opts, value) do
+    case constraint_errors(name, value, type, opts) do
+      [] ->
+        :ok
+
+      [{_name, {kind, constraint}} | _rest] ->
+        raise Hologram.CompileError,
+          message:
+            "invalid default value #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the default value doesn't satisfy the #{kind} option #{inspect(constraint)}"
+    end
+  end
+
   defp validate_default_value!(module, name, :enum, opts, value) do
     if not attribute_value_valid?(value, :enum, opts) do
       raise Hologram.CompileError,
@@ -383,6 +420,8 @@ defmodule Hologram.Entity.Validator do
         message:
           "invalid default value #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the default value must match the attribute type #{inspect(type)}"
     end
+
+    validate_default_constraints!(module, name, type, opts, value)
   end
 
   defp validate_enum_values!(module, name, values) do
@@ -560,7 +599,11 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp value_errors(name, value, type, _opts) do
-    if attribute_value_valid?(value, type), do: [], else: [{name, {:type, type}}]
+  defp value_errors(name, value, type, opts) do
+    if attribute_value_valid?(value, type) do
+      constraint_errors(name, value, type, opts)
+    else
+      [{name, {:type, type}}]
+    end
   end
 end
