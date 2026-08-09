@@ -8,8 +8,8 @@ defmodule Hologram.Test.DatabaseBootstrap do
   # by schema reconciliation once the pool is up - test_helper.exs calls the reconciler
   # directly, making the suite auto-sync's own first consumer.
 
-  alias Hologram.Database.Config, as: DatabaseConfig
-  alias Hologram.Database.Mapper
+  alias Hologram.DB.Config, as: DatabaseConfig
+  alias Hologram.DB.Mapper
 
   @drop_statements [
     ~s(DROP SCHEMA IF EXISTS "hologram_system" CASCADE),

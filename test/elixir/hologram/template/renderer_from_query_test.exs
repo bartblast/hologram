@@ -1,12 +1,12 @@
 defmodule Hologram.Template.RendererFromQueryTest do
   use Hologram.Test.DatabaseCase, async: false
 
-  import Hologram.Database.EntityOperations, only: [create: 1]
+  import Hologram.DB.EntityOperations, only: [create: 1]
   import Hologram.Template.Renderer
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Database.QueryCache
+  alias Hologram.DB.QueryCache
   alias Hologram.Entity
   alias Hologram.Server
   alias Hologram.Template.Renderer

@@ -14,8 +14,8 @@ defmodule Hologram.Test.DatabaseCase do
 
   use ExUnit.CaseTemplate
 
-  alias Hologram.Database
-  alias Hologram.Database.Connection
+  alias Hologram.DB
+  alias Hologram.DB.Connection
 
   using do
     quote do
@@ -27,7 +27,7 @@ defmodule Hologram.Test.DatabaseCase do
   end
 
   setup do
-    pool_name = Database.pool_name()
+    pool_name = DB.pool_name()
     test_pid = self()
     setup_pid = self()
 

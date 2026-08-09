@@ -24,7 +24,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
-  alias Hologram.Database.Mapper
+  alias Hologram.DB.Mapper
   alias Hologram.Entity.Validator
   alias Hologram.Reflection
 

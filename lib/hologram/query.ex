@@ -18,6 +18,9 @@ defmodule Hologram.Query do
           order_by: 2,
           paginate: 2
         ]
+
+      alias Hologram.DB
+      alias Hologram.Entity
     end
   end
 
@@ -324,6 +327,26 @@ defmodule Hologram.Query do
     query
     |> offset((page - 1) * size)
     |> limit(size)
+  end
+
+  @doc """
+  Returns the names of every param leaf in the given query term, filter values and
+  include sub-terms included - an empty list for a term with concrete values only.
+  """
+  @spec param_names(%{atom => any}) :: list(atom)
+  def param_names(term) do
+    filter_names =
+      term
+      |> Map.get(:filter, [])
+      |> Enum.flat_map(fn {_name, _operator, value} -> value_param_names(value) end)
+
+    include_names =
+      term
+      |> Map.get(:include, %{})
+      |> Map.values()
+      |> Enum.flat_map(&param_names/1)
+
+    filter_names ++ include_names
   end
 
   defp attribute_names(entity_type) do
@@ -777,4 +800,11 @@ defmodule Hologram.Query do
       message:
         "include sub-builder for relationship #{inspect(name)} must return a query term for #{inspect(target)}, got: #{inspect(sub_term)}"
   end
+
+  defp value_param_names({:param, name}), do: [name]
+
+  defp value_param_names(values) when is_list(values),
+    do: Enum.flat_map(values, &value_param_names/1)
+
+  defp value_param_names(_value), do: []
 end

@@ -4,6 +4,7 @@ defmodule Hologram.Entity.ValidatorTest do
   import Hologram.Entity.Validator
 
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -84,6 +85,97 @@ defmodule Hologram.Entity.ValidatorTest do
     end
   end
 
+  describe "error_message/3" do
+    test "builds one line per violation naming attribute, expectation, and received value" do
+      data = %{count: 0, priority: 9}
+      {:error, errors} = validate(Module10, data)
+
+      expected =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module10:
+          * attribute :count must be at least 1, got: 0
+          * attribute :priority must be in 1..5, got: 9\
+        """)
+
+      assert error_message(Module10, data, errors) == expected
+    end
+
+    test "describes required and unknown violations without received values" do
+      data = %{b: 1, e: 2}
+      {:error, errors} = validate(Module2, data)
+
+      expected =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module2:
+          * attribute :a is required
+          * attribute :c is required
+          * :e is not a declared attribute or to-one reference\
+        """)
+
+      assert error_message(Module2, data, errors) == expected
+    end
+
+    test "describes reference violations with reference wording" do
+      required_data = %{}
+      {:error, required_errors} = validate(Module3, required_data)
+
+      expected_required =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module3:
+          * reference :c_id is required\
+        """)
+
+      assert error_message(Module3, required_data, required_errors) == expected_required
+
+      invalid_data = %{c_id: "garbage"}
+      {:error, invalid_errors} = validate(Module3, invalid_data)
+
+      expected_invalid =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module3:
+          * reference :c_id must be a valid entity id, got: "garbage"\
+        """)
+
+      assert error_message(Module3, invalid_data, invalid_errors) == expected_invalid
+    end
+
+    test "describes each constraint violation kind" do
+      data = %{
+        bio: "01234567890",
+        country_code: "USA",
+        email: "nope",
+        held_at: ~U[2027-01-01 00:00:00Z],
+        rating: "high",
+        status: "x",
+        username: "ab"
+      }
+
+      errors = [
+        {:bio, {:max_length, 10}},
+        {:country_code, {:length, 2}},
+        {:email, {:format, ~r/@/}},
+        {:held_at, {:max, ~U[2026-12-31 23:59:59Z]}},
+        {:rating, {:type, :float}},
+        {:status, {:values, [:draft, :published]}},
+        {:username, {:min_length, 3}}
+      ]
+
+      expected =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module10:
+          * attribute :bio must be at most 10 characters, got: "01234567890"
+          * attribute :country_code must be exactly 2 characters, got: "USA"
+          * attribute :email must match ~r/@/, got: "nope"
+          * attribute :held_at must be at most ~U[2026-12-31 23:59:59Z], got: ~U[2027-01-01 00:00:00Z]
+          * attribute :rating must be of type :float, got: "high"
+          * attribute :status must be one of [:draft, :published], got: "x"
+          * attribute :username must be at least 3 characters, got: "ab"\
+        """)
+
+      assert error_message(Module10, data, errors) == expected
+    end
+  end
+
   describe "validate/2" do
     test "returns :ok for complete valid data" do
       assert validate(Module2, %{a: true, b: 1, c: "x"}) == :ok
@@ -103,16 +195,135 @@ defmodule Hologram.Entity.ValidatorTest do
       assert validate(Module4, data) == :ok
     end
 
-    test "reports missing non-optional attributes regardless of declared defaults" do
-      assert validate(Module2, %{b: 1}) == {:error, [{:a, :missing}, {:c, :missing}]}
+    test "reports required violations for absent non-optional attributes regardless of declared defaults" do
+      assert validate(Module2, %{b: 1}) == {:error, [{:a, :required}, {:c, :required}]}
     end
 
-    test "reports invalid attribute values" do
-      assert validate(Module2, %{a: 5, c: "x"}) == {:error, [{:a, :invalid}]}
+    test "reports required violation for nil non-optional attribute" do
+      assert validate(Module2, %{a: true, b: nil, c: nil}) == {:error, [{:c, :required}]}
     end
 
-    test "reports nil for non-optional attribute as invalid" do
-      assert validate(Module2, %{a: true, b: nil, c: nil}) == {:error, [{:c, :invalid}]}
+    test "reports type violations with the expected type" do
+      assert validate(Module2, %{a: 5, c: "x"}) == {:error, [{:a, {:type, :boolean}}]}
+    end
+
+    test "reports values violations for enum attributes" do
+      data = %{a: ~D[2026-07-17], b: ~U[2026-07-17 12:00:00Z], d: 1.5}
+
+      assert validate(Module4, Map.put(data, :c, :z)) == {:error, [{:c, {:values, [:x, :y]}}]}
+      assert validate(Module4, Map.put(data, :c, "x")) == {:error, [{:c, {:values, [:x, :y]}}]}
+    end
+
+    test "returns :ok for values on the declared bounds" do
+      data = %{
+        bio: "0123456789",
+        count: 1,
+        country_code: "us",
+        held_at: ~U[2026-01-01 00:00:00Z],
+        priority: 1,
+        rating: 0.0,
+        released_on: ~D[2030-12-31],
+        username: "abc"
+      }
+
+      assert validate(Module10, data) == :ok
+    end
+
+    test "reports min violations with the declared minimum" do
+      assert validate(Module10, %{count: 0}) == {:error, [{:count, {:min, 1}}]}
+
+      assert validate(Module10, %{count: 5, held_at: ~U[2025-12-31 23:59:59Z]}) ==
+               {:error, [{:held_at, {:min, ~U[2026-01-01 00:00:00Z]}}]}
+
+      assert validate(Module10, %{count: 5, rating: -0.5}) == {:error, [{:rating, {:min, 0}}]}
+    end
+
+    test "reports max violations with the declared maximum" do
+      assert validate(Module10, %{count: 11}) == {:error, [{:count, {:max, 10}}]}
+
+      assert validate(Module10, %{count: 5, rating: 5.5}) == {:error, [{:rating, {:max, 5.0}}]}
+
+      assert validate(Module10, %{count: 5, released_on: ~D[2031-01-01]}) ==
+               {:error, [{:released_on, {:max, ~D[2030-12-31]}}]}
+    end
+
+    test "reports in violations with the declared range" do
+      assert validate(Module10, %{count: 5, priority: 0}) ==
+               {:error, [{:priority, {:in, 1..5}}]}
+
+      assert validate(Module10, %{count: 5, priority: 6}) ==
+               {:error, [{:priority, {:in, 1..5}}]}
+    end
+
+    test "honors the step of a stepped in range" do
+      assert validate(Module10, %{count: 5, percent: 15}) == :ok
+
+      assert validate(Module10, %{count: 5, percent: 3}) ==
+               {:error, [{:percent, {:in, 0..100//5}}]}
+    end
+
+    test "reports length violations with the declared exact length" do
+      assert validate(Module10, %{count: 5, country_code: "USA"}) ==
+               {:error, [{:country_code, {:length, 2}}]}
+
+      assert validate(Module10, %{count: 5, country_code: "U"}) ==
+               {:error, [{:country_code, {:length, 2}}]}
+    end
+
+    test "reports min_length violations with the declared minimum" do
+      assert validate(Module10, %{count: 5, username: "ab"}) ==
+               {:error, [{:username, {:min_length, 3}}]}
+    end
+
+    test "reports max_length violations with the declared maximum" do
+      assert validate(Module10, %{count: 5, bio: "01234567890"}) ==
+               {:error, [{:bio, {:max_length, 10}}]}
+    end
+
+    test "counts string lengths in code points" do
+      # e + combining acute accent: 1 grapheme, 2 code points, 3 bytes
+      assert validate(Module10, %{count: 5, country_code: "e\u0301"}) == :ok
+
+      # precomposed e with acute: 1 grapheme, 1 code point, 2 bytes
+      assert validate(Module10, %{count: 5, country_code: "\u00E9"}) ==
+               {:error, [{:country_code, {:length, 2}}]}
+    end
+
+    test "reports format violations with the declared pattern" do
+      assert validate(Module10, %{count: 5, email: "a@b.com"}) == :ok
+
+      assert {:error, [{:email, {:format, format}}]} =
+               validate(Module10, %{count: 5, email: "nope"})
+
+      assert Regex.source(format) == "@"
+    end
+
+    test "accumulates multiple constraint violations per attribute" do
+      assert {:error, [{:handle, {:format, format}}, {:handle, {:min_length, 3}}]} =
+               validate(Module10, %{count: 5, handle: "A?"})
+
+      assert Regex.source(format) == "^[a-z_]+$"
+    end
+
+    test "type violation suppresses constraint checks" do
+      assert validate(Module10, %{count: "5"}) == {:error, [{:count, {:type, :integer}}]}
+    end
+
+    test "validates reference fields" do
+      target_id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+
+      assert validate(Module3, %{c_id: target_id}) == :ok
+      assert validate(Module3, %{b_id: nil, c_id: target_id}) == :ok
+      assert validate(Module3, %{}) == {:error, [{:c_id, :required}]}
+      assert validate(Module3, %{c_id: nil}) == {:error, [{:c_id, :required}]}
+      assert validate(Module3, %{c_id: "garbage"}) == {:error, [{:c_id, {:type, :uuid}}]}
+    end
+
+    test "reports to-many relationship names as unknown" do
+      target_id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+
+      assert validate(Module3, %{a: [target_id], c_id: target_id}) ==
+               {:error, [{:a, :unknown}]}
     end
 
     test "reports unknown keys" do
@@ -121,7 +332,8 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "accumulates all errors sorted by name" do
       assert validate(Module2, %{b: "nope", e: 1}) ==
-               {:error, [{:a, :missing}, {:b, :invalid}, {:c, :missing}, {:e, :unknown}]}
+               {:error,
+                [{:a, :required}, {:b, {:type, :integer}}, {:c, :required}, {:e, :unknown}]}
     end
   end
 
@@ -141,7 +353,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown attribute option" do
       expected_msg =
-        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :optional, :values"
+        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :format, :in, :length, :max, :max_length, :min, :min_length, :optional, :values"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture10 do
@@ -227,6 +439,367 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           attribute :count, :integer, default: 9_223_372_036_854_775_808
+        end
+      end
+    end
+
+    test "accepts min and max options on bounded attribute types" do
+      defmodule InlineEntityFixture28 do
+        use Hologram.Entity
+
+        attribute :count, :integer, min: 1, max: 10
+        attribute :held_at, :datetime, min: ~U[2026-01-01 00:00:00Z]
+        attribute :rating, :float, min: 0, max: 5.0
+        attribute :released_on, :date, max: ~D[2030-12-31]
+      end
+
+      assert InlineEntityFixture28.__attributes__() == [
+               {:count, :integer, [min: 1, max: 10]},
+               {:held_at, :datetime, [min: ~U[2026-01-01 00:00:00Z]]},
+               {:rating, :float, [min: 0, max: 5.0]},
+               {:released_on, :date, [max: ~D[2030-12-31]]}
+             ]
+    end
+
+    test "accepts equal min and max options" do
+      defmodule InlineEntityFixture29 do
+        use Hologram.Entity
+
+        attribute :count, :integer, min: 5, max: 5
+      end
+
+      assert InlineEntityFixture29.__attributes__() == [{:count, :integer, [min: 5, max: 5]}]
+    end
+
+    test "rejects min option on unbounded attribute type" do
+      expected_msg =
+        "min option not allowed for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture30 - min and max options apply only to integer, float, date and datetime attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture30 do
+          use Hologram.Entity
+
+          attribute :title, :string, min: 1
+        end
+      end
+    end
+
+    test "rejects max option on unbounded attribute type" do
+      expected_msg =
+        "max option not allowed for attribute :archived in Hologram.Entity.ValidatorTest.InlineEntityFixture31 - min and max options apply only to integer, float, date and datetime attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture31 do
+          use Hologram.Entity
+
+          attribute :archived, :boolean, max: true
+        end
+      end
+    end
+
+    test "rejects min option not matching attribute type" do
+      expected_msg =
+        "invalid min option 1.5 for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture32 - the min option must match the attribute type :integer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture32 do
+          use Hologram.Entity
+
+          attribute :count, :integer, min: 1.5
+        end
+      end
+    end
+
+    test "rejects max option not matching attribute type" do
+      expected_msg =
+        "invalid max option \"2030-12-31\" for attribute :released_on in Hologram.Entity.ValidatorTest.InlineEntityFixture33 - the max option must match the attribute type :date"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture33 do
+          use Hologram.Entity
+
+          attribute :released_on, :date, max: "2030-12-31"
+        end
+      end
+    end
+
+    test "rejects non-number min option on float attribute" do
+      expected_msg =
+        "invalid min option \"0\" for attribute :rating in Hologram.Entity.ValidatorTest.InlineEntityFixture34 - the min option must be a number"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture34 do
+          use Hologram.Entity
+
+          attribute :rating, :float, min: "0"
+        end
+      end
+    end
+
+    test "rejects min option beyond integer type bounds" do
+      expected_msg =
+        "invalid min option 9223372036854775808 for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture35 - the min option must match the attribute type :integer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture35 do
+          use Hologram.Entity
+
+          attribute :count, :integer, min: 9_223_372_036_854_775_808
+        end
+      end
+    end
+
+    test "rejects min greater than max" do
+      expected_msg =
+        "conflicting min and max options for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture36 - min 10 must be less than or equal to max 1"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture36 do
+          use Hologram.Entity
+
+          attribute :count, :integer, min: 10, max: 1
+        end
+      end
+    end
+
+    test "rejects min greater than max on temporal attribute" do
+      expected_msg =
+        "conflicting min and max options for attribute :released_on in Hologram.Entity.ValidatorTest.InlineEntityFixture37 - min ~D[2030-01-01] must be less than or equal to max ~D[2020-01-01]"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture37 do
+          use Hologram.Entity
+
+          attribute :released_on, :date, min: ~D[2030-01-01], max: ~D[2020-01-01]
+        end
+      end
+    end
+
+    test "accepts in option with integer range" do
+      defmodule InlineEntityFixture38 do
+        use Hologram.Entity
+
+        attribute :percent, :integer, in: 0..100//5
+        attribute :priority, :integer, in: 1..5
+      end
+
+      assert InlineEntityFixture38.__attributes__() == [
+               {:percent, :integer, [in: 0..100//5]},
+               {:priority, :integer, [in: 1..5]}
+             ]
+    end
+
+    test "rejects in option on non-integer attribute type" do
+      expected_msg =
+        "in option not allowed for attribute :rating in Hologram.Entity.ValidatorTest.InlineEntityFixture39 - the in option applies only to integer attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture39 do
+          use Hologram.Entity
+
+          attribute :rating, :float, in: 1..5
+        end
+      end
+    end
+
+    test "rejects non-range in option" do
+      expected_msg =
+        "invalid in option [1, 2, 3] for attribute :priority in Hologram.Entity.ValidatorTest.InlineEntityFixture40 - the in option must be an integer Range"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture40 do
+          use Hologram.Entity
+
+          attribute :priority, :integer, in: [1, 2, 3]
+        end
+      end
+    end
+
+    test "rejects in option range with endpoints beyond integer type bounds" do
+      expected_msg =
+        "invalid in option 1..9223372036854775808 for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture41 - the in option range endpoints must be valid integer attribute values"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture41 do
+          use Hologram.Entity
+
+          attribute :count, :integer, in: 1..9_223_372_036_854_775_808
+        end
+      end
+    end
+
+    test "rejects empty in option range" do
+      expected_msg =
+        "invalid in option 1..0//1 for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture42 - the in option range must not be empty"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture42 do
+          use Hologram.Entity
+
+          attribute :count, :integer, in: 1..0//1
+        end
+      end
+    end
+
+    test "rejects in option combined with min and max options" do
+      expected_msg =
+        "conflicting options for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture43 - the in option can't be combined with the min and max options"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture43 do
+          use Hologram.Entity
+
+          attribute :count, :integer, in: 1..10, min: 1
+        end
+      end
+    end
+
+    test "accepts length options on string attributes" do
+      defmodule InlineEntityFixture44 do
+        use Hologram.Entity
+
+        attribute :bio, :string, max_length: 500
+        attribute :country_code, :string, length: 2
+        attribute :username, :string, min_length: 3, max_length: 32
+      end
+
+      assert InlineEntityFixture44.__attributes__() == [
+               {:bio, :string, [max_length: 500]},
+               {:country_code, :string, [length: 2]},
+               {:username, :string, [min_length: 3, max_length: 32]}
+             ]
+    end
+
+    test "rejects length option on non-string attribute type" do
+      expected_msg =
+        "length option not allowed for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture45 - length options apply only to string attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture45 do
+          use Hologram.Entity
+
+          attribute :count, :integer, length: 2
+        end
+      end
+    end
+
+    test "rejects max_length option on non-string attribute type" do
+      expected_msg =
+        "max_length option not allowed for attribute :held_at in Hologram.Entity.ValidatorTest.InlineEntityFixture46 - length options apply only to string attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture46 do
+          use Hologram.Entity
+
+          attribute :held_at, :datetime, max_length: 10
+        end
+      end
+    end
+
+    test "rejects non-integer length option" do
+      expected_msg =
+        "invalid length option \"2\" for attribute :country_code in Hologram.Entity.ValidatorTest.InlineEntityFixture47 - the length option must be a non-negative integer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture47 do
+          use Hologram.Entity
+
+          attribute :country_code, :string, length: "2"
+        end
+      end
+    end
+
+    test "rejects negative min_length option" do
+      expected_msg =
+        "invalid min_length option -1 for attribute :username in Hologram.Entity.ValidatorTest.InlineEntityFixture48 - the min_length option must be a non-negative integer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture48 do
+          use Hologram.Entity
+
+          attribute :username, :string, min_length: -1
+        end
+      end
+    end
+
+    test "rejects length option combined with min_length and max_length options" do
+      expected_msg =
+        "conflicting options for attribute :username in Hologram.Entity.ValidatorTest.InlineEntityFixture49 - the length option can't be combined with the min_length and max_length options"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture49 do
+          use Hologram.Entity
+
+          attribute :username, :string, length: 2, max_length: 5
+        end
+      end
+    end
+
+    test "rejects min_length greater than max_length" do
+      expected_msg =
+        "conflicting min_length and max_length options for attribute :username in Hologram.Entity.ValidatorTest.InlineEntityFixture50 - min_length 10 must be less than or equal to max_length 1"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture50 do
+          use Hologram.Entity
+
+          attribute :username, :string, min_length: 10, max_length: 1
+        end
+      end
+    end
+
+    test "accepts format option on string attribute" do
+      defmodule InlineEntityFixture51 do
+        use Hologram.Entity
+
+        attribute :email, :string, format: ~r/@/
+        attribute :username, :string, format: ~r/^[a-z_]+$/, max_length: 32
+      end
+
+      assert [
+               {:email, :string, [format: email_format]},
+               {:username, :string, [format: username_format, max_length: 32]}
+             ] = InlineEntityFixture51.__attributes__()
+
+      assert Regex.source(email_format) == "@"
+      assert Regex.source(username_format) == "^[a-z_]+$"
+    end
+
+    test "rejects format option on non-string attribute type" do
+      expected_msg =
+        "format option not allowed for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture52 - the format option applies only to string attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture52 do
+          use Hologram.Entity
+
+          attribute :count, :integer, format: ~r/\d+/
+        end
+      end
+    end
+
+    test "rejects non-regex format option" do
+      expected_msg =
+        "invalid format option \"@\" for attribute :email in Hologram.Entity.ValidatorTest.InlineEntityFixture53 - the format option must be a Regex"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture53 do
+          use Hologram.Entity
+
+          attribute :email, :string, format: "@"
+        end
+      end
+    end
+
+    test "rejects default violating declared constraints" do
+      expected_msg =
+        "invalid default value 0 for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture54 - the default value doesn't satisfy the min option 1"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture54 do
+          use Hologram.Entity
+
+          attribute :count, :integer, min: 1, default: 0
         end
       end
     end
@@ -378,6 +951,43 @@ defmodule Hologram.Entity.ValidatorTest do
 
         assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
       end
+    end
+  end
+
+  describe "validate_changes/2" do
+    test "returns :ok for valid present pairs" do
+      assert validate_changes(Module10, %{count: 5, username: "abcd"}) == :ok
+    end
+
+    test "does not require absent attributes" do
+      assert validate_changes(Module2, %{}) == :ok
+      assert validate_changes(Module2, %{b: 2}) == :ok
+    end
+
+    test "accepts nil for optional attribute" do
+      assert validate_changes(Module2, %{b: nil}) == :ok
+    end
+
+    test "reports required violation for nil non-optional value" do
+      assert validate_changes(Module2, %{c: nil}) == {:error, [{:c, :required}]}
+    end
+
+    test "reports type and constraint violations" do
+      assert validate_changes(Module10, %{count: 0, username: 5}) ==
+               {:error, [{:count, {:min, 1}}, {:username, {:type, :string}}]}
+    end
+
+    test "validates reference field pairs" do
+      target_id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+
+      assert validate_changes(Module3, %{c_id: target_id}) == :ok
+      assert validate_changes(Module3, %{b_id: nil}) == :ok
+      assert validate_changes(Module3, %{c_id: nil}) == {:error, [{:c_id, :required}]}
+      assert validate_changes(Module3, %{c_id: "garbage"}) == {:error, [{:c_id, {:type, :uuid}}]}
+    end
+
+    test "reports unknown names" do
+      assert validate_changes(Module2, %{e: 1}) == {:error, [{:e, :unknown}]}
     end
   end
 

@@ -51,7 +51,7 @@ defmodule Hologram.ApplicationTest do
       # The entity fixture modules activate the database unit (test env declares entities).
       # Inside it, the database child yields to the suite-wide gateway instance (database
       # singleton semantics), so nothing here disturbs concurrent database tests.
-      assert Hologram.Database.Supervisor in child_modules
+      assert Hologram.DB.Supervisor in child_modules
 
       assert Hologram.Assets.PageDigestRegistry in child_modules
       assert Hologram.Assets.PathRegistry in child_modules

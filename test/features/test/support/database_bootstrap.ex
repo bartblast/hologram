@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.DatabaseBootstrap do
   # feature app declares entities, which activates the Hologram database at app boot,
   # and the boot-time reconciliation recreates the schema layout.
 
-  alias Hologram.Database.Config, as: DatabaseConfig
+  alias Hologram.DB.Config, as: DatabaseConfig
 
   @drop_statements [
     ~s(DROP SCHEMA IF EXISTS "hologram_system" CASCADE),

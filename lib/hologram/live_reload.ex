@@ -8,8 +8,8 @@ defmodule Hologram.LiveReload do
   alias Hologram.Assets.ManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
-  alias Hologram.Database
-  alias Hologram.Database.QueryCache
+  alias Hologram.DB
+  alias Hologram.DB.QueryCache
   alias Hologram.LiveReload.Diagnostic
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
@@ -207,7 +207,7 @@ defmodule Hologram.LiveReload do
   # with the runtime registries because it can fail on developer input (invalid
   # query builders raise at extraction, and companion reconciliation runs DDL).
   defp reload_database do
-    Database.reload()
+    DB.reload()
     QueryCache.reload()
 
     :ok
