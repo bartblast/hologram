@@ -335,6 +335,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
         @spec __attributes__() :: list(tuple)
         def __attributes__, do: [{:owner_id, :string, []}]
 
+        @spec __policies__() :: list(tuple)
+        def __policies__, do: []
+
         @spec __relationships__() :: list(tuple)
         def __relationships__, do: [{:owner, Hologram.Test.Fixtures.Entity.Module1, []}]
       end

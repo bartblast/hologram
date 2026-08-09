@@ -105,11 +105,7 @@ defmodule Hologram.Query do
         message: "filter predicates must be a keyword list, got: #{inspect(predicates)}"
     end
 
-    triples =
-      Enum.flat_map(predicates, fn {name, value} ->
-        validate_filtered_name!(name, term.entity)
-        predicate_triples!(name, value, term.entity)
-      end)
+    triples = predicate_triples!(term.entity, predicates)
 
     %{term | filter: term.filter ++ triples}
   end
@@ -352,6 +348,15 @@ defmodule Hologram.Query do
       |> Enum.flat_map(&param_names/1)
 
     filter_names ++ include_names
+  end
+
+  @doc false
+  @spec predicate_triples!(module, keyword) :: list({atom, atom, any})
+  def predicate_triples!(entity_type, predicates) do
+    Enum.flat_map(predicates, fn {name, value} ->
+      validate_filtered_name!(name, entity_type)
+      predicate_triples!(name, value, entity_type)
+    end)
   end
 
   defp attribute_names(entity_type) do
