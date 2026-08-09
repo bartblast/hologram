@@ -61,6 +61,9 @@ defmodule Hologram.DB do
   @doc """
   Returns the entity of the given type with the given id, or nil when no row matches.
   Column values are decoded back into their logical types.
+
+  Raises ArgumentError when the id is not a canonical entity id (a lowercase
+  8-4-4-4-12 UUID string).
   """
   @spec get(module, String.t()) :: struct | nil
   defdelegate get(entity_type, id), to: EntityOperations

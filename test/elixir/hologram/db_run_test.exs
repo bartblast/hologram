@@ -5,7 +5,6 @@ defmodule Hologram.DBRunTest do
 
   alias Hologram.DB
   alias Hologram.Entity
-  alias Hologram.Query
   alias Hologram.Query.Param
   alias Hologram.Test.Fixtures.Entity.Module2
 
@@ -15,33 +14,7 @@ defmodule Hologram.DBRunTest do
     |> DB.create()
   end
 
-  describe "Query.get/2" do
-    test "returns the entity with the given id" do
-      created_entity = create_module_2_entity(a: true, c: "some text")
-
-      assert Query.get(Module2, created_entity.id).id == created_entity.id
-    end
-
-    test "returns nil when no entity matches" do
-      assert Query.get(Module2, Entity.generate_id()) == nil
-    end
-
-    test "raises on a non-canonical id" do
-      expected_msg =
-        "invalid id \"garbage\" for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
-
-      assert_error ArgumentError, expected_msg, fn -> Query.get(Module2, "garbage") end
-
-      compact_id = "018f4571a1b27c3d8e4f5a6b7c8d9e0f"
-
-      expected_compact_msg =
-        "invalid id #{inspect(compact_id)} for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
-
-      assert_error ArgumentError, expected_compact_msg, fn -> Query.get(Module2, compact_id) end
-    end
-  end
-
-  describe "DB.run/1" do
+  describe "run/1" do
     test "runs a set query and returns entity structs" do
       create_module_2_entity(a: true, c: "bbb")
       create_module_2_entity(a: false, c: "aaa")

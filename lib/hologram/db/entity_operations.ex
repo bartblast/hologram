@@ -102,6 +102,8 @@ defmodule Hologram.DB.EntityOperations do
   @spec get(module, String.t()) :: struct | nil
   # sobelow_skip ["SQL.Query"]
   def get(entity_type, id) do
+    validate_id!(id)
+
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
     persisted_columns = Enum.reject(columns, &match?({:sort_key, _name}, &1.source))
@@ -324,6 +326,13 @@ defmodule Hologram.DB.EntityOperations do
 
       {:error, errors} ->
         raise ArgumentError, Validator.error_message(entity_type, data, errors)
+    end
+  end
+
+  defp validate_id!(id) do
+    if not Validator.attribute_value_valid?(id, :uuid) do
+      raise ArgumentError,
+            "invalid id #{inspect(id)} for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
     end
   end
 end
