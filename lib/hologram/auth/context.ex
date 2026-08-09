@@ -1,4 +1,4 @@
-defmodule Hologram.AuthContext do
+defmodule Hologram.Auth.Context do
   @moduledoc false
 
   # The ambient actor of the current process. Framework wrappers set it around the work

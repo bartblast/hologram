@@ -1,7 +1,7 @@
-defmodule Hologram.AuthContextTest do
+defmodule Hologram.Auth.ContextTest do
   use Hologram.Test.BasicCase, async: true
 
-  import Hologram.AuthContext
+  import Hologram.Auth.Context
 
   test "actor_user_id/0" do
     assert actor_user_id() == nil
