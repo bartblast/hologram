@@ -15,7 +15,7 @@ defmodule Hologram.Entity do
     [
       quote do
         import Hologram.Entity,
-          only: [attribute: 2, attribute: 3, relationship: 2, relationship: 3]
+          only: [attribute: 2, attribute: 3, relationship: 2, relationship: 3, role: 1, role: 2]
 
         @before_compile Entity
 
@@ -31,7 +31,8 @@ defmodule Hologram.Entity do
         def __is_hologram_entity__, do: true
       end,
       register_attributes_accumulator(),
-      register_relationships_accumulator()
+      register_relationships_accumulator(),
+      register_roles_accumulator()
     ]
   end
 
@@ -60,6 +61,12 @@ defmodule Hologram.Entity do
       """
       @spec __relationships__() :: list({atom, module | list(module), keyword})
       def __relationships__, do: Enum.sort(@__relationships__)
+
+      @doc """
+      Returns the list of role definitions for the compiled entity type, sorted by role name.
+      """
+      @spec __roles__() :: list({atom, keyword})
+      def __roles__, do: Enum.sort(@__roles__)
 
       @doc """
       Returns the list of system attribute definitions present on every entity type, sorted by attribute name.
@@ -97,6 +104,21 @@ defmodule Hologram.Entity do
 
       Validator.validate_relationship!(__MODULE__, name, type, opts)
       Module.put_attribute(__MODULE__, :__relationships__, {name, type, opts})
+    end
+  end
+
+  @doc """
+  Accumulates the given role definition in __roles__ module attribute.
+  A role is a named grantable capability set of the entity type - role names live in their own namespace, separate from attribute and relationship names.
+  """
+  @spec role(atom, T.opts()) :: Macro.t()
+  defmacro role(name, opts \\ []) do
+    quote do
+      name = unquote(name)
+      opts = unquote(opts)
+
+      Validator.validate_role!(__MODULE__, name, opts)
+      Module.put_attribute(__MODULE__, :__roles__, {name, opts})
     end
   end
 
@@ -154,6 +176,14 @@ defmodule Hologram.Entity do
   def register_relationships_accumulator do
     quote do
       Module.register_attribute(__MODULE__, :__relationships__, accumulate: true)
+    end
+  end
+
+  @doc false
+  @spec register_roles_accumulator() :: AST.t()
+  def register_roles_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__roles__, accumulate: true)
     end
   end
 

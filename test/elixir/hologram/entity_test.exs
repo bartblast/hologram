@@ -6,6 +6,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Entity.NotIncluded
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module11
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -39,6 +40,16 @@ defmodule Hologram.EntityTest do
                {:b, Module2, [optional: true]},
                {:c, Module1, []}
              ]
+    end
+  end
+
+  describe "__roles__/0" do
+    test "returns empty list for entity type with no role declarations" do
+      assert Module1.__roles__() == []
+    end
+
+    test "returns role definitions sorted by name regardless of declaration order" do
+      assert Module11.__roles__() == [{:editor, []}, {:owner, []}]
     end
   end
 

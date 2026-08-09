@@ -29,6 +29,8 @@ defmodule Hologram.Entity.Validator do
 
   @valid_relationship_opts [:optional]
 
+  @valid_role_opts [:creator, :extends, :scope]
+
   @doc """
   Returns true if the given value is a valid value for the given attribute type and declaration options, or false otherwise.
   A nil value is valid only when the optional option is true.
@@ -206,6 +208,19 @@ defmodule Hologram.Entity.Validator do
     validate_relationship_type!(module, name, type)
     validate_relationship_opts!(module, name, opts)
     validate_field_collision!(module, "relationship", name, relationship_field_names(name, type))
+    :ok
+  end
+
+  @doc """
+  Validates the given role declaration at compile time.
+
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (name, options).
+  Only the option key set is checked here - per-key value rules are checked separately, because they depend on the module's full role list, which is complete only after the module body has executed.
+  """
+  @spec validate_role!(module, atom, T.opts()) :: :ok
+  def validate_role!(module, name, opts) do
+    validate_role_name!(module, name)
+    validate_role_opts!(module, name, opts)
     :ok
   end
 
@@ -533,11 +548,7 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp validate_declaration_name!(module, kind, name) do
-    if not is_atom(name) do
-      raise Hologram.CompileError,
-        message:
-          "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - declaration names must be atoms"
-    end
+    validate_name_type!(module, kind, name)
 
     if name in @reserved_names do
       reserved_names = Enum.map_join(@reserved_names, ", ", &inspect/1)
@@ -695,6 +706,14 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
+  defp validate_name_type!(module, kind, name) do
+    if not is_atom(name) do
+      raise Hologram.CompileError,
+        message:
+          "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - declaration names must be atoms"
+    end
+  end
+
   defp validate_name_uniqueness!(module, kind, name) do
     declarations =
       Module.get_attribute(module, :__attributes__) ++
@@ -745,6 +764,26 @@ defmodule Hologram.Entity.Validator do
         message:
           "invalid type #{inspect(type)} for relationship #{inspect(name)} in #{inspect(module)} - the relationship type must be an entity type module (to-one) or a one-element list wrapping an entity type module (to-many)"
     end
+  end
+
+  defp validate_role_name!(module, name) do
+    validate_name_type!(module, "role", name)
+
+    declared_names =
+      module
+      |> Module.get_attribute(:__roles__)
+      |> Enum.map(fn {declared_name, _opts} -> declared_name end)
+
+    if name in declared_names do
+      raise Hologram.CompileError,
+        message:
+          "duplicate name #{inspect(name)} used for role in #{inspect(module)} - role names must be unique"
+    end
+  end
+
+  defp validate_role_opts!(module, name, opts) do
+    validate_opts_shape!(module, "role", name, opts)
+    validate_known_opts!(module, "role", name, opts, @valid_role_opts)
   end
 
   defp value_errors(name, value, :enum, opts) do

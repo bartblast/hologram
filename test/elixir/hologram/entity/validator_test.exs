@@ -1198,4 +1198,58 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
   end
+
+  describe "validate_role!/3" do
+    test "accepts a role name already used by an attribute" do
+      defmodule InlineEntityFixture55 do
+        use Hologram.Entity
+
+        attribute :owner, :string
+
+        role :owner
+      end
+
+      assert InlineEntityFixture55.__roles__() == [{:owner, []}]
+    end
+
+    test "rejects duplicate role name" do
+      expected_msg =
+        "duplicate name :owner used for role in Hologram.Entity.ValidatorTest.InlineEntityFixture56 - role names must be unique"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture56 do
+          use Hologram.Entity
+
+          role :owner
+          role :owner
+        end
+      end
+    end
+
+    test "rejects non-atom role name" do
+      expected_msg =
+        "invalid name \"owner\" used for role in Hologram.Entity.ValidatorTest.InlineEntityFixture57 - declaration names must be atoms"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture57 do
+          use Hologram.Entity
+
+          role "owner"
+        end
+      end
+    end
+
+    test "rejects unknown role option" do
+      expected_msg =
+        "unknown option :owner_only for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture58 - valid role options are: :creator, :extends, :scope"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture58 do
+          use Hologram.Entity
+
+          role :owner, owner_only: true
+        end
+      end
+    end
+  end
 end
