@@ -65,6 +65,16 @@ defmodule Hologram.Entity.Validator do
   def attribute_value_valid?(_value, :uuid, _opts), do: false
 
   @doc """
+  Builds one error message describing every violation reported by validate/2, naming the entity type and, per violation, the attribute, the expectation, and the received value.
+  """
+  @spec error_message(module, %{atom => any}, list({atom, atom | {atom, any}})) :: String.t()
+  def error_message(entity_type, data, errors) do
+    descriptions = Enum.map_join(errors, "\n", &violation_description(data, &1))
+
+    "invalid data for #{inspect(entity_type)}:\n#{descriptions}"
+  end
+
+  @doc """
   Validates the given data map against the given entity type's declared attributes.
   Returns :ok, or {:error, errors} where errors is a name-sorted list of {name, reason} pairs.
   Reasons: :required (a non-optional attribute is absent or nil), :unknown (an undeclared name), {:type, type} (a value not matching the attribute type), {:values, values} (an enum value outside the declared values), {:min, min} (a value below the declared minimum), {:max, max} (a value above the declared maximum), {:in, range} (an integer value outside the declared range), {:length, length} (a string not matching the declared exact length), {:min_length, min_length} (a string shorter than the declared minimum), {:max_length, max_length} (a string longer than the declared maximum), {:format, format} (a string not matching the declared pattern).
@@ -286,6 +296,26 @@ defmodule Hologram.Entity.Validator do
   defp relationship_type_valid?([type]), do: Reflection.alias?(type)
 
   defp relationship_type_valid?(_type), do: false
+
+  defp requirement_description({:type, type}), do: "must be of type #{inspect(type)}"
+
+  defp requirement_description({:values, values}), do: "must be one of #{inspect(values)}"
+
+  defp requirement_description({:min, min}), do: "must be at least #{inspect(min)}"
+
+  defp requirement_description({:max, max}), do: "must be at most #{inspect(max)}"
+
+  defp requirement_description({:in, range}), do: "must be in #{inspect(range)}"
+
+  defp requirement_description({:length, length}), do: "must be exactly #{length} characters"
+
+  defp requirement_description({:min_length, min_length}),
+    do: "must be at least #{min_length} characters"
+
+  defp requirement_description({:max_length, max_length}),
+    do: "must be at most #{max_length} characters"
+
+  defp requirement_description({:format, format}), do: "must match #{inspect(format)}"
 
   defp validate_attribute_bounds!(module, name, type, opts) do
     Enum.each([:min, :max], &validate_bound_opt!(module, name, type, opts, &1))
@@ -650,5 +680,17 @@ defmodule Hologram.Entity.Validator do
     else
       [{name, {:type, type}}]
     end
+  end
+
+  defp violation_description(_data, {name, :required}) do
+    "  * attribute #{inspect(name)} is required"
+  end
+
+  defp violation_description(_data, {name, :unknown}) do
+    "  * #{inspect(name)} is not a declared attribute"
+  end
+
+  defp violation_description(data, {name, reason}) do
+    "  * attribute #{inspect(name)} #{requirement_description(reason)}, got: #{inspect(Map.get(data, name))}"
   end
 end

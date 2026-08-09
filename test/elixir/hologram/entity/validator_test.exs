@@ -85,6 +85,70 @@ defmodule Hologram.Entity.ValidatorTest do
     end
   end
 
+  describe "error_message/3" do
+    test "builds one line per violation naming attribute, expectation, and received value" do
+      data = %{count: 0, priority: 9}
+      {:error, errors} = validate(Module10, data)
+
+      expected = """
+      invalid data for Hologram.Test.Fixtures.Entity.Module10:
+        * attribute :count must be at least 1, got: 0
+        * attribute :priority must be in 1..5, got: 9\
+      """
+
+      assert error_message(Module10, data, errors) == expected
+    end
+
+    test "describes required and unknown violations without received values" do
+      data = %{b: 1, e: 2}
+      {:error, errors} = validate(Module2, data)
+
+      expected = """
+      invalid data for Hologram.Test.Fixtures.Entity.Module2:
+        * attribute :a is required
+        * attribute :c is required
+        * :e is not a declared attribute\
+      """
+
+      assert error_message(Module2, data, errors) == expected
+    end
+
+    test "describes each constraint violation kind" do
+      data = %{
+        bio: "01234567890",
+        country_code: "USA",
+        email: "nope",
+        held_at: ~U[2027-01-01 00:00:00Z],
+        rating: "high",
+        status: "x",
+        username: "ab"
+      }
+
+      errors = [
+        {:bio, {:max_length, 10}},
+        {:country_code, {:length, 2}},
+        {:email, {:format, ~r/@/}},
+        {:held_at, {:max, ~U[2026-12-31 23:59:59Z]}},
+        {:rating, {:type, :float}},
+        {:status, {:values, [:draft, :published]}},
+        {:username, {:min_length, 3}}
+      ]
+
+      expected = """
+      invalid data for Hologram.Test.Fixtures.Entity.Module10:
+        * attribute :bio must be at most 10 characters, got: "01234567890"
+        * attribute :country_code must be exactly 2 characters, got: "USA"
+        * attribute :email must match ~r/@/, got: "nope"
+        * attribute :held_at must be at most ~U[2026-12-31 23:59:59Z], got: ~U[2027-01-01 00:00:00Z]
+        * attribute :rating must be of type :float, got: "high"
+        * attribute :status must be one of [:draft, :published], got: "x"
+        * attribute :username must be at least 3 characters, got: "ab"\
+      """
+
+      assert error_message(Module10, data, errors) == expected
+    end
+  end
+
   describe "validate/2" do
     test "returns :ok for complete valid data" do
       assert validate(Module2, %{a: true, b: 1, c: "x"}) == :ok
