@@ -54,6 +54,31 @@ defmodule Hologram.PolicyTest do
       assert validate_model!([InlinePolicyFixture2]) == :ok
     end
 
+    test "returns :ok for a to option naming a declared role" do
+      defmodule InlinePolicyFixture9 do
+        use Hologram.Entity
+
+        role :owner
+
+        allow :update, to: :owner
+      end
+
+      assert validate_model!([InlinePolicyFixture9]) == :ok
+    end
+
+    test "returns :ok for a to option listing declared roles" do
+      defmodule InlinePolicyFixture10 do
+        use Hologram.Entity
+
+        role :editor
+        role :owner
+
+        allow :update, to: [:editor, :owner]
+      end
+
+      assert validate_model!([InlinePolicyFixture10]) == :ok
+    end
+
     test "returns :ok for actor leaves on uuid-carrying names" do
       defmodule InlinePolicyFixture7 do
         use Hologram.Entity
@@ -81,6 +106,41 @@ defmodule Hologram.PolicyTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture8])
+      end
+    end
+
+    test "rejects a to option naming an undeclared role" do
+      defmodule InlinePolicyFixture11 do
+        use Hologram.Entity
+
+        role :editor
+        role :owner
+
+        allow :update, to: [:editor, :publisher]
+      end
+
+      expected_msg =
+        "unknown role :publisher in the to option of allow :update in Hologram.PolicyTest.InlinePolicyFixture11 - declared roles are: :editor, :owner"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture11])
+      end
+    end
+
+    test "rejects a to option that is neither a role name nor a list of them" do
+      defmodule InlinePolicyFixture12 do
+        use Hologram.Entity
+
+        role :owner
+
+        allow :update, to: "owner"
+      end
+
+      expected_msg =
+        "invalid to option \"owner\" for allow :update in Hologram.PolicyTest.InlinePolicyFixture12 - the to option must be a role name or a non-empty list of role names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture12])
       end
     end
 
