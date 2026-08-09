@@ -8,6 +8,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module11
   alias Hologram.Test.Fixtures.Entity.Module12
+  alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -28,6 +29,22 @@ defmodule Hologram.EntityTest do
 
   test "__is_hologram_entity__/0" do
     assert Module1.__is_hologram_entity__()
+  end
+
+  describe "__policies__/0" do
+    test "returns empty list for entity type with no policy declarations" do
+      assert Module1.__policies__() == []
+    end
+
+    test "returns policy definitions in declaration order, splitting grant references off the predicates" do
+      assert Module13.__policies__() == [
+               {:read, nil, nil, [public: true]},
+               {:read, [:editor, :owner], nil, []},
+               {:publish, nil, :parent, []},
+               {:triage, nil, nil, [priority: {:>=, 3}]},
+               {:unlink, nil, nil, [parent_id: nil]}
+             ]
+    end
   end
 
   describe "__relationships__/0" do

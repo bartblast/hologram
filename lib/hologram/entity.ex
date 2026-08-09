@@ -15,7 +15,16 @@ defmodule Hologram.Entity do
     [
       quote do
         import Hologram.Entity,
-          only: [attribute: 2, attribute: 3, relationship: 2, relationship: 3, role: 1, role: 2]
+          only: [
+            allow: 1,
+            allow: 2,
+            attribute: 2,
+            attribute: 3,
+            relationship: 2,
+            relationship: 3,
+            role: 1,
+            role: 2
+          ]
 
         @before_compile Entity
 
@@ -31,6 +40,7 @@ defmodule Hologram.Entity do
         def __is_hologram_entity__, do: true
       end,
       register_attributes_accumulator(),
+      register_policies_accumulator(),
       register_relationships_accumulator(),
       register_roles_accumulator()
     ]
@@ -59,6 +69,13 @@ defmodule Hologram.Entity do
       def __attributes__, do: Enum.sort(@__attributes__)
 
       @doc """
+      Returns the list of policy definitions for the compiled entity type, in declaration order.
+      Policy rules are OR'd, so the order carries no semantics - it is preserved to keep reflection output readable against the source.
+      """
+      @spec __policies__() :: list({atom, term, atom | nil, keyword})
+      def __policies__, do: Enum.reverse(@__policies__)
+
+      @doc """
       Returns the list of relationship definitions for the compiled entity type, sorted by relationship name.
       """
       @spec __relationships__() :: list({atom, module | list(module), keyword})
@@ -75,6 +92,25 @@ defmodule Hologram.Entity do
       """
       @spec __system_attributes__() :: list({atom, atom, keyword})
       def __system_attributes__, do: unquote(system_attributes)
+    end
+  end
+
+  @doc """
+  Accumulates the given policy definition in __policies__ module attribute.
+  A policy line grants the given action when its predicates hold and its grant reference (the to option) or delegation (the via option) is satisfied - a line with no options grants the action unconditionally.
+  """
+  @spec allow(atom, T.opts()) :: Macro.t()
+  defmacro allow(action, spec \\ []) do
+    quote do
+      action = unquote(action)
+      spec = unquote(spec)
+
+      Validator.validate_allow!(__MODULE__, action, spec)
+
+      policy =
+        {action, Keyword.get(spec, :to), Keyword.get(spec, :via), Keyword.drop(spec, [:to, :via])}
+
+      Module.put_attribute(__MODULE__, :__policies__, policy)
     end
   end
 
@@ -184,6 +220,14 @@ defmodule Hologram.Entity do
   def register_attributes_accumulator do
     quote do
       Module.register_attribute(__MODULE__, :__attributes__, accumulate: true)
+    end
+  end
+
+  @doc false
+  @spec register_policies_accumulator() :: AST.t()
+  def register_policies_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__policies__, accumulate: true)
     end
   end
 

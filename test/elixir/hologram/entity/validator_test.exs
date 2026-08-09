@@ -337,6 +337,56 @@ defmodule Hologram.Entity.ValidatorTest do
     end
   end
 
+  describe "validate_allow!/3" do
+    test "accepts a bare allow line as an unconditional rule" do
+      defmodule InlineEntityFixture71 do
+        use Hologram.Entity
+
+        allow :read
+      end
+
+      assert InlineEntityFixture71.__policies__() == [{:read, nil, nil, []}]
+    end
+
+    test "accepts an unknown option as a predicate" do
+      defmodule InlineEntityFixture72 do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        allow :read, title: "text_1"
+      end
+
+      assert InlineEntityFixture72.__policies__() == [{:read, nil, nil, [title: "text_1"]}]
+    end
+
+    test "rejects non-atom action" do
+      expected_msg =
+        "invalid action \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - policy actions must be atoms"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture73 do
+          use Hologram.Entity
+
+          allow "read"
+        end
+      end
+    end
+
+    test "rejects spec that is not a keyword list" do
+      expected_msg =
+        "invalid options [1, 2] for allow :read in Hologram.Entity.ValidatorTest.InlineEntityFixture74 - options must be a keyword list"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture74 do
+          use Hologram.Entity
+
+          allow :read, [1, 2]
+        end
+      end
+    end
+  end
+
   describe "validate_attribute!/4" do
     test "rejects values option on non-enum attribute" do
       expected_msg =
