@@ -214,8 +214,8 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the given role declaration at compile time.
 
-  Returns :ok, or raises Hologram.CompileError on the first violated rule (name, options).
-  Only the option key set is checked here - per-key value rules are checked separately, because they depend on the module's full role list, which is complete only after the module body has executed.
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (name, option keys, scope option).
+  The extends option is checked separately, because its targets may be declared further down the module body.
   """
   @spec validate_role!(module, atom, T.opts()) :: :ok
   def validate_role!(module, name, opts) do
@@ -924,6 +924,19 @@ defmodule Hologram.Entity.Validator do
   defp validate_role_opts!(module, name, opts) do
     validate_opts_shape!(module, "role", name, opts)
     validate_known_opts!(module, "role", name, opts, @valid_role_opts)
+    validate_scope_opt!(module, name, opts)
+  end
+
+  defp validate_scope_opt!(module, name, opts) do
+    case Keyword.fetch(opts, :scope) do
+      {:ok, value} when value != :global ->
+        raise Hologram.CompileError,
+          message:
+            "invalid scope option #{inspect(value)} for role #{inspect(name)} in #{inspect(module)} - the scope option must be :global"
+
+      _fetch_result ->
+        :ok
+    end
   end
 
   defp value_errors(name, value, :enum, opts) do

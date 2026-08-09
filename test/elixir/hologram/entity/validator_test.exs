@@ -1212,6 +1212,30 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture55.__roles__() == [{:owner, []}]
     end
 
+    test "accepts scope option" do
+      defmodule InlineEntityFixture65 do
+        use Hologram.Entity
+
+        role :admin, scope: :global
+      end
+
+      assert InlineEntityFixture65.__roles__() == [{:admin, [scope: :global]}]
+    end
+
+    test "accepts scope option combined with extends option" do
+      defmodule InlineEntityFixture66 do
+        use Hologram.Entity
+
+        role :admin, extends: :auditor, scope: :global
+        role :auditor
+      end
+
+      assert InlineEntityFixture66.__roles__() == [
+               {:admin, [extends: :auditor, scope: :global]},
+               {:auditor, []}
+             ]
+    end
+
     test "rejects duplicate role name" do
       expected_msg =
         "duplicate name :owner used for role in Hologram.Entity.ValidatorTest.InlineEntityFixture56 - role names must be unique"
@@ -1235,6 +1259,19 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           role "owner"
+        end
+      end
+    end
+
+    test "rejects scope option other than :global" do
+      expected_msg =
+        "invalid scope option :app for role :admin in Hologram.Entity.ValidatorTest.InlineEntityFixture67 - the scope option must be :global"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture67 do
+          use Hologram.Entity
+
+          role :admin, scope: :app
         end
       end
     end
