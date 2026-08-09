@@ -67,7 +67,8 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the given data map against the given entity type's declared attributes.
   Returns :ok, or {:error, errors} where errors is a name-sorted list of {name, reason} pairs.
-  Reasons: :required (a non-optional attribute is absent or nil), :unknown (an undeclared name), {:type, type} (a value not matching the attribute type), {:values, values} (an enum value outside the declared values), {:min, min} (a value below the declared minimum), {:max, max} (a value above the declared maximum), {:in, range} (an integer value outside the declared range).
+  Reasons: :required (a non-optional attribute is absent or nil), :unknown (an undeclared name), {:type, type} (a value not matching the attribute type), {:values, values} (an enum value outside the declared values), {:min, min} (a value below the declared minimum), {:max, max} (a value above the declared maximum), {:in, range} (an integer value outside the declared range), {:length, length} (a string not matching the declared exact length), {:min_length, min_length} (a string shorter than the declared minimum), {:max_length, max_length} (a string longer than the declared maximum).
+  String lengths count Unicode code points.
   Constraint options are checked only on type-valid values - a type violation suppresses the attribute's constraint checks.
   A non-optional attribute must be present regardless of its declared default - defaults are not applied here.
   An absent or nil optional attribute is valid.
@@ -198,7 +199,9 @@ defmodule Hologram.Entity.Validator do
   defp bounds_ordered?(min, max, _type), do: min <= max
 
   defp constraint_errors(name, value, type, opts) do
-    bound_errors(name, value, type, opts) ++ in_errors(name, value, opts)
+    bound_errors(name, value, type, opts) ++
+      in_errors(name, value, opts) ++
+      length_errors(name, value, opts)
   end
 
   defp declared_fields(module) do
@@ -230,6 +233,27 @@ defmodule Hologram.Entity.Validator do
         []
     end
   end
+
+  defp length_errors(name, value, opts) do
+    case Keyword.take(opts, [:length, :min_length, :max_length]) do
+      [] ->
+        []
+
+      length_opts ->
+        count = length(String.codepoints(value))
+        Enum.flat_map(length_opts, &length_key_errors(name, count, &1))
+    end
+  end
+
+  defp length_key_errors(name, count, {key, bound}) do
+    if length_satisfied?(count, key, bound), do: [], else: [{name, {key, bound}}]
+  end
+
+  defp length_satisfied?(count, :length, bound), do: count == bound
+
+  defp length_satisfied?(count, :min_length, bound), do: count >= bound
+
+  defp length_satisfied?(count, :max_length, bound), do: count <= bound
 
   defp relationship_field_names(name, [_target]), do: [Atom.to_string(name)]
 

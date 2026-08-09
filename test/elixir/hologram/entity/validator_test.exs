@@ -125,11 +125,14 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "returns :ok for values on the declared bounds" do
       data = %{
+        bio: "0123456789",
         count: 1,
+        country_code: "us",
         held_at: ~U[2026-01-01 00:00:00Z],
         priority: 1,
         rating: 0.0,
-        released_on: ~D[2030-12-31]
+        released_on: ~D[2030-12-31],
+        username: "abc"
       }
 
       assert validate(Module10, data) == :ok
@@ -166,6 +169,33 @@ defmodule Hologram.Entity.ValidatorTest do
 
       assert validate(Module10, %{count: 5, percent: 3}) ==
                {:error, [{:percent, {:in, 0..100//5}}]}
+    end
+
+    test "reports length violations with the declared exact length" do
+      assert validate(Module10, %{count: 5, country_code: "USA"}) ==
+               {:error, [{:country_code, {:length, 2}}]}
+
+      assert validate(Module10, %{count: 5, country_code: "U"}) ==
+               {:error, [{:country_code, {:length, 2}}]}
+    end
+
+    test "reports min_length violations with the declared minimum" do
+      assert validate(Module10, %{count: 5, username: "ab"}) ==
+               {:error, [{:username, {:min_length, 3}}]}
+    end
+
+    test "reports max_length violations with the declared maximum" do
+      assert validate(Module10, %{count: 5, bio: "01234567890"}) ==
+               {:error, [{:bio, {:max_length, 10}}]}
+    end
+
+    test "counts string lengths in code points" do
+      # e + combining acute accent: 1 grapheme, 2 code points, 3 bytes
+      assert validate(Module10, %{count: 5, country_code: "e\u0301"}) == :ok
+
+      # precomposed e with acute: 1 grapheme, 1 code point, 2 bytes
+      assert validate(Module10, %{count: 5, country_code: "\u00E9"}) ==
+               {:error, [{:country_code, {:length, 2}}]}
     end
 
     test "type violation suppresses constraint checks" do
