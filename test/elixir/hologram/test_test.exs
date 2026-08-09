@@ -3,7 +3,7 @@ defmodule Hologram.TestTest do
 
   import Hologram.Test, only: [as_user: 1, as_user: 2]
 
-  alias Hologram.AuthContext
+  alias Hologram.Auth.Context
   alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module14
 
@@ -11,7 +11,7 @@ defmodule Hologram.TestTest do
     test "sets the actor for the rest of the process" do
       as_user("user_id_1")
 
-      assert AuthContext.actor_user_id() == "user_id_1"
+      assert Context.actor_user_id() == "user_id_1"
     end
 
     test "takes the user entity" do
@@ -19,7 +19,7 @@ defmodule Hologram.TestTest do
 
       as_user(user)
 
-      assert AuthContext.actor_user_id() == user.id
+      assert Context.actor_user_id() == user.id
     end
 
     test "returns the given user" do
@@ -32,21 +32,21 @@ defmodule Hologram.TestTest do
 
   describe "as_user/2" do
     test "sets the actor for the duration of the function" do
-      assert as_user("user_id_3", fn -> AuthContext.actor_user_id() end) == "user_id_3"
-      assert AuthContext.actor_user_id() == nil
+      assert as_user("user_id_3", fn -> Context.actor_user_id() end) == "user_id_3"
+      assert Context.actor_user_id() == nil
     end
 
     test "takes the user entity" do
       user = Entity.new(Module14, email: "user_3@example.com")
 
-      assert as_user(user, fn -> AuthContext.actor_user_id() end) == user.id
+      assert as_user(user, fn -> Context.actor_user_id() end) == user.id
     end
 
     test "restores the enclosing actor afterwards" do
       as_user("user_id_4")
       as_user("user_id_5", fn -> :ok end)
 
-      assert AuthContext.actor_user_id() == "user_id_4"
+      assert Context.actor_user_id() == "user_id_4"
     end
   end
 end

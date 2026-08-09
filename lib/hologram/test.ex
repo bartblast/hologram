@@ -1,5 +1,5 @@
 defmodule Hologram.Test do
-  alias Hologram.AuthContext
+  alias Hologram.Auth
 
   @doc """
   Runs the rest of the calling process as the given user and returns that user unchanged,
@@ -16,7 +16,7 @@ defmodule Hologram.Test do
   def as_user(user_or_id) do
     user_or_id
     |> actor_user_id()
-    |> AuthContext.put_actor()
+    |> Auth.Context.put_actor()
 
     user_or_id
   end
@@ -33,7 +33,7 @@ defmodule Hologram.Test do
   def as_user(user_or_id, fun) do
     user_id = actor_user_id(user_or_id)
 
-    AuthContext.with_actor(user_id, fun)
+    Auth.Context.with_actor(user_id, fun)
   end
 
   @doc """
