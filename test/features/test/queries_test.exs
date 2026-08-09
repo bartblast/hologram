@@ -7,12 +7,19 @@ defmodule HologramFeatureTests.QueriesTest do
   alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias HologramFeatureTests.Entities.Product
+  alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Queries.Page1
 
+  # Both tables truncate in one statement: the review table's foreign key to the
+  # product table makes Postgres reject truncating the referenced table alone.
   setup do
-    table = Mapper.table_name(Product)
+    product_table = Mapper.table_name(Product)
+    review_table = Mapper.table_name(Review)
 
-    {:ok, _result} = Connection.query(~s(TRUNCATE "hologram_data"."#{table}"), [])
+    statement =
+      ~s(TRUNCATE "hologram_data"."#{review_table}", "hologram_data"."#{product_table}")
+
+    {:ok, _result} = Connection.query(statement, [])
 
     :ok
   end
