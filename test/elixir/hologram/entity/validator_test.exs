@@ -141,7 +141,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown attribute option" do
       expected_msg =
-        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :max, :min, :optional, :values"
+        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :in, :max, :min, :optional, :values"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture10 do
@@ -237,14 +237,14 @@ defmodule Hologram.Entity.ValidatorTest do
 
         attribute :count, :integer, min: 1, max: 10
         attribute :held_at, :datetime, min: ~U[2026-01-01 00:00:00Z]
-        attribute :price, :float, min: 0, max: 99.5
+        attribute :rating, :float, min: 0, max: 5.0
         attribute :released_on, :date, max: ~D[2030-12-31]
       end
 
       assert InlineEntityFixture28.__attributes__() == [
                {:count, :integer, [min: 1, max: 10]},
                {:held_at, :datetime, [min: ~U[2026-01-01 00:00:00Z]]},
-               {:price, :float, [min: 0, max: 99.5]},
+               {:rating, :float, [min: 0, max: 5.0]},
                {:released_on, :date, [max: ~D[2030-12-31]]}
              ]
     end
@@ -313,13 +313,13 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects non-number min option on float attribute" do
       expected_msg =
-        "invalid min option \"0\" for attribute :price in Hologram.Entity.ValidatorTest.InlineEntityFixture34 - the min option must be a number"
+        "invalid min option \"0\" for attribute :rating in Hologram.Entity.ValidatorTest.InlineEntityFixture34 - the min option must be a number"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture34 do
           use Hologram.Entity
 
-          attribute :price, :float, min: "0"
+          attribute :rating, :float, min: "0"
         end
       end
     end
@@ -359,6 +359,85 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           attribute :released_on, :date, min: ~D[2030-01-01], max: ~D[2020-01-01]
+        end
+      end
+    end
+
+    test "accepts in option with integer range" do
+      defmodule InlineEntityFixture38 do
+        use Hologram.Entity
+
+        attribute :percent, :integer, in: 0..100//5
+        attribute :priority, :integer, in: 1..5
+      end
+
+      assert InlineEntityFixture38.__attributes__() == [
+               {:percent, :integer, [in: 0..100//5]},
+               {:priority, :integer, [in: 1..5]}
+             ]
+    end
+
+    test "rejects in option on non-integer attribute type" do
+      expected_msg =
+        "in option not allowed for attribute :rating in Hologram.Entity.ValidatorTest.InlineEntityFixture39 - the in option applies only to integer attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture39 do
+          use Hologram.Entity
+
+          attribute :rating, :float, in: 1..5
+        end
+      end
+    end
+
+    test "rejects non-range in option" do
+      expected_msg =
+        "invalid in option [1, 2, 3] for attribute :priority in Hologram.Entity.ValidatorTest.InlineEntityFixture40 - the in option must be an integer Range"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture40 do
+          use Hologram.Entity
+
+          attribute :priority, :integer, in: [1, 2, 3]
+        end
+      end
+    end
+
+    test "rejects in option range with endpoints beyond integer type bounds" do
+      expected_msg =
+        "invalid in option 1..9223372036854775808 for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture41 - the in option range endpoints must be valid integer attribute values"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture41 do
+          use Hologram.Entity
+
+          attribute :count, :integer, in: 1..9_223_372_036_854_775_808
+        end
+      end
+    end
+
+    test "rejects empty in option range" do
+      expected_msg =
+        "invalid in option 1..0//1 for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture42 - the in option range must not be empty"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture42 do
+          use Hologram.Entity
+
+          attribute :count, :integer, in: 1..0//1
+        end
+      end
+    end
+
+    test "rejects in option combined with min and max options" do
+      expected_msg =
+        "conflicting options for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture43 - the in option can't be combined with the min and max options"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture43 do
+          use Hologram.Entity
+
+          attribute :count, :integer, in: 1..10, min: 1
         end
       end
     end

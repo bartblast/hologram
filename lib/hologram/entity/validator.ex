@@ -12,7 +12,7 @@ defmodule Hologram.Entity.Validator do
 
   @reserved_names [:created_at, :id, :updated_at]
 
-  @valid_attribute_opts [:default, :max, :min, :optional, :values]
+  @valid_attribute_opts [:default, :in, :max, :min, :optional, :values]
 
   @valid_attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string]
 
@@ -89,6 +89,7 @@ defmodule Hologram.Entity.Validator do
     validate_attribute_opts!(module, name, opts)
     validate_attribute_values!(module, name, type, opts)
     validate_attribute_bounds!(module, name, type, opts)
+    validate_attribute_in!(module, name, type, opts)
     validate_attribute_default!(module, name, type, opts)
     validate_field_collision!(module, "attribute", name, [Atom.to_string(name)])
     :ok
@@ -208,6 +209,22 @@ defmodule Hologram.Entity.Validator do
     case Keyword.fetch(opts, :default) do
       {:ok, value} ->
         validate_default_value!(module, name, type, opts, value)
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp validate_attribute_in!(module, name, type, opts) do
+    case Keyword.fetch(opts, :in) do
+      {:ok, _value} when type != :integer ->
+        raise Hologram.CompileError,
+          message:
+            "in option not allowed for attribute #{inspect(name)} in #{inspect(module)} - the in option applies only to integer attributes"
+
+      {:ok, value} ->
+        validate_in_conflict!(module, name, opts)
+        validate_in_range!(module, name, value)
 
       :error ->
         :ok
@@ -347,6 +364,37 @@ defmodule Hologram.Entity.Validator do
           :ok
       end
     end)
+  end
+
+  defp validate_in_conflict!(module, name, opts) do
+    if Keyword.has_key?(opts, :min) or Keyword.has_key?(opts, :max) do
+      raise Hologram.CompileError,
+        message:
+          "conflicting options for attribute #{inspect(name)} in #{inspect(module)} - the in option can't be combined with the min and max options"
+    end
+  end
+
+  defp validate_in_range!(module, name, value) do
+    cond do
+      not is_struct(value, Range) ->
+        raise Hologram.CompileError,
+          message:
+            "invalid in option #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the in option must be an integer Range"
+
+      not (attribute_value_valid?(value.first, :integer) and
+               attribute_value_valid?(value.last, :integer)) ->
+        raise Hologram.CompileError,
+          message:
+            "invalid in option #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the in option range endpoints must be valid integer attribute values"
+
+      Range.size(value) == 0 ->
+        raise Hologram.CompileError,
+          message:
+            "invalid in option #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the in option range must not be empty"
+
+      true ->
+        :ok
+    end
   end
 
   defp validate_known_opts!(module, kind, name, opts, valid_opts) do
