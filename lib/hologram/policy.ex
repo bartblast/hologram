@@ -2,6 +2,7 @@ defmodule Hologram.Policy do
   @moduledoc false
 
   alias Hologram.Query
+  alias Hologram.Reflection
 
   @doc """
   Validates the policy declarations of the given entity type modules as a whole.
@@ -19,11 +20,21 @@ defmodule Hologram.Policy do
     end)
   end
 
-  defp to_value_valid?(value) when is_atom(value), do: true
+  defp declared_role_names(entity_type) do
+    Enum.map(entity_type.__roles__(), fn {name, _opts} -> name end)
+  end
 
-  defp to_value_valid?([_first_role | _later_roles] = value), do: Enum.all?(value, &is_atom/1)
+  defp to_reference_valid?(value) when is_atom(value), do: true
 
-  defp to_value_valid?(_value), do: false
+  defp to_reference_valid?({target_type, role_name}) when is_atom(role_name),
+    do: Reflection.alias?(target_type)
+
+  defp to_reference_valid?(_value), do: false
+
+  defp to_value_valid?([_first_reference | _later_references] = value),
+    do: Enum.all?(value, &to_reference_valid?/1)
+
+  defp to_value_valid?(value), do: to_reference_valid?(value)
 
   defp validate_predicates!(entity_type, action, predicates) do
     Query.predicate_triples!(entity_type, predicates)
@@ -43,17 +54,35 @@ defmodule Hologram.Policy do
     if not to_value_valid?(to) do
       raise Hologram.CompileError,
         message:
-          "invalid to option #{inspect(to)} for allow #{inspect(action)} in #{inspect(entity_type)} - the to option must be a role name or a non-empty list of role names"
+          "invalid to option #{inspect(to)} for allow #{inspect(action)} in #{inspect(entity_type)} - the to option must be a role name, a {module, role} tuple, or a non-empty list of them"
     end
-
-    declared_names = Enum.map(entity_type.__roles__(), fn {name, _opts} -> name end)
 
     to
     |> List.wrap()
-    |> Enum.each(&validate_to_role!(entity_type, action, &1, declared_names))
+    |> Enum.each(&validate_to_reference!(entity_type, action, &1))
   end
 
-  defp validate_to_role!(entity_type, action, role_name, declared_names) do
+  defp validate_to_reference!(entity_type, action, {target_type, role_name}) do
+    if not Reflection.entity?(target_type) do
+      raise Hologram.CompileError,
+        message:
+          "invalid to option #{inspect({target_type, role_name})} for allow #{inspect(action)} in #{inspect(entity_type)} - #{inspect(target_type)} is not an entity type module"
+    end
+
+    declared_names = declared_role_names(target_type)
+
+    if role_name not in declared_names do
+      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "unknown role #{inspect(role_name)} in the to option of allow #{inspect(action)} in #{inspect(entity_type)} - declared roles of #{inspect(target_type)} are: #{declared_roles}"
+    end
+  end
+
+  defp validate_to_reference!(entity_type, action, role_name) do
+    declared_names = declared_role_names(entity_type)
+
     if role_name not in declared_names do
       declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
 

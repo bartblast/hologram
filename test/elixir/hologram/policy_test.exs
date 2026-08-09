@@ -79,6 +79,28 @@ defmodule Hologram.PolicyTest do
       assert validate_model!([InlinePolicyFixture10]) == :ok
     end
 
+    test "returns :ok for a to option referencing a role of another entity type" do
+      defmodule InlinePolicyFixture13 do
+        use Hologram.Entity
+
+        allow :update, to: {Module13, :editor}
+      end
+
+      assert validate_model!([InlinePolicyFixture13]) == :ok
+    end
+
+    test "returns :ok for a to option mixing role names and namespaced references" do
+      defmodule InlinePolicyFixture14 do
+        use Hologram.Entity
+
+        role :owner
+
+        allow :update, to: [:owner, {Module13, :editor}]
+      end
+
+      assert validate_model!([InlinePolicyFixture14]) == :ok
+    end
+
     test "returns :ok for actor leaves on uuid-carrying names" do
       defmodule InlinePolicyFixture7 do
         use Hologram.Entity
@@ -127,7 +149,37 @@ defmodule Hologram.PolicyTest do
       end
     end
 
-    test "rejects a to option that is neither a role name nor a list of them" do
+    test "rejects a to option referencing a non-entity module" do
+      defmodule InlinePolicyFixture15 do
+        use Hologram.Entity
+
+        allow :update, to: {Hologram.Reflection, :editor}
+      end
+
+      expected_msg =
+        "invalid to option {Hologram.Reflection, :editor} for allow :update in Hologram.PolicyTest.InlinePolicyFixture15 - Hologram.Reflection is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture15])
+      end
+    end
+
+    test "rejects a to option referencing an undeclared role of another entity type" do
+      defmodule InlinePolicyFixture16 do
+        use Hologram.Entity
+
+        allow :update, to: {Module13, :publisher}
+      end
+
+      expected_msg =
+        "unknown role :publisher in the to option of allow :update in Hologram.PolicyTest.InlinePolicyFixture16 - declared roles of Hologram.Test.Fixtures.Entity.Module13 are: :editor, :owner"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture16])
+      end
+    end
+
+    test "rejects a to option that is neither a role reference nor a list of them" do
       defmodule InlinePolicyFixture12 do
         use Hologram.Entity
 
@@ -137,7 +189,7 @@ defmodule Hologram.PolicyTest do
       end
 
       expected_msg =
-        "invalid to option \"owner\" for allow :update in Hologram.PolicyTest.InlinePolicyFixture12 - the to option must be a role name or a non-empty list of role names"
+        "invalid to option \"owner\" for allow :update in Hologram.PolicyTest.InlinePolicyFixture12 - the to option must be a role name, a {module, role} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture12])
