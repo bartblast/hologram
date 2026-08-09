@@ -7,6 +7,7 @@ defmodule Hologram.Database.EntityOperationsTest do
   alias Hologram.Database.Connection
   alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -179,6 +180,29 @@ defmodule Hologram.Database.EntityOperationsTest do
         end
 
       assert error.postgres.code == :unique_violation
+    end
+
+    test "raises naming every validation violation before touching the database" do
+      entity = Entity.new(Module2, b: "nope")
+
+      expected_msg = """
+      invalid data for Hologram.Test.Fixtures.Entity.Module2:
+        * attribute :b must be of type :integer, got: "nope"
+        * attribute :c is required\
+      """
+
+      assert_error ArgumentError, expected_msg, fn -> create(entity) end
+    end
+
+    test "raises on declared constraint option violations" do
+      entity = Entity.new(Module10, count: 0)
+
+      expected_msg = """
+      invalid data for Hologram.Test.Fixtures.Entity.Module10:
+        * attribute :count must be at least 1, got: 0\
+      """
+
+      assert_error ArgumentError, expected_msg, fn -> create(entity) end
     end
   end
 

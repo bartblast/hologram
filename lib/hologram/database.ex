@@ -28,6 +28,10 @@ defmodule Hologram.Database do
   Inserts the given entity as a full row - every column is named and bound explicitly -
   stamping created_at and updated_at with the same current UTC timestamp. Returns the
   stamped entity. Constraint violations raise.
+
+  Attribute values are validated against the entity type's declarations before any SQL
+  runs - type, enum values, required presence, and the declared constraint options -
+  raising one ArgumentError that lists every violation.
   """
   @spec create(struct) :: struct
   defdelegate create(entity), to: EntityOperations

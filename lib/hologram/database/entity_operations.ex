@@ -13,6 +13,7 @@ defmodule Hologram.Database.EntityOperations do
   alias Hologram.Database.Connection
   alias Hologram.Database.Mapper
   alias Hologram.Database.SortKey
+  alias Hologram.Entity.Validator
 
   @data_schema "hologram_data"
 
@@ -39,6 +40,9 @@ defmodule Hologram.Database.EntityOperations do
   # sobelow_skip ["SQL.Query"]
   def create(entity) do
     entity_type = entity.__struct__
+
+    validate_entity!(entity_type, entity)
+
     %{table: table, columns: columns} = Map.fetch!(Database.mapping(), entity_type)
 
     now = DateTime.utc_now(:microsecond)
@@ -292,5 +296,18 @@ defmodule Hologram.Database.EntityOperations do
     end
 
     :ok
+  end
+
+  defp validate_entity!(entity_type, entity) do
+    attribute_names = Enum.map(entity_type.__attributes__(), fn {name, _type, _opts} -> name end)
+    data = Map.take(entity, attribute_names)
+
+    case Validator.validate(entity_type, data) do
+      :ok ->
+        :ok
+
+      {:error, errors} ->
+        raise ArgumentError, Validator.error_message(entity_type, data, errors)
+    end
   end
 end
