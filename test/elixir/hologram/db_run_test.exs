@@ -1,10 +1,11 @@
-defmodule Hologram.QueryRunTest do
+defmodule Hologram.DBRunTest do
   use Hologram.Test.DatabaseCase, async: true
 
   import Hologram.Query
 
   alias Hologram.DB
   alias Hologram.Entity
+  alias Hologram.Query
   alias Hologram.Query.Param
   alias Hologram.Test.Fixtures.Entity.Module2
 
@@ -14,33 +15,33 @@ defmodule Hologram.QueryRunTest do
     |> DB.create()
   end
 
-  describe "get/2" do
+  describe "Query.get/2" do
     test "returns the entity with the given id" do
       created_entity = create_module_2_entity(a: true, c: "some text")
 
-      assert get(Module2, created_entity.id).id == created_entity.id
+      assert Query.get(Module2, created_entity.id).id == created_entity.id
     end
 
     test "returns nil when no entity matches" do
-      assert get(Module2, Entity.generate_id()) == nil
+      assert Query.get(Module2, Entity.generate_id()) == nil
     end
 
     test "raises on a non-canonical id" do
       expected_msg =
         "invalid id \"garbage\" for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
 
-      assert_error ArgumentError, expected_msg, fn -> get(Module2, "garbage") end
+      assert_error ArgumentError, expected_msg, fn -> Query.get(Module2, "garbage") end
 
       compact_id = "018f4571a1b27c3d8e4f5a6b7c8d9e0f"
 
       expected_compact_msg =
         "invalid id #{inspect(compact_id)} for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
 
-      assert_error ArgumentError, expected_compact_msg, fn -> get(Module2, compact_id) end
+      assert_error ArgumentError, expected_compact_msg, fn -> Query.get(Module2, compact_id) end
     end
   end
 
-  describe "run/1" do
+  describe "DB.run/1" do
     test "runs a set query and returns entity structs" do
       create_module_2_entity(a: true, c: "bbb")
       create_module_2_entity(a: false, c: "aaa")
@@ -48,7 +49,7 @@ defmodule Hologram.QueryRunTest do
       results =
         Module2
         |> order_by(:c)
-        |> run()
+        |> DB.run()
 
       assert [%Module2{c: "aaa"}, %Module2{c: "bbb"}] = results
     end
@@ -56,7 +57,7 @@ defmodule Hologram.QueryRunTest do
     test "runs a bare entity type as the whole set" do
       create_module_2_entity(a: true, c: "some text")
 
-      assert [%Module2{c: "some text"}] = run(Module2)
+      assert [%Module2{c: "some text"}] = DB.run(Module2)
     end
 
     test "runs a single-result query" do
@@ -66,7 +67,7 @@ defmodule Hologram.QueryRunTest do
         Module2
         |> filter(id: created_entity.id)
         |> one()
-        |> run()
+        |> DB.run()
 
       assert found_entity.id == created_entity.id
 
@@ -74,7 +75,7 @@ defmodule Hologram.QueryRunTest do
         Module2
         |> filter(id: Entity.generate_id())
         |> one()
-        |> run()
+        |> DB.run()
 
       assert missing_entity == nil
     end
@@ -88,7 +89,7 @@ defmodule Hologram.QueryRunTest do
         Module2
         |> filter(a: true)
         |> count()
-        |> run()
+        |> DB.run()
 
       assert count == 2
     end
@@ -100,7 +101,7 @@ defmodule Hologram.QueryRunTest do
       assert_error ArgumentError, expected_msg, fn ->
         Module2
         |> filter(b: {:>=, %Param{name: :min_b}})
-        |> run()
+        |> DB.run()
       end
     end
   end

@@ -7,7 +7,9 @@ defmodule Hologram.DB do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Mapper
+  alias Hologram.DB.QueryRunner
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.Query
   alias Hologram.Reflection
 
   @mapping_key {__MODULE__, :mapping}
@@ -77,6 +79,28 @@ defmodule Hologram.DB do
   """
   @spec rollback(any) :: no_return
   defdelegate rollback(reason), to: Connection
+
+  @doc """
+  Runs the given query against the database and returns its result - a list of entity
+  structs for set queries, an entity struct or nil for single-result queries, and an
+  integer for counting queries.
+
+  The query is an entity type module (the whole entity set) or a query term built with
+  Hologram.Query stages. Directly executed query terms embed concrete runtime values -
+  the query registry is never involved. A term containing param leaves raises
+  ArgumentError: params exist only in compiler-registered queries.
+
+  A :string ordering falls back to byte order when the attribute has no sort-key
+  companion column - companions are derived from registered query orderings.
+  """
+  @spec run(module | %{atom => any}) :: list(struct) | struct | integer | nil
+  def run(query) do
+    term = Query.normalize(query)
+
+    assert_no_params!(term)
+
+    QueryRunner.run(term, mapping())
+  end
 
   @doc """
   Runs the given zero-arity function inside a database transaction and returns
@@ -237,5 +261,17 @@ defmodule Hologram.DB do
       end
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  defp assert_no_params!(term) do
+    case Query.param_names(term) do
+      [] ->
+        :ok
+
+      [name | _rest] ->
+        raise ArgumentError,
+          message:
+            "cannot run a query term containing params - param #{inspect(name)} has no value: directly executed queries embed concrete runtime values, params exist only in compiler-registered queries"
+    end
   end
 end
