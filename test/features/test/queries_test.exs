@@ -1,10 +1,10 @@
 defmodule HologramFeatureTests.QueriesTest do
   use HologramFeatureTests.TestCase, async: false
 
-  import Hologram.Database.EntityOperations, only: [create: 1]
+  import Hologram.DB.EntityOperations, only: [create: 1]
 
-  alias Hologram.Database.Connection
-  alias Hologram.Database.Mapper
+  alias Hologram.DB.Connection
+  alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Queries.Page1
