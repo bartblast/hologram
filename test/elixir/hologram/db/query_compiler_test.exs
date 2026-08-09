@@ -107,6 +107,38 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s| WHERE "c" = ANY($1)|)
     end
 
+    test "compiles a to-one reference field predicate against its reference column" do
+      mapping = Mapper.derive!([Module1, Module2, Module3])
+
+      term =
+        Module3
+        |> filter(c_id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        |> Query.normalize()
+
+      assert compile(term, mapping) == %{
+               params: [
+                 {:value,
+                  <<1, 143, 69, 113, 161, 178, 124, 61, 142, 79, 90, 107, 124, 141, 158, 15>>}
+               ],
+               sql:
+                 ~s(SELECT "id", "b_id", "c_id", "created_at", "updated_at" ) <>
+                   ~s(FROM "hologram_data"."test_fixtures_entity_module3" ) <>
+                   ~s(WHERE "c_id" = $1 ORDER BY "id" ASC)
+             }
+    end
+
+    test "binds a to-one reference field param as a uuid slot" do
+      mapping = Mapper.derive!([Module1, Module2, Module3])
+      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:param, :owner}}]}
+
+      assert %{
+               params: [{:param, :owner, :uuid}],
+               sql: sql
+             } = compile(term, mapping)
+
+      assert String.contains?(sql, ~s( WHERE "c_id" = $1))
+    end
+
     test "compiles inequality null-inclusively on optional attributes" do
       mapping = Mapper.derive!([Module2])
 

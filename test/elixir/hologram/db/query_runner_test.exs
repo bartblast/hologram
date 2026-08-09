@@ -192,6 +192,30 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert run(term, @mapping, %{ids: []}) == []
     end
 
+    test "filters by a to-one reference field" do
+      matching = create_module_3_entity()
+      create_module_3_entity()
+
+      term =
+        Module3
+        |> filter(c_id: matching.c_id)
+        |> Query.normalize()
+
+      assert [%Module3{id: id, c_id: c_id}] = run(term, @mapping)
+      assert id == matching.id
+      assert c_id == matching.c_id
+    end
+
+    test "filters by a to-one reference field bound as a param" do
+      matching = create_module_3_entity()
+      create_module_3_entity()
+
+      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:param, :target}}]}
+
+      assert [%Module3{id: id}] = run(term, @mapping, %{target: matching.c_id})
+      assert id == matching.id
+    end
+
     test "returns entity structs filtered and ordered" do
       {first, _second, third} = create_module_2_entities()
 

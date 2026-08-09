@@ -143,6 +143,12 @@ defmodule Hologram.Query.RegistryTest do
       assert param_shape(term) == %{entity_id: :uuid}
     end
 
+    test "derives to-one reference field param types" do
+      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:param, :target_id}}]}
+
+      assert param_shape(term) == %{target_id: :uuid}
+    end
+
     test "returns an empty shape for queries without params" do
       term =
         Module2

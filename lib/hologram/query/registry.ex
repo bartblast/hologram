@@ -65,13 +65,15 @@ defmodule Hologram.Query.Registry do
     collect_params(term, %{})
   end
 
+  # A name matching no attribute definition is a to-one reference field - every reference
+  # column carries the entity id type.
   defp attribute_type(entity_type, name) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 
-    {_name, type, _opts} =
-      Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end)
-
-    type
+    case Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end) do
+      {_name, type, _opts} -> type
+      nil -> :uuid
+    end
   end
 
   defp collect_ordered_pairs(term, acc) do

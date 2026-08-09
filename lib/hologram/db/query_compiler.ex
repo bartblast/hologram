@@ -210,8 +210,12 @@ defmodule Hologram.DB.QueryCompiler do
     column_name = Atom.to_string(name)
 
     Enum.find(columns, fn column ->
-      column.source == {:attribute, name} or
-        (column.source == :system and column.name == column_name)
+      case column.source do
+        {:attribute, attribute_name} -> attribute_name == name
+        {:relationship, relationship_name} -> "#{relationship_name}_id" == column_name
+        :system -> column.name == column_name
+        _other_source -> false
+      end
     end)
   end
 

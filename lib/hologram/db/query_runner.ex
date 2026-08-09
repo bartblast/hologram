@@ -41,13 +41,15 @@ defmodule Hologram.DB.QueryRunner do
     end
   end
 
+  # A name matching no attribute definition is a to-one reference field - every reference
+  # column carries the entity id type, and a bound value is never nil (nil params raise).
   defp attribute_definition(entity_type, attribute_name) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 
-    {_name, type, opts} =
-      Enum.find(definitions, fn {name, _type, _opts} -> name == attribute_name end)
-
-    {type, opts}
+    case Enum.find(definitions, fn {name, _type, _opts} -> name == attribute_name end) do
+      {_name, type, opts} -> {type, opts}
+      nil -> {:uuid, []}
+    end
   end
 
   # Conflicts mirror the registry's param-shape rule: one param name binds one

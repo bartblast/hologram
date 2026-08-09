@@ -117,6 +117,24 @@ defmodule Hologram.QueryTest do
       assert query.filter == [{:id, :==, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"}]
     end
 
+    test "accepts to-one reference field names" do
+      query = filter(Module3, c_id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+
+      assert query.filter == [{:c_id, :==, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"}]
+    end
+
+    test "accepts a membership list on a to-one reference field" do
+      query = filter(Module3, b_id: [nil, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"])
+
+      assert query.filter == [{:b_id, :in, [nil, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"]}]
+    end
+
+    test "accepts a param sentinel on a to-one reference field" do
+      query = filter(Module3, c_id: %Param{name: :owner})
+
+      assert query.filter == [{:c_id, :==, {:param, :owner}}]
+    end
+
     test "accumulates repeated filters on the same attribute" do
       query =
         Module2
@@ -317,12 +335,30 @@ defmodule Hologram.QueryTest do
       end
     end
 
-    test "raises on a predicate naming a relationship" do
+    test "raises on a predicate naming a to-one relationship" do
       expected_msg =
-        ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered"
+        ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered - filter its reference via :c_id"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module3, c: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+      end
+    end
+
+    test "raises on a predicate naming a to-many relationship" do
+      expected_msg =
+        ":a is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module3, a: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+      end
+    end
+
+    test "raises on an ordering comparison on a to-one reference field" do
+      expected_msg =
+        "operator :>= requires a numeric or temporal attribute - attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 has type :uuid"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module3, c_id: {:>=, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"})
       end
     end
 
@@ -332,6 +368,15 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, x: 1)
+      end
+    end
+
+    test "raises on an unknown attribute listing to-one reference fields among the known names" do
+      expected_msg =
+        "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module3 - known attributes: :b_id, :c_id, :created_at, :id, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module3, x: 1)
       end
     end
 
@@ -971,6 +1016,15 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         order_by(Module2, [123])
+      end
+    end
+
+    test "raises on a to-one reference field" do
+      expected_msg =
+        "unknown attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 - known attributes: :created_at, :id, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        order_by(Module3, :c_id)
       end
     end
 
