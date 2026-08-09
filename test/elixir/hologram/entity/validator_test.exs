@@ -1252,4 +1252,92 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
   end
+
+  describe "validate_roles!/1" do
+    test "accepts a role extending a role declared further down the module body" do
+      defmodule InlineEntityFixture59 do
+        use Hologram.Entity
+
+        role :owner, extends: :viewer
+        role :viewer
+      end
+
+      assert InlineEntityFixture59.__roles__() == [{:owner, [extends: :viewer]}, {:viewer, []}]
+    end
+
+    test "rejects extends option with a non-atom target in the list" do
+      expected_msg =
+        "invalid extends option [:viewer, \"editor\"] for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture60 - the extends option must be a role name or a non-empty list of role names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture60 do
+          use Hologram.Entity
+
+          role :owner, extends: [:viewer, "editor"]
+          role :viewer
+        end
+      end
+    end
+
+    test "rejects empty extends option list" do
+      expected_msg =
+        "invalid extends option [] for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture61 - the extends option must be a role name or a non-empty list of role names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture61 do
+          use Hologram.Entity
+
+          role :owner, extends: []
+        end
+      end
+    end
+
+    test "rejects role extending an undeclared role" do
+      expected_msg =
+        "unknown role :editor in the extends option of role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture62 - declared roles are: :owner, :viewer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture62 do
+          use Hologram.Entity
+
+          role :owner, extends: :editor
+          role :viewer
+        end
+      end
+    end
+
+    test "rejects role extension cycle" do
+      expected_msg =
+        normalize_newlines("""
+        cyclic role extension in Hologram.Entity.ValidatorTest.InlineEntityFixture63 - a role can't extend itself, directly or transitively:
+          * :editor -> :viewer -> :owner -> :editor\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture63 do
+          use Hologram.Entity
+
+          role :editor, extends: :viewer
+          role :owner, extends: :editor
+          role :viewer, extends: :owner
+        end
+      end
+    end
+
+    test "rejects self-extending role" do
+      expected_msg =
+        normalize_newlines("""
+        cyclic role extension in Hologram.Entity.ValidatorTest.InlineEntityFixture64 - a role can't extend itself, directly or transitively:
+          * :owner -> :owner\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture64 do
+          use Hologram.Entity
+
+          role :owner, extends: :owner
+        end
+      end
+    end
+  end
 end

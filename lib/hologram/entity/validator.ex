@@ -224,6 +224,30 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
+  @doc """
+  Validates the role declarations of the given module as a whole, after its body has executed.
+
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (extends option shape, extends targets, extension cycles).
+  Role extension is checked here rather than per declaration, so that a role can extend one declared further down the module body.
+  """
+  @spec validate_roles!(module) :: :ok
+  def validate_roles!(module) do
+    roles =
+      module
+      |> Module.get_attribute(:__roles__)
+      |> Enum.sort()
+
+    declared_names = Enum.map(roles, fn {name, _opts} -> name end)
+
+    Enum.each(roles, fn {name, opts} ->
+      validate_extends_opt!(module, name, opts, declared_names)
+    end)
+
+    validate_role_extension_cycles!(module, roles)
+
+    :ok
+  end
+
   defp attribute_data_errors(data, {name, type, opts}) do
     optional? = Keyword.get(opts, :optional) == true
 
@@ -271,6 +295,19 @@ defmodule Hologram.Entity.Validator do
 
   defp bounds_ordered?(min, max, _type), do: min <= max
 
+  # Rotates the cycle to start at its alphabetically first role, so that the same cycle
+  # is always reported with the same hop order regardless of where the traversal entered it.
+  defp canonicalize_role_cycle(cycle) do
+    start_index =
+      cycle
+      |> Enum.with_index()
+      |> Enum.min_by(fn {name, _index} -> name end)
+      |> elem(1)
+
+    {hops_before_start, hops_from_start} = Enum.split(cycle, start_index)
+    hops_from_start ++ hops_before_start
+  end
+
   defp change_errors(name, nil, _type, opts) do
     if Keyword.get(opts, :optional) == true, do: [], else: [{name, :required}]
   end
@@ -302,6 +339,53 @@ defmodule Hologram.Entity.Validator do
       end)
 
     attribute_fields ++ relationship_fields
+  end
+
+  defp describe_role_cycle([first_name | _later_hops] = cycle) do
+    hops = Enum.map_join(cycle, " -> ", &inspect/1)
+
+    "  * #{hops} -> #{inspect(first_name)}"
+  end
+
+  defp extends_value_valid?(value) when is_atom(value), do: true
+
+  defp extends_value_valid?([_first_target | _later_targets] = value),
+    do: Enum.all?(value, &is_atom/1)
+
+  defp extends_value_valid?(_value), do: false
+
+  # Depth-first traversal over role extension edges. The path holds the roles visited on the way
+  # to the current one (most recent first) - reaching a role already on the path closes a cycle.
+  # Fully explored roles are marked visited and never re-entered, so each cycle is reported once.
+  defp find_role_extension_cycles(name, path, edges, {cycles, visited}) do
+    if MapSet.member?(visited, name) do
+      {cycles, visited}
+    else
+      {cycles, visited} =
+        edges
+        |> Map.get(name, [])
+        |> Enum.reduce({cycles, visited}, fn target, acc ->
+          follow_role_extension_edge(name, target, path, edges, acc)
+        end)
+
+      {cycles, MapSet.put(visited, name)}
+    end
+  end
+
+  # Closes a cycle when the target is already on the path, descends into the target otherwise.
+  defp follow_role_extension_edge(name, target, path, edges, {cycles, visited}) do
+    new_path = [name | path]
+
+    if target in new_path do
+      {hops_beyond_target, [target_hop | _earlier_hops]} =
+        Enum.split_while(new_path, &(&1 != target))
+
+      cycle = [target_hop | Enum.reverse(hops_beyond_target)]
+
+      {[cycle | cycles], visited}
+    else
+      find_role_extension_cycles(target, new_path, edges, {cycles, visited})
+    end
   end
 
   defp format_errors(name, value, opts) do
@@ -414,6 +498,10 @@ defmodule Hologram.Entity.Validator do
     do: "must be at most #{max_length} characters"
 
   defp requirement_description({:format, format}), do: "must match #{inspect(format)}"
+
+  defp role_extension_edges(roles) do
+    Map.new(roles, fn {name, opts} -> {name, List.wrap(Keyword.get(opts, :extends, []))} end)
+  end
 
   defp validate_attribute_bounds!(module, name, type, opts) do
     Enum.each([:min, :max], &validate_bound_opt!(module, name, type, opts, &1))
@@ -606,6 +694,34 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  defp validate_extends_opt!(module, name, opts, declared_names) do
+    case Keyword.fetch(opts, :extends) do
+      {:ok, value} ->
+        if not extends_value_valid?(value) do
+          raise Hologram.CompileError,
+            message:
+              "invalid extends option #{inspect(value)} for role #{inspect(name)} in #{inspect(module)} - the extends option must be a role name or a non-empty list of role names"
+        end
+
+        value
+        |> List.wrap()
+        |> Enum.each(&validate_extends_target!(module, name, &1, declared_names))
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp validate_extends_target!(module, name, target, declared_names) do
+    if target not in declared_names do
+      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "unknown role #{inspect(target)} in the extends option of role #{inspect(name)} in #{inspect(module)} - declared roles are: #{declared_roles}"
+    end
+  end
+
   defp validate_field_collision!(module, kind, name, field_names) do
     declared = declared_fields(module)
 
@@ -763,6 +879,30 @@ defmodule Hologram.Entity.Validator do
       raise Hologram.CompileError,
         message:
           "invalid type #{inspect(type)} for relationship #{inspect(name)} in #{inspect(module)} - the relationship type must be an entity type module (to-one) or a one-element list wrapping an entity type module (to-many)"
+    end
+  end
+
+  defp validate_role_extension_cycles!(module, roles) do
+    edges = role_extension_edges(roles)
+
+    {cycles, _visited} =
+      edges
+      |> Map.keys()
+      |> Enum.reduce({[], MapSet.new()}, fn name, acc ->
+        find_role_extension_cycles(name, [], edges, acc)
+      end)
+
+    if cycles != [] do
+      descriptions =
+        cycles
+        |> Enum.map(&canonicalize_role_cycle/1)
+        |> Enum.uniq()
+        |> Enum.sort()
+        |> Enum.map_join("\n", &describe_role_cycle/1)
+
+      raise Hologram.CompileError,
+        message:
+          "cyclic role extension in #{inspect(module)} - a role can't extend itself, directly or transitively:\n#{descriptions}"
     end
   end
 

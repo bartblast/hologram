@@ -7,6 +7,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module11
+  alias Hologram.Test.Fixtures.Entity.Module12
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -116,6 +117,24 @@ defmodule Hologram.EntityTest do
                {:c, :enum, [values: [:x, :y], default: :x]},
                {:d, :float, []}
              ]
+    end
+  end
+
+  describe "expand_role/2" do
+    test "returns the role name alone when no other role extends it" do
+      assert expand_role(Module12, :admin) == [:admin]
+    end
+
+    test "returns the roles extending the given one through any number of hops" do
+      assert expand_role(Module12, :viewer) == [:admin, :editor, :owner, :viewer]
+    end
+
+    test "returns the roles listing the given one among several extended roles" do
+      assert expand_role(Module12, :owner) == [:admin, :owner]
+    end
+
+    test "returns the role name alone for entity type with no role declarations" do
+      assert expand_role(Module1, :owner) == [:owner]
     end
   end
 

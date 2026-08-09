@@ -37,6 +37,8 @@ defmodule Hologram.Entity do
   end
 
   defmacro __before_compile__(env) do
+    Validator.validate_roles!(env.module)
+
     system_attributes =
       @system_attributes
       |> Enum.sort()
@@ -120,6 +122,20 @@ defmodule Hologram.Entity do
       Validator.validate_role!(__MODULE__, name, opts)
       Module.put_attribute(__MODULE__, :__roles__, {name, opts})
     end
+  end
+
+  @doc """
+  Returns the given role name together with every role of the given entity type whose extends chain reaches it, sorted.
+  A role that extends another one carries all of its capabilities, so a requirement for the given role is satisfied by every role in the returned list.
+  """
+  @spec expand_role(module, atom) :: list(atom)
+  def expand_role(entity_type, role_name) do
+    extends_by_name =
+      Map.new(entity_type.__roles__(), fn {name, opts} ->
+        {name, List.wrap(Keyword.get(opts, :extends, []))}
+      end)
+
+    expand_role_names(MapSet.new([role_name]), extends_by_name)
   end
 
   @doc """
@@ -240,6 +256,25 @@ defmodule Hologram.Entity do
     entity_type
     |> Validator.validate_changes(Map.new(changes))
     |> group_errors()
+  end
+
+  # Reverse-expansion fixpoint - each pass admits the roles extending anything already admitted,
+  # so a role reaching the given one through any number of hops ends up in the result.
+  defp expand_role_names(names, extends_by_name) do
+    expanded =
+      Enum.reduce(extends_by_name, names, fn {name, targets}, acc ->
+        if Enum.any?(targets, &MapSet.member?(names, &1)) do
+          MapSet.put(acc, name)
+        else
+          acc
+        end
+      end)
+
+    if MapSet.size(expanded) == MapSet.size(names) do
+      Enum.sort(expanded)
+    else
+      expand_role_names(expanded, extends_by_name)
+    end
   end
 
   defp group_errors(:ok), do: :ok
