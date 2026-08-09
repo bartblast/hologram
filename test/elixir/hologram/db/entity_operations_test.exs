@@ -212,7 +212,9 @@ defmodule Hologram.DB.EntityOperationsTest do
       """
 
       assert_error ArgumentError, expected_required_msg, fn ->
-        Module3 |> Entity.new() |> create()
+        Module3
+        |> Entity.new()
+        |> create()
       end
 
       expected_invalid_msg = """
@@ -221,7 +223,9 @@ defmodule Hologram.DB.EntityOperationsTest do
       """
 
       assert_error ArgumentError, expected_invalid_msg, fn ->
-        Module3 |> Entity.new(c_id: "garbage") |> create()
+        Module3
+        |> Entity.new(c_id: "garbage")
+        |> create()
       end
     end
   end

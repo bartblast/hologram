@@ -190,24 +190,30 @@ defmodule Hologram.EntityTest do
 
   describe "validate/1" do
     test "returns :ok for a valid entity struct" do
-      assert Module10 |> new(count: 5) |> validate() == :ok
+      entity = new(Module10, count: 5)
+
+      assert validate(entity) == :ok
     end
 
     test "reports violations grouped by field name" do
-      assert Module2 |> new(b: "nope") |> validate() ==
-               {:error, %{b: [{:type, :integer}], c: [:required]}}
+      entity = new(Module2, b: "nope")
+
+      assert validate(entity) == {:error, %{b: [{:type, :integer}], c: [:required]}}
     end
 
     test "accumulates multiple reasons per field" do
-      assert {:error, %{handle: [format_reason, {:min_length, 3}]}} =
-               Module10 |> new(count: 5, handle: "A?") |> validate()
+      entity = new(Module10, count: 5, handle: "A?")
+
+      assert {:error, %{handle: [format_reason, {:min_length, 3}]}} = validate(entity)
 
       assert {:format, format} = format_reason
       assert Regex.source(format) == "^[a-z_]+$"
     end
 
     test "reports missing required reference" do
-      assert Module3 |> new() |> validate() == {:error, %{c_id: [:required]}}
+      entity = new(Module3)
+
+      assert validate(entity) == {:error, %{c_id: [:required]}}
     end
   end
 
