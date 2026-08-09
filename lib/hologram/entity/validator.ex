@@ -67,7 +67,7 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the given data map against the given entity type's declared attributes.
   Returns :ok, or {:error, errors} where errors is a name-sorted list of {name, reason} pairs.
-  Reasons: :required (a non-optional attribute is absent or nil), :unknown (an undeclared name), {:type, type} (a value not matching the attribute type), {:values, values} (an enum value outside the declared values), {:min, min} (a value below the declared minimum), {:max, max} (a value above the declared maximum).
+  Reasons: :required (a non-optional attribute is absent or nil), :unknown (an undeclared name), {:type, type} (a value not matching the attribute type), {:values, values} (an enum value outside the declared values), {:min, min} (a value below the declared minimum), {:max, max} (a value above the declared maximum), {:in, range} (an integer value outside the declared range).
   Constraint options are checked only on type-valid values - a type violation suppresses the attribute's constraint checks.
   A non-optional attribute must be present regardless of its declared default - defaults are not applied here.
   An absent or nil optional attribute is valid.
@@ -198,7 +198,7 @@ defmodule Hologram.Entity.Validator do
   defp bounds_ordered?(min, max, _type), do: min <= max
 
   defp constraint_errors(name, value, type, opts) do
-    bound_errors(name, value, type, opts)
+    bound_errors(name, value, type, opts) ++ in_errors(name, value, opts)
   end
 
   defp declared_fields(module) do
@@ -219,6 +219,16 @@ defmodule Hologram.Entity.Validator do
       end)
 
     attribute_fields ++ relationship_fields
+  end
+
+  defp in_errors(name, value, opts) do
+    case Keyword.fetch(opts, :in) do
+      {:ok, range} ->
+        if value in range, do: [], else: [{name, {:in, range}}]
+
+      :error ->
+        []
+    end
   end
 
   defp relationship_field_names(name, [_target]), do: [Atom.to_string(name)]

@@ -127,6 +127,7 @@ defmodule Hologram.Entity.ValidatorTest do
       data = %{
         count: 1,
         held_at: ~U[2026-01-01 00:00:00Z],
+        priority: 1,
         rating: 0.0,
         released_on: ~D[2030-12-31]
       }
@@ -150,6 +151,21 @@ defmodule Hologram.Entity.ValidatorTest do
 
       assert validate(Module10, %{count: 5, released_on: ~D[2031-01-01]}) ==
                {:error, [{:released_on, {:max, ~D[2030-12-31]}}]}
+    end
+
+    test "reports in violations with the declared range" do
+      assert validate(Module10, %{count: 5, priority: 0}) ==
+               {:error, [{:priority, {:in, 1..5}}]}
+
+      assert validate(Module10, %{count: 5, priority: 6}) ==
+               {:error, [{:priority, {:in, 1..5}}]}
+    end
+
+    test "honors the step of a stepped in range" do
+      assert validate(Module10, %{count: 5, percent: 15}) == :ok
+
+      assert validate(Module10, %{count: 5, percent: 3}) ==
+               {:error, [{:percent, {:in, 0..100//5}}]}
     end
 
     test "type violation suppresses constraint checks" do
