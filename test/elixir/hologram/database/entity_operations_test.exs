@@ -466,5 +466,38 @@ defmodule Hologram.Database.EntityOperationsTest do
         update(Module2, nonexistent_id, %{c: "some text"})
       end
     end
+
+    test "raises naming every change violation before touching the database" do
+      created_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      expected_msg = """
+      invalid data for Hologram.Test.Fixtures.Entity.Module2:
+        * attribute :b must be of type :integer, got: "nope"
+        * attribute :c is required\
+      """
+
+      assert_error ArgumentError, expected_msg, fn ->
+        update(Module2, created_entity.id, %{b: "nope", c: nil})
+      end
+    end
+
+    test "raises on declared constraint option violations" do
+      created_entity =
+        Module10
+        |> Entity.new(count: 5)
+        |> create()
+
+      expected_msg = """
+      invalid data for Hologram.Test.Fixtures.Entity.Module10:
+        * attribute :count must be at least 1, got: 0\
+      """
+
+      assert_error ArgumentError, expected_msg, fn ->
+        update(Module10, created_entity.id, %{count: 0})
+      end
+    end
   end
 end

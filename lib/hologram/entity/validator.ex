@@ -122,6 +122,30 @@ defmodule Hologram.Entity.Validator do
   end
 
   @doc """
+  Validates the given partial changes map against the given entity type's declared attributes.
+  Returns :ok, or {:error, errors} in the validate/2 shape and reason vocabulary.
+  Only present pairs are validated - absence is legal in a partial map. A nil value for a non-optional attribute reports :required - a nil value for an optional attribute is valid (clearing).
+  """
+  @spec validate_changes(module, %{atom => any}) ::
+          :ok | {:error, list({atom, atom | {atom, any}})}
+  def validate_changes(entity_type, changes) do
+    attributes_by_name =
+      Map.new(entity_type.__attributes__(), fn {name, type, opts} -> {name, {type, opts}} end)
+
+    errors =
+      changes
+      |> Enum.flat_map(fn {name, value} ->
+        case Map.fetch(attributes_by_name, name) do
+          {:ok, {type, opts}} -> change_errors(name, value, type, opts)
+          :error -> [{name, :unknown}]
+        end
+      end)
+      |> Enum.sort()
+
+    if errors == [], do: :ok, else: {:error, errors}
+  end
+
+  @doc """
   Validates the given data model as a whole, taking the list of all compiled entity type modules.
 
   Returns :ok, or raises Hologram.CompileError listing every relationship whose target is not an entity type module.
@@ -207,6 +231,12 @@ defmodule Hologram.Entity.Validator do
   defp bounds_ordered?(min, max, :datetime), do: DateTime.compare(min, max) != :gt
 
   defp bounds_ordered?(min, max, _type), do: min <= max
+
+  defp change_errors(name, nil, _type, opts) do
+    if Keyword.get(opts, :optional) == true, do: [], else: [{name, :required}]
+  end
+
+  defp change_errors(name, value, type, opts), do: value_errors(name, value, type, opts)
 
   defp constraint_errors(name, value, type, opts) do
     bound_errors(name, value, type, opts) ++

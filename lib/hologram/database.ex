@@ -95,9 +95,23 @@ defmodule Hologram.Database do
   set, reassigned, or cleared (nil) through its relationship name. Changing any other
   name, system attributes included, raises ArgumentError - as do empty changes and an
   id that names no entity. Returns :ok. Constraint violations raise.
+
+  Changed attribute values are validated against the entity type's declarations before
+  any SQL runs - type, enum values, the required-nil rule, and the declared constraint
+  options - raising one ArgumentError that lists every violation.
   """
   @spec update(module, String.t(), map | keyword) :: :ok
   defdelegate update(entity_type, id, changes), to: EntityOperations
+
+  @doc false
+  @spec update(struct) :: no_return
+  def update(entity) when is_struct(entity) do
+    raise ArgumentError,
+          "update takes explicit changes, not a modified struct - pass the changed attributes: " <>
+            "Database.update(#{inspect(entity.__struct__)}, entity.id, attribute: value). " <>
+            "Full-row writes from a struct aren't supported: they would overwrite concurrent " <>
+            "changes to fields you didn't touch."
+  end
 
   @doc """
   Returns the physical name mapping derived from the discovered entity type modules.

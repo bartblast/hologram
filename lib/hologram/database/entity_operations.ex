@@ -148,6 +148,7 @@ defmodule Hologram.Database.EntityOperations do
       |> Enum.sort()
 
     validate_changes!(entity_type, sorted_changes, columns_by_field)
+    validate_change_values!(entity_type, sorted_changes)
 
     change_entries =
       Enum.map(sorted_changes, fn {name, value} ->
@@ -275,6 +276,23 @@ defmodule Hologram.Database.EntityOperations do
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
+  end
+
+  defp validate_change_values!(entity_type, sorted_changes) do
+    attribute_names = Enum.map(entity_type.__attributes__(), fn {name, _type, _opts} -> name end)
+
+    attribute_changes =
+      sorted_changes
+      |> Map.new()
+      |> Map.take(attribute_names)
+
+    case Validator.validate_changes(entity_type, attribute_changes) do
+      :ok ->
+        :ok
+
+      {:error, errors} ->
+        raise ArgumentError, Validator.error_message(entity_type, attribute_changes, errors)
+    end
   end
 
   defp validate_changes!(entity_type, sorted_changes, columns_by_field) do

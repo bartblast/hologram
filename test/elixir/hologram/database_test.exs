@@ -8,7 +8,9 @@ defmodule Hologram.DatabaseTest do
   alias Hologram.Database.Introspection
   alias Hologram.Database.Mapper
   alias Hologram.Database.Schema
+  alias Hologram.Entity
   alias Hologram.Reflection
+  alias Hologram.Test.Fixtures.Entity.Module1
 
   describe "init/1" do
     test "starts only the connection pool outside dev" do
@@ -59,6 +61,20 @@ defmodule Hologram.DatabaseTest do
       assert reload() == :ok
 
       assert Introspection.schema() == Schema.from_mapping(mapping())
+    end
+  end
+
+  describe "update/1" do
+    test "raises a teaching error for a struct argument" do
+      entity = Entity.new(Module1)
+
+      expected_msg =
+        "update takes explicit changes, not a modified struct - pass the changed attributes: " <>
+          "Database.update(Hologram.Test.Fixtures.Entity.Module1, entity.id, attribute: value). " <>
+          "Full-row writes from a struct aren't supported: they would overwrite concurrent " <>
+          "changes to fields you didn't touch."
+
+      assert_error ArgumentError, expected_msg, fn -> update(entity) end
     end
   end
 end

@@ -910,6 +910,34 @@ defmodule Hologram.Entity.ValidatorTest do
     end
   end
 
+  describe "validate_changes/2" do
+    test "returns :ok for valid present pairs" do
+      assert validate_changes(Module10, %{count: 5, username: "abcd"}) == :ok
+    end
+
+    test "does not require absent attributes" do
+      assert validate_changes(Module2, %{}) == :ok
+      assert validate_changes(Module2, %{b: 2}) == :ok
+    end
+
+    test "accepts nil for optional attribute" do
+      assert validate_changes(Module2, %{b: nil}) == :ok
+    end
+
+    test "reports required violation for nil non-optional value" do
+      assert validate_changes(Module2, %{c: nil}) == {:error, [{:c, :required}]}
+    end
+
+    test "reports type and constraint violations" do
+      assert validate_changes(Module10, %{count: 0, username: 5}) ==
+               {:error, [{:count, {:min, 1}}, {:username, {:type, :string}}]}
+    end
+
+    test "reports unknown names" do
+      assert validate_changes(Module2, %{e: 1}) == {:error, [{:e, :unknown}]}
+    end
+  end
+
   describe "validate_model!/1" do
     test "returns :ok for empty model" do
       assert validate_model!([]) == :ok
