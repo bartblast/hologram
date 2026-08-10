@@ -42,7 +42,7 @@ defmodule Hologram.Auth do
       raise ArgumentError, unknown_global_role_message(role, global_role_names)
     end
 
-    authorize_trusted_grant!("global")
+    authorize_trusted_write!("global", "granted")
 
     write_grant(user_id, nil, nil, role)
   end
@@ -67,6 +67,45 @@ defmodule Hologram.Auth do
   end
 
   @doc """
+  Revokes the given global role from the given user and returns :ok.
+
+  Takes the user entity or a bare user id. Revoking a role the user does not hold is a no-op.
+  """
+  @spec revoke_role(struct | String.t(), atom) :: :ok
+  def revoke_role(user_or_id, role) do
+    user_id = validate_user_id!(user_or_id)
+    global_role_names = Policy.global_role_names()
+
+    if role not in global_role_names do
+      raise ArgumentError, unknown_global_role_message(role, global_role_names)
+    end
+
+    authorize_trusted_write!("global", "revoked")
+
+    delete_grant(user_id, nil, nil, role)
+  end
+
+  @doc """
+  Revokes the given role on the given resource from the given user and returns :ok.
+
+  Takes the user entity or a bare user id, and an entity struct or entity type module for
+  the resource. Users may always revoke their own roles, which is how a member leaves a
+  resource - revoking someone else's requires managing that resource's roles. The last role
+  managing a resource can't be revoked, so a resource never loses its last manager.
+  Revoking a role the user does not hold is a no-op.
+  """
+  @spec revoke_role(struct | String.t(), struct | module, atom) :: :ok
+  def revoke_role(user_or_id, resource, role) do
+    user_id = validate_user_id!(user_or_id)
+    {entity_type, resource_id} = resource_reference(resource)
+
+    validate_declared_role!(entity_type, role)
+    authorize_revoke!(entity_type, resource_id, user_id, role)
+
+    delete_grant(user_id, RoleGrant.resource_type(entity_type), resource_id, role)
+  end
+
+  @doc """
   Returns the entity id of the user the running work is authorized as, or nil when the
   session is anonymous. Framework wrappers set the actor around the work they run, so the
   value always comes from an authenticated session and never from anything a client sends.
@@ -80,7 +119,7 @@ defmodule Hologram.Auth do
 
   # Granting on a resource requires holding a role that manages its grants. Running with no
   # actor is the trusted tier - scripts, consoles and seeds grant whatever they need.
-  defp authorize_grant!(_entity_type, nil), do: authorize_trusted_grant!("type-wide")
+  defp authorize_grant!(_entity_type, nil), do: authorize_trusted_write!("type-wide", "granted")
 
   defp authorize_grant!(entity_type, resource_id) do
     case Context.actor_user_id() do
@@ -91,18 +130,41 @@ defmodule Hologram.Auth do
         role_names = Policy.manage_roles_qualifying_roles(entity_type)
 
         if not holds_role?(actor_user_id, entity_type, resource_id, role_names) do
-          raise Hologram.AccessDeniedError,
-                "not allowed to manage the roles of #{inspect(entity_type)} #{inspect(resource_id)}"
+          raise Hologram.AccessDeniedError, unmanaged_resource_message(entity_type, resource_id)
         end
 
         :ok
     end
   end
 
-  defp authorize_trusted_grant!(scope) do
+  # Users may always revoke their own roles - leaving a resource needs no permission. Taking
+  # a role from someone else does, and the last managing role never goes, so a resource can
+  # never be left with nobody able to manage it.
+  defp authorize_revoke!(_entity_type, nil, _user_id, _role) do
+    authorize_trusted_write!("type-wide", "revoked")
+  end
+
+  defp authorize_revoke!(entity_type, resource_id, user_id, role) do
+    case Context.actor_user_id() do
+      nil ->
+        :ok
+
+      actor_user_id ->
+        role_names = Policy.manage_roles_qualifying_roles(entity_type)
+
+        if actor_user_id != user_id and
+             not holds_role?(actor_user_id, entity_type, resource_id, role_names) do
+          raise Hologram.AccessDeniedError, unmanaged_resource_message(entity_type, resource_id)
+        end
+
+        guard_last_managing_role!(entity_type, resource_id, role, role_names)
+    end
+  end
+
+  defp authorize_trusted_write!(scope, verb) do
     if Context.actor_user_id() do
       raise Hologram.AccessDeniedError,
-            "#{scope} roles are granted only by trusted code running without an acting user"
+            "#{scope} roles are #{verb} only by trusted code running without an acting user"
     end
 
     :ok
@@ -111,41 +173,76 @@ defmodule Hologram.Auth do
   # TODO: grant references and delegations deny until the role grant store can answer them.
   defp check_requirement(_requirement, _entity, _actor_user_id), do: false
 
-  defp column_sql_type(columns, name) do
-    columns
-    |> Enum.find(&(&1.name == name))
-    |> Map.fetch!(:sql_type)
+  # sobelow_skip ["SQL.Query"]
+  defp count_managing_grants(entity_type, resource_id, role_names) do
+    statement = """
+    SELECT count(*) FROM "hologram_data"."hologram_role_grant"
+    WHERE "resource_type" = $1::#{qualified_enum_type("resource_type")}
+      AND "resource_id" = $2
+      AND "role" = ANY($3::#{qualified_enum_type("role")}[])
+    """
+
+    params = [
+      resource_type_value(entity_type),
+      Codec.encode(resource_id, :uuid),
+      Enum.map(role_names, &Atom.to_string/1)
+    ]
+
+    {:ok, %{rows: [[count]]}} = Connection.query(statement, params)
+
+    count
   end
 
-  # Enum params are cast to their column's type in SQL rather than the columns to text, so
-  # the lookup keeps using the grant table's unique index.
+  # Nils encode the type-wide and global grant shapes, so the delete matches them as values -
+  # the same comparison the store's unique index makes.
   # sobelow_skip ["SQL.Query"]
+  defp delete_grant(user_id, resource_type, resource_id, role) do
+    statement = """
+    DELETE FROM "hologram_data"."hologram_role_grant"
+    WHERE "user_id" = $1
+      AND "resource_type" IS NOT DISTINCT FROM $2::#{qualified_enum_type("resource_type")}
+      AND "resource_id" IS NOT DISTINCT FROM $3
+      AND "role" = $4::#{qualified_enum_type("role")}
+    """
+
+    params = [
+      Codec.encode(user_id, :uuid),
+      resource_type && Atom.to_string(resource_type),
+      Codec.encode(resource_id, :uuid),
+      Atom.to_string(role)
+    ]
+
+    {:ok, _result} = Connection.query(statement, params)
+
+    :ok
+  end
+
+  defp guard_last_managing_role!(entity_type, resource_id, role, role_names) do
+    if role in role_names and count_managing_grants(entity_type, resource_id, role_names) <= 1 do
+      raise Hologram.AccessDeniedError,
+            "cannot revoke the last role managing #{inspect(entity_type)} #{inspect(resource_id)} - transfer ownership first"
+    end
+
+    :ok
+  end
+
   defp holds_role?(_actor_user_id, _entity_type, _resource_id, []), do: false
 
+  # sobelow_skip ["SQL.Query"]
   defp holds_role?(actor_user_id, entity_type, resource_id, role_names) do
-    %{columns: columns} = Map.fetch!(DB.mapping(), RoleGrant)
-
-    resource_type_enum = column_sql_type(columns, "resource_type")
-    role_enum = column_sql_type(columns, "role")
-
     statement = """
     SELECT EXISTS (
       SELECT 1 FROM "hologram_data"."hologram_role_grant"
       WHERE "user_id" = $1
-        AND "resource_type" = $2::"hologram_data".#{Mapper.quote_identifier(resource_type_enum)}
+        AND "resource_type" = $2::#{qualified_enum_type("resource_type")}
         AND "resource_id" = $3
-        AND "role" = ANY($4::"hologram_data".#{Mapper.quote_identifier(role_enum)}[])
+        AND "role" = ANY($4::#{qualified_enum_type("role")}[])
     )
     """
 
-    resource_type =
-      entity_type
-      |> RoleGrant.resource_type()
-      |> Atom.to_string()
-
     params = [
       Codec.encode(actor_user_id, :uuid),
-      resource_type,
+      resource_type_value(entity_type),
       Codec.encode(resource_id, :uuid),
       Enum.map(role_names, &Atom.to_string/1)
     ]
@@ -155,11 +252,30 @@ defmodule Hologram.Auth do
     holds_role?
   end
 
+  # Enum params are cast to their column's type in SQL rather than the columns to text, so
+  # grant lookups keep using the store's unique index.
+  defp qualified_enum_type(column_name) do
+    %{columns: columns} = Map.fetch!(DB.mapping(), RoleGrant)
+
+    enum_type =
+      columns
+      |> Enum.find(&(&1.name == column_name))
+      |> Map.fetch!(:sql_type)
+
+    ~s("hologram_data".#{Mapper.quote_identifier(enum_type)})
+  end
+
   defp resource_reference(resource) when is_struct(resource) do
     {resource.__struct__, validate_id!(resource.id, "resource")}
   end
 
   defp resource_reference(resource), do: {resource, nil}
+
+  defp resource_type_value(entity_type) do
+    entity_type
+    |> RoleGrant.resource_type()
+    |> Atom.to_string()
+  end
 
   defp unknown_global_role_message(role, []) do
     "unknown global role #{inspect(role)} - no role is declared with scope: :global"
@@ -169,6 +285,10 @@ defmodule Hologram.Auth do
     declared_roles = Enum.map_join(global_role_names, ", ", &inspect/1)
 
     "unknown global role #{inspect(role)} - declared global roles are: #{declared_roles}"
+  end
+
+  defp unmanaged_resource_message(entity_type, resource_id) do
+    "not allowed to manage the roles of #{inspect(entity_type)} #{inspect(resource_id)}"
   end
 
   defp validate_declared_role!(entity_type, role) do

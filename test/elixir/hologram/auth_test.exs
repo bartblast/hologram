@@ -17,6 +17,12 @@ defmodule Hologram.AuthTest do
     |> DB.create()
   end
 
+  defp create_resource do
+    Module1
+    |> Entity.new()
+    |> DB.create()
+  end
+
   defp grant_rows(user_id) do
     select_sql =
       ~s|SELECT "resource_type", "resource_id", "role", "granted_by_id", "created_at" | <>
@@ -124,10 +130,7 @@ defmodule Hologram.AuthTest do
     test "writes an instance grant naming the resource type and id" do
       user = create_user("user_7@example.com")
 
-      resource =
-        Module1
-        |> Entity.new()
-        |> DB.create()
+      resource = create_resource()
 
       assert grant_role(user, resource, :owner) == :ok
 
@@ -150,10 +153,7 @@ defmodule Hologram.AuthTest do
       granter = create_user("user_9@example.com")
       user = create_user("user_10@example.com")
 
-      resource =
-        Module1
-        |> Entity.new()
-        |> DB.create()
+      resource = create_resource()
 
       grant_role(granter, resource, :owner)
 
@@ -175,10 +175,7 @@ defmodule Hologram.AuthTest do
       granter = create_user("user_12@example.com")
       user = create_user("user_13@example.com")
 
-      resource =
-        Module1
-        |> Entity.new()
-        |> DB.create()
+      resource = create_resource()
 
       grant_role(granter, resource, :owner)
 
@@ -194,10 +191,7 @@ defmodule Hologram.AuthTest do
       granter = create_user("user_16@example.com")
       user = create_user("user_17@example.com")
 
-      resource =
-        Module1
-        |> Entity.new()
-        |> DB.create()
+      resource = create_resource()
 
       grant_role(granter, resource, :owner)
 
@@ -210,10 +204,7 @@ defmodule Hologram.AuthTest do
       granter = create_user("user_18@example.com")
       user = create_user("user_19@example.com")
 
-      resource =
-        Module1
-        |> Entity.new()
-        |> DB.create()
+      resource = create_resource()
 
       grant_role(granter, resource, :editor)
 
@@ -254,6 +245,142 @@ defmodule Hologram.AuthTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         grant_role(user, %Module1{id: "nope"}, :owner)
+      end
+    end
+  end
+
+  describe "revoke_role/2" do
+    test "removes a global grant" do
+      user = create_user("user_24@example.com")
+      grant_role(user, :admin)
+
+      assert revoke_role(user, :admin) == :ok
+      assert grant_rows(user.id) == []
+    end
+
+    test "is a no-op for a role the user does not hold" do
+      user = create_user("user_25@example.com")
+
+      assert revoke_role(user, :admin) == :ok
+      assert grant_rows(user.id) == []
+    end
+
+    test "raises on a global revocation issued by an acting user" do
+      granter = create_user("user_26@example.com")
+      user = create_user("user_27@example.com")
+
+      expected_msg =
+        "global roles are revoked only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(granter.id, fn -> revoke_role(user, :admin) end)
+      end
+    end
+  end
+
+  describe "revoke_role/3" do
+    test "removes an instance grant" do
+      user = create_user("user_28@example.com")
+      resource = create_resource()
+
+      grant_role(user, resource, :owner)
+
+      assert revoke_role(user, resource, :owner) == :ok
+      assert grant_rows(user.id) == []
+    end
+
+    test "lets a user revoke their own role" do
+      owner = create_user("user_29@example.com")
+      member = create_user("user_30@example.com")
+      resource = create_resource()
+
+      grant_role(owner, resource, :owner)
+      grant_role(member, resource, :editor)
+
+      assert Context.with_actor(member.id, fn -> revoke_role(member, resource, :editor) end) ==
+               :ok
+
+      assert grant_rows(member.id) == []
+    end
+
+    test "removes another user's role when the acting user manages the resource" do
+      owner = create_user("user_31@example.com")
+      member = create_user("user_32@example.com")
+      resource = create_resource()
+
+      grant_role(owner, resource, :owner)
+      grant_role(member, resource, :editor)
+
+      assert Context.with_actor(owner.id, fn -> revoke_role(member, resource, :editor) end) == :ok
+
+      assert grant_rows(member.id) == []
+    end
+
+    test "raises when the acting user neither owns the role nor manages the resource" do
+      member = create_user("user_33@example.com")
+      other_member = create_user("user_34@example.com")
+      resource = create_resource()
+
+      grant_role(member, resource, :editor)
+      grant_role(other_member, resource, :editor)
+
+      expected_msg =
+        "not allowed to manage the roles of Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)}"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(other_member.id, fn -> revoke_role(member, resource, :editor) end)
+      end
+    end
+
+    test "refuses to revoke the last role managing the resource" do
+      owner = create_user("user_35@example.com")
+      resource = create_resource()
+
+      grant_role(owner, resource, :owner)
+
+      expected_msg =
+        "cannot revoke the last role managing Hologram.Test.Fixtures.Policy.Module1 " <>
+          "#{inspect(resource.id)} - transfer ownership first"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(owner.id, fn -> revoke_role(owner, resource, :owner) end)
+      end
+    end
+
+    test "revokes a managing role while another one remains" do
+      first_owner = create_user("user_36@example.com")
+      second_owner = create_user("user_37@example.com")
+      resource = create_resource()
+
+      grant_role(first_owner, resource, :owner)
+      grant_role(second_owner, resource, :owner)
+
+      assert Context.with_actor(first_owner.id, fn ->
+               revoke_role(first_owner, resource, :owner)
+             end) == :ok
+
+      assert grant_rows(first_owner.id) == []
+    end
+
+    test "revokes the last managing role for trusted code" do
+      owner = create_user("user_38@example.com")
+      resource = create_resource()
+
+      grant_role(owner, resource, :owner)
+
+      assert revoke_role(owner, resource, :owner) == :ok
+      assert grant_rows(owner.id) == []
+    end
+
+    test "raises on a type-wide revocation issued by an acting user" do
+      granter = create_user("user_39@example.com")
+      user = create_user("user_40@example.com")
+
+      expected_msg =
+        "type-wide roles are revoked only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(granter.id, fn -> revoke_role(user, Module1, :owner) end)
       end
     end
   end
