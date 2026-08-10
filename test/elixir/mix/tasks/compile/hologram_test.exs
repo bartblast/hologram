@@ -340,6 +340,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
         @spec __relationships__() :: list(tuple)
         def __relationships__, do: [{:owner, Hologram.Test.Fixtures.Entity.Module1, []}]
+
+        @spec __roles__() :: list(tuple)
+        def __roles__, do: []
       end
 
       # Register a fake loaded OTP app whose spec lists the entity type module with the

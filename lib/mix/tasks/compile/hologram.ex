@@ -297,6 +297,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp validate_data_model! do
+    Hologram.RoleGrant.reset_resolution_cache()
+
     entity_types = Reflection.list_entities()
 
     Validator.validate_model!(entity_types)

@@ -16,6 +16,7 @@ defmodule Hologram.DB.IntrospectionTest do
         |> Enum.sort()
 
       assert table_names == [
+               "hologram_role_grant",
                "test_fixtures_entity_module1",
                "test_fixtures_entity_module10",
                "test_fixtures_entity_module11",
@@ -197,7 +198,34 @@ defmodule Hologram.DB.IntrospectionTest do
     end
 
     test "introspects enum types with their values" do
-      assert schema().enum_types == %{"test_fixtures_entity_module4_c_$enum" => ["x", "y"]}
+      assert schema().enum_types == %{
+               "hologram_role_grant_resource_type_$enum" => [
+                 "test_fixtures_entity_module1",
+                 "test_fixtures_entity_module10",
+                 "test_fixtures_entity_module11",
+                 "test_fixtures_entity_module12",
+                 "test_fixtures_entity_module13",
+                 "test_fixtures_entity_module14",
+                 "test_fixtures_entity_module2",
+                 "test_fixtures_entity_module3",
+                 "test_fixtures_entity_module4",
+                 "test_fixtures_entity_module5",
+                 "test_fixtures_entity_module6",
+                 "test_fixtures_entity_module7",
+                 "test_fixtures_entity_module8",
+                 "test_fixtures_entity_module9",
+                 "test_fixtures_policy_module1",
+                 "test_fixtures_policy_module2"
+               ],
+               "hologram_role_grant_role_$enum" => [
+                 "admin",
+                 "editor",
+                 "member",
+                 "owner",
+                 "viewer"
+               ],
+               "test_fixtures_entity_module4_c_$enum" => ["x", "y"]
+             }
     end
 
     test "introspects enum values in sort order after positioned additions" do

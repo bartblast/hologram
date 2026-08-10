@@ -481,6 +481,10 @@ defmodule Hologram.DB.MapperTest do
 
   # The primary OTP app root in this test suite is Hologram (Reflection.otp_app() == :hologram).
   describe "table_name/1" do
+    test "pins the role grant table to its full path" do
+      assert table_name(Hologram.RoleGrant) == "hologram_role_grant"
+    end
+
     test "snake cases the module path with the primary app root stripped" do
       assert table_name(Hologram.Blog.Post) == "blog_post"
     end

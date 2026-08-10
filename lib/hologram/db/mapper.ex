@@ -189,8 +189,14 @@ defmodule Hologram.DB.Mapper do
   the primary OTP app's conventional root namespace - modules from other roots (guest apps,
   libraries) keep their full path. Derived names over the PostgreSQL identifier limit keep
   a readable prefix followed by a short deterministic hash of the full name.
+
+  Framework-provided entity types are pinned to their full snake_cased path, so their
+  tables carry the hologram_ prefix in every project - path derivation would strip it
+  inside the framework's own repository, where the root namespace is Hologram.
   """
   @spec table_name(module) :: String.t()
+  def table_name(Hologram.RoleGrant), do: "hologram_role_grant"
+
   def table_name(entity_type) do
     segments = Module.split(entity_type)
 

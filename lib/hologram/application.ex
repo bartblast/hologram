@@ -7,6 +7,8 @@ defmodule Hologram.Application do
 
   @impl Application
   def start(_type, _args) do
+    Hologram.RoleGrant.reset_resolution_cache()
+
     opts = [strategy: :one_for_one, name: Hologram.Supervisor]
 
     Hologram.env()
