@@ -32,6 +32,19 @@ defmodule Hologram.RoleGrant do
             user: %NotIncluded{relationship: :user},
             user_id: nil
 
+  @type t :: %__MODULE__{
+          created_at: DateTime.t() | nil,
+          granted_by: struct | NotIncluded.t() | nil,
+          granted_by_id: String.t() | nil,
+          id: String.t() | nil,
+          resource_id: String.t() | nil,
+          resource_type: atom | nil,
+          role: atom | nil,
+          updated_at: DateTime.t() | nil,
+          user: struct | NotIncluded.t(),
+          user_id: String.t() | nil
+        }
+
   @doc """
   Returns the list of attribute definitions for the role grant entity type, sorted by attribute name.
   The enum value sets are computed from the compiled data model: resource_type values are the entity type table names, and role values are the union of the declared role names.
