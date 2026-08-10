@@ -13,6 +13,8 @@ defmodule Hologram.DB.QueryCacheTest do
   alias Hologram.Query.Registry
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Component.Module11
+  alias Hologram.Test.Fixtures.Component.Module15
+  alias Hologram.Test.Fixtures.Component.Module16
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
   use_module_stub :query_cache
@@ -75,6 +77,32 @@ defmodule Hologram.DB.QueryCacheTest do
     assert init(nil) == {:ok, nil}
 
     assert :persistent_term.get(QueryCacheStub.persistent_term_key()) == expected_data()
+  end
+
+  test "init/1 raises for a registered query whose root type declares no allow lines" do
+    stub(QueryCacheMock, :component_modules, fn -> [Module15] end)
+
+    expected_msg =
+      "the registered query in Hologram.Test.Fixtures.Component.Module15 reads " <>
+        "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
+        "default deny returns no rows to any session. Add allow lines, or drop the query."
+
+    assert_error Hologram.CompileError, expected_msg, fn ->
+      init(nil)
+    end
+  end
+
+  test "init/1 raises for a registered query whose include target declares no allow lines" do
+    stub(QueryCacheMock, :component_modules, fn -> [Module16] end)
+
+    expected_msg =
+      "the registered query in Hologram.Test.Fixtures.Component.Module16 reads " <>
+        "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
+        "default deny returns no rows to any session. Add allow lines, or drop the query."
+
+    assert_error Hologram.CompileError, expected_msg, fn ->
+      init(nil)
+    end
   end
 
   describe "prop_params/2" do

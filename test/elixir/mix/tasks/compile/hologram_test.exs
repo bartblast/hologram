@@ -270,11 +270,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   setup do
-    # The data model validation warns about the policy-less entity fixtures on every run -
-    # the message shell keeps that advice out of the suite output and assertable.
-    Mix.shell(Mix.Shell.Process)
-    on_exit(fn -> Mix.shell(Mix.Shell.IO) end)
-
     File.rm(@lock_path)
 
     clean_dir(@static_dir)
@@ -304,21 +299,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert run(opts) == :ok
     end
 
-    test "warns about entity types declaring no allow lines", %{opts: opts} do
-      System.delete_env("HOLOGRAM_START")
-
-      run(opts)
-
-      assert_received {:mix_shell, :error, [message]}
-
-      assert message =~
-               "warning: these entity types declare no allow lines, so every query against them returns nothing:"
-
-      assert message =~ "  * Hologram.Test.Fixtures.Entity.Module1\n"
-    end
-
     test "reports global roles declared in more than one OTP app", %{opts: opts} do
       System.delete_env("HOLOGRAM_START")
+
+      Mix.shell(Mix.Shell.Process)
+      on_exit(fn -> Mix.shell(Mix.Shell.IO) end)
 
       defmodule GlobalRoleEntityFixture do
         use Hologram.Entity

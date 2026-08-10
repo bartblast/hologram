@@ -10,6 +10,7 @@ defmodule Hologram.DB.QueryCache do
   alias Hologram.DB.QueryCompiler
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SortKey
+  alias Hologram.Policy
   alias Hologram.Query.Registry
   alias Hologram.Reflection
 
@@ -86,6 +87,10 @@ defmodule Hologram.DB.QueryCache do
   Rebuilds the query cache from the current component modules and mapping - the
   live-reload path after a dev code change. A no-op when the database is not
   running (no entities declared at boot). Returns :ok.
+
+  Raises Hologram.CompileError when a registered query reads an entity type
+  declaring no allow lines - such a query is statically dead, because default
+  deny returns it no rows for any session.
   """
   @spec reload() :: :ok
   def reload do
@@ -128,6 +133,13 @@ defmodule Hologram.DB.QueryCache do
     ops
     |> Enum.filter(&match?(%{op: :add_column}, &1))
     |> Enum.each(&maybe_backfill_op!(&1, mapping))
+  end
+
+  defp dead_query_message(module, dead_entity_types) do
+    listing = Enum.map_join(dead_entity_types, ", ", &inspect/1)
+    declare_verb = if length(dead_entity_types) == 1, do: "declares", else: "declare"
+
+    "the registered query in #{inspect(module)} reads #{listing}, which #{declare_verb} no allow lines - default deny returns no rows to any session. Add allow lines, or drop the query."
   end
 
   # The registered queries' ordered pairs enrich the mapping with sort-key
@@ -175,7 +187,11 @@ defmodule Hologram.DB.QueryCache do
 
   defp populate do
     modules = impl().component_modules()
-    terms = QueryExtractor.extract_queries(modules)
+    module_queries = Enum.map(modules, &{&1, QueryExtractor.extract_module_queries(&1)})
+
+    Enum.each(module_queries, &validate_readable_queries!/1)
+
+    terms = Enum.flat_map(module_queries, fn {_module, module_terms} -> module_terms end)
     mapping = ensure_mapping(terms)
 
     entries =
@@ -201,5 +217,29 @@ defmodule Hologram.DB.QueryCache do
 
   defp qualified_table(table) do
     ~s("hologram_data".#{Mapper.quote_identifier(table)})
+  end
+
+  defp queried_entity_types(term) do
+    nested_types =
+      term.include
+      |> Map.values()
+      |> Enum.flat_map(&queried_entity_types/1)
+
+    Enum.uniq([term.entity | nested_types])
+  end
+
+  # A registered query naming an entity type with no allow lines - as its root or as an
+  # include target - is statically dead: the policied read path composes default deny
+  # into every statement, so no session ever receives a row from it.
+  defp validate_readable_queries!({module, module_terms}) do
+    Enum.each(module_terms, fn term ->
+      case Policy.dead_entity_types(queried_entity_types(term)) do
+        [] ->
+          :ok
+
+        dead_entity_types ->
+          raise Hologram.CompileError, message: dead_query_message(module, dead_entity_types)
+      end
+    end)
   end
 end
