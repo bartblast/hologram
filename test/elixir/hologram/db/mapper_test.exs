@@ -287,6 +287,23 @@ defmodule Hologram.DB.MapperTest do
   end
 
   describe "derive!/2" do
+    test "derives the role grant unique index comparing nulls as values" do
+      mapping =
+        derive!([
+          Hologram.RoleGrant,
+          Hologram.Test.Fixtures.Entity.Module14,
+          Module1
+        ])
+
+      assert mapping[Hologram.RoleGrant].indexes == %{
+               "hologram_role_grant_$uidx" => %{
+                 columns: ["user_id", "resource_type", "resource_id", "role"],
+                 nulls_distinct: false,
+                 unique: true
+               }
+             }
+    end
+
     test "carries sort-key companions for the given ordered pairs" do
       mapping = derive!([Module2], MapSet.new([{Module2, :c}]))
 
@@ -299,12 +316,14 @@ defmodule Hologram.DB.MapperTest do
                  table: table_name(Module1),
                  pk_constraint: "test_fixtures_entity_module1_$pk",
                  columns: columns(Module1),
+                 indexes: %{},
                  join_tables: join_tables(Module1)
                },
                Module3 => %{
                  table: table_name(Module3),
                  pk_constraint: "test_fixtures_entity_module3_$pk",
                  columns: columns(Module3),
+                 indexes: %{},
                  join_tables: join_tables(Module3)
                }
              }

@@ -108,6 +108,7 @@ defmodule Hologram.DB.Mapper do
            table: table_name,
            pk_constraint: fit_identifier("#{table_name}_$pk"),
            columns: columns(entity_type, ordered_pairs),
+           indexes: entity_indexes(entity_type),
            join_tables: join_tables(entity_type)
          }}
       end)
@@ -312,6 +313,21 @@ defmodule Hologram.DB.Mapper do
 
     "  * #{hops} -> #{inspect(first_entity_type)}"
   end
+
+  # The role grant store carries the one framework-derived extra index: unique over the
+  # grant fact, with nulls compared as values - resource_type and resource_id nils encode
+  # the type-wide and global grant shapes, so identical rows with nils must still collide.
+  defp entity_indexes(Hologram.RoleGrant) do
+    %{
+      "hologram_role_grant_$uidx" => %{
+        columns: ["user_id", "resource_type", "resource_id", "role"],
+        nulls_distinct: false,
+        unique: true
+      }
+    }
+  end
+
+  defp entity_indexes(_entity_type), do: %{}
 
   defp enum_values(:enum, opts) do
     opts

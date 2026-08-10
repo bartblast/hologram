@@ -80,7 +80,7 @@ defmodule Hologram.DB.Schema do
   reconciliation comparison share. :tables maps each table name (entity tables and
   join tables alike) to its definition: :columns (column name to %{type:, collation:,
   null:}), :primary_key (%{columns:, constraint:}), :foreign_keys (owning column name
-  to %{references:, on_delete:, constraint:}), and :indexes (index name to %{columns:}).
+  to %{references:, on_delete:, constraint:}), and :indexes (index name to %{columns:, nulls_distinct:, unique:}).
   :enum_types maps each derived enum type name to its values in declaration order.
   Join table columns are fixed: source_id/target_id uuid NOT NULL with a composite
   primary key, both columns FK ON DELETE RESTRICT, and the reverse index over
@@ -233,7 +233,13 @@ defmodule Hologram.DB.Schema do
          }}
       end)
 
-    indexes = Map.new(reference_columns, &{&1.fk_index, %{columns: [&1.name]}})
+    fk_indexes =
+      Map.new(
+        reference_columns,
+        &{&1.fk_index, %{columns: [&1.name], nulls_distinct: true, unique: false}}
+      )
+
+    indexes = Map.merge(fk_indexes, entity_mapping.indexes)
 
     {entity_mapping.table,
      %{
@@ -360,7 +366,14 @@ defmodule Hologram.DB.Schema do
       actual_definition.indexes[name] == target_index
     end)
     |> Enum.map(fn {name, target_index} ->
-      %{op: :create_index, table: table, index: name, columns: target_index.columns}
+      %{
+        op: :create_index,
+        table: table,
+        index: name,
+        columns: target_index.columns,
+        nulls_distinct: target_index.nulls_distinct,
+        unique: target_index.unique
+      }
     end)
   end
 
@@ -400,7 +413,13 @@ defmodule Hologram.DB.Schema do
          constraint: join_table.pk_constraint
        },
        foreign_keys: foreign_keys,
-       indexes: %{join_table.reverse_index => %{columns: ["target_id", "source_id"]}}
+       indexes: %{
+         join_table.reverse_index => %{
+           columns: ["target_id", "source_id"],
+           nulls_distinct: true,
+           unique: false
+         }
+       }
      }}
   end
 

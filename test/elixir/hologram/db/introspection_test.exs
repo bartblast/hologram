@@ -172,7 +172,7 @@ defmodule Hologram.DB.IntrospectionTest do
       {:ok, _result} = Connection.query(index_statement)
 
       assert schema().tables["indexed"].indexes == %{
-               "indexed_b_a_$idx" => %{columns: ["b", "a"]}
+               "indexed_b_a_$idx" => %{columns: ["b", "a"], nulls_distinct: true, unique: false}
              }
     end
 
@@ -192,8 +192,18 @@ defmodule Hologram.DB.IntrospectionTest do
     test "introspects the fixture join table reverse index" do
       assert schema().tables["test_fixtures_entity_module3_a_$join"].indexes == %{
                "test_fixtures_entity_module3_a_$join_target_id_$idx" => %{
-                 columns: ["target_id", "source_id"]
+                 columns: ["target_id", "source_id"],
+                 nulls_distinct: true,
+                 unique: false
                }
+             }
+    end
+
+    test "introspects the role grant unique index comparing nulls as values" do
+      assert schema().tables["hologram_role_grant"].indexes["hologram_role_grant_$uidx"] == %{
+               columns: ["user_id", "resource_type", "resource_id", "role"],
+               nulls_distinct: false,
+               unique: true
              }
     end
 

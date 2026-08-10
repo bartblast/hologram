@@ -26,9 +26,12 @@ defmodule Hologram.DB.Introspection do
   the mapper's vocabulary and dropped-column tombstones filtered out), :primary_key
   (%{columns:, constraint:}, nil when the table has none), :foreign_keys (owning column
   name to %{references:, on_delete:, constraint:}), and :indexes (index name to
-  %{columns:} in index column order, primary-key-backing indexes excluded - they are
-  implied by the constraint). :enum_types maps each enum type name to its values in
-  enum sort order.
+  %{columns:, nulls_distinct:, unique:} in index column order, primary-key-backing
+  indexes excluded - they are implied by the constraint). :enum_types maps each enum
+  type name to its values in enum sort order.
+
+  Reading the null-distinctness of indexes requires PostgreSQL 15 or newer - the
+  framework's documented floor.
   """
   @spec schema() :: %{atom => any}
   def schema do
@@ -128,7 +131,9 @@ defmodule Hologram.DB.Introspection do
            (SELECT array_agg(a.attname ORDER BY k.ord)
             FROM unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)
             JOIN pg_catalog.pg_attribute a
-              ON a.attrelid = i.indrelid AND a.attnum = k.attnum)
+              ON a.attrelid = i.indrelid AND a.attnum = k.attnum),
+           NOT i.indnullsnotdistinct,
+           i.indisunique
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
     JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
@@ -142,7 +147,9 @@ defmodule Hologram.DB.Introspection do
     |> Enum.group_by(fn [table | _rest] -> table end)
     |> Map.new(fn {table, table_rows} ->
       {table,
-       Map.new(table_rows, fn [_table, index, columns] -> {index, %{columns: columns}} end)}
+       Map.new(table_rows, fn [_table, index, columns, nulls_distinct, unique] ->
+         {index, %{columns: columns, nulls_distinct: nulls_distinct, unique: unique}}
+       end)}
     end)
   end
 

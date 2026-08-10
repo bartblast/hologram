@@ -272,7 +272,9 @@ defmodule Hologram.DB.DDLTest do
         op: :create_index,
         table: "task",
         index: "task_project_id_$idx",
-        columns: ["project_id"]
+        columns: ["project_id"],
+        nulls_distinct: true,
+        unique: false
       }
 
       assert statements(op) == [
@@ -285,12 +287,31 @@ defmodule Hologram.DB.DDLTest do
         op: :create_index,
         table: "task_tags_$join",
         index: "task_tags_$join_target_id_$idx",
-        columns: ["target_id", "source_id"]
+        columns: ["target_id", "source_id"],
+        nulls_distinct: true,
+        unique: false
       }
 
       assert statements(op) == [
                ~s(CREATE INDEX "task_tags_$join_target_id_$idx" ) <>
                  ~s{ON "hologram_data"."task_tags_$join" ("target_id", "source_id")}
+             ]
+    end
+
+    test "renders unique indexes comparing nulls as values" do
+      op = %{
+        op: :create_index,
+        table: "hologram_role_grant",
+        index: "hologram_role_grant_$uidx",
+        columns: ["user_id", "resource_type", "resource_id", "role"],
+        nulls_distinct: false,
+        unique: true
+      }
+
+      assert statements(op) == [
+               ~s(CREATE UNIQUE INDEX "hologram_role_grant_$uidx" ) <>
+                 ~s{ON "hologram_data"."hologram_role_grant" } <>
+                 ~s{("user_id", "resource_type", "resource_id", "role") NULLS NOT DISTINCT}
              ]
     end
   end

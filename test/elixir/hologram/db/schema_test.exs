@@ -216,7 +216,9 @@ defmodule Hologram.DB.SchemaTest do
     end
 
     defp with_index(table_definition, name, columns) do
-      %{table_definition | indexes: Map.put(table_definition.indexes, name, %{columns: columns})}
+      index = %{columns: columns, nulls_distinct: true, unique: false}
+
+      %{table_definition | indexes: Map.put(table_definition.indexes, name, index)}
     end
 
     test "emits add_foreign_key for target-only foreign keys" do
@@ -347,7 +349,9 @@ defmodule Hologram.DB.SchemaTest do
                  op: :create_index,
                  table: "task",
                  index: "task_project_id_$idx",
-                 columns: ["project_id"]
+                 columns: ["project_id"],
+                 nulls_distinct: true,
+                 unique: false
                }
              ]
     end
@@ -382,7 +386,9 @@ defmodule Hologram.DB.SchemaTest do
                  op: :create_index,
                  table: "task",
                  index: "task_project_id_$idx",
-                 columns: ["project_id", "name"]
+                 columns: ["project_id", "name"],
+                 nulls_distinct: true,
+                 unique: false
                }
              ]
     end
@@ -565,7 +571,9 @@ defmodule Hologram.DB.SchemaTest do
             constraint: "task_project_id_$fk"
           }
         })
-        |> Map.put(:indexes, %{"task_old_$idx" => %{columns: ["legacy"]}})
+        |> Map.put(:indexes, %{
+          "task_old_$idx" => %{columns: ["legacy"], nulls_distinct: true, unique: false}
+        })
 
       target_task_table =
         @task_table
@@ -581,7 +589,9 @@ defmodule Hologram.DB.SchemaTest do
             constraint: "task_project_id_$fk"
           }
         })
-        |> Map.put(:indexes, %{"task_new_$idx" => %{columns: ["done"]}})
+        |> Map.put(:indexes, %{
+          "task_new_$idx" => %{columns: ["done"], nulls_distinct: true, unique: false}
+        })
 
       actual = %{
         tables: %{"old" => @project_table, "task" => actual_task_table},
@@ -695,8 +705,16 @@ defmodule Hologram.DB.SchemaTest do
       indexes = table(Module3, "test_fixtures_entity_module3").indexes
 
       assert indexes == %{
-               "test_fixtures_entity_module3_b_id_$idx" => %{columns: ["b_id"]},
-               "test_fixtures_entity_module3_c_id_$idx" => %{columns: ["c_id"]}
+               "test_fixtures_entity_module3_b_id_$idx" => %{
+                 columns: ["b_id"],
+                 nulls_distinct: true,
+                 unique: false
+               },
+               "test_fixtures_entity_module3_c_id_$idx" => %{
+                 columns: ["c_id"],
+                 nulls_distinct: true,
+                 unique: false
+               }
              }
     end
 
@@ -724,7 +742,9 @@ defmodule Hologram.DB.SchemaTest do
                },
                indexes: %{
                  "test_fixtures_entity_module3_a_$join_target_id_$idx" => %{
-                   columns: ["target_id", "source_id"]
+                   columns: ["target_id", "source_id"],
+                   nulls_distinct: true,
+                   unique: false
                  }
                }
              }

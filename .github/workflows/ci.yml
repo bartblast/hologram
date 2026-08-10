@@ -228,16 +228,17 @@ jobs:
           sudo systemctl start postgresql.service
           sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
 
+      # The windows-2022 image preinstalls Postgres 14, below Hologram's Postgres 15 floor
+      # (NULLS NOT DISTINCT index + indnullsnotdistinct introspection) - install 16 instead
+      # of starting the preinstalled service.
       - name: Start Postgres (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          PGPASSWORD: root
+          PGPASSWORD: postgres
         run: |
-          $pg_service_name = (Get-Service -Name "postgresql*").Name
-          Set-Service -Name $pg_service_name -StartupType Manual
-          Start-Service -Name $pg_service_name
-          & "$env:PGBIN\psql" -U postgres -c "ALTER USER postgres PASSWORD 'postgres';"
+          choco install --no-progress postgresql16 --params "/Password:postgres /Port:5432"
+          & "C:\Program Files\PostgreSQL\16\bin\psql" -U postgres -c "SELECT version();"
 
       # Step: Execute lib Elixir tests.
       - name: Run lib Elixir tests

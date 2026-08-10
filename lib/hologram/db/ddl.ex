@@ -209,10 +209,12 @@ defmodule Hologram.DB.DDL do
 
   def statements(%{op: :create_index} = op) do
     columns = Enum.map_join(op.columns, ", ", &Mapper.quote_identifier/1)
+    unique_sql = if op.unique, do: "UNIQUE ", else: ""
+    nulls_sql = if op.nulls_distinct, do: "", else: " NULLS NOT DISTINCT"
 
     [
-      "CREATE INDEX #{Mapper.quote_identifier(op.index)} " <>
-        "ON #{qualified(op.table)} (#{columns})"
+      "CREATE #{unique_sql}INDEX #{Mapper.quote_identifier(op.index)} " <>
+        "ON #{qualified(op.table)} (#{columns})#{nulls_sql}"
     ]
   end
 
