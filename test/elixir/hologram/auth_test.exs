@@ -106,6 +106,18 @@ defmodule Hologram.AuthTest do
 
       assert_error ArgumentError, expected_msg, fn -> grant_role(user_id, :admin) end
     end
+
+    test "raises on a global grant issued by an acting user" do
+      granter = create_user("user_22@example.com")
+      user = create_user("user_23@example.com")
+
+      expected_msg =
+        "global roles are granted only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(granter.id, fn -> grant_role(user, :admin) end)
+      end
+    end
   end
 
   describe "grant_role/3" do
@@ -138,7 +150,14 @@ defmodule Hologram.AuthTest do
       granter = create_user("user_9@example.com")
       user = create_user("user_10@example.com")
 
-      Context.with_actor(granter.id, fn -> grant_role(user, Module1, :owner) end)
+      resource =
+        Module1
+        |> Entity.new()
+        |> DB.create()
+
+      grant_role(granter, resource, :owner)
+
+      Context.with_actor(granter.id, fn -> grant_role(user, resource, :editor) end)
 
       assert [%{granted_by_id: granted_by_id}] = grant_rows(user.id)
       assert granted_by_id == granter.id
@@ -156,12 +175,66 @@ defmodule Hologram.AuthTest do
       granter = create_user("user_12@example.com")
       user = create_user("user_13@example.com")
 
-      Context.with_actor(granter.id, fn -> grant_role(user, Module1, :owner) end)
+      resource =
+        Module1
+        |> Entity.new()
+        |> DB.create()
+
+      grant_role(granter, resource, :owner)
+
+      Context.with_actor(granter.id, fn -> grant_role(user, resource, :editor) end)
       [original_grant] = grant_rows(user.id)
 
-      assert grant_role(user, Module1, :owner) == :ok
+      assert grant_role(user, resource, :editor) == :ok
 
       assert grant_rows(user.id) == [original_grant]
+    end
+
+    test "grants when the acting user manages the resource's roles" do
+      granter = create_user("user_16@example.com")
+      user = create_user("user_17@example.com")
+
+      resource =
+        Module1
+        |> Entity.new()
+        |> DB.create()
+
+      grant_role(granter, resource, :owner)
+
+      assert Context.with_actor(granter.id, fn -> grant_role(user, resource, :editor) end) == :ok
+
+      assert [%{role: "editor"}] = grant_rows(user.id)
+    end
+
+    test "raises when the acting user does not manage the resource's roles" do
+      granter = create_user("user_18@example.com")
+      user = create_user("user_19@example.com")
+
+      resource =
+        Module1
+        |> Entity.new()
+        |> DB.create()
+
+      grant_role(granter, resource, :editor)
+
+      expected_msg =
+        "not allowed to manage the roles of Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)}"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(granter.id, fn -> grant_role(user, resource, :editor) end)
+      end
+    end
+
+    test "raises on a type-wide grant issued by an acting user" do
+      granter = create_user("user_20@example.com")
+      user = create_user("user_21@example.com")
+
+      expected_msg =
+        "type-wide roles are granted only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(granter.id, fn -> grant_role(user, Module1, :owner) end)
+      end
     end
 
     test "raises on a role the resource type does not declare" do
