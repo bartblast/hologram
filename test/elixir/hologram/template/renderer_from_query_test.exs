@@ -22,6 +22,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module90
   alias Hologram.Test.Fixtures.Template.Renderer.Module91
   alias Hologram.Test.Fixtures.Template.Renderer.Module92
+  alias Hologram.Test.Fixtures.Template.Renderer.Module93
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -140,6 +141,55 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       assert String.contains?(html, "entities = 1")
       refute String.contains?(html, "entities = 1,2")
+    end
+  end
+
+  describe "current-user context" do
+    setup do
+      setup_asset_path_registry(AssetPathRegistryStub)
+      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
+
+      setup_asset_manifest_cache(AssetManifestCacheStub)
+      setup_page_digest_registry(PageDigestRegistryStub)
+
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module93, :dummy_module_93_digest)
+
+      :ok
+    end
+
+    test "exposes the session user's row to a from_context prop" do
+      user =
+        Module14
+        |> Entity.new(email: "renderer_2@example.com")
+        |> DB.create()
+
+      {html, _component_registry, _server_struct} =
+        render_page(Module93, %{}, %Server{user_id: user.id}, @page_opts)
+
+      assert String.contains?(html, "current user = renderer_2@example.com")
+    end
+
+    test "exposes nil for an anonymous session" do
+      {html, _component_registry, _server_struct} =
+        render_page(Module93, %{}, %Server{}, @page_opts)
+
+      assert String.contains?(html, "current user = none")
+    end
+
+    test "exposes nil when no row carries the session user id" do
+      dangling_user_id = Entity.generate_id()
+
+      {html, _component_registry, _server_struct} =
+        render_page(Module93, %{}, %Server{user_id: dangling_user_id}, @page_opts)
+
+      assert String.contains?(html, "current user = none")
+    end
+
+    test "exposes nil for a session user id that is not a canonical entity id" do
+      {html, _component_registry, _server_struct} =
+        render_page(Module93, %{}, %Server{user_id: 7}, @page_opts)
+
+      assert String.contains?(html, "current user = none")
     end
   end
 end

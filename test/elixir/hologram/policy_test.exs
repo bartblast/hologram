@@ -8,6 +8,7 @@ defmodule Hologram.PolicyTest do
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy
 
   describe "build/1" do
@@ -109,9 +110,9 @@ defmodule Hologram.PolicyTest do
 
   describe "dead_entity_types/1" do
     test "returns the entity types declaring no allow lines, sorted" do
-      assert dead_entity_types([Policy.Module1, Module14, Module2, Module1]) == [
+      assert dead_entity_types([Policy.Module1, Module14, Module2, Module1, Module4]) == [
                Module1,
-               Module14
+               Module4
              ]
     end
 
