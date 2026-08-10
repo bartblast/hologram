@@ -2,11 +2,11 @@ defmodule Hologram.UI.Runtime do
   use Hologram.Component
   alias Hologram.Router.Helpers, as: RouterHelpers
 
-  prop :csrf_token, :string, from_context: {Hologram.Runtime, :csrf_token}
-  prop :initial_page?, :boolean, from_context: {Hologram.Runtime, :initial_page?}
-  prop :instance_id, :string, from_context: {Hologram.Runtime, :instance_id}
-  prop :page_digest, :string, from_context: {Hologram.Runtime, :page_digest}
-  prop :page_mounted?, :boolean, from_context: {Hologram.Runtime, :page_mounted?}
+  prop :csrf_token, :string, from_context: {Hologram, :csrf_token}
+  prop :initial_page?, :boolean, from_context: {Hologram, :initial_page?}
+  prop :instance_id, :string, from_context: {Hologram, :instance_id}
+  prop :page_digest, :string, from_context: {Hologram, :page_digest}
+  prop :page_mounted?, :boolean, from_context: {Hologram, :page_mounted?}
 
   @impl Component
   def template do

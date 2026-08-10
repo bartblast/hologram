@@ -17,11 +17,11 @@ defmodule Hologram.UI.RuntimeTest do
 
     [
       context: %{
-        {Hologram.Runtime, :csrf_token} => "test-csrf-token-12345",
-        {Hologram.Runtime, :initial_page?} => false,
-        {Hologram.Runtime, :instance_id} => "test-instance-id-abcde",
-        {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693",
-        {Hologram.Runtime, :page_mounted?} => false
+        {Hologram, :csrf_token} => "test-csrf-token-12345",
+        {Hologram, :initial_page?} => false,
+        {Hologram, :instance_id} => "test-instance-id-abcde",
+        {Hologram, :page_digest} => "102790adb6c3b1956db310be523a7693",
+        {Hologram, :page_mounted?} => false
       }
     ]
   end
@@ -29,8 +29,8 @@ defmodule Hologram.UI.RuntimeTest do
   test "initial page, page mounted", %{context: context} do
     context =
       context
-      |> Map.put({Hologram.Runtime, :initial_page?}, true)
-      |> Map.put({Hologram.Runtime, :page_mounted?}, true)
+      |> Map.put({Hologram, :initial_page?}, true)
+      |> Map.put({Hologram, :page_mounted?}, true)
 
     markup = render_component(Runtime, %{}, context)
 
@@ -45,7 +45,7 @@ defmodule Hologram.UI.RuntimeTest do
   end
 
   test "initial page, page not mounted", %{context: context} do
-    context = Map.put(context, {Hologram.Runtime, :initial_page?}, true)
+    context = Map.put(context, {Hologram, :initial_page?}, true)
     markup = render_component(Runtime, %{}, context)
 
     assert String.contains?(markup, "globalThis.Hologram._pendingJsInteropActions")
@@ -61,9 +61,9 @@ defmodule Hologram.UI.RuntimeTest do
   test "not initial page, page mounted", %{context: initial_context} do
     context =
       initial_context
-      |> Map.delete({Hologram.Runtime, :csrf_token})
-      |> Map.delete({Hologram.Runtime, :instance_id})
-      |> Map.put({Hologram.Runtime, :page_mounted?}, true)
+      |> Map.delete({Hologram, :csrf_token})
+      |> Map.delete({Hologram, :instance_id})
+      |> Map.put({Hologram, :page_mounted?}, true)
 
     markup = render_component(Runtime, %{}, context)
 
@@ -80,8 +80,8 @@ defmodule Hologram.UI.RuntimeTest do
   test "not initial page, page not mounted", %{context: initial_context} do
     context =
       initial_context
-      |> Map.delete({Hologram.Runtime, :csrf_token})
-      |> Map.delete({Hologram.Runtime, :instance_id})
+      |> Map.delete({Hologram, :csrf_token})
+      |> Map.delete({Hologram, :instance_id})
 
     markup = render_component(Runtime, %{}, context)
 
@@ -96,14 +96,14 @@ defmodule Hologram.UI.RuntimeTest do
   end
 
   test "csrf_token prop", %{context: initial_context} do
-    context = Map.put(initial_context, {Hologram.Runtime, :initial_page?}, true)
+    context = Map.put(initial_context, {Hologram, :initial_page?}, true)
     markup = render_component(Runtime, %{}, context)
 
     assert String.contains?(markup, ~s'globalThis.Hologram.csrfToken = "test-csrf-token-12345";')
   end
 
   test "instance_id prop", %{context: initial_context} do
-    context = Map.put(initial_context, {Hologram.Runtime, :initial_page?}, true)
+    context = Map.put(initial_context, {Hologram, :initial_page?}, true)
     markup = render_component(Runtime, %{}, context)
 
     assert String.contains?(
