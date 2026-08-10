@@ -34,6 +34,20 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns the names of the roles declared with scope :global across the data model, sorted.
+
+  A global role is granted without a resource, and the same name declared on several entity
+  types is one role.
+  """
+  @spec global_role_names() :: list(atom)
+  def global_role_names do
+    Reflection.list_entities()
+    |> Enum.flat_map(&global_role_names/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
   Returns the own roles qualifying their holders to manage the grants of the given entity type, sorted.
 
   These are the extends-expanded own roles of its allow :manage_roles rules - empty when the entity
@@ -134,6 +148,13 @@ defmodule Hologram.Policy do
     Enum.map(entity_type.__roles__(), fn {name, _opts} -> name end)
   end
 
+  # TODO: identity features are detected through declarations only - grant_role and can?
+  # callsites are not scanned yet, which the compiler's whole-program call graph analysis covers.
+  defp declares_identity_features?(entity_type) do
+    entity_type.__roles__() != [] or
+      Enum.any?(entity_type.__policies__(), fn {_action, to, _via, _predicates} -> to != nil end)
+  end
+
   defp describe_via_cycle([{first_entity_type, _first_relationship_name} | _later_hops] = cycle) do
     hops =
       Enum.map_join(cycle, " -> ", fn {entity_type, relationship_name} ->
@@ -141,13 +162,6 @@ defmodule Hologram.Policy do
       end)
 
     "  * #{hops} -> #{inspect(first_entity_type)}"
-  end
-
-  # TODO: identity features are detected through declarations only - grant_role and can?
-  # callsites are not scanned yet, which the compiler's whole-program call graph analysis covers.
-  defp declares_identity_features?(entity_type) do
-    entity_type.__roles__() != [] or
-      Enum.any?(entity_type.__policies__(), fn {_action, to, _via, _predicates} -> to != nil end)
   end
 
   # Depth-first traversal over the delegation edges of one action. The path holds the hops
@@ -185,6 +199,12 @@ defmodule Hologram.Policy do
     else
       find_via_cycles(target_type, new_path, edges, {cycles, visited})
     end
+  end
+
+  defp global_role_names(entity_type) do
+    entity_type.__roles__()
+    |> Enum.filter(fn {_name, opts} -> Keyword.get(opts, :scope) == :global end)
+    |> Enum.map(fn {name, _opts} -> name end)
   end
 
   defp own_reference_names(%{to: nil}), do: []

@@ -43,6 +43,12 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "global_role_names/0" do
+    test "collects the roles declared with global scope across the data model" do
+      assert global_role_names() == [:admin]
+    end
+  end
+
   describe "manage_roles_qualifying_roles/1" do
     test "returns the expanded own roles of the manage_roles rules" do
       assert manage_roles_qualifying_roles(Policy.Module1) == [:owner]

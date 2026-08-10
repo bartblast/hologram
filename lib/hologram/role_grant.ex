@@ -98,6 +98,16 @@ defmodule Hologram.RoleGrant do
   end
 
   @doc false
+  @spec resource_type(module) :: atom
+  def resource_type(entity_type) do
+    entity_type
+    |> Mapper.table_name()
+    # The atom set is bounded by the app's entity types, all named at build time.
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    |> String.to_atom()
+  end
+
+  @doc false
   @spec reset_resolution_cache() :: :ok
   def reset_resolution_cache do
     :persistent_term.erase(@resolution_key)
@@ -110,11 +120,8 @@ defmodule Hologram.RoleGrant do
 
     resource_type_values =
       entity_types
-      |> Enum.map(&Mapper.table_name/1)
+      |> Enum.map(&resource_type/1)
       |> Enum.sort()
-      # Compile-time atom creation - the enum values name the app's entity types.
-      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-      |> Enum.map(&String.to_atom/1)
 
     role_values =
       entity_types

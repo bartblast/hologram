@@ -2,7 +2,7 @@
 defmodule Hologram.Test.Fixtures.Policy.Module2 do
   use Hologram.Entity
 
-  role :admin
+  role :admin, scope: :global
   role :member
 
   allow :read, to: :member
