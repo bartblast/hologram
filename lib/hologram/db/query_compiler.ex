@@ -4,6 +4,7 @@ defmodule Hologram.DB.QueryCompiler do
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
+  alias Hologram.Policy
 
   @data_schema "hologram_data"
 
@@ -53,8 +54,9 @@ defmodule Hologram.DB.QueryCompiler do
   bind nil at runtime - a sometimes-nil variable branches into an explicit nil
   predicate in code.
   """
-  @spec compile(%{atom => any}, %{module => %{atom => any}}, list(map) | nil) :: %{atom => any}
-  def compile(term, mapping, rules \\ nil) do
+  @spec compile(%{atom => any}, %{module => %{atom => any}}, %{atom => any} | nil) ::
+          %{atom => any}
+  def compile(term, mapping, policy \\ nil) do
     entity_mapping = Map.fetch!(mapping, term.entity)
 
     {authored_conditions, authored_params} = conditions(term.filter, entity_mapping, [])
@@ -62,10 +64,12 @@ defmodule Hologram.DB.QueryCompiler do
     {include_sql, params_after_includes} =
       include_selects(term, entity_mapping, mapping, authored_params)
 
-    policy_context = %{entity_mapping: entity_mapping, entity_type: term.entity, mapping: mapping}
-
     {policy_conditions, all_reversed_params} =
-      policy_conditions(rules, policy_context, params_after_includes)
+      policy_conditions(
+        policy,
+        policy_context(term.entity, mapping, policy),
+        params_after_includes
+      )
 
     where_sql = where_clause(authored_conditions ++ policy_conditions)
     order_sql = order_clause(term.order_by, entity_mapping)
@@ -239,6 +243,15 @@ defmodule Hologram.DB.QueryCompiler do
     {"#{Mapper.quote_identifier(column.name)} #{operator} #{placeholder}", new_params}
   end
 
+  defp relationship_target(entity_type, relationship_name) do
+    {_name, target_type, _opts} =
+      Enum.find(entity_type.__relationships__(), fn {name, _type, _opts} ->
+        name == relationship_name
+      end)
+
+    target_type
+  end
+
   defp reference_column(entity_mapping, relationship_name) do
     Enum.find(entity_mapping.columns, &(&1.source == {:relationship, relationship_name}))
   end
@@ -258,11 +271,23 @@ defmodule Hologram.DB.QueryCompiler do
     {"#{placeholder}::#{enum_type(column)}", new_params}
   end
 
+  defp policy_context(_entity_type, _mapping, nil), do: nil
+
+  defp policy_context(entity_type, mapping, %{operation: operation}) do
+    %{
+      entity_mapping: Map.fetch!(mapping, entity_type),
+      entity_type: entity_type,
+      mapping: mapping,
+      operation: operation
+    }
+  end
+
   defp policy_conditions(nil, _context, reversed_params), do: {[], reversed_params}
 
-  defp policy_conditions([], _context, reversed_params), do: {["FALSE"], reversed_params}
+  defp policy_conditions(%{rules: []}, _context, reversed_params),
+    do: {["FALSE"], reversed_params}
 
-  defp policy_conditions(rules, context, reversed_params) do
+  defp policy_conditions(%{rules: rules}, context, reversed_params) do
     {rendered_rules, new_params} =
       Enum.map_reduce(rules, reversed_params, fn rule, acc_params ->
         rule_condition(rule, context, acc_params)
@@ -374,21 +399,52 @@ defmodule Hologram.DB.QueryCompiler do
     "(" <> Enum.map_join(rule_sqls, " OR ", &"(#{&1})") <> ")"
   end
 
-  # TODO: delegations render as a denial until via composition lands - an under-approximation,
-  # so no row is shown that a rule does not grant.
-  defp delegation_conditions(nil), do: []
+  # Delegation asks the related entity's policy for the same operation, composed into a
+  # correlated EXISTS. Recursion terminates because delegation cycles are a compile error, so
+  # every chain reaches a type that delegates no further.
+  defp delegation_conditions(nil, _context, reversed_params), do: {[], reversed_params}
 
-  defp delegation_conditions(_relationship_name), do: ["FALSE"]
+  defp delegation_conditions(relationship_name, context, reversed_params) do
+    column = reference_column(context.entity_mapping, relationship_name)
+    target_type = relationship_target(context.entity_type, relationship_name)
+    target_mapping = Map.fetch!(context.mapping, target_type)
+
+    target_rules =
+      target_type
+      |> Policy.build()
+      |> Map.get(context.operation, [])
+
+    target_policy = %{operation: context.operation, rules: target_rules}
+
+    target_context = policy_context(target_type, context.mapping, target_policy)
+
+    {target_conditions, new_params} =
+      policy_conditions(target_policy, target_context, reversed_params)
+
+    join_sql =
+      ~s|#{Mapper.quote_identifier(target_mapping.table)}."id" = | <>
+        ~s|#{Mapper.quote_identifier(context.entity_mapping.table)}.#{Mapper.quote_identifier(column.name)}|
+
+    inner_sql = Enum.join([join_sql | target_conditions], " AND ")
+
+    condition =
+      ~s|EXISTS (SELECT 1 FROM #{Mapper.quote_identifier(@data_schema)}.| <>
+        ~s|#{Mapper.quote_identifier(target_mapping.table)} WHERE #{inner_sql})|
+
+    {[condition], new_params}
+  end
 
   defp rule_condition(rule, context, reversed_params) do
     {predicate_conditions, params_after_predicates} =
       conditions(rule.predicates, context.entity_mapping, reversed_params)
 
-    {reference_conditions, new_params} =
+    {reference_conditions, params_after_references} =
       grant_reference_conditions(rule.to, context, params_after_predicates)
 
-    rule_conditions =
-      predicate_conditions ++ reference_conditions ++ delegation_conditions(rule.via)
+    {delegation_conditions, new_params} =
+      delegation_conditions(rule.via, context, params_after_references)
+
+    rule_conditions = predicate_conditions ++ reference_conditions ++ delegation_conditions
 
     case rule_conditions do
       [] -> {:unconditional, new_params}
