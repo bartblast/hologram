@@ -5,19 +5,27 @@ defmodule Hologram.DB.QueryRunnerTest do
   import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1]
   import Hologram.DB.QueryRunner
 
+  alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
+  alias Hologram.DB
   alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module8
   alias Hologram.Test.Fixtures.Entity.Module9
+  alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
   @mapping Mapper.derive!([Module1, Module2, Module3])
+
+  @policy_mapping Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
 
   defp create_module_2_entities do
     first =
@@ -47,6 +55,107 @@ defmodule Hologram.DB.QueryRunnerTest do
     Module3
     |> Entity.new(c_id: target.id)
     |> create()
+  end
+
+  describe "run_policied/4" do
+    defp create_policy_entity(public) do
+      PolicyModule1
+      |> Entity.new(public: public)
+      |> DB.create()
+    end
+
+    defp create_policy_user(email) do
+      Module14
+      |> Entity.new(email: email)
+      |> DB.create()
+    end
+
+    defp policied_ids(actor_user_id) do
+      term = Query.normalize(PolicyModule1)
+
+      term
+      |> run_policied(@policy_mapping, actor_user_id)
+      |> Enum.map(& &1.id)
+      |> Enum.sort()
+    end
+
+    test "returns only the rows the policy grants the acting user" do
+      user = create_policy_user("runner_1@example.com")
+      public_entity = create_policy_entity(true)
+      private_entity = create_policy_entity(false)
+
+      Auth.grant_role(user, private_entity, :viewer)
+
+      assert policied_ids(user.id) == Enum.sort([public_entity.id, private_entity.id])
+    end
+
+    test "hides rows granted to another user" do
+      user = create_policy_user("runner_2@example.com")
+      other_user = create_policy_user("runner_3@example.com")
+      public_entity = create_policy_entity(true)
+      private_entity = create_policy_entity(false)
+
+      Auth.grant_role(other_user, private_entity, :viewer)
+
+      assert policied_ids(user.id) == [public_entity.id]
+    end
+
+    test "returns only unconditionally visible rows for an anonymous session" do
+      user = create_policy_user("runner_4@example.com")
+      public_entity = create_policy_entity(true)
+      private_entity = create_policy_entity(false)
+
+      Auth.grant_role(user, private_entity, :viewer)
+
+      assert policied_ids(nil) == [public_entity.id]
+    end
+
+    test "applies the policy to counting queries" do
+      create_policy_entity(true)
+      create_policy_entity(false)
+
+      term =
+        PolicyModule1
+        |> Query.count()
+        |> Query.normalize()
+
+      assert run_policied(term, @policy_mapping, nil) == 1
+    end
+
+    test "applies the policy to single-result queries" do
+      public_entity = create_policy_entity(true)
+      private_entity = create_policy_entity(false)
+
+      private_term =
+        PolicyModule1
+        |> filter(id: private_entity.id)
+        |> Query.one()
+        |> Query.normalize()
+
+      public_term =
+        PolicyModule1
+        |> filter(id: public_entity.id)
+        |> Query.one()
+        |> Query.normalize()
+
+      assert run_policied(private_term, @policy_mapping, nil) == nil
+      assert %{id: id} = run_policied(public_term, @policy_mapping, nil)
+      assert id == public_entity.id
+    end
+
+    test "leaves the trusted run unrestricted" do
+      public_entity = create_policy_entity(true)
+      private_entity = create_policy_entity(false)
+
+      ids =
+        PolicyModule1
+        |> Query.normalize()
+        |> run(@policy_mapping)
+        |> Enum.map(& &1.id)
+        |> Enum.sort()
+
+      assert ids == Enum.sort([public_entity.id, private_entity.id])
+    end
   end
 
   describe "run/3" do

@@ -95,6 +95,17 @@ defmodule Hologram.DB.QueryCompiler do
 
   # Bind slots inside an ARRAY constructor carry no type context of their own -
   # without the cast Postgres resolves them to text.
+  defp actor_gated?(rule) do
+    rule.to != nil or
+      Enum.any?(rule.predicates, fn {_name, _operator, value} -> value == {:actor} end)
+  end
+
+  # A rule referencing the actor cannot match without one, so an anonymous statement drops it
+  # rather than binding a nil param - at every nesting level, delegated policies included.
+  defp applicable_rules(rules, %{anonymous?: true}), do: Enum.reject(rules, &actor_gated?/1)
+
+  defp applicable_rules(rules, _context), do: rules
+
   defp array_type(%{type: :enum, sql_type: sql_type}) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(sql_type)}[]"
   end
@@ -275,8 +286,9 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp policy_context(_entity_type, _mapping, nil), do: nil
 
-  defp policy_context(entity_type, mapping, %{operation: operation}) do
+  defp policy_context(entity_type, mapping, %{operation: operation} = policy) do
     %{
+      anonymous?: Map.get(policy, :anonymous?, false),
       entity_mapping: Map.fetch!(mapping, entity_type),
       entity_type: entity_type,
       mapping: mapping,
@@ -286,10 +298,16 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp policy_conditions(nil, _context, reversed_params), do: {[], reversed_params}
 
-  defp policy_conditions(%{rules: []}, _context, reversed_params),
+  defp policy_conditions(%{rules: rules}, context, reversed_params) do
+    rules
+    |> applicable_rules(context)
+    |> applicable_policy_conditions(context, reversed_params)
+  end
+
+  defp applicable_policy_conditions([], _context, reversed_params),
     do: {["FALSE"], reversed_params}
 
-  defp policy_conditions(%{rules: rules}, context, reversed_params) do
+  defp applicable_policy_conditions(rules, context, reversed_params) do
     {rendered_rules, new_params} =
       Enum.map_reduce(rules, reversed_params, fn rule, acc_params ->
         rule_condition(rule, context, acc_params)
@@ -434,7 +452,11 @@ defmodule Hologram.DB.QueryCompiler do
       |> Policy.build()
       |> Map.get(context.operation, [])
 
-    target_policy = %{operation: context.operation, rules: target_rules}
+    target_policy = %{
+      anonymous?: context.anonymous?,
+      operation: context.operation,
+      rules: target_rules
+    }
 
     target_context = policy_context(target_type, context.mapping, target_policy)
 

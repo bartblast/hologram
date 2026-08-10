@@ -5,6 +5,7 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.DB.Connection
   alias Hologram.DB.QueryCompiler
   alias Hologram.Entity.Validator
+  alias Hologram.Policy
 
   @doc """
   Runs the given normalized query term against the database and returns its decoded
@@ -34,6 +35,27 @@ defmodule Hologram.DB.QueryRunner do
 
     compiled = QueryCompiler.compile(term, mapping)
     values = Enum.map(compiled.params, &resolve_param!(&1, bindings))
+
+    case Connection.query(compiled.sql, values) do
+      {:ok, result} -> decode_result(result, term, mapping)
+      {:error, error} -> raise error
+    end
+  end
+
+  @doc false
+  @spec run_policied(%{atom => any}, %{module => %{atom => any}}, String.t() | nil, %{atom => any}) ::
+          list(struct) | struct | integer | nil
+  def run_policied(term, mapping, actor_user_id, bindings \\ %{}) do
+    validate_bindings!(term, bindings)
+
+    policy = %{
+      anonymous?: is_nil(actor_user_id),
+      operation: :read,
+      rules: read_rules(term.entity)
+    }
+
+    compiled = QueryCompiler.compile(term, mapping, policy)
+    values = Enum.map(compiled.params, &resolve_param!(&1, bindings, actor_user_id))
 
     case Connection.query(compiled.sql, values) do
       {:ok, result} -> decode_result(result, term, mapping)
@@ -213,6 +235,18 @@ defmodule Hologram.DB.QueryRunner do
   defp field_name(%{source: {:attribute, name}}), do: name
 
   defp field_name(%{source: {:relationship, name}}), do: String.to_existing_atom("#{name}_id")
+
+  defp read_rules(entity_type) do
+    entity_type
+    |> Policy.build()
+    |> Map.get(:read, [])
+  end
+
+  # The actor slot never appears in an anonymous statement - actor-referencing rules are
+  # elided at composition, so there is no nil to bind.
+  defp resolve_param!(:actor, _bindings, actor_user_id), do: Codec.encode(actor_user_id, :uuid)
+
+  defp resolve_param!(slot, bindings, _actor_user_id), do: resolve_param!(slot, bindings)
 
   defp resolve_param!({:value, encoded_value}, _bindings), do: encoded_value
 
