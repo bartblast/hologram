@@ -10,10 +10,17 @@ defmodule Hologram.AuthTest do
   alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
+  alias Hologram.Test.Fixtures.Policy.Module2
 
   defp create_user(email) do
     Module14
     |> Entity.new(email: email)
+    |> DB.create()
+  end
+
+  defp create_parent(public \\ false) do
+    Module2
+    |> Entity.new(public: public)
     |> DB.create()
   end
 
@@ -69,6 +76,88 @@ defmodule Hologram.AuthTest do
 
     test "skips rules referencing the acting user for an anonymous session" do
       refute can?(nil, :archive, %Module1{author_id: nil})
+    end
+
+    test "matches an instance grant on the entity" do
+      user = create_user("user_41@example.com")
+      entity = %Module1{id: Entity.generate_id(), priority: 5}
+
+      refute can?(user, :update, entity)
+
+      grant_role(user, %Module1{id: entity.id}, :editor)
+
+      assert can?(user, :update, entity)
+    end
+
+    test "matches a type-wide grant on the entity type" do
+      user = create_user("user_42@example.com")
+      entity = %Module1{id: Entity.generate_id(), priority: 5}
+
+      grant_role(user, Module1, :editor)
+
+      assert can?(user, :update, entity)
+    end
+
+    test "matches a global grant" do
+      user = create_user("user_43@example.com")
+
+      refute can?(user, :update, %Module2{id: Entity.generate_id()})
+
+      grant_role(user, :admin)
+
+      assert can?(user, :update, %Module2{id: Entity.generate_id()})
+    end
+
+    test "matches a role extending the referenced one" do
+      user = create_user("user_44@example.com")
+      entity = %Module1{id: Entity.generate_id(), priority: 5}
+
+      grant_role(user, %Module1{id: entity.id}, :owner)
+
+      assert can?(user, :update, entity)
+    end
+
+    test "matches a type-wide grant on another entity type" do
+      user = create_user("user_45@example.com")
+      entity = %Module1{id: Entity.generate_id()}
+
+      refute can?(user, :read, entity)
+
+      grant_role(user, Module2, :admin)
+
+      assert can?(user, :read, entity)
+    end
+
+    test "matches a grant on the entity's related instance" do
+      user = create_user("user_46@example.com")
+      parent = create_parent()
+      entity = %Module1{id: Entity.generate_id(), parent_id: parent.id}
+
+      refute can?(user, :delete, entity)
+
+      grant_role(user, parent, :admin)
+
+      assert can?(user, :delete, entity)
+    end
+
+    test "denies a related-instance grant reference on an entity without the reference" do
+      user = create_user("user_47@example.com")
+
+      grant_role(user, Module2, :admin)
+
+      refute can?(user, :delete, %Module1{id: Entity.generate_id(), parent_id: nil})
+    end
+
+    test "delegates to the related entity's policy" do
+      public_parent = create_parent(true)
+      private_parent = create_parent()
+
+      assert can?(nil, :publish, %Module1{id: Entity.generate_id(), parent_id: public_parent.id})
+      refute can?(nil, :publish, %Module1{id: Entity.generate_id(), parent_id: private_parent.id})
+    end
+
+    test "denies delegation without the reference" do
+      refute can?(nil, :publish, %Module1{id: Entity.generate_id(), parent_id: nil})
     end
   end
 

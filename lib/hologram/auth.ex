@@ -22,8 +22,9 @@ defmodule Hologram.Auth do
   @spec can?(struct | String.t() | nil, atom, struct) :: boolean
   def can?(user_or_id, action, entity) do
     policy = Policy.build(entity.__struct__)
+    checker = &check_requirement(&1, &2, &3, action)
 
-    Evaluator.grants?(policy, action, entity, actor_user_id(user_or_id), &check_requirement/3)
+    Evaluator.grants?(policy, action, entity, actor_user_id(user_or_id), checker)
   end
 
   @doc """
@@ -129,7 +130,7 @@ defmodule Hologram.Auth do
       actor_user_id ->
         role_names = Policy.manage_roles_qualifying_roles(entity_type)
 
-        if not holds_role?(actor_user_id, entity_type, resource_id, role_names) do
+        if not grant_exists?(actor_user_id, {:instance, entity_type, resource_id}, role_names) do
           raise Hologram.AccessDeniedError, unmanaged_resource_message(entity_type, resource_id)
         end
 
@@ -153,7 +154,7 @@ defmodule Hologram.Auth do
         role_names = Policy.manage_roles_qualifying_roles(entity_type)
 
         if actor_user_id != user_id and
-             not holds_role?(actor_user_id, entity_type, resource_id, role_names) do
+             not grant_exists?(actor_user_id, {:instance, entity_type, resource_id}, role_names) do
           raise Hologram.AccessDeniedError, unmanaged_resource_message(entity_type, resource_id)
         end
 
@@ -170,8 +171,45 @@ defmodule Hologram.Auth do
     :ok
   end
 
-  # TODO: grant references and delegations deny until the role grant store can answer them.
-  defp check_requirement(_requirement, _entity, _actor_user_id), do: false
+  # Own roles are held on the entity itself, on its whole type, or globally - the three grant
+  # shapes the store keeps apart by which of its resource columns are nil.
+  defp check_requirement({:own, role_names}, entity, actor_user_id, _action) do
+    entity_type = entity.__struct__
+
+    grant_exists?(actor_user_id, {:own, entity_type, entity.id}, role_names) or
+      holds_global_role?(actor_user_id, entity_type, role_names)
+  end
+
+  defp check_requirement({:type, target_type, role_names}, _entity, actor_user_id, _action) do
+    grant_exists?(actor_user_id, {:type, target_type}, role_names)
+  end
+
+  defp check_requirement({:rel, relationship_name, role_names}, entity, actor_user_id, _action) do
+    case related_id(entity, relationship_name) do
+      nil ->
+        false
+
+      target_id ->
+        target_type = relationship_target(entity.__struct__, relationship_name)
+
+        grant_exists?(actor_user_id, {:instance, target_type, target_id}, role_names)
+    end
+  end
+
+  # Delegation asks the related entity's policy for the same action. The related row is read
+  # raw, because a policy that could not see its own delegation target would deny everything.
+  defp check_requirement({:via, relationship_name}, entity, actor_user_id, action) do
+    case related_id(entity, relationship_name) do
+      nil ->
+        false
+
+      target_id ->
+        entity.__struct__
+        |> relationship_target(relationship_name)
+        |> EntityOperations.get(target_id)
+        |> delegates?(actor_user_id, action)
+    end
+  end
 
   # sobelow_skip ["SQL.Query"]
   defp count_managing_grants(entity_type, resource_id, role_names) do
@@ -196,6 +234,10 @@ defmodule Hologram.Auth do
   # Nils encode the type-wide and global grant shapes, so the delete matches them as values -
   # the same comparison the store's unique index makes.
   # sobelow_skip ["SQL.Query"]
+  defp delegates?(nil, _actor_user_id, _action), do: false
+
+  defp delegates?(target, actor_user_id, action), do: can?(actor_user_id, action, target)
+
   defp delete_grant(user_id, resource_type, resource_id, role) do
     statement = """
     DELETE FROM "hologram_data"."hologram_role_grant"
@@ -217,6 +259,24 @@ defmodule Hologram.Auth do
     :ok
   end
 
+  defp global_role?(entity_type, role_name) do
+    Enum.any?(entity_type.__roles__(), fn {name, opts} ->
+      name == role_name and Keyword.get(opts, :scope) == :global
+    end)
+  end
+
+  defp grant_exists?(_actor_user_id, _scope, []), do: false
+
+  # No stored grant can name an id the framework never generated, so an id in any other
+  # spelling holds nothing - checking access with one is a denial, not an error.
+  defp grant_exists?(actor_user_id, scope, role_names) do
+    if Validator.attribute_value_valid?(actor_user_id, :uuid) do
+      query_grant_exists?(actor_user_id, scope, role_names)
+    else
+      false
+    end
+  end
+
   defp guard_last_managing_role!(entity_type, resource_id, role, role_names) do
     if role in role_names and count_managing_grants(entity_type, resource_id, role_names) <= 1 do
       raise Hologram.AccessDeniedError,
@@ -226,30 +286,10 @@ defmodule Hologram.Auth do
     :ok
   end
 
-  defp holds_role?(_actor_user_id, _entity_type, _resource_id, []), do: false
+  defp holds_global_role?(actor_user_id, entity_type, role_names) do
+    global_role_names = Enum.filter(role_names, &global_role?(entity_type, &1))
 
-  # sobelow_skip ["SQL.Query"]
-  defp holds_role?(actor_user_id, entity_type, resource_id, role_names) do
-    statement = """
-    SELECT EXISTS (
-      SELECT 1 FROM "hologram_data"."hologram_role_grant"
-      WHERE "user_id" = $1
-        AND "resource_type" = $2::#{qualified_enum_type("resource_type")}
-        AND "resource_id" = $3
-        AND "role" = ANY($4::#{qualified_enum_type("role")}[])
-    )
-    """
-
-    params = [
-      Codec.encode(actor_user_id, :uuid),
-      resource_type_value(entity_type),
-      Codec.encode(resource_id, :uuid),
-      Enum.map(role_names, &Atom.to_string/1)
-    ]
-
-    {:ok, %{rows: [[holds_role?]]}} = Connection.query(statement, params)
-
-    holds_role?
+    grant_exists?(actor_user_id, :global, global_role_names)
   end
 
   # Enum params are cast to their column's type in SQL rather than the columns to text, so
@@ -265,6 +305,41 @@ defmodule Hologram.Auth do
     ~s("hologram_data".#{Mapper.quote_identifier(enum_type)})
   end
 
+  # sobelow_skip ["SQL.Query"]
+  defp query_grant_exists?(actor_user_id, scope, role_names) do
+    {scope_condition, scope_params} = scope_condition(scope)
+    role_placeholder = "$#{length(scope_params) + 2}"
+
+    statement = """
+    SELECT EXISTS (
+      SELECT 1 FROM "hologram_data"."hologram_role_grant"
+      WHERE "user_id" = $1
+        AND #{scope_condition}
+        AND "role" = ANY(#{role_placeholder}::#{qualified_enum_type("role")}[])
+    )
+    """
+
+    role_values = Enum.map(role_names, &Atom.to_string/1)
+    params = Enum.concat([[Codec.encode(actor_user_id, :uuid)], scope_params, [role_values]])
+
+    {:ok, %{rows: [[grant_exists?]]}} = Connection.query(statement, params)
+
+    grant_exists?
+  end
+
+  defp related_id(entity, relationship_name) do
+    Map.fetch!(entity, String.to_existing_atom("#{relationship_name}_id"))
+  end
+
+  defp relationship_target(entity_type, relationship_name) do
+    {_name, target_type, _opts} =
+      Enum.find(entity_type.__relationships__(), fn {name, _type, _opts} ->
+        name == relationship_name
+      end)
+
+    target_type
+  end
+
   defp resource_reference(resource) when is_struct(resource) do
     {resource.__struct__, validate_id!(resource.id, "resource")}
   end
@@ -275,6 +350,32 @@ defmodule Hologram.Auth do
     entity_type
     |> RoleGrant.resource_type()
     |> Atom.to_string()
+  end
+
+  defp scope_condition({:own, entity_type, resource_id}) do
+    condition =
+      ~s|"resource_type" = $2::#{qualified_enum_type("resource_type")} | <>
+        ~s|AND ("resource_id" = $3 OR "resource_id" IS NULL)|
+
+    {condition, [resource_type_value(entity_type), Codec.encode(resource_id, :uuid)]}
+  end
+
+  defp scope_condition({:instance, entity_type, resource_id}) do
+    condition =
+      ~s|"resource_type" = $2::#{qualified_enum_type("resource_type")} AND "resource_id" = $3|
+
+    {condition, [resource_type_value(entity_type), Codec.encode(resource_id, :uuid)]}
+  end
+
+  defp scope_condition({:type, entity_type}) do
+    condition =
+      ~s|"resource_type" = $2::#{qualified_enum_type("resource_type")} AND "resource_id" IS NULL|
+
+    {condition, [resource_type_value(entity_type)]}
+  end
+
+  defp scope_condition(:global) do
+    {~s|"resource_type" IS NULL AND "resource_id" IS NULL|, []}
   end
 
   defp unknown_global_role_message(role, []) do
