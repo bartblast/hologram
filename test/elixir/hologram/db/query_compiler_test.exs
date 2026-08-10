@@ -6,6 +6,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Mapper
+  alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -424,6 +425,36 @@ defmodule Hologram.DB.QueryCompilerTest do
                  ~s|WHERE "test_fixtures_policy_module2"."id" = | <>
                  ~s|"test_fixtures_policy_module1"."parent_id" AND EXISTS (SELECT 1 FROM | <>
                  ~s|"hologram_data"."hologram_role_grant" AS "rg" WHERE "rg"."user_id" = $1|
+             )
+    end
+
+    test "composes the grant store's own visibility policy" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      term = Query.normalize(RoleGrant)
+      policy = %{operation: :read, rules: Policy.build(RoleGrant)[:read]}
+
+      assert %{params: params, sql: sql} = compile(term, mapping, policy)
+
+      assert params == [
+               :actor,
+               {:value, "test_fixtures_policy_module1"},
+               {:value, ["owner"]},
+               {:value, "test_fixtures_policy_module1"},
+               {:value, "test_fixtures_policy_module2"},
+               {:value, ["member"]},
+               {:value, "test_fixtures_policy_module2"}
+             ]
+
+      assert String.contains?(sql, ~s|WHERE (("user_id" = $1)|)
+
+      assert String.contains?(
+               sql,
+               ~s|("resource_type" = $2 AND EXISTS (SELECT 1 FROM | <>
+                 ~s|"hologram_data"."hologram_role_grant" AS "rg" WHERE "rg"."user_id" = $1 | <>
+                 ~s|AND "rg"."role" = ANY($3::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                 ~s|AND "rg"."resource_type" = | <>
+                 ~s|$4::"hologram_data"."hologram_role_grant_resource_type_$enum" | <>
+                 ~s|AND "rg"."resource_id" = "hologram_role_grant"."resource_id"))|
              )
     end
 

@@ -4,6 +4,7 @@ defmodule Hologram.AuthTest do
   import Hologram.Auth
 
   alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -158,6 +159,63 @@ defmodule Hologram.AuthTest do
 
     test "denies delegation without the reference" do
       refute can?(nil, :publish, %Module1{id: Entity.generate_id(), parent_id: nil})
+    end
+  end
+
+  describe "can?/3 for the grant store" do
+    test "shows a user their own grants" do
+      user = create_user("user_50@example.com")
+
+      assert can?(user, :read, %RoleGrant{user_id: user.id})
+    end
+
+    test "hides another user's grants without a read-grants role" do
+      user = create_user("user_51@example.com")
+      other_user = create_user("user_52@example.com")
+      resource = create_parent()
+
+      grant = %RoleGrant{
+        user_id: other_user.id,
+        resource_type: RoleGrant.resource_type(Module2),
+        resource_id: resource.id
+      }
+
+      refute can?(user, :read, grant)
+    end
+
+    test "shows another user's grants to a holder of the resource type's read-grants role" do
+      user = create_user("user_53@example.com")
+      other_user = create_user("user_54@example.com")
+      resource = create_parent()
+
+      grant_role(user, resource, :member)
+
+      grant = %RoleGrant{
+        user_id: other_user.id,
+        resource_type: RoleGrant.resource_type(Module2),
+        resource_id: resource.id
+      }
+
+      assert can?(user, :read, grant)
+    end
+
+    test "defaults to the roles managing the resource when read_grants is undeclared" do
+      owner = create_user("user_55@example.com")
+      editor = create_user("user_56@example.com")
+      other_user = create_user("user_57@example.com")
+      resource = create_resource()
+
+      grant_role(owner, resource, :owner)
+      grant_role(editor, resource, :editor)
+
+      grant = %RoleGrant{
+        user_id: other_user.id,
+        resource_type: RoleGrant.resource_type(Module1),
+        resource_id: resource.id
+      }
+
+      assert can?(owner, :read, grant)
+      refute can?(editor, :read, grant)
     end
   end
 

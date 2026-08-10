@@ -196,6 +196,17 @@ defmodule Hologram.Auth do
     end
   end
 
+  # The grant store's own policy: a role held on the resource this grant row names.
+  defp check_requirement({:resource, target_type, role_names}, entity, actor_user_id, _operation) do
+    case entity.resource_id do
+      nil ->
+        false
+
+      resource_id ->
+        grant_exists?(actor_user_id, {:instance, target_type, resource_id}, role_names)
+    end
+  end
+
   # Delegation asks the related entity's policy for the same operation. The related row is read
   # raw, because a policy that could not see its own delegation target would deny everything.
   defp check_requirement({:via, relationship_name}, entity, actor_user_id, operation) do

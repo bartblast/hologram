@@ -262,6 +262,8 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp reference_role_names({:rel, _relationship_name, role_names}), do: role_names
 
+  defp reference_role_names({:resource, _target_type, role_names}), do: role_names
+
   # The resource type enum's values ARE the entity table names, so a table name is already the
   # encoded value - it binds directly rather than through the enum codec.
   defp resource_type_slot(table, context, reversed_params) do
@@ -353,6 +355,24 @@ defmodule Hologram.DB.QueryCompiler do
       else
         ~s|"rg"."resource_type" = #{placeholder} AND #{resource_sql}|
       end
+
+    {scope_sql, new_params}
+  end
+
+  # The grant store's own policy checks a role held on the resource a grant row names, so the
+  # lookup keys on the outer row's resource_id column rather than on a relationship reference.
+  defp grant_scope_sql({:resource, target_type, _role_names}, context, reversed_params) do
+    target_table =
+      context.mapping
+      |> Map.fetch!(target_type)
+      |> Map.fetch!(:table)
+
+    {placeholder, new_params} = resource_type_slot(target_table, context, reversed_params)
+    quoted_table = Mapper.quote_identifier(context.entity_mapping.table)
+
+    scope_sql =
+      ~s|"rg"."resource_type" = #{placeholder} | <>
+        ~s|AND "rg"."resource_id" = #{quoted_table}."resource_id"|
 
     {scope_sql, new_params}
   end

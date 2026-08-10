@@ -3,6 +3,7 @@ defmodule Hologram.PolicyTest do
 
   import Hologram.Policy
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -38,6 +39,26 @@ defmodule Hologram.PolicyTest do
                ],
                update: [
                  %{predicates: [{:priority, :>=, 3}], to: [{:own, [:editor, :owner]}], via: nil}
+               ]
+             }
+    end
+  end
+
+  describe "build/1 for the grant store" do
+    test "grants sight of own grants, and of others' grants to read-grants role holders" do
+      assert build(RoleGrant) == %{
+               read: [
+                 %{predicates: [{:user_id, :==, {:actor}}], to: nil, via: nil},
+                 %{
+                   predicates: [{:resource_type, :==, :test_fixtures_policy_module1}],
+                   to: [{:resource, Policy.Module1, [:owner]}],
+                   via: nil
+                 },
+                 %{
+                   predicates: [{:resource_type, :==, :test_fixtures_policy_module2}],
+                   to: [{:resource, Policy.Module2, [:member]}],
+                   via: nil
+                 }
                ]
              }
     end

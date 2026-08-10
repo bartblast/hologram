@@ -1,12 +1,17 @@
 defmodule Hologram.Policy do
   @moduledoc false
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Entity
   alias Hologram.Query
   alias Hologram.Reflection
 
   @doc """
   Builds the compiled policy of the given entity type: a map of operation to the list of rules granting it, in declaration order.
+
+  The grant store's own policy is framework-supplied rather than declared: a user always sees
+  the grants they hold, and sees others' grants on a resource when they hold one of that entity
+  type's read-grants roles.
 
   A rule holds the predicate triples of its allow line, its grant references, and its delegation.
   Predicates carry the actor sentinel in value position where the declaration called user_id().
@@ -19,6 +24,8 @@ defmodule Hologram.Policy do
   @spec build(module) :: %{
           atom => list(%{predicates: list(tuple), to: list(tuple) | nil, via: atom | nil})
         }
+  def build(RoleGrant), do: %{read: role_grant_read_rules()}
+
   def build(entity_type) do
     entity_type.__policies__()
     |> Enum.map(fn {operation, to, via, predicates} ->
@@ -225,6 +232,29 @@ defmodule Hologram.Policy do
     |> Enum.flat_map(&own_reference_names/1)
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  # Everyone sees the grants they hold. Seeing someone else's grants on a resource takes one of
+  # that resource type's read-grants roles, held on the very resource the grant row names - so
+  # the check reads grant rows through grant rows, never through this policy again.
+  defp role_grant_read_rules do
+    resource_rules =
+      Reflection.list_entities()
+      |> Enum.reject(&(&1 == RoleGrant))
+      |> Enum.map(&{&1, read_grants_roles(&1)})
+      |> Enum.reject(fn {_entity_type, role_names} -> role_names == [] end)
+      |> Enum.sort_by(fn {entity_type, _role_names} -> RoleGrant.resource_type(entity_type) end)
+      |> Enum.map(&role_grant_resource_rule/1)
+
+    [%{predicates: [{:user_id, :==, {:actor}}], to: nil, via: nil} | resource_rules]
+  end
+
+  defp role_grant_resource_rule({entity_type, role_names}) do
+    %{
+      predicates: [{:resource_type, :==, RoleGrant.resource_type(entity_type)}],
+      to: [{:resource, entity_type, role_names}],
+      via: nil
+    }
   end
 
   defp relationship_target(entity_type, relationship_name) do
