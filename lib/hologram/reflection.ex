@@ -377,10 +377,26 @@ defmodule Hologram.Reflection do
 
   @doc """
   Lists Elixir modules which are Hologram entity types and that belong to any of the OTP apps in the project.
+
+  The framework's role grant store joins the data model only when an entity type is designated
+  as the user entity - without one there is nothing for its grants to point at.
   """
   @spec list_entities() :: list(module)
   def list_entities do
-    Enum.filter(list_elixir_modules(), &entity?/1)
+    list_elixir_modules()
+    |> Enum.filter(&entity?/1)
+    |> include_role_grant_when_designated()
+  end
+
+  @doc """
+  Lists Elixir modules which are Hologram entity types and that belong to the given OTP apps.
+  """
+  @spec list_entities(list(atom)) :: list(module)
+  def list_entities(apps) do
+    apps
+    |> list_elixir_modules()
+    |> Enum.filter(&entity?/1)
+    |> include_role_grant_when_designated()
   end
 
   @doc """
@@ -778,6 +794,16 @@ defmodule Hologram.Reflection do
     else
       beam_path_str = to_string(beam_path)
       not File.exists?(beam_path_str, [:raw])
+    end
+  end
+
+  # The check runs over the entity types already swept, never through user_entity/0 -
+  # that function lists entity types itself, which would recurse.
+  defp include_role_grant_when_designated(entity_types) do
+    if Enum.any?(entity_types, &user_entity?/1) do
+      entity_types
+    else
+      entity_types -- [Hologram.RoleGrant]
     end
   end
 

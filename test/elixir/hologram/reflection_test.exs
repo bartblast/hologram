@@ -55,6 +55,20 @@ defmodule Hologram.ReflectionTest do
     on_exit(fn -> :application.unload(app) end)
   end
 
+  defp load_app_with_modules(app, modules) do
+    spec =
+      {:application, app,
+       applications: [],
+       description: ~c"fixture",
+       modules: modules,
+       registered: [],
+       vsn: ~c"0.0.0"}
+
+    :ok = :application.load(spec)
+
+    on_exit(fn -> :application.unload(app) end)
+  end
+
   defp put_env_with_cleanup(app, key, value) do
     Application.put_env(app, key, value)
 
@@ -463,14 +477,36 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "list_entities/0" do
-    result = list_entities()
+  describe "list_entities/0" do
+    test "lists the entity types of the project" do
+      result = list_entities()
 
-    assert Entity.Module1 in result
-    assert Entity.Module3 in result
+      assert Entity.Module1 in result
+      assert Entity.Module3 in result
 
-    refute Hologram.Compiler.Context in result
-    refute Module2 in result
+      refute Hologram.Compiler.Context in result
+      refute Module2 in result
+    end
+
+    test "includes the role grant store, since the project designates a user entity type" do
+      assert Hologram.RoleGrant in list_entities()
+    end
+  end
+
+  describe "list_entities/1" do
+    test "includes the role grant store when an entity type is designated as the user entity" do
+      app = :hologram_reflection_designated_user_fixture_app
+      load_app_with_modules(app, [Entity.Module1, Entity.Module14, Hologram.RoleGrant])
+
+      assert list_entities([app]) == [Entity.Module1, Entity.Module14, Hologram.RoleGrant]
+    end
+
+    test "excludes the role grant store when no entity type is designated as the user entity" do
+      app = :hologram_reflection_undesignated_user_fixture_app
+      load_app_with_modules(app, [Entity.Module1, Entity.Module3, Hologram.RoleGrant])
+
+      assert list_entities([app]) == [Entity.Module1, Entity.Module3]
+    end
   end
 
   test "list_loaded_otp_apps/0" do
