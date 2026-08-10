@@ -1,0 +1,112 @@
+defmodule Hologram.Policy.Evaluator do
+  @moduledoc false
+
+  # In-memory evaluation of compiled policy rules against entity structs. Predicates are
+  # evaluated here, while grant references and delegations are resolved by the checker
+  # function the caller injects - they need the grant store and the related rows, which
+  # this module deliberately knows nothing about.
+
+  @ordering_operators [:<, :<=, :>, :>=]
+
+  @doc """
+  Returns true when the given action's compiled policy grants it for the given entity struct, or false otherwise.
+
+  An action with no rules grants nothing, which is what makes the default deny.
+  """
+  @spec grants?(%{atom => list(map)}, atom, struct, String.t() | nil, fun) :: boolean
+  def grants?(policy, action, entity, actor_user_id, checker) do
+    policy
+    |> Map.get(action, [])
+    |> Enum.any?(&rule_matches?(&1, entity, actor_user_id, checker))
+  end
+
+  @doc """
+  Returns true when the given compiled rule grants its action for the given entity struct, or false otherwise.
+
+  Every predicate must hold, one grant reference must be held, and the delegation must grant
+  the same action on the related entity. Predicate values compare as they do in the database:
+  nil is a regular value for equality and membership, while ordering comparisons never match it.
+
+  A rule referencing the actor - through a user_id() predicate or any grant reference - is
+  skipped for an anonymous session instead of being evaluated with a nil actor, which would
+  make rows with a missing reference match everyone. A delegating rule is still evaluated,
+  because the entity type it delegates to skips its own actor-referencing rules in turn.
+
+  Grant references and delegations are resolved by the given checker function, called as
+  checker.(requirement, entity, actor user id) with the rule's grant reference or a
+  {:via, relationship name} tuple, and returning a boolean.
+  """
+  @spec rule_matches?(map, struct, String.t() | nil, fun) :: boolean
+  def rule_matches?(rule, entity, actor_user_id, checker) do
+    if is_nil(actor_user_id) and actor_gated?(rule) do
+      false
+    else
+      predicates_hold?(rule.predicates, entity, actor_user_id) and
+        to_holds?(rule.to, entity, actor_user_id, checker) and
+        via_holds?(rule.via, entity, actor_user_id, checker)
+    end
+  end
+
+  defp actor_gated?(rule) do
+    rule.to != nil or
+      Enum.any?(rule.predicates, fn {_name, _operator, value} -> value == {:actor} end)
+  end
+
+  defp compare(%Date{} = left, %Date{} = right), do: Date.compare(left, right)
+
+  defp compare(%DateTime{} = left, %DateTime{} = right), do: DateTime.compare(left, right)
+
+  defp compare(left, right) when left < right, do: :lt
+
+  defp compare(left, right) when left > right, do: :gt
+
+  defp compare(_left, _right), do: :eq
+
+  defp equal?(left, right), do: compare(left, right) == :eq
+
+  defp holds?(field_value, :==, value), do: equal?(field_value, value)
+
+  defp holds?(field_value, :!=, value), do: not equal?(field_value, value)
+
+  defp holds?(field_value, :in, values), do: Enum.any?(values, &equal?(field_value, &1))
+
+  defp holds?(field_value, :not_in, values), do: not Enum.any?(values, &equal?(field_value, &1))
+
+  defp holds?(nil, operator, _value) when operator in @ordering_operators, do: false
+
+  defp holds?(_field_value, operator, nil) when operator in @ordering_operators, do: false
+
+  defp holds?(field_value, :<, value), do: compare(field_value, value) == :lt
+
+  defp holds?(field_value, :<=, value), do: compare(field_value, value) != :gt
+
+  defp holds?(field_value, :>, value), do: compare(field_value, value) == :gt
+
+  defp holds?(field_value, :>=, value), do: compare(field_value, value) != :lt
+
+  defp predicate_holds?({name, operator, value}, entity, actor_user_id) do
+    entity
+    |> Map.fetch!(name)
+    |> holds?(operator, resolve_value(value, actor_user_id))
+  end
+
+  defp predicates_hold?(predicates, entity, actor_user_id) do
+    Enum.all?(predicates, &predicate_holds?(&1, entity, actor_user_id))
+  end
+
+  defp resolve_value({:actor}, actor_user_id), do: actor_user_id
+
+  defp resolve_value(value, _actor_user_id), do: value
+
+  defp to_holds?(nil, _entity, _actor_user_id, _checker), do: true
+
+  defp to_holds?(references, entity, actor_user_id, checker) do
+    Enum.any?(references, &checker.(&1, entity, actor_user_id))
+  end
+
+  defp via_holds?(nil, _entity, _actor_user_id, _checker), do: true
+
+  defp via_holds?(relationship_name, entity, actor_user_id, checker) do
+    checker.({:via, relationship_name}, entity, actor_user_id)
+  end
+end
