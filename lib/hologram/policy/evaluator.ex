@@ -9,22 +9,22 @@ defmodule Hologram.Policy.Evaluator do
   @ordering_operators [:<, :<=, :>, :>=]
 
   @doc """
-  Returns true when the given action's compiled policy grants it for the given entity struct, or false otherwise.
+  Returns true when the given operation's compiled policy grants it for the given entity struct, or false otherwise.
 
-  An action with no rules grants nothing, which is what makes the default deny.
+  An operation with no rules grants nothing, which is what makes the default deny.
   """
   @spec grants?(%{atom => list(map)}, atom, struct, String.t() | nil, fun) :: boolean
-  def grants?(policy, action, entity, actor_user_id, checker) do
+  def grants?(policy, operation, entity, actor_user_id, checker) do
     policy
-    |> Map.get(action, [])
+    |> Map.get(operation, [])
     |> Enum.any?(&rule_matches?(&1, entity, actor_user_id, checker))
   end
 
   @doc """
-  Returns true when the given compiled rule grants its action for the given entity struct, or false otherwise.
+  Returns true when the given compiled rule grants its operation for the given entity struct, or false otherwise.
 
   Every predicate must hold, one grant reference must be held, and the delegation must grant
-  the same action on the related entity. Predicate values compare as they do in the database:
+  the same operation on the related entity. Predicate values compare as they do in the database:
   nil is a regular value for equality and membership, while ordering comparisons never match it.
 
   A rule referencing the actor - through a user_id() predicate or any grant reference - is

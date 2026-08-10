@@ -122,18 +122,18 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the given policy declaration at compile time.
 
-  Returns :ok, or raises Hologram.CompileError on the first violated rule (action, spec shape).
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (operation, spec shape).
   Predicates and the to and via options are validated separately, at the whole-model point - they reference attributes, roles and relationships of entity types that may not be compiled yet.
   """
   @spec validate_allow!(module, atom, T.opts()) :: :ok
-  def validate_allow!(module, action, spec) do
-    if not is_atom(action) do
+  def validate_allow!(module, operation, spec) do
+    if not is_atom(operation) do
       raise Hologram.CompileError,
         message:
-          "invalid action #{inspect(action)} used for allow in #{inspect(module)} - policy actions must be atoms"
+          "invalid operation #{inspect(operation)} used for allow in #{inspect(module)} - policy operations must be atoms"
     end
 
-    validate_opts_shape!(module, "allow", action, spec)
+    validate_opts_shape!(module, "allow", operation, spec)
 
     :ok
   end

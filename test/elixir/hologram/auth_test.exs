@@ -49,15 +49,15 @@ defmodule Hologram.AuthTest do
   end
 
   describe "can?/3" do
-    test "grants an action through a rule whose predicates hold" do
+    test "grants an operation through a rule whose predicates hold" do
       assert can?(nil, :read, %Module1{public: true})
     end
 
-    test "denies an action when no rule matches" do
+    test "denies an operation when no rule matches" do
       refute can?("user_id_1", :read, %Module1{public: false})
     end
 
-    test "denies an action the entity type declares no rule for" do
+    test "denies an operation the entity type declares no rule for" do
       refute can?("user_id_1", :transfer, %Module1{public: true})
     end
 

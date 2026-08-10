@@ -14,17 +14,17 @@ defmodule Hologram.Auth do
   alias Hologram.Policy.Evaluator
 
   @doc """
-  Returns true when the given user may perform the given action on the given entity, or false otherwise.
+  Returns true when the given user may perform the given operation on the given entity, or false otherwise.
 
   Takes the user entity or a bare user id, and nil for an anonymous session - rules referencing
-  the acting user never match then. An action the entity type declares no rule for is denied.
+  the acting user never match then. An operation the entity type declares no rule for is denied.
   """
   @spec can?(struct | String.t() | nil, atom, struct) :: boolean
-  def can?(user_or_id, action, entity) do
+  def can?(user_or_id, operation, entity) do
     policy = Policy.build(entity.__struct__)
-    checker = &check_requirement(&1, &2, &3, action)
+    checker = &check_requirement(&1, &2, &3, operation)
 
-    Evaluator.grants?(policy, action, entity, actor_user_id(user_or_id), checker)
+    Evaluator.grants?(policy, operation, entity, actor_user_id(user_or_id), checker)
   end
 
   @doc """
@@ -173,18 +173,18 @@ defmodule Hologram.Auth do
 
   # Own roles are held on the entity itself, on its whole type, or globally - the three grant
   # shapes the store keeps apart by which of its resource columns are nil.
-  defp check_requirement({:own, role_names}, entity, actor_user_id, _action) do
+  defp check_requirement({:own, role_names}, entity, actor_user_id, _operation) do
     entity_type = entity.__struct__
 
     grant_exists?(actor_user_id, {:own, entity_type, entity.id}, role_names) or
       holds_global_role?(actor_user_id, entity_type, role_names)
   end
 
-  defp check_requirement({:type, target_type, role_names}, _entity, actor_user_id, _action) do
+  defp check_requirement({:type, target_type, role_names}, _entity, actor_user_id, _operation) do
     grant_exists?(actor_user_id, {:type, target_type}, role_names)
   end
 
-  defp check_requirement({:rel, relationship_name, role_names}, entity, actor_user_id, _action) do
+  defp check_requirement({:rel, relationship_name, role_names}, entity, actor_user_id, _operation) do
     case related_id(entity, relationship_name) do
       nil ->
         false
@@ -196,9 +196,9 @@ defmodule Hologram.Auth do
     end
   end
 
-  # Delegation asks the related entity's policy for the same action. The related row is read
+  # Delegation asks the related entity's policy for the same operation. The related row is read
   # raw, because a policy that could not see its own delegation target would deny everything.
-  defp check_requirement({:via, relationship_name}, entity, actor_user_id, action) do
+  defp check_requirement({:via, relationship_name}, entity, actor_user_id, operation) do
     case related_id(entity, relationship_name) do
       nil ->
         false
@@ -207,7 +207,7 @@ defmodule Hologram.Auth do
         entity.__struct__
         |> relationship_target(relationship_name)
         |> EntityOperations.get(target_id)
-        |> delegates?(actor_user_id, action)
+        |> delegates?(actor_user_id, operation)
     end
   end
 
@@ -234,9 +234,9 @@ defmodule Hologram.Auth do
   # Nils encode the type-wide and global grant shapes, so the delete matches them as values -
   # the same comparison the store's unique index makes.
   # sobelow_skip ["SQL.Query"]
-  defp delegates?(nil, _actor_user_id, _action), do: false
+  defp delegates?(nil, _actor_user_id, _operation), do: false
 
-  defp delegates?(target, actor_user_id, action), do: can?(actor_user_id, action, target)
+  defp delegates?(target, actor_user_id, operation), do: can?(actor_user_id, operation, target)
 
   defp delete_grant(user_id, resource_type, resource_id, role) do
     statement = """

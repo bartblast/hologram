@@ -360,9 +360,9 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture72.__policies__() == [{:read, nil, nil, [title: "text_1"]}]
     end
 
-    test "rejects non-atom action" do
+    test "rejects non-atom operation" do
       expected_msg =
-        "invalid action \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - policy actions must be atoms"
+        "invalid operation \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - policy operations must be atoms"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture73 do

@@ -14,7 +14,7 @@ defmodule Hologram.PolicyTest do
       assert build(Module1) == %{}
     end
 
-    test "builds rules per action, keeping declaration order" do
+    test "builds rules per operation, keeping declaration order" do
       assert build(Policy.Module1) == %{
                archive: [
                  %{predicates: [{:author_id, :==, {:actor}}], to: nil, via: nil}

@@ -15,13 +15,13 @@ defmodule Hologram.Policy.EvaluatorTest do
   end
 
   describe "grants?/5" do
-    test "returns false for an action with no rules" do
+    test "returns false for an operation with no rules" do
       entity = %Module1{public: true}
 
       refute grants?(%{}, :read, entity, nil, &deny/3)
     end
 
-    test "returns true when any rule of the action matches" do
+    test "returns true when any rule of the operation matches" do
       entity = %Module1{public: true, priority: 1}
 
       policy = %{
@@ -34,7 +34,7 @@ defmodule Hologram.Policy.EvaluatorTest do
       assert grants?(policy, :read, entity, nil, &deny/3)
     end
 
-    test "returns false when no rule of the action matches" do
+    test "returns false when no rule of the operation matches" do
       entity = %Module1{public: false, priority: 1}
 
       policy = %{
@@ -47,7 +47,7 @@ defmodule Hologram.Policy.EvaluatorTest do
       refute grants?(policy, :read, entity, nil, &deny/3)
     end
 
-    test "returns false for an action other than the rules' one" do
+    test "returns false for an operation other than the rules' one" do
       entity = %Module1{public: true}
       policy = %{read: [rule(predicates: [{:public, :==, true}])]}
 

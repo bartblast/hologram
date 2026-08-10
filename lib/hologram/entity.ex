@@ -99,21 +99,22 @@ defmodule Hologram.Entity do
 
   @doc """
   Accumulates the given policy definition in __policies__ module attribute.
-  A policy line grants the given action when its predicates hold and its grant reference (the to option) or delegation (the via option) is satisfied - a line with no options grants the action unconditionally.
+  A policy line grants the given operation when its predicates hold and its grant reference (the to option) or delegation (the via option) is satisfied - a line with no options grants the operation unconditionally.
   A `user_id()` call in a predicate value position stands for the acting user's entity id and is stored as the actor sentinel.
   """
   @spec allow(atom, T.opts()) :: Macro.t()
-  defmacro allow(action, spec \\ []) do
+  defmacro allow(operation, spec \\ []) do
     spec = replace_actor_leaves!(spec, __CALLER__.module)
 
     quote do
-      action = unquote(action)
+      operation = unquote(operation)
       spec = unquote(spec)
 
-      Validator.validate_allow!(__MODULE__, action, spec)
+      Validator.validate_allow!(__MODULE__, operation, spec)
 
       policy =
-        {action, Keyword.get(spec, :to), Keyword.get(spec, :via), Keyword.drop(spec, [:to, :via])}
+        {operation, Keyword.get(spec, :to), Keyword.get(spec, :via),
+         Keyword.drop(spec, [:to, :via])}
 
       Module.put_attribute(__MODULE__, :__policies__, policy)
     end
