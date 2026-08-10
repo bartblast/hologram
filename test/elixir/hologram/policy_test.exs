@@ -64,6 +64,49 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "cross_app_global_roles/1" do
+    defp register_fixture_app(app, modules) do
+      :ok = :application.load({:application, app, [modules: modules]})
+      on_exit(fn -> :application.unload(app) end)
+
+      :ok
+    end
+
+    test "pairs a global role declared in several OTP apps with those apps" do
+      defmodule CrossAppGlobalRoleFixture1 do
+        use Hologram.Entity
+
+        role :admin, scope: :global
+      end
+
+      register_fixture_app(:hologram_cross_app_global_role_fixture_app_1, [
+        CrossAppGlobalRoleFixture1
+      ])
+
+      assert cross_app_global_roles([Policy.Module2, CrossAppGlobalRoleFixture1]) == [
+               {:admin, [:hologram, :hologram_cross_app_global_role_fixture_app_1]}
+             ]
+    end
+
+    test "returns empty list for a global role declared within a single OTP app" do
+      assert cross_app_global_roles([Policy.Module1, Policy.Module2]) == []
+    end
+
+    test "returns empty list for a resource-scoped role name shared across OTP apps" do
+      defmodule CrossAppGlobalRoleFixture2 do
+        use Hologram.Entity
+
+        role :viewer
+      end
+
+      register_fixture_app(:hologram_cross_app_global_role_fixture_app_2, [
+        CrossAppGlobalRoleFixture2
+      ])
+
+      assert cross_app_global_roles([Policy.Module1, CrossAppGlobalRoleFixture2]) == []
+    end
+  end
+
   describe "dead_entity_types/1" do
     test "returns the entity types declaring no allow lines, sorted" do
       assert dead_entity_types([Policy.Module1, Module14, Module2, Module1]) == [

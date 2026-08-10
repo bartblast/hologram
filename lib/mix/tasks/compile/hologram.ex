@@ -272,6 +272,25 @@ defmodule Mix.Tasks.Compile.Hologram do
     File.rm(lock_path)
   end
 
+  # Informational - a global role name means one role across every app behind the endpoint,
+  # which is easiest to miss in an umbrella, where the declarations sit in separate projects.
+  defp report_cross_app_global_roles(entity_types) do
+    case Policy.cross_app_global_roles(entity_types) do
+      [] ->
+        :ok
+
+      cross_app_global_roles ->
+        listing =
+          Enum.map_join(cross_app_global_roles, "\n", fn {role_name, apps} ->
+            "  * #{inspect(role_name)} - declared in #{Enum.map_join(apps, ", ", &inspect/1)}"
+          end)
+
+        Mix.shell().info(
+          "Hologram: these global roles are declared in more than one OTP app, and name one role across all of them:\n#{listing}"
+        )
+    end
+  end
+
   # Lists all apps of the enclosing umbrella project, whether the compiler runs in
   # the umbrella root context or in a child app context. Empty in single-app projects.
   # TODO: Remove together with refresh_umbrella_app_manifests/0 (see the removal
@@ -309,6 +328,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     Mapper.derive!(entity_types)
 
     warn_about_dead_entity_types(entity_types)
+    report_cross_app_global_roles(entity_types)
 
     :ok
   end
