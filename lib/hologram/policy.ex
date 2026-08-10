@@ -41,6 +41,20 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns the given entity type modules that declare no allow lines, sorted.
+
+  Such an entity type is statically dead under default deny - every query against it returns
+  nothing, whatever the acting user holds. The grant store is never listed: its policy is
+  framework-supplied rather than declared.
+  """
+  @spec dead_entity_types(list(module)) :: list(module)
+  def dead_entity_types(entity_types) do
+    entity_types
+    |> Enum.filter(&(&1 != RoleGrant and &1.__policies__() == []))
+    |> Enum.sort_by(&inspect/1)
+  end
+
+  @doc """
   Returns the names of the roles declared with scope :global across the data model, sorted.
 
   A global role is granted without a resource, and the same name declared on several entity

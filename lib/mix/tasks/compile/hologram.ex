@@ -308,6 +308,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     # The mapping value is discarded - only the fail-fast derivation checks matter here.
     Mapper.derive!(entity_types)
 
+    warn_about_dead_entity_types(entity_types)
+
     :ok
   end
 
@@ -320,6 +322,22 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       :error ->
         remove_lock_file_with_invalid_os_pid(lock_path)
+    end
+  end
+
+  # Advisory only - printed through the shell rather than IO.warn/2, so that a model
+  # awaiting its policies never fails a warnings-as-errors build.
+  defp warn_about_dead_entity_types(entity_types) do
+    case Policy.dead_entity_types(entity_types) do
+      [] ->
+        :ok
+
+      dead_entity_types ->
+        listing = Enum.map_join(dead_entity_types, "\n", &"  * #{inspect(&1)}")
+
+        Mix.shell().error(
+          "warning: these entity types declare no allow lines, so every query against them returns nothing:\n#{listing}"
+        )
     end
   end
 

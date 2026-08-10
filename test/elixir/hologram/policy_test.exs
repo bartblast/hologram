@@ -64,6 +64,23 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "dead_entity_types/1" do
+    test "returns the entity types declaring no allow lines, sorted" do
+      assert dead_entity_types([Policy.Module1, Module14, Module2, Module1]) == [
+               Module1,
+               Module14
+             ]
+    end
+
+    test "returns empty list when every entity type declares an allow line" do
+      assert dead_entity_types([Policy.Module1, Policy.Module2]) == []
+    end
+
+    test "never returns the grant store" do
+      assert dead_entity_types([RoleGrant]) == []
+    end
+  end
+
   describe "global_role_names/0" do
     test "collects the roles declared with global scope across the data model" do
       assert global_role_names() == [:admin]
