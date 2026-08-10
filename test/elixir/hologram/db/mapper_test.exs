@@ -137,6 +137,28 @@ defmodule Hologram.DB.MapperTest do
       assert column(Module2, "c").collation == "C"
     end
 
+    test "maps :uuid to uuid" do
+      defmodule InlineEntityFixture19 do
+        use Hologram.Entity
+
+        attribute :external_id, :uuid, optional: true
+      end
+
+      assert column(InlineEntityFixture19, "external_id") == %{
+               name: "external_id",
+               type: :uuid,
+               sql_type: "uuid",
+               collation: nil,
+               enum_values: nil,
+               default: nil,
+               null: true,
+               references: nil,
+               fk_constraint: nil,
+               fk_index: nil,
+               source: {:attribute, :external_id}
+             }
+    end
+
     test "derives nil collation for types that carry none" do
       assert column(Module2, "a").collation == nil
     end

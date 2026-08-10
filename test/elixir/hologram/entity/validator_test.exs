@@ -416,7 +416,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown attribute type" do
       expected_msg =
-        "invalid type :text for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture1 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string"
+        "invalid type :text for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture1 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string, :uuid"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture1 do
@@ -429,7 +429,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects module used as attribute type" do
       expected_msg =
-        "invalid type DateTime for attribute :happened_at in Hologram.Entity.ValidatorTest.InlineEntityFixture2 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string"
+        "invalid type DateTime for attribute :happened_at in Hologram.Entity.ValidatorTest.InlineEntityFixture2 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string, :uuid"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture2 do
@@ -895,6 +895,16 @@ defmodule Hologram.Entity.ValidatorTest do
           attribute :owner, :string
         end
       end
+    end
+
+    test "accepts uuid attribute" do
+      defmodule InlineEntityFixture82 do
+        use Hologram.Entity
+
+        attribute :external_id, :uuid, optional: true
+      end
+
+      assert InlineEntityFixture82.__attributes__() == [{:external_id, :uuid, [optional: true]}]
     end
 
     test "accepts attribute named user_id" do

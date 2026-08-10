@@ -27,7 +27,7 @@ defmodule Hologram.Entity.Validator do
     :values
   ]
 
-  @valid_attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string]
+  @valid_attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string, :uuid]
 
   @valid_relationship_opts [:optional]
 
