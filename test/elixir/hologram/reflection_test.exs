@@ -489,21 +489,21 @@ defmodule Hologram.ReflectionTest do
     end
 
     test "includes the role grant store, since the project designates a user entity type" do
-      assert Hologram.RoleGrant in list_entities()
+      assert Hologram.Auth.RoleGrant in list_entities()
     end
   end
 
   describe "list_entities/1" do
     test "includes the role grant store when an entity type is designated as the user entity" do
       app = :hologram_reflection_designated_user_fixture_app
-      load_app_with_modules(app, [Entity.Module1, Entity.Module14, Hologram.RoleGrant])
+      load_app_with_modules(app, [Entity.Module1, Entity.Module14, Hologram.Auth.RoleGrant])
 
-      assert list_entities([app]) == [Entity.Module1, Entity.Module14, Hologram.RoleGrant]
+      assert list_entities([app]) == [Entity.Module1, Entity.Module14, Hologram.Auth.RoleGrant]
     end
 
     test "excludes the role grant store when no entity type is designated as the user entity" do
       app = :hologram_reflection_undesignated_user_fixture_app
-      load_app_with_modules(app, [Entity.Module1, Entity.Module3, Hologram.RoleGrant])
+      load_app_with_modules(app, [Entity.Module1, Entity.Module3, Hologram.Auth.RoleGrant])
 
       assert list_entities([app]) == [Entity.Module1, Entity.Module3]
     end

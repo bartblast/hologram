@@ -4,13 +4,13 @@ defmodule Hologram.DBTest do
 
   import Hologram.DB
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Connection
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Schema
   alias Hologram.Entity
   alias Hologram.Reflection
-  alias Hologram.RoleGrant
   alias Hologram.Test.Fixtures.Entity.Module1
 
   describe "init/1" do

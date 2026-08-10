@@ -277,7 +277,7 @@ defmodule Hologram.Entity.Validator do
   Returns :ok, or raises ArgumentError for entity types the framework writes itself.
   """
   @spec validate_writable!(module) :: :ok
-  def validate_writable!(Hologram.RoleGrant) do
+  def validate_writable!(Hologram.Auth.RoleGrant) do
     raise ArgumentError, "role grants are written only through grant_role/revoke_role"
   end
 

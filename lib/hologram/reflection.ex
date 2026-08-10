@@ -803,7 +803,7 @@ defmodule Hologram.Reflection do
     if Enum.any?(entity_types, &user_entity?/1) do
       entity_types
     else
-      entity_types -- [Hologram.RoleGrant]
+      entity_types -- [Hologram.Auth.RoleGrant]
     end
   end
 

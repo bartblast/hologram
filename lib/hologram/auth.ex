@@ -2,6 +2,7 @@ defmodule Hologram.Auth do
   @moduledoc false
 
   alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -11,7 +12,6 @@ defmodule Hologram.Auth do
   alias Hologram.Entity.Validator
   alias Hologram.Policy
   alias Hologram.Policy.Evaluator
-  alias Hologram.RoleGrant
 
   @doc """
   Returns true when the given user may perform the given action on the given entity, or false otherwise.

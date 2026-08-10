@@ -20,6 +20,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   require Logger
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
@@ -297,7 +298,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp validate_data_model! do
-    Hologram.RoleGrant.reset_resolution_cache()
+    RoleGrant.reset_resolution_cache()
 
     entity_types = Reflection.list_entities()
 

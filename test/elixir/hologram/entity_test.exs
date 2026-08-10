@@ -275,7 +275,7 @@ defmodule Hologram.EntityTest do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
       assert_error ArgumentError, expected_msg, fn ->
-        new(Hologram.RoleGrant)
+        new(Hologram.Auth.RoleGrant)
       end
     end
 

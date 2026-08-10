@@ -1,8 +1,8 @@
-defmodule Hologram.RoleGrantTest do
+defmodule Hologram.Auth.RoleGrantTest do
   use Hologram.Test.BasicCase, async: true
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Entity.NotIncluded
-  alias Hologram.RoleGrant
   alias Hologram.Test.Fixtures.Entity.Module14
 
   describe "__attributes__/0" do

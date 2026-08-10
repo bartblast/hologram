@@ -4,10 +4,10 @@ defmodule Hologram.DB.EntityOperationsTest do
   import Hologram.DB.EntityOperations
 
   alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.Entity
-  alias Hologram.RoleGrant
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module14

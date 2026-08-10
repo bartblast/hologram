@@ -196,7 +196,7 @@ defmodule Hologram.DB.Mapper do
   inside the framework's own repository, where the root namespace is Hologram.
   """
   @spec table_name(module) :: String.t()
-  def table_name(Hologram.RoleGrant), do: "hologram_role_grant"
+  def table_name(Hologram.Auth.RoleGrant), do: "hologram_role_grant"
 
   def table_name(entity_type) do
     segments = Module.split(entity_type)
@@ -317,7 +317,7 @@ defmodule Hologram.DB.Mapper do
   # The role grant store carries the one framework-derived extra index: unique over the
   # grant fact, with nulls compared as values - resource_type and resource_id nils encode
   # the type-wide and global grant shapes, so identical rows with nils must still collide.
-  defp entity_indexes(Hologram.RoleGrant) do
+  defp entity_indexes(Hologram.Auth.RoleGrant) do
     %{
       "hologram_role_grant_$uidx" => %{
         columns: ["user_id", "resource_type", "resource_id", "role"],

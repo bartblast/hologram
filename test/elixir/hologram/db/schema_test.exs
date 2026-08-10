@@ -703,7 +703,7 @@ defmodule Hologram.DB.SchemaTest do
 
     test "derives the role grant store's user references with the no action delete action" do
       foreign_keys =
-        [Hologram.RoleGrant, Hologram.Test.Fixtures.Entity.Module14]
+        [Hologram.Auth.RoleGrant, Hologram.Test.Fixtures.Entity.Module14]
         |> Mapper.derive!()
         |> from_mapping()
         |> Map.fetch!(:tables)

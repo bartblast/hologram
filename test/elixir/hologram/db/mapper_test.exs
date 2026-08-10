@@ -290,12 +290,12 @@ defmodule Hologram.DB.MapperTest do
     test "derives the role grant unique index comparing nulls as values" do
       mapping =
         derive!([
-          Hologram.RoleGrant,
+          Hologram.Auth.RoleGrant,
           Hologram.Test.Fixtures.Entity.Module14,
           Module1
         ])
 
-      assert mapping[Hologram.RoleGrant].indexes == %{
+      assert mapping[Hologram.Auth.RoleGrant].indexes == %{
                "hologram_role_grant_$uidx" => %{
                  columns: ["user_id", "resource_type", "resource_id", "role"],
                  nulls_distinct: false,
@@ -501,7 +501,7 @@ defmodule Hologram.DB.MapperTest do
   # The primary OTP app root in this test suite is Hologram (Reflection.otp_app() == :hologram).
   describe "table_name/1" do
     test "pins the role grant table to its full path" do
-      assert table_name(Hologram.RoleGrant) == "hologram_role_grant"
+      assert table_name(Hologram.Auth.RoleGrant) == "hologram_role_grant"
     end
 
     test "snake cases the module path with the primary app root stripped" do

@@ -1,4 +1,4 @@
-defmodule Hologram.RoleGrant do
+defmodule Hologram.Auth.RoleGrant do
   @moduledoc false
 
   # The role store: one row per granted role. Grant shapes by nil pattern: an instance

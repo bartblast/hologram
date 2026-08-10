@@ -9,6 +9,7 @@ defmodule Hologram.DB.EntityOperations do
   # param. The sobelow_skip markers on the emitting functions record that invariant.
 
   alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -16,7 +17,6 @@ defmodule Hologram.DB.EntityOperations do
   alias Hologram.DB.SortKey
   alias Hologram.Entity
   alias Hologram.Entity.Validator
-  alias Hologram.RoleGrant
 
   @data_schema "hologram_data"
 
