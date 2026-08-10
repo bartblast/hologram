@@ -6,15 +6,26 @@ defmodule Hologram.Template.RendererFromQueryTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
+  alias Hologram.Auth
+  alias Hologram.Commons.ETS
+  alias Hologram.DB
   alias Hologram.DB.QueryCache
   alias Hologram.Entity
   alias Hologram.Server
   alias Hologram.Template.Renderer
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Template.Renderer.Module88
   alias Hologram.Test.Fixtures.Template.Renderer.Module89
   alias Hologram.Test.Fixtures.Template.Renderer.Module90
+  alias Hologram.Test.Fixtures.Template.Renderer.Module91
+  alias Hologram.Test.Fixtures.Template.Renderer.Module92
 
+  use_module_stub :asset_manifest_cache
+  use_module_stub :asset_path_registry
+  use_module_stub :page_digest_registry
   use_module_stub :query_cache
 
   setup :set_mox_global
@@ -22,13 +33,15 @@ defmodule Hologram.Template.RendererFromQueryTest do
   setup do
     setup_query_cache(QueryCacheStub, false)
 
-    stub(QueryCacheMock, :component_modules, fn -> [Module88, Module89, Module90] end)
+    stub(QueryCacheMock, :component_modules, fn -> [Module88, Module89, Module90, Module92] end)
     QueryCache.init(nil)
 
     :ok
   end
 
   @env %Renderer.Env{}
+
+  @page_opts [csrf_token: "test-csrf-token", initial_page?: true, instance_id: "instance-1"]
   @server %Server{}
 
   defp create_entities do
@@ -79,6 +92,54 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
     assert_error ArgumentError, expected_msg, fn ->
       render_dom(node, @env, @server)
+    end
+  end
+
+  describe "policy filtering" do
+    setup do
+      setup_asset_path_registry(AssetPathRegistryStub)
+      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
+
+      setup_asset_manifest_cache(AssetManifestCacheStub)
+      setup_page_digest_registry(PageDigestRegistryStub)
+
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module91, :dummy_module_91_digest)
+
+      public_entity =
+        PolicyEntity
+        |> Entity.new(priority: 1, public: true)
+        |> DB.create()
+
+      private_entity =
+        PolicyEntity
+        |> Entity.new(priority: 2, public: false)
+        |> DB.create()
+
+      {:ok, private_entity: private_entity, public_entity: public_entity}
+    end
+
+    test "renders only the rows the session user's policy grants", %{
+      private_entity: private_entity
+    } do
+      user =
+        Module14
+        |> Entity.new(email: "renderer_1@example.com")
+        |> DB.create()
+
+      Auth.grant_role(user, private_entity, :viewer)
+
+      {html, _component_registry, _server_struct} =
+        render_page(Module91, %{}, %Server{user_id: user.id}, @page_opts)
+
+      assert String.contains?(html, "entities = 1,2")
+    end
+
+    test "renders only unconditionally visible rows for an anonymous session" do
+      {html, _component_registry, _server_struct} =
+        render_page(Module91, %{}, %Server{}, @page_opts)
+
+      assert String.contains?(html, "entities = 1")
+      refute String.contains?(html, "entities = 1,2")
     end
   end
 end

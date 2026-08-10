@@ -8,4 +8,6 @@ defmodule Hologram.Test.Fixtures.Entity.Module3 do
   relationship :c, Module1
   relationship :a, [Module2]
   relationship :b, Module2, optional: true
+
+  allow :read
 end

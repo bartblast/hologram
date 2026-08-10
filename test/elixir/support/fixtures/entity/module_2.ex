@@ -5,4 +5,6 @@ defmodule Hologram.Test.Fixtures.Entity.Module2 do
   attribute :c, :string
   attribute :a, :boolean, default: false
   attribute :b, :integer, optional: true
+
+  allow :read
 end

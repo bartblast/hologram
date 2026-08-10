@@ -3,6 +3,8 @@ defmodule Hologram.Template.Renderer do
 
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
+  alias Hologram.Auth
+  alias Hologram.Auth.Context
   alias Hologram.Commons.StringUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
@@ -203,6 +205,15 @@ defmodule Hologram.Template.Renderer do
   @spec render_page(module, %{atom => any}, Server.t(), T.opts()) ::
           {String.t(), %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
   def render_page(page_module, params, server_struct, opts) do
+    Context.with_actor(server_struct.user_id, fn ->
+      render_page_as_actor(page_module, params, server_struct, opts)
+    end)
+  end
+
+  # Queries evaluated during the render are filtered by the session user's policies, and the
+  # actor reaches them through the process context: prop queries run deep inside the render,
+  # with no server struct in their signatures.
+  defp render_page_as_actor(page_module, params, server_struct, opts) do
     initial_page? = opts[:initial_page?] || false
 
     {page_component_struct, page_server_struct} =
@@ -720,7 +731,7 @@ defmodule Hologram.Template.Renderer do
       |> apply(args)
       |> Query.normalize()
 
-    QueryRunner.run(term, DB.mapping())
+    QueryRunner.run_policied(term, DB.mapping(), Auth.user_id())
   end
 
   defp spread_entries(value)
