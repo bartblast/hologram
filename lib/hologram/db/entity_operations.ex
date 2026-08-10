@@ -37,28 +37,18 @@ defmodule Hologram.DB.EntityOperations do
 
   @doc false
   @spec create(struct) :: struct
-  # sobelow_skip ["SQL.Query"]
   def create(entity) do
-    entity_type = entity.__struct__
-    %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+    {stamped_entity, _result} = insert(entity, "")
 
-    validate_entity!(entity_type, entity, columns)
+    stamped_entity
+  end
 
-    now = DateTime.utc_now(:microsecond)
-    stamped_entity = %{entity | created_at: now, updated_at: now}
+  @doc false
+  @spec create_if_absent(struct) :: :ok
+  def create_if_absent(entity) do
+    insert(entity, " ON CONFLICT DO NOTHING")
 
-    encoded_values = Enum.map(columns, &encoded_column_value(stamped_entity, &1))
-
-    column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
-    placeholder_list = Enum.map_join(1..length(columns), ", ", &"$#{&1}")
-
-    statement =
-      "INSERT INTO #{qualified_table(table)} (#{column_list}) VALUES (#{placeholder_list})"
-
-    case Connection.query(statement, encoded_values) do
-      {:ok, _result} -> stamped_entity
-      {:error, error} -> raise error
-    end
+    :ok
   end
 
   @doc false
@@ -274,6 +264,31 @@ defmodule Hologram.DB.EntityOperations do
   defp field_name(%{source: {:attribute, name}}), do: name
 
   defp field_name(%{source: {:relationship, name}}), do: String.to_existing_atom("#{name}_id")
+
+  # sobelow_skip ["SQL.Query"]
+  defp insert(entity, conflict_clause) do
+    entity_type = entity.__struct__
+    %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
+    validate_entity!(entity_type, entity, columns)
+
+    now = DateTime.utc_now(:microsecond)
+    stamped_entity = %{entity | created_at: now, updated_at: now}
+
+    encoded_values = Enum.map(columns, &encoded_column_value(stamped_entity, &1))
+
+    column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
+    placeholder_list = Enum.map_join(1..length(columns), ", ", &"$#{&1}")
+
+    statement =
+      "INSERT INTO #{qualified_table(table)} (#{column_list}) " <>
+        "VALUES (#{placeholder_list})#{conflict_clause}"
+
+    case Connection.query(statement, encoded_values) do
+      {:ok, result} -> {stamped_entity, result}
+      {:error, error} -> raise error
+    end
+  end
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"

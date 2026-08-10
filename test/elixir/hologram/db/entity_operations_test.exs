@@ -6,8 +6,10 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.Entity
+  alias Hologram.RoleGrant
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -231,6 +233,43 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> Entity.new(c_id: "garbage")
         |> create()
       end
+    end
+  end
+
+  describe "create_if_absent/1" do
+    defp count_role_grants(user_id) do
+      count_sql =
+        ~s|SELECT count(*) FROM "hologram_data"."hologram_role_grant" WHERE "user_id" = $1|
+
+      {:ok, %{rows: [[count]]}} = Connection.query(count_sql, [Codec.encode(user_id, :uuid)])
+
+      count
+    end
+
+    defp role_grant(user, role) do
+      %RoleGrant{id: Entity.generate_id(), role: role, user_id: user.id}
+    end
+
+    test "inserts the entity when no conflicting row exists" do
+      user = create(Entity.new(Module14, email: "user_1@example.com"))
+
+      assert create_if_absent(role_grant(user, :owner)) == :ok
+      assert count_role_grants(user.id) == 1
+    end
+
+    test "keeps the existing row when a unique index conflicts" do
+      user = create(Entity.new(Module14, email: "user_2@example.com"))
+      first_grant = role_grant(user, :owner)
+
+      create_if_absent(first_grant)
+
+      assert create_if_absent(role_grant(user, :owner)) == :ok
+      assert count_role_grants(user.id) == 1
+
+      select_sql = ~s|SELECT "id" FROM "hologram_data"."hologram_role_grant" WHERE "user_id" = $1|
+      {:ok, %{rows: [[id]]}} = Connection.query(select_sql, [Codec.encode(user.id, :uuid)])
+
+      assert Codec.decode(id, :uuid) == first_grant.id
     end
   end
 
