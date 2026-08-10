@@ -8,12 +8,15 @@ defmodule Hologram.DB.EntityOperations do
   # through Mapper.quote_identifier/1) and $n placeholders - every value travels as a bound
   # param. The sobelow_skip markers on the emitting functions record that invariant.
 
+  alias Hologram.Auth.Context
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.SortKey
+  alias Hologram.Entity
   alias Hologram.Entity.Validator
+  alias Hologram.RoleGrant
 
   @data_schema "hologram_data"
 
@@ -38,9 +41,24 @@ defmodule Hologram.DB.EntityOperations do
   @doc false
   @spec create(struct) :: struct
   def create(entity) do
-    {stamped_entity, _result} = insert(entity, "")
+    case creator_grants(entity) do
+      [] ->
+        {stamped_entity, _result} = insert(entity, "")
 
-    stamped_entity
+        stamped_entity
+
+      grants ->
+        {:ok, stamped_entity} =
+          Connection.transaction(fn ->
+            {stamped_entity, _result} = insert(entity, "")
+
+            Enum.each(grants, &create_if_absent/1)
+
+            stamped_entity
+          end)
+
+        stamped_entity
+    end
   end
 
   @doc false
@@ -231,6 +249,34 @@ defmodule Hologram.DB.EntityOperations do
         {:error, error} -> raise error
       end
     end)
+  end
+
+  # The creating user takes the entity type's creator roles as the row is inserted, in the
+  # same transaction - so a resource never exists without whoever made it holding its roles.
+  # Creating without an acting user grants nothing, which is what the trusted tier wants.
+  defp creator_grants(entity) do
+    entity_type = entity.__struct__
+
+    case Context.actor_user_id() do
+      nil ->
+        []
+
+      actor_user_id ->
+        entity_type.__roles__()
+        |> Enum.filter(fn {_name, opts} -> Keyword.get(opts, :creator) == true end)
+        |> Enum.map(&creator_grant(&1, entity, entity_type, actor_user_id))
+    end
+  end
+
+  defp creator_grant({role_name, _opts}, entity, entity_type, actor_user_id) do
+    %RoleGrant{
+      id: Entity.generate_id(),
+      granted_by_id: actor_user_id,
+      resource_id: entity.id,
+      resource_type: RoleGrant.resource_type(entity_type),
+      role: role_name,
+      user_id: actor_user_id
+    }
   end
 
   defp encoded_column_value(entity, %{source: {:sort_key, attribute_name}} = column) do

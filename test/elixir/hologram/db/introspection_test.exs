@@ -237,6 +237,7 @@ defmodule Hologram.DB.IntrospectionTest do
                "hologram_role_grant_role_$enum" => [
                  "admin",
                  "editor",
+                 "maintainer",
                  "member",
                  "owner",
                  "viewer"

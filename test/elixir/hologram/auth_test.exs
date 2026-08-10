@@ -232,7 +232,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_14@example.com")
 
       expected_msg =
-        "unknown role :publisher for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :owner, :viewer"
+        "unknown role :publisher for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
 
       assert_error ArgumentError, expected_msg, fn -> grant_role(user, Module1, :publisher) end
     end

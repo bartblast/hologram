@@ -31,7 +31,7 @@ defmodule Hologram.RoleGrantTest do
                   ],
                   optional: true
                 ]},
-               {:role, :enum, [values: [:admin, :editor, :member, :owner, :viewer]]}
+               {:role, :enum, [values: [:admin, :editor, :maintainer, :member, :owner, :viewer]]}
              ]
     end
   end
