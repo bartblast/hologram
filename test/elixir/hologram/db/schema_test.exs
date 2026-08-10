@@ -701,6 +701,29 @@ defmodule Hologram.DB.SchemaTest do
              }
     end
 
+    test "derives the role grant store's user references with the no action delete action" do
+      foreign_keys =
+        [Hologram.RoleGrant, Hologram.Test.Fixtures.Entity.Module14]
+        |> Mapper.derive!()
+        |> from_mapping()
+        |> Map.fetch!(:tables)
+        |> Map.fetch!("hologram_role_grant")
+        |> Map.fetch!(:foreign_keys)
+
+      assert foreign_keys == %{
+               "granted_by_id" => %{
+                 references: "test_fixtures_entity_module14",
+                 on_delete: :no_action,
+                 constraint: "hologram_role_grant_granted_by_id_$fk"
+               },
+               "user_id" => %{
+                 references: "test_fixtures_entity_module14",
+                 on_delete: :no_action,
+                 constraint: "hologram_role_grant_user_id_$fk"
+               }
+             }
+    end
+
     test "derives an index per reference column" do
       indexes = table(Module3, "test_fixtures_entity_module3").indexes
 

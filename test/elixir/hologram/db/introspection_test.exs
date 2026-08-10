@@ -199,6 +199,13 @@ defmodule Hologram.DB.IntrospectionTest do
              }
     end
 
+    test "introspects the role grant store's user references as no action" do
+      foreign_keys = schema().tables["hologram_role_grant"].foreign_keys
+
+      assert foreign_keys["user_id"].on_delete == :no_action
+      assert foreign_keys["granted_by_id"].on_delete == :no_action
+    end
+
     test "introspects the role grant unique index comparing nulls as values" do
       assert schema().tables["hologram_role_grant"].indexes["hologram_role_grant_$uidx"] == %{
                columns: ["user_id", "resource_type", "resource_id", "role"],

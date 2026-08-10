@@ -329,6 +329,8 @@ defmodule Hologram.DB.DDL do
     "SELECT COUNT(*) FROM #{qualified(table)} WHERE #{predicate}"
   end
 
+  defp delete_action(:no_action), do: "NO ACTION"
+
   defp delete_action(:restrict), do: "RESTRICT"
 
   defp enum_literal(value) do

@@ -170,6 +170,25 @@ defmodule Hologram.DB.DDLTest do
                  "ON DELETE RESTRICT"
              ]
     end
+
+    test "renders the no action delete action" do
+      op = %{
+        op: :add_foreign_key,
+        table: "hologram_role_grant",
+        column: "user_id",
+        references: "user",
+        on_delete: :no_action,
+        constraint: "hologram_role_grant_user_id_$fk"
+      }
+
+      assert statements(op) == [
+               ~s(ALTER TABLE "hologram_data"."hologram_role_grant" ) <>
+                 ~s(ADD CONSTRAINT "hologram_role_grant_user_id_$fk" ) <>
+                 ~s{FOREIGN KEY ("user_id") } <>
+                 ~s{REFERENCES "hologram_data"."user" ("id") } <>
+                 "ON DELETE NO ACTION"
+             ]
+    end
   end
 
   describe "statements/1 for alter_column" do
