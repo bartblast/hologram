@@ -139,6 +139,119 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s( WHERE "c_id" = $1))
     end
 
+    test "composes a policy rule after the authored filter" do
+      mapping = Mapper.derive!([Module1, Module2, Module3])
+
+      term =
+        Module2
+        |> filter(a: true)
+        |> Query.normalize()
+
+      rules = [%{predicates: [{:c, :==, "text_1"}], to: nil, via: nil}]
+
+      assert compile(term, mapping, rules) == %{
+               params: [{:value, true}, {:value, "text_1"}],
+               sql:
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at" ) <>
+                   ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
+                   ~s(WHERE "a" = $1 AND "c" = $2 ORDER BY "id" ASC)
+             }
+    end
+
+    test "composes several policy rules as an OR group" do
+      mapping = Mapper.derive!([Module2])
+      term = Query.normalize(Module2)
+
+      rules = [
+        %{predicates: [{:a, :==, true}], to: nil, via: nil},
+        %{predicates: [{:b, :>=, 3}, {:c, :==, "text_2"}], to: nil, via: nil}
+      ]
+
+      assert %{sql: sql} = compile(term, mapping, rules)
+
+      assert String.contains?(sql, ~s|WHERE (("a" = $1) OR ("b" >= $2 AND "c" = $3))|)
+    end
+
+    test "drops the policy group for an unconditional rule" do
+      mapping = Mapper.derive!([Module2])
+
+      term =
+        Module2
+        |> filter(a: true)
+        |> Query.normalize()
+
+      rules = [%{predicates: [], to: nil, via: nil}]
+
+      assert %{sql: sql} = compile(term, mapping, rules)
+
+      assert String.contains?(sql, ~s|WHERE "a" = $1 ORDER BY|)
+    end
+
+    test "denies everything for a policy with no rules" do
+      mapping = Mapper.derive!([Module2])
+      term = Query.normalize(Module2)
+
+      assert %{params: [], sql: sql} = compile(term, mapping, [])
+
+      assert String.contains?(sql, " WHERE FALSE ORDER BY")
+    end
+
+    test "binds one reserved slot for every actor reference" do
+      mapping = Mapper.derive!([Module1, Module2, Module3])
+      term = Query.normalize(Module3)
+
+      rules = [
+        %{predicates: [{:b_id, :==, {:actor}}], to: nil, via: nil},
+        %{predicates: [{:c_id, :==, {:actor}}], to: nil, via: nil}
+      ]
+
+      assert %{params: [:actor], sql: sql} = compile(term, mapping, rules)
+
+      assert String.contains?(sql, ~s|WHERE (("b_id" = $1) OR ("c_id" = $1))|)
+    end
+
+    test "allocates the actor slot after the authored params" do
+      mapping = Mapper.derive!([Module1, Module2, Module3])
+
+      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:param, :target}}]}
+
+      rules = [%{predicates: [{:b_id, :==, {:actor}}], to: nil, via: nil}]
+
+      assert %{params: [{:param, :target, :uuid}, :actor], sql: sql} =
+               compile(term, mapping, rules)
+
+      assert String.contains?(sql, ~s|WHERE "c_id" = $1 AND "b_id" = $2|)
+    end
+
+    test "composes a policy into a counting query before aggregation" do
+      mapping = Mapper.derive!([Module2])
+
+      term =
+        Module2
+        |> Query.count()
+        |> Query.normalize()
+
+      rules = [%{predicates: [{:a, :==, true}], to: nil, via: nil}]
+
+      assert compile(term, mapping, rules) == %{
+               params: [{:value, true}],
+               sql:
+                 ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_entity_module2" | <>
+                   ~s|WHERE "a" = $1|
+             }
+    end
+
+    test "denies a rule carrying grant references until the store composes" do
+      mapping = Mapper.derive!([Module2])
+      term = Query.normalize(Module2)
+
+      rules = [%{predicates: [{:a, :==, true}], to: [{:own, [:owner]}], via: nil}]
+
+      assert %{sql: sql} = compile(term, mapping, rules)
+
+      assert String.contains?(sql, ~s|WHERE "a" = $1 AND FALSE|)
+    end
+
     test "compiles inequality null-inclusively on optional attributes" do
       mapping = Mapper.derive!([Module2])
 

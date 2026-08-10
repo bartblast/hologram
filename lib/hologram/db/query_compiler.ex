@@ -36,6 +36,14 @@ defmodule Hologram.DB.QueryCompiler do
   ordering, and view bounds inside the aggregation - include param slots follow the
   root's in placeholder order.
 
+  A compiled policy composes into the statement when one is given: its rules render as an
+  OR group ANDed after the authored filter, so a row must satisfy the query and at least one
+  rule. Rules are conjunctions of the same predicate triples the authored filter uses, and an
+  unconditional rule (no conditions) satisfies the group on its own, which drops the group
+  from the statement. An empty rule list denies everything (`FALSE`) - default deny. The
+  actor leaf binds ONE reserved slot allocated after the authored and include params and
+  reused by every actor reference in the policy, so the caller binds the session's user once.
+
   Nil is a regular value for equality and membership on both execution tiers:
   inequality matches missing values (`!=` widens with `OR IS NULL` on optional
   attributes), membership lists may hold nil (compiled into the `IS [NOT] NULL`
@@ -44,15 +52,19 @@ defmodule Hologram.DB.QueryCompiler do
   bind nil at runtime - a sometimes-nil variable branches into an explicit nil
   predicate in code.
   """
-  @spec compile(%{atom => any}, %{module => %{atom => any}}) :: %{atom => any}
-  def compile(term, mapping) do
+  @spec compile(%{atom => any}, %{module => %{atom => any}}, list(map) | nil) :: %{atom => any}
+  def compile(term, mapping, rules \\ nil) do
     entity_mapping = Map.fetch!(mapping, term.entity)
 
-    {where_sql, where_reversed_params} = where_clause(term.filter, entity_mapping, [])
+    {authored_conditions, authored_params} = conditions(term.filter, entity_mapping, [])
 
-    {include_sql, all_reversed_params} =
-      include_selects(term, entity_mapping, mapping, where_reversed_params)
+    {include_sql, params_after_includes} =
+      include_selects(term, entity_mapping, mapping, authored_params)
 
+    {policy_conditions, all_reversed_params} =
+      policy_conditions(rules, entity_mapping, params_after_includes)
+
+    where_sql = where_clause(authored_conditions ++ policy_conditions)
     order_sql = order_clause(term.order_by, entity_mapping)
     sql = statement(term, entity_mapping, where_sql, order_sql, include_sql)
 
@@ -81,6 +93,18 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp array_type(%{sql_type: sql_type}), do: "#{sql_type}[]"
+
+  # The actor leaf binds one reserved slot for the whole statement - every reference to it
+  # reuses that placeholder, so the caller binds the session's user exactly once.
+  defp bind_slot({:actor}, _column, reversed_params) do
+    case Enum.find_index(reversed_params, &(&1 == :actor)) do
+      nil ->
+        {"$#{length(reversed_params) + 1}", [:actor | reversed_params]}
+
+      reversed_index ->
+        {"$#{length(reversed_params) - reversed_index}", reversed_params}
+    end
+  end
 
   defp bind_slot({:param, param_name}, column, reversed_params) do
     {"$#{length(reversed_params) + 1}", [{:param, param_name, column.type} | reversed_params]}
@@ -195,6 +219,46 @@ defmodule Hologram.DB.QueryCompiler do
     {placeholder, new_params} = bind_slot(value, column, reversed_params)
 
     {"#{Mapper.quote_identifier(column.name)} #{operator} #{placeholder}", new_params}
+  end
+
+  defp policy_conditions(nil, _entity_mapping, reversed_params), do: {[], reversed_params}
+
+  defp policy_conditions([], _entity_mapping, reversed_params), do: {["FALSE"], reversed_params}
+
+  defp policy_conditions(rules, entity_mapping, reversed_params) do
+    {rendered_rules, new_params} =
+      Enum.map_reduce(rules, reversed_params, fn rule, acc_params ->
+        rule_condition(rule, entity_mapping, acc_params)
+      end)
+
+    if Enum.any?(rendered_rules, &(&1 == :unconditional)) do
+      {[], new_params}
+    else
+      {[group_condition(rendered_rules)], new_params}
+    end
+  end
+
+  defp group_condition([rule_sql]), do: rule_sql
+
+  defp group_condition(rule_sqls) do
+    "(" <> Enum.map_join(rule_sqls, " OR ", &"(#{&1})") <> ")"
+  end
+
+  # TODO: grant references and delegations render as a denial until the grant store and
+  # delegation composition land - an under-approximation, so no row is shown that a rule
+  # does not grant.
+  defp requirement_conditions(%{to: nil, via: nil}), do: []
+
+  defp requirement_conditions(_rule), do: ["FALSE"]
+
+  defp rule_condition(rule, entity_mapping, reversed_params) do
+    {predicate_conditions, new_params} =
+      conditions(rule.predicates, entity_mapping, reversed_params)
+
+    case predicate_conditions ++ requirement_conditions(rule) do
+      [] -> {:unconditional, new_params}
+      rule_conditions -> {Enum.join(rule_conditions, " AND "), new_params}
+    end
   end
 
   defp conditions(triples, entity_mapping, reversed_params) do
@@ -457,11 +521,7 @@ defmodule Hologram.DB.QueryCompiler do
     {expression, new_acc}
   end
 
-  defp where_clause([], _entity_mapping, reversed_params), do: {"", reversed_params}
+  defp where_clause([]), do: ""
 
-  defp where_clause(triples, entity_mapping, reversed_params) do
-    {conditions, new_params} = conditions(triples, entity_mapping, reversed_params)
-
-    {" WHERE " <> Enum.join(conditions, " AND "), new_params}
-  end
+  defp where_clause(conditions), do: " WHERE " <> Enum.join(conditions, " AND ")
 end
