@@ -99,10 +99,12 @@ defmodule Hologram.Auth.RoleGrant do
 
   @doc false
   @spec resource_type(module) :: atom
+  # The atom set is bounded by the app's entity types, all named at build time - the table
+  # names they derive can't be influenced at runtime.
+  # sobelow_skip ["DOS.StringToAtom"]
   def resource_type(entity_type) do
     entity_type
     |> Mapper.table_name()
-    # The atom set is bounded by the app's entity types, all named at build time.
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     |> String.to_atom()
   end
