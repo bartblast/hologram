@@ -10,6 +10,7 @@ defmodule Hologram.DBTest do
   alias Hologram.DB.Schema
   alias Hologram.Entity
   alias Hologram.Reflection
+  alias Hologram.RoleGrant
   alias Hologram.Test.Fixtures.Entity.Module1
 
   describe "init/1" do
@@ -53,6 +54,24 @@ defmodule Hologram.DBTest do
     end
   end
 
+  describe "create/1" do
+    test "rejects role grants" do
+      expected_msg = "role grants are written only through grant_role/revoke_role"
+
+      assert_error ArgumentError, expected_msg, fn -> create(%RoleGrant{}) end
+    end
+  end
+
+  describe "delete/2" do
+    test "rejects role grants" do
+      expected_msg = "role grants are written only through grant_role/revoke_role"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        delete(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+      end
+    end
+  end
+
   describe "reload/0" do
     test "re-derives the mapping and reconciles the schema" do
       {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_system" CASCADE))
@@ -61,6 +80,16 @@ defmodule Hologram.DBTest do
       assert reload() == :ok
 
       assert Introspection.schema() == Schema.from_mapping(mapping())
+    end
+  end
+
+  describe "update/3" do
+    test "rejects role grants" do
+      expected_msg = "role grants are written only through grant_role/revoke_role"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        update(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f", role: :owner)
+      end
     end
   end
 

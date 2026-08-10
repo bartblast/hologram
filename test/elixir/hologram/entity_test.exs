@@ -271,6 +271,14 @@ defmodule Hologram.EntityTest do
       assert new(Module3, %{c_id: "id_2"}).c_id == "id_2"
     end
 
+    test "raises on a role grant" do
+      expected_msg = "role grants are written only through grant_role/revoke_role"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        new(Hologram.RoleGrant)
+      end
+    end
+
     test "raises on an assigned relationship value" do
       expected_msg =
         "relationship :c of Hologram.Test.Fixtures.Entity.Module3 cannot be assigned at construction - set a to-one reference via the :c_id field, to-many edges via add_relationship"

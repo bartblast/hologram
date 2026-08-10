@@ -205,6 +205,7 @@ defmodule Hologram.Entity do
   def new(entity_type, values \\ %{}) do
     values_map = Map.new(values)
 
+    Validator.validate_writable!(entity_type)
     validate_construction_values!(entity_type, values_map)
 
     declared_defaults =
