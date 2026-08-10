@@ -27,7 +27,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.CallGraph
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Validator
-  alias Hologram.Policy
+  alias Hologram.Policy.Compiler, as: Policy
   alias Hologram.Reflection
 
   @ls_build_dirs [".elixir_ls", ".elixir-tools", ".expert", ".lexical"]

@@ -10,7 +10,7 @@ defmodule Hologram.Auth do
   alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Entity.Validator
-  alias Hologram.Policy
+  alias Hologram.Policy.Compiler, as: Policy
   alias Hologram.Policy.Evaluator
 
   @doc """

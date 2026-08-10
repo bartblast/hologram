@@ -1,4 +1,4 @@
-defmodule Hologram.Policy do
+defmodule Hologram.Policy.Compiler do
   @moduledoc false
 
   alias Hologram.Auth.RoleGrant

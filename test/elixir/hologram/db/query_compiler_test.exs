@@ -6,7 +6,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Mapper
-  alias Hologram.Policy
+  alias Hologram.Policy.Compiler, as: Policy
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14

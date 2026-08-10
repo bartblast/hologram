@@ -1,7 +1,7 @@
 defmodule Hologram.Policy.Edges do
   @moduledoc false
 
-  alias Hologram.Policy
+  alias Hologram.Policy.Compiler, as: Policy
 
   @universal_edges [:auth_change, :deploy]
 
