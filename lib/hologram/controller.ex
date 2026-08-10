@@ -3,6 +3,7 @@ defmodule Hologram.Controller do
 
   require Logger
 
+  alias Hologram.Auth.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Page
@@ -204,7 +205,14 @@ defmodule Hologram.Controller do
       |> send_response(middleware_server_struct)
       |> Plug.Conn.halt()
     else
-      command_result = module.command(name, params, middleware_server_struct)
+      # The handler reads the session user from its server struct - the actor context is set
+      # for the framework's sake, so that writes made during the command carry the acting user
+      # into machinery whose signatures cannot: creator role grants, grant gating, the guard
+      # against removing a resource's last manager.
+      command_result =
+        Context.with_actor(middleware_server_struct.user_id, fn ->
+          module.command(name, params, middleware_server_struct)
+        end)
 
       {processed_server_struct, next_action} =
         process_command_result(command_result, middleware_server_struct, target)
