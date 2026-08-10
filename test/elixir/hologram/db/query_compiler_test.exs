@@ -4,14 +4,18 @@ defmodule Hologram.DB.QueryCompilerTest do
 
   import Hologram.DB.QueryCompiler
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Mapper
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Entity.Module6
+  alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
   describe "compile/2" do
     test "assigns placeholders to param slots" do
@@ -241,15 +245,103 @@ defmodule Hologram.DB.QueryCompilerTest do
              }
     end
 
-    test "denies a rule carrying grant references until the store composes" do
-      mapping = Mapper.derive!([Module2])
-      term = Query.normalize(Module2)
+    test "composes an own-roles grant reference as an EXISTS over the grant store" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      term = Query.normalize(PolicyModule1)
 
-      rules = [%{predicates: [{:a, :==, true}], to: [{:own, [:owner]}], via: nil}]
+      rules = [%{predicates: [], to: [{:own, [:editor, :owner]}], via: nil}]
+
+      assert compile(term, mapping, rules) == %{
+               params: [
+                 :actor,
+                 {:value, ["editor", "owner"]},
+                 {:value, "test_fixtures_policy_module1"}
+               ],
+               sql:
+                 ~s|SELECT "id", "priority", "public", "author_id", "parent_id", | <>
+                   ~s|"created_at", "updated_at" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module1" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
+                   ~s|WHERE "rg"."user_id" = $1 | <>
+                   ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                   ~s|AND "rg"."resource_type" = | <>
+                   ~s|$3::"hologram_data"."hologram_role_grant_resource_type_$enum" | <>
+                   ~s|AND ("rg"."resource_id" = "test_fixtures_policy_module1"."id" | <>
+                   ~s|OR "rg"."resource_id" IS NULL)) ORDER BY "id" ASC|
+             }
+    end
+
+    test "emits the global branch only for globally scoped roles" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+
+      local_rules = [%{predicates: [], to: [{:own, [:member]}], via: nil}]
+      global_rules = [%{predicates: [], to: [{:own, [:admin]}], via: nil}]
+
+      assert %{sql: local_sql} = compile(Query.normalize(PolicyModule2), mapping, local_rules)
+      assert %{sql: global_sql} = compile(Query.normalize(PolicyModule2), mapping, global_rules)
+
+      refute String.contains?(local_sql, ~s|"rg"."resource_type" IS NULL|)
+
+      assert String.contains?(
+               global_sql,
+               ~s|OR ("rg"."resource_type" IS NULL AND "rg"."resource_id" IS NULL))|
+             )
+    end
+
+    test "composes a namespaced grant reference as a type-wide lookup" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      term = Query.normalize(PolicyModule1)
+
+      rules = [%{predicates: [], to: [{:type, PolicyModule2, [:admin]}], via: nil}]
+
+      assert %{params: params, sql: sql} = compile(term, mapping, rules)
+      assert params == [:actor, {:value, ["admin"]}, {:value, "test_fixtures_policy_module2"}]
+
+      assert String.contains?(
+               sql,
+               ~s|AND "rg"."resource_type" = $3::"hologram_data"."hologram_role_grant_resource_type_$enum" | <>
+                 ~s|AND "rg"."resource_id" IS NULL)|
+             )
+    end
+
+    test "composes a relationship grant reference against the reference column" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      term = Query.normalize(PolicyModule1)
+
+      rules = [%{predicates: [], to: [{:rel, :parent, [:admin]}], via: nil}]
+
+      assert %{params: params, sql: sql} = compile(term, mapping, rules)
+      assert params == [:actor, {:value, ["admin"]}, {:value, "test_fixtures_policy_module2"}]
+
+      assert String.contains?(
+               sql,
+               ~s|AND "rg"."resource_id" = "test_fixtures_policy_module1"."parent_id")|
+             )
+    end
+
+    test "composes grant references and predicates as one conjunction" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      term = Query.normalize(PolicyModule1)
+
+      rules = [%{predicates: [{:priority, :>=, 3}], to: [{:own, [:editor]}], via: nil}]
 
       assert %{sql: sql} = compile(term, mapping, rules)
 
-      assert String.contains?(sql, ~s|WHERE "a" = $1 AND FALSE|)
+      assert String.contains?(sql, ~s|WHERE "priority" >= $1 AND EXISTS (SELECT 1|)
+    end
+
+    test "composes several grant references of one rule as an OR group" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      term = Query.normalize(PolicyModule1)
+
+      rules = [
+        %{predicates: [], to: [{:own, [:viewer]}, {:type, PolicyModule2, [:admin]}], via: nil}
+      ]
+
+      assert %{sql: sql} = compile(term, mapping, rules)
+
+      assert String.contains?(sql, ~s|WHERE ((EXISTS (SELECT 1|)
+      assert String.contains?(sql, ~s|) OR (EXISTS (SELECT 1|)
     end
 
     test "compiles inequality null-inclusively on optional attributes" do

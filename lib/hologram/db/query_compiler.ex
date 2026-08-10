@@ -1,6 +1,7 @@
 defmodule Hologram.DB.QueryCompiler do
   @moduledoc false
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
 
@@ -61,8 +62,10 @@ defmodule Hologram.DB.QueryCompiler do
     {include_sql, params_after_includes} =
       include_selects(term, entity_mapping, mapping, authored_params)
 
+    policy_context = %{entity_mapping: entity_mapping, entity_type: term.entity, mapping: mapping}
+
     {policy_conditions, all_reversed_params} =
-      policy_conditions(rules, entity_mapping, params_after_includes)
+      policy_conditions(rules, policy_context, params_after_includes)
 
     where_sql = where_clause(authored_conditions ++ policy_conditions)
     order_sql = order_clause(term.order_by, entity_mapping)
@@ -113,6 +116,21 @@ defmodule Hologram.DB.QueryCompiler do
   defp bind_slot(literal, column, reversed_params) do
     encoded_value = Codec.encode(literal, column.type)
 
+    {"$#{length(reversed_params) + 1}", [{:value, encoded_value} | reversed_params]}
+  end
+
+  defp enum_list_slot(values, column, reversed_params) do
+    encoded_values = Enum.map(values, &Codec.encode(&1, column.type))
+    {placeholder, new_params} = bind_slot_value(encoded_values, reversed_params)
+
+    {"#{placeholder}::#{array_type(column)}", new_params}
+  end
+
+  defp enum_type(%{sql_type: sql_type}) do
+    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(sql_type)}"
+  end
+
+  defp bind_slot_value(encoded_value, reversed_params) do
     {"$#{length(reversed_params) + 1}", [{:value, encoded_value} | reversed_params]}
   end
 
@@ -221,14 +239,33 @@ defmodule Hologram.DB.QueryCompiler do
     {"#{Mapper.quote_identifier(column.name)} #{operator} #{placeholder}", new_params}
   end
 
-  defp policy_conditions(nil, _entity_mapping, reversed_params), do: {[], reversed_params}
+  defp reference_column(entity_mapping, relationship_name) do
+    Enum.find(entity_mapping.columns, &(&1.source == {:relationship, relationship_name}))
+  end
 
-  defp policy_conditions([], _entity_mapping, reversed_params), do: {["FALSE"], reversed_params}
+  defp reference_role_names({:own, role_names}), do: role_names
 
-  defp policy_conditions(rules, entity_mapping, reversed_params) do
+  defp reference_role_names({:type, _target_type, role_names}), do: role_names
+
+  defp reference_role_names({:rel, _relationship_name, role_names}), do: role_names
+
+  # The resource type enum's values ARE the entity table names, so a table name is already the
+  # encoded value - it binds directly rather than through the enum codec.
+  defp resource_type_slot(table, context, reversed_params) do
+    column = grant_column(context, "resource_type")
+    {placeholder, new_params} = bind_slot_value(table, reversed_params)
+
+    {"#{placeholder}::#{enum_type(column)}", new_params}
+  end
+
+  defp policy_conditions(nil, _context, reversed_params), do: {[], reversed_params}
+
+  defp policy_conditions([], _context, reversed_params), do: {["FALSE"], reversed_params}
+
+  defp policy_conditions(rules, context, reversed_params) do
     {rendered_rules, new_params} =
       Enum.map_reduce(rules, reversed_params, fn rule, acc_params ->
-        rule_condition(rule, entity_mapping, acc_params)
+        rule_condition(rule, context, acc_params)
       end)
 
     if Enum.any?(rendered_rules, &(&1 == :unconditional)) do
@@ -238,27 +275,138 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
+  defp global_role?(entity_type, role_name) do
+    Enum.any?(entity_type.__roles__(), fn {name, opts} ->
+      name == role_name and Keyword.get(opts, :scope) == :global
+    end)
+  end
+
+  defp grant_column(context, name) do
+    context.mapping
+    |> Map.fetch!(RoleGrant)
+    |> Map.fetch!(:columns)
+    |> Enum.find(&(&1.name == name))
+  end
+
+  # Enum values bind as params cast to their column type, so the lookup keeps using the grant
+  # store's unique index - the same shape the in-memory grant lookups use.
+  defp grant_exists_condition(reference, context, reversed_params) do
+    role_names = reference_role_names(reference)
+
+    {actor_placeholder, params_after_actor} =
+      bind_slot({:actor}, grant_column(context, "user_id"), reversed_params)
+
+    {role_placeholder, params_after_roles} =
+      enum_list_slot(role_names, grant_column(context, "role"), params_after_actor)
+
+    {scope_sql, new_params} = grant_scope_sql(reference, context, params_after_roles)
+
+    condition =
+      ~s|EXISTS (SELECT 1 FROM #{grant_table(context)} AS "rg" | <>
+        ~s|WHERE "rg"."user_id" = #{actor_placeholder} | <>
+        ~s|AND "rg"."role" = ANY(#{role_placeholder}) AND #{scope_sql})|
+
+    {condition, new_params}
+  end
+
+  # A rule's own roles are held on the row itself, on its whole type, or globally - the global
+  # branch is emitted only when one of the named roles is declared with global scope, so a
+  # statement never carries a branch that cannot match.
+  defp grant_scope_sql({:own, role_names}, context, reversed_params) do
+    {placeholder, new_params} =
+      resource_type_slot(context.entity_mapping.table, context, reversed_params)
+
+    quoted_table = Mapper.quote_identifier(context.entity_mapping.table)
+
+    resource_sql =
+      ~s|("rg"."resource_id" = #{quoted_table}."id" OR "rg"."resource_id" IS NULL)|
+
+    scope_sql =
+      if Enum.any?(role_names, &global_role?(context.entity_type, &1)) do
+        ~s|(("rg"."resource_type" = #{placeholder} AND #{resource_sql}) | <>
+          ~s|OR ("rg"."resource_type" IS NULL AND "rg"."resource_id" IS NULL))|
+      else
+        ~s|"rg"."resource_type" = #{placeholder} AND #{resource_sql}|
+      end
+
+    {scope_sql, new_params}
+  end
+
+  defp grant_scope_sql({:type, target_type, _role_names}, context, reversed_params) do
+    target_table =
+      context.mapping
+      |> Map.fetch!(target_type)
+      |> Map.fetch!(:table)
+
+    {placeholder, new_params} = resource_type_slot(target_table, context, reversed_params)
+
+    {~s|"rg"."resource_type" = #{placeholder} AND "rg"."resource_id" IS NULL|, new_params}
+  end
+
+  defp grant_scope_sql({:rel, relationship_name, _role_names}, context, reversed_params) do
+    column = reference_column(context.entity_mapping, relationship_name)
+
+    {placeholder, new_params} =
+      resource_type_slot(column.references, context, reversed_params)
+
+    quoted_table = Mapper.quote_identifier(context.entity_mapping.table)
+    quoted_column = Mapper.quote_identifier(column.name)
+
+    scope_sql =
+      ~s|"rg"."resource_type" = #{placeholder} | <>
+        ~s|AND "rg"."resource_id" = #{quoted_table}.#{quoted_column}|
+
+    {scope_sql, new_params}
+  end
+
+  defp grant_table(context) do
+    table =
+      context.mapping
+      |> Map.fetch!(RoleGrant)
+      |> Map.fetch!(:table)
+
+    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
+  end
+
   defp group_condition([rule_sql]), do: rule_sql
 
   defp group_condition(rule_sqls) do
     "(" <> Enum.map_join(rule_sqls, " OR ", &"(#{&1})") <> ")"
   end
 
-  # TODO: grant references and delegations render as a denial until the grant store and
-  # delegation composition land - an under-approximation, so no row is shown that a rule
-  # does not grant.
-  defp requirement_conditions(%{to: nil, via: nil}), do: []
+  # TODO: delegations render as a denial until via composition lands - an under-approximation,
+  # so no row is shown that a rule does not grant.
+  defp delegation_conditions(nil), do: []
 
-  defp requirement_conditions(_rule), do: ["FALSE"]
+  defp delegation_conditions(_relationship_name), do: ["FALSE"]
 
-  defp rule_condition(rule, entity_mapping, reversed_params) do
-    {predicate_conditions, new_params} =
-      conditions(rule.predicates, entity_mapping, reversed_params)
+  defp rule_condition(rule, context, reversed_params) do
+    {predicate_conditions, params_after_predicates} =
+      conditions(rule.predicates, context.entity_mapping, reversed_params)
 
-    case predicate_conditions ++ requirement_conditions(rule) do
+    {reference_conditions, new_params} =
+      grant_reference_conditions(rule.to, context, params_after_predicates)
+
+    rule_conditions =
+      predicate_conditions ++ reference_conditions ++ delegation_conditions(rule.via)
+
+    case rule_conditions do
       [] -> {:unconditional, new_params}
-      rule_conditions -> {Enum.join(rule_conditions, " AND "), new_params}
+      conditions -> {Enum.join(conditions, " AND "), new_params}
     end
+  end
+
+  # Holding any of a rule's grant references satisfies it, so the references render as one
+  # OR group of EXISTS lookups against the grant store.
+  defp grant_reference_conditions(nil, _context, reversed_params), do: {[], reversed_params}
+
+  defp grant_reference_conditions(references, context, reversed_params) do
+    {rendered, new_params} =
+      Enum.map_reduce(references, reversed_params, fn reference, acc_params ->
+        grant_exists_condition(reference, context, acc_params)
+      end)
+
+    {[group_condition(rendered)], new_params}
   end
 
   defp conditions(triples, entity_mapping, reversed_params) do
