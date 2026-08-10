@@ -229,7 +229,7 @@ defmodule Hologram.Template.Renderer do
       |> put_page_mounted_flag_context(false)
       |> maybe_put_csrf_token_context(opts, initial_page?)
       |> maybe_put_instance_id_context(opts, initial_page?)
-      |> put_current_user_context()
+      |> put_user_context()
 
     {initial_html, initial_component_registry, final_server_struct} =
       render_page_inside_layout(
@@ -618,12 +618,6 @@ defmodule Hologram.Template.Renderer do
     {String.to_existing_atom(name), value}
   end
 
-  defp put_current_user_context(page_component_struct) do
-    current_user = read_current_user(Reflection.user_entity(), Auth.user_id())
-
-    Component.put_context(page_component_struct, {Hologram, :current_user}, current_user)
-  end
-
   defp put_initial_page_flag_context(page_component_struct, initial_page?) do
     Component.put_context(
       page_component_struct,
@@ -648,6 +642,12 @@ defmodule Hologram.Template.Renderer do
     )
   end
 
+  defp put_user_context(page_component_struct) do
+    user = read_session_user(Reflection.user_entity(), Auth.user_id())
+
+    Component.put_context(page_component_struct, {Hologram, :user}, user)
+  end
+
   defp raise_invalid_spread_value(value) do
     raise ArgumentError,
       message: "spread value must be a map or a keyword list, got: #{inspect(value)}"
@@ -658,9 +658,9 @@ defmodule Hologram.Template.Renderer do
   # read rules deny it (or none matches the own row), nil when anonymous, nil when no user
   # entity is designated. A session user id that is not a canonical entity id also yields
   # nil - the session's user_id keeps its wider latitude for apps not using the data layer.
-  defp read_current_user(nil, _user_id), do: nil
+  defp read_session_user(nil, _user_id), do: nil
 
-  defp read_current_user(user_entity, user_id) do
+  defp read_session_user(user_entity, user_id) do
     if Validator.attribute_value_valid?(user_id, :uuid) do
       term =
         user_entity

@@ -4,7 +4,9 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module94 do
 
   alias Hologram.Test.Fixtures.Entity.Module14, as: User
 
-  prop :current_user, User, from_context: {Hologram, :current_user}
+  # The prop remaps the framework's {Hologram, :user} context value to the conventional
+  # current_user template name.
+  prop :current_user, User, from_context: {Hologram, :user}
 
   @impl Component
   def template do

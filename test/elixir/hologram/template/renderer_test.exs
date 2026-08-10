@@ -1493,11 +1493,11 @@ defmodule Hologram.Template.RendererTest do
                     struct: %Component{
                       emitted_context: %{
                         {Hologram, :csrf_token} => @csrf_token,
-                        {Hologram, :current_user} => nil,
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_39_digest,
                         {Hologram, :page_mounted?} => true,
+                        {Hologram, :user} => nil,
                         {:my_scope, :my_key} => 123
                       }
                     }
@@ -1522,11 +1522,11 @@ defmodule Hologram.Template.RendererTest do
                     struct: %Component{
                       emitted_context: %{
                         {Hologram, :csrf_token} => @csrf_token,
-                        {Hologram, :current_user} => nil,
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_46_digest,
                         {Hologram, :page_mounted?} => true,
+                        {Hologram, :user} => nil,
                         {:my_scope, :my_key} => 123
                       }
                     }
@@ -1551,11 +1551,11 @@ defmodule Hologram.Template.RendererTest do
                     struct: %Component{
                       emitted_context: %{
                         {Hologram, :csrf_token} => @csrf_token,
-                        {Hologram, :current_user} => nil,
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_40_digest,
                         {Hologram, :page_mounted?} => true,
+                        {Hologram, :user} => nil,
                         {:my_scope, :my_key} => 123
                       }
                     }
@@ -1580,11 +1580,11 @@ defmodule Hologram.Template.RendererTest do
                     struct: %Component{
                       emitted_context: %{
                         {Hologram, :csrf_token} => @csrf_token,
-                        {Hologram, :current_user} => nil,
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_43_digest,
-                        {Hologram, :page_mounted?} => true
+                        {Hologram, :page_mounted?} => true,
+                        {Hologram, :user} => nil
                       }
                     }
                   }
@@ -1608,11 +1608,11 @@ defmodule Hologram.Template.RendererTest do
                     struct: %Component{
                       emitted_context: %{
                         {Hologram, :csrf_token} => @csrf_token,
-                        {Hologram, :current_user} => nil,
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_45_digest,
-                        {Hologram, :page_mounted?} => true
+                        {Hologram, :page_mounted?} => true,
+                        {Hologram, :user} => nil
                       }
                     }
                   }
@@ -1710,11 +1710,11 @@ defmodule Hologram.Template.RendererTest do
                     struct: %Component{
                       emitted_context: %{
                         {Hologram, :csrf_token} => @csrf_token,
-                        {Hologram, :current_user} => nil,
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_28_digest,
-                        {Hologram, :page_mounted?} => true
+                        {Hologram, :page_mounted?} => true,
+                        {Hologram, :user} => nil
                       },
                       state: %{state_1: "value_1", state_2: "value_2"}
                     }
@@ -1739,11 +1739,11 @@ defmodule Hologram.Template.RendererTest do
                     struct: %Component{
                       emitted_context: %{
                         {Hologram, :csrf_token} => @csrf_token,
-                        {Hologram, :current_user} => nil,
                         {Hologram, :initial_page?} => false,
                         {Hologram, :instance_id} => @instance_id,
                         {Hologram, :page_digest} => :dummy_module_29_digest,
-                        {Hologram, :page_mounted?} => true
+                        {Hologram, :page_mounted?} => true,
+                        {Hologram, :user} => nil
                       }
                     }
                   }
@@ -1846,7 +1846,7 @@ defmodule Hologram.Template.RendererTest do
                render_page(Module48, @params, @server, @opts)
 
       expected =
-        ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("csrf_token")]), Type.bitstring("#{@csrf_token}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("current_user")]), Type.atom("nil")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("instance_id")]), Type.bitstring("#{@instance_id}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])]])/
+        ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("csrf_token")]), Type.bitstring("#{@csrf_token}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("instance_id")]), Type.bitstring("#{@instance_id}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_mounted?")]), Type.atom("true")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("user")]), Type.atom("nil")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])]])/
 
       assert String.contains?(html, expected)
     end
