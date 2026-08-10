@@ -48,6 +48,46 @@ defmodule Hologram.AuthTest do
     end)
   end
 
+  describe "authorize!/2" do
+    test "returns ok when the session's user may perform the action" do
+      user = create_user("user_48@example.com")
+      entity = %Module1{id: Entity.generate_id(), priority: 5}
+
+      grant_role(user, %Module1{id: entity.id}, :editor)
+
+      assert Context.with_actor(user.id, fn -> authorize!(:update, entity) end) == :ok
+    end
+
+    test "returns ok for an action a rule grants without an acting user" do
+      assert authorize!(:read, %Module1{id: Entity.generate_id(), public: true}) == :ok
+    end
+
+    test "raises when the session's user may not perform the action" do
+      user = create_user("user_49@example.com")
+      entity = %Module1{id: Entity.generate_id(), priority: 5}
+
+      expected_msg =
+        "not allowed to perform :update on Hologram.Test.Fixtures.Policy.Module1 " <>
+          "#{inspect(entity.id)}"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(user.id, fn -> authorize!(:update, entity) end)
+      end
+    end
+
+    test "raises for an anonymous session on an action only the acting user may perform" do
+      entity = %Module1{id: Entity.generate_id(), author_id: Entity.generate_id()}
+
+      expected_msg =
+        "not allowed to perform :archive on Hologram.Test.Fixtures.Policy.Module1 " <>
+          "#{inspect(entity.id)}"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        authorize!(:archive, entity)
+      end
+    end
+  end
+
   describe "can?/3" do
     test "grants an action through a rule whose predicates hold" do
       assert can?(nil, :read, %Module1{public: true})

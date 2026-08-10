@@ -14,6 +14,24 @@ defmodule Hologram.Auth do
   alias Hologram.Policy.Evaluator
 
   @doc """
+  Raises Hologram.AccessDeniedError unless the session's user may perform the given action on
+  the given entity, and returns :ok when they may.
+
+  The acting user comes from the session and is never an argument: passing one would let app
+  code authorize as somebody other than the user whose request is running.
+  """
+  # TODO: final argument order decided with the step-08 write surface
+  @spec authorize!(atom, struct) :: :ok
+  def authorize!(action, entity) do
+    if not can?(user_id(), action, entity) do
+      raise Hologram.AccessDeniedError,
+            "not allowed to perform #{inspect(action)} on #{inspect(entity.__struct__)} #{inspect(entity.id)}"
+    end
+
+    :ok
+  end
+
+  @doc """
   Returns true when the given user may perform the given action on the given entity, or false otherwise.
 
   Takes the user entity or a bare user id, and nil for an anonymous session - rules referencing
