@@ -288,6 +288,9 @@ defmodule Hologram.Entity do
     target_type
   end
 
+  # The replacement happens on the AST, before the spec is evaluated in the module body -
+  # a real user_id() call would be an undefined function there. Policies have no variable
+  # scope, so a paren-less user_id can only be the call written without its parens.
   @doc false
   @spec replace_actor_leaves!(Macro.t(), module) :: Macro.t()
   def replace_actor_leaves!(spec, module) do
@@ -388,9 +391,6 @@ defmodule Hologram.Entity do
     {:error, grouped}
   end
 
-  # The replacement happens on the AST, before the spec is evaluated in the module body -
-  # a real user_id() call would be an undefined function there. Policies have no variable
-  # scope, so a paren-less user_id can only be the call written without its parens.
   defp user_entity_marker(opts) do
     if Keyword.get(opts, :user) == true do
       [

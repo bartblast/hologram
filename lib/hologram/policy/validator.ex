@@ -41,8 +41,6 @@ defmodule Hologram.Policy.Validator do
     validate_role_extends_cycles!(role_modules)
   end
 
-  # Rotates the cycle to start at its alphabetically first entity type, so that the same
-  # cycle is always reported with the same hop order regardless of where traversal entered it.
   # Rotates the cycle to start at its alphabetically first role module, so that the same
   # cycle is always reported with the same hop order regardless of where traversal entered it.
   defp canonicalize_role_cycle(cycle) do
@@ -56,6 +54,8 @@ defmodule Hologram.Policy.Validator do
     hops_from_start ++ hops_before_start
   end
 
+  # Rotates the cycle to start at its alphabetically first entity type, so that the same
+  # cycle is always reported with the same hop order regardless of where traversal entered it.
   defp canonicalize_via_cycle(cycle) do
     start_index =
       cycle
@@ -113,6 +113,10 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
+  # Depth-first traversal over the delegation edges of one operation. The path holds the hops
+  # taken to reach the current entity type (most recent first) - reaching an entity type
+  # already on the path closes a cycle. Fully explored entity types are marked visited and
+  # never re-entered, so each cycle is reported once.
   defp find_via_cycles(entity_type, path, edges, {cycles, visited}) do
     if MapSet.member?(visited, entity_type) do
       {cycles, visited}
@@ -129,7 +133,6 @@ defmodule Hologram.Policy.Validator do
   end
 
   # Closes a cycle when the target is already on the path, descends into the target otherwise.
-  # Closes a cycle when the target is already on the path, descends into the target otherwise.
   defp follow_role_edge(role_module, target_module, path, {cycles, visited}) do
     new_path = [role_module | path]
 
@@ -145,6 +148,7 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
+  # Closes a cycle when the target is already on the path, descends into the target otherwise.
   defp follow_via_edge(hop, target_type, path, edges, {cycles, visited}) do
     new_path = [hop | path]
 

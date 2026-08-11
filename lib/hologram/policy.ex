@@ -255,10 +255,6 @@ defmodule Hologram.Policy do
     end
   end
 
-  # Depth-first traversal over the delegation edges of one operation. The path holds the hops
-  # taken to reach the current entity type (most recent first) - reaching an entity type
-  # already on the path closes a cycle. Fully explored entity types are marked visited and
-  # never re-entered, so each cycle is reported once.
   # A reference to a role module is satisfied by every role carrying it - the module itself and
   # every role whose extends chain reaches it. The sweep is model-wide: role modules resolve
   # globally, so a reference means the same thing in every entity type.
