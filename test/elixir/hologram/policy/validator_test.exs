@@ -470,6 +470,73 @@ defmodule Hologram.Policy.ValidatorTest do
     end
   end
 
+  describe "validate_model!/1 for the grant lifecycle operations" do
+    test "returns :ok for own role references" do
+      defmodule OwnGateFixture do
+        use Hologram.Entity
+
+        role :editor
+        role :owner
+
+        allow :manage_roles, to: [:editor, :owner]
+        allow :read_grants, to: :owner
+      end
+
+      assert validate_model!([Module14, OwnGateFixture]) == :ok
+    end
+
+    test "rejects a reference the gate cannot honor" do
+      defmodule GlobalGateFixture do
+        use Hologram.Entity
+
+        allow :manage_roles, to: Hologram.Test.Fixtures.Role.Module1
+      end
+
+      expected_msg =
+        "invalid to option Hologram.Test.Fixtures.Role.Module1 for allow :manage_roles in Hologram.Policy.ValidatorTest.GlobalGateFixture - :manage_roles is checked without loading the row, so it takes own role names only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, GlobalGateFixture])
+      end
+    end
+
+    test "rejects a predicate the gate cannot honor" do
+      defmodule PredicateGateFixture do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        role :owner
+
+        allow :manage_roles, to: :owner, archived: false
+      end
+
+      expected_msg =
+        "invalid predicate :archived for allow :manage_roles in Hologram.Policy.ValidatorTest.PredicateGateFixture - :manage_roles is checked without loading the row, so it takes own role names only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, PredicateGateFixture])
+      end
+    end
+
+    test "rejects a delegation the gate cannot honor" do
+      defmodule DelegatedGateFixture do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Test.Fixtures.Policy.Module2, optional: true
+
+        allow :read_grants, via: :parent
+      end
+
+      expected_msg =
+        "invalid via option :parent for allow :read_grants in Hologram.Policy.ValidatorTest.DelegatedGateFixture - :read_grants is checked without loading the row, so it takes own role names only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, DelegatedGateFixture])
+      end
+    end
+  end
+
   describe "validate_model!/1 with global role references" do
     test "returns :ok for a declared role module reference" do
       defmodule ValidGlobalReferenceFixture do

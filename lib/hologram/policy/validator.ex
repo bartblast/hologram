@@ -5,6 +5,11 @@ defmodule Hologram.Policy.Validator do
   alias Hologram.Query
   alias Hologram.Reflection
 
+  # The operations gating the grant lifecycle. Their checks run without the row in hand -
+  # grant_role/revoke_role know the entity type and the resource id, not the row's data - so
+  # only own role references can be honored, and anything else would be silently ignored.
+  @gate_operations [:manage_roles, :read_grants]
+
   @doc """
   Validates the policy declarations of the given entity type modules as a whole.
 
@@ -21,6 +26,7 @@ defmodule Hologram.Policy.Validator do
         validate_to!(entity_type, operation, to)
         validate_via!(entity_type, operation, via)
         validate_predicates!(entity_type, operation, predicates)
+        validate_gate_operation!(entity_type, operation, to, via, predicates)
       end)
     end)
 
@@ -67,6 +73,10 @@ defmodule Hologram.Policy.Validator do
 
     {hops_before_start, hops_from_start} = Enum.split(cycle, start_index)
     hops_from_start ++ hops_before_start
+  end
+
+  defp gate_operation_reason(operation) do
+    "#{inspect(operation)} is checked without loading the row, so it takes own role names only"
   end
 
   defp declared_role_names(entity_type) do
@@ -306,6 +316,37 @@ defmodule Hologram.Policy.Validator do
       validate_own_reference!(entity_type, operation, role_module)
     end
   end
+
+  defp validate_gate_operation!(entity_type, operation, to, via, predicates)
+       when operation in @gate_operations do
+    to
+    |> List.wrap()
+    |> Enum.each(fn reference ->
+      if not is_atom(reference) or Reflection.alias?(reference) do
+        raise Hologram.CompileError,
+          message:
+            "invalid to option #{inspect(reference)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{gate_operation_reason(operation)}"
+      end
+    end)
+
+    if via do
+      raise Hologram.CompileError,
+        message:
+          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{gate_operation_reason(operation)}"
+    end
+
+    case predicates do
+      [] ->
+        :ok
+
+      [{name, _value} | _later_predicates] ->
+        raise Hologram.CompileError,
+          message:
+            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{gate_operation_reason(operation)}"
+    end
+  end
+
+  defp validate_gate_operation!(_entity_type, _operation, _to, _via, _predicates), do: :ok
 
   defp validate_global_reference!(entity_type, operation, role_module) do
     if not Reflection.role?(role_module) do
