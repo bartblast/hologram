@@ -427,6 +427,19 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects an empty to option list" do
+      expected_msg =
+        "invalid to option [] for allow :read in Hologram.Entity.ValidatorTest.EmptyToListFixture - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule EmptyToListFixture do
+          use Hologram.Entity
+
+          allow :read, to: []
+        end
+      end
+    end
+
     test "rejects spec that is not a keyword list" do
       expected_msg =
         "invalid options [1, 2] for allow :read in Hologram.Entity.ValidatorTest.InlineEntityFixture74 - options must be a keyword list"
