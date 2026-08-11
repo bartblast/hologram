@@ -32,6 +32,11 @@ defmodule Hologram.Policy.Edges do
   the chain prefixed, so every pair's list is complete on its own. Edges may over-approximate
   the affected data - re-checking everything an edge names is slower than necessary, never
   wrong - and they never under-approximate.
+
+  Takes a validated data model: the transitive expansion follows delegation to its end, so a
+  via cycle would not terminate. Cycles are a compile error, raised by
+  `Hologram.Policy.Validator.validate_model!/1` before anything reads the model - the same
+  guarantee SQL composition relies on to keep the table names of a chain distinct.
   """
   @spec derive(list(module)) :: %{{module, atom} => list(tuple)}
   def derive(entity_types) do
