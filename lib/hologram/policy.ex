@@ -43,6 +43,8 @@ defmodule Hologram.Policy do
   alias Hologram.Query
   alias Hologram.Reflection
 
+  @model_facts_key {__MODULE__, :model_facts}
+
   defmacro __using__(_opts) do
     quote do
       import Hologram.Policy, only: [allow: 1, allow: 2, role: 1, role: 2]
@@ -192,6 +194,14 @@ defmodule Hologram.Policy do
     own_role_names(entity_type, :manage_roles)
   end
 
+  @doc false
+  @spec reset_model_facts_cache() :: :ok
+  def reset_model_facts_cache do
+    :persistent_term.erase(@model_facts_key)
+
+    :ok
+  end
+
   @doc """
   Returns the own roles whose holders see the grants others hold on the given entity type, sorted.
 
@@ -259,10 +269,7 @@ defmodule Hologram.Policy do
   # every role whose extends chain reaches it. The sweep is model-wide: role modules resolve
   # globally, so a reference means the same thing in every entity type.
   defp expand_global_role(role_module) do
-    extends_by_module =
-      Map.new(Reflection.list_roles(), fn module -> {module, module.__extends__()} end)
-
-    expand_global_role_modules(MapSet.new([role_module]), extends_by_module)
+    expand_global_role_modules(MapSet.new([role_module]), model_facts().extends_by_role_module)
   end
 
   defp expand_global_role_modules(modules, extends_by_module) do
@@ -279,6 +286,28 @@ defmodule Hologram.Policy do
       Enum.sort(expanded)
     else
       expand_global_role_modules(expanded, extends_by_module)
+    end
+  end
+
+  # Both facts are model-wide sweeps over every module in the project, and policies are built
+  # on the request path - per policied query, per delegation hop and per can? call - so they are
+  # computed once and cached for the lifetime of the runtime, like the physical name mapping.
+  # The compiler and the application boot reset the cache, so a recompiled model is picked up.
+  defp model_facts do
+    case :persistent_term.get(@model_facts_key, nil) do
+      nil ->
+        facts = %{
+          entity_types: Reflection.list_entities(),
+          extends_by_role_module:
+            Map.new(Reflection.list_roles(), fn module -> {module, module.__extends__()} end)
+        }
+
+        :persistent_term.put(@model_facts_key, facts)
+
+        facts
+
+      facts ->
+        facts
     end
   end
 
@@ -305,7 +334,7 @@ defmodule Hologram.Policy do
   # the check reads grant rows through grant rows, never through this policy again.
   defp role_grant_read_rules do
     resource_rules =
-      Reflection.list_entities()
+      model_facts().entity_types
       |> Enum.reject(&(&1 == RoleGrant))
       |> Enum.map(&{&1, read_grants_roles(&1)})
       |> Enum.reject(fn {_entity_type, role_names} -> role_names == [] end)

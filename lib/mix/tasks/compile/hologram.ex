@@ -27,6 +27,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.CallGraph
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Validator, as: EntityValidator
+  alias Hologram.Policy
   alias Hologram.Policy.Validator, as: PolicyValidator
   alias Hologram.Reflection
 
@@ -299,6 +300,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp validate_data_model! do
     RoleGrant.reset_resolution_cache()
+    Policy.reset_model_facts_cache()
 
     entity_types = Reflection.list_entities()
 
