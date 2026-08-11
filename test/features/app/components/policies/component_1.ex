@@ -23,7 +23,7 @@ defmodule HologramFeatureTests.Components.Policies.Component1 do
       Documents: <strong id="documents"><code>{Enum.map_join(@documents, ",", & &1.title)}</code></strong>
     </p>
     <p>
-      Manageable: <strong id="manageable"><code>{Enum.count(@documents, &can?(@current_user, :manage_roles, &1))}</code></strong>
+      Session user: <strong id="session_user"><code>{session_user_email(@current_user)}</code></strong>
     </p>
     """
   end
@@ -31,4 +31,8 @@ defmodule HologramFeatureTests.Components.Policies.Component1 do
   defp documents_query do
     order_by(Document, :title)
   end
+
+  defp session_user_email(nil), do: "anonymous"
+
+  defp session_user_email(user), do: user.email
 end
