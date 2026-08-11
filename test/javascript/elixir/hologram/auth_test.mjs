@@ -1,7 +1,6 @@
 "use strict";
 
 import {
-  assert,
   assertBoxedError,
   defineRuntimeGlobals,
 } from "../../support/helpers.mjs";
