@@ -107,16 +107,7 @@ defmodule Hologram.Entity do
     spec = replace_actor_leaves!(spec, __CALLER__.module)
 
     quote do
-      operation = unquote(operation)
-      spec = unquote(spec)
-
-      Validator.validate_allow!(__MODULE__, operation, spec)
-
-      policy =
-        {operation, Keyword.get(spec, :to), Keyword.get(spec, :via),
-         Keyword.drop(spec, [:to, :via])}
-
-      Module.put_attribute(__MODULE__, :__policies__, policy)
+      Entity.__put_policy__(__MODULE__, unquote(operation), unquote(spec))
     end
   end
 
@@ -219,6 +210,20 @@ defmodule Hologram.Entity do
   end
 
   @doc false
+  @spec __put_policy__(module, atom, T.opts()) :: :ok
+  def __put_policy__(module, operation, spec) do
+    Validator.validate_allow!(module, operation, spec)
+
+    policy =
+      {operation, Keyword.get(spec, :to), Keyword.get(spec, :via),
+       Keyword.drop(spec, [:to, :via])}
+
+    Module.put_attribute(module, :__policies__, policy)
+
+    :ok
+  end
+
+  @doc false
   @spec __put_role__(module, atom, T.opts()) :: :ok
   def __put_role__(module, name, opts) do
     declarations = Module.get_attribute(module, :__roles__)
@@ -270,6 +275,23 @@ defmodule Hologram.Entity do
     quote do
       Module.register_attribute(__MODULE__, :__roles__, accumulate: true)
     end
+  end
+
+  @doc false
+  @spec replace_actor_leaves!(Macro.t(), module) :: Macro.t()
+  def replace_actor_leaves!(spec, module) do
+    Macro.prewalk(spec, fn
+      {:user_id, _meta, []} ->
+        Macro.escape({:actor})
+
+      {:user_id, _meta, context} when is_atom(context) ->
+        raise Hologram.CompileError,
+          message:
+            "paren-less user_id in a policy in #{inspect(module)} - did you mean user_id()?"
+
+      node ->
+        node
+    end)
   end
 
   @doc false
@@ -358,21 +380,6 @@ defmodule Hologram.Entity do
   # The replacement happens on the AST, before the spec is evaluated in the module body -
   # a real user_id() call would be an undefined function there. Policies have no variable
   # scope, so a paren-less user_id can only be the call written without its parens.
-  defp replace_actor_leaves!(spec, module) do
-    Macro.prewalk(spec, fn
-      {:user_id, _meta, []} ->
-        Macro.escape({:actor})
-
-      {:user_id, _meta, context} when is_atom(context) ->
-        raise Hologram.CompileError,
-          message:
-            "paren-less user_id in a policy in #{inspect(module)} - did you mean user_id()?"
-
-      node ->
-        node
-    end)
-  end
-
   defp user_entity_marker(opts) do
     if Keyword.get(opts, :user) == true do
       [
