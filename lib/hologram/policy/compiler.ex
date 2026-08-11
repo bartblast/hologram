@@ -17,7 +17,8 @@ defmodule Hologram.Policy.Compiler do
   Predicates carry the actor sentinel in value position where the declaration called user_id().
   Grant references are extends-expanded, so a reference to a role also names every role carrying it:
   own roles as {:own, role names}, another entity type's roles as {:type, entity type, role names},
-  and a related instance's roles as {:rel, relationship name, role names} - nil when the line has none.
+  a related instance's roles as {:rel, relationship name, role names}, and global role modules as
+  {:global, role modules} - nil when the line has none.
   A rule grants its operation when its predicates hold, one of its grant references is held, and its
   delegation grants the same operation - and a policy grants its operation when any of its rules does.
   """
@@ -153,6 +154,18 @@ defmodule Hologram.Policy.Compiler do
     validate_role_extends_cycles!(role_modules)
   end
 
+  defp build_global_reference([]), do: []
+
+  defp build_global_reference(role_modules) do
+    expanded_modules =
+      role_modules
+      |> Enum.flat_map(&expand_global_role/1)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    [{:global, expanded_modules}]
+  end
+
   defp build_own_reference(_entity_type, []), do: []
 
   defp build_own_reference(entity_type, role_names) do
@@ -168,15 +181,16 @@ defmodule Hologram.Policy.Compiler do
   defp build_to(_entity_type, nil), do: nil
 
   defp build_to(entity_type, to) do
-    {role_names, typed_references} =
-      to
-      |> List.wrap()
-      |> Enum.split_with(&is_atom/1)
+    references = List.wrap(to)
+
+    {role_modules, plain_references} = Enum.split_with(references, &Reflection.alias?/1)
+    {role_names, typed_references} = Enum.split_with(plain_references, &is_atom/1)
 
     own_reference = build_own_reference(entity_type, role_names)
     typed = Enum.map(typed_references, &build_typed_reference(entity_type, &1))
+    global_reference = build_global_reference(role_modules)
 
-    own_reference ++ typed
+    own_reference ++ typed ++ global_reference
   end
 
   defp build_typed_reference(entity_type, {reference, role_name}) do
@@ -249,6 +263,33 @@ defmodule Hologram.Policy.Compiler do
   # taken to reach the current entity type (most recent first) - reaching an entity type
   # already on the path closes a cycle. Fully explored entity types are marked visited and
   # never re-entered, so each cycle is reported once.
+  # A reference to a role module is satisfied by every role carrying it - the module itself and
+  # every role whose extends chain reaches it. The sweep is model-wide: role modules resolve
+  # globally, so a reference means the same thing in every entity type.
+  defp expand_global_role(role_module) do
+    extends_by_module =
+      Map.new(Reflection.list_roles(), fn module -> {module, module.__extends__()} end)
+
+    expand_global_role_modules(MapSet.new([role_module]), extends_by_module)
+  end
+
+  defp expand_global_role_modules(modules, extends_by_module) do
+    expanded =
+      Enum.reduce(extends_by_module, modules, fn {module, targets}, acc ->
+        if Enum.any?(targets, &MapSet.member?(modules, &1)) do
+          MapSet.put(acc, module)
+        else
+          acc
+        end
+      end)
+
+    if MapSet.size(expanded) == MapSet.size(modules) do
+      Enum.sort(expanded)
+    else
+      expand_global_role_modules(expanded, extends_by_module)
+    end
+  end
+
   # Depth-first traversal over the extends edges. The path holds the roles walked to reach the
   # current one (most recent first) - reaching a role already on the path closes a cycle.
   # Fully explored roles are marked visited and never re-entered, so each cycle is reported once.
@@ -514,7 +555,24 @@ defmodule Hologram.Policy.Compiler do
     end
   end
 
-  defp validate_to_reference!(entity_type, operation, role_name) do
+  defp validate_to_reference!(entity_type, operation, role_module)
+       when is_atom(role_module) do
+    if Reflection.alias?(role_module) do
+      validate_global_reference!(entity_type, operation, role_module)
+    else
+      validate_own_reference!(entity_type, operation, role_module)
+    end
+  end
+
+  defp validate_global_reference!(entity_type, operation, role_module) do
+    if not Reflection.role?(role_module) do
+      raise Hologram.CompileError,
+        message:
+          "invalid to option #{inspect(role_module)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{inspect(role_module)} is not a role module (define it with use Hologram.Role)"
+    end
+  end
+
+  defp validate_own_reference!(entity_type, operation, role_name) do
     declared_names = declared_role_names(entity_type)
 
     if role_name not in declared_names do

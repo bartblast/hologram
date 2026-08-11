@@ -46,6 +46,42 @@ defmodule Hologram.Policy.CompilerTest do
     end
   end
 
+  describe "build/1 with global role references" do
+    test "expands a role module reference to every role carrying it" do
+      defmodule GlobalReferenceFixture do
+        use Hologram.Entity
+
+        allow :archive, to: Hologram.Test.Fixtures.Role.Module1
+      end
+
+      assert build(GlobalReferenceFixture)[:archive] == [
+               %{
+                 predicates: [],
+                 to: [{:global, [Role.Module1, Role.Module2]}],
+                 via: nil
+               }
+             ]
+    end
+
+    test "keeps own and global references of one line apart" do
+      defmodule MixedReferenceFixture do
+        use Hologram.Entity
+
+        role :viewer
+
+        allow :read, to: [:viewer, Hologram.Test.Fixtures.Role.Module2]
+      end
+
+      assert build(MixedReferenceFixture)[:read] == [
+               %{
+                 predicates: [],
+                 to: [{:own, [:viewer]}, {:global, [Role.Module2]}],
+                 via: nil
+               }
+             ]
+    end
+  end
+
   describe "build/1 for the grant store" do
     test "grants sight of own grants, and of others' grants to read-grants role holders" do
       assert build(RoleGrant) == %{
@@ -609,6 +645,33 @@ defmodule Hologram.Policy.CompilerTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture6])
+      end
+    end
+  end
+
+  describe "validate_model!/1 with global role references" do
+    test "returns :ok for a declared role module reference" do
+      defmodule ValidGlobalReferenceFixture do
+        use Hologram.Entity
+
+        allow :read, to: Hologram.Test.Fixtures.Role.Module1
+      end
+
+      assert validate_model!([Module14, ValidGlobalReferenceFixture]) == :ok
+    end
+
+    test "rejects a to option naming a module that is not a role" do
+      defmodule InvalidGlobalReferenceFixture do
+        use Hologram.Entity
+
+        allow :read, to: Hologram.Test.Fixtures.Entity.Module1
+      end
+
+      expected_msg =
+        "invalid to option Hologram.Test.Fixtures.Entity.Module1 for allow :read in Hologram.Policy.CompilerTest.InvalidGlobalReferenceFixture - Hologram.Test.Fixtures.Entity.Module1 is not a role module (define it with use Hologram.Role)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, InvalidGlobalReferenceFixture])
       end
     end
   end
