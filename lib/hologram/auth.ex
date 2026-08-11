@@ -34,6 +34,9 @@ defmodule Hologram.Auth do
   Takes the user entity or a bare user id. The role is a module defined with use Hologram.Role -
   a global role is held without a resource, so it applies everywhere.
   Granting a role the user already holds keeps the original grant, metadata included.
+
+  Trusted-only: raises when an acting user is set, since no role qualifies its holder to hand
+  out powers that span the whole app.
   """
   @spec grant_role(struct | String.t(), module) :: :ok
   def grant_role(user_or_id, role) do
@@ -52,6 +55,9 @@ defmodule Hologram.Auth do
   entity type module grants it on every row of the type. The role must be declared on the
   resource's entity type. Granting a role the user already holds on the same resource keeps
   the original grant, metadata included.
+
+  An acting user must hold a role managing that resource's grants. Trusted code running without
+  an acting user grants whatever it needs, and a type-wide grant is trusted-only.
   """
   @spec grant_role(struct | String.t(), struct | module, atom) :: :ok
   def grant_role(user_or_id, resource, role) do
@@ -69,6 +75,8 @@ defmodule Hologram.Auth do
 
   Takes the user entity or a bare user id. The role is a module defined with use Hologram.Role.
   Revoking a role the user does not hold is a no-op.
+
+  Trusted-only: raises when an acting user is set, as its granting counterpart does.
   """
   @spec revoke_role(struct | String.t(), module) :: :ok
   def revoke_role(user_or_id, role) do
@@ -84,10 +92,13 @@ defmodule Hologram.Auth do
   Revokes the given role on the given resource from the given user and returns :ok.
 
   Takes the user entity or a bare user id, and an entity struct or entity type module for
-  the resource. Users may always revoke their own roles, which is how a member leaves a
-  resource - revoking someone else's requires managing that resource's roles. The last role
-  managing a resource can't be revoked, so a resource never loses its last manager.
-  Revoking a role the user does not hold is a no-op.
+  the resource. Revoking a role the user does not hold is a no-op.
+
+  Under an acting user: revoking one's own role is always allowed, which is how a member leaves
+  a resource - revoking someone else's requires managing that resource's roles - and the last
+  role managing a resource can't be revoked, so a resource never loses its last manager while
+  its members administer it. Trusted code running without an acting user is subject to neither,
+  and is how a resource's roles are set up and torn down. A type-wide revocation is trusted-only.
   """
   @spec revoke_role(struct | String.t(), struct | module, atom) :: :ok
   def revoke_role(user_or_id, resource, role) do
