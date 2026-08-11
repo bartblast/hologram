@@ -3,11 +3,13 @@ defmodule Hologram.Auth.RoleGrant do
 
   # The role store: one row per granted role. Grant shapes by nil pattern: an instance
   # grant names a resource type and id, a type-wide grant leaves resource_id nil, and a
-  # global grant leaves both nil.
+  # global grant leaves both nil. A row's role is an entity role name (:admin) or a global
+  # role module (MyApp.Roles.Admin).
   #
   # This module implements the entity contract by hand instead of through use
   # Hologram.Entity, because three parts of its definition are facts of the app, unknown
-  # when the dep compiles: the role enum values (the app's declared role names), the
+  # when the dep compiles: the role enum values (the app's declared role names and global
+  # role modules), the
   # resource_type enum values (the app's entity type names), and the relationship targets
   # (the app's designated user entity type). The reflection functions below compute those
   # facts when called - by then the app is compiled - so every consumer reading entity
@@ -15,6 +17,7 @@ defmodule Hologram.Auth.RoleGrant do
   # resolved definition. Keep the hand-written contract in sync with what use
   # Hologram.Entity generates.
 
+  alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
   alias Hologram.Entity.NotIncluded
   alias Hologram.Reflection
@@ -39,7 +42,7 @@ defmodule Hologram.Auth.RoleGrant do
           id: String.t() | nil,
           resource_id: String.t() | nil,
           resource_type: atom | nil,
-          role: atom | nil,
+          role: atom | module | nil,
           updated_at: DateTime.t() | nil,
           user: struct | NotIncluded.t(),
           user_id: String.t() | nil
@@ -47,7 +50,7 @@ defmodule Hologram.Auth.RoleGrant do
 
   @doc """
   Returns the list of attribute definitions for the role grant entity type, sorted by attribute name.
-  The enum value sets are computed from the compiled data model: resource_type values are the entity type table names, and role values are the union of the declared role names.
+  The enum value sets are computed from the compiled data model: resource_type values are the entity type table names, and role values are the union of the entity types' declared role names and the global role modules.
   """
   @spec __attributes__() :: list({atom, atom, keyword})
   def __attributes__ do
@@ -125,13 +128,16 @@ defmodule Hologram.Auth.RoleGrant do
       |> Enum.map(&resource_type/1)
       |> Enum.sort()
 
-    role_values =
-      entity_types
-      |> Enum.flat_map(fn entity_type ->
+    entity_role_names =
+      Enum.flat_map(entity_types, fn entity_type ->
         Enum.map(entity_type.__roles__(), fn {name, _opts} -> name end)
       end)
+
+    role_values =
+      entity_role_names
+      |> Enum.concat(Reflection.list_roles())
       |> Enum.uniq()
-      |> Enum.sort()
+      |> Enum.sort_by(&Codec.encode(&1, :enum))
 
     %{
       resource_type_values: resource_type_values,

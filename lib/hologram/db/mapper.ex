@@ -1,6 +1,7 @@
 defmodule Hologram.DB.Mapper do
   @moduledoc false
 
+  alias Hologram.DB.Codec
   alias Hologram.Reflection
 
   @hash_bytes 8
@@ -332,7 +333,7 @@ defmodule Hologram.DB.Mapper do
   defp enum_values(:enum, opts) do
     opts
     |> Keyword.fetch!(:values)
-    |> Enum.map(&Atom.to_string/1)
+    |> Enum.map(&Codec.encode(&1, :enum))
   end
 
   defp enum_values(_type, _opts), do: nil

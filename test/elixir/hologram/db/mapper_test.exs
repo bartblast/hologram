@@ -167,6 +167,10 @@ defmodule Hologram.DB.MapperTest do
       assert column(Module4, "c").enum_values == ["x", "y"]
     end
 
+    test "carries enum values that are modules without their Elixir prefix" do
+      assert "Hologram.Test.Fixtures.Role.Module1" in column(Hologram.Auth.RoleGrant, "role").enum_values
+    end
+
     test "carries the declared default value" do
       assert column(Module4, "c").default == :x
     end

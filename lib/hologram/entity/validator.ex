@@ -2,9 +2,13 @@ defmodule Hologram.Entity.Validator do
   @moduledoc false
 
   alias Hologram.Commons.Types, as: T
+  alias Hologram.DB.Codec
   alias Hologram.Reflection
 
   @bounded_attribute_types [:date, :datetime, :float, :integer]
+
+  # Postgres enum label limit
+  @max_enum_label_bytes 63
 
   # Postgres int8 column bounds
   @max_integer 9_223_372_036_854_775_807
@@ -776,6 +780,31 @@ defmodule Hologram.Entity.Validator do
     validate_default_constraints!(module, name, type, opts, value)
   end
 
+  # Postgres caps enum labels at 63 bytes and silently truncates longer ones - a truncated
+  # label would no longer decode back to the value it was stored for.
+  defp validate_enum_label_length!(module, kind, value) do
+    label = Codec.encode(value, :enum)
+    label_size = byte_size(label)
+
+    if label_size > @max_enum_label_bytes do
+      raise Hologram.CompileError,
+        message:
+          "#{kind} #{inspect(value)} in #{inspect(module)} is too long to store (#{label_size} bytes, limit #{@max_enum_label_bytes}) - shorten it"
+    end
+  end
+
+  # Stored enum labels distinguish modules from plain atoms by their first character, so a
+  # plain atom starting uppercase would decode back as a module.
+  defp validate_lowercase_atom!(module, kind, value) do
+    label = Codec.encode(value, :enum)
+
+    if not Reflection.alias?(value) and not String.match?(label, ~r/^[a-z_]/) do
+      raise Hologram.CompileError,
+        message:
+          "invalid #{kind} #{inspect(value)} in #{inspect(module)} - #{kind}s that are not modules must begin with a lowercase letter or an underscore"
+    end
+  end
+
   defp validate_enum_values!(module, name, values) do
     valid =
       is_list(values) and values != [] and
@@ -787,6 +816,11 @@ defmodule Hologram.Entity.Validator do
         message:
           "invalid values option #{inspect(values)} for enum attribute #{inspect(name)} in #{inspect(module)} - the values option must be a non-empty list of unique non-nil atoms"
     end
+
+    Enum.each(values, fn value ->
+      validate_lowercase_atom!(module, "enum value", value)
+      validate_enum_label_length!(module, "enum value", value)
+    end)
   end
 
   defp validate_extends_opt!(module, name, opts, declared_names) do
@@ -1015,6 +1049,8 @@ defmodule Hologram.Entity.Validator do
 
   defp validate_role_name!(module, name) do
     validate_name_type!(module, "role", name)
+    validate_lowercase_atom!(module, "role name", name)
+    validate_enum_label_length!(module, "role name", name)
   end
 
   defp validate_role_opts!(module, name, opts) do

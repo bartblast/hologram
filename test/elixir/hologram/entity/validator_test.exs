@@ -990,6 +990,47 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "accepts enum values that are modules" do
+      defmodule ModuleEnumValuesFixture do
+        use Hologram.Entity
+
+        attribute :role, :enum, values: [:viewer, Hologram.Test.Fixtures.Role.Module1]
+      end
+
+      assert ModuleEnumValuesFixture.__attributes__() == [
+               {:role, :enum, [values: [:viewer, Hologram.Test.Fixtures.Role.Module1]]}
+             ]
+    end
+
+    test "rejects an enum value that is not a module and does not begin with a lowercase letter" do
+      expected_msg =
+        "invalid enum value :Active in Hologram.Entity.ValidatorTest.UppercaseEnumValueFixture - enum values that are not modules must begin with a lowercase letter or an underscore"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule UppercaseEnumValueFixture do
+          use Hologram.Entity
+
+          attribute :status, :enum, values: [:Active]
+        end
+      end
+    end
+
+    test "rejects an enum value too long to store" do
+      expected_msg =
+        "enum value :this_is_a_very_long_enum_value_used_to_exceed_the_postgres_enum_label_limit in Hologram.Entity.ValidatorTest.LongEnumValueFixture is too long to store (75 bytes, limit 63) - shorten it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule LongEnumValueFixture do
+          use Hologram.Entity
+
+          attribute :status, :enum,
+            values: [
+              :this_is_a_very_long_enum_value_used_to_exceed_the_postgres_enum_label_limit
+            ]
+        end
+      end
+    end
+
     test "rejects non-boolean optional option" do
       expected_msg =
         "invalid optional option :yes for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture9 - the optional option must be true or false"
@@ -1378,6 +1419,32 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           role "owner"
+        end
+      end
+    end
+
+    test "rejects a role name that does not begin with a lowercase letter" do
+      expected_msg =
+        "invalid role name :Owner in Hologram.Entity.ValidatorTest.UppercaseRoleNameFixture - role names that are not modules must begin with a lowercase letter or an underscore"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule UppercaseRoleNameFixture do
+          use Hologram.Entity
+
+          role :Owner
+        end
+      end
+    end
+
+    test "rejects a role name too long to store" do
+      expected_msg =
+        "role name :this_is_a_very_long_role_name_used_to_exceed_the_postgres_enum_label_limit in Hologram.Entity.ValidatorTest.LongRoleNameFixture is too long to store (74 bytes, limit 63) - shorten it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule LongRoleNameFixture do
+          use Hologram.Entity
+
+          role :this_is_a_very_long_role_name_used_to_exceed_the_postgres_enum_label_limit
         end
       end
     end

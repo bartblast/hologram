@@ -234,7 +234,7 @@ defmodule Hologram.Auth do
     params = [
       resource_type_value(entity_type),
       Codec.encode(resource_id, :uuid),
-      Enum.map(role_names, &Atom.to_string/1)
+      Enum.map(role_names, &Codec.encode(&1, :enum))
     ]
 
     {:ok, %{rows: [[count]]}} = Connection.query(statement, params)
@@ -262,7 +262,7 @@ defmodule Hologram.Auth do
       Codec.encode(user_id, :uuid),
       resource_type && Atom.to_string(resource_type),
       Codec.encode(resource_id, :uuid),
-      Atom.to_string(role)
+      Codec.encode(role, :enum)
     ]
 
     {:ok, _result} = Connection.query(statement, params)
@@ -330,7 +330,7 @@ defmodule Hologram.Auth do
     )
     """
 
-    role_values = Enum.map(role_names, &Atom.to_string/1)
+    role_values = Enum.map(role_names, &Codec.encode(&1, :enum))
     params = Enum.concat([[Codec.encode(actor_user_id, :uuid)], scope_params, [role_values]])
 
     {:ok, %{rows: [[grant_exists?]]}} = Connection.query(statement, params)

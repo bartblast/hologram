@@ -235,6 +235,8 @@ defmodule Hologram.DB.IntrospectionTest do
                  "test_fixtures_policy_module2"
                ],
                "hologram_role_grant_role_$enum" => [
+                 "Hologram.Test.Fixtures.Role.Module1",
+                 "Hologram.Test.Fixtures.Role.Module2",
                  "admin",
                  "editor",
                  "maintainer",

@@ -4,6 +4,7 @@ defmodule Hologram.Auth.RoleGrantTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Entity.NotIncluded
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Role
 
   describe "__attributes__/0" do
     test "computes the enum value sets from the compiled data model" do
@@ -31,7 +32,19 @@ defmodule Hologram.Auth.RoleGrantTest do
                   ],
                   optional: true
                 ]},
-               {:role, :enum, [values: [:admin, :editor, :maintainer, :member, :owner, :viewer]]}
+               {:role, :enum,
+                [
+                  values: [
+                    Role.Module1,
+                    Role.Module2,
+                    :admin,
+                    :editor,
+                    :maintainer,
+                    :member,
+                    :owner,
+                    :viewer
+                  ]
+                ]}
              ]
     end
   end

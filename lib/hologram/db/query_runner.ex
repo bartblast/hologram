@@ -170,7 +170,7 @@ defmodule Hologram.DB.QueryRunner do
     datetime
   end
 
-  defp decode_embedded_value(value, :enum), do: String.to_existing_atom(value)
+  defp decode_embedded_value(value, :enum), do: Codec.decode_enum_label(value)
 
   defp decode_embedded_value(value, _type), do: value
 
