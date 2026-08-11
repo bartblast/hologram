@@ -10,6 +10,7 @@ defmodule Hologram.Policy.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy
+  alias Hologram.Test.Fixtures.Role
 
   describe "build/1" do
     test "returns empty map for entity type without policy declarations" do
@@ -608,6 +609,72 @@ defmodule Hologram.Policy.CompilerTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture6])
+      end
+    end
+  end
+
+  describe "validate_role_modules!/1" do
+    test "returns :ok for empty model" do
+      assert validate_role_modules!([]) == :ok
+    end
+
+    test "returns :ok for roles extending declared roles" do
+      assert validate_role_modules!([Role.Module1, Role.Module2]) == :ok
+    end
+
+    test "returns :ok for a role extending several roles" do
+      defmodule MultiExtendsRoleFixture do
+        use Hologram.Role, extends: [Role.Module1, Role.Module2]
+      end
+
+      assert validate_role_modules!([MultiExtendsRoleFixture]) == :ok
+    end
+
+    test "rejects an extends target that is not a role module" do
+      defmodule InvalidTargetRoleFixture do
+        use Hologram.Role, extends: Module1
+      end
+
+      expected_msg =
+        "invalid extends target Hologram.Test.Fixtures.Entity.Module1 in use Hologram.Role for Hologram.Policy.CompilerTest.InvalidTargetRoleFixture - extends targets must be modules defined with use Hologram.Role"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_role_modules!([InvalidTargetRoleFixture])
+      end
+    end
+
+    test "rejects an extension cycle" do
+      defmodule CyclicRoleFixture1 do
+        use Hologram.Role, extends: Hologram.Policy.CompilerTest.CyclicRoleFixture2
+      end
+
+      defmodule CyclicRoleFixture2 do
+        use Hologram.Role, extends: Hologram.Policy.CompilerTest.CyclicRoleFixture1
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        cyclic role extension - an extends chain can't return to the role it starts from:
+          * Hologram.Policy.CompilerTest.CyclicRoleFixture1 -> Hologram.Policy.CompilerTest.CyclicRoleFixture2 -> Hologram.Policy.CompilerTest.CyclicRoleFixture1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_role_modules!([CyclicRoleFixture1, CyclicRoleFixture2])
+      end
+    end
+
+    test "rejects a role module name too long to store as a grant value" do
+      defmodule ThisIsAVeryLongRoleModuleNameUsedToExceedThePostgresEnumLabelLimit do
+        use Hologram.Role
+      end
+
+      expected_msg =
+        "role module name Hologram.Policy.CompilerTest.ThisIsAVeryLongRoleModuleNameUsedToExceedThePostgresEnumLabelLimit is too long to store as a grant value (95 bytes, limit 63) - shorten the module name"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_role_modules!([
+          ThisIsAVeryLongRoleModuleNameUsedToExceedThePostgresEnumLabelLimit
+        ])
       end
     end
   end

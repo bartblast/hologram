@@ -125,6 +125,7 @@ defmodule Hologram.Policy.Compiler do
   """
   @spec validate_model!(list(module)) :: :ok
   def validate_model!(entity_types) do
+    validate_role_modules!(Reflection.list_roles())
     validate_user_entity!(entity_types)
 
     Enum.each(entity_types, fn entity_type ->
@@ -136,6 +137,20 @@ defmodule Hologram.Policy.Compiler do
     end)
 
     validate_via_cycles!(entity_types)
+  end
+
+  @doc """
+  Validates the given global role modules as a whole.
+
+  Returns :ok, or raises Hologram.CompileError naming the first invalid declaration (grant-value length, extends targets, extension cycles).
+  Extension is checked here rather than at the declaration, because a role module's extends targets are not compiled while its body is executing.
+  """
+  @spec validate_role_modules!(list(module)) :: :ok
+  def validate_role_modules!(role_modules) do
+    Enum.each(role_modules, &validate_role_label!/1)
+    Enum.each(role_modules, &validate_role_extends_targets!/1)
+
+    validate_role_extends_cycles!(role_modules)
   end
 
   defp build_own_reference(_entity_type, []), do: []
@@ -176,6 +191,19 @@ defmodule Hologram.Policy.Compiler do
 
   # Rotates the cycle to start at its alphabetically first entity type, so that the same
   # cycle is always reported with the same hop order regardless of where traversal entered it.
+  # Rotates the cycle to start at its alphabetically first role module, so that the same
+  # cycle is always reported with the same hop order regardless of where traversal entered it.
+  defp canonicalize_role_cycle(cycle) do
+    start_index =
+      cycle
+      |> Enum.with_index()
+      |> Enum.min_by(fn {role_module, _index} -> inspect(role_module) end)
+      |> elem(1)
+
+    {hops_before_start, hops_from_start} = Enum.split(cycle, start_index)
+    hops_from_start ++ hops_before_start
+  end
+
   defp canonicalize_via_cycle(cycle) do
     start_index =
       cycle
@@ -202,6 +230,12 @@ defmodule Hologram.Policy.Compiler do
       end)
   end
 
+  defp describe_role_cycle([first_role_module | _later_hops] = cycle) do
+    hops = Enum.map_join(cycle, " -> ", &inspect/1)
+
+    "  * #{hops} -> #{inspect(first_role_module)}"
+  end
+
   defp describe_via_cycle([{first_entity_type, _first_relationship_name} | _later_hops] = cycle) do
     hops =
       Enum.map_join(cycle, " -> ", fn {entity_type, relationship_name} ->
@@ -215,6 +249,22 @@ defmodule Hologram.Policy.Compiler do
   # taken to reach the current entity type (most recent first) - reaching an entity type
   # already on the path closes a cycle. Fully explored entity types are marked visited and
   # never re-entered, so each cycle is reported once.
+  # Depth-first traversal over the extends edges. The path holds the roles walked to reach the
+  # current one (most recent first) - reaching a role already on the path closes a cycle.
+  # Fully explored roles are marked visited and never re-entered, so each cycle is reported once.
+  defp find_role_cycles(role_module, path, {cycles, visited}) do
+    if MapSet.member?(visited, role_module) do
+      {cycles, visited}
+    else
+      {cycles, visited} =
+        Enum.reduce(role_module.__extends__(), {cycles, visited}, fn target_module, acc ->
+          follow_role_edge(role_module, target_module, path, acc)
+        end)
+
+      {cycles, MapSet.put(visited, role_module)}
+    end
+  end
+
   defp find_via_cycles(entity_type, path, edges, {cycles, visited}) do
     if MapSet.member?(visited, entity_type) do
       {cycles, visited}
@@ -231,6 +281,22 @@ defmodule Hologram.Policy.Compiler do
   end
 
   # Closes a cycle when the target is already on the path, descends into the target otherwise.
+  # Closes a cycle when the target is already on the path, descends into the target otherwise.
+  defp follow_role_edge(role_module, target_module, path, {cycles, visited}) do
+    new_path = [role_module | path]
+
+    if target_module in new_path do
+      {hops_beyond_target, [target_hop | _earlier_hops]} =
+        Enum.split_while(new_path, &(&1 != target_module))
+
+      cycle = [target_hop | Enum.reverse(hops_beyond_target)]
+
+      {[cycle | cycles], visited}
+    else
+      find_role_cycles(target_module, new_path, {cycles, visited})
+    end
+  end
+
   defp follow_via_edge(hop, target_type, path, edges, {cycles, visited}) do
     new_path = [hop | path]
 
@@ -360,6 +426,58 @@ defmodule Hologram.Policy.Compiler do
           message:
             "unknown relationship #{inspect(relationship_name)} in the to option of allow #{inspect(operation)} in #{inspect(entity_type)} - declared relationships are: #{declared_relationships}"
     end
+  end
+
+  defp validate_role_extends_cycles!(role_modules) do
+    {cycles, _visited} =
+      Enum.reduce(role_modules, {[], MapSet.new()}, fn role_module, acc ->
+        find_role_cycles(role_module, [], acc)
+      end)
+
+    if cycles != [] do
+      descriptions =
+        cycles
+        |> Enum.map(&canonicalize_role_cycle/1)
+        |> Enum.uniq()
+        |> Enum.sort()
+        |> Enum.map_join("\n", &describe_role_cycle/1)
+
+      raise Hologram.CompileError,
+        message:
+          "cyclic role extension - an extends chain can't return to the role it starts from:\n#{descriptions}"
+    end
+
+    :ok
+  end
+
+  defp validate_role_extends_targets!(role_module) do
+    Enum.each(role_module.__extends__(), fn target_module ->
+      if not Reflection.role?(target_module) do
+        raise Hologram.CompileError,
+          message:
+            "invalid extends target #{inspect(target_module)} in use Hologram.Role for #{inspect(role_module)} - extends targets must be modules defined with use Hologram.Role"
+      end
+    end)
+  end
+
+  # Role modules are stored as grant values in a Postgres enum, whose labels are capped at 63
+  # bytes and silently truncated above it - a truncated label would no longer decode back to
+  # the module.
+  defp validate_role_label!(role_module) do
+    label =
+      role_module
+      |> Atom.to_string()
+      |> String.replace_prefix("Elixir.", "")
+
+    label_size = byte_size(label)
+
+    if label_size > 63 do
+      raise Hologram.CompileError,
+        message:
+          "role module name #{inspect(role_module)} is too long to store as a grant value (#{label_size} bytes, limit 63) - shorten the module name"
+    end
+
+    :ok
   end
 
   defp validate_target_role!(entity_type, operation, target_type, role_name) do
