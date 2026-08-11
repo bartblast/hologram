@@ -7,6 +7,7 @@ defmodule Hologram.Policy.EdgesTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy
+  alias Hologram.Test.Fixtures.Role
 
   describe "derive/1" do
     test "derives the full edge list per operation for a policy-declaring model" do
@@ -39,6 +40,14 @@ defmodule Hologram.Policy.EdgesTest do
       assert edges[{Policy.Module2, :update}] == [
                {:global_grants, [:admin]},
                {:own_grants, [:admin]}
+             ]
+    end
+
+    test "derives a global-grant edge for a referenced role module" do
+      edges = derive([Policy.Module2])
+
+      assert edges[{Policy.Module2, :archive}] == [
+               {:global_grants, [Role.Module1, Role.Module2]}
              ]
     end
 

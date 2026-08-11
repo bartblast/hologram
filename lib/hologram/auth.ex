@@ -12,6 +12,7 @@ defmodule Hologram.Auth do
   alias Hologram.Entity.Validator
   alias Hologram.Policy.Compiler, as: Policy
   alias Hologram.Policy.Evaluator
+  alias Hologram.Reflection
 
   @doc """
   Returns true when the given user may perform the given operation on the given entity, or false otherwise.
@@ -30,19 +31,15 @@ defmodule Hologram.Auth do
   @doc """
   Grants the given global role to the given user and returns :ok.
 
-  Takes the user entity or a bare user id. The role must be declared with scope :global on
-  some entity type - a global role is held without a resource, so it applies everywhere.
+  Takes the user entity or a bare user id. The role is a module defined with use Hologram.Role -
+  a global role is held without a resource, so it applies everywhere.
   Granting a role the user already holds keeps the original grant, metadata included.
   """
-  @spec grant_role(struct | String.t(), atom) :: :ok
+  @spec grant_role(struct | String.t(), module) :: :ok
   def grant_role(user_or_id, role) do
     user_id = validate_user_id!(user_or_id)
-    global_role_names = Policy.global_role_names()
 
-    if role not in global_role_names do
-      raise ArgumentError, unknown_global_role_message(role, global_role_names)
-    end
-
+    validate_global_role!(role)
     authorize_trusted_write!("global", "granted")
 
     write_grant(user_id, nil, nil, role)
@@ -70,17 +67,14 @@ defmodule Hologram.Auth do
   @doc """
   Revokes the given global role from the given user and returns :ok.
 
-  Takes the user entity or a bare user id. Revoking a role the user does not hold is a no-op.
+  Takes the user entity or a bare user id. The role is a module defined with use Hologram.Role.
+  Revoking a role the user does not hold is a no-op.
   """
-  @spec revoke_role(struct | String.t(), atom) :: :ok
+  @spec revoke_role(struct | String.t(), module) :: :ok
   def revoke_role(user_or_id, role) do
     user_id = validate_user_id!(user_or_id)
-    global_role_names = Policy.global_role_names()
 
-    if role not in global_role_names do
-      raise ArgumentError, unknown_global_role_message(role, global_role_names)
-    end
-
+    validate_global_role!(role)
     authorize_trusted_write!("global", "revoked")
 
     delete_grant(user_id, nil, nil, role)
@@ -394,14 +388,19 @@ defmodule Hologram.Auth do
     {~s|"resource_type" IS NULL AND "resource_id" IS NULL|, []}
   end
 
-  defp unknown_global_role_message(role, []) do
-    "unknown global role #{inspect(role)} - no role is declared with scope: :global"
-  end
+  defp unknown_global_role_message(role) do
+    case Reflection.list_roles() do
+      [] ->
+        "unknown global role #{inspect(role)} - no module is defined with use Hologram.Role"
 
-  defp unknown_global_role_message(role, global_role_names) do
-    declared_roles = Enum.map_join(global_role_names, ", ", &inspect/1)
+      role_modules ->
+        declared_roles =
+          role_modules
+          |> Enum.sort_by(&inspect/1)
+          |> Enum.map_join(", ", &inspect/1)
 
-    "unknown global role #{inspect(role)} - declared global roles are: #{declared_roles}"
+        "unknown global role #{inspect(role)} - defined global roles are: #{declared_roles}"
+    end
   end
 
   defp unmanaged_resource_message(entity_type, resource_id) do
@@ -417,6 +416,14 @@ defmodule Hologram.Auth do
       raise ArgumentError,
             "unknown role #{inspect(role)} for #{inspect(entity_type)} - declared roles are: #{declared_roles}"
     end
+  end
+
+  defp validate_global_role!(role) do
+    if not Reflection.role?(role) do
+      raise ArgumentError, unknown_global_role_message(role)
+    end
+
+    :ok
   end
 
   defp validate_id!(id, subject) do

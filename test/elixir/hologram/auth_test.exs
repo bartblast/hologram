@@ -105,7 +105,7 @@ defmodule Hologram.AuthTest do
 
       refute can?(user, :update, %Module2{id: Entity.generate_id()})
 
-      grant_role(user, :admin)
+      insert_global_grant(user.id, :admin)
 
       assert can?(user, :update, %Module2{id: Entity.generate_id()})
     end
@@ -257,32 +257,52 @@ defmodule Hologram.AuthTest do
     test "writes a global grant with no resource" do
       user = create_user("user_4@example.com")
 
-      assert grant_role(user, :admin) == :ok
+      assert grant_role(user, Role.Module1) == :ok
 
-      assert [%{resource_type: nil, resource_id: nil, role: "admin"}] = grant_rows(user.id)
+      assert [
+               %{
+                 resource_type: nil,
+                 resource_id: nil,
+                 role: "Hologram.Test.Fixtures.Role.Module1"
+               }
+             ] = grant_rows(user.id)
     end
 
     test "takes a bare user id" do
       user = create_user("user_5@example.com")
 
-      assert grant_role(user.id, :admin) == :ok
+      assert grant_role(user.id, Role.Module1) == :ok
 
-      assert [%{role: "admin"}] = grant_rows(user.id)
+      assert [%{role: "Hologram.Test.Fixtures.Role.Module1"}] = grant_rows(user.id)
     end
 
-    test "raises on a role declared without global scope" do
+    test "keeps the original grant when the user already holds the role" do
+      user = create_user("user_49@example.com")
+
+      grant_role(user, Role.Module1)
+      [%{created_at: created_at}] = grant_rows(user.id)
+
+      assert grant_role(user, Role.Module1) == :ok
+
+      assert [%{created_at: ^created_at}] = grant_rows(user.id)
+    end
+
+    test "raises on a module that is not a global role" do
       user = create_user("user_6@example.com")
 
-      expected_msg = "unknown global role :editor - declared global roles are: :admin"
+      expected_msg =
+        "unknown global role Hologram.Test.Fixtures.Entity.Module1 - defined global roles are: Hologram.Test.Fixtures.Role.Module1, Hologram.Test.Fixtures.Role.Module2"
 
-      assert_error ArgumentError, expected_msg, fn -> grant_role(user, :editor) end
+      assert_error ArgumentError, expected_msg, fn ->
+        grant_role(user, Hologram.Test.Fixtures.Entity.Module1)
+      end
     end
 
     test "raises on an id that is not a canonical entity id" do
       expected_msg =
         "invalid user id \"nope\" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
 
-      assert_error ArgumentError, expected_msg, fn -> grant_role("nope", :admin) end
+      assert_error ArgumentError, expected_msg, fn -> grant_role("nope", Role.Module1) end
     end
 
     test "raises on a user that does not exist" do
@@ -291,7 +311,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown user id #{inspect(user_id)} - roles are granted only to existing users"
 
-      assert_error ArgumentError, expected_msg, fn -> grant_role(user_id, :admin) end
+      assert_error ArgumentError, expected_msg, fn -> grant_role(user_id, Role.Module1) end
     end
 
     test "raises on a global grant issued by an acting user" do
@@ -302,7 +322,7 @@ defmodule Hologram.AuthTest do
         "global roles are granted only by trusted code running without an acting user"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        Context.with_actor(granter.id, fn -> grant_role(user, :admin) end)
+        Context.with_actor(granter.id, fn -> grant_role(user, Role.Module1) end)
       end
     end
   end
@@ -433,17 +453,28 @@ defmodule Hologram.AuthTest do
   describe "revoke_role/2" do
     test "removes a global grant" do
       user = create_user("user_24@example.com")
-      grant_role(user, :admin)
+      grant_role(user, Role.Module1)
 
-      assert revoke_role(user, :admin) == :ok
+      assert revoke_role(user, Role.Module1) == :ok
       assert grant_rows(user.id) == []
     end
 
     test "is a no-op for a role the user does not hold" do
       user = create_user("user_25@example.com")
 
-      assert revoke_role(user, :admin) == :ok
+      assert revoke_role(user, Role.Module1) == :ok
       assert grant_rows(user.id) == []
+    end
+
+    test "raises on a module that is not a global role" do
+      user = create_user("user_50@example.com")
+
+      expected_msg =
+        "unknown global role Hologram.Test.Fixtures.Entity.Module1 - defined global roles are: Hologram.Test.Fixtures.Role.Module1, Hologram.Test.Fixtures.Role.Module2"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        revoke_role(user, Hologram.Test.Fixtures.Entity.Module1)
+      end
     end
 
     test "raises on a global revocation issued by an acting user" do
@@ -454,7 +485,7 @@ defmodule Hologram.AuthTest do
         "global roles are revoked only by trusted code running without an acting user"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
-        Context.with_actor(granter.id, fn -> revoke_role(user, :admin) end)
+        Context.with_actor(granter.id, fn -> revoke_role(user, Role.Module1) end)
       end
     end
   end

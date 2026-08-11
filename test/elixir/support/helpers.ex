@@ -128,8 +128,8 @@ defmodule Hologram.Test.Helpers do
   @doc """
   Writes a global role grant row directly, for tests needing a grant the public surface does not create.
   """
-  @spec insert_global_grant(String.t(), module) :: :ok
-  def insert_global_grant(user_id, role_module) do
+  @spec insert_global_grant(String.t(), atom) :: :ok
+  def insert_global_grant(user_id, role) do
     insert_sql =
       ~s|INSERT INTO "hologram_data"."hologram_role_grant" | <>
         ~s|("id", "user_id", "role", "created_at", "updated_at") | <>
@@ -138,7 +138,7 @@ defmodule Hologram.Test.Helpers do
     params = [
       Codec.encode(Entity.generate_id(), :uuid),
       Codec.encode(user_id, :uuid),
-      Codec.encode(role_module, :enum),
+      Codec.encode(role, :enum),
       DateTime.utc_now()
     ]
 

@@ -6,6 +6,7 @@ defmodule Hologram.Test.Fixtures.Controller.Module29 do
   alias Hologram.DB
   alias Hologram.Entity
   alias Hologram.Test.Fixtures.Policy.Module1
+  alias Hologram.Test.Fixtures.Role.Module1, as: Role1
 
   @impl Component
   def command(:my_command_creating_entity, _params, server) do
@@ -17,7 +18,7 @@ defmodule Hologram.Test.Fixtures.Controller.Module29 do
   end
 
   def command(:my_command_granting_global_role, %{user_id: user_id}, server) do
-    Auth.grant_role(user_id, :admin)
+    Auth.grant_role(user_id, Role1)
 
     %{server | next_action: nil}
   end
