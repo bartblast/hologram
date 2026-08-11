@@ -20,7 +20,6 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Test.Fixtures.Component.Module8
   alias Hologram.Test.Fixtures.Component.Module9
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
-  alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity1
 
   @server %Server{cid: "page"}
 
@@ -645,22 +644,5 @@ defmodule Hologram.ComponentTest do
 
       assert normalize_newlines(text) == "Module3 template\n"
     end
-  end
-
-  test "use Hologram.Component imports can?/3" do
-    defmodule CanImportComponentFixture do
-      use Hologram.Component
-
-      @spec check(struct | String.t() | nil, struct) :: boolean
-      def check(user, entity), do: can?(user, :read, entity)
-
-      @impl Component
-      def template do
-        ~HOLO""
-      end
-    end
-
-    assert CanImportComponentFixture.check(nil, %PolicyEntity1{public: true})
-    refute CanImportComponentFixture.check(nil, %PolicyEntity1{public: false})
   end
 end

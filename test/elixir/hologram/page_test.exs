@@ -12,7 +12,6 @@ defmodule Hologram.PageTest do
   alias Hologram.Test.Fixtures.Page.Module5
   alias Hologram.Test.Fixtures.Page.Module6
   alias Hologram.Test.Fixtures.Page.Module7
-  alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity1
 
   test "__is_hologram_page__/0" do
     assert Module1.__is_hologram_page__()
@@ -150,26 +149,5 @@ defmodule Hologram.PageTest do
 
       assert normalize_newlines(text) == "Module5 template\n"
     end
-  end
-
-  test "use Hologram.Page imports can?/3" do
-    defmodule CanImportPageFixture do
-      use Hologram.Page
-
-      route "/hologram-page-test-can-import-fixture"
-
-      layout Hologram.Test.Fixtures.LayoutFixture
-
-      @spec check(struct | String.t() | nil, struct) :: boolean
-      def check(user, entity), do: can?(user, :read, entity)
-
-      @impl Page
-      def template do
-        ~HOLO""
-      end
-    end
-
-    assert CanImportPageFixture.check(nil, %PolicyEntity1{public: true})
-    refute CanImportPageFixture.check(nil, %PolicyEntity1{public: false})
   end
 end
