@@ -158,11 +158,7 @@ defmodule Hologram.Entity do
   @spec role(atom, T.opts()) :: Macro.t()
   defmacro role(name, opts \\ []) do
     quote do
-      name = unquote(name)
-      opts = unquote(opts)
-
-      Validator.validate_role!(__MODULE__, name, opts)
-      Module.put_attribute(__MODULE__, :__roles__, {name, opts})
+      Entity.__put_role__(__MODULE__, unquote(name), unquote(opts))
     end
   end
 
@@ -220,6 +216,28 @@ defmodule Hologram.Entity do
       |> Map.merge(values_map)
 
     struct!(entity_type, fields)
+  end
+
+  @doc false
+  @spec __put_role__(module, atom, T.opts()) :: :ok
+  def __put_role__(module, name, opts) do
+    declarations = Module.get_attribute(module, :__roles__)
+
+    case Enum.find(declarations, fn {declared_name, _opts} -> declared_name == name end) do
+      nil ->
+        Validator.validate_role!(module, name, opts)
+        Module.put_attribute(module, :__roles__, {name, opts})
+
+        :ok
+
+      {^name, ^opts} ->
+        :ok
+
+      {^name, declared_opts} ->
+        raise Hologram.CompileError,
+          message:
+            "conflicting declarations for role #{inspect(name)} in #{inspect(module)}: #{inspect(declared_opts)} and #{inspect(opts)} - repeated role declarations must be identical"
+    end
   end
 
   @doc false

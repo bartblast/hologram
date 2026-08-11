@@ -1369,20 +1369,6 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
-    test "rejects duplicate role name" do
-      expected_msg =
-        "duplicate name :owner used for role in Hologram.Entity.ValidatorTest.InlineEntityFixture56 - role names must be unique"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        defmodule InlineEntityFixture56 do
-          use Hologram.Entity
-
-          role :owner
-          role :owner
-        end
-      end
-    end
-
     test "rejects non-atom role name" do
       expected_msg =
         "invalid name \"owner\" used for role in Hologram.Entity.ValidatorTest.InlineEntityFixture57 - declaration names must be atoms"

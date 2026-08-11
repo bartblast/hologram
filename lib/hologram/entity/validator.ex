@@ -1015,17 +1015,6 @@ defmodule Hologram.Entity.Validator do
 
   defp validate_role_name!(module, name) do
     validate_name_type!(module, "role", name)
-
-    declared_names =
-      module
-      |> Module.get_attribute(:__roles__)
-      |> Enum.map(fn {declared_name, _opts} -> declared_name end)
-
-    if name in declared_names do
-      raise Hologram.CompileError,
-        message:
-          "duplicate name #{inspect(name)} used for role in #{inspect(module)} - role names must be unique"
-    end
   end
 
   defp validate_role_opts!(module, name, opts) do
