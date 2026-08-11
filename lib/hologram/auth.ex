@@ -95,9 +95,18 @@ defmodule Hologram.Auth do
     {entity_type, resource_id} = resource_reference(resource)
 
     validate_declared_role!(entity_type, role)
-    authorize_revoke!(entity_type, resource_id, user_id, role)
 
-    delete_grant(user_id, RoleGrant.resource_type(entity_type), resource_id, role)
+    # The last-manager guard counts the managing grants and then deletes one, so the two
+    # statements run in a transaction with the counted rows locked - concurrent revokes of a
+    # resource's final managing roles would otherwise both see a survivor and both delete.
+    {:ok, :ok} =
+      Connection.transaction(fn ->
+        authorize_revoke!(entity_type, resource_id, user_id, role)
+
+        delete_grant(user_id, RoleGrant.resource_type(entity_type), resource_id, role)
+      end)
+
+    :ok
   end
 
   @doc """
@@ -218,13 +227,16 @@ defmodule Hologram.Auth do
     end
   end
 
+  # The rows are selected rather than counted in SQL because Postgres rejects FOR UPDATE with
+  # aggregates - the lock is the point, and a resource's managing grants are few.
   # sobelow_skip ["SQL.Query"]
   defp count_managing_grants(entity_type, resource_id, role_names) do
     statement = """
-    SELECT count(*) FROM "hologram_data"."hologram_role_grant"
+    SELECT "id" FROM "hologram_data"."hologram_role_grant"
     WHERE "resource_type" = $1::#{qualified_enum_type("resource_type")}
       AND "resource_id" = $2
       AND "role" = ANY($3::#{qualified_enum_type("role")}[])
+    FOR UPDATE
     """
 
     params = [
@@ -233,9 +245,9 @@ defmodule Hologram.Auth do
       Enum.map(role_names, &Codec.encode(&1, :enum))
     ]
 
-    {:ok, %{rows: [[count]]}} = Connection.query(statement, params)
+    {:ok, %{rows: rows}} = Connection.query(statement, params)
 
-    count
+    length(rows)
   end
 
   defp delegates?(nil, _actor_user_id, _operation), do: false
