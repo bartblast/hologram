@@ -216,6 +216,46 @@ defmodule Hologram.DB.QueryCompilerTest do
       end
     end
 
+    test "composes the included type's read policy into the include subquery, keyed on its alias" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+
+      term =
+        PolicyModule1
+        |> include(:parent)
+        |> Query.normalize()
+
+      rules = [%{predicates: [], to: nil, via: nil}]
+
+      assert %{sql: sql} = compile(term, mapping, %{operation: :read, rules: rules})
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE "i1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
+                 ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
+                 ~s|WHERE "rg"."user_id" = $1 | <>
+                 ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                 ~s|AND "rg"."resource_type" = | <>
+                 ~s|$3::"hologram_data"."hologram_role_grant_resource_type_$enum" | <>
+                 ~s|AND ("rg"."resource_id" = "i1"."id" OR "rg"."resource_id" IS NULL))|
+             )
+    end
+
+    test "leaves include subqueries unfiltered without a policy" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+
+      term =
+        PolicyModule1
+        |> include(:parent)
+        |> Query.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE "i1"."id" = "test_fixtures_policy_module1"."parent_id")|
+             )
+    end
+
     test "denies everything for a policy with no rules" do
       mapping = Mapper.derive!([Module2])
       term = Query.normalize(Module2)

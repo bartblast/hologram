@@ -26,11 +26,18 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module9
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Role
 
   @mapping Mapper.derive!([Module1, Module2, Module3])
 
-  @policy_mapping Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+  @policy_mapping Mapper.derive!([
+                    Module14,
+                    PolicyModule1,
+                    PolicyModule2,
+                    PolicyModule3,
+                    RoleGrant
+                  ])
 
   defp create_module_2_entities do
     first =
@@ -88,9 +95,32 @@ defmodule Hologram.DB.QueryRunnerTest do
       Enum.map(rows, fn [id | _rest] -> Codec.decode(id, :uuid) end)
     end
 
+    defp create_policy_child(parent, public) do
+      PolicyModule1
+      |> Entity.new(parent_id: parent.id, public: public)
+      |> DB.create()
+    end
+
     defp create_policy_entity(public) do
       PolicyModule1
       |> Entity.new(public: public)
+      |> DB.create()
+    end
+
+    defp create_policy_container(children) do
+      container =
+        PolicyModule3
+        |> Entity.new()
+        |> DB.create()
+
+      Enum.each(children, &add_relationship(PolicyModule3, container.id, :children, &1.id))
+
+      container
+    end
+
+    defp create_policy_parent do
+      PolicyModule2
+      |> Entity.new()
       |> DB.create()
     end
 
@@ -98,6 +128,28 @@ defmodule Hologram.DB.QueryRunnerTest do
       Module14
       |> Entity.new(email: email)
       |> DB.create()
+    end
+
+    defp included_children(actor_user_id) do
+      term =
+        PolicyModule3
+        |> include(:children)
+        |> Query.normalize()
+
+      [row] = run_policied(term, @policy_mapping, actor_user_id)
+
+      row.children
+    end
+
+    defp included_parent(actor_user_id) do
+      term =
+        PolicyModule1
+        |> include(:parent)
+        |> Query.normalize()
+
+      [row] = run_policied(term, @policy_mapping, actor_user_id)
+
+      row.parent
     end
 
     defp policied_ids(actor_user_id) do
@@ -186,6 +238,63 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert run_policied(private_term, @policy_mapping, nil) == nil
       assert %{id: id} = run_policied(public_term, @policy_mapping, nil)
       assert id == public_entity.id
+    end
+
+    test "hides an included row the policy denies the acting user" do
+      user = create_policy_user("runner_12@example.com")
+      parent = create_policy_parent()
+      create_policy_child(parent, true)
+
+      assert included_parent(user.id) == nil
+    end
+
+    test "embeds an included row the policy grants the acting user" do
+      user = create_policy_user("runner_13@example.com")
+      parent = create_policy_parent()
+      create_policy_child(parent, true)
+
+      Auth.grant_role(user, parent, :member)
+
+      assert included_parent(user.id).id == parent.id
+    end
+
+    test "hides an included row from an anonymous session" do
+      parent = create_policy_parent()
+      create_policy_child(parent, true)
+
+      assert included_parent(nil) == nil
+    end
+
+    test "filters a to-many include by the included type's policy" do
+      user = create_policy_user("runner_14@example.com")
+      parent = create_policy_parent()
+      visible_child = create_policy_child(parent, true)
+      hidden_child = create_policy_child(parent, false)
+      create_policy_container([visible_child, hidden_child])
+
+      included_ids =
+        user.id
+        |> included_children()
+        |> Enum.map(& &1.id)
+
+      assert included_ids == [visible_child.id]
+    end
+
+    test "applies the policy at every include level" do
+      user = create_policy_user("runner_15@example.com")
+      parent = create_policy_parent()
+      child = create_policy_child(parent, true)
+      create_policy_container([child])
+
+      term =
+        PolicyModule3
+        |> include(:children, &include(&1, :parent))
+        |> Query.normalize()
+
+      assert [%{children: [included_child]}] = run_policied(term, @policy_mapping, user.id)
+
+      assert included_child.id == child.id
+      assert included_child.parent == nil
     end
 
     test "leaves the trusted run unrestricted" do
@@ -281,6 +390,25 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert id == source.id
       assert embedded_entity.id == source.c_id
       assert %DateTime{} = embedded_entity.created_at
+    end
+
+    test "embeds an included row the read policy hides from an acting user" do
+      parent =
+        PolicyModule2
+        |> Entity.new()
+        |> DB.create()
+
+      PolicyModule1
+      |> Entity.new(parent_id: parent.id, public: true)
+      |> DB.create()
+
+      term =
+        PolicyModule1
+        |> include(:parent)
+        |> Query.normalize()
+
+      assert [%{parent: included_parent}] = run(term, @policy_mapping)
+      assert included_parent.id == parent.id
     end
 
     test "decodes an absent optional to-one include as nil" do
