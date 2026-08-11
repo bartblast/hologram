@@ -35,7 +35,7 @@ defmodule Hologram.Entity.Validator do
 
   @valid_relationship_opts [:optional]
 
-  @valid_role_opts [:creator, :extends, :scope]
+  @valid_role_opts [:creator, :extends]
 
   @valid_use_opts [:user]
 
@@ -1055,21 +1055,19 @@ defmodule Hologram.Entity.Validator do
 
   defp validate_role_opts!(module, name, opts) do
     validate_opts_shape!(module, "role", name, opts)
+    validate_scope_opt_removed!(module, name, opts)
     validate_known_opts!(module, "role", name, opts, @valid_role_opts)
     validate_creator_opt!(module, name, opts)
-    validate_scope_opt!(module, name, opts)
   end
 
-  defp validate_scope_opt!(module, name, opts) do
-    case Keyword.fetch(opts, :scope) do
-      {:ok, value} when value != :global ->
-        raise Hologram.CompileError,
-          message:
-            "invalid scope option #{inspect(value)} for role #{inspect(name)} in #{inspect(module)} - the scope option must be :global"
-
-      _fetch_result ->
-        :ok
+  defp validate_scope_opt_removed!(module, name, opts) do
+    if Keyword.has_key?(opts, :scope) do
+      raise Hologram.CompileError,
+        message:
+          "scope option for role #{inspect(name)} in #{inspect(module)} - the scope option was removed, define global roles as modules with use Hologram.Role"
     end
+
+    :ok
   end
 
   defp validate_use_opt_keys!(module, opts) do

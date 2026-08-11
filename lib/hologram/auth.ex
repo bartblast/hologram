@@ -170,13 +170,10 @@ defmodule Hologram.Auth do
     grant_exists?(actor_user_id, :global, role_modules)
   end
 
-  # Own roles are held on the entity itself, on its whole type, or globally - the three grant
-  # shapes the store keeps apart by which of its resource columns are nil.
+  # Own roles are held on the entity itself or on its whole type - the two grant shapes the
+  # store keeps apart by whether its resource_id column is nil.
   defp check_requirement({:own, role_names}, entity, actor_user_id, _operation) do
-    entity_type = entity.__struct__
-
-    grant_exists?(actor_user_id, {:own, entity_type, entity.id}, role_names) or
-      holds_global_role?(actor_user_id, entity_type, role_names)
+    grant_exists?(actor_user_id, {:own, entity.__struct__, entity.id}, role_names)
   end
 
   defp check_requirement({:type, target_type, role_names}, _entity, actor_user_id, _operation) do
@@ -269,12 +266,6 @@ defmodule Hologram.Auth do
     :ok
   end
 
-  defp global_role?(entity_type, role_name) do
-    Enum.any?(entity_type.__roles__(), fn {name, opts} ->
-      name == role_name and Keyword.get(opts, :scope) == :global
-    end)
-  end
-
   defp grant_exists?(_actor_user_id, _scope, []), do: false
 
   # No stored grant can name an id the framework never generated, so an id in any other
@@ -294,12 +285,6 @@ defmodule Hologram.Auth do
     end
 
     :ok
-  end
-
-  defp holds_global_role?(actor_user_id, entity_type, role_names) do
-    global_role_names = Enum.filter(role_names, &global_role?(entity_type, &1))
-
-    grant_exists?(actor_user_id, :global, global_role_names)
   end
 
   # Enum params are cast to their column's type in SQL rather than the columns to text, so

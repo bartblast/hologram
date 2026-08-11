@@ -322,12 +322,6 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  defp global_role?(entity_type, role_name) do
-    Enum.any?(entity_type.__roles__(), fn {name, opts} ->
-      name == role_name and Keyword.get(opts, :scope) == :global
-    end)
-  end
-
   defp grant_column(context, name) do
     context.mapping
     |> Map.fetch!(RoleGrant)
@@ -362,10 +356,9 @@ defmodule Hologram.DB.QueryCompiler do
     {~s|"rg"."resource_type" IS NULL AND "rg"."resource_id" IS NULL|, reversed_params}
   end
 
-  # A rule's own roles are held on the row itself, on its whole type, or globally - the global
-  # branch is emitted only when one of the named roles is declared with global scope, so a
-  # statement never carries a branch that cannot match.
-  defp grant_scope_sql({:own, role_names}, context, reversed_params) do
+  # A rule's own roles are held on the row itself or on its whole type - the lookup matches
+  # both shapes, which the store keeps apart by whether its resource_id column is nil.
+  defp grant_scope_sql({:own, _role_names}, context, reversed_params) do
     {placeholder, new_params} =
       resource_type_slot(context.entity_mapping.table, context, reversed_params)
 
@@ -374,15 +367,7 @@ defmodule Hologram.DB.QueryCompiler do
     resource_sql =
       ~s|("rg"."resource_id" = #{quoted_table}."id" OR "rg"."resource_id" IS NULL)|
 
-    scope_sql =
-      if Enum.any?(role_names, &global_role?(context.entity_type, &1)) do
-        ~s|(("rg"."resource_type" = #{placeholder} AND #{resource_sql}) | <>
-          ~s|OR ("rg"."resource_type" IS NULL AND "rg"."resource_id" IS NULL))|
-      else
-        ~s|"rg"."resource_type" = #{placeholder} AND #{resource_sql}|
-      end
-
-    {scope_sql, new_params}
+    {~s|"rg"."resource_type" = #{placeholder} AND #{resource_sql}|, new_params}
   end
 
   # The grant store's own policy checks a role held on the resource a grant row names, so the

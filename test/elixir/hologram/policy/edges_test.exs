@@ -34,15 +34,6 @@ defmodule Hologram.Policy.EdgesTest do
              }
     end
 
-    test "derives a global-grant edge for a referenced role declared with global scope" do
-      edges = derive([Policy.Module2])
-
-      assert edges[{Policy.Module2, :update}] == [
-               {:global_grants, [:admin]},
-               {:own_grants, [:admin]}
-             ]
-    end
-
     test "derives a global-grant edge for a referenced role module" do
       edges = derive([Policy.Module2])
 

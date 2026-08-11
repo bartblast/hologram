@@ -16,7 +16,7 @@ defmodule Hologram.Policy.Edges do
       `<relationship>_id` columns relationship-shaped rules read through.
     * `{:own_grants, role_names}` - grants of these roles held on the entity type's own rows
       or on the whole type.
-    * `{:global_grants, role_names}` - grants of these roles held globally.
+    * `{:global_grants, role_modules}` - grants of these global role modules, held app-wide.
     * `{:type_grants, entity_type, role_names}` - grants of these roles held on another
       entity type as a whole.
     * `{:relationship_grants, chain, entity_type, role_names}` - grants of these roles held
@@ -48,14 +48,6 @@ defmodule Hologram.Policy.Edges do
   """
   @spec universal_edges() :: list(atom)
   def universal_edges, do: @universal_edges
-
-  defp global_role_subset(entity_type, role_names) do
-    Enum.filter(role_names, fn role_name ->
-      Enum.any?(entity_type.__roles__(), fn {name, opts} ->
-        name == role_name and Keyword.get(opts, :scope) == :global
-      end)
-    end)
-  end
 
   # A delegated edge names the same data one relationship hop further away: the target's
   # own-row dependencies become related-row dependencies through the chain, its own grants
@@ -128,14 +120,8 @@ defmodule Hologram.Policy.Edges do
     [{:global_grants, role_modules}]
   end
 
-  defp reference_edges_for(entity_type, {:own, role_names}) do
-    global_edges =
-      case global_role_subset(entity_type, role_names) do
-        [] -> []
-        global_role_names -> [{:global_grants, global_role_names}]
-      end
-
-    [{:own_grants, role_names} | global_edges]
+  defp reference_edges_for(_entity_type, {:own, role_names}) do
+    [{:own_grants, role_names}]
   end
 
   defp reference_edges_for(_entity_type, {:type, target_type, role_names}) do

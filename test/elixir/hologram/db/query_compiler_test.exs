@@ -274,32 +274,6 @@ defmodule Hologram.DB.QueryCompilerTest do
              }
     end
 
-    test "emits the global branch only for globally scoped roles" do
-      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
-
-      local_rules = [%{predicates: [], to: [{:own, [:member]}], via: nil}]
-      global_rules = [%{predicates: [], to: [{:own, [:admin]}], via: nil}]
-
-      assert %{sql: local_sql} =
-               compile(Query.normalize(PolicyModule2), mapping, %{
-                 operation: :read,
-                 rules: local_rules
-               })
-
-      assert %{sql: global_sql} =
-               compile(Query.normalize(PolicyModule2), mapping, %{
-                 operation: :read,
-                 rules: global_rules
-               })
-
-      refute String.contains?(local_sql, ~s|"rg"."resource_type" IS NULL|)
-
-      assert String.contains?(
-               global_sql,
-               ~s|OR ("rg"."resource_type" IS NULL AND "rg"."resource_id" IS NULL))|
-             )
-    end
-
     test "composes a global grant reference as an uncorrelated grant-store lookup" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
       term = Query.normalize(PolicyModule2)

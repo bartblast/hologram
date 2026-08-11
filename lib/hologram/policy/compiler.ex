@@ -42,30 +42,6 @@ defmodule Hologram.Policy.Compiler do
   end
 
   @doc """
-  Returns the global roles the given entity type modules declare in more than one OTP app, sorted.
-
-  Each entry pairs the role name with the sorted apps declaring it. Same-name global roles are one
-  role across every app behind an endpoint, so a name declared in several of them names one role,
-  granted once and held everywhere. Entity types whose OTP app cannot be resolved are skipped.
-  """
-  @spec cross_app_global_roles(list(module)) :: list({atom, list(atom)})
-  def cross_app_global_roles(entity_types) do
-    entity_types
-    |> Enum.flat_map(&global_role_declarations/1)
-    |> Enum.group_by(fn {role_name, _app} -> role_name end, fn {_role_name, app} -> app end)
-    |> Enum.map(fn {role_name, apps} ->
-      declaring_apps =
-        apps
-        |> Enum.uniq()
-        |> Enum.sort()
-
-      {role_name, declaring_apps}
-    end)
-    |> Enum.filter(fn {_role_name, apps} -> length(apps) > 1 end)
-    |> Enum.sort()
-  end
-
-  @doc """
   Returns the given entity type modules that declare no allow lines, sorted.
 
   Such an entity type is statically dead under default deny - every query against it returns
@@ -77,20 +53,6 @@ defmodule Hologram.Policy.Compiler do
     entity_types
     |> Enum.filter(&(&1 != RoleGrant and &1.__policies__() == []))
     |> Enum.sort_by(&inspect/1)
-  end
-
-  @doc """
-  Returns the names of the roles declared with scope :global across the data model, sorted.
-
-  A global role is granted without a resource, and the same name declared on several entity
-  types is one role.
-  """
-  @spec global_role_names() :: list(atom)
-  def global_role_names do
-    Reflection.list_entities()
-    |> Enum.flat_map(&global_role_names/1)
-    |> Enum.uniq()
-    |> Enum.sort()
   end
 
   @doc """
@@ -353,24 +315,6 @@ defmodule Hologram.Policy.Compiler do
     else
       find_via_cycles(target_type, new_path, edges, {cycles, visited})
     end
-  end
-
-  defp global_role_declarations(entity_type) do
-    case Application.get_application(entity_type) do
-      nil ->
-        []
-
-      app ->
-        entity_type
-        |> global_role_names()
-        |> Enum.map(&{&1, app})
-    end
-  end
-
-  defp global_role_names(entity_type) do
-    entity_type.__roles__()
-    |> Enum.filter(fn {_name, opts} -> Keyword.get(opts, :scope) == :global end)
-    |> Enum.map(fn {name, _opts} -> name end)
   end
 
   defp own_reference_names(%{to: nil}), do: []

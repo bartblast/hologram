@@ -299,35 +299,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert run(opts) == :ok
     end
 
-    test "reports global roles declared in more than one OTP app", %{opts: opts} do
-      System.delete_env("HOLOGRAM_START")
-
-      Mix.shell(Mix.Shell.Process)
-      on_exit(fn -> Mix.shell(Mix.Shell.IO) end)
-
-      defmodule GlobalRoleEntityFixture do
-        use Hologram.Entity
-
-        role :admin, scope: :global
-      end
-
-      # Register a fake loaded OTP app whose spec lists the entity type module, so that
-      # data model discovery picks it up and resolves it to an app other than :hologram.
-      fixture_app = :hologram_global_role_entity_fixture_app
-      :ok = :application.load({:application, fixture_app, [modules: [GlobalRoleEntityFixture]]})
-      on_exit(fn -> :application.unload(fixture_app) end)
-
-      run(opts)
-
-      assert_received {:mix_shell, :info, [message]}
-
-      assert message ==
-               normalize_newlines("""
-               Hologram: these global roles are declared in more than one OTP app, and name one role across all of them:
-                 * :admin - declared in :hologram, :hologram_global_role_entity_fixture_app\
-               """)
-    end
-
     test "validates the data model even when compilation is skipped", %{opts: opts} do
       System.delete_env("HOLOGRAM_START")
 

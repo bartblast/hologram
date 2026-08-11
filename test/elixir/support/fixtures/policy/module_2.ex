@@ -6,7 +6,7 @@ defmodule Hologram.Test.Fixtures.Policy.Module2 do
 
   attribute :public, :boolean, default: false
 
-  role :admin, scope: :global
+  role :admin
   role :member
 
   allow :read, to: :member

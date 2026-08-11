@@ -100,16 +100,6 @@ defmodule Hologram.AuthTest do
       assert can?(user, :update, entity)
     end
 
-    test "matches a global grant" do
-      user = create_user("user_43@example.com")
-
-      refute can?(user, :update, %Module2{id: Entity.generate_id()})
-
-      insert_global_grant(user.id, :admin)
-
-      assert can?(user, :update, %Module2{id: Entity.generate_id()})
-    end
-
     test "matches a role extending the referenced one" do
       user = create_user("user_44@example.com")
       entity = %Module1{id: Entity.generate_id(), priority: 5}

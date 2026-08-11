@@ -1373,30 +1373,6 @@ defmodule Hologram.Entity.ValidatorTest do
              ]
     end
 
-    test "accepts scope option" do
-      defmodule InlineEntityFixture65 do
-        use Hologram.Entity
-
-        role :admin, scope: :global
-      end
-
-      assert InlineEntityFixture65.__roles__() == [{:admin, [scope: :global]}]
-    end
-
-    test "accepts scope option combined with extends option" do
-      defmodule InlineEntityFixture66 do
-        use Hologram.Entity
-
-        role :admin, extends: :auditor, scope: :global
-        role :auditor
-      end
-
-      assert InlineEntityFixture66.__roles__() == [
-               {:admin, [extends: :auditor, scope: :global]},
-               {:auditor, []}
-             ]
-    end
-
     test "rejects creator option other than true" do
       expected_msg =
         "invalid creator option false for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture70 - the creator option must be true"
@@ -1449,22 +1425,22 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
-    test "rejects scope option other than :global" do
+    test "rejects the removed scope option" do
       expected_msg =
-        "invalid scope option :app for role :admin in Hologram.Entity.ValidatorTest.InlineEntityFixture67 - the scope option must be :global"
+        "scope option for role :admin in Hologram.Entity.ValidatorTest.InlineEntityFixture67 - the scope option was removed, define global roles as modules with use Hologram.Role"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture67 do
           use Hologram.Entity
 
-          role :admin, scope: :app
+          role :admin, scope: :global
         end
       end
     end
 
     test "rejects unknown role option" do
       expected_msg =
-        "unknown option :owner_only for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture58 - valid role options are: :creator, :extends, :scope"
+        "unknown option :owner_only for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture58 - valid role options are: :creator, :extends"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture58 do
