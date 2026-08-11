@@ -176,18 +176,6 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
-  defp to_reference_valid?(value) when is_atom(value), do: true
-
-  defp to_reference_valid?({reference, role_name}) when is_atom(reference) and is_atom(role_name),
-    do: true
-
-  defp to_reference_valid?(_value), do: false
-
-  defp to_value_valid?([_first_reference | _later_references] = value),
-    do: Enum.all?(value, &to_reference_valid?/1)
-
-  defp to_value_valid?(value), do: to_reference_valid?(value)
-
   defp validate_predicates!(entity_type, operation, predicates) do
     Query.predicate_triples!(entity_type, predicates)
 
@@ -289,12 +277,6 @@ defmodule Hologram.Policy.Validator do
   defp validate_to!(_entity_type, _operation, nil), do: :ok
 
   defp validate_to!(entity_type, operation, to) do
-    if not to_value_valid?(to) do
-      raise Hologram.CompileError,
-        message:
-          "invalid to option #{inspect(to)} for allow #{inspect(operation)} in #{inspect(entity_type)} - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
-    end
-
     to
     |> List.wrap()
     |> Enum.each(&validate_to_reference!(entity_type, operation, &1))

@@ -305,23 +305,6 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
-    test "rejects a to option that is neither a role reference nor a list of them" do
-      defmodule InlinePolicyFixture12 do
-        use Hologram.Entity
-
-        role :owner
-
-        allow :update, to: "owner"
-      end
-
-      expected_msg =
-        "invalid to option \"owner\" for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture12 - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([Module14, InlinePolicyFixture12])
-      end
-    end
-
     test "rejects a via option naming an unknown relationship" do
       defmodule InlinePolicyFixture22 do
         use Hologram.Entity

@@ -399,6 +399,34 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects a to option that is neither a role reference nor a list of them" do
+      expected_msg =
+        "invalid to option \"owner\" for allow :update in Hologram.Entity.ValidatorTest.MalformedToOptionFixture - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule MalformedToOptionFixture do
+          use Hologram.Entity
+
+          role :owner
+
+          allow :update, to: "owner"
+        end
+      end
+    end
+
+    test "rejects a to option list holding a malformed reference" do
+      expected_msg =
+        "invalid to option [{:a, :b, :c}] for allow :read in Hologram.Entity.ValidatorTest.MalformedToListFixture - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule MalformedToListFixture do
+          use Hologram.Entity
+
+          allow :read, to: [{:a, :b, :c}]
+        end
+      end
+    end
+
     test "rejects spec that is not a keyword list" do
       expected_msg =
         "invalid options [1, 2] for allow :read in Hologram.Entity.ValidatorTest.InlineEntityFixture74 - options must be a keyword list"

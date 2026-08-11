@@ -142,6 +142,7 @@ defmodule Hologram.Entity.Validator do
     validate_opts_shape!(module, "allow", operation, spec)
 
     Enum.each(@policy_option_names, &validate_policy_option_value!(module, operation, spec, &1))
+    validate_to_opt_shape!(module, operation, spec)
 
     :ok
   end
@@ -1019,6 +1020,34 @@ defmodule Hologram.Entity.Validator do
 
     :ok
   end
+
+  # The shape is structural, so it is checked where it is written - the references themselves
+  # are checked at the whole-model point, against reflection that does not exist yet here.
+  defp validate_to_opt_shape!(module, operation, spec) do
+    case Keyword.fetch(spec, :to) do
+      {:ok, to} ->
+        if not to_value_valid?(to) do
+          raise Hologram.CompileError,
+            message:
+              "invalid to option #{inspect(to)} for allow #{inspect(operation)} in #{inspect(module)} - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+        end
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp to_reference_valid?(value) when is_atom(value), do: true
+
+  defp to_reference_valid?({reference, role_name}) when is_atom(reference) and is_atom(role_name),
+    do: true
+
+  defp to_reference_valid?(_value), do: false
+
+  defp to_value_valid?([_first_reference | _later_references] = value),
+    do: Enum.all?(value, &to_reference_valid?/1)
+
+  defp to_value_valid?(value), do: to_reference_valid?(value)
 
   defp validate_relationship_name!(module, name) do
     validate_declaration_name!(module, "relationship", name)
