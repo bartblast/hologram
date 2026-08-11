@@ -1,9 +1,15 @@
 defmodule Hologram.Auth.Context do
   @moduledoc false
 
-  # The ambient actor of the current process. Framework wrappers set it around the work
-  # they run, and Hologram.Test.as_user/1,2 is the sanctioned test-only door - app code
-  # gets no setter, so it can never present itself as a different user than its session.
+  # The ambient actor of the current process. Framework wrappers set it around the work they
+  # run, and Hologram.Test.as_user/1,2 is the sanctioned test-only door.
+  #
+  # The guarantee is about where identity comes from, not about what server code is able to
+  # call: the actor always traces to an authenticated session, and nothing a client sends -
+  # params, mutation args, envelopes - ever becomes it. Server code is trusted by
+  # construction and already reads and writes past every policy through the DB verbs, so
+  # neither setter is a boundary against it. Shipping no act-as-user API keeps impersonation
+  # off the app-facing surface, which is a surface decision, not an enforced one.
 
   @actor_key {__MODULE__, :actor_user_id}
 
