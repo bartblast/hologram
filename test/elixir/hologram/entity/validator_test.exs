@@ -373,6 +373,32 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects a nil to option" do
+      expected_msg =
+        "invalid to option nil for allow :read in Hologram.Entity.ValidatorTest.NilToOptionFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilToOptionFixture do
+          use Hologram.Entity
+
+          allow :read, to: nil
+        end
+      end
+    end
+
+    test "rejects a nil via option" do
+      expected_msg =
+        "invalid via option nil for allow :read in Hologram.Entity.ValidatorTest.NilViaOptionFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilViaOptionFixture do
+          use Hologram.Entity
+
+          allow :read, via: nil
+        end
+      end
+    end
+
     test "rejects spec that is not a keyword list" do
       expected_msg =
         "invalid options [1, 2] for allow :read in Hologram.Entity.ValidatorTest.InlineEntityFixture74 - options must be a keyword list"
@@ -1487,6 +1513,19 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           role :owner, extends: []
+        end
+      end
+    end
+
+    test "rejects nil extends option" do
+      expected_msg =
+        "invalid extends option nil for role :owner in Hologram.Entity.ValidatorTest.NilExtendsFixture - the extends option must be a role name or a non-empty list of role names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilExtendsFixture do
+          use Hologram.Entity
+
+          role :owner, extends: nil
         end
       end
     end

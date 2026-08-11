@@ -141,6 +141,8 @@ defmodule Hologram.Entity.Validator do
 
     validate_opts_shape!(module, "allow", operation, spec)
 
+    Enum.each(@policy_option_names, &validate_policy_option_value!(module, operation, spec, &1))
+
     :ok
   end
 
@@ -433,7 +435,7 @@ defmodule Hologram.Entity.Validator do
     "  * #{hops} -> #{inspect(first_name)}"
   end
 
-  defp extends_value_valid?(value) when is_atom(value), do: true
+  defp extends_value_valid?(value) when is_atom(value) and not is_nil(value), do: true
 
   defp extends_value_valid?([_first_target | _later_targets] = value),
     do: Enum.all?(value, &is_atom/1)
@@ -1003,6 +1005,19 @@ defmodule Hologram.Entity.Validator do
         message:
           "reserved name #{inspect(name)} used for attribute in #{inspect(module)} - #{policy_option_names} are allow line options and can't be attribute names"
     end
+  end
+
+  # An option written as nil is indistinguishable from an absent one once the declaration is
+  # stored, and both compile to a rule granting through no reference at all - which is what a
+  # bare allow line means, so the mistake would silently widen the rule.
+  defp validate_policy_option_value!(module, operation, spec, key) do
+    if Keyword.has_key?(spec, key) and is_nil(Keyword.fetch!(spec, key)) do
+      raise Hologram.CompileError,
+        message:
+          "invalid #{key} option nil for allow #{inspect(operation)} in #{inspect(module)} - omit the option instead"
+    end
+
+    :ok
   end
 
   defp validate_relationship_name!(module, name) do
