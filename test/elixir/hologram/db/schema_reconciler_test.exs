@@ -6,14 +6,21 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
   import Hologram.DB.SchemaReconciler
 
+  alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
+  alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Schema
+  alias Hologram.Entity
+  alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Role
 
   @context %{
     otp_app: "hologram",
@@ -509,6 +516,33 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       expected_msg =
         ~s(found 1 row in "test_fixtures_entity_module4"."c" ) <>
           "holding removed enum value 'y' - update the rows or re-add the value"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+  end
+
+  describe "reconcile/1 for the role grant store" do
+    test "raises when removing a role that grants still hold" do
+      user =
+        Module14
+        |> Entity.new(email: "reconciler_1@example.com")
+        |> DB.create()
+
+      Auth.grant_role(user, Role.Module1)
+
+      context =
+        Reflection.list_entities()
+        |> reconcile_context()
+        |> update_mapping_column(RoleGrant, "role", fn column ->
+          %{column | enum_values: column.enum_values -- ["Hologram.Test.Fixtures.Role.Module1"]}
+        end)
+
+      expected_msg =
+        ~s(found 1 row in "hologram_role_grant"."role" ) <>
+          "holding removed enum value 'Hologram.Test.Fixtures.Role.Module1' - " <>
+          "update the rows or re-add the value"
 
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)
