@@ -193,6 +193,29 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s|WHERE "a" = $1 ORDER BY|)
     end
 
+    test "drops the params bound by the rules of a group an unconditional rule satisfies" do
+      mapping = Mapper.derive!([Module2])
+
+      term =
+        Module2
+        |> filter(a: true)
+        |> Query.normalize()
+
+      conditional_rule = %{predicates: [{:b, :>=, 3}], to: nil, via: nil}
+      unconditional_rule = %{predicates: [], to: nil, via: nil}
+
+      for rules <- [
+            [conditional_rule, unconditional_rule],
+            [unconditional_rule, conditional_rule]
+          ] do
+        assert %{params: params, sql: sql} =
+                 compile(term, mapping, %{operation: :read, rules: rules})
+
+        assert params == [value: true]
+        assert String.contains?(sql, ~s|WHERE "a" = $1 ORDER BY|)
+      end
+    end
+
     test "denies everything for a policy with no rules" do
       mapping = Mapper.derive!([Module2])
       term = Query.normalize(Module2)

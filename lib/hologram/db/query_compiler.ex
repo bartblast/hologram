@@ -316,7 +316,9 @@ defmodule Hologram.DB.QueryCompiler do
       end)
 
     if Enum.any?(rendered_rules, &(&1 == :unconditional)) do
-      {[], new_params}
+      # Dropping the group drops its placeholders, so the slots its rules bound go with it -
+      # a param the statement doesn't carry fails the bind.
+      {[], reversed_params}
     else
       {[group_condition(rendered_rules)], new_params}
     end
