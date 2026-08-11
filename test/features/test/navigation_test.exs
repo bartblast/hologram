@@ -139,6 +139,32 @@ defmodule HologramFeatureTests.NavigationTest do
     end
   end
 
+  describe "navigation to the current page" do
+    # A page the browser already holds is fetched and patched like any other - the marker
+    # survives, which a document load would have cleared.
+    feature "patches the page instead of loading it", %{session: session} do
+      session = visit(session, Page1)
+
+      execute_script(session, "window.__hologramNavigationMarker__ = 'kept';")
+
+      session
+      |> click(link("Page 1 link"))
+      |> assert_page(Page1)
+
+      assert script_result(session, "return window.__hologramNavigationMarker__;") == "kept"
+    end
+
+    feature "remounts the page put by an action", %{session: session} do
+      session
+      |> visit(Page1)
+      |> click(button("Put page 1 result A"))
+      |> assert_text("Page 1 result A")
+      |> click(button("Put current page"))
+      |> assert_page(Page1)
+      |> assert_text("Page result: nil")
+    end
+  end
+
   feature "put page in action", %{session: session} do
     session
     |> visit(Page1)
@@ -156,6 +182,16 @@ defmodule HologramFeatureTests.NavigationTest do
       |> click(button("Put page 1 result A"))
       |> assert_text("Page 1 result A")
       |> reload()
+      |> assert_page(Page1)
+      |> assert_text("Page result: nil")
+    end
+
+    feature "navigation to the current page resets component state", %{session: session} do
+      session
+      |> visit(Page1)
+      |> click(button("Put page 1 result A"))
+      |> assert_text("Page 1 result A")
+      |> click(link("Page 1 link"))
       |> assert_page(Page1)
       |> assert_text("Page result: nil")
     end
