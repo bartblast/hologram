@@ -7,7 +7,6 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
-  alias HologramFeatureTests.EmptyPage
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.PoliciesPage
@@ -43,8 +42,9 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> assert_text(css("#session_user"), "anonymous")
   end
 
-  # The page is revisited through another page: navigating to the URL the browser already
-  # holds does not reload it, so the row created in between would never reach a render.
+  # The page is reloaded rather than revisited: Wallaby navigates to the URL the browser
+  # already holds, which it treats as a no-op, so the row created in between would never
+  # reach a render.
   feature "renders a row the session user created, through its creator role grant", %{
     session: session
   } do
@@ -54,8 +54,7 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> assert_text(css("#result"), "logged_in")
     |> click(button("Create own document"))
     |> assert_text(css("#result"), "created_own_document")
-    |> visit(EmptyPage)
-    |> visit(PoliciesPage)
+    |> reload()
     |> assert_text(css("#documents"), "own_document")
     |> assert_text(css("#session_user"), "session@example.com")
   end
