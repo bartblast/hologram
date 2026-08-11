@@ -238,13 +238,13 @@ defmodule Hologram.Auth do
     count
   end
 
-  # Nils encode the type-wide and global grant shapes, so the delete matches them as values -
-  # the same comparison the store's unique index makes.
-  # sobelow_skip ["SQL.Query"]
   defp delegates?(nil, _actor_user_id, _operation), do: false
 
   defp delegates?(target, actor_user_id, operation), do: can?(actor_user_id, operation, target)
 
+  # Nils encode the type-wide and global grant shapes, so the delete matches them as values -
+  # the same comparison the store's unique index makes.
+  # sobelow_skip ["SQL.Query"]
   defp delete_grant(user_id, resource_type, resource_id, role) do
     statement = """
     DELETE FROM "hologram_data"."hologram_role_grant"
