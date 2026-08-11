@@ -4,7 +4,7 @@ defmodule Hologram.DB.QueryCompiler do
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
-  alias Hologram.Policy.Compiler, as: Policy
+  alias Hologram.Policy
 
   @data_schema "hologram_data"
 

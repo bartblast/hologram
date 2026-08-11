@@ -5,7 +5,7 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.DB.Connection
   alias Hologram.DB.QueryCompiler
   alias Hologram.Entity.Validator
-  alias Hologram.Policy.Compiler, as: Policy
+  alias Hologram.Policy
 
   @doc """
   Runs the given normalized query term against the database and returns its decoded

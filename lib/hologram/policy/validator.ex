@@ -1,84 +1,9 @@
-defmodule Hologram.Policy.Compiler do
+defmodule Hologram.Policy.Validator do
   @moduledoc false
 
-  alias Hologram.Auth.RoleGrant
   alias Hologram.Entity
   alias Hologram.Query
   alias Hologram.Reflection
-
-  @doc """
-  Builds the compiled policy of the given entity type: a map of operation to the list of rules granting it, in declaration order.
-
-  The grant store's own policy is framework-supplied rather than declared: a user always sees
-  the grants they hold, and sees others' grants on a resource when they hold one of that entity
-  type's read-grants roles.
-
-  A rule holds the predicate triples of its allow line, its grant references, and its delegation.
-  Predicates carry the actor sentinel in value position where the declaration called user_id().
-  Grant references are extends-expanded, so a reference to a role also names every role carrying it:
-  own roles as {:own, role names}, another entity type's roles as {:type, entity type, role names},
-  a related instance's roles as {:rel, relationship name, role names}, and global role modules as
-  {:global, role modules} - nil when the line has none.
-  A rule grants its operation when its predicates hold, one of its grant references is held, and its
-  delegation grants the same operation - and a policy grants its operation when any of its rules does.
-  """
-  @spec build(module) :: %{
-          atom => list(%{predicates: list(tuple), to: list(tuple) | nil, via: atom | nil})
-        }
-  def build(RoleGrant), do: %{read: role_grant_read_rules()}
-
-  def build(entity_type) do
-    entity_type.__policies__()
-    |> Enum.map(fn {operation, to, via, predicates} ->
-      rule = %{
-        predicates: Query.predicate_triples!(entity_type, predicates),
-        to: build_to(entity_type, to),
-        via: via
-      }
-
-      {operation, rule}
-    end)
-    |> Enum.group_by(fn {operation, _rule} -> operation end, fn {_operation, rule} -> rule end)
-  end
-
-  @doc """
-  Returns the given entity type modules that declare no allow lines, sorted.
-
-  Such an entity type is statically dead under default deny - every query against it returns
-  nothing, whatever the acting user holds. The grant store is never listed: its policy is
-  framework-supplied rather than declared.
-  """
-  @spec dead_entity_types(list(module)) :: list(module)
-  def dead_entity_types(entity_types) do
-    entity_types
-    |> Enum.filter(&(&1 != RoleGrant and &1.__policies__() == []))
-    |> Enum.sort_by(&inspect/1)
-  end
-
-  @doc """
-  Returns the own roles qualifying their holders to manage the grants of the given entity type, sorted.
-
-  These are the extends-expanded own roles of its allow :manage_roles rules - empty when the entity
-  type declares none, which leaves granting on it to the trusted tier.
-  """
-  @spec manage_roles_qualifying_roles(module) :: list(atom)
-  def manage_roles_qualifying_roles(entity_type) do
-    own_role_names(entity_type, :manage_roles)
-  end
-
-  @doc """
-  Returns the own roles whose holders see the grants others hold on the given entity type, sorted.
-
-  These are the extends-expanded own roles of its allow :read_grants rules, defaulting to the roles
-  qualifying to manage grants when the entity type declares no read_grants rule.
-  """
-  @spec read_grants_roles(module) :: list(atom)
-  def read_grants_roles(entity_type) do
-    case own_role_names(entity_type, :read_grants) do
-      [] -> manage_roles_qualifying_roles(entity_type)
-      role_names -> role_names
-    end
-  end
 
   @doc """
   Validates the policy declarations of the given entity type modules as a whole.
@@ -114,55 +39,6 @@ defmodule Hologram.Policy.Compiler do
     Enum.each(role_modules, &validate_role_extends_targets!/1)
 
     validate_role_extends_cycles!(role_modules)
-  end
-
-  defp build_global_reference([]), do: []
-
-  defp build_global_reference(role_modules) do
-    expanded_modules =
-      role_modules
-      |> Enum.flat_map(&expand_global_role/1)
-      |> Enum.uniq()
-      |> Enum.sort()
-
-    [{:global, expanded_modules}]
-  end
-
-  defp build_own_reference(_entity_type, []), do: []
-
-  defp build_own_reference(entity_type, role_names) do
-    expanded_names =
-      role_names
-      |> Enum.flat_map(&Entity.expand_role(entity_type, &1))
-      |> Enum.uniq()
-      |> Enum.sort()
-
-    [{:own, expanded_names}]
-  end
-
-  defp build_to(_entity_type, nil), do: nil
-
-  defp build_to(entity_type, to) do
-    references = List.wrap(to)
-
-    {role_modules, plain_references} = Enum.split_with(references, &Reflection.alias?/1)
-    {role_names, typed_references} = Enum.split_with(plain_references, &is_atom/1)
-
-    own_reference = build_own_reference(entity_type, role_names)
-    typed = Enum.map(typed_references, &build_typed_reference(entity_type, &1))
-    global_reference = build_global_reference(role_modules)
-
-    own_reference ++ typed ++ global_reference
-  end
-
-  defp build_typed_reference(entity_type, {reference, role_name}) do
-    if Reflection.alias?(reference) do
-      {:type, reference, Entity.expand_role(reference, role_name)}
-    else
-      target_type = relationship_target(entity_type, reference)
-
-      {:rel, reference, Entity.expand_role(target_type, role_name)}
-    end
   end
 
   # Rotates the cycle to start at its alphabetically first entity type, so that the same
@@ -219,37 +95,6 @@ defmodule Hologram.Policy.Compiler do
       end)
 
     "  * #{hops} -> #{inspect(first_entity_type)}"
-  end
-
-  # Depth-first traversal over the delegation edges of one operation. The path holds the hops
-  # taken to reach the current entity type (most recent first) - reaching an entity type
-  # already on the path closes a cycle. Fully explored entity types are marked visited and
-  # never re-entered, so each cycle is reported once.
-  # A reference to a role module is satisfied by every role carrying it - the module itself and
-  # every role whose extends chain reaches it. The sweep is model-wide: role modules resolve
-  # globally, so a reference means the same thing in every entity type.
-  defp expand_global_role(role_module) do
-    extends_by_module =
-      Map.new(Reflection.list_roles(), fn module -> {module, module.__extends__()} end)
-
-    expand_global_role_modules(MapSet.new([role_module]), extends_by_module)
-  end
-
-  defp expand_global_role_modules(modules, extends_by_module) do
-    expanded =
-      Enum.reduce(extends_by_module, modules, fn {module, targets}, acc ->
-        if Enum.any?(targets, &MapSet.member?(modules, &1)) do
-          MapSet.put(acc, module)
-        else
-          acc
-        end
-      end)
-
-    if MapSet.size(expanded) == MapSet.size(modules) do
-      Enum.sort(expanded)
-    else
-      expand_global_role_modules(expanded, extends_by_module)
-    end
   end
 
   # Depth-first traversal over the extends edges. The path holds the roles walked to reach the
@@ -315,56 +160,6 @@ defmodule Hologram.Policy.Compiler do
     else
       find_via_cycles(target_type, new_path, edges, {cycles, visited})
     end
-  end
-
-  defp own_reference_names(%{to: nil}), do: []
-
-  defp own_reference_names(%{to: references}) do
-    Enum.flat_map(references, fn
-      {:own, role_names} -> role_names
-      _other_reference -> []
-    end)
-  end
-
-  defp own_role_names(entity_type, operation) do
-    entity_type
-    |> build()
-    |> Map.get(operation, [])
-    |> Enum.flat_map(&own_reference_names/1)
-    |> Enum.uniq()
-    |> Enum.sort()
-  end
-
-  # Everyone sees the grants they hold. Seeing someone else's grants on a resource takes one of
-  # that resource type's read-grants roles, held on the very resource the grant row names - so
-  # the check reads grant rows through grant rows, never through this policy again.
-  defp role_grant_read_rules do
-    resource_rules =
-      Reflection.list_entities()
-      |> Enum.reject(&(&1 == RoleGrant))
-      |> Enum.map(&{&1, read_grants_roles(&1)})
-      |> Enum.reject(fn {_entity_type, role_names} -> role_names == [] end)
-      |> Enum.sort_by(fn {entity_type, _role_names} -> RoleGrant.resource_type(entity_type) end)
-      |> Enum.map(&role_grant_resource_rule/1)
-
-    [%{predicates: [{:user_id, :==, {:actor}}], to: nil, via: nil} | resource_rules]
-  end
-
-  defp role_grant_resource_rule({entity_type, role_names}) do
-    %{
-      predicates: [{:resource_type, :==, RoleGrant.resource_type(entity_type)}],
-      to: [{:resource, entity_type, role_names}],
-      via: nil
-    }
-  end
-
-  defp relationship_target(entity_type, relationship_name) do
-    {_name, target_type, _opts} =
-      Enum.find(entity_type.__relationships__(), fn {name, _type, _opts} ->
-        name == relationship_name
-      end)
-
-    target_type
   end
 
   defp to_reference_valid?(value) when is_atom(value), do: true
@@ -637,7 +432,7 @@ defmodule Hologram.Policy.Compiler do
     entity_type.__policies__()
     |> Enum.reject(fn {_operation, _to, via, _predicates} -> is_nil(via) end)
     |> Enum.map(fn {operation, _to, via, _predicates} ->
-      {operation, entity_type, {via, relationship_target(entity_type, via)}}
+      {operation, entity_type, {via, Entity.relationship_target(entity_type, via)}}
     end)
   end
 

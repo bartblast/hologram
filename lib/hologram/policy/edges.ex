@@ -1,7 +1,8 @@
 defmodule Hologram.Policy.Edges do
   @moduledoc false
 
-  alias Hologram.Policy.Compiler, as: Policy
+  alias Hologram.Entity
+  alias Hologram.Policy
 
   @universal_edges [:auth_change, :deploy]
 
@@ -129,7 +130,7 @@ defmodule Hologram.Policy.Edges do
   end
 
   defp reference_edges_for(entity_type, {:rel, relationship_name, role_names}) do
-    target_type = relationship_target(entity_type, relationship_name)
+    target_type = Entity.relationship_target(entity_type, relationship_name)
 
     [
       {:attributes, [reference_field_name(relationship_name)]},
@@ -147,15 +148,6 @@ defmodule Hologram.Policy.Edges do
     String.to_existing_atom("#{relationship_name}_id")
   end
 
-  defp relationship_target(entity_type, relationship_name) do
-    {_name, target_type, _opts} =
-      Enum.find(entity_type.__relationships__(), fn {name, _target, _opts} ->
-        name == relationship_name
-      end)
-
-    target_type
-  end
-
   defp rule_edges(entity_type, operation, %{predicates: predicates, to: to, via: via}) do
     predicate_edges(predicates) ++
       reference_edges(entity_type, to) ++
@@ -165,7 +157,7 @@ defmodule Hologram.Policy.Edges do
   defp via_edges(_entity_type, _operation, nil), do: []
 
   defp via_edges(entity_type, operation, via) do
-    target_type = relationship_target(entity_type, via)
+    target_type = Entity.relationship_target(entity_type, via)
 
     target_rules =
       target_type

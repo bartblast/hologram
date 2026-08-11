@@ -10,7 +10,7 @@ defmodule Hologram.DB.QueryCache do
   alias Hologram.DB.QueryCompiler
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SortKey
-  alias Hologram.Policy.Compiler, as: Policy
+  alias Hologram.Policy
   alias Hologram.Query.Registry
   alias Hologram.Reflection
 

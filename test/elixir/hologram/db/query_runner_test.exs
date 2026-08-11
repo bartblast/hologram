@@ -14,7 +14,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.DB.QueryCompiler
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
-  alias Hologram.Policy.Compiler
+  alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -69,7 +69,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       policy = %{
         anonymous?: false,
         operation: :archive,
-        rules: Compiler.build(PolicyModule2)[:archive]
+        rules: Policy.build(PolicyModule2)[:archive]
       }
 
       compiled =

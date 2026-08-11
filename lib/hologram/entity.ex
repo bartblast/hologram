@@ -278,6 +278,17 @@ defmodule Hologram.Entity do
   end
 
   @doc false
+  @spec relationship_target(module, atom) :: module | list(module)
+  def relationship_target(entity_type, relationship_name) do
+    {_name, target_type, _opts} =
+      Enum.find(entity_type.__relationships__(), fn {name, _target, _opts} ->
+        name == relationship_name
+      end)
+
+    target_type
+  end
+
+  @doc false
   @spec replace_actor_leaves!(Macro.t(), module) :: Macro.t()
   def replace_actor_leaves!(spec, module) do
     Macro.prewalk(spec, fn

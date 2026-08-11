@@ -26,8 +26,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.DB.Mapper
-  alias Hologram.Entity.Validator
-  alias Hologram.Policy.Compiler, as: Policy
+  alias Hologram.Entity.Validator, as: EntityValidator
+  alias Hologram.Policy.Validator, as: PolicyValidator
   alias Hologram.Reflection
 
   @ls_build_dirs [".elixir_ls", ".elixir-tools", ".expert", ".lexical"]
@@ -302,8 +302,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     entity_types = Reflection.list_entities()
 
-    Validator.validate_model!(entity_types)
-    Policy.validate_model!(entity_types)
+    EntityValidator.validate_model!(entity_types)
+    PolicyValidator.validate_model!(entity_types)
 
     # The mapping value is discarded - only the fail-fast derivation checks matter here.
     Mapper.derive!(entity_types)
