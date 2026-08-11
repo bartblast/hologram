@@ -35,6 +35,8 @@ defmodule Hologram.Entity.Validator do
 
   @valid_use_opts [:user]
 
+  @valid_use_role_opts [:extends]
+
   @doc """
   Returns true if the given value is a valid value for the given attribute type and declaration options, or false otherwise.
   A nil value is valid only when the optional option is true.
@@ -298,6 +300,32 @@ defmodule Hologram.Entity.Validator do
 
     validate_use_opt_keys!(module, opts)
     validate_user_opt!(module, opts)
+
+    :ok
+  end
+
+  @doc """
+  Validates the options given to the use Hologram.Role directive at compile time.
+
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys).
+  """
+  @spec validate_use_role_opts!(module, T.opts()) :: :ok
+  def validate_use_role_opts!(module, opts) do
+    if not Keyword.keyword?(opts) do
+      raise Hologram.CompileError,
+        message:
+          "invalid options #{inspect(opts)} for use Hologram.Role in #{inspect(module)} - options must be a keyword list"
+    end
+
+    Enum.each(opts, fn {key, _value} ->
+      if key not in @valid_use_role_opts do
+        valid_opts = Enum.map_join(@valid_use_role_opts, ", ", &inspect/1)
+
+        raise Hologram.CompileError,
+          message:
+            "unknown option #{inspect(key)} for use Hologram.Role in #{inspect(module)} - valid options are: #{valid_opts}"
+      end
+    end)
 
     :ok
   end

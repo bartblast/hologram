@@ -452,6 +452,14 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Lists Elixir modules which are Hologram global role modules and that belong to any of the OTP apps in the project.
+  """
+  @spec list_roles() :: list(module)
+  def list_roles do
+    Enum.filter(list_elixir_modules(), &role?/1)
+  end
+
+  @doc """
   Lists standard library Elixir modules, e.g. DateTime, Kernel, Calendar.ISO, etc.
   Elixir modules listed in @ignored_modules module attribute, Elixir modules without a BEAM file, and Erlang modules are filtered out.
   """
@@ -686,6 +694,23 @@ defmodule Hologram.Reflection do
   @spec root_dir() :: String.t()
   def root_dir do
     Path.dirname(Mix.Project.deps_path())
+  end
+
+  @doc """
+  Returns true if the given term is a global role module (a module that has a "use Hologram.Role" directive).
+  Otherwise false is returned.
+
+  ## Examples
+
+      iex> role?(MyApp.Roles.Admin)
+      true
+
+      iex> role?(Hologram.Reflection)
+      false
+  """
+  @spec role?(term) :: boolean
+  def role?(term) do
+    elixir_module?(term) && has_function?(term, :__is_hologram_role__, 0)
   end
 
   @doc """

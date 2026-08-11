@@ -10,6 +10,7 @@ defmodule Hologram.ReflectionTest do
   alias Hologram.Test.Fixtures.Reflection.Module7
   alias Hologram.Test.Fixtures.Reflection.Module8
   alias Hologram.Test.Fixtures.Reflection.Module9
+  alias Hologram.Test.Fixtures.Role
 
   # Reproduces the way some Erlang libraries (e.g. luerl) name their modules with an
   # "Elixir." prefix for interop. Such modules are compiled by the Erlang compiler, so
@@ -538,6 +539,16 @@ defmodule Hologram.ReflectionTest do
     assert String.Chars.Hologram.Test.Fixtures.Reflection.Module5 in result
   end
 
+  test "list_roles/0" do
+    result = list_roles()
+
+    assert Role.Module1 in result
+    assert Role.Module2 in result
+
+    refute Entity.Module1 in result
+    refute Hologram.Reflection in result
+  end
+
   test "list_std_lib_elixir_modules/0" do
     result = list_std_lib_elixir_modules()
 
@@ -812,6 +823,20 @@ defmodule Hologram.ReflectionTest do
         end)
 
       assert result == umbrella_dir
+    end
+  end
+
+  describe "role?" do
+    test "is a global role module" do
+      assert role?(Role.Module1)
+    end
+
+    test "is not a module" do
+      refute role?(123)
+    end
+
+    test "is not a global role module" do
+      refute role?(Entity.Module1)
     end
   end
 
