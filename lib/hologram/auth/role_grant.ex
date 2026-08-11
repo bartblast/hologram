@@ -120,6 +120,15 @@ defmodule Hologram.Auth.RoleGrant do
     :ok
   end
 
+  @doc """
+  Returns the entity type designated as the app's user, or nil when none is designated.
+
+  Read from the same cached resolution the store's own definition uses, so the answer costs
+  no module sweep - unlike `Hologram.Reflection.user_entity/0`, which computes it.
+  """
+  @spec user_entity() :: module | nil
+  def user_entity, do: resolved(:user_entity)
+
   defp build_resolution do
     entity_types = Enum.reject(Reflection.list_entities(), &(&1 == __MODULE__))
 

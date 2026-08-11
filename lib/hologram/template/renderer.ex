@@ -5,6 +5,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Auth
   alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.StringUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
@@ -643,7 +644,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp put_user_context(page_component_struct) do
-    user = read_session_user(Reflection.user_entity(), Auth.user_id())
+    user = read_session_user(RoleGrant.user_entity(), Auth.user_id())
 
     Component.put_context(page_component_struct, {Hologram, :user}, user)
   end
