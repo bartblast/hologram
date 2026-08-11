@@ -8,9 +8,13 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
+  alias Hologram.DB.Codec
+  alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias Hologram.DB.QueryCompiler
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
+  alias Hologram.Policy.Compiler
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -22,6 +26,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module9
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Role
 
   @mapping Mapper.derive!([Module1, Module2, Module3])
 
@@ -58,6 +63,31 @@ defmodule Hologram.DB.QueryRunnerTest do
   end
 
   describe "run_policied/4" do
+    # run_policied/4 composes read rules only, so the global reference (declared for :archive)
+    # is executed through the compiler and the connection directly.
+    defp archivable_ids(actor_user_id) do
+      policy = %{
+        anonymous?: false,
+        operation: :archive,
+        rules: Compiler.build(PolicyModule2)[:archive]
+      }
+
+      compiled =
+        PolicyModule2
+        |> Query.normalize()
+        |> QueryCompiler.compile(@policy_mapping, policy)
+
+      values =
+        Enum.map(compiled.params, fn
+          :actor -> Codec.encode(actor_user_id, :uuid)
+          {:value, value} -> value
+        end)
+
+      {:ok, %{rows: rows}} = Connection.query(compiled.sql, values)
+
+      Enum.map(rows, fn [id | _rest] -> Codec.decode(id, :uuid) end)
+    end
+
     defp create_policy_entity(public) do
       PolicyModule1
       |> Entity.new(public: public)
@@ -108,6 +138,21 @@ defmodule Hologram.DB.QueryRunnerTest do
       Auth.grant_role(user, private_entity, :viewer)
 
       assert policied_ids(nil) == [public_entity.id]
+    end
+
+    test "returns rows granted through a global role module" do
+      user = create_policy_user("runner_10@example.com")
+      other_user = create_policy_user("runner_11@example.com")
+
+      entity =
+        PolicyModule2
+        |> Entity.new()
+        |> DB.create()
+
+      insert_global_grant(user.id, Role.Module1)
+
+      assert archivable_ids(user.id) == [entity.id]
+      assert archivable_ids(other_user.id) == []
     end
 
     test "applies the policy to counting queries" do

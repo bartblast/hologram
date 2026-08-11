@@ -12,6 +12,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module2
+  alias Hologram.Test.Fixtures.Role
 
   defp create_user(email) do
     Module14
@@ -116,6 +117,39 @@ defmodule Hologram.AuthTest do
       grant_role(user, %Module1{id: entity.id}, :owner)
 
       assert can?(user, :update, entity)
+    end
+
+    test "matches a global role module grant" do
+      user = create_user("user_45@example.com")
+      entity = %Module2{id: Entity.generate_id()}
+
+      refute can?(user, :archive, entity)
+
+      insert_global_grant(user.id, Role.Module1)
+
+      assert can?(user, :archive, entity)
+    end
+
+    test "matches a role module extending the referenced one" do
+      user = create_user("user_46@example.com")
+      entity = %Module2{id: Entity.generate_id()}
+
+      insert_global_grant(user.id, Role.Module2)
+
+      assert can?(user, :archive, entity)
+    end
+
+    test "denies a global role module the acting user does not hold" do
+      user = create_user("user_47@example.com")
+      other_user = create_user("user_48@example.com")
+
+      insert_global_grant(other_user.id, Role.Module1)
+
+      refute can?(user, :archive, %Module2{id: Entity.generate_id()})
+    end
+
+    test "skips global role module rules for an anonymous session" do
+      refute can?(nil, :archive, %Module2{id: Entity.generate_id()})
     end
 
     test "matches a type-wide grant on another entity type" do

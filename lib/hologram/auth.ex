@@ -171,6 +171,11 @@ defmodule Hologram.Auth do
     :ok
   end
 
+  # Global roles are held without a resource - the grant shape leaving both resource columns nil.
+  defp check_requirement({:global, role_modules}, _entity, actor_user_id, _operation) do
+    grant_exists?(actor_user_id, :global, role_modules)
+  end
+
   # Own roles are held on the entity itself, on its whole type, or globally - the three grant
   # shapes the store keeps apart by which of its resource columns are nil.
   defp check_requirement({:own, role_names}, entity, actor_user_id, _operation) do

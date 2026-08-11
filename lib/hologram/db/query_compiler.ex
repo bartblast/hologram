@@ -267,6 +267,8 @@ defmodule Hologram.DB.QueryCompiler do
     Enum.find(entity_mapping.columns, &(&1.source == {:relationship, relationship_name}))
   end
 
+  defp reference_role_names({:global, role_modules}), do: role_modules
+
   defp reference_role_names({:own, role_names}), do: role_names
 
   defp reference_role_names({:type, _target_type, role_names}), do: role_names
@@ -352,6 +354,12 @@ defmodule Hologram.DB.QueryCompiler do
         ~s|AND "rg"."role" = ANY(#{role_placeholder}) AND #{scope_sql})|
 
     {condition, new_params}
+  end
+
+  # A global role is held without a resource, so the row shape has both resource columns nil -
+  # the lookup needs no correlation with the queried row.
+  defp grant_scope_sql({:global, _role_modules}, _context, reversed_params) do
+    {~s|"rg"."resource_type" IS NULL AND "rg"."resource_id" IS NULL|, reversed_params}
   end
 
   # A rule's own roles are held on the row itself, on its whole type, or globally - the global

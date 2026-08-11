@@ -124,6 +124,10 @@ defmodule Hologram.Policy.Edges do
     Enum.flat_map(references, &reference_edges_for(entity_type, &1))
   end
 
+  defp reference_edges_for(_entity_type, {:global, role_modules}) do
+    [{:global_grants, role_modules}]
+  end
+
   defp reference_edges_for(entity_type, {:own, role_names}) do
     global_edges =
       case global_role_subset(entity_type, role_names) do

@@ -17,6 +17,7 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module6
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Role
 
   describe "compile/2" do
     test "assigns placeholders to param slots" do
@@ -299,6 +300,42 @@ defmodule Hologram.DB.QueryCompilerTest do
              )
     end
 
+    test "composes a global grant reference as an uncorrelated grant-store lookup" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      term = Query.normalize(PolicyModule2)
+
+      rules = [%{predicates: [], to: [{:global, [Role.Module1, Role.Module2]}], via: nil}]
+
+      assert compile(term, mapping, %{operation: :archive, rules: rules}) == %{
+               params: [
+                 :actor,
+                 {:value,
+                  ["Hologram.Test.Fixtures.Role.Module1", "Hologram.Test.Fixtures.Role.Module2"]}
+               ],
+               sql:
+                 ~s|SELECT "id", "public", "created_at", "updated_at" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module2" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "rg" | <>
+                   ~s|WHERE "rg"."user_id" = $1 | <>
+                   ~s|AND "rg"."role" = ANY($2::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+                   ~s|AND "rg"."resource_type" IS NULL AND "rg"."resource_id" IS NULL) | <>
+                   ~s|ORDER BY "id" ASC|
+             }
+    end
+
+    test "elides a global grant reference for an anonymous session" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
+      term = Query.normalize(PolicyModule2)
+
+      rules = [%{predicates: [], to: [{:global, [Role.Module1]}], via: nil}]
+
+      assert %{params: params, sql: sql} =
+               compile(term, mapping, %{operation: :archive, rules: rules, anonymous?: true})
+
+      assert params == []
+      refute String.contains?(sql, "hologram_role_grant")
+    end
+
     test "composes a namespaced grant reference as a type-wide lookup" do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant])
       term = Query.normalize(PolicyModule1)
@@ -384,7 +421,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: nil, via: :parent}]
 
-      assert %{sql: sql} = compile(term, mapping, %{operation: :archive, rules: rules})
+      assert %{sql: sql} = compile(term, mapping, %{operation: :delete, rules: rules})
 
       assert String.contains?(
                sql,
