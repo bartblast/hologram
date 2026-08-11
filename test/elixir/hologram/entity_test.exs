@@ -38,6 +38,8 @@ defmodule Hologram.EntityTest do
     end
 
     test "is not defined without the user option" do
+      Code.ensure_loaded!(Module1)
+
       refute function_exported?(Module1, :__is_hologram_user_entity__, 0)
     end
   end
