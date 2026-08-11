@@ -237,7 +237,7 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          choco install --no-progress postgresql16 --params "/Password:postgres /Port:5432"
+          choco install --no-progress --yes postgresql16 --params "/Password:postgres /Port:5432"
           & "C:\Program Files\PostgreSQL\16\bin\psql" -U postgres -c "SELECT version();"
 
       # Step: Execute lib Elixir tests.
