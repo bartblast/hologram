@@ -191,7 +191,13 @@ defmodule Hologram.Controller do
         subscriptions: target_subscriptions
     }
 
-    middleware_server_struct = Middleware.run(server_struct, module.__middleware__())
+    # Middleware acts on behalf of the session for the same reason the command below does, so it
+    # runs under the same actor - the user the request ARRIVED with, since a step that changes
+    # identity changes it for the work after it rather than for its own execution.
+    middleware_server_struct =
+      Context.with_actor(server_struct.user_id, fn ->
+        Middleware.run(server_struct, module.__middleware__())
+      end)
 
     if middleware_server_struct.status do
       # Middleware produced a terminal response - skip the command and send it,
@@ -316,7 +322,9 @@ defmodule Hologram.Controller do
     }
 
     middleware_server_struct =
-      Middleware.run(server_struct, page_module.__middleware__())
+      Context.with_actor(server_struct.user_id, fn ->
+        Middleware.run(server_struct, page_module.__middleware__())
+      end)
 
     if middleware_server_struct.status do
       # Middleware produced a terminal response - skip the render and send it,
