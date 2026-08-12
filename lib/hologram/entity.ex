@@ -352,8 +352,11 @@ defmodule Hologram.Entity do
     Map.merge(stripped, walked_fields)
   end
 
+  # Keys are walked as well as values - any term can key a map, an entity struct included.
   def strip_server_only_deep(term) when is_map(term) do
-    Map.new(term, fn {key, value} -> {key, strip_server_only_deep(value)} end)
+    Map.new(term, fn {key, value} ->
+      {strip_server_only_deep(key), strip_server_only_deep(value)}
+    end)
   end
 
   def strip_server_only_deep(term) when is_list(term) do

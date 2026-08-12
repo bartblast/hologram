@@ -373,6 +373,12 @@ defmodule Hologram.EntityTest do
       assert strip_server_only_deep(action) == %Action{name: :save, params: expected_params}
     end
 
+    test "strips an entity struct used as a map key" do
+      entity = new(Module15, label: "Report", token: "tok_D4")
+
+      assert strip_server_only_deep(%{entity => "held"}) == %{strip_server_only(entity) => "held"}
+    end
+
     test "returns a value struct unchanged" do
       datetime = ~U[2026-01-01 00:00:00Z]
 
