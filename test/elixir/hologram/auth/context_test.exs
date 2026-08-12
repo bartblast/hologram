@@ -33,6 +33,20 @@ defmodule Hologram.Auth.ContextTest do
       assert result == "user_id_4"
     end
 
+    # The actor lives in the process dictionary, so work moved off the request process starts
+    # with none - which is the trusted tier, not an anonymous session. Pinned here because the
+    # boundary decides which tier spawned work runs in.
+    test "leaves a spawned process without an actor" do
+      spawned_actor_user_id =
+        with_actor("user_id_8", fn ->
+          fn -> actor_user_id() end
+          |> Task.async()
+          |> Task.await()
+        end)
+
+      assert spawned_actor_user_id == nil
+    end
+
     test "restores the enclosing actor when the function raises" do
       with_actor("user_id_6", fn ->
         assert_raise RuntimeError, fn ->
