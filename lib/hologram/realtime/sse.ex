@@ -20,7 +20,7 @@ defmodule Hologram.Realtime.SSE do
   """
   @spec encode_action_envelope(integer, Action.t()) :: String.t()
   def encode_action_envelope(id, %Action{} = action) do
-    {:ok, data} = Encoder.encode_term(action)
+    {:ok, data} = Encoder.encode_client_term(action)
     "event: action\nid: #{id}\ndata: #{data}\n\n"
   end
 
@@ -32,7 +32,7 @@ defmodule Hologram.Realtime.SSE do
   @spec encode_add_sub_receipts_envelope(integer, [{any, String.t(), String.t()}]) ::
           String.t()
   def encode_add_sub_receipts_envelope(id, receipts) do
-    {:ok, data} = Encoder.encode_term(receipts)
+    {:ok, data} = Encoder.encode_client_term(receipts)
     "event: add_sub_receipts\nid: #{id}\ndata: #{data}\n\n"
   end
 
@@ -46,7 +46,7 @@ defmodule Hologram.Realtime.SSE do
   """
   @spec encode_broadcast_envelope(integer, atom, map, [String.t()]) :: String.t()
   def encode_broadcast_envelope(id, action_name, params, cids) do
-    {:ok, data} = Encoder.encode_term({action_name, params, cids})
+    {:ok, data} = Encoder.encode_client_term({action_name, params, cids})
     "event: broadcast\nid: #{id}\ndata: #{data}\n\n"
   end
 
@@ -57,7 +57,7 @@ defmodule Hologram.Realtime.SSE do
   """
   @spec encode_drop_sub_receipts_envelope(integer, [{any, String.t()}]) :: String.t()
   def encode_drop_sub_receipts_envelope(id, keys) do
-    {:ok, data} = Encoder.encode_term(keys)
+    {:ok, data} = Encoder.encode_client_term(keys)
     "event: drop_sub_receipts\nid: #{id}\ndata: #{data}\n\n"
   end
 
@@ -69,7 +69,7 @@ defmodule Hologram.Realtime.SSE do
   @spec encode_refresh_sub_receipts_envelope(integer, [{any, String.t(), String.t()}]) ::
           String.t()
   def encode_refresh_sub_receipts_envelope(id, receipts) do
-    {:ok, data} = Encoder.encode_term(receipts)
+    {:ok, data} = Encoder.encode_client_term(receipts)
     "event: refresh_sub_receipts\nid: #{id}\ndata: #{data}\n\n"
   end
 

@@ -9,6 +9,9 @@ defmodule Hologram.Realtime.SSETest do
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Test.Fixtures.Entity.Module15
+
+  @server_only_token_js ~s'[Type.atom("token"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Entity.ServerOnly")], [Type.atom("attribute"), Type.atom("token")]])]'
 
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
@@ -134,6 +137,23 @@ defmodule Hologram.Realtime.SSETest do
 
       assert encode_action_envelope(42, action) == "event: action\nid: 42\ndata: #{encoded}\n\n"
     end
+
+    test "replaces server-only attribute values in the action params with the sentinel" do
+      row = %Module15{
+        id: "test-id-sse-1",
+        label: "Report",
+        secret_note: "note_secret_v1",
+        token: "tok_K3xR"
+      }
+
+      action = %Action{name: :my_action, params: %{row: row}, target: "c1"}
+
+      envelope = encode_action_envelope(42, action)
+
+      assert String.contains?(envelope, @server_only_token_js)
+      refute String.contains?(envelope, "note_secret_v1")
+      refute String.contains?(envelope, "tok_K3xR")
+    end
   end
 
   describe "encode_add_sub_receipts_envelope/2" do
@@ -167,6 +187,21 @@ defmodule Hologram.Realtime.SSETest do
 
       assert encode_broadcast_envelope(1, :ping, %{}, ["page"]) ==
                "event: broadcast\nid: 1\ndata: #{encoded}\n\n"
+    end
+
+    test "replaces server-only attribute values in the broadcast params with the sentinel" do
+      row = %Module15{
+        id: "test-id-sse-2",
+        label: "Report",
+        secret_note: "note_secret_v2",
+        token: "tok_M6zY"
+      }
+
+      envelope = encode_broadcast_envelope(42, :append, %{row: row}, ["chat"])
+
+      assert String.contains?(envelope, @server_only_token_js)
+      refute String.contains?(envelope, "note_secret_v2")
+      refute String.contains?(envelope, "tok_M6zY")
     end
   end
 
