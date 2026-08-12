@@ -28,6 +28,7 @@ defmodule Hologram.Entity.Validator do
     :min,
     :min_length,
     :optional,
+    :server_only,
     :values
   ]
 
@@ -661,6 +662,7 @@ defmodule Hologram.Entity.Validator do
     validate_opts_shape!(module, "attribute", name, opts)
     validate_known_opts!(module, "attribute", name, opts, @valid_attribute_opts)
     validate_optional_opt!(module, "attribute", name, opts)
+    validate_server_only_opt!(module, name, opts)
   end
 
   defp validate_attribute_type!(module, name, type) do
@@ -1112,6 +1114,18 @@ defmodule Hologram.Entity.Validator do
     end
 
     :ok
+  end
+
+  defp validate_server_only_opt!(module, name, opts) do
+    case Keyword.fetch(opts, :server_only) do
+      {:ok, value} when not is_boolean(value) ->
+        raise Hologram.CompileError,
+          message:
+            "invalid server_only option #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the server_only option must be true or false"
+
+      _fetch_result ->
+        :ok
+    end
   end
 
   defp validate_use_opt_keys!(module, opts) do
