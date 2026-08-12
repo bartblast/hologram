@@ -177,7 +177,8 @@ defmodule Hologram.Policy.Validator do
   end
 
   defp validate_predicates!(entity_type, operation, predicates) do
-    Query.predicate_triples!(entity_type, predicates)
+    triples = Query.predicate_triples!(entity_type, predicates)
+    validate_server_only_predicates!(entity_type, operation, triples)
 
     :ok
   rescue
@@ -260,6 +261,19 @@ defmodule Hologram.Policy.Validator do
     end
 
     :ok
+  end
+
+  # Policy predicates must stay evaluable by the client, which never holds a server-only value.
+  defp validate_server_only_predicates!(entity_type, operation, triples) do
+    server_only_names = Entity.server_only_attribute_names(entity_type)
+
+    Enum.each(triples, fn {name, _operator, _value} ->
+      if name in server_only_names do
+        raise Hologram.CompileError,
+          message:
+            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{inspect(name)} is server_only, and the client cannot evaluate a predicate over a value it never holds"
+      end
+    end)
   end
 
   defp validate_target_role!(entity_type, operation, target_type, role_name) do
