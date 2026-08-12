@@ -23,14 +23,23 @@ defmodule HologramFeatureTests.Components.Policies.Component1 do
       Documents: <strong id="documents"><code>{Enum.map_join(@documents, ",", & &1.title)}</code></strong>
     </p>
     <p>
+      Folders: <strong id="folders"><code>{Enum.map_join(@documents, ",", &folder_name(&1.folder))}</code></strong>
+    </p>
+    <p>
       Session user: <strong id="session_user"><code>{session_user_email(@current_user)}</code></strong>
     </p>
     """
   end
 
   defp documents_query do
-    order_by(Document, :title)
+    Document
+    |> include(:folder)
+    |> order_by(:title)
   end
+
+  defp folder_name(nil), do: "none"
+
+  defp folder_name(folder), do: folder.name
 
   defp session_user_email(nil), do: "anonymous"
 

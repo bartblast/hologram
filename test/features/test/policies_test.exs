@@ -8,14 +8,15 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias HologramFeatureTests.Entities.Document
+  alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.PoliciesPage
 
-  # All three tables truncate in one statement: the role grant table's foreign keys to the
+  # All four tables truncate in one statement: the role grant table's foreign keys to the
   # user table make Postgres reject truncating the referenced table alone.
   setup do
     tables =
-      Enum.map_join([Document, RoleGrant, User], ", ", fn entity_type ->
+      Enum.map_join([Document, Folder, RoleGrant, User], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 
@@ -40,6 +41,31 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> assert_text(css("#documents"), "public_document")
     |> refute_has(css("#documents", text: "private_document"))
     |> assert_text(css("#session_user"), "anonymous")
+  end
+
+  feature "renders an included row only when the session may read it", %{session: session} do
+    public_folder =
+      Folder
+      |> Entity.new(name: "shared_folder", public: true)
+      |> create()
+
+    private_folder =
+      Folder
+      |> Entity.new(name: "locked_folder")
+      |> create()
+
+    Document
+    |> Entity.new(folder_id: public_folder.id, public: true, title: "filed_document")
+    |> create()
+
+    Document
+    |> Entity.new(folder_id: private_folder.id, public: true, title: "secret_document")
+    |> create()
+
+    session
+    |> visit(PoliciesPage)
+    |> assert_text(css("#documents"), "filed_document,secret_document")
+    |> assert_text(css("#folders"), "shared_folder,none")
   end
 
   # The page is reloaded rather than revisited: Wallaby navigates to the URL the browser
