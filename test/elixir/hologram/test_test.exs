@@ -29,6 +29,13 @@ defmodule Hologram.TestTest do
       assert as_user("user_id_2") == "user_id_2"
     end
 
+    test "runs anonymously from this point on for a nil id" do
+      as_user("user_id_7")
+
+      assert as_user(nil) == nil
+      assert Context.actor_user_id() == nil
+    end
+
     test "raises for a user struct with a nil id" do
       expected_msg =
         "cannot act as Hologram.Test.Fixtures.Entity.Module14 with a nil id - an unset actor reads as an anonymous session and writes as trusted code, so an authorization test would pass for the wrong reason"

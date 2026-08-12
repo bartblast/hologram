@@ -9,10 +9,14 @@ defmodule Hologram.Test do
         {:ok, user: as_user(create_user())}
       end
 
-  Takes the user entity or a bare user id. A test that sets no actor runs as an anonymous
-  session.
+  Takes the user entity, a bare user id, or nil to run anonymously from this point on. A test
+  that sets no actor at all is anonymous too.
+
+  Raises ArgumentError when given a user struct whose id is nil - an unset actor reads as an
+  anonymous session and writes as trusted code, so the silent outcome would be a test passing
+  without exercising what it was written for.
   """
-  @spec as_user(struct | String.t()) :: struct | String.t()
+  @spec as_user(struct | String.t() | nil) :: struct | String.t() | nil
   def as_user(user_or_id) do
     user_or_id
     |> actor_user_id()
@@ -27,9 +31,13 @@ defmodule Hologram.Test do
 
       as_user(author, fn -> DB.create(post) end)
 
-  Takes the user entity or a bare user id.
+  Takes the user entity, a bare user id, or nil to run the function anonymously - the spelling
+  for a block that must not carry the enclosing actor.
+
+  Raises ArgumentError when given a user struct whose id is nil, as its single-argument
+  counterpart does.
   """
-  @spec as_user(struct | String.t(), (-> any)) :: any
+  @spec as_user(struct | String.t() | nil, (-> any)) :: any
   def as_user(user_or_id, fun) do
     user_id = actor_user_id(user_or_id)
 
