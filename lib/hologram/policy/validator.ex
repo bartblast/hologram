@@ -301,9 +301,9 @@ defmodule Hologram.Policy.Validator do
 
   defp validate_gate_operation!(entity_type, operation, to, via, predicates)
        when operation in @gate_operations do
-    to
-    |> List.wrap()
-    |> Enum.each(fn reference ->
+    references = List.wrap(to)
+
+    Enum.each(references, fn reference ->
       if not is_atom(reference) or Reflection.alias?(reference) do
         raise Hologram.CompileError,
           message:
@@ -326,6 +326,17 @@ defmodule Hologram.Policy.Validator do
           message:
             "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{gate_operation_reason(operation)}"
     end
+
+    # A line naming no own role reads as an unconditional grant and qualifies nobody - the same
+    # declaration-versus-effect mismatch the reference check catches, in the fail-closed direction.
+    # Checked last, so a line that did name something unusable reports what it named.
+    if references == [] do
+      raise Hologram.CompileError,
+        message:
+          "missing to option for allow #{inspect(operation)} in #{inspect(entity_type)} - #{gate_operation_reason(operation)}"
+    end
+
+    :ok
   end
 
   defp validate_gate_operation!(_entity_type, _operation, _to, _via, _predicates), do: :ok

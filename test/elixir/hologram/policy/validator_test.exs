@@ -502,6 +502,23 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a line naming no own role" do
+      defmodule UnqualifiedGateFixture do
+        use Hologram.Entity
+
+        role :owner
+
+        allow :manage_roles
+      end
+
+      expected_msg =
+        "missing to option for allow :manage_roles in Hologram.Policy.ValidatorTest.UnqualifiedGateFixture - :manage_roles is checked without loading the row, so it takes own role names only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, UnqualifiedGateFixture])
+      end
+    end
+
     test "rejects a delegation the gate cannot honor" do
       defmodule DelegatedGateFixture do
         use Hologram.Entity
