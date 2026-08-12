@@ -5,6 +5,7 @@ defmodule Hologram.Entity do
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
   alias Hologram.Entity.Validator
+  alias Hologram.Reflection
 
   @system_attributes [
     {:created_at, :datetime, []},
@@ -326,6 +327,47 @@ defmodule Hologram.Entity do
       %{stripped | name => %ServerOnly{attribute: name}}
     end)
   end
+
+  # Sentinels are terminal - they hold no entity structs, and re-walking one would rebuild it
+  # for nothing.
+  @doc false
+  @spec strip_server_only_deep(any) :: any
+  def strip_server_only_deep(%NotIncluded{} = term), do: term
+
+  def strip_server_only_deep(%ServerOnly{} = term), do: term
+
+  def strip_server_only_deep(term) when is_struct(term) do
+    stripped =
+      if Reflection.entity?(term.__struct__) do
+        strip_server_only(term)
+      else
+        term
+      end
+
+    walked_fields =
+      stripped
+      |> Map.from_struct()
+      |> Map.new(fn {name, value} -> {name, strip_server_only_deep(value)} end)
+
+    Map.merge(stripped, walked_fields)
+  end
+
+  def strip_server_only_deep(term) when is_map(term) do
+    Map.new(term, fn {key, value} -> {key, strip_server_only_deep(value)} end)
+  end
+
+  def strip_server_only_deep(term) when is_list(term) do
+    Enum.map(term, &strip_server_only_deep/1)
+  end
+
+  def strip_server_only_deep(term) when is_tuple(term) do
+    term
+    |> Tuple.to_list()
+    |> Enum.map(&strip_server_only_deep/1)
+    |> List.to_tuple()
+  end
+
+  def strip_server_only_deep(term), do: term
 
   @doc false
   # sobelow_skip ["DOS.BinToAtom"]

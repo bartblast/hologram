@@ -3,6 +3,7 @@ defmodule Hologram.EntityTest do
 
   import Hologram.Entity
 
+  alias Hologram.Component.Action
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
   alias Hologram.Test.Fixtures.Entity.Module1
@@ -346,6 +347,42 @@ defmodule Hologram.EntityTest do
       entity = new(Module2, a: true, b: 5, c: "abc")
 
       assert strip_server_only(entity) == entity
+    end
+  end
+
+  describe "strip_server_only_deep/1" do
+    test "strips entity structs nested in lists" do
+      entity = new(Module15, label: "Report", token: "tok_A1")
+
+      assert strip_server_only_deep([[entity], []]) == [[strip_server_only(entity)], []]
+    end
+
+    test "strips an entity struct held in a relationship embed field" do
+      child = new(Module15, token: "tok_B2")
+      parent = %Module13{parent: child}
+
+      assert strip_server_only_deep(parent) == %Module13{parent: strip_server_only(child)}
+    end
+
+    test "strips an entity struct nested in a map inside a non-entity struct" do
+      entity = new(Module15, token: "tok_C3")
+      action = %Action{name: :save, params: %{row: entity}}
+
+      expected_params = %{row: strip_server_only(entity)}
+
+      assert strip_server_only_deep(action) == %Action{name: :save, params: expected_params}
+    end
+
+    test "returns a value struct unchanged" do
+      datetime = ~U[2026-01-01 00:00:00Z]
+
+      assert strip_server_only_deep(datetime) == datetime
+    end
+
+    test "returns a term holding no entity structs unchanged" do
+      term = %{a: [1, {:b, "c"}], d: nil}
+
+      assert strip_server_only_deep(term) == term
     end
   end
 
