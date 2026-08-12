@@ -3,6 +3,73 @@ defmodule Hologram.Migration.LoaderTest do
 
   import Hologram.Migration.Loader
 
+  alias Hologram.Reflection
+
+  @tmp_dir Path.join([Reflection.tmp_dir(), "tests", "migration", "loader"])
+
+  defp write_migrations!(test_dir, files) do
+    dir = Path.join(@tmp_dir, test_dir)
+
+    File.rm_rf!(dir)
+    File.mkdir_p!(dir)
+
+    Enum.each(files, fn {file_name, contents} ->
+      dir
+      |> Path.join(file_name)
+      |> File.write!(contents)
+    end)
+
+    dir
+  end
+
+  describe "load_dir!/1" do
+    test "returns the migrations ordered by version" do
+      dir =
+        write_migrations!("ordered", [
+          {"20260813120000.exs", "use Hologram.Migration\n\ndelete_entity MyApp.Archive\n"},
+          {"20260813090000.exs", "use Hologram.Migration\n\ncreate_entity MyApp.Task\n"}
+        ])
+
+      assert [first, second] = load_dir!(dir)
+
+      assert first == %{
+               version: "20260813090000",
+               path: Path.join(dir, "20260813090000.exs"),
+               ops: [%{op: :create_entity, entity: MyApp.Task, line: 3}]
+             }
+
+      assert second == %{
+               version: "20260813120000",
+               path: Path.join(dir, "20260813120000.exs"),
+               ops: [%{op: :delete_entity, entity: MyApp.Archive, line: 3}]
+             }
+    end
+
+    test "returns an empty list for an empty directory" do
+      assert load_dir!(write_migrations!("empty", [])) == []
+    end
+
+    test "returns an empty list for a directory that does not exist" do
+      assert load_dir!(Path.join(@tmp_dir, "nonexistent")) == []
+    end
+
+    test "rejects a file whose name is not a version" do
+      dir =
+        write_migrations!("invalid_name", [
+          {"20260813090000_add_priority.exs", "use Hologram.Migration\n"}
+        ])
+
+      expected_msg =
+        "invalid migration file name #{Path.join(dir, "20260813090000_add_priority.exs")} - " <>
+          "a migration file is named after its version: 14 timestamp digits with the " <>
+          "\".exs\" extension, e.g. \"20260813091500.exs\""
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        load_dir!(dir)
+      end
+    end
+  end
+
   describe "load_string!/2" do
     test "returns the ops of a file holding flat statements" do
       contents = """
