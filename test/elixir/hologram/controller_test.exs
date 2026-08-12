@@ -660,6 +660,25 @@ defmodule Hologram.ControllerTest do
                ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_cid")], [Type.atom("params"), Type.map([[Type.atom("cid"), Type.bitstring("my_target_1")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
     end
 
+    test "encodes next action params with server-only attribute values replaced by the sentinel" do
+      payload = %{
+        module: Module6,
+        name: :my_command_returning_entity_row,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      conn = execute_command_request(payload)
+      response = Jason.decode!(conn.resp_body)
+
+      expected_sentinel =
+        ~s'[Type.atom("token"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Entity.ServerOnly")], [Type.atom("attribute"), Type.atom("token")]])]'
+
+      assert String.contains?(response["action"], expected_sentinel)
+      refute String.contains?(response["action"], "note_secret_v5")
+      refute String.contains?(response["action"], "tok_H2sB")
+    end
+
     test "extracts instance_id from payload and exposes it via server.instance_id" do
       payload = %{
         instance_id: "my-instance-id",

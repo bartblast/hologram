@@ -2,6 +2,7 @@
 defmodule Hologram.Test.Fixtures.Controller.Module6 do
   use Hologram.Component
   alias Hologram.Component.Action
+  alias Hologram.Test.Fixtures.Entity.Module15
 
   @impl Component
   def command(:my_command_a, _params, server) do
@@ -107,6 +108,23 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
   def command(:my_command_queueing_broadcast_then_raising, _params, server) do
     put_broadcast(server, {:instance, server.instance_id}, :my_broadcast_action, text: "hi")
     raise "boom"
+  end
+
+  def command(:my_command_returning_entity_row, _params, server) do
+    row = %Module15{
+      id: "test-id-6",
+      label: "Report",
+      secret_note: "note_secret_v5",
+      token: "tok_H2sB"
+    }
+
+    action = %Action{
+      name: :my_action_receiving_entity_row,
+      params: %{row: row},
+      target: nil
+    }
+
+    %{server | next_action: action}
   end
 
   def command(:my_command_self_echo_broadcast_only, _params, server) do

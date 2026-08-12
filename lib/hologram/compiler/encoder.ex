@@ -59,6 +59,19 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   @doc """
+  Encodes an Elixir term bound for the client into JavaScript.
+  Returns {:ok, js}, or {:error, message} when the term can't be encoded into JavaScript.
+  Values of attributes declared server_only never reach the output - every entity struct in the term, at any nesting depth, has them replaced with the Hologram.Entity.ServerOnly sentinel first.
+  """
+  @spec encode_client_term(any) :: {:ok, String.t()} | {:error, String.t()}
+  def encode_client_term(term) do
+    {:ok, encode_client_term!(term)}
+  rescue
+    e in ArgumentError ->
+      {:error, e.message}
+  end
+
+  @doc """
   Encodes an Elixir term bound for the client into JavaScript, erroring out if the term can't be encoded into JavaScript.
   Values of attributes declared server_only never reach the output - every entity struct in the term, at any nesting depth, has them replaced with the Hologram.Entity.ServerOnly sentinel first.
   """
