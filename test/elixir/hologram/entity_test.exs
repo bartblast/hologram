@@ -4,12 +4,14 @@ defmodule Hologram.EntityTest do
   import Hologram.Entity
 
   alias Hologram.Entity.NotIncluded
+  alias Hologram.Entity.ServerOnly
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module11
   alias Hologram.Test.Fixtures.Entity.Module12
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -315,6 +317,35 @@ defmodule Hologram.EntityTest do
           role :owner, creator: true
         end
       end
+    end
+  end
+
+  describe "server_only_attribute_names/1" do
+    test "returns the server-only attribute names sorted" do
+      assert server_only_attribute_names(Module15) == [:secret_note, :token]
+    end
+
+    test "returns empty list for an entity type without server-only attributes" do
+      assert server_only_attribute_names(Module2) == []
+    end
+  end
+
+  describe "strip_server_only/1" do
+    test "replaces every server-only value with the sentinel, leaving the rest untouched" do
+      entity = new(Module15, label: "Report", secret_note: "internal", token: "tok_9xK2")
+
+      stripped = strip_server_only(entity)
+
+      assert stripped.secret_note == %ServerOnly{attribute: :secret_note}
+      assert stripped.token == %ServerOnly{attribute: :token}
+      assert stripped.label == "Report"
+      assert stripped.id == entity.id
+    end
+
+    test "returns an entity type without server-only attributes unchanged" do
+      entity = new(Module2, a: true, b: 5, c: "abc")
+
+      assert strip_server_only(entity) == entity
     end
   end
 

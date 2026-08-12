@@ -3,6 +3,7 @@ defmodule Hologram.Entity do
   alias Hologram.Compiler.AST
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
+  alias Hologram.Entity.ServerOnly
   alias Hologram.Entity.Validator
 
   @system_attributes [
@@ -305,6 +306,24 @@ defmodule Hologram.Entity do
 
       node ->
         node
+    end)
+  end
+
+  @doc false
+  @spec server_only_attribute_names(module) :: list(atom)
+  def server_only_attribute_names(entity_type) do
+    entity_type.__attributes__()
+    |> Enum.filter(fn {_name, _type, opts} -> opts[:server_only] == true end)
+    |> Enum.map(fn {name, _type, _opts} -> name end)
+  end
+
+  @doc false
+  @spec strip_server_only(struct) :: struct
+  def strip_server_only(entity) do
+    attribute_names = server_only_attribute_names(entity.__struct__)
+
+    Enum.reduce(attribute_names, entity, fn name, stripped ->
+      %{stripped | name => %ServerOnly{attribute: name}}
     end)
   end
 
