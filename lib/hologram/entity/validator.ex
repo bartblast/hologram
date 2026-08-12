@@ -16,16 +16,6 @@ defmodule Hologram.Entity.Validator do
 
   @policy_option_names [:to, :via]
 
-  # What use Hologram.Entity generates, and what a hand-written entity type module owes.
-  # __is_hologram_entity__/0 is not listed - it is how a module gets into the model in the first place.
-  @reflection_contract [
-    __attributes__: 0,
-    __policies__: 0,
-    __relationships__: 0,
-    __roles__: 0,
-    __system_attributes__: 0
-  ]
-
   @reserved_names [:created_at, :id, :updated_at]
 
   @valid_attribute_opts [
@@ -216,27 +206,24 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the given data model as a whole, taking the list of all compiled entity type modules.
 
-  Returns :ok, or raises Hologram.CompileError listing every entity type module missing part of the reflection contract, then every relationship whose target is not an entity type module.
-  The contract comes first, because reading the model calls the very functions it covers.
-  These checks are possible only after all entity type modules are compiled - relationship declarations verify the type shape alone, because the target module may not be compiled yet while the declaring module's body is executing.
+  Returns :ok, or raises Hologram.CompileError listing every relationship whose target is not an entity type module.
+  This check is possible only after all entity type modules are compiled - relationship declarations verify the type shape alone, because the target module may not be compiled yet while the declaring module's body is executing.
   """
   @spec validate_model!(list(module)) :: :ok
   def validate_model!(entity_types) do
-    entity_types
-    |> Enum.flat_map(&reflection_contract_violations/1)
-    |> Enum.sort()
-    |> Enum.map_join("\n", fn {entity_type, function, arity} ->
-      "  * #{inspect(entity_type)} is an entity type module but doesn't export #{function}/#{arity}"
-    end)
-    |> raise_invalid_model!()
+    violations =
+      entity_types
+      |> Enum.flat_map(&relationship_target_violations/1)
+      |> Enum.sort()
 
-    entity_types
-    |> Enum.flat_map(&relationship_target_violations/1)
-    |> Enum.sort()
-    |> Enum.map_join("\n", fn {entity_type, name, target} ->
-      "  * relationship #{inspect(name)} in #{inspect(entity_type)} targets #{inspect(target)}, which is not an entity type module"
-    end)
-    |> raise_invalid_model!()
+    if violations != [] do
+      descriptions =
+        Enum.map_join(violations, "\n", fn {entity_type, name, target} ->
+          "  * relationship #{inspect(name)} in #{inspect(entity_type)} targets #{inspect(target)}, which is not an entity type module"
+        end)
+
+      raise Hologram.CompileError, message: "invalid data model:\n#{descriptions}"
+    end
 
     :ok
   end
@@ -531,12 +518,6 @@ defmodule Hologram.Entity.Validator do
 
   defp length_satisfied?(count, :max_length, bound), do: count <= bound
 
-  defp raise_invalid_model!(""), do: :ok
-
-  defp raise_invalid_model!(descriptions) do
-    raise Hologram.CompileError, message: "invalid data model:\n#{descriptions}"
-  end
-
   defp reference_change_errors(field, nil, optional?) do
     if optional?, do: [], else: [{field, :required}]
   end
@@ -564,12 +545,6 @@ defmodule Hologram.Entity.Validator do
     |> Enum.map(fn {name, _type, opts} ->
       {String.to_existing_atom("#{name}_id"), Keyword.get(opts, :optional) == true}
     end)
-  end
-
-  defp reflection_contract_violations(entity_type) do
-    for {function, arity} <- @reflection_contract,
-        !Reflection.has_function?(entity_type, function, arity),
-        do: {entity_type, function, arity}
   end
 
   defp relationship_field_names(name, [_target]), do: [Atom.to_string(name)]

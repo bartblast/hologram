@@ -343,11 +343,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
         @spec __roles__() :: list(tuple)
         def __roles__, do: []
-
-        @spec __system_attributes__() :: list(tuple)
-        def __system_attributes__ do
-          [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
-        end
       end
 
       # Register a fake loaded OTP app whose spec lists the entity type module with the

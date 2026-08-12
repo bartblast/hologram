@@ -1255,55 +1255,6 @@ defmodule Hologram.Entity.ValidatorTest do
         validate_model!([InlineEntityFixture24, InlineEntityFixture25])
       end
     end
-
-    test "rejects an entity type module not exporting the whole reflection contract" do
-      defmodule InlineEntityFixture83 do
-        @spec __is_hologram_entity__() :: boolean
-        def __is_hologram_entity__, do: true
-
-        @spec __attributes__() :: list(tuple)
-        def __attributes__, do: []
-
-        @spec __relationships__() :: list(tuple)
-        def __relationships__, do: []
-
-        @spec __system_attributes__() :: list(tuple)
-        def __system_attributes__, do: []
-      end
-
-      expected_msg =
-        "invalid data model:\n  * Hologram.Entity.ValidatorTest.InlineEntityFixture83 is an entity type module but doesn't export __policies__/0\n  * Hologram.Entity.ValidatorTest.InlineEntityFixture83 is an entity type module but doesn't export __roles__/0"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlineEntityFixture83])
-      end
-    end
-
-    test "rejects an entity type module not exporting a reflection function the model check itself calls" do
-      defmodule InlineEntityFixture84 do
-        @spec __is_hologram_entity__() :: boolean
-        def __is_hologram_entity__, do: true
-
-        @spec __attributes__() :: list(tuple)
-        def __attributes__, do: []
-
-        @spec __policies__() :: list(tuple)
-        def __policies__, do: []
-
-        @spec __roles__() :: list(tuple)
-        def __roles__, do: []
-
-        @spec __system_attributes__() :: list(tuple)
-        def __system_attributes__, do: []
-      end
-
-      expected_msg =
-        "invalid data model:\n  * Hologram.Entity.ValidatorTest.InlineEntityFixture84 is an entity type module but doesn't export __relationships__/0"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlineEntityFixture84])
-      end
-    end
   end
 
   describe "validate_relationship!/4" do
