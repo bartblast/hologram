@@ -19,6 +19,8 @@ defmodule Hologram.Auth.RoleGrantTest do
                     :test_fixtures_entity_module12,
                     :test_fixtures_entity_module13,
                     :test_fixtures_entity_module14,
+                    :test_fixtures_entity_module15,
+                    :test_fixtures_entity_module16,
                     :test_fixtures_entity_module2,
                     :test_fixtures_entity_module3,
                     :test_fixtures_entity_module4,

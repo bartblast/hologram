@@ -451,6 +451,47 @@ defmodule Hologram.Policy.ValidatorTest do
         validate_model!([InlinePolicyFixture6])
       end
     end
+
+    test "accepts a read predicate over a server-only attribute" do
+      defmodule InlinePolicyFixture32 do
+        use Hologram.Entity
+
+        attribute :token, :string, server_only: true
+
+        allow :read, token: "tok_hidden"
+      end
+
+      assert validate_model!([InlinePolicyFixture32]) == :ok
+    end
+
+    test "accepts a non-read predicate over an attribute that is not server-only in this type" do
+      defmodule InlinePolicyFixture31 do
+        use Hologram.Entity
+
+        attribute :token, :string
+
+        allow :publish, token: "tok_public"
+      end
+
+      assert validate_model!([InlinePolicyFixture31]) == :ok
+    end
+
+    test "rejects a non-read predicate over a server-only attribute" do
+      defmodule InlinePolicyFixture33 do
+        use Hologram.Entity
+
+        attribute :token, :string, server_only: true
+
+        allow :publish, token: "tok_hidden"
+      end
+
+      expected_msg =
+        "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture33 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture33])
+      end
+    end
   end
 
   describe "validate_model!/1 for the grant lifecycle operations" do

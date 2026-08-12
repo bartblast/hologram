@@ -13,6 +13,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.DB
   alias Hologram.DB.QueryCache
   alias Hologram.DB.QueryRunner
+  alias Hologram.Entity
   alias Hologram.Entity.Validator
   alias Hologram.Query
   alias Hologram.Reflection
@@ -41,7 +42,7 @@ defmodule Hologram.Template.Renderer do
   """
   @spec interpolate_self_echoes_js(String.t(), [Component.Action.t()]) :: String.t()
   def interpolate_self_echoes_js(html, self_echoes) do
-    self_echoes_js = Encoder.encode_term!(self_echoes)
+    self_echoes_js = Encoder.encode_client_term!(self_echoes)
     String.replace(html, "$SELF_ECHOES_JS_PLACEHOLDER", self_echoes_js)
   end
 
@@ -51,7 +52,7 @@ defmodule Hologram.Template.Renderer do
   """
   @spec interpolate_sub_receipt_adds_js(String.t(), list) :: String.t()
   def interpolate_sub_receipt_adds_js(html, sub_receipt_adds) do
-    sub_receipt_adds_js = Encoder.encode_term!(sub_receipt_adds)
+    sub_receipt_adds_js = Encoder.encode_client_term!(sub_receipt_adds)
     String.replace(html, "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER", sub_receipt_adds_js)
   end
 
@@ -61,7 +62,7 @@ defmodule Hologram.Template.Renderer do
   """
   @spec interpolate_sub_receipt_drops_js(String.t(), list) :: String.t()
   def interpolate_sub_receipt_drops_js(html, sub_receipt_drops) do
-    sub_receipt_drops_js = Encoder.encode_term!(sub_receipt_drops)
+    sub_receipt_drops_js = Encoder.encode_client_term!(sub_receipt_drops)
     String.replace(html, "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER", sub_receipt_drops_js)
   end
 
@@ -560,17 +561,17 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp interpolate_component_registry_js(html, component_registry) do
-    component_registry_js = Encoder.encode_term!(component_registry)
+    component_registry_js = Encoder.encode_client_term!(component_registry)
     String.replace(html, "$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
   end
 
   defp interpolate_page_module_js(html, page_module) do
-    page_module_js = Encoder.encode_term!(page_module)
+    page_module_js = Encoder.encode_client_term!(page_module)
     String.replace(html, "$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
   end
 
   defp interpolate_page_params_js(html, page_params) do
-    page_params_js = Encoder.encode_term!(page_params)
+    page_params_js = Encoder.encode_client_term!(page_params)
     String.replace(html, "$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
   end
 
@@ -643,8 +644,13 @@ defmodule Hologram.Template.Renderer do
     )
   end
 
+  # The row is handed over already carrying the sentinel, so the server-rendered HTML and the
+  # client re-render agree on framework-delivered rows.
   defp put_user_context(page_component_struct) do
-    user = read_session_user(RoleGrant.user_entity(), Auth.user_id())
+    user =
+      RoleGrant.user_entity()
+      |> read_session_user(Auth.user_id())
+      |> Entity.strip_server_only_deep()
 
     Component.put_context(page_component_struct, {Hologram, :user}, user)
   end
@@ -759,7 +765,9 @@ defmodule Hologram.Template.Renderer do
       |> apply(args)
       |> Query.normalize()
 
-    QueryRunner.run_policied(term, DB.mapping(), Auth.user_id())
+    term
+    |> QueryRunner.run_policied(DB.mapping(), Auth.user_id())
+    |> Entity.strip_server_only_deep()
   end
 
   defp spread_entries(value)

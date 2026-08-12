@@ -10,6 +10,7 @@ defmodule Hologram.DB.QueryCache do
   alias Hologram.DB.QueryCompiler
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SortKey
+  alias Hologram.Entity
   alias Hologram.Policy
   alias Hologram.Query.Registry
   alias Hologram.Reflection
@@ -207,6 +208,7 @@ defmodule Hologram.DB.QueryCache do
     module_queries = Enum.map(modules, &{&1, QueryExtractor.extract_module_queries(&1)})
 
     Enum.each(module_queries, &validate_readable_queries!/1)
+    Enum.each(module_queries, &validate_client_evaluable_queries!/1)
 
     terms = Enum.flat_map(module_queries, fn {_module, module_terms} -> module_terms end)
     mapping = ensure_mapping(terms)
@@ -243,6 +245,55 @@ defmodule Hologram.DB.QueryCache do
       |> Enum.flat_map(&queried_entity_types/1)
 
     Enum.uniq([term.entity | nested_types])
+  end
+
+  defp server_only_listing(references) do
+    Enum.map_join(references, ", ", fn {entity_type, names} ->
+      "#{inspect(entity_type)} #{Enum.map_join(names, ", ", &inspect/1)}"
+    end)
+  end
+
+  defp server_only_query_message(module, references) do
+    "the registered query in #{inspect(module)} filters or orders on server_only attributes (#{server_only_listing(references)}) - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API."
+  end
+
+  # Pairs each term entity with the server-only attributes its own filter and order_by name,
+  # walking include sub-terms so a reference nested under an include is reached too.
+  defp server_only_references(term) do
+    server_only_names = Entity.server_only_attribute_names(term.entity)
+    filter_names = Enum.map(term.filter, fn {name, _operator, _value} -> name end)
+    order_by_names = Enum.map(term.order_by, fn {name, _direction} -> name end)
+
+    referenced_names =
+      (filter_names ++ order_by_names)
+      |> Enum.filter(&(&1 in server_only_names))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    nested_references =
+      term.include
+      |> Map.values()
+      |> Enum.flat_map(&server_only_references/1)
+
+    if referenced_names == [] do
+      nested_references
+    else
+      [{term.entity, referenced_names} | nested_references]
+    end
+  end
+
+  # A registered query is provisioned to the client, which evaluates it locally over rows that
+  # never carry a server-only value - so it must not reference one.
+  defp validate_client_evaluable_queries!({module, module_terms}) do
+    Enum.each(module_terms, fn term ->
+      case server_only_references(term) do
+        [] ->
+          :ok
+
+        references ->
+          raise Hologram.CompileError, message: server_only_query_message(module, references)
+      end
+    end)
   end
 
   defp validate_readable_includes!(module, term) do

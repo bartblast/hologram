@@ -243,12 +243,12 @@ defmodule Hologram.Controller do
 
       flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
 
-      {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
+      {encode_status, encoded_next_action} = Encoder.encode_client_term(next_action)
       command_status = if encode_status == :ok, do: 1, else: 0
 
-      {:ok, encoded_self_echoes} = Encoder.encode_term(self_echoes)
-      {:ok, encoded_sub_receipt_adds} = Encoder.encode_term(sub_receipt_adds)
-      {:ok, encoded_sub_receipt_drops} = Encoder.encode_term(sub_receipt_drops)
+      {:ok, encoded_self_echoes} = Encoder.encode_client_term(self_echoes)
+      {:ok, encoded_sub_receipt_adds} = Encoder.encode_client_term(sub_receipt_adds)
+      {:ok, encoded_sub_receipt_drops} = Encoder.encode_client_term(sub_receipt_drops)
 
       conn
       |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
@@ -420,7 +420,7 @@ defmodule Hologram.Controller do
           expires_at
         )
 
-        {:ok, encoded_refreshed_receipts} = Encoder.encode_term(refreshed_receipts)
+        {:ok, encoded_refreshed_receipts} = Encoder.encode_client_term(refreshed_receipts)
 
         conn
         |> Controller.json(%{

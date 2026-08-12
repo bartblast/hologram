@@ -3,7 +3,9 @@ defmodule Hologram.Entity do
   alias Hologram.Compiler.AST
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
+  alias Hologram.Entity.ServerOnly
   alias Hologram.Entity.Validator
+  alias Hologram.Reflection
 
   @system_attributes [
     {:created_at, :datetime, []},
@@ -307,6 +309,68 @@ defmodule Hologram.Entity do
         node
     end)
   end
+
+  @doc false
+  @spec server_only_attribute_names(module) :: list(atom)
+  def server_only_attribute_names(entity_type) do
+    entity_type.__attributes__()
+    |> Enum.filter(fn {_name, _type, opts} -> opts[:server_only] == true end)
+    |> Enum.map(fn {name, _type, _opts} -> name end)
+  end
+
+  @doc false
+  @spec strip_server_only(struct) :: struct
+  def strip_server_only(entity) do
+    attribute_names = server_only_attribute_names(entity.__struct__)
+
+    Enum.reduce(attribute_names, entity, fn name, stripped ->
+      %{stripped | name => %ServerOnly{attribute: name}}
+    end)
+  end
+
+  # Sentinels are terminal - they hold no entity structs, and re-walking one would rebuild it
+  # for nothing.
+  @doc false
+  @spec strip_server_only_deep(any) :: any
+  def strip_server_only_deep(%NotIncluded{} = term), do: term
+
+  def strip_server_only_deep(%ServerOnly{} = term), do: term
+
+  def strip_server_only_deep(term) when is_struct(term) do
+    stripped =
+      if Reflection.entity?(term.__struct__) do
+        strip_server_only(term)
+      else
+        term
+      end
+
+    walked_fields =
+      stripped
+      |> Map.from_struct()
+      |> Map.new(fn {name, value} -> {name, strip_server_only_deep(value)} end)
+
+    Map.merge(stripped, walked_fields)
+  end
+
+  # Keys are walked as well as values - any term can key a map, an entity struct included.
+  def strip_server_only_deep(term) when is_map(term) do
+    Map.new(term, fn {key, value} ->
+      {strip_server_only_deep(key), strip_server_only_deep(value)}
+    end)
+  end
+
+  def strip_server_only_deep(term) when is_list(term) do
+    Enum.map(term, &strip_server_only_deep/1)
+  end
+
+  def strip_server_only_deep(term) when is_tuple(term) do
+    term
+    |> Tuple.to_list()
+    |> Enum.map(&strip_server_only_deep/1)
+    |> List.to_tuple()
+  end
+
+  def strip_server_only_deep(term), do: term
 
   @doc false
   # sobelow_skip ["DOS.BinToAtom"]

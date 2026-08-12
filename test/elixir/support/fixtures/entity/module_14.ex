@@ -3,6 +3,7 @@ defmodule Hologram.Test.Fixtures.Entity.Module14 do
   use Hologram.Entity, user: true
 
   attribute :email, :string
+  attribute :password_hash, :string, optional: true, server_only: true
 
   allow :read, id: user_id()
 end

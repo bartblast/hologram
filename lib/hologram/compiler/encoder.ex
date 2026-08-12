@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.Encoder do
   alias Hologram.Compiler
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
+  alias Hologram.Entity
   alias Hologram.Reflection
 
   # See Hologram.Compiler.IR: a `%Context{}` default MapSet reads as concrete and won't unify
@@ -55,6 +56,30 @@ defmodule Hologram.Compiler.Encoder do
       end
 
     Enum.map_join(class_segments, "_", &:string.titlecase/1)
+  end
+
+  @doc """
+  Encodes an Elixir term bound for the client into JavaScript.
+  Returns {:ok, js}, or {:error, message} when the term can't be encoded into JavaScript.
+  Values of attributes declared server_only never reach the output - every entity struct in the term, at any nesting depth, has them replaced with the Hologram.Entity.ServerOnly sentinel first.
+  """
+  @spec encode_client_term(any) :: {:ok, String.t()} | {:error, String.t()}
+  def encode_client_term(term) do
+    {:ok, encode_client_term!(term)}
+  rescue
+    e in ArgumentError ->
+      {:error, e.message}
+  end
+
+  @doc """
+  Encodes an Elixir term bound for the client into JavaScript, erroring out if the term can't be encoded into JavaScript.
+  Values of attributes declared server_only never reach the output - every entity struct in the term, at any nesting depth, has them replaced with the Hologram.Entity.ServerOnly sentinel first.
+  """
+  @spec encode_client_term!(any) :: String.t()
+  def encode_client_term!(term) do
+    term
+    |> Entity.strip_server_only_deep()
+    |> encode_term!()
   end
 
   @doc """
