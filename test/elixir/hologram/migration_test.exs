@@ -10,11 +10,11 @@ defmodule Hologram.MigrationTest do
           add_attribute(:priority, :integer, backfill: 0)
           change_attribute(:estimate, type: :float)
           delete_attribute(:legacy)
-          question(:attributes_changed, deleted: [:name])
           rename_attribute(:name, :title)
+          resolve!(:attributes, deleted: [:name])
         end
 
-      assert [add_op, change_op, delete_op, question_op, rename_op] = result
+      assert [add_op, change_op, delete_op, rename_op, resolve_op] = result
 
       assert add_op == %{
                op: :add_attribute,
@@ -40,20 +40,20 @@ defmodule Hologram.MigrationTest do
                line: delete_op.line
              }
 
-      assert question_op == %{
-               op: :question,
-               entity: MyApp.Task,
-               kind: :attributes_changed,
-               payload: [deleted: [:name]],
-               line: question_op.line
-             }
-
       assert rename_op == %{
                op: :rename_attribute,
                entity: MyApp.Task,
                from: :name,
                to: :title,
                line: rename_op.line
+             }
+
+      assert resolve_op == %{
+               op: :resolve!,
+               entity: MyApp.Task,
+               kind: :attributes,
+               payload: [deleted: [:name]],
+               line: resolve_op.line
              }
 
       lines = Enum.map(result, & &1.line)
@@ -163,28 +163,6 @@ defmodule Hologram.MigrationTest do
     end
   end
 
-  describe "question/2" do
-    test "returns the op with the kind, an empty payload by default, and the call line" do
-      result = question(:rename_or_replace)
-
-      assert result == %{op: :question, kind: :rename_or_replace, payload: [], line: result.line}
-      assert is_integer(result.line)
-    end
-
-    test "returns the op with the kind, the given payload, and the call line" do
-      result = question(:attributes_changed, deleted: [:name], added: [:title])
-
-      assert result == %{
-               op: :question,
-               kind: :attributes_changed,
-               payload: [deleted: [:name], added: [:title]],
-               line: result.line
-             }
-
-      assert is_integer(result.line)
-    end
-  end
-
   describe "rename_entity/2" do
     test "returns the op with both entity type names and the call line" do
       result = rename_entity(MyApp.Draft, MyApp.Sketch)
@@ -193,6 +171,28 @@ defmodule Hologram.MigrationTest do
                op: :rename_entity,
                from: MyApp.Draft,
                to: MyApp.Sketch,
+               line: result.line
+             }
+
+      assert is_integer(result.line)
+    end
+  end
+
+  describe "resolve!/2" do
+    test "returns the op with the kind, an empty payload by default, and the call line" do
+      result = resolve!(:attributes)
+
+      assert result == %{op: :resolve!, kind: :attributes, payload: [], line: result.line}
+      assert is_integer(result.line)
+    end
+
+    test "returns the op with the kind, the given payload, and the call line" do
+      result = resolve!(:attributes, deleted: [:name], added: [:title])
+
+      assert result == %{
+               op: :resolve!,
+               kind: :attributes,
+               payload: [deleted: [:name], added: [:title]],
                line: result.line
              }
 

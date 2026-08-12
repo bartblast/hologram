@@ -18,9 +18,9 @@ defmodule Hologram.Migration do
           create_entity: 1,
           create_entity: 2,
           delete_entity: 1,
-          question: 1,
-          question: 2,
-          rename_entity: 2
+          rename_entity: 2,
+          resolve!: 1,
+          resolve!: 2
         ]
     end
   end
@@ -82,22 +82,6 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the placeholder op marking an unresolved draft question of the given kind,
-  with the detected facts as its payload.
-
-  A migration file containing a question op is a draft - verification, the check task,
-  and the applier all refuse it until the question line is replaced by the ops that
-  express what happened.
-  """
-  defmacro question(kind, payload \\ []) do
-    line = __CALLER__.line
-
-    quote do
-      %{op: :question, kind: unquote(kind), payload: unquote(payload), line: unquote(line)}
-    end
-  end
-
-  @doc """
   Returns the op recording that the first given entity type was renamed to the second,
   its table and every derived physical name following, existing data preserved.
   """
@@ -106,6 +90,22 @@ defmodule Hologram.Migration do
 
     quote do
       %{op: :rename_entity, from: unquote(old), to: unquote(new), line: unquote(line)}
+    end
+  end
+
+  @doc """
+  Returns the placeholder op demanding human resolution of the given kind of detected
+  change, with the detected facts as its payload.
+
+  A migration file containing a resolve! op is a draft - verification, the check task,
+  and the applier all refuse it until the line is replaced by the ops that express
+  what happened.
+  """
+  defmacro resolve!(kind, payload \\ []) do
+    line = __CALLER__.line
+
+    quote do
+      %{op: :resolve!, kind: unquote(kind), payload: unquote(payload), line: unquote(line)}
     end
   end
 
@@ -161,24 +161,6 @@ defmodule Hologram.Migration do
     end
   end
 
-  defp member_op({:question, meta, [kind]}, entity_type, caller) do
-    member_op({:question, meta, [kind, []]}, entity_type, caller)
-  end
-
-  defp member_op({:question, meta, [kind, payload]}, entity_type, caller) do
-    line = statement_line(meta, caller)
-
-    quote do
-      %{
-        op: :question,
-        entity: unquote(entity_type),
-        kind: unquote(kind),
-        payload: unquote(payload),
-        line: unquote(line)
-      }
-    end
-  end
-
   defp member_op({:rename_attribute, meta, [old, new]}, entity_type, caller) do
     line = statement_line(meta, caller)
 
@@ -188,6 +170,24 @@ defmodule Hologram.Migration do
         entity: unquote(entity_type),
         from: unquote(old),
         to: unquote(new),
+        line: unquote(line)
+      }
+    end
+  end
+
+  defp member_op({:resolve!, meta, [kind]}, entity_type, caller) do
+    member_op({:resolve!, meta, [kind, []]}, entity_type, caller)
+  end
+
+  defp member_op({:resolve!, meta, [kind, payload]}, entity_type, caller) do
+    line = statement_line(meta, caller)
+
+    quote do
+      %{
+        op: :resolve!,
+        entity: unquote(entity_type),
+        kind: unquote(kind),
+        payload: unquote(payload),
         line: unquote(line)
       }
     end
