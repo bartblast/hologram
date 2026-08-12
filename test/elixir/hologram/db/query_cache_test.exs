@@ -96,9 +96,9 @@ defmodule Hologram.DB.QueryCacheTest do
     stub(QueryCacheMock, :component_modules, fn -> [Module16] end)
 
     expected_msg =
-      "the registered query in Hologram.Test.Fixtures.Component.Module16 reads " <>
+      "the registered query in Hologram.Test.Fixtures.Component.Module16 includes " <>
         "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
-        "default deny returns no rows to any session. Add allow lines, or drop the query."
+        "default deny leaves the embed empty in every row. Add allow lines, or drop the include."
 
     assert_error Hologram.CompileError, expected_msg, fn ->
       init(nil)
