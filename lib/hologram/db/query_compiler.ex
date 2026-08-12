@@ -47,8 +47,9 @@ defmodule Hologram.DB.QueryCompiler do
   reused by every actor reference in the policy, so the caller binds the session's user once.
 
   Includes are policied too, at every nesting level: an include subquery ANDs the included
-  type's read policy, whatever operation the statement's own policy carries, keyed on the
-  include's alias rather than the target table name. A to-one embed the acting user cannot
+  type's :read policy - fixed at :read, since an include embeds rows regardless of the
+  operation the statement's own policy carries - keyed on the include's alias rather than
+  the target table name. A to-one embed the acting user cannot
   read is NULL, and rows they cannot read drop out of a to-many aggregate before its view
   bounds apply. Compiling without a policy leaves every level unfiltered - the trusted tier.
 
@@ -595,8 +596,8 @@ defmodule Hologram.DB.QueryCompiler do
     {Enum.join(fragments, ""), new_acc}
   end
 
-  # An include embeds rows of the target type, so every level composes that type's read policy -
-  # whatever operation the statement's own policy carries.
+  # An include embeds rows of the target type, so every level composes that type's :read policy,
+  # fixed at :read regardless of the operation the statement's own policy carries.
   defp include_policy(nil, _entity_type), do: nil
 
   defp include_policy(policy, entity_type) do
