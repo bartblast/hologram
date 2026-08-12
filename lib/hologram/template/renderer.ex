@@ -13,6 +13,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.DB
   alias Hologram.DB.QueryCache
   alias Hologram.DB.QueryRunner
+  alias Hologram.Entity
   alias Hologram.Entity.Validator
   alias Hologram.Query
   alias Hologram.Reflection
@@ -643,8 +644,13 @@ defmodule Hologram.Template.Renderer do
     )
   end
 
+  # The row is handed over already carrying the sentinel, so the server-rendered HTML and the
+  # client re-render agree on framework-delivered rows.
   defp put_user_context(page_component_struct) do
-    user = read_session_user(RoleGrant.user_entity(), Auth.user_id())
+    user =
+      RoleGrant.user_entity()
+      |> read_session_user(Auth.user_id())
+      |> Entity.strip_server_only_deep()
 
     Component.put_context(page_component_struct, {Hologram, :user}, user)
   end
@@ -759,7 +765,9 @@ defmodule Hologram.Template.Renderer do
       |> apply(args)
       |> Query.normalize()
 
-    QueryRunner.run_policied(term, DB.mapping(), Auth.user_id())
+    term
+    |> QueryRunner.run_policied(DB.mapping(), Auth.user_id())
+    |> Entity.strip_server_only_deep()
   end
 
   defp spread_entries(value)

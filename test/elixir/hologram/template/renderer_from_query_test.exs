@@ -12,9 +12,11 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.DB
   alias Hologram.DB.QueryCache
   alias Hologram.Entity
+  alias Hologram.Entity.ServerOnly
   alias Hologram.Server
   alias Hologram.Template.Renderer
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Template.Renderer.Module88
@@ -23,6 +25,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module91
   alias Hologram.Test.Fixtures.Template.Renderer.Module92
   alias Hologram.Test.Fixtures.Template.Renderer.Module93
+  alias Hologram.Test.Fixtures.Template.Renderer.Module95
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -34,7 +37,10 @@ defmodule Hologram.Template.RendererFromQueryTest do
   setup do
     setup_query_cache(QueryCacheStub, false)
 
-    stub(QueryCacheMock, :component_modules, fn -> [Module88, Module89, Module90, Module92] end)
+    stub(QueryCacheMock, :component_modules, fn ->
+      [Module88, Module89, Module90, Module92, Module95]
+    end)
+
     QueryCache.init(nil)
 
     :ok
@@ -94,6 +100,27 @@ defmodule Hologram.Template.RendererFromQueryTest do
     assert_error ArgumentError, expected_msg, fn ->
       render_dom(node, @env, @server)
     end
+  end
+
+  test "injects a from_query prop row with its server-only attributes already replaced by the sentinel" do
+    Module15
+    |> Entity.new(label: "Report", secret_note: "note_secret_v7", token: "tok_R4mQ")
+    |> create()
+
+    node = {:component, Module95, [], []}
+
+    {html, _component_registry, _server_struct} = render_dom(node, @env, @server)
+
+    assert String.contains?(html, "labels = Report")
+
+    assert String.contains?(
+             html,
+             "secret_note = %Hologram.Entity.ServerOnly{attribute: :secret_note}"
+           )
+
+    assert String.contains?(html, "token = %Hologram.Entity.ServerOnly{attribute: :token}")
+    refute String.contains?(html, "note_secret_v7")
+    refute String.contains?(html, "tok_R4mQ")
   end
 
   describe "policy filtering" do
@@ -167,6 +194,21 @@ defmodule Hologram.Template.RendererFromQueryTest do
         render_page(Module93, %{}, %Server{user_id: user.id}, @page_opts)
 
       assert String.contains?(html, "current user = renderer_2@example.com")
+    end
+
+    test "hands over the row with its server-only attributes already replaced by the sentinel" do
+      user =
+        Module14
+        |> Entity.new(email: "renderer_5@example.com", password_hash: "hash_9dTf")
+        |> DB.create()
+
+      {_html, component_registry, _server_struct} =
+        render_page(Module93, %{}, %Server{user_id: user.id}, @page_opts)
+
+      context_user = component_registry["page"].struct.emitted_context[{Hologram, :user}]
+
+      assert context_user.password_hash == %ServerOnly{attribute: :password_hash}
+      assert context_user.email == "renderer_5@example.com"
     end
 
     test "exposes nil for an anonymous session" do
