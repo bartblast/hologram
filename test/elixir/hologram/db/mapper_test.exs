@@ -3,6 +3,8 @@ defmodule Hologram.DB.MapperTest do
 
   import Hologram.DB.Mapper
 
+  alias Hologram.Entity.Model
+  alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
@@ -438,6 +440,30 @@ defmodule Hologram.DB.MapperTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         derive!([InlineEntityFixture16, InlineEntityFixture16B])
       end
+    end
+  end
+
+  describe "derive_from_model!/2" do
+    test "derives the same mapping as derive!/2" do
+      entity_types = Reflection.list_entities()
+      ordered_pairs = MapSet.new([{Module2, :c}])
+
+      assert derive_from_model!(Model.from_modules(entity_types), ordered_pairs) ==
+               derive!(entity_types, ordered_pairs)
+    end
+
+    test "derives without consulting any module" do
+      model = %{
+        Nonexistent.Ghost => %{
+          attributes: [{:name, :string, []}],
+          relationships: [],
+          roles: []
+        }
+      }
+
+      mapping = derive_from_model!(model)
+
+      assert mapping[Nonexistent.Ghost].table == "nonexistent_ghost"
     end
   end
 
