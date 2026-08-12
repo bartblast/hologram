@@ -170,6 +170,25 @@ defmodule Hologram.DB.DDLTest do
                  "ON DELETE RESTRICT"
              ]
     end
+
+    test "renders the no action delete action" do
+      op = %{
+        op: :add_foreign_key,
+        table: "hologram_role_grant",
+        column: "user_id",
+        references: "user",
+        on_delete: :no_action,
+        constraint: "hologram_role_grant_user_id_$fk"
+      }
+
+      assert statements(op) == [
+               ~s(ALTER TABLE "hologram_data"."hologram_role_grant" ) <>
+                 ~s(ADD CONSTRAINT "hologram_role_grant_user_id_$fk" ) <>
+                 ~s{FOREIGN KEY ("user_id") } <>
+                 ~s{REFERENCES "hologram_data"."user" ("id") } <>
+                 "ON DELETE NO ACTION"
+             ]
+    end
   end
 
   describe "statements/1 for alter_column" do
@@ -272,7 +291,9 @@ defmodule Hologram.DB.DDLTest do
         op: :create_index,
         table: "task",
         index: "task_project_id_$idx",
-        columns: ["project_id"]
+        columns: ["project_id"],
+        nulls_distinct: true,
+        unique: false
       }
 
       assert statements(op) == [
@@ -285,12 +306,31 @@ defmodule Hologram.DB.DDLTest do
         op: :create_index,
         table: "task_tags_$join",
         index: "task_tags_$join_target_id_$idx",
-        columns: ["target_id", "source_id"]
+        columns: ["target_id", "source_id"],
+        nulls_distinct: true,
+        unique: false
       }
 
       assert statements(op) == [
                ~s(CREATE INDEX "task_tags_$join_target_id_$idx" ) <>
                  ~s{ON "hologram_data"."task_tags_$join" ("target_id", "source_id")}
+             ]
+    end
+
+    test "renders unique indexes comparing nulls as values" do
+      op = %{
+        op: :create_index,
+        table: "hologram_role_grant",
+        index: "hologram_role_grant_$uidx",
+        columns: ["user_id", "resource_type", "resource_id", "role"],
+        nulls_distinct: false,
+        unique: true
+      }
+
+      assert statements(op) == [
+               ~s(CREATE UNIQUE INDEX "hologram_role_grant_$uidx" ) <>
+                 ~s{ON "hologram_data"."hologram_role_grant" } <>
+                 ~s{("user_id", "resource_type", "resource_id", "role") NULLS NOT DISTINCT}
              ]
     end
   end

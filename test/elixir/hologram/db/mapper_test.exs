@@ -137,12 +137,38 @@ defmodule Hologram.DB.MapperTest do
       assert column(Module2, "c").collation == "C"
     end
 
+    test "maps :uuid to uuid" do
+      defmodule InlineEntityFixture19 do
+        use Hologram.Entity
+
+        attribute :external_id, :uuid, optional: true
+      end
+
+      assert column(InlineEntityFixture19, "external_id") == %{
+               name: "external_id",
+               type: :uuid,
+               sql_type: "uuid",
+               collation: nil,
+               enum_values: nil,
+               default: nil,
+               null: true,
+               references: nil,
+               fk_constraint: nil,
+               fk_index: nil,
+               source: {:attribute, :external_id}
+             }
+    end
+
     test "derives nil collation for types that carry none" do
       assert column(Module2, "a").collation == nil
     end
 
     test "carries enum values as strings in declaration order" do
       assert column(Module4, "c").enum_values == ["x", "y"]
+    end
+
+    test "carries enum values that are modules without their Elixir prefix" do
+      assert "Hologram.Test.Fixtures.Role.Module1" in column(Hologram.Auth.RoleGrant, "role").enum_values
     end
 
     test "carries the declared default value" do
@@ -265,6 +291,23 @@ defmodule Hologram.DB.MapperTest do
   end
 
   describe "derive!/2" do
+    test "derives the role grant unique index comparing nulls as values" do
+      mapping =
+        derive!([
+          Hologram.Auth.RoleGrant,
+          Hologram.Test.Fixtures.Entity.Module14,
+          Module1
+        ])
+
+      assert mapping[Hologram.Auth.RoleGrant].indexes == %{
+               "hologram_role_grant_$uidx" => %{
+                 columns: ["user_id", "resource_type", "resource_id", "role"],
+                 nulls_distinct: false,
+                 unique: true
+               }
+             }
+    end
+
     test "carries sort-key companions for the given ordered pairs" do
       mapping = derive!([Module2], MapSet.new([{Module2, :c}]))
 
@@ -277,12 +320,14 @@ defmodule Hologram.DB.MapperTest do
                  table: table_name(Module1),
                  pk_constraint: "test_fixtures_entity_module1_$pk",
                  columns: columns(Module1),
+                 indexes: %{},
                  join_tables: join_tables(Module1)
                },
                Module3 => %{
                  table: table_name(Module3),
                  pk_constraint: "test_fixtures_entity_module3_$pk",
                  columns: columns(Module3),
+                 indexes: %{},
                  join_tables: join_tables(Module3)
                }
              }
@@ -459,6 +504,10 @@ defmodule Hologram.DB.MapperTest do
 
   # The primary OTP app root in this test suite is Hologram (Reflection.otp_app() == :hologram).
   describe "table_name/1" do
+    test "pins the role grant table to its full path" do
+      assert table_name(Hologram.Auth.RoleGrant) == "hologram_role_grant"
+    end
+
     test "snake cases the module path with the primary app root stripped" do
       assert table_name(Hologram.Blog.Post) == "blog_post"
     end

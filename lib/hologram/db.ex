@@ -9,6 +9,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryRunner
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.Entity.Validator
   alias Hologram.Query
   alias Hologram.Reflection
 
@@ -36,7 +37,11 @@ defmodule Hologram.DB do
   raising one ArgumentError that lists every violation.
   """
   @spec create(struct) :: struct
-  defdelegate create(entity), to: EntityOperations
+  def create(entity) do
+    Validator.validate_writable!(entity.__struct__)
+
+    EntityOperations.create(entity)
+  end
 
   @doc """
   Deletes the entity of the given type with the given id together with its own outgoing
@@ -47,7 +52,11 @@ defmodule Hologram.DB do
   raises. Deleting a nonexistent id is a no-op. Returns :ok.
   """
   @spec delete(module, String.t()) :: :ok | {:error, {:restricted, map}}
-  defdelegate delete(entity_type, id), to: EntityOperations
+  def delete(entity_type, id) do
+    Validator.validate_writable!(entity_type)
+
+    EntityOperations.delete(entity_type, id)
+  end
 
   @doc """
   Deletes the (source, target) edge from the given to-many relationship of the entity
@@ -128,7 +137,11 @@ defmodule Hologram.DB do
   options - raising one ArgumentError that lists every violation.
   """
   @spec update(module, String.t(), map | keyword) :: :ok
-  defdelegate update(entity_type, id, changes), to: EntityOperations
+  def update(entity_type, id, changes) do
+    Validator.validate_writable!(entity_type)
+
+    EntityOperations.update(entity_type, id, changes)
+  end
 
   @doc false
   @spec update(struct) :: no_return

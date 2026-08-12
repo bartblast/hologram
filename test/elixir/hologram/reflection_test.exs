@@ -10,6 +10,7 @@ defmodule Hologram.ReflectionTest do
   alias Hologram.Test.Fixtures.Reflection.Module7
   alias Hologram.Test.Fixtures.Reflection.Module8
   alias Hologram.Test.Fixtures.Reflection.Module9
+  alias Hologram.Test.Fixtures.Role
 
   # Reproduces the way some Erlang libraries (e.g. luerl) name their modules with an
   # "Elixir." prefix for interop. Such modules are compiled by the Erlang compiler, so
@@ -47,6 +48,20 @@ defmodule Hologram.ReflectionTest do
        applications: [:hologram],
        description: ~c"fixture",
        modules: [],
+       registered: [],
+       vsn: ~c"0.0.0"}
+
+    :ok = :application.load(spec)
+
+    on_exit(fn -> :application.unload(app) end)
+  end
+
+  defp load_app_with_modules(app, modules) do
+    spec =
+      {:application, app,
+       applications: [],
+       description: ~c"fixture",
+       modules: modules,
        registered: [],
        vsn: ~c"0.0.0"}
 
@@ -463,14 +478,36 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "list_entities/0" do
-    result = list_entities()
+  describe "list_entities/0" do
+    test "lists the entity types of the project" do
+      result = list_entities()
 
-    assert Entity.Module1 in result
-    assert Entity.Module3 in result
+      assert Entity.Module1 in result
+      assert Entity.Module3 in result
 
-    refute Hologram.Compiler.Context in result
-    refute Module2 in result
+      refute Hologram.Compiler.Context in result
+      refute Module2 in result
+    end
+
+    test "includes the role grant store, since the project designates a user entity type" do
+      assert Hologram.Auth.RoleGrant in list_entities()
+    end
+  end
+
+  describe "list_entities/1" do
+    test "includes the role grant store when an entity type is designated as the user entity" do
+      app = :hologram_reflection_designated_user_fixture_app
+      load_app_with_modules(app, [Entity.Module1, Entity.Module14, Hologram.Auth.RoleGrant])
+
+      assert list_entities([app]) == [Entity.Module1, Entity.Module14, Hologram.Auth.RoleGrant]
+    end
+
+    test "excludes the role grant store when no entity type is designated as the user entity" do
+      app = :hologram_reflection_undesignated_user_fixture_app
+      load_app_with_modules(app, [Entity.Module1, Entity.Module3, Hologram.Auth.RoleGrant])
+
+      assert list_entities([app]) == [Entity.Module1, Entity.Module3]
+    end
   end
 
   test "list_loaded_otp_apps/0" do
@@ -500,6 +537,16 @@ defmodule Hologram.ReflectionTest do
 
     assert String.Chars.Atom in result
     assert String.Chars.Hologram.Test.Fixtures.Reflection.Module5 in result
+  end
+
+  test "list_roles/0" do
+    result = list_roles()
+
+    assert Role.Module1 in result
+    assert Role.Module2 in result
+
+    refute Entity.Module1 in result
+    refute Hologram.Reflection in result
   end
 
   test "list_std_lib_elixir_modules/0" do
@@ -779,6 +826,20 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "role?" do
+    test "is a global role module" do
+      assert role?(Role.Module1)
+    end
+
+    test "is not a module" do
+      refute role?(123)
+    end
+
+    test "is not a global role module" do
+      refute role?(Entity.Module1)
+    end
+  end
+
   test "source_path/1" do
     assert source_path(__MODULE__) == __ENV__.file
   end
@@ -821,6 +882,24 @@ defmodule Hologram.ReflectionTest do
         end)
 
       assert result == true
+    end
+  end
+
+  test "user_entity/0" do
+    assert user_entity() == Entity.Module14
+  end
+
+  describe "user_entity?/1" do
+    test "entity type designated as the user entity type" do
+      assert user_entity?(Entity.Module14)
+    end
+
+    test "entity type not designated as the user entity type" do
+      refute user_entity?(Entity.Module1)
+    end
+
+    test "module that is not an entity type" do
+      refute user_entity?(Hologram.Reflection)
     end
   end
 end

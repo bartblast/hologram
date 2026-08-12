@@ -93,6 +93,7 @@ defmodule Hologram.Component do
 
         use Hologram.Middleware.Builder
 
+        import Hologram.Auth, only: [can?: 3]
         import Hologram.Component, only: unquote([prop: 2, prop: 3] ++ __helper_imports__())
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())

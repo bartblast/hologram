@@ -3,6 +3,7 @@ defmodule Hologram.Controller do
 
   require Logger
 
+  alias Hologram.Auth.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Page
@@ -190,7 +191,13 @@ defmodule Hologram.Controller do
         subscriptions: target_subscriptions
     }
 
-    middleware_server_struct = Middleware.run(server_struct, module.__middleware__())
+    # Middleware acts on behalf of the session for the same reason the command below does, so it
+    # runs under the same actor - the user the request ARRIVED with, since a step that changes
+    # identity changes it for the work after it rather than for its own execution.
+    middleware_server_struct =
+      Context.with_actor(server_struct.user_id, fn ->
+        Middleware.run(server_struct, module.__middleware__())
+      end)
 
     if middleware_server_struct.status do
       # Middleware produced a terminal response - skip the command and send it,
@@ -204,7 +211,14 @@ defmodule Hologram.Controller do
       |> send_response(middleware_server_struct)
       |> Plug.Conn.halt()
     else
-      command_result = module.command(name, params, middleware_server_struct)
+      # The handler reads the session user from its server struct - the actor context is set
+      # for the framework's sake, so that writes made during the command carry the acting user
+      # into machinery whose signatures cannot: creator role grants, grant gating, the guard
+      # against removing a resource's last manager.
+      command_result =
+        Context.with_actor(middleware_server_struct.user_id, fn ->
+          module.command(name, params, middleware_server_struct)
+        end)
 
       {processed_server_struct, next_action} =
         process_command_result(command_result, middleware_server_struct, target)
@@ -308,7 +322,9 @@ defmodule Hologram.Controller do
     }
 
     middleware_server_struct =
-      Middleware.run(server_struct, page_module.__middleware__())
+      Context.with_actor(server_struct.user_id, fn ->
+        Middleware.run(server_struct, page_module.__middleware__())
+      end)
 
     if middleware_server_struct.status do
       # Middleware produced a terminal response - skip the render and send it,

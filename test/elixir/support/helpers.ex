@@ -13,6 +13,9 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Component
+  alias Hologram.DB.Codec
+  alias Hologram.DB.Connection
+  alias Hologram.Entity
   alias Hologram.Realtime
   alias Hologram.Server
   alias Hologram.Template.Parser
@@ -120,6 +123,28 @@ defmodule Hologram.Test.Helpers do
     # Can't use: table_name |> :ets.whereis() |> is_reference()
     # because Dialyzer will warn about breaking the opacity of the term.
     :ets.whereis(table_name) != :undefined
+  end
+
+  @doc """
+  Writes a global role grant row directly, for tests needing a grant the public surface does not create.
+  """
+  @spec insert_global_grant(String.t(), atom) :: :ok
+  def insert_global_grant(user_id, role) do
+    insert_sql =
+      ~s|INSERT INTO "hologram_data"."hologram_role_grant" | <>
+        ~s|("id", "user_id", "role", "created_at", "updated_at") | <>
+        ~s|VALUES ($1, $2, $3::"hologram_data"."hologram_role_grant_role_$enum", $4, $4)|
+
+    params = [
+      Codec.encode(Entity.generate_id(), :uuid),
+      Codec.encode(user_id, :uuid),
+      Codec.encode(role, :enum),
+      DateTime.utc_now()
+    ]
+
+    {:ok, _result} = Connection.query(insert_sql, params)
+
+    :ok
   end
 
   @doc """

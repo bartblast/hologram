@@ -196,18 +196,6 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Returns the `user_id` recorded for the currently-attached SSE process.
-
-  Assumes exactly one SSE process is currently registered. Useful for gating on
-  a handler-driven identity change having propagated to the connection.
-  """
-  @spec current_user_id() :: term
-  def current_user_id do
-    [{_instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
-    entry.user_id
-  end
-
-  @doc """
   Executes a query for refute_has with optimized retry behavior.
 
   - Returns immediately if element is NOT found (fast path for refute_has)
@@ -486,17 +474,21 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Blocks until the currently-attached SSE process records `user_id`, then
+  Blocks until the SSE process of the given session's tab records `user_id`, then
   returns the `session`. Gates on a handler-driven identity change (login or
   logout) having propagated to the connection before its effects are asserted -
   e.g. before broadcasting to check whether a binding was kept or dropped.
   Raises if the value does not appear within `@max_wait_time`.
+
+  The connection is looked up by the tab's own instance id rather than by being
+  the only registered one: a sibling tab of the same session may still be
+  deregistering while this tab's identity has already moved.
   """
   def wait_for_user_id(session, user_id, start_time \\ nil) do
     start_time = start_time || current_time()
 
     cond do
-      current_user_id() == user_id ->
+      connection_user_id(session) == user_id ->
         session
 
       timed_out?(start_time) ->
@@ -514,6 +506,15 @@ defmodule HologramFeatureTests.Helpers do
       {:all, _count} -> {:ok, elements}
       {n, count} when n < count -> {:ok, [Enum.at(elements, n)]}
       {_n, _count} -> {:error, {:not_found, elements}}
+    end
+  end
+
+  defp connection_user_id(session) do
+    instance_id = script_result(session, "return globalThis.Hologram.instanceId;")
+
+    case :ets.lookup(SubscriptionRegistry.ets_table_name(), instance_id) do
+      [{^instance_id, entry}] -> entry.user_id
+      [] -> :no_connection
     end
   end
 

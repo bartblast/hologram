@@ -20,12 +20,15 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   require Logger
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.DB.Mapper
-  alias Hologram.Entity.Validator
+  alias Hologram.Entity.Validator, as: EntityValidator
+  alias Hologram.Policy
+  alias Hologram.Policy.Validator, as: PolicyValidator
   alias Hologram.Reflection
 
   @ls_build_dirs [".elixir_ls", ".elixir-tools", ".expert", ".lexical"]
@@ -296,9 +299,13 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp validate_data_model! do
+    RoleGrant.reset_resolution_cache()
+    Policy.reset_model_facts_cache()
+
     entity_types = Reflection.list_entities()
 
-    Validator.validate_model!(entity_types)
+    EntityValidator.validate_model!(entity_types)
+    PolicyValidator.validate_model!(entity_types)
 
     # The mapping value is discarded - only the fail-fast derivation checks matter here.
     Mapper.derive!(entity_types)

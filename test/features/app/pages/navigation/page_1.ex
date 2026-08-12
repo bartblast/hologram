@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.Navigation.Page1 do
   import Kernel, except: [inspect: 1]
 
   alias Hologram.UI.Link
+  alias HologramFeatureTests.Navigation.Page1
   alias HologramFeatureTests.Navigation.Page2
   alias HologramFeatureTests.Navigation.Page3
 
@@ -22,6 +23,8 @@ defmodule HologramFeatureTests.Navigation.Page1 do
     <button $click="put_result_a">Put page 1 result A</button>
     <button $click="put_result_b">Put page 1 result B</button>
     <button $click="change_page">Change page</button>
+    <button $click="put_current_page">Put current page</button>
+    <Link to={Page1}>Page 1 link</Link>
     <Link to={Page2}>Page 2 link</Link>
     <Link to={Page3, s: "abc", i: 123}>Page 3 link</Link>
     <a href="/external">External link</a>    
@@ -33,6 +36,10 @@ defmodule HologramFeatureTests.Navigation.Page1 do
 
   def action(:change_page, _params, component) do
     put_page(component, Page2)
+  end
+
+  def action(:put_current_page, _params, component) do
+    put_page(component, Page1)
   end
 
   def action(:put_result_a, _params, component) do

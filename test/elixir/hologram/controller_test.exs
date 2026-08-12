@@ -38,6 +38,8 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module27
   alias Hologram.Test.Fixtures.Controller.Module28
   alias Hologram.Test.Fixtures.Controller.Module3
+  alias Hologram.Test.Fixtures.Controller.Module30
+  alias Hologram.Test.Fixtures.Controller.Module31
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
@@ -591,6 +593,30 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] =~ "injected_by_middleware"
+    end
+
+    test "runs middleware as the session user" do
+      session = Map.put(@session, :hologram_user_id, "019ff5c2-0000-7000-8000-000000000001")
+
+      parsed_json =
+        %{
+          module: Module30,
+          name: :my_command_reporting_middleware_actor,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response["action"] =~ "019ff5c2-0000-7000-8000-000000000001"
     end
 
     test "establishes a Hologram session ID when absent" do
@@ -1740,6 +1766,25 @@ defmodule Hologram.ControllerTest do
       conn = render_page_with_instance(Module26, "test-instance-id")
 
       assert String.contains?(conn.resp_body, "marker=injected_by_middleware")
+    end
+
+    test "runs page middleware as the session user" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module31, :dummy_module_31_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{
+          hologram_user_id: "019ff5c2-0000-7000-8000-000000000002"
+        })
+        |> Plug.Conn.fetch_cookies()
+        |> handle_page_request(Module31, %{}, [],
+          initial_page?: true,
+          instance_id: "test-instance-id",
+          csrf_token: @masked_csrf_token
+        )
+
+      assert String.contains?(conn.resp_body, "actor=019ff5c2-0000-7000-8000-000000000002")
     end
 
     test "drives SubscriptionRegistry.transition with the page's accumulated subscriptions" do

@@ -2,13 +2,19 @@ defmodule Hologram.Entity.Validator do
   @moduledoc false
 
   alias Hologram.Commons.Types, as: T
+  alias Hologram.DB.Codec
   alias Hologram.Reflection
 
   @bounded_attribute_types [:date, :datetime, :float, :integer]
 
+  # Postgres enum label limit
+  @max_enum_label_bytes 63
+
   # Postgres int8 column bounds
   @max_integer 9_223_372_036_854_775_807
   @min_integer -9_223_372_036_854_775_808
+
+  @policy_option_names [:to, :via]
 
   @reserved_names [:created_at, :id, :updated_at]
 
@@ -25,9 +31,15 @@ defmodule Hologram.Entity.Validator do
     :values
   ]
 
-  @valid_attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string]
+  @valid_attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string, :uuid]
 
   @valid_relationship_opts [:optional]
+
+  @valid_role_opts [:creator, :extends]
+
+  @valid_use_opts [:user]
+
+  @valid_use_role_opts [:extends]
 
   @doc """
   Returns true if the given value is a valid value for the given attribute type and declaration options, or false otherwise.
@@ -111,6 +123,28 @@ defmodule Hologram.Entity.Validator do
       [] -> :ok
       errors -> {:error, errors}
     end
+  end
+
+  @doc """
+  Validates the given policy declaration at compile time.
+
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (operation, spec shape).
+  Predicates and the to and via options are validated separately, at the whole-model point - they reference attributes, roles and relationships of entity types that may not be compiled yet.
+  """
+  @spec validate_allow!(module, atom, T.opts()) :: :ok
+  def validate_allow!(module, operation, spec) do
+    if not is_atom(operation) do
+      raise Hologram.CompileError,
+        message:
+          "invalid operation #{inspect(operation)} used for allow in #{inspect(module)} - policy operations must be atoms"
+    end
+
+    validate_opts_shape!(module, "allow", operation, spec)
+
+    Enum.each(@policy_option_names, &validate_policy_option_value!(module, operation, spec, &1))
+    validate_to_opt_shape!(module, operation, spec)
+
+    :ok
   end
 
   @doc """
@@ -209,6 +243,100 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
+  @doc """
+  Validates the given role declaration at compile time.
+
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (name, option keys, creator and scope options).
+  The extends option is checked separately, because its targets may be declared further down the module body.
+  """
+  @spec validate_role!(module, atom, T.opts()) :: :ok
+  def validate_role!(module, name, opts) do
+    validate_role_name!(module, name)
+    validate_role_opts!(module, name, opts)
+    :ok
+  end
+
+  @doc """
+  Validates the role declarations of the given module as a whole, after its body has executed.
+
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (extends option shape, extends targets, extension cycles).
+  Role extension is checked here rather than per declaration, so that a role can extend one declared further down the module body.
+  """
+  @spec validate_roles!(module) :: :ok
+  def validate_roles!(module) do
+    roles =
+      module
+      |> Module.get_attribute(:__roles__)
+      |> Enum.sort()
+
+    declared_names = Enum.map(roles, fn {name, _opts} -> name end)
+
+    Enum.each(roles, fn {name, opts} ->
+      validate_extends_opt!(module, name, opts, declared_names)
+    end)
+
+    validate_role_extension_cycles!(module, roles)
+
+    :ok
+  end
+
+  @doc """
+  Validates that entities of the given type are written through the general write surface.
+
+  Returns :ok, or raises ArgumentError for entity types the framework writes itself.
+  """
+  @spec validate_writable!(module) :: :ok
+  def validate_writable!(Hologram.Auth.RoleGrant) do
+    raise ArgumentError, "role grants are written only through grant_role/revoke_role"
+  end
+
+  def validate_writable!(_entity_type), do: :ok
+
+  @doc """
+  Validates the options given to the use Hologram.Entity directive at compile time.
+
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys, user option).
+  """
+  @spec validate_use_opts!(module, T.opts()) :: :ok
+  def validate_use_opts!(module, opts) do
+    if not Keyword.keyword?(opts) do
+      raise Hologram.CompileError,
+        message:
+          "invalid options #{inspect(opts)} for use Hologram.Entity in #{inspect(module)} - options must be a keyword list"
+    end
+
+    validate_use_opt_keys!(module, opts)
+    validate_user_opt!(module, opts)
+
+    :ok
+  end
+
+  @doc """
+  Validates the options given to the use Hologram.Role directive at compile time.
+
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys).
+  """
+  @spec validate_use_role_opts!(module, T.opts()) :: :ok
+  def validate_use_role_opts!(module, opts) do
+    if not Keyword.keyword?(opts) do
+      raise Hologram.CompileError,
+        message:
+          "invalid options #{inspect(opts)} for use Hologram.Role in #{inspect(module)} - options must be a keyword list"
+    end
+
+    Enum.each(opts, fn {key, _value} ->
+      if key not in @valid_use_role_opts do
+        valid_opts = Enum.map_join(@valid_use_role_opts, ", ", &inspect/1)
+
+        raise Hologram.CompileError,
+          message:
+            "unknown option #{inspect(key)} for use Hologram.Role in #{inspect(module)} - valid options are: #{valid_opts}"
+      end
+    end)
+
+    :ok
+  end
+
   defp attribute_data_errors(data, {name, type, opts}) do
     optional? = Keyword.get(opts, :optional) == true
 
@@ -256,6 +384,19 @@ defmodule Hologram.Entity.Validator do
 
   defp bounds_ordered?(min, max, _type), do: min <= max
 
+  # Rotates the cycle to start at its alphabetically first role, so that the same cycle
+  # is always reported with the same hop order regardless of where the traversal entered it.
+  defp canonicalize_role_cycle(cycle) do
+    start_index =
+      cycle
+      |> Enum.with_index()
+      |> Enum.min_by(fn {name, _index} -> name end)
+      |> elem(1)
+
+    {hops_before_start, hops_from_start} = Enum.split(cycle, start_index)
+    hops_from_start ++ hops_before_start
+  end
+
   defp change_errors(name, nil, _type, opts) do
     if Keyword.get(opts, :optional) == true, do: [], else: [{name, :required}]
   end
@@ -287,6 +428,53 @@ defmodule Hologram.Entity.Validator do
       end)
 
     attribute_fields ++ relationship_fields
+  end
+
+  defp describe_role_cycle([first_name | _later_hops] = cycle) do
+    hops = Enum.map_join(cycle, " -> ", &inspect/1)
+
+    "  * #{hops} -> #{inspect(first_name)}"
+  end
+
+  defp extends_value_valid?(value) when is_atom(value) and not is_nil(value), do: true
+
+  defp extends_value_valid?([_first_target | _later_targets] = value),
+    do: Enum.all?(value, &is_atom/1)
+
+  defp extends_value_valid?(_value), do: false
+
+  # Depth-first traversal over role extension edges. The path holds the roles visited on the way
+  # to the current one (most recent first) - reaching a role already on the path closes a cycle.
+  # Fully explored roles are marked visited and never re-entered, so each cycle is reported once.
+  defp find_role_extension_cycles(name, path, edges, {cycles, visited}) do
+    if MapSet.member?(visited, name) do
+      {cycles, visited}
+    else
+      {cycles, visited} =
+        edges
+        |> Map.get(name, [])
+        |> Enum.reduce({cycles, visited}, fn target, acc ->
+          follow_role_extension_edge(name, target, path, edges, acc)
+        end)
+
+      {cycles, MapSet.put(visited, name)}
+    end
+  end
+
+  # Closes a cycle when the target is already on the path, descends into the target otherwise.
+  defp follow_role_extension_edge(name, target, path, edges, {cycles, visited}) do
+    new_path = [name | path]
+
+    if target in new_path do
+      {hops_beyond_target, [target_hop | _earlier_hops]} =
+        Enum.split_while(new_path, &(&1 != target))
+
+      cycle = [target_hop | Enum.reverse(hops_beyond_target)]
+
+      {[cycle | cycles], visited}
+    else
+      find_role_extension_cycles(target, new_path, edges, {cycles, visited})
+    end
   end
 
   defp format_errors(name, value, opts) do
@@ -400,6 +588,10 @@ defmodule Hologram.Entity.Validator do
 
   defp requirement_description({:format, format}), do: "must match #{inspect(format)}"
 
+  defp role_extension_edges(roles) do
+    Map.new(roles, fn {name, opts} -> {name, List.wrap(Keyword.get(opts, :extends, []))} end)
+  end
+
   defp validate_attribute_bounds!(module, name, type, opts) do
     Enum.each([:min, :max], &validate_bound_opt!(module, name, type, opts, &1))
     validate_bounds_order!(module, name, type, opts)
@@ -462,6 +654,7 @@ defmodule Hologram.Entity.Validator do
 
   defp validate_attribute_name!(module, name) do
     validate_declaration_name!(module, "attribute", name)
+    validate_policy_option_name!(module, name)
   end
 
   defp validate_attribute_opts!(module, name, opts) do
@@ -532,12 +725,20 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
-  defp validate_declaration_name!(module, kind, name) do
-    if not is_atom(name) do
-      raise Hologram.CompileError,
-        message:
-          "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - declaration names must be atoms"
+  defp validate_creator_opt!(module, name, opts) do
+    case Keyword.fetch(opts, :creator) do
+      {:ok, value} when value != true ->
+        raise Hologram.CompileError,
+          message:
+            "invalid creator option #{inspect(value)} for role #{inspect(name)} in #{inspect(module)} - the creator option must be true"
+
+      _fetch_result ->
+        :ok
     end
+  end
+
+  defp validate_declaration_name!(module, kind, name) do
+    validate_name_type!(module, kind, name)
 
     if name in @reserved_names do
       reserved_names = Enum.map_join(@reserved_names, ", ", &inspect/1)
@@ -582,6 +783,31 @@ defmodule Hologram.Entity.Validator do
     validate_default_constraints!(module, name, type, opts, value)
   end
 
+  # Postgres caps enum labels at 63 bytes and silently truncates longer ones - a truncated
+  # label would no longer decode back to the value it was stored for.
+  defp validate_enum_label_length!(module, kind, value) do
+    label = Codec.encode(value, :enum)
+    label_size = byte_size(label)
+
+    if label_size > @max_enum_label_bytes do
+      raise Hologram.CompileError,
+        message:
+          "#{kind} #{inspect(value)} in #{inspect(module)} is too long to store (#{label_size} bytes, limit #{@max_enum_label_bytes}) - shorten it"
+    end
+  end
+
+  # Stored enum labels distinguish modules from plain atoms by their first character, so a
+  # plain atom starting uppercase would decode back as a module.
+  defp validate_lowercase_atom!(module, kind, value) do
+    label = Codec.encode(value, :enum)
+
+    if not Reflection.alias?(value) and not String.match?(label, ~r/^[a-z_]/) do
+      raise Hologram.CompileError,
+        message:
+          "invalid #{kind} #{inspect(value)} in #{inspect(module)} - #{kind}s that are not modules must begin with a lowercase letter or an underscore"
+    end
+  end
+
   defp validate_enum_values!(module, name, values) do
     valid =
       is_list(values) and values != [] and
@@ -592,6 +818,39 @@ defmodule Hologram.Entity.Validator do
       raise Hologram.CompileError,
         message:
           "invalid values option #{inspect(values)} for enum attribute #{inspect(name)} in #{inspect(module)} - the values option must be a non-empty list of unique non-nil atoms"
+    end
+
+    Enum.each(values, fn value ->
+      validate_lowercase_atom!(module, "enum value", value)
+      validate_enum_label_length!(module, "enum value", value)
+    end)
+  end
+
+  defp validate_extends_opt!(module, name, opts, declared_names) do
+    case Keyword.fetch(opts, :extends) do
+      {:ok, value} ->
+        if not extends_value_valid?(value) do
+          raise Hologram.CompileError,
+            message:
+              "invalid extends option #{inspect(value)} for role #{inspect(name)} in #{inspect(module)} - the extends option must be a role name or a non-empty list of role names"
+        end
+
+        value
+        |> List.wrap()
+        |> Enum.each(&validate_extends_target!(module, name, &1, declared_names))
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp validate_extends_target!(module, name, target, declared_names) do
+    if target not in declared_names do
+      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "unknown role #{inspect(target)} in the extends option of role #{inspect(name)} in #{inspect(module)} - declared roles are: #{declared_roles}"
     end
   end
 
@@ -695,6 +954,14 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
+  defp validate_name_type!(module, kind, name) do
+    if not is_atom(name) do
+      raise Hologram.CompileError,
+        message:
+          "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - declaration names must be atoms"
+    end
+  end
+
   defp validate_name_uniqueness!(module, kind, name) do
     declarations =
       Module.get_attribute(module, :__attributes__) ++
@@ -729,6 +996,59 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  # On an allow line every key that is not an option is a predicate naming an attribute, so an
+  # attribute named after an option could never be reached in predicate position.
+  defp validate_policy_option_name!(module, name) do
+    if name in @policy_option_names do
+      policy_option_names = Enum.map_join(@policy_option_names, " and ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "reserved name #{inspect(name)} used for attribute in #{inspect(module)} - #{policy_option_names} are allow line options and can't be attribute names"
+    end
+  end
+
+  # An option written as nil is indistinguishable from an absent one once the declaration is
+  # stored, and both compile to a rule granting through no reference at all - which is what a
+  # bare allow line means, so the mistake would silently widen the rule.
+  defp validate_policy_option_value!(module, operation, spec, key) do
+    if Keyword.has_key?(spec, key) and is_nil(Keyword.fetch!(spec, key)) do
+      raise Hologram.CompileError,
+        message:
+          "invalid #{key} option nil for allow #{inspect(operation)} in #{inspect(module)} - omit the option instead"
+    end
+
+    :ok
+  end
+
+  # The shape is structural, so it is checked where it is written - the references themselves
+  # are checked at the whole-model point, against reflection that does not exist yet here.
+  defp validate_to_opt_shape!(module, operation, spec) do
+    case Keyword.fetch(spec, :to) do
+      {:ok, to} ->
+        if not to_value_valid?(to) do
+          raise Hologram.CompileError,
+            message:
+              "invalid to option #{inspect(to)} for allow #{inspect(operation)} in #{inspect(module)} - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+        end
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp to_reference_valid?(value) when is_atom(value), do: true
+
+  defp to_reference_valid?({reference, role_name}) when is_atom(reference) and is_atom(role_name),
+    do: true
+
+  defp to_reference_valid?(_value), do: false
+
+  defp to_value_valid?([_first_reference | _later_references] = value),
+    do: Enum.all?(value, &to_reference_valid?/1)
+
+  defp to_value_valid?(value), do: to_reference_valid?(value)
+
   defp validate_relationship_name!(module, name) do
     validate_declaration_name!(module, "relationship", name)
   end
@@ -744,6 +1064,77 @@ defmodule Hologram.Entity.Validator do
       raise Hologram.CompileError,
         message:
           "invalid type #{inspect(type)} for relationship #{inspect(name)} in #{inspect(module)} - the relationship type must be an entity type module (to-one) or a one-element list wrapping an entity type module (to-many)"
+    end
+  end
+
+  defp validate_role_extension_cycles!(module, roles) do
+    edges = role_extension_edges(roles)
+
+    {cycles, _visited} =
+      edges
+      |> Map.keys()
+      |> Enum.reduce({[], MapSet.new()}, fn name, acc ->
+        find_role_extension_cycles(name, [], edges, acc)
+      end)
+
+    if cycles != [] do
+      descriptions =
+        cycles
+        |> Enum.map(&canonicalize_role_cycle/1)
+        |> Enum.uniq()
+        |> Enum.sort()
+        |> Enum.map_join("\n", &describe_role_cycle/1)
+
+      raise Hologram.CompileError,
+        message:
+          "cyclic role extension in #{inspect(module)} - a role can't extend itself, directly or transitively:\n#{descriptions}"
+    end
+  end
+
+  defp validate_role_name!(module, name) do
+    validate_name_type!(module, "role", name)
+    validate_lowercase_atom!(module, "role name", name)
+    validate_enum_label_length!(module, "role name", name)
+  end
+
+  defp validate_role_opts!(module, name, opts) do
+    validate_opts_shape!(module, "role", name, opts)
+    validate_scope_opt_removed!(module, name, opts)
+    validate_known_opts!(module, "role", name, opts, @valid_role_opts)
+    validate_creator_opt!(module, name, opts)
+  end
+
+  defp validate_scope_opt_removed!(module, name, opts) do
+    if Keyword.has_key?(opts, :scope) do
+      raise Hologram.CompileError,
+        message:
+          "scope option for role #{inspect(name)} in #{inspect(module)} - the scope option was removed, define global roles as modules with use Hologram.Role"
+    end
+
+    :ok
+  end
+
+  defp validate_use_opt_keys!(module, opts) do
+    Enum.each(opts, fn {key, _value} ->
+      if key not in @valid_use_opts do
+        valid_opts = Enum.map_join(@valid_use_opts, ", ", &inspect/1)
+
+        raise Hologram.CompileError,
+          message:
+            "unknown option #{inspect(key)} for use Hologram.Entity in #{inspect(module)} - valid options are: #{valid_opts}"
+      end
+    end)
+  end
+
+  defp validate_user_opt!(module, opts) do
+    case Keyword.fetch(opts, :user) do
+      {:ok, value} when value != true ->
+        raise Hologram.CompileError,
+          message:
+            "invalid user option #{inspect(value)} for use Hologram.Entity in #{inspect(module)} - the user option must be true"
+
+      _fetch_result ->
+        :ok
     end
   end
 

@@ -2,11 +2,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
   use Hologram.Test.BasicCase, async: false
   import Mix.Tasks.Compile.Hologram
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Policy
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
@@ -68,6 +70,19 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   def handle_compiler_telemetry([:hologram, :compiler, :stop], _measurements, _metadata, tracker) do
     Agent.update(tracker, fn state -> %{state | current: state.current - 1} end)
+  end
+
+  # Registering a fake app changes the data model for as long as it is loaded, and the compile
+  # task's validation caches what it resolves against that model - so the caches go with the app.
+  # Unloading alone leaves every later test reading a grant store resolved against the fixture.
+  defp load_entity_fixture_app(app, modules) do
+    :ok = :application.load({:application, app, [modules: modules]})
+
+    on_exit(fn ->
+      :application.unload(app)
+      RoleGrant.reset_resolution_cache()
+      Policy.reset_model_facts_cache()
+    end)
   end
 
   defp setup_empty_assets_and_build_dirs(opts) do
@@ -310,9 +325,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       # Register a fake loaded OTP app whose spec lists the invalid entity type module,
       # so that data model discovery picks it up.
-      fixture_app = :hologram_invalid_entity_fixture_app
-      :ok = :application.load({:application, fixture_app, [modules: [InvalidEntityFixture]]})
-      on_exit(fn -> :application.unload(fixture_app) end)
+      load_entity_fixture_app(:hologram_invalid_entity_fixture_app, [InvalidEntityFixture])
 
       expected_msg =
         "invalid data model:\n  * relationship :owner in Mix.Tasks.Compile.HologramTest.InvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
@@ -335,18 +348,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
         @spec __attributes__() :: list(tuple)
         def __attributes__, do: [{:owner_id, :string, []}]
 
+        @spec __policies__() :: list(tuple)
+        def __policies__, do: []
+
         @spec __relationships__() :: list(tuple)
         def __relationships__, do: [{:owner, Hologram.Test.Fixtures.Entity.Module1, []}]
+
+        @spec __roles__() :: list(tuple)
+        def __roles__, do: []
       end
 
       # Register a fake loaded OTP app whose spec lists the entity type module with the
       # colliding declarations, so that data model discovery picks it up.
-      fixture_app = :hologram_invalid_mapping_entity_fixture_app
-
-      :ok =
-        :application.load({:application, fixture_app, [modules: [InvalidMappingEntityFixture]]})
-
-      on_exit(fn -> :application.unload(fixture_app) end)
+      load_entity_fixture_app(:hologram_invalid_mapping_entity_fixture_app, [
+        InvalidMappingEntityFixture
+      ])
 
       expected_msg =
         normalize_newlines("""

@@ -3,6 +3,9 @@ defmodule Hologram.Template.Renderer do
 
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
+  alias Hologram.Auth
+  alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.StringUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
@@ -10,6 +13,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.DB
   alias Hologram.DB.QueryCache
   alias Hologram.DB.QueryRunner
+  alias Hologram.Entity.Validator
   alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.Server
@@ -203,6 +207,15 @@ defmodule Hologram.Template.Renderer do
   @spec render_page(module, %{atom => any}, Server.t(), T.opts()) ::
           {String.t(), %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
   def render_page(page_module, params, server_struct, opts) do
+    Context.with_actor(server_struct.user_id, fn ->
+      render_page_as_actor(page_module, params, server_struct, opts)
+    end)
+  end
+
+  # Queries evaluated during the render are filtered by the session user's policies, and the
+  # actor reaches them through the process context: prop queries run deep inside the render,
+  # with no server struct in their signatures.
+  defp render_page_as_actor(page_module, params, server_struct, opts) do
     initial_page? = opts[:initial_page?] || false
 
     {page_component_struct, page_server_struct} =
@@ -217,6 +230,7 @@ defmodule Hologram.Template.Renderer do
       |> put_page_mounted_flag_context(false)
       |> maybe_put_csrf_token_context(opts, initial_page?)
       |> maybe_put_instance_id_context(opts, initial_page?)
+      |> put_user_context()
 
     {initial_html, initial_component_registry, final_server_struct} =
       render_page_inside_layout(
@@ -570,7 +584,7 @@ defmodule Hologram.Template.Renderer do
 
     Component.put_context(
       page_component_struct,
-      {Hologram.Runtime, :csrf_token},
+      {Hologram, :csrf_token},
       csrf_token
     )
   end
@@ -586,7 +600,7 @@ defmodule Hologram.Template.Renderer do
 
     Component.put_context(
       page_component_struct,
-      {Hologram.Runtime, :instance_id},
+      {Hologram, :instance_id},
       instance_id
     )
   end
@@ -608,7 +622,7 @@ defmodule Hologram.Template.Renderer do
   defp put_initial_page_flag_context(page_component_struct, initial_page?) do
     Component.put_context(
       page_component_struct,
-      {Hologram.Runtime, :initial_page?},
+      {Hologram, :initial_page?},
       initial_page?
     )
   end
@@ -616,7 +630,7 @@ defmodule Hologram.Template.Renderer do
   defp put_page_digest_context(page_component_struct, page_digest) do
     Component.put_context(
       page_component_struct,
-      {Hologram.Runtime, :page_digest},
+      {Hologram, :page_digest},
       page_digest
     )
   end
@@ -624,14 +638,39 @@ defmodule Hologram.Template.Renderer do
   defp put_page_mounted_flag_context(page_component_struct, page_mounted?) do
     Component.put_context(
       page_component_struct,
-      {Hologram.Runtime, :page_mounted?},
+      {Hologram, :page_mounted?},
       page_mounted?
     )
+  end
+
+  defp put_user_context(page_component_struct) do
+    user = read_session_user(RoleGrant.user_entity(), Auth.user_id())
+
+    Component.put_context(page_component_struct, {Hologram, :user}, user)
   end
 
   defp raise_invalid_spread_value(value) do
     raise ArgumentError,
       message: "spread value must be a map or a keyword list, got: #{inspect(value)}"
+  end
+
+  # The session user's row, read through the policied path - the framework grants itself
+  # no bypass, so the value is the row AS VISIBLE to that user: nil when the user entity's
+  # read rules deny it (or none matches the own row), nil when anonymous, nil when no user
+  # entity is designated. A session user id that is not a canonical entity id also yields
+  # nil - the session's user_id keeps its wider latitude for apps not using the data layer.
+  defp read_session_user(nil, _user_id), do: nil
+
+  defp read_session_user(user_entity, user_id) do
+    if Validator.attribute_value_valid?(user_id, :uuid) do
+      term =
+        user_entity
+        |> Query.filter(id: user_id)
+        |> Query.one()
+        |> Query.normalize()
+
+      QueryRunner.run_policied(term, DB.mapping(), user_id)
+    end
   end
 
   defp render_attribute(name, value_dom)
@@ -720,7 +759,7 @@ defmodule Hologram.Template.Renderer do
       |> apply(args)
       |> Query.normalize()
 
-    QueryRunner.run(term, DB.mapping())
+    QueryRunner.run_policied(term, DB.mapping(), Auth.user_id())
   end
 
   defp spread_entries(value)

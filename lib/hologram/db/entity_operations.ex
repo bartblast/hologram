@@ -8,11 +8,14 @@ defmodule Hologram.DB.EntityOperations do
   # through Mapper.quote_identifier/1) and $n placeholders - every value travels as a bound
   # param. The sobelow_skip markers on the emitting functions record that invariant.
 
+  alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.SortKey
+  alias Hologram.Entity
   alias Hologram.Entity.Validator
 
   @data_schema "hologram_data"
@@ -37,28 +40,33 @@ defmodule Hologram.DB.EntityOperations do
 
   @doc false
   @spec create(struct) :: struct
-  # sobelow_skip ["SQL.Query"]
   def create(entity) do
-    entity_type = entity.__struct__
-    %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+    case creator_grants(entity) do
+      [] ->
+        {stamped_entity, _result} = insert(entity, "")
 
-    validate_entity!(entity_type, entity, columns)
+        stamped_entity
 
-    now = DateTime.utc_now(:microsecond)
-    stamped_entity = %{entity | created_at: now, updated_at: now}
+      grants ->
+        {:ok, stamped_entity} =
+          Connection.transaction(fn ->
+            {stamped_entity, _result} = insert(entity, "")
 
-    encoded_values = Enum.map(columns, &encoded_column_value(stamped_entity, &1))
+            Enum.each(grants, &create_if_absent/1)
 
-    column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
-    placeholder_list = Enum.map_join(1..length(columns), ", ", &"$#{&1}")
+            stamped_entity
+          end)
 
-    statement =
-      "INSERT INTO #{qualified_table(table)} (#{column_list}) VALUES (#{placeholder_list})"
-
-    case Connection.query(statement, encoded_values) do
-      {:ok, _result} -> stamped_entity
-      {:error, error} -> raise error
+        stamped_entity
     end
+  end
+
+  @doc false
+  @spec create_if_absent(struct) :: :ok
+  def create_if_absent(entity) do
+    insert(entity, " ON CONFLICT DO NOTHING")
+
+    :ok
   end
 
   @doc false
@@ -243,6 +251,34 @@ defmodule Hologram.DB.EntityOperations do
     end)
   end
 
+  # The creating user takes the entity type's creator roles as the row is inserted, in the
+  # same transaction - so a resource never exists without whoever made it holding its roles.
+  # Creating without an acting user grants nothing, which is what the trusted tier wants.
+  defp creator_grants(entity) do
+    entity_type = entity.__struct__
+
+    case Context.actor_user_id() do
+      nil ->
+        []
+
+      actor_user_id ->
+        entity_type.__roles__()
+        |> Enum.filter(fn {_name, opts} -> Keyword.get(opts, :creator) == true end)
+        |> Enum.map(&creator_grant(&1, entity, entity_type, actor_user_id))
+    end
+  end
+
+  defp creator_grant({role_name, _opts}, entity, entity_type, actor_user_id) do
+    %RoleGrant{
+      id: Entity.generate_id(),
+      granted_by_id: actor_user_id,
+      resource_id: entity.id,
+      resource_type: RoleGrant.resource_type(entity_type),
+      role: role_name,
+      user_id: actor_user_id
+    }
+  end
+
   defp encoded_column_value(entity, %{source: {:sort_key, attribute_name}} = column) do
     entity
     |> Map.fetch!(attribute_name)
@@ -274,6 +310,31 @@ defmodule Hologram.DB.EntityOperations do
   defp field_name(%{source: {:attribute, name}}), do: name
 
   defp field_name(%{source: {:relationship, name}}), do: String.to_existing_atom("#{name}_id")
+
+  # sobelow_skip ["SQL.Query"]
+  defp insert(entity, conflict_clause) do
+    entity_type = entity.__struct__
+    %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
+    validate_entity!(entity_type, entity, columns)
+
+    now = DateTime.utc_now(:microsecond)
+    stamped_entity = %{entity | created_at: now, updated_at: now}
+
+    encoded_values = Enum.map(columns, &encoded_column_value(stamped_entity, &1))
+
+    column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
+    placeholder_list = Enum.map_join(1..length(columns), ", ", &"$#{&1}")
+
+    statement =
+      "INSERT INTO #{qualified_table(table)} (#{column_list}) " <>
+        "VALUES (#{placeholder_list})#{conflict_clause}"
+
+    case Connection.query(statement, encoded_values) do
+      {:ok, result} -> {stamped_entity, result}
+      {:error, error} -> raise error
+    end
+  end
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"

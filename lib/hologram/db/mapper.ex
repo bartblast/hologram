@@ -1,6 +1,7 @@
 defmodule Hologram.DB.Mapper do
   @moduledoc false
 
+  alias Hologram.DB.Codec
   alias Hologram.Reflection
 
   @hash_bytes 8
@@ -108,6 +109,7 @@ defmodule Hologram.DB.Mapper do
            table: table_name,
            pk_constraint: fit_identifier("#{table_name}_$pk"),
            columns: columns(entity_type, ordered_pairs),
+           indexes: entity_indexes(entity_type),
            join_tables: join_tables(entity_type)
          }}
       end)
@@ -189,8 +191,14 @@ defmodule Hologram.DB.Mapper do
   the primary OTP app's conventional root namespace - modules from other roots (guest apps,
   libraries) keep their full path. Derived names over the PostgreSQL identifier limit keep
   a readable prefix followed by a short deterministic hash of the full name.
+
+  Framework-provided entity types are pinned to their full snake_cased path, so their
+  tables carry the hologram_ prefix in every project - path derivation would strip it
+  inside the framework's own repository, where the root namespace is Hologram.
   """
   @spec table_name(module) :: String.t()
+  def table_name(Hologram.Auth.RoleGrant), do: "hologram_role_grant"
+
   def table_name(entity_type) do
     segments = Module.split(entity_type)
 
@@ -307,10 +315,25 @@ defmodule Hologram.DB.Mapper do
     "  * #{hops} -> #{inspect(first_entity_type)}"
   end
 
+  # The role grant store carries the one framework-derived extra index: unique over the
+  # grant fact, with nulls compared as values - resource_type and resource_id nils encode
+  # the type-wide and global grant shapes, so identical rows with nils must still collide.
+  defp entity_indexes(Hologram.Auth.RoleGrant) do
+    %{
+      "hologram_role_grant_$uidx" => %{
+        columns: ["user_id", "resource_type", "resource_id", "role"],
+        nulls_distinct: false,
+        unique: true
+      }
+    }
+  end
+
+  defp entity_indexes(_entity_type), do: %{}
+
   defp enum_values(:enum, opts) do
     opts
     |> Keyword.fetch!(:values)
-    |> Enum.map(&Atom.to_string/1)
+    |> Enum.map(&Codec.encode(&1, :enum))
   end
 
   defp enum_values(_type, _opts), do: nil
@@ -408,6 +431,8 @@ defmodule Hologram.DB.Mapper do
   defp sql_type(:integer, _table_name, _name), do: "int8"
 
   defp sql_type(:string, _table_name, _name), do: "text"
+
+  defp sql_type(:uuid, _table_name, _name), do: "uuid"
 
   defp strip_root([root | [_head | _tail] = remainder], root), do: remainder
 

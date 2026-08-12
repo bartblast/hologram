@@ -337,6 +337,123 @@ defmodule Hologram.Entity.ValidatorTest do
     end
   end
 
+  describe "validate_allow!/3" do
+    test "accepts a bare allow line as an unconditional rule" do
+      defmodule InlineEntityFixture71 do
+        use Hologram.Entity
+
+        allow :read
+      end
+
+      assert InlineEntityFixture71.__policies__() == [{:read, nil, nil, []}]
+    end
+
+    test "accepts an unknown option as a predicate" do
+      defmodule InlineEntityFixture72 do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        allow :read, title: "text_1"
+      end
+
+      assert InlineEntityFixture72.__policies__() == [{:read, nil, nil, [title: "text_1"]}]
+    end
+
+    test "rejects non-atom operation" do
+      expected_msg =
+        "invalid operation \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - policy operations must be atoms"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture73 do
+          use Hologram.Entity
+
+          allow "read"
+        end
+      end
+    end
+
+    test "rejects a nil to option" do
+      expected_msg =
+        "invalid to option nil for allow :read in Hologram.Entity.ValidatorTest.NilToOptionFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilToOptionFixture do
+          use Hologram.Entity
+
+          allow :read, to: nil
+        end
+      end
+    end
+
+    test "rejects a nil via option" do
+      expected_msg =
+        "invalid via option nil for allow :read in Hologram.Entity.ValidatorTest.NilViaOptionFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilViaOptionFixture do
+          use Hologram.Entity
+
+          allow :read, via: nil
+        end
+      end
+    end
+
+    test "rejects a to option that is neither a role reference nor a list of them" do
+      expected_msg =
+        "invalid to option \"owner\" for allow :update in Hologram.Entity.ValidatorTest.MalformedToOptionFixture - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule MalformedToOptionFixture do
+          use Hologram.Entity
+
+          role :owner
+
+          allow :update, to: "owner"
+        end
+      end
+    end
+
+    test "rejects a to option list holding a malformed reference" do
+      expected_msg =
+        "invalid to option [{:a, :b, :c}] for allow :read in Hologram.Entity.ValidatorTest.MalformedToListFixture - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule MalformedToListFixture do
+          use Hologram.Entity
+
+          allow :read, to: [{:a, :b, :c}]
+        end
+      end
+    end
+
+    test "rejects an empty to option list" do
+      expected_msg =
+        "invalid to option [] for allow :read in Hologram.Entity.ValidatorTest.EmptyToListFixture - the to option must be a role name, a {module, role} or {relationship, role} tuple, or a non-empty list of them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule EmptyToListFixture do
+          use Hologram.Entity
+
+          allow :read, to: []
+        end
+      end
+    end
+
+    test "rejects spec that is not a keyword list" do
+      expected_msg =
+        "invalid options [1, 2] for allow :read in Hologram.Entity.ValidatorTest.InlineEntityFixture74 - options must be a keyword list"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture74 do
+          use Hologram.Entity
+
+          allow :read, [1, 2]
+        end
+      end
+    end
+  end
+
   describe "validate_attribute!/4" do
     test "rejects values option on non-enum attribute" do
       expected_msg =
@@ -366,7 +483,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown attribute type" do
       expected_msg =
-        "invalid type :text for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture1 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string"
+        "invalid type :text for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture1 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string, :uuid"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture1 do
@@ -379,7 +496,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects module used as attribute type" do
       expected_msg =
-        "invalid type DateTime for attribute :happened_at in Hologram.Entity.ValidatorTest.InlineEntityFixture2 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string"
+        "invalid type DateTime for attribute :happened_at in Hologram.Entity.ValidatorTest.InlineEntityFixture2 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string, :uuid"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture2 do
@@ -847,6 +964,52 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "accepts uuid attribute" do
+      defmodule InlineEntityFixture82 do
+        use Hologram.Entity
+
+        attribute :external_id, :uuid, optional: true
+      end
+
+      assert InlineEntityFixture82.__attributes__() == [{:external_id, :uuid, [optional: true]}]
+    end
+
+    test "accepts attribute named user_id" do
+      defmodule InlineEntityFixture75 do
+        use Hologram.Entity
+
+        attribute :user_id, :string
+      end
+
+      assert InlineEntityFixture75.__attributes__() == [{:user_id, :string, []}]
+    end
+
+    test "rejects attribute named to" do
+      expected_msg =
+        "reserved name :to used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture76 - :to and :via are allow line options and can't be attribute names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture76 do
+          use Hologram.Entity
+
+          attribute :to, :string
+        end
+      end
+    end
+
+    test "rejects attribute named via" do
+      expected_msg =
+        "reserved name :via used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture77 - :to and :via are allow line options and can't be attribute names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture77 do
+          use Hologram.Entity
+
+          attribute :via, :string
+        end
+      end
+    end
+
     test "rejects enum attribute without values option" do
       expected_msg =
         "missing values option for enum attribute :status in Hologram.Entity.ValidatorTest.InlineEntityFixture7 - enum attributes require a values option with a non-empty list of unique non-nil atoms"
@@ -891,6 +1054,47 @@ defmodule Hologram.Entity.ValidatorTest do
         """
 
         assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+      end
+    end
+
+    test "accepts enum values that are modules" do
+      defmodule ModuleEnumValuesFixture do
+        use Hologram.Entity
+
+        attribute :role, :enum, values: [:viewer, Hologram.Test.Fixtures.Role.Module1]
+      end
+
+      assert ModuleEnumValuesFixture.__attributes__() == [
+               {:role, :enum, [values: [:viewer, Hologram.Test.Fixtures.Role.Module1]]}
+             ]
+    end
+
+    test "rejects an enum value that is not a module and does not begin with a lowercase letter" do
+      expected_msg =
+        "invalid enum value :Active in Hologram.Entity.ValidatorTest.UppercaseEnumValueFixture - enum values that are not modules must begin with a lowercase letter or an underscore"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule UppercaseEnumValueFixture do
+          use Hologram.Entity
+
+          attribute :status, :enum, values: [:Active]
+        end
+      end
+    end
+
+    test "rejects an enum value too long to store" do
+      expected_msg =
+        "enum value :this_is_a_very_long_enum_value_used_to_exceed_the_postgres_enum_label_limit in Hologram.Entity.ValidatorTest.LongEnumValueFixture is too long to store (75 bytes, limit 63) - shorten it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule LongEnumValueFixture do
+          use Hologram.Entity
+
+          attribute :status, :enum,
+            values: [
+              :this_is_a_very_long_enum_value_used_to_exceed_the_postgres_enum_label_limit
+            ]
+        end
       end
     end
 
@@ -1194,6 +1398,266 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           relationship :owner, Module1, default: nil
+        end
+      end
+    end
+  end
+
+  describe "validate_role!/3" do
+    test "accepts a role name already used by an attribute" do
+      defmodule InlineEntityFixture55 do
+        use Hologram.Entity
+
+        attribute :owner, :string
+
+        role :owner
+      end
+
+      assert InlineEntityFixture55.__roles__() == [{:owner, []}]
+    end
+
+    test "accepts creator option" do
+      defmodule InlineEntityFixture68 do
+        use Hologram.Entity
+
+        role :owner, creator: true
+      end
+
+      assert InlineEntityFixture68.__roles__() == [{:owner, [creator: true]}]
+    end
+
+    test "accepts creator option on several roles of one entity type" do
+      defmodule InlineEntityFixture69 do
+        use Hologram.Entity
+
+        role :author, creator: true
+        role :owner, creator: true
+      end
+
+      assert InlineEntityFixture69.__roles__() == [
+               {:author, [creator: true]},
+               {:owner, [creator: true]}
+             ]
+    end
+
+    test "rejects creator option other than true" do
+      expected_msg =
+        "invalid creator option false for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture70 - the creator option must be true"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture70 do
+          use Hologram.Entity
+
+          role :owner, creator: false
+        end
+      end
+    end
+
+    test "rejects non-atom role name" do
+      expected_msg =
+        "invalid name \"owner\" used for role in Hologram.Entity.ValidatorTest.InlineEntityFixture57 - declaration names must be atoms"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture57 do
+          use Hologram.Entity
+
+          role "owner"
+        end
+      end
+    end
+
+    test "rejects a role name that does not begin with a lowercase letter" do
+      expected_msg =
+        "invalid role name :Owner in Hologram.Entity.ValidatorTest.UppercaseRoleNameFixture - role names that are not modules must begin with a lowercase letter or an underscore"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule UppercaseRoleNameFixture do
+          use Hologram.Entity
+
+          role :Owner
+        end
+      end
+    end
+
+    test "rejects a role name too long to store" do
+      expected_msg =
+        "role name :this_is_a_very_long_role_name_used_to_exceed_the_postgres_enum_label_limit in Hologram.Entity.ValidatorTest.LongRoleNameFixture is too long to store (74 bytes, limit 63) - shorten it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule LongRoleNameFixture do
+          use Hologram.Entity
+
+          role :this_is_a_very_long_role_name_used_to_exceed_the_postgres_enum_label_limit
+        end
+      end
+    end
+
+    test "rejects the removed scope option" do
+      expected_msg =
+        "scope option for role :admin in Hologram.Entity.ValidatorTest.InlineEntityFixture67 - the scope option was removed, define global roles as modules with use Hologram.Role"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture67 do
+          use Hologram.Entity
+
+          role :admin, scope: :global
+        end
+      end
+    end
+
+    test "rejects unknown role option" do
+      expected_msg =
+        "unknown option :owner_only for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture58 - valid role options are: :creator, :extends"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture58 do
+          use Hologram.Entity
+
+          role :owner, owner_only: true
+        end
+      end
+    end
+  end
+
+  describe "validate_roles!/1" do
+    test "accepts a role extending a role declared further down the module body" do
+      defmodule InlineEntityFixture59 do
+        use Hologram.Entity
+
+        role :owner, extends: :viewer
+        role :viewer
+      end
+
+      assert InlineEntityFixture59.__roles__() == [{:owner, [extends: :viewer]}, {:viewer, []}]
+    end
+
+    test "rejects extends option with a non-atom target in the list" do
+      expected_msg =
+        "invalid extends option [:viewer, \"editor\"] for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture60 - the extends option must be a role name or a non-empty list of role names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture60 do
+          use Hologram.Entity
+
+          role :owner, extends: [:viewer, "editor"]
+          role :viewer
+        end
+      end
+    end
+
+    test "rejects empty extends option list" do
+      expected_msg =
+        "invalid extends option [] for role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture61 - the extends option must be a role name or a non-empty list of role names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture61 do
+          use Hologram.Entity
+
+          role :owner, extends: []
+        end
+      end
+    end
+
+    test "rejects nil extends option" do
+      expected_msg =
+        "invalid extends option nil for role :owner in Hologram.Entity.ValidatorTest.NilExtendsFixture - the extends option must be a role name or a non-empty list of role names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilExtendsFixture do
+          use Hologram.Entity
+
+          role :owner, extends: nil
+        end
+      end
+    end
+
+    test "rejects role extending an undeclared role" do
+      expected_msg =
+        "unknown role :editor in the extends option of role :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture62 - declared roles are: :owner, :viewer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture62 do
+          use Hologram.Entity
+
+          role :owner, extends: :editor
+          role :viewer
+        end
+      end
+    end
+
+    test "rejects role extension cycle" do
+      expected_msg =
+        normalize_newlines("""
+        cyclic role extension in Hologram.Entity.ValidatorTest.InlineEntityFixture63 - a role can't extend itself, directly or transitively:
+          * :editor -> :viewer -> :owner -> :editor\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture63 do
+          use Hologram.Entity
+
+          role :editor, extends: :viewer
+          role :owner, extends: :editor
+          role :viewer, extends: :owner
+        end
+      end
+    end
+
+    test "rejects self-extending role" do
+      expected_msg =
+        normalize_newlines("""
+        cyclic role extension in Hologram.Entity.ValidatorTest.InlineEntityFixture64 - a role can't extend itself, directly or transitively:
+          * :owner -> :owner\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture64 do
+          use Hologram.Entity
+
+          role :owner, extends: :owner
+        end
+      end
+    end
+  end
+
+  describe "validate_use_opts!/2" do
+    test "accepts the user option" do
+      defmodule InlineEntityFixture78 do
+        use Hologram.Entity, user: true
+      end
+
+      assert InlineEntityFixture78.__is_hologram_user_entity__()
+    end
+
+    test "rejects options that are not a keyword list" do
+      expected_msg =
+        "invalid options [1, 2] for use Hologram.Entity in Hologram.Entity.ValidatorTest.InlineEntityFixture79 - options must be a keyword list"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture79 do
+          use Hologram.Entity, [1, 2]
+        end
+      end
+    end
+
+    test "rejects unknown option" do
+      expected_msg =
+        "unknown option :usr for use Hologram.Entity in Hologram.Entity.ValidatorTest.InlineEntityFixture80 - valid options are: :user"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture80 do
+          use Hologram.Entity, usr: true
+        end
+      end
+    end
+
+    test "rejects user option other than true" do
+      expected_msg =
+        "invalid user option false for use Hologram.Entity in Hologram.Entity.ValidatorTest.InlineEntityFixture81 - the user option must be true"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture81 do
+          use Hologram.Entity, user: false
         end
       end
     end

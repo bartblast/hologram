@@ -3,10 +3,15 @@ defmodule Hologram.Application do
 
   use Application
 
+  alias Hologram.Auth.RoleGrant
+  alias Hologram.Policy
   alias Hologram.Reflection
 
   @impl Application
   def start(_type, _args) do
+    RoleGrant.reset_resolution_cache()
+    Policy.reset_model_facts_cache()
+
     opts = [strategy: :one_for_one, name: Hologram.Supervisor]
 
     Hologram.env()

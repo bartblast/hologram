@@ -16,8 +16,13 @@ defmodule Hologram.DB.IntrospectionTest do
         |> Enum.sort()
 
       assert table_names == [
+               "hologram_role_grant",
                "test_fixtures_entity_module1",
                "test_fixtures_entity_module10",
+               "test_fixtures_entity_module11",
+               "test_fixtures_entity_module12",
+               "test_fixtures_entity_module13",
+               "test_fixtures_entity_module14",
                "test_fixtures_entity_module2",
                "test_fixtures_entity_module3",
                "test_fixtures_entity_module3_a_$join",
@@ -28,7 +33,11 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_entity_module7",
                "test_fixtures_entity_module8",
                "test_fixtures_entity_module9",
-               "test_fixtures_entity_module9_a_$join"
+               "test_fixtures_entity_module9_a_$join",
+               "test_fixtures_policy_module1",
+               "test_fixtures_policy_module2",
+               "test_fixtures_policy_module3",
+               "test_fixtures_policy_module3_children_$join"
              ]
     end
 
@@ -165,7 +174,7 @@ defmodule Hologram.DB.IntrospectionTest do
       {:ok, _result} = Connection.query(index_statement)
 
       assert schema().tables["indexed"].indexes == %{
-               "indexed_b_a_$idx" => %{columns: ["b", "a"]}
+               "indexed_b_a_$idx" => %{columns: ["b", "a"], nulls_distinct: true, unique: false}
              }
     end
 
@@ -185,13 +194,61 @@ defmodule Hologram.DB.IntrospectionTest do
     test "introspects the fixture join table reverse index" do
       assert schema().tables["test_fixtures_entity_module3_a_$join"].indexes == %{
                "test_fixtures_entity_module3_a_$join_target_id_$idx" => %{
-                 columns: ["target_id", "source_id"]
+                 columns: ["target_id", "source_id"],
+                 nulls_distinct: true,
+                 unique: false
                }
              }
     end
 
+    test "introspects the role grant store's user references as no action" do
+      foreign_keys = schema().tables["hologram_role_grant"].foreign_keys
+
+      assert foreign_keys["user_id"].on_delete == :no_action
+      assert foreign_keys["granted_by_id"].on_delete == :no_action
+    end
+
+    test "introspects the role grant unique index comparing nulls as values" do
+      assert schema().tables["hologram_role_grant"].indexes["hologram_role_grant_$uidx"] == %{
+               columns: ["user_id", "resource_type", "resource_id", "role"],
+               nulls_distinct: false,
+               unique: true
+             }
+    end
+
     test "introspects enum types with their values" do
-      assert schema().enum_types == %{"test_fixtures_entity_module4_c_$enum" => ["x", "y"]}
+      assert schema().enum_types == %{
+               "hologram_role_grant_resource_type_$enum" => [
+                 "test_fixtures_entity_module1",
+                 "test_fixtures_entity_module10",
+                 "test_fixtures_entity_module11",
+                 "test_fixtures_entity_module12",
+                 "test_fixtures_entity_module13",
+                 "test_fixtures_entity_module14",
+                 "test_fixtures_entity_module2",
+                 "test_fixtures_entity_module3",
+                 "test_fixtures_entity_module4",
+                 "test_fixtures_entity_module5",
+                 "test_fixtures_entity_module6",
+                 "test_fixtures_entity_module7",
+                 "test_fixtures_entity_module8",
+                 "test_fixtures_entity_module9",
+                 "test_fixtures_policy_module1",
+                 "test_fixtures_policy_module2",
+                 "test_fixtures_policy_module3"
+               ],
+               "hologram_role_grant_role_$enum" => [
+                 "Hologram.Test.Fixtures.Role.Module1",
+                 "Hologram.Test.Fixtures.Role.Module2",
+                 "admin",
+                 "editor",
+                 "maintainer",
+                 "member",
+                 "owner",
+                 "viewer"
+               ],
+               "test_fixtures_entity_module4_c_$enum" => ["x", "y"]
+             }
     end
 
     test "introspects enum values in sort order after positioned additions" do

@@ -11,11 +11,22 @@ defmodule Hologram.Entity do
     {:updated_at, :datetime, []}
   ]
 
-  defmacro __using__(_opts) do
+  defmacro __using__(opts) do
+    Validator.validate_use_opts!(__CALLER__.module, opts)
+
     [
       quote do
         import Hologram.Entity,
-          only: [attribute: 2, attribute: 3, relationship: 2, relationship: 3]
+          only: [
+            allow: 1,
+            allow: 2,
+            attribute: 2,
+            attribute: 3,
+            relationship: 2,
+            relationship: 3,
+            role: 1,
+            role: 2
+          ]
 
         @before_compile Entity
 
@@ -31,11 +42,15 @@ defmodule Hologram.Entity do
         def __is_hologram_entity__, do: true
       end,
       register_attributes_accumulator(),
-      register_relationships_accumulator()
-    ]
+      register_policies_accumulator(),
+      register_relationships_accumulator(),
+      register_roles_accumulator()
+    ] ++ user_entity_marker(opts)
   end
 
   defmacro __before_compile__(env) do
+    Validator.validate_roles!(env.module)
+
     system_attributes =
       @system_attributes
       |> Enum.sort()
@@ -56,16 +71,43 @@ defmodule Hologram.Entity do
       def __attributes__, do: Enum.sort(@__attributes__)
 
       @doc """
+      Returns the list of policy definitions for the compiled entity type, in declaration order.
+      Policy rules are OR'd, so the order carries no semantics - it is preserved to keep reflection output readable against the source.
+      """
+      @spec __policies__() :: list({atom, term, atom | nil, keyword})
+      def __policies__, do: Enum.reverse(@__policies__)
+
+      @doc """
       Returns the list of relationship definitions for the compiled entity type, sorted by relationship name.
       """
       @spec __relationships__() :: list({atom, module | list(module), keyword})
       def __relationships__, do: Enum.sort(@__relationships__)
 
       @doc """
+      Returns the list of role definitions for the compiled entity type, sorted by role name.
+      """
+      @spec __roles__() :: list({atom, keyword})
+      def __roles__, do: Enum.sort(@__roles__)
+
+      @doc """
       Returns the list of system attribute definitions present on every entity type, sorted by attribute name.
       """
       @spec __system_attributes__() :: list({atom, atom, keyword})
       def __system_attributes__, do: unquote(system_attributes)
+    end
+  end
+
+  @doc """
+  Accumulates the given policy definition in __policies__ module attribute.
+  A policy line grants the given operation when its predicates hold and its grant reference (the to option) or delegation (the via option) is satisfied - a line with no options grants the operation unconditionally.
+  A `user_id()` call in a predicate value position stands for the acting user's entity id and is stored as the actor sentinel.
+  """
+  @spec allow(atom, T.opts()) :: Macro.t()
+  defmacro allow(operation, spec \\ []) do
+    spec = replace_actor_leaves!(spec, __CALLER__.module)
+
+    quote do
+      Entity.__put_policy__(__MODULE__, unquote(operation), unquote(spec))
     end
   end
 
@@ -101,6 +143,31 @@ defmodule Hologram.Entity do
   end
 
   @doc """
+  Accumulates the given role definition in __roles__ module attribute.
+  A role is a named grantable capability set of the entity type - role names live in their own namespace, separate from attribute and relationship names.
+  """
+  @spec role(atom, T.opts()) :: Macro.t()
+  defmacro role(name, opts \\ []) do
+    quote do
+      Entity.__put_role__(__MODULE__, unquote(name), unquote(opts))
+    end
+  end
+
+  @doc """
+  Returns the given role name together with every role of the given entity type whose extends chain reaches it, sorted.
+  A role that extends another one carries all of its capabilities, so a requirement for the given role is satisfied by every role in the returned list.
+  """
+  @spec expand_role(module, atom) :: list(atom)
+  def expand_role(entity_type, role_name) do
+    extends_by_name =
+      Map.new(entity_type.__roles__(), fn {name, opts} ->
+        {name, List.wrap(Keyword.get(opts, :extends, []))}
+      end)
+
+    expand_role_names(MapSet.new([role_name]), extends_by_name)
+  end
+
+  @doc """
   Generates a new entity id - a UUIDv7 string built from the number of milliseconds since the Unix epoch (1970-01-01 UTC, 48 bits) followed by random bits (74 bits).
   Entity ids come only from this function, on the server and on the client alike.
   """
@@ -126,6 +193,7 @@ defmodule Hologram.Entity do
   def new(entity_type, values \\ %{}) do
     values_map = Map.new(values)
 
+    Validator.validate_writable!(entity_type)
     validate_construction_values!(entity_type, values_map)
 
     declared_defaults =
@@ -142,10 +210,54 @@ defmodule Hologram.Entity do
   end
 
   @doc false
+  @spec __put_policy__(module, atom, T.opts()) :: :ok
+  def __put_policy__(module, operation, spec) do
+    Validator.validate_allow!(module, operation, spec)
+
+    policy =
+      {operation, Keyword.get(spec, :to), Keyword.get(spec, :via),
+       Keyword.drop(spec, [:to, :via])}
+
+    Module.put_attribute(module, :__policies__, policy)
+
+    :ok
+  end
+
+  @doc false
+  @spec __put_role__(module, atom, T.opts()) :: :ok
+  def __put_role__(module, name, opts) do
+    declarations = Module.get_attribute(module, :__roles__)
+
+    case Enum.find(declarations, fn {declared_name, _opts} -> declared_name == name end) do
+      nil ->
+        Validator.validate_role!(module, name, opts)
+        Module.put_attribute(module, :__roles__, {name, opts})
+
+        :ok
+
+      {^name, ^opts} ->
+        :ok
+
+      {^name, declared_opts} ->
+        raise Hologram.CompileError,
+          message:
+            "conflicting declarations for role #{inspect(name)} in #{inspect(module)}: #{inspect(declared_opts)} and #{inspect(opts)} - repeated role declarations must be identical"
+    end
+  end
+
+  @doc false
   @spec register_attributes_accumulator() :: AST.t()
   def register_attributes_accumulator do
     quote do
       Module.register_attribute(__MODULE__, :__attributes__, accumulate: true)
+    end
+  end
+
+  @doc false
+  @spec register_policies_accumulator() :: AST.t()
+  def register_policies_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__policies__, accumulate: true)
     end
   end
 
@@ -155,6 +267,45 @@ defmodule Hologram.Entity do
     quote do
       Module.register_attribute(__MODULE__, :__relationships__, accumulate: true)
     end
+  end
+
+  @doc false
+  @spec register_roles_accumulator() :: AST.t()
+  def register_roles_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__roles__, accumulate: true)
+    end
+  end
+
+  @doc false
+  @spec relationship_target(module, atom) :: module | list(module)
+  def relationship_target(entity_type, relationship_name) do
+    {_name, target_type, _opts} =
+      Enum.find(entity_type.__relationships__(), fn {name, _target, _opts} ->
+        name == relationship_name
+      end)
+
+    target_type
+  end
+
+  # The replacement happens on the AST, before the spec is evaluated in the module body -
+  # a real user_id() call would be an undefined function there. Policies have no variable
+  # scope, so a paren-less user_id can only be the call written without its parens.
+  @doc false
+  @spec replace_actor_leaves!(Macro.t(), module) :: Macro.t()
+  def replace_actor_leaves!(spec, module) do
+    Macro.prewalk(spec, fn
+      {:user_id, _meta, []} ->
+        Macro.escape({:actor})
+
+      {:user_id, _meta, context} when is_atom(context) ->
+        raise Hologram.CompileError,
+          message:
+            "paren-less user_id in a policy in #{inspect(module)} - did you mean user_id()?"
+
+      node ->
+        node
+    end)
   end
 
   @doc false
@@ -212,6 +363,25 @@ defmodule Hologram.Entity do
     |> group_errors()
   end
 
+  # Reverse-expansion fixpoint - each pass admits the roles extending anything already admitted,
+  # so a role reaching the given one through any number of hops ends up in the result.
+  defp expand_role_names(names, extends_by_name) do
+    expanded =
+      Enum.reduce(extends_by_name, names, fn {name, targets}, acc ->
+        if Enum.any?(targets, &MapSet.member?(names, &1)) do
+          MapSet.put(acc, name)
+        else
+          acc
+        end
+      end)
+
+    if MapSet.size(expanded) == MapSet.size(names) do
+      Enum.sort(expanded)
+    else
+      expand_role_names(expanded, extends_by_name)
+    end
+  end
+
   defp group_errors(:ok), do: :ok
 
   defp group_errors({:error, errors}) do
@@ -219,6 +389,27 @@ defmodule Hologram.Entity do
       Enum.group_by(errors, fn {name, _reason} -> name end, fn {_name, reason} -> reason end)
 
     {:error, grouped}
+  end
+
+  defp user_entity_marker(opts) do
+    if Keyword.get(opts, :user) == true do
+      [
+        quote do
+          @doc """
+          Returns true to indicate that the callee module is the project's user entity type module (has "use Hologram.Entity, user: true" directive).
+
+          ## Examples
+
+              iex> __is_hologram_user_entity__()
+              true
+          """
+          @spec __is_hologram_user_entity__() :: boolean
+          def __is_hologram_user_entity__, do: true
+        end
+      ]
+    else
+      []
+    end
   end
 
   defp validate_construction_values!(entity_type, values_map) do

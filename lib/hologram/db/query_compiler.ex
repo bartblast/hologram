@@ -1,8 +1,10 @@
 defmodule Hologram.DB.QueryCompiler do
   @moduledoc false
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
+  alias Hologram.Policy
 
   @data_schema "hologram_data"
 
@@ -36,6 +38,21 @@ defmodule Hologram.DB.QueryCompiler do
   ordering, and view bounds inside the aggregation - include param slots follow the
   root's in placeholder order.
 
+  A compiled policy composes into the statement when one is given: its rules render as an
+  OR group ANDed after the authored filter, so a row must satisfy the query and at least one
+  rule. Rules are conjunctions of the same predicate triples the authored filter uses, and an
+  unconditional rule (no conditions) satisfies the group on its own, which drops the group
+  from the statement. An empty rule list denies everything (`FALSE`) - default deny. The
+  actor leaf binds ONE reserved slot allocated after the authored and include params and
+  reused by every actor reference in the policy, so the caller binds the session's user once.
+
+  Includes are policied too, at every nesting level: an include subquery ANDs the included
+  type's :read policy - fixed at :read, since an include embeds rows regardless of the
+  operation the statement's own policy carries - keyed on the include's alias rather than
+  the target table name. A to-one embed the acting user cannot
+  read is NULL, and rows they cannot read drop out of a to-many aggregate before its view
+  bounds apply. Compiling without a policy leaves every level unfiltered - the trusted tier.
+
   Nil is a regular value for equality and membership on both execution tiers:
   inequality matches missing values (`!=` widens with `OR IS NULL` on optional
   attributes), membership lists may hold nil (compiled into the `IS [NOT] NULL`
@@ -44,15 +61,24 @@ defmodule Hologram.DB.QueryCompiler do
   bind nil at runtime - a sometimes-nil variable branches into an explicit nil
   predicate in code.
   """
-  @spec compile(%{atom => any}, %{module => %{atom => any}}) :: %{atom => any}
-  def compile(term, mapping) do
+  @spec compile(%{atom => any}, %{module => %{atom => any}}, %{atom => any} | nil) ::
+          %{atom => any}
+  def compile(term, mapping, policy \\ nil) do
     entity_mapping = Map.fetch!(mapping, term.entity)
 
-    {where_sql, where_reversed_params} = where_clause(term.filter, entity_mapping, [])
+    {authored_conditions, authored_params} = conditions(term.filter, entity_mapping, [])
 
-    {include_sql, all_reversed_params} =
-      include_selects(term, entity_mapping, mapping, where_reversed_params)
+    {include_sql, params_after_includes} =
+      include_selects(term, entity_mapping, mapping, policy, authored_params)
 
+    {policy_conditions, all_reversed_params} =
+      policy_conditions(
+        policy,
+        policy_context(term.entity, mapping, policy),
+        params_after_includes
+      )
+
+    where_sql = where_clause(authored_conditions ++ policy_conditions)
     order_sql = order_clause(term.order_by, entity_mapping)
     sql = statement(term, entity_mapping, where_sql, order_sql, include_sql)
 
@@ -76,11 +102,34 @@ defmodule Hologram.DB.QueryCompiler do
 
   # Bind slots inside an ARRAY constructor carry no type context of their own -
   # without the cast Postgres resolves them to text.
+  defp actor_gated?(rule) do
+    rule.to != nil or
+      Enum.any?(rule.predicates, fn {_name, _operator, value} -> value == {:actor} end)
+  end
+
+  # A rule referencing the actor cannot match without one, so an anonymous statement drops it
+  # rather than binding a nil param - at every nesting level, delegated policies included.
+  defp applicable_rules(rules, %{anonymous?: true}), do: Enum.reject(rules, &actor_gated?/1)
+
+  defp applicable_rules(rules, _context), do: rules
+
   defp array_type(%{type: :enum, sql_type: sql_type}) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(sql_type)}[]"
   end
 
   defp array_type(%{sql_type: sql_type}), do: "#{sql_type}[]"
+
+  # The actor leaf binds one reserved slot for the whole statement - every reference to it
+  # reuses that placeholder, so the caller binds the session's user exactly once.
+  defp bind_slot({:actor}, _column, reversed_params) do
+    case Enum.find_index(reversed_params, &(&1 == :actor)) do
+      nil ->
+        {"$#{length(reversed_params) + 1}", [:actor | reversed_params]}
+
+      reversed_index ->
+        {"$#{length(reversed_params) - reversed_index}", reversed_params}
+    end
+  end
 
   defp bind_slot({:param, param_name}, column, reversed_params) do
     {"$#{length(reversed_params) + 1}", [{:param, param_name, column.type} | reversed_params]}
@@ -89,6 +138,21 @@ defmodule Hologram.DB.QueryCompiler do
   defp bind_slot(literal, column, reversed_params) do
     encoded_value = Codec.encode(literal, column.type)
 
+    {"$#{length(reversed_params) + 1}", [{:value, encoded_value} | reversed_params]}
+  end
+
+  defp enum_list_slot(values, column, reversed_params) do
+    encoded_values = Enum.map(values, &Codec.encode(&1, column.type))
+    {placeholder, new_params} = bind_slot_value(encoded_values, reversed_params)
+
+    {"#{placeholder}::#{array_type(column)}", new_params}
+  end
+
+  defp enum_type(%{sql_type: sql_type}) do
+    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(sql_type)}"
+  end
+
+  defp bind_slot_value(encoded_value, reversed_params) do
     {"$#{length(reversed_params) + 1}", [{:value, encoded_value} | reversed_params]}
   end
 
@@ -197,6 +261,258 @@ defmodule Hologram.DB.QueryCompiler do
     {"#{Mapper.quote_identifier(column.name)} #{operator} #{placeholder}", new_params}
   end
 
+  defp relationship_target(entity_type, relationship_name) do
+    {_name, target_type, _opts} =
+      Enum.find(entity_type.__relationships__(), fn {name, _type, _opts} ->
+        name == relationship_name
+      end)
+
+    target_type
+  end
+
+  defp reference_column(entity_mapping, relationship_name) do
+    Enum.find(entity_mapping.columns, &(&1.source == {:relationship, relationship_name}))
+  end
+
+  defp reference_role_names({:global, role_modules}), do: role_modules
+
+  defp reference_role_names({:own, role_names}), do: role_names
+
+  defp reference_role_names({:type, _target_type, role_names}), do: role_names
+
+  defp reference_role_names({:rel, _relationship_name, role_names}), do: role_names
+
+  defp reference_role_names({:resource, _target_type, role_names}), do: role_names
+
+  # The resource type enum's values ARE the entity table names, so a table name is already the
+  # encoded value - it binds directly rather than through the enum codec.
+  defp resource_type_slot(table, context, reversed_params) do
+    column = grant_column(context, "resource_type")
+    {placeholder, new_params} = bind_slot_value(table, reversed_params)
+
+    {"#{placeholder}::#{enum_type(column)}", new_params}
+  end
+
+  # The row prefix qualifies references to the row a policy is evaluated for. It is the entity's
+  # table name at statement level, and the include's alias inside an include subquery - where the
+  # table name would resolve to the outer row for a self-referencing relationship.
+  defp policy_context(entity_type, mapping, policy, quoted_row_prefix \\ nil)
+
+  defp policy_context(_entity_type, _mapping, nil, _quoted_row_prefix), do: nil
+
+  defp policy_context(entity_type, mapping, %{operation: operation} = policy, quoted_row_prefix) do
+    entity_mapping = Map.fetch!(mapping, entity_type)
+
+    %{
+      anonymous?: Map.get(policy, :anonymous?, false),
+      entity_mapping: entity_mapping,
+      entity_type: entity_type,
+      mapping: mapping,
+      operation: operation,
+      row_prefix: quoted_row_prefix || Mapper.quote_identifier(entity_mapping.table)
+    }
+  end
+
+  defp policy_conditions(nil, _context, reversed_params), do: {[], reversed_params}
+
+  defp policy_conditions(%{rules: rules}, context, reversed_params) do
+    rules
+    |> applicable_rules(context)
+    |> applicable_policy_conditions(context, reversed_params)
+  end
+
+  defp applicable_policy_conditions([], _context, reversed_params),
+    do: {["FALSE"], reversed_params}
+
+  defp applicable_policy_conditions(rules, context, reversed_params) do
+    {rendered_rules, new_params} =
+      Enum.map_reduce(rules, reversed_params, fn rule, acc_params ->
+        rule_condition(rule, context, acc_params)
+      end)
+
+    if Enum.any?(rendered_rules, &(&1 == :unconditional)) do
+      # Dropping the group drops its placeholders, so the slots its rules bound go with it -
+      # a param the statement doesn't carry fails the bind.
+      {[], reversed_params}
+    else
+      {[group_condition(rendered_rules)], new_params}
+    end
+  end
+
+  defp grant_column(context, name) do
+    context.mapping
+    |> Map.fetch!(RoleGrant)
+    |> Map.fetch!(:columns)
+    |> Enum.find(&(&1.name == name))
+  end
+
+  # Enum values bind as params cast to their column type, so the lookup keeps using the grant
+  # store's unique index - the same shape the in-memory grant lookups use.
+  defp grant_exists_condition(reference, context, reversed_params) do
+    role_names = reference_role_names(reference)
+
+    {actor_placeholder, params_after_actor} =
+      bind_slot({:actor}, grant_column(context, "user_id"), reversed_params)
+
+    {role_placeholder, params_after_roles} =
+      enum_list_slot(role_names, grant_column(context, "role"), params_after_actor)
+
+    {scope_sql, new_params} = grant_scope_sql(reference, context, params_after_roles)
+
+    condition =
+      ~s|EXISTS (SELECT 1 FROM #{grant_table(context)} AS "rg" | <>
+        ~s|WHERE "rg"."user_id" = #{actor_placeholder} | <>
+        ~s|AND "rg"."role" = ANY(#{role_placeholder}) AND #{scope_sql})|
+
+    {condition, new_params}
+  end
+
+  # A global role is held without a resource, so the row shape has both resource columns nil -
+  # the lookup needs no correlation with the queried row.
+  defp grant_scope_sql({:global, _role_modules}, _context, reversed_params) do
+    {~s|"rg"."resource_type" IS NULL AND "rg"."resource_id" IS NULL|, reversed_params}
+  end
+
+  # A rule's own roles are held on the row itself or on its whole type - the lookup matches
+  # both shapes, which the store keeps apart by whether its resource_id column is nil.
+  defp grant_scope_sql({:own, _role_names}, context, reversed_params) do
+    {placeholder, new_params} =
+      resource_type_slot(context.entity_mapping.table, context, reversed_params)
+
+    resource_sql =
+      ~s|("rg"."resource_id" = #{context.row_prefix}."id" OR "rg"."resource_id" IS NULL)|
+
+    {~s|"rg"."resource_type" = #{placeholder} AND #{resource_sql}|, new_params}
+  end
+
+  # The grant store's own policy checks a role held on the resource a grant row names, so the
+  # lookup keys on the outer row's resource_id column rather than on a relationship reference.
+  defp grant_scope_sql({:resource, target_type, _role_names}, context, reversed_params) do
+    target_table =
+      context.mapping
+      |> Map.fetch!(target_type)
+      |> Map.fetch!(:table)
+
+    {placeholder, new_params} = resource_type_slot(target_table, context, reversed_params)
+
+    scope_sql =
+      ~s|"rg"."resource_type" = #{placeholder} | <>
+        ~s|AND "rg"."resource_id" = #{context.row_prefix}."resource_id"|
+
+    {scope_sql, new_params}
+  end
+
+  defp grant_scope_sql({:type, target_type, _role_names}, context, reversed_params) do
+    target_table =
+      context.mapping
+      |> Map.fetch!(target_type)
+      |> Map.fetch!(:table)
+
+    {placeholder, new_params} = resource_type_slot(target_table, context, reversed_params)
+
+    {~s|"rg"."resource_type" = #{placeholder} AND "rg"."resource_id" IS NULL|, new_params}
+  end
+
+  defp grant_scope_sql({:rel, relationship_name, _role_names}, context, reversed_params) do
+    column = reference_column(context.entity_mapping, relationship_name)
+
+    {placeholder, new_params} =
+      resource_type_slot(column.references, context, reversed_params)
+
+    quoted_column = Mapper.quote_identifier(column.name)
+
+    scope_sql =
+      ~s|"rg"."resource_type" = #{placeholder} | <>
+        ~s|AND "rg"."resource_id" = #{context.row_prefix}.#{quoted_column}|
+
+    {scope_sql, new_params}
+  end
+
+  defp grant_table(context) do
+    table =
+      context.mapping
+      |> Map.fetch!(RoleGrant)
+      |> Map.fetch!(:table)
+
+    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
+  end
+
+  defp group_condition([rule_sql]), do: rule_sql
+
+  defp group_condition(rule_sqls) do
+    "(" <> Enum.map_join(rule_sqls, " OR ", &"(#{&1})") <> ")"
+  end
+
+  # Delegation asks the related entity's policy for the same operation, composed into a
+  # correlated EXISTS. Recursion terminates because delegation cycles are a compile error, so
+  # every chain reaches a type that delegates no further.
+  defp delegation_conditions(nil, _context, reversed_params), do: {[], reversed_params}
+
+  defp delegation_conditions(relationship_name, context, reversed_params) do
+    column = reference_column(context.entity_mapping, relationship_name)
+    target_type = relationship_target(context.entity_type, relationship_name)
+    target_mapping = Map.fetch!(context.mapping, target_type)
+
+    target_rules =
+      target_type
+      |> Policy.build()
+      |> Map.get(context.operation, [])
+
+    target_policy = %{
+      anonymous?: context.anonymous?,
+      operation: context.operation,
+      rules: target_rules
+    }
+
+    target_context = policy_context(target_type, context.mapping, target_policy)
+
+    {target_conditions, new_params} =
+      policy_conditions(target_policy, target_context, reversed_params)
+
+    join_sql =
+      ~s|#{Mapper.quote_identifier(target_mapping.table)}."id" = | <>
+        ~s|#{context.row_prefix}.#{Mapper.quote_identifier(column.name)}|
+
+    inner_sql = Enum.join([join_sql | target_conditions], " AND ")
+
+    condition =
+      ~s|EXISTS (SELECT 1 FROM #{Mapper.quote_identifier(@data_schema)}.| <>
+        ~s|#{Mapper.quote_identifier(target_mapping.table)} WHERE #{inner_sql})|
+
+    {[condition], new_params}
+  end
+
+  defp rule_condition(rule, context, reversed_params) do
+    {predicate_conditions, params_after_predicates} =
+      conditions(rule.predicates, context.entity_mapping, reversed_params)
+
+    {reference_conditions, params_after_references} =
+      grant_reference_conditions(rule.to, context, params_after_predicates)
+
+    {delegation_conditions, new_params} =
+      delegation_conditions(rule.via, context, params_after_references)
+
+    rule_conditions = predicate_conditions ++ reference_conditions ++ delegation_conditions
+
+    case rule_conditions do
+      [] -> {:unconditional, new_params}
+      conditions -> {Enum.join(conditions, " AND "), new_params}
+    end
+  end
+
+  # Holding any of a rule's grant references satisfies it, so the references render as one
+  # OR group of EXISTS lookups against the grant store.
+  defp grant_reference_conditions(nil, _context, reversed_params), do: {[], reversed_params}
+
+  defp grant_reference_conditions(references, context, reversed_params) do
+    {rendered, new_params} =
+      Enum.map_reduce(references, reversed_params, fn reference, acc_params ->
+        grant_exists_condition(reference, context, acc_params)
+      end)
+
+    {[group_condition(rendered)], new_params}
+  end
+
   defp conditions(triples, entity_mapping, reversed_params) do
     Enum.map_reduce(triples, reversed_params, fn triple, acc_params ->
       condition(triple, entity_mapping, acc_params)
@@ -210,8 +526,12 @@ defmodule Hologram.DB.QueryCompiler do
     column_name = Atom.to_string(name)
 
     Enum.find(columns, fn column ->
-      column.source == {:attribute, name} or
-        (column.source == :system and column.name == column_name)
+      case column.source do
+        {:attribute, attribute_name} -> attribute_name == name
+        {:relationship, relationship_name} -> "#{relationship_name}_id" == column_name
+        :system -> column.name == column_name
+        _other_source -> false
+      end
     end)
   end
 
@@ -244,23 +564,31 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  defp include_expression({name, sub_term}, parent_mapping, mapping, parent_prefix, acc) do
+  defp include_expression({name, sub_term}, parent_mapping, mapping, policy, parent_prefix, acc) do
     join_table = Enum.find(parent_mapping.join_tables, &(&1.relationship == name))
 
     if join_table do
-      to_many_include_expression(sub_term, join_table, mapping, parent_prefix, acc)
+      to_many_include_expression(sub_term, join_table, mapping, policy, parent_prefix, acc)
     else
-      to_one_include_expression(name, sub_term, parent_mapping, mapping, parent_prefix, acc)
+      to_one_include_expression(
+        name,
+        sub_term,
+        parent_mapping,
+        mapping,
+        policy,
+        parent_prefix,
+        acc
+      )
     end
   end
 
-  defp include_pairs(term, target_mapping, mapping, quoted_alias, acc) do
+  defp include_pairs(term, target_mapping, mapping, policy, quoted_alias, acc) do
     {fragments, new_acc} =
       term.include
       |> Enum.sort_by(fn {entry_name, _sub_term} -> entry_name end)
       |> Enum.map_reduce(acc, fn {entry_name, _sub_term} = entry, inner_acc ->
         {expression, next_acc} =
-          include_expression(entry, target_mapping, mapping, quoted_alias, inner_acc)
+          include_expression(entry, target_mapping, mapping, policy, quoted_alias, inner_acc)
 
         {", '#{entry_name}', #{expression}", next_acc}
       end)
@@ -268,11 +596,32 @@ defmodule Hologram.DB.QueryCompiler do
     {Enum.join(fragments, ""), new_acc}
   end
 
-  defp include_selects(%{cardinality: :count}, _entity_mapping, _mapping, reversed_params) do
+  # An include embeds rows of the target type, so every level composes that type's :read policy,
+  # fixed at :read regardless of the operation the statement's own policy carries.
+  defp include_policy(nil, _entity_type), do: nil
+
+  defp include_policy(policy, entity_type) do
+    %{
+      anonymous?: Map.get(policy, :anonymous?, false),
+      operation: :read,
+      rules:
+        entity_type
+        |> Policy.build()
+        |> Map.get(:read, [])
+    }
+  end
+
+  defp include_selects(
+         %{cardinality: :count},
+         _entity_mapping,
+         _mapping,
+         _policy,
+         reversed_params
+       ) do
     {"", reversed_params}
   end
 
-  defp include_selects(term, entity_mapping, mapping, reversed_params) do
+  defp include_selects(term, entity_mapping, mapping, policy, reversed_params) do
     quoted_prefix = Mapper.quote_identifier(entity_mapping.table)
 
     {fragments, {new_params, _next_index}} =
@@ -280,7 +629,7 @@ defmodule Hologram.DB.QueryCompiler do
       |> Enum.sort_by(fn {name, _sub_term} -> name end)
       |> Enum.map_reduce({reversed_params, 1}, fn {name, _sub_term} = entry, acc ->
         {expression, new_acc} =
-          include_expression(entry, entity_mapping, mapping, quoted_prefix, acc)
+          include_expression(entry, entity_mapping, mapping, policy, quoted_prefix, acc)
 
         {", #{expression} AS #{Mapper.quote_identifier(Atom.to_string(name))}", new_acc}
       end)
@@ -385,6 +734,7 @@ defmodule Hologram.DB.QueryCompiler do
          sub_term,
          join_table,
          mapping,
+         policy,
          parent_prefix,
          {reversed_params, index}
        ) do
@@ -394,15 +744,26 @@ defmodule Hologram.DB.QueryCompiler do
     quoted_target = Mapper.quote_identifier("t#{index}")
 
     {conditions, filtered_params} = conditions(sub_term.filter, target_mapping, reversed_params)
-    filter_sql = Enum.map_join(conditions, "", &(" AND " <> &1))
+
+    target_policy = include_policy(policy, sub_term.entity)
+
+    {policy_conditions, policied_params} =
+      policy_conditions(
+        target_policy,
+        policy_context(sub_term.entity, mapping, target_policy, quoted_target),
+        filtered_params
+      )
+
+    filter_sql = Enum.map_join(conditions ++ policy_conditions, "", &(" AND " <> &1))
 
     {nested_pairs, new_acc} =
       include_pairs(
         sub_term,
         target_mapping,
         mapping,
+        policy,
         quoted_wrapper,
-        {filtered_params, index + 1}
+        {policied_params, index + 1}
       )
 
     # The edge scan is a nested subselect (not a join) so that only the target
@@ -433,6 +794,7 @@ defmodule Hologram.DB.QueryCompiler do
          sub_term,
          parent_mapping,
          mapping,
+         policy,
          parent_prefix,
          {reversed_params, index}
        ) do
@@ -442,22 +804,37 @@ defmodule Hologram.DB.QueryCompiler do
     target_mapping = Map.fetch!(mapping, sub_term.entity)
     quoted_alias = Mapper.quote_identifier("i#{index}")
 
+    target_policy = include_policy(policy, sub_term.entity)
+
+    {policy_conditions, policied_params} =
+      policy_conditions(
+        target_policy,
+        policy_context(sub_term.entity, mapping, target_policy, quoted_alias),
+        reversed_params
+      )
+
+    policy_sql = Enum.map_join(policy_conditions, "", &(" AND " <> &1))
+
     {nested_pairs, new_acc} =
-      include_pairs(sub_term, target_mapping, mapping, quoted_alias, {reversed_params, index + 1})
+      include_pairs(
+        sub_term,
+        target_mapping,
+        mapping,
+        policy,
+        quoted_alias,
+        {policied_params, index + 1}
+      )
 
     expression =
       "(SELECT jsonb_build_object(#{jsonb_pairs(target_mapping, quoted_alias)}#{nested_pairs}) " <>
         "FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} " <>
-        ~s|WHERE #{quoted_alias}."id" = #{parent_prefix}.#{Mapper.quote_identifier(reference_column.name)})|
+        ~s|WHERE #{quoted_alias}."id" = #{parent_prefix}.#{Mapper.quote_identifier(reference_column.name)}| <>
+        policy_sql <> ")"
 
     {expression, new_acc}
   end
 
-  defp where_clause([], _entity_mapping, reversed_params), do: {"", reversed_params}
+  defp where_clause([]), do: ""
 
-  defp where_clause(triples, entity_mapping, reversed_params) do
-    {conditions, new_params} = conditions(triples, entity_mapping, reversed_params)
-
-    {" WHERE " <> Enum.join(conditions, " AND "), new_params}
-  end
+  defp where_clause(conditions), do: " WHERE " <> Enum.join(conditions, " AND ")
 end

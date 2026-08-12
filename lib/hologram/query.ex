@@ -86,6 +86,11 @@ defmodule Hologram.Query do
   execution). A membership-element param binds a single value of the attribute's
   type. Ordering comparisons still require an orderable attribute.
 
+  To-one reference fields (`<relationship name>_id`) are filterable alongside attributes -
+  they carry the `:uuid` type, so they take equality, membership and param values, while
+  ordering comparisons and ranges reject them like any other non-orderable type. To-many
+  relationships have no reference field, and neither relationship name itself is filterable.
+
   Raises ArgumentError when the query is neither an entity type module nor a query term,
   when the predicates are not a keyword list, when a predicate names a relationship or
   an unknown attribute, or when a predicate value is invalid (unknown operator, invalid
@@ -100,11 +105,7 @@ defmodule Hologram.Query do
         message: "filter predicates must be a keyword list, got: #{inspect(predicates)}"
     end
 
-    triples =
-      Enum.flat_map(predicates, fn {name, value} ->
-        validate_attribute_name!(name, term.entity, "filtered")
-        predicate_triples!(name, value, term.entity)
-      end)
+    triples = predicate_triples!(term.entity, predicates)
 
     %{term | filter: term.filter ++ triples}
   end
@@ -349,6 +350,15 @@ defmodule Hologram.Query do
     filter_names ++ include_names
   end
 
+  @doc false
+  @spec predicate_triples!(module, keyword) :: list({atom, atom, any})
+  def predicate_triples!(entity_type, predicates) do
+    Enum.flat_map(predicates, fn {name, value} ->
+      validate_filtered_name!(name, entity_type)
+      predicate_triples!(name, value, entity_type)
+    end)
+  end
+
   defp attribute_names(entity_type) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 
@@ -357,17 +367,23 @@ defmodule Hologram.Query do
     |> Enum.sort()
   end
 
+  # Names reach type lookups already validated, so a name matching no attribute definition
+  # is a to-one reference field - every reference column carries the entity id type.
   defp attribute_type(entity_type, name) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 
-    {_name, type, _opts} =
-      Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end)
-
-    type
+    case Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end) do
+      {_name, type, _opts} -> type
+      nil -> :uuid
+    end
   end
 
   defp constraint_tuple?(value) do
     is_tuple(value) and tuple_size(value) == 2 and is_atom(elem(value, 0))
+  end
+
+  defp filterable_names(entity_type) do
+    Enum.sort(attribute_names(entity_type) ++ reference_field_names(entity_type))
   end
 
   defp equality_triple!(name, operator, operand) do
@@ -529,6 +545,19 @@ defmodule Hologram.Query do
     end
   end
 
+  defp predicate_triples!(name, {:actor}, entity_type) do
+    validate_actor_attribute!(name, entity_type)
+
+    [{name, :==, {:actor}}]
+  end
+
+  defp predicate_triples!(name, {operator, {:actor}}, entity_type)
+       when operator in @equality_operators do
+    validate_actor_attribute!(name, entity_type)
+
+    [{name, operator, {:actor}}]
+  end
+
   defp predicate_triples!(name, {operator, operand}, entity_type) when is_atom(operator) do
     cond do
       operator in @equality_operators ->
@@ -583,6 +612,12 @@ defmodule Hologram.Query do
         "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
   end
 
+  defp reference_field_names(entity_type) do
+    entity_type
+    |> to_one_relationship_names()
+    |> Enum.map(&String.to_existing_atom("#{&1}_id"))
+  end
+
   defp relationship_kind(entity_type, name) do
     {_target, kind} = validate_relationship_name!(name, entity_type)
 
@@ -615,6 +650,12 @@ defmodule Hologram.Query do
       sub_term.offset != nil
   end
 
+  defp to_one_relationship_names(entity_type) do
+    entity_type.__relationships__()
+    |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
+    |> Enum.map(fn {name, _type, _opts} -> name end)
+  end
+
   defp to_term(%{entity: _entity_type} = term), do: term
 
   defp to_term(query) do
@@ -635,6 +676,18 @@ defmodule Hologram.Query do
     end
   end
 
+  # The actor leaf carries the acting user's entity id, so it compares only against names
+  # holding an entity id - any other type would compile a comparison that never matches.
+  defp validate_actor_attribute!(name, entity_type) do
+    type = attribute_type(entity_type, name)
+
+    if type != :uuid do
+      raise ArgumentError,
+        message:
+          "user_id() requires a uuid attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
+    end
+  end
+
   defp validate_attribute_name!(name, entity_type, usage) do
     attribute_names = attribute_names(entity_type)
 
@@ -649,6 +702,32 @@ defmodule Hologram.Query do
 
       true ->
         known = Enum.map_join(attribute_names, ", ", &inspect/1)
+
+        raise ArgumentError,
+          message:
+            "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known attributes: #{known}"
+    end
+  end
+
+  defp validate_filtered_name!(name, entity_type) do
+    filterable_names = filterable_names(entity_type)
+
+    cond do
+      name in filterable_names ->
+        :ok
+
+      name in to_one_relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered - filter its reference via :#{name}_id"
+
+      name in relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered"
+
+      true ->
+        known = Enum.map_join(filterable_names, ", ", &inspect/1)
 
         raise ArgumentError,
           message:

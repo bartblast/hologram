@@ -6,6 +6,10 @@ defmodule Hologram.EntityTest do
   alias Hologram.Entity.NotIncluded
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module11
+  alias Hologram.Test.Fixtures.Entity.Module12
+  alias Hologram.Test.Fixtures.Entity.Module13
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -28,6 +32,34 @@ defmodule Hologram.EntityTest do
     assert Module1.__is_hologram_entity__()
   end
 
+  describe "__is_hologram_user_entity__/0" do
+    test "is defined by the user option" do
+      assert Module14.__is_hologram_user_entity__()
+    end
+
+    test "is not defined without the user option" do
+      Code.ensure_loaded!(Module1)
+
+      refute function_exported?(Module1, :__is_hologram_user_entity__, 0)
+    end
+  end
+
+  describe "__policies__/0" do
+    test "returns empty list for entity type with no policy declarations" do
+      assert Module1.__policies__() == []
+    end
+
+    test "returns policy definitions in declaration order, splitting grant references off the predicates" do
+      assert Module13.__policies__() == [
+               {:read, nil, nil, [public: true]},
+               {:read, [:editor, :owner], nil, []},
+               {:publish, nil, :parent, []},
+               {:triage, nil, nil, [priority: {:>=, 3}]},
+               {:unlink, nil, nil, [parent_id: nil]}
+             ]
+    end
+  end
+
   describe "__relationships__/0" do
     test "returns empty list for entity type with no relationship declarations" do
       assert Module1.__relationships__() == []
@@ -39,6 +71,16 @@ defmodule Hologram.EntityTest do
                {:b, Module2, [optional: true]},
                {:c, Module1, []}
              ]
+    end
+  end
+
+  describe "__roles__/0" do
+    test "returns empty list for entity type with no role declarations" do
+      assert Module1.__roles__() == []
+    end
+
+    test "returns role definitions sorted by name regardless of declaration order" do
+      assert Module11.__roles__() == [{:editor, []}, {:owner, []}]
     end
   end
 
@@ -97,6 +139,41 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "allow/2" do
+    test "replaces a user_id() call with the actor sentinel" do
+      defmodule InlineEntityFixture1 do
+        use Hologram.Entity
+
+        allow :read, id: user_id()
+      end
+
+      assert InlineEntityFixture1.__policies__() == [{:read, nil, nil, [id: {:actor}]}]
+    end
+
+    test "replaces a user_id() call inside an operator tuple" do
+      defmodule InlineEntityFixture2 do
+        use Hologram.Entity
+
+        allow :update, id: {:!=, user_id()}
+      end
+
+      assert InlineEntityFixture2.__policies__() == [{:update, nil, nil, [id: {:!=, {:actor}}]}]
+    end
+
+    test "rejects paren-less user_id" do
+      expected_msg =
+        "paren-less user_id in a policy in Hologram.EntityTest.InlineEntityFixture3 - did you mean user_id()?"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture3 do
+          use Hologram.Entity
+
+          allow :read, id: user_id
+        end
+      end
+    end
+  end
+
   describe "attribute/3" do
     test "accepts all valid attribute types" do
       assert Module4.__attributes__() == [
@@ -105,6 +182,24 @@ defmodule Hologram.EntityTest do
                {:c, :enum, [values: [:x, :y], default: :x]},
                {:d, :float, []}
              ]
+    end
+  end
+
+  describe "expand_role/2" do
+    test "returns the role name alone when no other role extends it" do
+      assert expand_role(Module12, :admin) == [:admin]
+    end
+
+    test "returns the roles extending the given one through any number of hops" do
+      assert expand_role(Module12, :viewer) == [:admin, :editor, :owner, :viewer]
+    end
+
+    test "returns the roles listing the given one among several extended roles" do
+      assert expand_role(Module12, :owner) == [:admin, :owner]
+    end
+
+    test "returns the role name alone for entity type with no role declarations" do
+      assert expand_role(Module1, :owner) == [:owner]
     end
   end
 
@@ -178,12 +273,47 @@ defmodule Hologram.EntityTest do
       assert new(Module3, %{c_id: "id_2"}).c_id == "id_2"
     end
 
+    test "raises on a role grant" do
+      expected_msg = "role grants are written only through grant_role/revoke_role"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        new(Hologram.Auth.RoleGrant)
+      end
+    end
+
     test "raises on an assigned relationship value" do
       expected_msg =
         "relationship :c of Hologram.Test.Fixtures.Entity.Module3 cannot be assigned at construction - set a to-one reference via the :c_id field, to-many edges via add_relationship"
 
       assert_error ArgumentError, expected_msg, fn ->
         new(Module3, %{c: "id_2"})
+      end
+    end
+  end
+
+  describe "role/2" do
+    test "unifies an identical re-declaration" do
+      defmodule InlineRoleFixture1 do
+        use Hologram.Entity
+
+        role :owner, creator: true
+        role :owner, creator: true
+      end
+
+      assert InlineRoleFixture1.__roles__() == [{:owner, [creator: true]}]
+    end
+
+    test "rejects a re-declaration with different options" do
+      expected_msg =
+        "conflicting declarations for role :owner in Hologram.EntityTest.InlineRoleFixture2: [] and [creator: true] - repeated role declarations must be identical"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineRoleFixture2 do
+          use Hologram.Entity
+
+          role :owner
+          role :owner, creator: true
+        end
       end
     end
   end

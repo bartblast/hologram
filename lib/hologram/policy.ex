@@ -1,0 +1,364 @@
+defmodule Hologram.Policy do
+  @moduledoc """
+  The construct for policies shared by several entity types.
+
+  A policy module holds `role` and `allow` declarations written exactly as they are written
+  inside an entity type:
+
+      defmodule MyApp.Policies.AdminManaged do
+        use Hologram.Policy
+
+        alias MyApp.Roles.Admin
+
+        allow :read, to: Admin
+        allow :update, to: Admin
+        allow :delete, to: Admin
+      end
+
+  An entity type takes them on with `use`, and keeps declaring its own alongside:
+
+      defmodule MyApp.Invoice do
+        use Hologram.Entity
+        use MyApp.Policies.AdminManaged
+
+        attribute :number, :string
+
+        role :admin
+        allow :manage_roles, to: :admin
+      end
+
+  Policy modules compose: one may `use` another, and an entity type taking on the outer one
+  receives the declarations of both. A role declared by several of them collapses into one
+  declaration, as long as every declaration of it is identical.
+
+  Declarations are evaluated where they are written, so aliases, module attributes and helper
+  functions in a policy module mean what they mean there - the entity type receives values,
+  not code to re-resolve.
+  """
+
+  alias Hologram.Auth.RoleGrant
+  alias Hologram.Commons.Types, as: T
+  alias Hologram.Entity
+  alias Hologram.Entity.Validator, as: EntityValidator
+  alias Hologram.Query
+  alias Hologram.Reflection
+
+  @model_facts_key {__MODULE__, :model_facts}
+
+  defmacro __using__(_opts) do
+    quote do
+      import Hologram.Policy, only: [allow: 1, allow: 2, role: 1, role: 2]
+
+      Module.register_attribute(__MODULE__, :__policy_declarations__, accumulate: true)
+
+      @before_compile Hologram.Policy
+    end
+  end
+
+  @doc false
+  defmacro __before_compile__(env) do
+    declarations =
+      env.module
+      |> Module.get_attribute(:__policy_declarations__)
+      |> Enum.reverse()
+
+    # The replay is a plain call executed in the including module's body, not a macro expanded
+    # into it: a module body is fully expanded before any of it runs, so at expansion time the
+    # accumulators use Hologram.Entity registers do not exist yet.
+    replay_calls =
+      Enum.map(declarations, fn declaration ->
+        quote do
+          Hologram.Policy.__replay__(__MODULE__, unquote(Macro.escape(declaration)))
+        end
+      end)
+
+    quote do
+      defmacro __using__(_opts) do
+        unquote(Macro.escape({:__block__, [], replay_calls}))
+      end
+    end
+  end
+
+  @doc false
+  @spec __replay__(module, tuple) :: :ok
+  def __replay__(module, declaration) do
+    cond do
+      Module.has_attribute?(module, :__policies__) ->
+        replay_into_entity(module, declaration)
+
+      Module.has_attribute?(module, :__policy_declarations__) ->
+        Module.put_attribute(module, :__policy_declarations__, declaration)
+
+      true ->
+        raise Hologram.CompileError,
+          message:
+            "policies can be used only in a module with use Hologram.Entity or use Hologram.Policy - #{inspect(module)} has neither"
+    end
+
+    :ok
+  end
+
+  @doc """
+  Accumulates the given policy declaration, for replay into the entity types taking this policy on.
+
+  Takes the same operation and spec as `Hologram.Entity.allow/2`.
+  """
+  @spec allow(atom, T.opts()) :: Macro.t()
+  defmacro allow(operation, spec \\ []) do
+    spec = Entity.replace_actor_leaves!(spec, __CALLER__.module)
+
+    quote do
+      operation = unquote(operation)
+      spec = unquote(spec)
+
+      EntityValidator.validate_allow!(__MODULE__, operation, spec)
+
+      @__policy_declarations__ {:allow, operation, spec}
+    end
+  end
+
+  @doc """
+  Accumulates the given role declaration, for replay into the entity types taking this policy on.
+
+  Takes the same name and options as `Hologram.Entity.role/2`.
+  """
+  @spec role(atom, T.opts()) :: Macro.t()
+  defmacro role(name, opts \\ []) do
+    quote do
+      name = unquote(name)
+      opts = unquote(opts)
+
+      EntityValidator.validate_role!(__MODULE__, name, opts)
+
+      @__policy_declarations__ {:role, name, opts}
+    end
+  end
+
+  @doc """
+  Builds the compiled policy of the given entity type: a map of operation to the list of rules granting it, in declaration order.
+
+  The grant store's own policy is framework-supplied rather than declared: a user always sees
+  the grants they hold, and sees others' grants on a resource when they hold one of that entity
+  type's read-grants roles.
+
+  A rule holds the predicate triples of its allow line, its grant references, and its delegation.
+  Predicates carry the actor sentinel in value position where the declaration called user_id().
+  Grant references are extends-expanded, so a reference to a role also names every role carrying it:
+  own roles as {:own, role names}, another entity type's roles as {:type, entity type, role names},
+  a related instance's roles as {:rel, relationship name, role names}, and global role modules as
+  {:global, role modules} - nil when the line has none. The grant store's framework-supplied rules
+  carry a fifth kind no declaration can spell, {:resource, entity type, role names}: roles held on
+  the resource a grant row names.
+  A rule grants its operation when its predicates hold, one of its grant references is held, and its
+  delegation grants the same operation - and a policy grants its operation when any of its rules does.
+  """
+  @spec build(module) :: %{
+          atom => list(%{predicates: list(tuple), to: list(tuple) | nil, via: atom | nil})
+        }
+  def build(RoleGrant), do: %{read: role_grant_read_rules()}
+
+  def build(entity_type) do
+    entity_type.__policies__()
+    |> Enum.map(fn {operation, to, via, predicates} ->
+      rule = %{
+        predicates: Query.predicate_triples!(entity_type, predicates),
+        to: build_to(entity_type, to),
+        via: via
+      }
+
+      {operation, rule}
+    end)
+    |> Enum.group_by(fn {operation, _rule} -> operation end, fn {_operation, rule} -> rule end)
+  end
+
+  @doc """
+  Returns the given entity type modules that declare no allow lines, sorted.
+
+  Such an entity type is statically dead under default deny - every query against it returns
+  nothing, whatever the acting user holds. The grant store is never listed: its policy is
+  framework-supplied rather than declared.
+  """
+  @spec dead_entity_types(list(module)) :: list(module)
+  def dead_entity_types(entity_types) do
+    entity_types
+    |> Enum.filter(&(&1 != RoleGrant and &1.__policies__() == []))
+    |> Enum.sort_by(&inspect/1)
+  end
+
+  @doc """
+  Returns the own roles qualifying their holders to manage the grants of the given entity type, sorted.
+
+  These are the extends-expanded own roles of its allow :manage_roles rules - empty when the entity
+  type declares none, which leaves granting on it to the trusted tier.
+  """
+  @spec manage_roles_qualifying_roles(module) :: list(atom)
+  def manage_roles_qualifying_roles(entity_type) do
+    own_role_names(entity_type, :manage_roles)
+  end
+
+  @doc false
+  @spec reset_model_facts_cache() :: :ok
+  def reset_model_facts_cache do
+    :persistent_term.erase(@model_facts_key)
+
+    :ok
+  end
+
+  @doc """
+  Returns the own roles whose holders see the grants others hold on the given entity type, sorted.
+
+  These are the extends-expanded own roles of its allow :read_grants rules, defaulting to the roles
+  qualifying to manage grants when the entity type declares no read_grants rule.
+  """
+  @spec read_grants_roles(module) :: list(atom)
+  def read_grants_roles(entity_type) do
+    case own_role_names(entity_type, :read_grants) do
+      [] -> manage_roles_qualifying_roles(entity_type)
+      role_names -> role_names
+    end
+  end
+
+  defp build_global_reference([]), do: []
+
+  defp build_global_reference(role_modules) do
+    expanded_modules =
+      role_modules
+      |> Enum.flat_map(&expand_global_role/1)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    [{:global, expanded_modules}]
+  end
+
+  defp build_own_reference(_entity_type, []), do: []
+
+  defp build_own_reference(entity_type, role_names) do
+    expanded_names =
+      role_names
+      |> Enum.flat_map(&Entity.expand_role(entity_type, &1))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    [{:own, expanded_names}]
+  end
+
+  defp build_to(_entity_type, nil), do: nil
+
+  defp build_to(entity_type, to) do
+    references = List.wrap(to)
+
+    {role_modules, plain_references} = Enum.split_with(references, &Reflection.alias?/1)
+    {role_names, typed_references} = Enum.split_with(plain_references, &is_atom/1)
+
+    own_reference = build_own_reference(entity_type, role_names)
+    typed = Enum.map(typed_references, &build_typed_reference(entity_type, &1))
+    global_reference = build_global_reference(role_modules)
+
+    own_reference ++ typed ++ global_reference
+  end
+
+  defp build_typed_reference(entity_type, {reference, role_name}) do
+    if Reflection.alias?(reference) do
+      {:type, reference, Entity.expand_role(reference, role_name)}
+    else
+      target_type = Entity.relationship_target(entity_type, reference)
+
+      {:rel, reference, Entity.expand_role(target_type, role_name)}
+    end
+  end
+
+  # A reference to a role module is satisfied by every role carrying it - the module itself and
+  # every role whose extends chain reaches it. The sweep is model-wide: role modules resolve
+  # globally, so a reference means the same thing in every entity type.
+  defp expand_global_role(role_module) do
+    expand_global_role_modules(MapSet.new([role_module]), model_facts().extends_by_role_module)
+  end
+
+  defp expand_global_role_modules(modules, extends_by_module) do
+    expanded =
+      Enum.reduce(extends_by_module, modules, fn {module, targets}, acc ->
+        if Enum.any?(targets, &MapSet.member?(modules, &1)) do
+          MapSet.put(acc, module)
+        else
+          acc
+        end
+      end)
+
+    if MapSet.size(expanded) == MapSet.size(modules) do
+      Enum.sort(expanded)
+    else
+      expand_global_role_modules(expanded, extends_by_module)
+    end
+  end
+
+  # Both facts are model-wide sweeps over every module in the project, and policies are built
+  # on the request path - per policied query, per delegation hop and per can? call - so they are
+  # computed once and cached for the lifetime of the runtime, like the physical name mapping.
+  # The compiler and the application boot reset the cache, so a recompiled model is picked up.
+  defp model_facts do
+    case :persistent_term.get(@model_facts_key, nil) do
+      nil ->
+        facts = %{
+          entity_types: Reflection.list_entities(),
+          extends_by_role_module:
+            Map.new(Reflection.list_roles(), fn module -> {module, module.__extends__()} end)
+        }
+
+        :persistent_term.put(@model_facts_key, facts)
+
+        facts
+
+      facts ->
+        facts
+    end
+  end
+
+  defp own_reference_names(%{to: nil}), do: []
+
+  defp own_reference_names(%{to: references}) do
+    Enum.flat_map(references, fn
+      {:own, role_names} -> role_names
+      _other_reference -> []
+    end)
+  end
+
+  defp own_role_names(entity_type, operation) do
+    entity_type
+    |> build()
+    |> Map.get(operation, [])
+    |> Enum.flat_map(&own_reference_names/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  # Everyone sees the grants they hold. Seeing someone else's grants on a resource takes one of
+  # that resource type's read-grants roles, held on the very resource the grant row names - so
+  # the check reads grant rows through grant rows, never through this policy again.
+  defp role_grant_read_rules do
+    resource_rules =
+      model_facts().entity_types
+      |> Enum.reject(&(&1 == RoleGrant))
+      |> Enum.map(&{&1, read_grants_roles(&1)})
+      |> Enum.reject(fn {_entity_type, role_names} -> role_names == [] end)
+      |> Enum.sort_by(fn {entity_type, _role_names} -> RoleGrant.resource_type(entity_type) end)
+      |> Enum.map(&role_grant_resource_rule/1)
+
+    [%{predicates: [{:user_id, :==, {:actor}}], to: nil, via: nil} | resource_rules]
+  end
+
+  defp role_grant_resource_rule({entity_type, role_names}) do
+    %{
+      predicates: [{:resource_type, :==, RoleGrant.resource_type(entity_type)}],
+      to: [{:resource, entity_type, role_names}],
+      via: nil
+    }
+  end
+
+  defp replay_into_entity(module, {:allow, operation, spec}) do
+    Entity.__put_policy__(module, operation, spec)
+  end
+
+  defp replay_into_entity(module, {:role, name, opts}) do
+    Entity.__put_role__(module, name, opts)
+  end
+end

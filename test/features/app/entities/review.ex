@@ -8,4 +8,6 @@ defmodule HologramFeatureTests.Entities.Review do
   attribute :rating, :integer, in: 1..5
 
   relationship :product, Product
+
+  allow :read
 end

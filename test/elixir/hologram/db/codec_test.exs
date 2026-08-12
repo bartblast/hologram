@@ -3,6 +3,8 @@ defmodule Hologram.DB.CodecTest do
 
   import Hologram.DB.Codec
 
+  alias Hologram.Test.Fixtures.Role.Module1
+
   @uuid_binary Base.decode16!("0192b1e97a2b7c3d8e4f5a6b7c8d9e0f", case: :lower)
   @uuid_string "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
 
@@ -27,6 +29,10 @@ defmodule Hologram.DB.CodecTest do
       assert decode("high", :enum) == :high
     end
 
+    test "decodes :enum labels beginning with an uppercase letter to modules" do
+      assert decode("Hologram.Test.Fixtures.Role.Module1", :enum) == Module1
+    end
+
     test "passes :float values through" do
       assert decode(1.5, :float) == 1.5
     end
@@ -41,6 +47,16 @@ defmodule Hologram.DB.CodecTest do
 
     test "decodes :uuid values from 16-byte binaries to strings" do
       assert decode(@uuid_binary, :uuid) == @uuid_string
+    end
+  end
+
+  describe "decode_enum_label/1" do
+    test "returns the module named by a label beginning with an uppercase letter" do
+      assert decode_enum_label("Hologram.Test.Fixtures.Role.Module1") == Module1
+    end
+
+    test "returns the plain atom named by any other label" do
+      assert decode_enum_label("high") == :high
     end
   end
 
@@ -84,6 +100,10 @@ defmodule Hologram.DB.CodecTest do
       assert encode(:low, :enum) == "low"
     end
 
+    test "encodes :enum values that are modules without their Elixir prefix" do
+      assert encode(Module1, :enum) == "Hologram.Test.Fixtures.Role.Module1"
+    end
+
     test "passes :float values through" do
       assert encode(2.5, :float) == 2.5
     end
@@ -98,6 +118,16 @@ defmodule Hologram.DB.CodecTest do
 
     test "encodes :uuid values from strings to 16-byte binaries" do
       assert encode(@uuid_string, :uuid) == @uuid_binary
+    end
+  end
+
+  describe "encode_enum_value/1" do
+    test "strips the Elixir prefix of a module" do
+      assert encode_enum_value(Module1) == "Hologram.Test.Fixtures.Role.Module1"
+    end
+
+    test "keeps a plain atom as it is spelled" do
+      assert encode_enum_value(:high) == "high"
     end
   end
 end

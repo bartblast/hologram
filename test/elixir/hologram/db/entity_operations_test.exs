@@ -3,14 +3,18 @@ defmodule Hologram.DB.EntityOperationsTest do
 
   import Hologram.DB.EntityOperations
 
+  alias Hologram.Auth.Context
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
 
   defp count_edges(source_entity, target_entity) do
     count_sql =
@@ -231,6 +235,100 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> Entity.new(c_id: "garbage")
         |> create()
       end
+    end
+  end
+
+  describe "create/1 creator grants" do
+    defp granted_roles(user_id, resource_id) do
+      select_sql =
+        ~s|SELECT "role" FROM "hologram_data"."hologram_role_grant" | <>
+          ~s|WHERE "user_id" = $1 AND "resource_id" = $2 ORDER BY "role"|
+
+      params = [Codec.encode(user_id, :uuid), Codec.encode(resource_id, :uuid)]
+      {:ok, %{rows: rows}} = Connection.query(select_sql, params)
+
+      Enum.map(rows, fn [role] -> role end)
+    end
+
+    test "grants every creator role of the entity type to the acting user" do
+      user = create(Entity.new(Module14, email: "user_3@example.com"))
+
+      resource = Context.with_actor(user.id, fn -> create(Entity.new(PolicyModule1)) end)
+
+      assert granted_roles(user.id, resource.id) == ["maintainer", "owner"]
+    end
+
+    test "grants nothing outside an actor context" do
+      resource = create(Entity.new(PolicyModule1))
+
+      select_sql =
+        ~s|SELECT count(*) FROM "hologram_data"."hologram_role_grant" WHERE "resource_id" = $1|
+
+      {:ok, %{rows: [[count]]}} =
+        Connection.query(select_sql, [Codec.encode(resource.id, :uuid)])
+
+      assert count == 0
+    end
+
+    test "grants nothing for an entity type declaring no creator role" do
+      user = create(Entity.new(Module14, email: "user_4@example.com"))
+
+      resource = Context.with_actor(user.id, fn -> create(Entity.new(Module1)) end)
+
+      assert granted_roles(user.id, resource.id) == []
+    end
+
+    test "rolls the entity row back when a grant fails" do
+      missing_user_id = Entity.generate_id()
+      entity = Entity.new(PolicyModule1)
+
+      assert_raise Postgrex.Error, fn ->
+        Context.with_actor(missing_user_id, fn -> create(entity) end)
+      end
+
+      select_sql =
+        ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_policy_module1" WHERE "id" = $1|
+
+      {:ok, %{rows: [[count]]}} = Connection.query(select_sql, [Codec.encode(entity.id, :uuid)])
+
+      assert count == 0
+    end
+  end
+
+  describe "create_if_absent/1" do
+    defp count_role_grants(user_id) do
+      count_sql =
+        ~s|SELECT count(*) FROM "hologram_data"."hologram_role_grant" WHERE "user_id" = $1|
+
+      {:ok, %{rows: [[count]]}} = Connection.query(count_sql, [Codec.encode(user_id, :uuid)])
+
+      count
+    end
+
+    defp role_grant(user, role) do
+      %RoleGrant{id: Entity.generate_id(), role: role, user_id: user.id}
+    end
+
+    test "inserts the entity when no conflicting row exists" do
+      user = create(Entity.new(Module14, email: "user_1@example.com"))
+
+      assert create_if_absent(role_grant(user, :owner)) == :ok
+      assert count_role_grants(user.id) == 1
+    end
+
+    test "keeps the existing row when a unique index conflicts" do
+      user = create(Entity.new(Module14, email: "user_2@example.com"))
+      first_grant = role_grant(user, :owner)
+
+      create_if_absent(first_grant)
+
+      assert create_if_absent(role_grant(user, :owner)) == :ok
+      assert count_role_grants(user.id) == 1
+
+      select_sql = ~s|SELECT "id" FROM "hologram_data"."hologram_role_grant" WHERE "user_id" = $1|
+      {:ok, %{rows: [[id]]}} = Connection.query(select_sql, [Codec.encode(user.id, :uuid)])
+
+      assert Codec.decode(id, :uuid) == first_grant.id
     end
   end
 

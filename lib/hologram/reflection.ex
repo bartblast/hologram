@@ -377,10 +377,26 @@ defmodule Hologram.Reflection do
 
   @doc """
   Lists Elixir modules which are Hologram entity types and that belong to any of the OTP apps in the project.
+
+  The framework's role grant store joins the data model only when an entity type is designated
+  as the user entity - without one there is nothing for its grants to point at.
   """
   @spec list_entities() :: list(module)
   def list_entities do
-    Enum.filter(list_elixir_modules(), &entity?/1)
+    list_elixir_modules()
+    |> Enum.filter(&entity?/1)
+    |> include_role_grant_when_designated()
+  end
+
+  @doc """
+  Lists Elixir modules which are Hologram entity types and that belong to the given OTP apps.
+  """
+  @spec list_entities(list(atom)) :: list(module)
+  def list_entities(apps) do
+    apps
+    |> list_elixir_modules()
+    |> Enum.filter(&entity?/1)
+    |> include_role_grant_when_designated()
   end
 
   @doc """
@@ -433,6 +449,14 @@ defmodule Hologram.Reflection do
     |> Protocol.extract_impls(paths)
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     |> Enum.map(&Module.concat(protocol, &1))
+  end
+
+  @doc """
+  Lists Elixir modules which are Hologram global role modules and that belong to any of the OTP apps in the project.
+  """
+  @spec list_roles() :: list(module)
+  def list_roles do
+    Enum.filter(list_elixir_modules(), &role?/1)
   end
 
   @doc """
@@ -673,6 +697,23 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns true if the given term is a global role module (a module that has a "use Hologram.Role" directive).
+  Otherwise false is returned.
+
+  ## Examples
+
+      iex> role?(MyApp.Roles.Admin)
+      true
+
+      iex> role?(Hologram.Reflection)
+      false
+  """
+  @spec role?(term) :: boolean
+  def role?(term) do
+    elixir_module?(term) && has_function?(term, :__is_hologram_role__, 0)
+  end
+
+  @doc """
   Returns the file path of the given module's source code.
   """
   @spec source_path(module()) :: String.t()
@@ -735,6 +776,30 @@ defmodule Hologram.Reflection do
       Enum.any?(Mix.Dep.cached(), & &1.opts[:in_umbrella])
   end
 
+  @doc """
+  Returns the entity type module designated as the project's user entity type, or nil when no entity type is designated.
+  """
+  @spec user_entity() :: module | nil
+  def user_entity do
+    Enum.find(list_entities(), &user_entity?/1)
+  end
+
+  @doc """
+  Returns true if the given term is the entity type module designated as the project's user entity type, or false otherwise.
+
+  ## Examples
+
+      iex> user_entity?(MyUser)
+      true
+
+      iex> user_entity?(MyPost)
+      false
+  """
+  @spec user_entity?(term) :: boolean
+  def user_entity?(term) do
+    entity?(term) && has_function?(term, :__is_hologram_user_entity__, 0)
+  end
+
   defp apps_depending_on_hologram do
     apps =
       for {app, _description, _version} <- Application.loaded_applications(),
@@ -754,6 +819,16 @@ defmodule Hologram.Reflection do
     else
       beam_path_str = to_string(beam_path)
       not File.exists?(beam_path_str, [:raw])
+    end
+  end
+
+  # The check runs over the entity types already swept, never through user_entity/0 -
+  # that function lists entity types itself, which would recurse.
+  defp include_role_grant_when_designated(entity_types) do
+    if Enum.any?(entity_types, &user_entity?/1) do
+      entity_types
+    else
+      entity_types -- [Hologram.Auth.RoleGrant]
     end
   end
 

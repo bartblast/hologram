@@ -80,18 +80,22 @@ defmodule Hologram.DB.Schema do
   reconciliation comparison share. :tables maps each table name (entity tables and
   join tables alike) to its definition: :columns (column name to %{type:, collation:,
   null:}), :primary_key (%{columns:, constraint:}), :foreign_keys (owning column name
-  to %{references:, on_delete:, constraint:}), and :indexes (index name to %{columns:}).
+  to %{references:, on_delete:, constraint:}), and :indexes (index name to %{columns:, nulls_distinct:, unique:}).
   :enum_types maps each derived enum type name to its values in declaration order.
   Join table columns are fixed: source_id/target_id uuid NOT NULL with a composite
   primary key, both columns FK ON DELETE RESTRICT, and the reverse index over
-  (target_id, source_id).
+  (target_id, source_id). Entity table foreign keys are ON DELETE RESTRICT, except the
+  role grant store's user references, which are ON DELETE NO ACTION.
   """
   @spec from_mapping(%{module => %{atom => any}}) :: %{atom => any}
   def from_mapping(mapping) do
     tables =
       mapping
-      |> Enum.flat_map(fn {_entity_type, entity_mapping} ->
-        [entity_table(entity_mapping) | Enum.map(entity_mapping.join_tables, &join_table/1)]
+      |> Enum.flat_map(fn {entity_type, entity_mapping} ->
+        [
+          entity_table(entity_type, entity_mapping)
+          | Enum.map(entity_mapping.join_tables, &join_table/1)
+        ]
       end)
       |> Map.new()
 
@@ -215,7 +219,14 @@ defmodule Hologram.DB.Schema do
     pk_renames ++ fk_renames
   end
 
-  defp entity_table(entity_mapping) do
+  # The role grant store's user references never rewrite rows: a cascade or set-null fired
+  # by the database would change synced rows without an outbox event, stranding stale grants
+  # on clients - deleting a user revokes their grants through the framework path instead.
+  defp delete_action(Hologram.Auth.RoleGrant), do: :no_action
+
+  defp delete_action(_entity_type), do: :restrict
+
+  defp entity_table(entity_type, entity_mapping) do
     columns =
       Map.new(entity_mapping.columns, fn column ->
         {column.name, %{type: column.sql_type, collation: column.collation, null: column.null}}
@@ -228,12 +239,18 @@ defmodule Hologram.DB.Schema do
         {column.name,
          %{
            references: column.references,
-           on_delete: :restrict,
+           on_delete: delete_action(entity_type),
            constraint: column.fk_constraint
          }}
       end)
 
-    indexes = Map.new(reference_columns, &{&1.fk_index, %{columns: [&1.name]}})
+    fk_indexes =
+      Map.new(
+        reference_columns,
+        &{&1.fk_index, %{columns: [&1.name], nulls_distinct: true, unique: false}}
+      )
+
+    indexes = Map.merge(fk_indexes, entity_mapping.indexes)
 
     {entity_mapping.table,
      %{
@@ -360,7 +377,14 @@ defmodule Hologram.DB.Schema do
       actual_definition.indexes[name] == target_index
     end)
     |> Enum.map(fn {name, target_index} ->
-      %{op: :create_index, table: table, index: name, columns: target_index.columns}
+      %{
+        op: :create_index,
+        table: table,
+        index: name,
+        columns: target_index.columns,
+        nulls_distinct: target_index.nulls_distinct,
+        unique: target_index.unique
+      }
     end)
   end
 
@@ -400,7 +424,13 @@ defmodule Hologram.DB.Schema do
          constraint: join_table.pk_constraint
        },
        foreign_keys: foreign_keys,
-       indexes: %{join_table.reverse_index => %{columns: ["target_id", "source_id"]}}
+       indexes: %{
+         join_table.reverse_index => %{
+           columns: ["target_id", "source_id"],
+           nulls_distinct: true,
+           unique: false
+         }
+       }
      }}
   end
 

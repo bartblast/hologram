@@ -10,6 +10,7 @@ defmodule Hologram.DB.QueryCache do
   alias Hologram.DB.QueryCompiler
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SortKey
+  alias Hologram.Policy
   alias Hologram.Query.Registry
   alias Hologram.Reflection
 
@@ -86,6 +87,11 @@ defmodule Hologram.DB.QueryCache do
   Rebuilds the query cache from the current component modules and mapping - the
   live-reload path after a dev code change. A no-op when the database is not
   running (no entities declared at boot). Returns :ok.
+
+  Raises Hologram.CompileError when a registered query reads an entity type
+  declaring no allow lines - default deny makes it statically dead, returning
+  no rows when it is the query's root and no embedded row when it is an
+  include target.
   """
   @spec reload() :: :ok
   def reload do
@@ -130,6 +136,18 @@ defmodule Hologram.DB.QueryCache do
     |> Enum.each(&maybe_backfill_op!(&1, mapping))
   end
 
+  defp dead_include_message(module, dead_entity_types) do
+    "the registered query in #{inspect(module)} includes #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny leaves the embed empty in every row. Add allow lines, or drop the include."
+  end
+
+  defp dead_root_message(module, dead_entity_types) do
+    "the registered query in #{inspect(module)} reads #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny returns no rows to any session. Add allow lines, or drop the query."
+  end
+
+  defp declare_verb([_single_entity_type]), do: "declares"
+
+  defp declare_verb(_entity_types), do: "declare"
+
   # The registered queries' ordered pairs enrich the mapping with sort-key
   # companions - the cache owns this derivation because extraction needs no
   # mapping and the cache boots right after the database. With no pairs the boot
@@ -155,6 +173,17 @@ defmodule Hologram.DB.QueryCache do
     Application.get_env(:hologram, :query_cache_impl, __MODULE__)
   end
 
+  defp included_entity_types(term) do
+    term.include
+    |> Map.values()
+    |> Enum.flat_map(&queried_entity_types/1)
+    |> Enum.uniq()
+  end
+
+  defp listing(entity_types) do
+    Enum.map_join(entity_types, ", ", &inspect/1)
+  end
+
   defp maybe_backfill_op!(op, mapping) do
     {_entity_type, entity_mapping} =
       Enum.find(mapping, fn {_entity_type, table_mapping} -> table_mapping.table == op.table end)
@@ -175,7 +204,11 @@ defmodule Hologram.DB.QueryCache do
 
   defp populate do
     modules = impl().component_modules()
-    terms = QueryExtractor.extract_queries(modules)
+    module_queries = Enum.map(modules, &{&1, QueryExtractor.extract_module_queries(&1)})
+
+    Enum.each(module_queries, &validate_readable_queries!/1)
+
+    terms = Enum.flat_map(module_queries, fn {_module, module_terms} -> module_terms end)
     mapping = ensure_mapping(terms)
 
     entries =
@@ -201,5 +234,43 @@ defmodule Hologram.DB.QueryCache do
 
   defp qualified_table(table) do
     ~s("hologram_data".#{Mapper.quote_identifier(table)})
+  end
+
+  defp queried_entity_types(term) do
+    nested_types =
+      term.include
+      |> Map.values()
+      |> Enum.flat_map(&queried_entity_types/1)
+
+    Enum.uniq([term.entity | nested_types])
+  end
+
+  defp validate_readable_includes!(module, term) do
+    dead_entity_types =
+      term
+      |> included_entity_types()
+      |> Policy.dead_entity_types()
+
+    if dead_entity_types != [] do
+      raise Hologram.CompileError, message: dead_include_message(module, dead_entity_types)
+    end
+
+    :ok
+  end
+
+  # A registered query naming an entity type with no allow lines is statically dead: the policied
+  # read path composes default deny into every statement it reaches. The root and an include target
+  # fail differently, so they are checked and reported apart - and a dead root is reported alone,
+  # because a query returning no rows produces no embeds to be empty either.
+  defp validate_readable_queries!({module, module_terms}) do
+    Enum.each(module_terms, fn term ->
+      case Policy.dead_entity_types([term.entity]) do
+        [] ->
+          validate_readable_includes!(module, term)
+
+        dead_entity_types ->
+          raise Hologram.CompileError, message: dead_root_message(module, dead_entity_types)
+      end
+    end)
   end
 end

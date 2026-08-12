@@ -1,0 +1,107 @@
+defmodule HologramFeatureTests.PoliciesPage do
+  use Hologram.Page
+  use Hologram.Query
+
+  alias Hologram.Auth
+  alias HologramFeatureTests.Components.Policies.Component1
+  alias HologramFeatureTests.Entities.Document
+  alias HologramFeatureTests.Entities.User
+
+  route "/policies"
+
+  layout HologramFeatureTests.Components.DefaultLayout
+
+  def init(_params, component, _server) do
+    put_state(component, :result, nil)
+  end
+
+  def template do
+    ~HOLO"""
+    <p>
+      <button $click={command: :create_own_document}> Create own document </button>
+      <button $click={command: :grant_editor}> Grant editor </button>
+      <button $click={command: :leave_last_owner}> Leave last owner </button>
+      <button $click={command: :log_in}> Log in </button>
+      <button $click={command: :revoke_editor}> Revoke editor </button>
+      <button $click={command: :seed_documents}> Seed documents </button>
+    </p>
+    <p>
+      Result: <strong id="result"><code>{@result}</code></strong>
+    </p>
+    <Component1 cid="component_1" />
+    """
+  end
+
+  def action(:show_result, params, component) do
+    put_state(component, :result, params.result)
+  end
+
+  def command(:create_own_document, _params, server) do
+    Document
+    |> Entity.new(title: "own_document")
+    |> DB.create()
+
+    put_action(server, :show_result, result: "created_own_document")
+  end
+
+  def command(:grant_editor, _params, server) do
+    document = create_document("granted_document")
+    other_user = create_user("granted@example.com")
+
+    Auth.grant_role(other_user, document, :editor)
+
+    put_action(server, :show_result, result: "grant_editor_#{can?(other_user, :read, document)}")
+  end
+
+  def command(:leave_last_owner, _params, server) do
+    document = create_document("last_owner_document")
+
+    result =
+      try do
+        Auth.revoke_role(server.user_id, document, :owner)
+        "left_document"
+      rescue
+        error in Hologram.AccessDeniedError -> error.message
+      end
+
+    put_action(server, :show_result, result: result)
+  end
+
+  def command(:log_in, _params, server) do
+    user = create_user("session@example.com")
+
+    put_action(%{server | user_id: user.id}, :show_result, result: "logged_in")
+  end
+
+  def command(:revoke_editor, _params, server) do
+    document = create_document("revoked_document")
+    other_user = create_user("revoked@example.com")
+
+    Auth.grant_role(other_user, document, :editor)
+    Auth.revoke_role(other_user, document, :editor)
+
+    put_action(server, :show_result, result: "revoke_editor_#{can?(other_user, :read, document)}")
+  end
+
+  def command(:seed_documents, _params, server) do
+    Document
+    |> Entity.new(public: true, title: "public_document")
+    |> DB.create()
+
+    create_document("private_document")
+
+    put_action(server, :show_result, result: "seeded_documents")
+  end
+
+  defp create_document(title) do
+    Document
+    |> Entity.new(title: title)
+    |> DB.create()
+  end
+
+  defp create_user(email) do
+    User
+    |> Entity.new(email: email)
+    |> DB.create()
+  end
+end

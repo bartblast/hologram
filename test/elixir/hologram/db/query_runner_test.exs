@@ -5,19 +5,39 @@ defmodule Hologram.DB.QueryRunnerTest do
   import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1]
   import Hologram.DB.QueryRunner
 
+  alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
+  alias Hologram.DB
+  alias Hologram.DB.Codec
+  alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias Hologram.DB.QueryCompiler
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
+  alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module8
   alias Hologram.Test.Fixtures.Entity.Module9
+  alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
+  alias Hologram.Test.Fixtures.Role
 
   @mapping Mapper.derive!([Module1, Module2, Module3])
+
+  @policy_mapping Mapper.derive!([
+                    Module14,
+                    PolicyModule1,
+                    PolicyModule2,
+                    PolicyModule3,
+                    RoleGrant
+                  ])
 
   defp create_module_2_entities do
     first =
@@ -47,6 +67,283 @@ defmodule Hologram.DB.QueryRunnerTest do
     Module3
     |> Entity.new(c_id: target.id)
     |> create()
+  end
+
+  describe "run_policied/4" do
+    # run_policied/4 composes read rules only, so the global reference (declared for :archive)
+    # is executed through the compiler and the connection directly.
+    defp archivable_ids(actor_user_id) do
+      policy = %{
+        anonymous?: false,
+        operation: :archive,
+        rules: Policy.build(PolicyModule2)[:archive]
+      }
+
+      compiled =
+        PolicyModule2
+        |> Query.normalize()
+        |> QueryCompiler.compile(@policy_mapping, policy)
+
+      values =
+        Enum.map(compiled.params, fn
+          :actor -> Codec.encode(actor_user_id, :uuid)
+          {:value, value} -> value
+        end)
+
+      {:ok, %{rows: rows}} = Connection.query(compiled.sql, values)
+
+      Enum.map(rows, fn [id | _rest] -> Codec.decode(id, :uuid) end)
+    end
+
+    defp create_policy_child(parent, public) do
+      PolicyModule1
+      |> Entity.new(parent_id: parent.id, public: public)
+      |> DB.create()
+    end
+
+    defp create_policy_entity(public) do
+      PolicyModule1
+      |> Entity.new(public: public)
+      |> DB.create()
+    end
+
+    defp create_policy_container(children) do
+      container =
+        PolicyModule3
+        |> Entity.new()
+        |> DB.create()
+
+      Enum.each(children, &add_relationship(PolicyModule3, container.id, :children, &1.id))
+
+      container
+    end
+
+    defp create_policy_parent do
+      PolicyModule2
+      |> Entity.new()
+      |> DB.create()
+    end
+
+    defp create_policy_user(email) do
+      Module14
+      |> Entity.new(email: email)
+      |> DB.create()
+    end
+
+    defp included_children(actor_user_id) do
+      term =
+        PolicyModule3
+        |> include(:children)
+        |> Query.normalize()
+
+      [row] = run_policied(term, @policy_mapping, actor_user_id)
+
+      row.children
+    end
+
+    defp included_parent(actor_user_id) do
+      term =
+        PolicyModule1
+        |> include(:parent)
+        |> Query.normalize()
+
+      [row] = run_policied(term, @policy_mapping, actor_user_id)
+
+      row.parent
+    end
+
+    defp policied_ids(actor_user_id) do
+      term = Query.normalize(PolicyModule1)
+
+      term
+      |> run_policied(@policy_mapping, actor_user_id)
+      |> Enum.map(& &1.id)
+      |> Enum.sort()
+    end
+
+    test "returns only the rows the policy grants the acting user" do
+      user = create_policy_user("runner_1@example.com")
+      public_entity = create_policy_entity(true)
+      private_entity = create_policy_entity(false)
+
+      Auth.grant_role(user, private_entity, :viewer)
+
+      assert policied_ids(user.id) == Enum.sort([public_entity.id, private_entity.id])
+    end
+
+    test "hides rows granted to another user" do
+      user = create_policy_user("runner_2@example.com")
+      other_user = create_policy_user("runner_3@example.com")
+      public_entity = create_policy_entity(true)
+      private_entity = create_policy_entity(false)
+
+      Auth.grant_role(other_user, private_entity, :viewer)
+
+      assert policied_ids(user.id) == [public_entity.id]
+    end
+
+    test "returns only unconditionally visible rows for an anonymous session" do
+      user = create_policy_user("runner_4@example.com")
+      public_entity = create_policy_entity(true)
+      private_entity = create_policy_entity(false)
+
+      Auth.grant_role(user, private_entity, :viewer)
+
+      assert policied_ids(nil) == [public_entity.id]
+    end
+
+    test "returns rows granted through a global role module" do
+      user = create_policy_user("runner_10@example.com")
+      other_user = create_policy_user("runner_11@example.com")
+
+      entity =
+        PolicyModule2
+        |> Entity.new()
+        |> DB.create()
+
+      insert_global_grant(user.id, Role.Module1)
+
+      assert archivable_ids(user.id) == [entity.id]
+      assert archivable_ids(other_user.id) == []
+    end
+
+    test "applies the policy to counting queries" do
+      create_policy_entity(true)
+      create_policy_entity(false)
+
+      term =
+        PolicyModule1
+        |> Query.count()
+        |> Query.normalize()
+
+      assert run_policied(term, @policy_mapping, nil) == 1
+    end
+
+    test "applies the policy to single-result queries" do
+      public_entity = create_policy_entity(true)
+      private_entity = create_policy_entity(false)
+
+      private_term =
+        PolicyModule1
+        |> filter(id: private_entity.id)
+        |> Query.one()
+        |> Query.normalize()
+
+      public_term =
+        PolicyModule1
+        |> filter(id: public_entity.id)
+        |> Query.one()
+        |> Query.normalize()
+
+      assert run_policied(private_term, @policy_mapping, nil) == nil
+      assert %{id: id} = run_policied(public_term, @policy_mapping, nil)
+      assert id == public_entity.id
+    end
+
+    test "binds authored params alongside the actor slot" do
+      user = create_policy_user("runner_16@example.com")
+
+      public_match =
+        PolicyModule1
+        |> Entity.new(priority: 5, public: true)
+        |> DB.create()
+
+      granted_match =
+        PolicyModule1
+        |> Entity.new(priority: 5)
+        |> DB.create()
+
+      PolicyModule1
+      |> Entity.new(priority: 5)
+      |> DB.create()
+
+      PolicyModule1
+      |> Entity.new(priority: 9, public: true)
+      |> DB.create()
+
+      Auth.grant_role(user, granted_match, :viewer)
+
+      term = %{Query.normalize(PolicyModule1) | filter: [{:priority, :==, {:param, :priority}}]}
+
+      ids =
+        term
+        |> run_policied(@policy_mapping, user.id, %{priority: 5})
+        |> Enum.map(& &1.id)
+        |> Enum.sort()
+
+      assert ids == Enum.sort([public_match.id, granted_match.id])
+    end
+
+    test "hides an included row the policy denies the acting user" do
+      user = create_policy_user("runner_12@example.com")
+      parent = create_policy_parent()
+      create_policy_child(parent, true)
+
+      assert included_parent(user.id) == nil
+    end
+
+    test "embeds an included row the policy grants the acting user" do
+      user = create_policy_user("runner_13@example.com")
+      parent = create_policy_parent()
+      create_policy_child(parent, true)
+
+      Auth.grant_role(user, parent, :member)
+
+      assert included_parent(user.id).id == parent.id
+    end
+
+    test "hides an included row from an anonymous session" do
+      parent = create_policy_parent()
+      create_policy_child(parent, true)
+
+      assert included_parent(nil) == nil
+    end
+
+    test "filters a to-many include by the included type's policy" do
+      user = create_policy_user("runner_14@example.com")
+      parent = create_policy_parent()
+      visible_child = create_policy_child(parent, true)
+      hidden_child = create_policy_child(parent, false)
+      create_policy_container([visible_child, hidden_child])
+
+      included_ids =
+        user.id
+        |> included_children()
+        |> Enum.map(& &1.id)
+
+      assert included_ids == [visible_child.id]
+    end
+
+    test "applies the policy at every include level" do
+      user = create_policy_user("runner_15@example.com")
+      parent = create_policy_parent()
+      child = create_policy_child(parent, true)
+      create_policy_container([child])
+
+      term =
+        PolicyModule3
+        |> include(:children, &include(&1, :parent))
+        |> Query.normalize()
+
+      assert [%{children: [included_child]}] = run_policied(term, @policy_mapping, user.id)
+
+      assert included_child.id == child.id
+      assert included_child.parent == nil
+    end
+
+    test "leaves the trusted run unrestricted" do
+      public_entity = create_policy_entity(true)
+      private_entity = create_policy_entity(false)
+
+      ids =
+        PolicyModule1
+        |> Query.normalize()
+        |> run(@policy_mapping)
+        |> Enum.map(& &1.id)
+        |> Enum.sort()
+
+      assert ids == Enum.sort([public_entity.id, private_entity.id])
+    end
   end
 
   describe "run/3" do
@@ -129,6 +426,25 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert %DateTime{} = embedded_entity.created_at
     end
 
+    test "embeds an included row the read policy hides from an acting user" do
+      parent =
+        PolicyModule2
+        |> Entity.new()
+        |> DB.create()
+
+      PolicyModule1
+      |> Entity.new(parent_id: parent.id, public: true)
+      |> DB.create()
+
+      term =
+        PolicyModule1
+        |> include(:parent)
+        |> Query.normalize()
+
+      assert [%{parent: included_parent}] = run(term, @policy_mapping)
+      assert included_parent.id == parent.id
+    end
+
     test "decodes an absent optional to-one include as nil" do
       create_module_3_entity()
 
@@ -190,6 +506,30 @@ defmodule Hologram.DB.QueryRunnerTest do
       term = %{Query.normalize(Module2) | filter: [{:b, :in, {:param, :ids}}]}
 
       assert run(term, @mapping, %{ids: []}) == []
+    end
+
+    test "filters by a to-one reference field" do
+      matching = create_module_3_entity()
+      create_module_3_entity()
+
+      term =
+        Module3
+        |> filter(c_id: matching.c_id)
+        |> Query.normalize()
+
+      assert [%Module3{id: id, c_id: c_id}] = run(term, @mapping)
+      assert id == matching.id
+      assert c_id == matching.c_id
+    end
+
+    test "filters by a to-one reference field bound as a param" do
+      matching = create_module_3_entity()
+      create_module_3_entity()
+
+      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:param, :target}}]}
+
+      assert [%Module3{id: id}] = run(term, @mapping, %{target: matching.c_id})
+      assert id == matching.id
     end
 
     test "returns entity structs filtered and ordered" do
