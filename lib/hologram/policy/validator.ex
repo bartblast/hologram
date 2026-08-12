@@ -263,7 +263,13 @@ defmodule Hologram.Policy.Validator do
     :ok
   end
 
-  # Policy predicates must stay evaluable by the client, which never holds a server-only value.
+  # Read predicates may reference server-only attributes: a row reaches the client only after
+  # the server's read policy admitted it, and the client cannot write a server-only value, so
+  # the row's presence already proves the predicate held - the client never evaluates it.
+  # Every other operation is decided locally (can?), which needs the value, so there the
+  # reference is rejected.
+  defp validate_server_only_predicates!(_entity_type, :read, _triples), do: :ok
+
   defp validate_server_only_predicates!(entity_type, operation, triples) do
     server_only_names = Entity.server_only_attribute_names(entity_type)
 
@@ -271,7 +277,7 @@ defmodule Hologram.Policy.Validator do
       if name in server_only_names do
         raise Hologram.CompileError,
           message:
-            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{inspect(name)} is server_only, and the client cannot evaluate a predicate over a value it never holds"
+            "invalid predicate #{inspect(name)} for allow #{inspect(operation)} in #{inspect(entity_type)} - #{inspect(name)} is server_only, and the client cannot decide #{inspect(operation)} locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
       end
     end)
   end
