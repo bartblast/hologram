@@ -57,6 +57,15 @@ defmodule Hologram.Test do
     Application.ensure_all_started(:hologram)
   end
 
+  # An unset actor is a legal state, and a bare nil asks for it deliberately - but a user struct
+  # carrying a nil id asks for it by accident, and the outcome is silent: the test would exercise
+  # neither the policy nor the gate it was written for.
+  defp actor_user_id(%{__struct__: module, id: nil}) do
+    raise ArgumentError,
+      message:
+        "cannot act as #{inspect(module)} with a nil id - an unset actor reads as an anonymous session and writes as trusted code, so an authorization test would pass for the wrong reason"
+  end
+
   defp actor_user_id(%{id: id}), do: id
 
   defp actor_user_id(id), do: id
