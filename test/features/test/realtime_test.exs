@@ -18,6 +18,7 @@ defmodule HologramFeatureTests.RealtimeTest do
   alias HologramFeatureTests.Realtime.Page2
   alias HologramFeatureTests.Realtime.Page20
   alias HologramFeatureTests.Realtime.Page21
+  alias HologramFeatureTests.Realtime.Page23
   alias HologramFeatureTests.Realtime.Page3
   alias HologramFeatureTests.Realtime.Page4
   alias HologramFeatureTests.Realtime.Page5
@@ -28,6 +29,7 @@ defmodule HologramFeatureTests.RealtimeTest do
 
   @channel_1 {:room, 1}
   @channel_2 {:room, 2}
+  @channel_23 {:room, 23}
   @channel_9 {:room, 9}
 
   describe "broadcasting" do
@@ -383,6 +385,23 @@ defmodule HologramFeatureTests.RealtimeTest do
       Realtime.broadcast_action(@channel_1, :show, message: "delivered on granted subscription")
 
       assert_text(session, css("#received"), "delivered on granted subscription")
+    end
+
+    feature "from a command issued during page boot", %{session: session} do
+      # Page23's init/3 queues an action that issues a subscribing command. Holding the
+      # attach open puts that command on the wire while the instance still has no registry
+      # entry, which is the race the subscription has to survive - and one this is a
+      # first-ever connect for, so the stream goes on to succeed and never reconnects to
+      # replay the receipt. Gate on the registry reflecting the binding.
+      session =
+        session
+        |> simulate_slow_sse_attach(1_000)
+        |> visit(Page23)
+        |> wait_for_subscription(@channel_23)
+
+      Realtime.broadcast_action(@channel_23, :show, message: "delivered after boot subscribe")
+
+      assert_text(session, css("#received"), "delivered after boot subscribe")
     end
   end
 

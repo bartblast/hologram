@@ -1,15 +1,36 @@
 defmodule Hologram.Realtime.SubscriptionRegistryTest do
   use Hologram.Test.BasicCase, async: false
 
+  import ExUnit.CaptureLog
   import Hologram.Realtime.SubscriptionRegistry
 
+  alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.SubscriptionRegistry
+
+  # Shortened so tests exercising the timeout path don't each pay the production
+  # window, which is sized for a slow client connection.
+  @attach_wait_ms 50
 
   setup do
     wait_for_process_cleanup(SubscriptionRegistry)
-    start_supervised!(SubscriptionRegistry)
+    start_supervised!({SubscriptionRegistry, attach_wait_ms: @attach_wait_ms})
 
     :ok
+  end
+
+  # Issues apply_deltas/4 from a task and returns once the registry has actually
+  # parked it, so a test can attach without racing the park.
+  defp park_apply_deltas(instance_id, adds, drops, authorizing_user_id) do
+    task = Task.async(fn -> apply_deltas(instance_id, adds, drops, authorizing_user_id) end)
+
+    wait_until(fn ->
+      SubscriptionRegistry
+      |> :sys.get_state()
+      |> Map.fetch!(:waiters)
+      |> Map.has_key?(instance_id)
+    end)
+
+    task
   end
 
   describe "apply_deltas/4" do
@@ -226,7 +247,17 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       refute_receive {:unsub, _channel}
     end
 
-    test "returns the input adds and drops for an unknown instance_id" do
+    test "parks the caller for the wait window when no entry exists" do
+      started_at = System.monotonic_time(:millisecond)
+
+      apply_deltas("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      elapsed_ms = System.monotonic_time(:millisecond) - started_at
+
+      assert elapsed_ms >= @attach_wait_ms
+    end
+
+    test "returns the input adds and drops when no connection attaches within the wait window" do
       adds = [{:room_a, "page"}, {:room_b, "comp_1"}]
       drops = [{:room_c, "page"}]
 
@@ -237,17 +268,55 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert Enum.sort(drop_keys) == Enum.sort(drops)
     end
 
-    test "creates no entry for an unknown instance_id" do
+    test "creates no entry when no connection attaches within the wait window" do
       apply_deltas("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
       assert :ets.lookup(ets_table_name(), "test-unknown-instance-id") == []
     end
 
-    test "sends no zero-crossing messages for an unknown instance_id" do
+    test "sends no zero-crossing messages when no connection attaches within the wait window" do
       apply_deltas("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
       refute_receive {:sub, _channel}
       refute_receive {:unsub, _channel}
+    end
+
+    test "discards the parked caller once the wait window has elapsed" do
+      apply_deltas("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      assert :sys.get_state(SubscriptionRegistry).waiters == %{}
+    end
+
+    test "logs the unapplied deltas when no connection attaches within the wait window" do
+      log =
+        capture_log(fn ->
+          apply_deltas(
+            "test-unknown-instance-id",
+            [{:room_a, "page"}],
+            [{:room_b, "comp_1"}],
+            "test-user-id"
+          )
+        end)
+
+      assert log =~ ~s(No connection attached for instance "test-unknown-instance-id")
+      assert log =~ "within #{@attach_wait_ms}ms"
+      assert log =~ ~s(adds: [room_a: "page"])
+      assert log =~ ~s(drops: [room_b: "comp_1"])
+    end
+
+    test "logs nothing when a connection attaches within the wait window" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      log =
+        capture_log(fn ->
+          task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+          attach_connection("test-instance-id", "test-session-id", "test-user-id", sse_pid, [])
+
+          Task.await(task)
+        end)
+
+      refute log =~ "No connection attached"
     end
   end
 
@@ -384,6 +453,94 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
       assert entry.session_id == "new-session"
       assert entry.user_id == "new-user"
+    end
+
+    test "applies deltas parked by apply_deltas/4 against the entry it creates" do
+      task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      attach_connection("test-instance-id", "test-session-id", "test-user-id", sse_pid, [])
+
+      assert Task.await(task) == {[{:room_a, "page"}], []}
+      assert bindings_of("test-instance-id") == %{{:room_a, "page"} => "test-user-id"}
+    end
+
+    test "folds parked deltas on top of the validated bindings rather than replacing them" do
+      task = park_apply_deltas("test-instance-id", [{:room_b, "page"}], [], "test-user-id")
+
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      attach_connection(
+        "test-instance-id",
+        "test-session-id",
+        "test-user-id",
+        sse_pid,
+        [{{:room_a, "page"}, "test-user-id"}]
+      )
+
+      Task.await(task)
+
+      assert bindings_of("test-instance-id") == %{
+               {:room_a, "page"} => "test-user-id",
+               {:room_b, "page"} => "test-user-id"
+             }
+    end
+
+    test "sends zero-crossing messages for channels a parked delta newly binds" do
+      task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      attach_connection("test-instance-id", "test-session-id", "test-user-id", self(), [])
+
+      Task.await(task)
+
+      assert_receive {:sub, :room_a}
+    end
+
+    test "releases callers parked for the same instance in the order they were issued" do
+      task_a = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+      task_b = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      attach_connection("test-instance-id", "test-session-id", "test-user-id", sse_pid, [])
+
+      # Both park the same add. The first applies it, so the second finds the key
+      # already present and reports nothing added - which it can only do by seeing
+      # the first one's effect.
+      assert Task.await(task_a) == {[{:room_a, "page"}], []}
+      assert Task.await(task_b) == {[], []}
+
+      assert bindings_of("test-instance-id") == %{{:room_a, "page"} => "test-user-id"}
+    end
+
+    test "leaves callers parked for other instances untouched" do
+      # Captured because the untouched caller goes on to time out, which logs.
+      capture_log(fn ->
+        task =
+          park_apply_deltas("test-other-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+        sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+        attach_connection("test-instance-id", "test-session-id", "test-user-id", sse_pid, [])
+
+        assert Map.has_key?(
+                 :sys.get_state(SubscriptionRegistry).waiters,
+                 "test-other-instance-id"
+               )
+
+        Task.await(task)
+      end)
+    end
+  end
+
+  describe "attach_wait_ms/0" do
+    test "returns the window apply_deltas/4 waits for a connection to attach" do
+      assert is_integer(attach_wait_ms())
+    end
+
+    test "exceeds the handshake redeem wait it has to clear" do
+      assert attach_wait_ms() > Handshake.server_wait_ms()
     end
   end
 

@@ -9,9 +9,21 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Session
 
+  # Read only when the host app enables the attach-delay seam - see maybe_delay_attach/1.
+  @attach_delay_cookie "hologram_sse_attach_delay_ms"
+
   @heartbeat_interval_ms 15_000
   @max_heap_size_words 1_000_000
   @receipts_refresh_interval_ms 12 * 60 * 60 * 1000
+
+  @doc """
+  Returns the name of the cookie carrying the test-only attach delay.
+
+  Honored only when the host app sets `:__sse_attach_delay_enabled__`, so it has
+  no effect in production. See `maybe_delay_attach/1`.
+  """
+  @spec attach_delay_cookie() :: String.t()
+  def attach_delay_cookie, do: @attach_delay_cookie
 
   @doc """
   Builds the SSE event-stream chunk for an `action` broadcast: the standard
@@ -235,6 +247,7 @@ defmodule Hologram.Realtime.SSE do
         {_instance_id, session_id, user_id} = claimed
 
         conn
+        |> maybe_delay_attach()
         |> attach_validated_subscriptions(validated_bindings)
         |> subscribe_to_announce_topics()
         |> prepare()
@@ -460,6 +473,29 @@ defmodule Hologram.Realtime.SSE do
     instance_id
     |> own_identities(session_id, user_id)
     |> Enum.any?(&(&1 in excluded_identities))
+  end
+
+  # Test-only seam. Holds the stream open before it attaches, so a test can put a
+  # command on the wire while the instance still has no registry entry - the boot-time
+  # race a subscription declared from a command has to survive. That race is otherwise
+  # unreproducible over a local loop, where the attach reliably wins.
+  #
+  # Scoped by cookie rather than application env so concurrently running test files
+  # cannot disturb each other, and gated on the host app opting in so a client can
+  # never slow its own attach in production.
+  defp maybe_delay_attach(initial_conn) do
+    if Application.get_env(:hologram, :__sse_attach_delay_enabled__, false) do
+      conn = Plug.Conn.fetch_cookies(initial_conn)
+
+      with value when is_binary(value) <- conn.cookies[@attach_delay_cookie],
+           {delay_ms, ""} when delay_ms > 0 <- Integer.parse(value) do
+        Process.sleep(delay_ms)
+      end
+
+      conn
+    else
+      initial_conn
+    end
   end
 
   defp maybe_drop_identity_change_bindings(conn, _instance_id, user_id, user_id),
