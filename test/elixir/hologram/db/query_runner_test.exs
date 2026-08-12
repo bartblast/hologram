@@ -240,6 +240,40 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert id == public_entity.id
     end
 
+    test "binds authored params alongside the actor slot" do
+      user = create_policy_user("runner_16@example.com")
+
+      public_match =
+        PolicyModule1
+        |> Entity.new(priority: 5, public: true)
+        |> DB.create()
+
+      granted_match =
+        PolicyModule1
+        |> Entity.new(priority: 5)
+        |> DB.create()
+
+      PolicyModule1
+      |> Entity.new(priority: 5)
+      |> DB.create()
+
+      PolicyModule1
+      |> Entity.new(priority: 9, public: true)
+      |> DB.create()
+
+      Auth.grant_role(user, granted_match, :viewer)
+
+      term = %{Query.normalize(PolicyModule1) | filter: [{:priority, :==, {:param, :priority}}]}
+
+      ids =
+        term
+        |> run_policied(@policy_mapping, user.id, %{priority: 5})
+        |> Enum.map(& &1.id)
+        |> Enum.sort()
+
+      assert ids == Enum.sort([public_match.id, granted_match.id])
+    end
+
     test "hides an included row the policy denies the acting user" do
       user = create_policy_user("runner_12@example.com")
       parent = create_policy_parent()
