@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.Entities.Document do
 
   alias HologramFeatureTests.Entities.Folder
 
+  attribute :api_token, :string, optional: true, server_only: true
   attribute :public, :boolean, default: false
   attribute :title, :string
 
