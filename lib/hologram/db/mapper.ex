@@ -1,6 +1,7 @@
 defmodule Hologram.DB.Mapper do
   @moduledoc false
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.Entity.Model
   alias Hologram.Reflection
@@ -63,27 +64,30 @@ defmodule Hologram.DB.Mapper do
     validate_table_names!(entity_types)
 
     entity_types
-    |> Model.from_modules()
+    |> Model.from_modules(Reflection.list_roles())
     |> derive_from_model!(ordered_pairs)
   end
 
   @doc """
   Derives the complete physical name mapping for the given model term.
 
-  Same checks and result shape as derive!/2 - the term form derives without consulting
+  Same checks and result shape as derive!/2, plus the role grant store, whose entry is
+  derived from the term rather than declared. The term form derives without consulting
   any module, so a mapping is obtainable for entity types that no longer exist as code
   (a replayed migration history names them as plain module atoms).
   """
-  @spec derive_from_model!(%{module => %{atom => any}}, MapSet.t()) :: %{module => %{atom => any}}
+  @spec derive_from_model!(%{atom => map}, MapSet.t()) :: %{module => %{atom => any}}
   def derive_from_model!(model, ordered_pairs \\ MapSet.new()) do
-    model
+    entities = Map.put(model.entities, RoleGrant, role_grant_entry(model))
+
+    entities
     |> Map.keys()
     |> validate_table_names!()
 
-    validate_model_cycles!(model)
+    validate_model_cycles!(entities)
 
     mapping =
-      Map.new(model, fn {entity_type, entry} ->
+      Map.new(entities, fn {entity_type, entry} ->
         table_name = table_name(entity_type)
 
         {entity_type,
@@ -192,6 +196,7 @@ defmodule Hologram.DB.Mapper do
   def validate_required_to_one_cycles!(entity_types) do
     entity_types
     |> Model.from_modules()
+    |> Map.fetch!(:entities)
     |> validate_model_cycles!()
   end
 
@@ -407,6 +412,44 @@ defmodule Hologram.DB.Mapper do
         target_fk_constraint: fit_identifier("#{join_table_name}_target_id_$fk")
       }
     end)
+  end
+
+  # The grant store is derived, never declared: its enum values are the model's table names
+  # and role names, and its relationships point at the designated user entity type - so a
+  # replayed history derives the store as it stood at that point, with no op declaring it.
+  defp role_grant_entry(model) do
+    resource_type_values =
+      model.entities
+      |> Map.keys()
+      |> Enum.map(&RoleGrant.resource_type/1)
+      |> Enum.sort()
+
+    entity_role_names =
+      Enum.flat_map(model.entities, fn {_entity_type, entry} ->
+        Enum.map(entry.roles, fn {name, _opts} -> name end)
+      end)
+
+    role_values =
+      entity_role_names
+      |> Enum.concat(Map.keys(model.roles))
+      |> Enum.uniq()
+      |> Enum.sort_by(&Codec.encode(&1, :enum))
+
+    # TODO: The user entity designation is a module reflection with no term
+    # representation, so a replayed history resolves it against the current modules
+    # instead of the model as it stood - correct until a user entity type is renamed.
+    # Carrying the designation in the term (and in the ops that record it) closes it.
+    user_entity = RoleGrant.user_entity()
+
+    %{
+      attributes: [
+        {:resource_id, :uuid, [optional: true]},
+        {:resource_type, :enum, [optional: true, values: resource_type_values]},
+        {:role, :enum, [values: role_values]}
+      ],
+      relationships: [{:granted_by, user_entity, [optional: true]}, {:user, user_entity, []}],
+      roles: []
+    }
   end
 
   # A target absent from the model has no outgoing edges - the model is the traversal universe.

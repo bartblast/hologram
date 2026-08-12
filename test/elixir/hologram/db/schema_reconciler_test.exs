@@ -58,7 +58,20 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     {:ok, _result} = Connection.query(statement)
   end
 
+  # The grant store is derived into every mapping - dropped here so a run converges
+  # exactly the entity types the test names (its user references would otherwise point
+  # at a table outside the mapping). Tests converging the store itself use
+  # reconcile_context_with_grant_store/1.
   defp reconcile_context(entity_types) do
+    mapping =
+      entity_types
+      |> Mapper.derive!()
+      |> Map.drop([RoleGrant])
+
+    Map.put(@context, :mapping, mapping)
+  end
+
+  defp reconcile_context_with_grant_store(entity_types) do
     Map.put(@context, :mapping, Mapper.derive!(entity_types))
   end
 
@@ -534,7 +547,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       context =
         Reflection.list_entities()
-        |> reconcile_context()
+        |> reconcile_context_with_grant_store()
         |> update_mapping_column(RoleGrant, "role", fn column ->
           %{column | enum_values: column.enum_values -- ["Hologram.Test.Fixtures.Role.Module1"]}
         end)

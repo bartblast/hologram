@@ -3,6 +3,7 @@ defmodule Hologram.DB.MapperTest do
 
   import Hologram.DB.Mapper
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Entity.Model
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
@@ -316,8 +317,19 @@ defmodule Hologram.DB.MapperTest do
       assert List.last(mapping[Module2].columns).source == {:sort_key, :c}
     end
 
+    test "derives the role grant store even when it is not among the given entity types" do
+      mapping = derive!([Module1])
+
+      assert mapping[Hologram.Auth.RoleGrant].table == "hologram_role_grant"
+    end
+
     test "returns the mapping keyed by entity type" do
-      assert derive!([Module1, Module3]) == %{
+      mapping =
+        [Module1, Module3]
+        |> derive!()
+        |> Map.drop([RoleGrant])
+
+      assert mapping == %{
                Module1 => %{
                  table: table_name(Module1),
                  pk_constraint: "test_fixtures_entity_module1_$pk",
@@ -447,23 +459,49 @@ defmodule Hologram.DB.MapperTest do
     test "derives the same mapping as derive!/2" do
       entity_types = Reflection.list_entities()
       ordered_pairs = MapSet.new([{Module2, :c}])
+      model = Model.from_modules(entity_types, Reflection.list_roles())
 
-      assert derive_from_model!(Model.from_modules(entity_types), ordered_pairs) ==
-               derive!(entity_types, ordered_pairs)
+      assert derive_from_model!(model, ordered_pairs) == derive!(entity_types, ordered_pairs)
     end
 
     test "derives without consulting any module" do
       model = %{
-        Nonexistent.Ghost => %{
-          attributes: [{:name, :string, []}],
-          relationships: [],
-          roles: []
-        }
+        entities: %{
+          Nonexistent.Ghost => %{
+            attributes: [{:name, :string, []}],
+            relationships: [],
+            roles: []
+          }
+        },
+        roles: %{}
       }
 
       mapping = derive_from_model!(model)
 
       assert mapping[Nonexistent.Ghost].table == "nonexistent_ghost"
+    end
+
+    test "derives the grant store's enum values from the term" do
+      model = %{
+        entities: %{
+          Nonexistent.Ghost => %{
+            attributes: [],
+            relationships: [],
+            roles: [{:editor, []}]
+          }
+        },
+        roles: %{Nonexistent.Roles.Admin => %{extends: []}}
+      }
+
+      mapping = derive_from_model!(model)
+
+      resource_type_column =
+        Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :resource_type}))
+
+      role_column = Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :role}))
+
+      assert resource_type_column.enum_values == ["nonexistent_ghost"]
+      assert role_column.enum_values == ["Nonexistent.Roles.Admin", "editor"]
     end
   end
 

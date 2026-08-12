@@ -26,6 +26,14 @@ defmodule Hologram.DB.SchemaTest do
     indexes: %{}
   }
 
+  # The grant store is derived into every mapping - dropped here so a projection test
+  # sees exactly the entity types it names.
+  defp app_mapping(entity_types) do
+    entity_types
+    |> Mapper.derive!()
+    |> Map.drop([Hologram.Auth.RoleGrant])
+  end
+
   defp table(entity_type, table_name) do
     [entity_type]
     |> Mapper.derive!()
@@ -634,7 +642,7 @@ defmodule Hologram.DB.SchemaTest do
 
   describe "from_mapping/1" do
     test "derives a table with columns and primary key per entity type" do
-      assert from_mapping(Mapper.derive!([Module1])) == %{
+      assert from_mapping(app_mapping([Module1])) == %{
                tables: %{
                  "test_fixtures_entity_module1" => %{
                    columns: %{
@@ -776,7 +784,7 @@ defmodule Hologram.DB.SchemaTest do
     test "collects enum types with values in declaration order" do
       enum_types =
         [Module4]
-        |> Mapper.derive!()
+        |> app_mapping()
         |> from_mapping()
         |> Map.fetch!(:enum_types)
 
@@ -786,7 +794,7 @@ defmodule Hologram.DB.SchemaTest do
     test "collects tables across all entity types in the mapping" do
       table_names =
         [Module1, Module3]
-        |> Mapper.derive!()
+        |> app_mapping()
         |> from_mapping()
         |> Map.fetch!(:tables)
         |> Map.keys()
