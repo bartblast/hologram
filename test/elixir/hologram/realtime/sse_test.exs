@@ -224,6 +224,104 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "process_message/4 on {:apply_deltas_remote, ...}" do
+    test "applies the deltas to the addressed instance's bindings" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn()
+
+      send(
+        self(),
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [], "test-user-id", self(),
+         make_ref()}
+      )
+
+      process_message(conn, nil, nil)
+
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{
+               {:room_a, "page"} => "test-user-id"
+             }
+    end
+
+    test "replies to the requesting process with the applied deltas" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn()
+      waiter_ref = make_ref()
+
+      send(
+        self(),
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [], "test-user-id", self(),
+         waiter_ref}
+      )
+
+      process_message(conn, nil, nil)
+
+      assert_receive {:apply_deltas_remote_reply, ^instance_id, ^waiter_ref,
+                      {[{:room_a, "page"}], []}}
+    end
+
+    test "replies with the idempotence-filtered deltas, not the requested ones" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      SubscriptionRegistry.apply_deltas(instance_id, [{:room_a, "page"}], [], "test-user-id")
+
+      # Seeding the binding emits a zero-crossing to this process. Consume it, or the
+      # pump's {:sub, channel} clause matches it ahead of the message under test.
+      assert_receive {:sub, :room_a}
+
+      conn = prepared_test_conn()
+      waiter_ref = make_ref()
+
+      # Re-adds a binding that is already present and drops one that is absent, so both
+      # requested deltas filter out.
+      send(
+        self(),
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [{:room_b, "page"}],
+         "test-user-id", self(), waiter_ref}
+      )
+
+      process_message(conn, nil, nil)
+
+      assert_receive {:apply_deltas_remote_reply, ^instance_id, ^waiter_ref, {[], []}}
+    end
+
+    test "emits the zero-crossing for a channel the deltas newly bind" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn()
+
+      send(
+        self(),
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [], "test-user-id", self(),
+         make_ref()}
+      )
+
+      process_message(conn, nil, nil)
+
+      assert_receive {:sub, :room_a}
+    end
+
+    test "continues the message pump with the conn untouched" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn()
+
+      send(
+        self(),
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [], "test-user-id", self(),
+         make_ref()}
+      )
+
+      assert process_message(conn, nil, nil) == {:cont, conn}
+    end
+  end
+
   describe "process_message/4 on {:broadcast_action, ...}" do
     test "emits one bundled event: broadcast chunk carrying all matching cids" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"

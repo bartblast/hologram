@@ -122,6 +122,19 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
+      # Deltas a node that does not hold this connection could not apply itself. The
+      # instance id travels in the message rather than being read from the query params,
+      # since the sender identified the connection, not this stream.
+      #
+      # TODO: nothing publishes this yet - the registry's lookup-miss path will.
+      {:apply_deltas_remote, instance_id, adds, drops, authorizing_user_id, reply_to, waiter_ref} ->
+        result =
+          SubscriptionRegistry.apply_deltas(instance_id, adds, drops, authorizing_user_id)
+
+        send(reply_to, {:apply_deltas_remote_reply, instance_id, waiter_ref, result})
+
+        {:cont, conn}
+
       {:broadcast_action, channel, action_name, params, excluded_identities} ->
         conn = Plug.Conn.fetch_query_params(conn)
         instance_id = conn.query_params["instance_id"]
