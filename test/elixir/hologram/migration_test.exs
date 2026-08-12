@@ -3,6 +3,44 @@ defmodule Hologram.MigrationTest do
 
   import Hologram.Migration
 
+  describe "add_role/2" do
+    test "returns the op with the role module, an empty opts list by default, and the call line" do
+      result = add_role(MyApp.Roles.Admin)
+
+      assert result == %{op: :add_role, role: MyApp.Roles.Admin, opts: [], line: result.line}
+      assert is_integer(result.line)
+    end
+
+    test "returns the op with the role module, the given opts, and the call line" do
+      result = add_role(MyApp.Roles.Owner, extends: MyApp.Roles.Admin)
+
+      assert result == %{
+               op: :add_role,
+               role: MyApp.Roles.Owner,
+               opts: [extends: MyApp.Roles.Admin],
+               line: result.line
+             }
+
+      assert is_integer(result.line)
+    end
+
+    test "rejects an atom arg naming an entity role" do
+      code = """
+      import Hologram.Migration
+
+      add_role :moderator
+      """
+
+      expected_msg =
+        "add_role :moderator is an entity-role op - " <>
+          "it lives inside a change_entity or create_entity block (line 3)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string(code)
+      end
+    end
+  end
+
   describe "change_entity/2" do
     test "returns the member ops with the entity type injected" do
       result =
@@ -61,6 +99,158 @@ defmodule Hologram.MigrationTest do
       assert Enum.all?(lines, &is_integer/1)
     end
 
+    test "returns enum value member ops with the entity type injected" do
+      result =
+        change_entity MyApp.Task do
+          add_enum_value(:status, :archived, after: :done)
+          delete_enum_value(:status, :draft)
+          rename_enum_value(:status, :done, :completed)
+          reorder_enum_values(:status, [:todo, :doing, :completed])
+        end
+
+      assert [add_op, delete_op, rename_op, reorder_op] = result
+
+      assert add_op == %{
+               op: :add_enum_value,
+               entity: MyApp.Task,
+               attribute: :status,
+               value: :archived,
+               opts: [after: :done],
+               line: add_op.line
+             }
+
+      assert delete_op == %{
+               op: :delete_enum_value,
+               entity: MyApp.Task,
+               attribute: :status,
+               value: :draft,
+               line: delete_op.line
+             }
+
+      assert rename_op == %{
+               op: :rename_enum_value,
+               entity: MyApp.Task,
+               attribute: :status,
+               from: :done,
+               to: :completed,
+               line: rename_op.line
+             }
+
+      assert reorder_op == %{
+               op: :reorder_enum_values,
+               entity: MyApp.Task,
+               attribute: :status,
+               values: [:todo, :doing, :completed],
+               line: reorder_op.line
+             }
+    end
+
+    test "returns relationship member ops with the entity type injected" do
+      result =
+        change_entity MyApp.Task do
+          add_relationship(:author, MyApp.User)
+          add_relationship(:tags, [MyApp.Tag], optional: true)
+          change_relationship(:author, optional: true)
+          delete_relationship(:legacy_project)
+          rename_relationship(:author, :creator)
+        end
+
+      assert [add_one_op, add_many_op, change_op, delete_op, rename_op] = result
+
+      assert add_one_op == %{
+               op: :add_relationship,
+               entity: MyApp.Task,
+               name: :author,
+               type: MyApp.User,
+               opts: [],
+               line: add_one_op.line
+             }
+
+      assert add_many_op == %{
+               op: :add_relationship,
+               entity: MyApp.Task,
+               name: :tags,
+               type: [MyApp.Tag],
+               opts: [optional: true],
+               line: add_many_op.line
+             }
+
+      assert change_op == %{
+               op: :change_relationship,
+               entity: MyApp.Task,
+               name: :author,
+               changes: [optional: true],
+               line: change_op.line
+             }
+
+      assert delete_op == %{
+               op: :delete_relationship,
+               entity: MyApp.Task,
+               name: :legacy_project,
+               line: delete_op.line
+             }
+
+      assert rename_op == %{
+               op: :rename_relationship,
+               entity: MyApp.Task,
+               from: :author,
+               to: :creator,
+               line: rename_op.line
+             }
+    end
+
+    test "returns role member ops with the entity type injected" do
+      result =
+        change_entity MyApp.Task do
+          add_role(:editor)
+          add_role(:owner, extends: :editor)
+          change_role(:owner, creator: true)
+          delete_role(:viewer)
+          rename_role(:moderator, :maintainer)
+        end
+
+      assert [add_op, add_extends_op, change_op, delete_op, rename_op] = result
+
+      assert add_op == %{
+               op: :add_role,
+               entity: MyApp.Task,
+               name: :editor,
+               opts: [],
+               line: add_op.line
+             }
+
+      assert add_extends_op == %{
+               op: :add_role,
+               entity: MyApp.Task,
+               name: :owner,
+               opts: [extends: :editor],
+               line: add_extends_op.line
+             }
+
+      assert change_op == %{
+               op: :change_role,
+               entity: MyApp.Task,
+               name: :owner,
+               changes: [creator: true],
+               line: change_op.line
+             }
+
+      assert delete_op == %{
+               op: :delete_role,
+               entity: MyApp.Task,
+               name: :viewer,
+               line: delete_op.line
+             }
+
+      assert rename_op == %{
+               op: :rename_role,
+               entity: MyApp.Task,
+               from: :moderator,
+               to: :maintainer,
+               line: rename_op.line
+             }
+    end
+
     test "returns a one-op list for a single-statement block" do
       result =
         change_entity MyApp.Task do
@@ -108,6 +298,24 @@ defmodule Hologram.MigrationTest do
       expected_msg =
         "invalid statement in a migration entity block starting at line 3 - " <>
           "entity blocks contain only member ops"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string(code)
+      end
+    end
+
+    test "rejects a role op with a module arg inside the block" do
+      code = """
+      import Hologram.Migration
+
+      change_entity MyApp.Task do
+        rename_role MyApp.Roles.Admin, MyApp.Roles.Owner
+      end
+      """
+
+      expected_msg =
+        "rename_role with a role module is a flat top-level statement - " <>
+          "move it out of the entity block (line 4)"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         Code.eval_string(code)
@@ -163,6 +371,31 @@ defmodule Hologram.MigrationTest do
     end
   end
 
+  describe "delete_role/1" do
+    test "returns the op with the role module and the call line" do
+      result = delete_role(MyApp.Roles.Admin)
+
+      assert result == %{op: :delete_role, role: MyApp.Roles.Admin, line: result.line}
+      assert is_integer(result.line)
+    end
+
+    test "rejects an atom arg naming an entity role" do
+      code = """
+      import Hologram.Migration
+
+      delete_role :moderator
+      """
+
+      expected_msg =
+        "delete_role :moderator is an entity-role op - " <>
+          "it lives inside a change_entity or create_entity block (line 3)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string(code)
+      end
+    end
+  end
+
   describe "rename_entity/2" do
     test "returns the op with both entity type names and the call line" do
       result = rename_entity(MyApp.Draft, MyApp.Sketch)
@@ -175,6 +408,37 @@ defmodule Hologram.MigrationTest do
              }
 
       assert is_integer(result.line)
+    end
+  end
+
+  describe "rename_role/2" do
+    test "returns the op with both role modules and the call line" do
+      result = rename_role(MyApp.Roles.Admin, MyApp.Roles.Owner)
+
+      assert result == %{
+               op: :rename_role,
+               from: MyApp.Roles.Admin,
+               to: MyApp.Roles.Owner,
+               line: result.line
+             }
+
+      assert is_integer(result.line)
+    end
+
+    test "rejects an atom arg naming an entity role" do
+      code = """
+      import Hologram.Migration
+
+      rename_role :moderator, :maintainer
+      """
+
+      expected_msg =
+        "rename_role :moderator is an entity-role op - " <>
+          "it lives inside a change_entity or create_entity block (line 3)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string(code)
+      end
     end
   end
 
