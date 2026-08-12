@@ -301,6 +301,14 @@ defmodule Hologram.Auth do
     end
   end
 
+  defp grantee_fk_constraint do
+    %{columns: columns} = Map.fetch!(DB.mapping(), RoleGrant)
+
+    columns
+    |> Enum.find(&(&1.name == "user_id"))
+    |> Map.fetch!(:fk_constraint)
+  end
+
   defp guard_last_managing_role!(entity_type, resource_id, role, role_names) do
     if role in role_names and count_managing_grants(entity_type, resource_id, role_names) <= 1 do
       raise Hologram.AccessDeniedError,
@@ -464,12 +472,21 @@ defmodule Hologram.Auth do
     EntityOperations.create_if_absent(grant)
   rescue
     error in Postgrex.Error ->
-      if error.postgres.code == :foreign_key_violation do
-        message = "unknown user id #{inspect(user_id)} - roles are granted only to existing users"
+      # A grant row references the user table twice - the grantee and whoever granted it - so the
+      # violated constraint is what says which id was unknown. Only the grantee's is the caller's
+      # mistake: an acting user is authorized by a grant of their own, whose reference keeps their
+      # row undeletable, so their id going missing mid-write is a database story, not a caller one.
+      grantee_constraint = grantee_fk_constraint()
 
-        reraise ArgumentError, [message: message], __STACKTRACE__
-      else
-        reraise error, __STACKTRACE__
+      case error.postgres do
+        %{code: :foreign_key_violation, constraint: ^grantee_constraint} ->
+          message =
+            "unknown user id #{inspect(user_id)} - roles are granted only to existing users"
+
+          reraise ArgumentError, [message: message], __STACKTRACE__
+
+        _other_violation ->
+          reraise error, __STACKTRACE__
       end
   end
 end
