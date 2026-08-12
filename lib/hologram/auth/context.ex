@@ -10,6 +10,11 @@ defmodule Hologram.Auth.Context do
   # construction and already reads and writes past every policy through the DB verbs, so
   # neither setter is a boundary against it. Shipping no act-as-user API keeps impersonation
   # off the app-facing surface, which is a surface decision, not an enforced one.
+  #
+  # The actor is process-local and is not inherited. Work moved off the request process - a task,
+  # a spawned process, a call into a GenServer - starts with no actor, and no actor IS the trusted
+  # tier, so a gate that denies in the request process permits there instead. Framework code
+  # continuing a session's work in another process re-establishes identity with with_actor/2.
 
   @actor_key {__MODULE__, :actor_user_id}
 
