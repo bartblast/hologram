@@ -146,7 +146,9 @@ defmodule Hologram.Policy do
   Grant references are extends-expanded, so a reference to a role also names every role carrying it:
   own roles as {:own, role names}, another entity type's roles as {:type, entity type, role names},
   a related instance's roles as {:rel, relationship name, role names}, and global role modules as
-  {:global, role modules} - nil when the line has none.
+  {:global, role modules} - nil when the line has none. The grant store's framework-supplied rules
+  carry a fifth kind no declaration can spell, {:resource, entity type, role names}: roles held on
+  the resource a grant row names.
   A rule grants its operation when its predicates hold, one of its grant references is held, and its
   delegation grants the same operation - and a policy grants its operation when any of its rules does.
   """
