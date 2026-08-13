@@ -122,6 +122,26 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
+      # A subscription granted from outside any handler. The binding is registered and
+      # its receipt signed here rather than by the grantor, so the authorization carries
+      # the identity this connection holds at delivery time.
+      #
+      # TODO: nothing publishes this yet - Realtime.subscribe/3 will.
+      {:add_subscription, channel, cid} ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        instance_id = conn.query_params["instance_id"]
+
+        SubscriptionRegistry.apply_deltas(instance_id, [{channel, cid}], [], user_id)
+
+        token = Receipt.issue(channel, cid, instance_id, user_id)
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = encode_add_sub_receipts_envelope(id, [{channel, cid, token}])
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
       # Deltas a node that does not hold this connection could not apply itself. The
       # instance id travels in the message rather than being read from the query params,
       # since the sender identified the connection, not this stream.

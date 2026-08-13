@@ -76,6 +76,14 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  # Pulls the signed token out of an encoded add_sub_receipts chunk, which carries it as
+  # the third element of each {channel, cid, token} tuple.
+  defp extract_receipt_token(resp_body) do
+    [_full_match, token] = Regex.run(~r/Type\.bitstring\("(SFMyNTY\.[^"]+)"\)/, resp_body)
+
+    token
+  end
+
   defp prepared_test_conn do
     conn =
       :get
@@ -221,6 +229,85 @@ defmodule Hologram.Realtime.SSETest do
 
       assert updated_conn.resp_body =~ "event: add_sub_receipts\nid: "
       assert updated_conn.resp_body =~ "\ndata: "
+    end
+  end
+
+  describe "process_message/4 on {:add_subscription, ...}" do
+    test "registers the binding under the connection's current user_id" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:add_subscription, :room_a, "page"})
+
+      process_message(conn, "test-session-id", "test-user-id")
+
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{
+               {:room_a, "page"} => "test-user-id"
+             }
+    end
+
+    test "pushes an add_sub_receipts SSE event for the granted binding" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:add_subscription, :room_a, "page"})
+
+      {:cont, updated_conn} = process_message(conn, "test-session-id", "test-user-id")
+
+      assert updated_conn.resp_body =~ "event: add_sub_receipts\nid: "
+      assert updated_conn.resp_body =~ "\ndata: "
+    end
+
+    test "signs the pushed receipt for this connection and its current identity" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:add_subscription, :room_a, "page"})
+
+      {:cont, updated_conn} = process_message(conn, "test-session-id", "test-user-id")
+
+      {:ok, receipt} =
+        updated_conn.resp_body
+        |> extract_receipt_token()
+        |> Receipt.verify()
+
+      assert receipt.channel == :room_a
+      assert receipt.cid == "page"
+      assert receipt.instance_id == instance_id
+      assert receipt.user_id == "test-user-id"
+    end
+
+    test "signs the receipt for an anonymous connection with a nil user_id" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:add_subscription, :room_a, "page"})
+
+      {:cont, updated_conn} = process_message(conn, "test-session-id", nil)
+
+      {:ok, receipt} =
+        updated_conn.resp_body
+        |> extract_receipt_token()
+        |> Receipt.verify()
+
+      assert receipt.user_id == nil
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{{:room_a, "page"} => nil}
+    end
+
+    test "emits the zero-crossing for the granted channel" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:add_subscription, :room_a, "page"})
+
+      process_message(conn, "test-session-id", "test-user-id")
+
+      assert_receive {:sub, :room_a}
     end
   end
 
