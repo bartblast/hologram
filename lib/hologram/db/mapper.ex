@@ -78,7 +78,7 @@ defmodule Hologram.DB.Mapper do
   """
   @spec derive_from_model!(%{atom => map}, MapSet.t()) :: %{module => %{atom => any}}
   def derive_from_model!(model, ordered_pairs \\ MapSet.new()) do
-    entities = Map.put(model.entities, RoleGrant, role_grant_entry(model))
+    entities = put_role_grant(model)
 
     entities
     |> Map.keys()
@@ -412,6 +412,15 @@ defmodule Hologram.DB.Mapper do
         target_fk_constraint: fit_identifier("#{join_table_name}_target_id_$fk")
       }
     end)
+  end
+
+  # A model declaring no entity types has nothing to grant roles on, so it derives no
+  # grant store either - which keeps "the empty model has the empty schema" true, the
+  # premise a migration history replayed from empty rests on.
+  defp put_role_grant(%{entities: entities}) when entities == %{}, do: %{}
+
+  defp put_role_grant(model) do
+    Map.put(model.entities, RoleGrant, role_grant_entry(model))
   end
 
   # The grant store is derived, never declared: its enum values are the model's table names

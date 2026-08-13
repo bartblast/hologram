@@ -11,6 +11,10 @@ defmodule Hologram.Entity.Model do
   # real default, not a flag).
   @flag_opts [:creator, :optional, :server_only]
 
+  # One-time transition values ride the migration op, never the model: a backfill is
+  # what existing rows receive as the column arrives, not something the entity declares.
+  @transition_opts [:backfill]
+
   @doc """
   Returns the empty model term - a model with no entity types and no global roles.
   """
@@ -387,7 +391,9 @@ defmodule Hologram.Entity.Model do
 
   defp normalize_opts(opts) do
     opts
-    |> Enum.reject(fn {key, value} -> is_nil(value) or (value == false and key in @flag_opts) end)
+    |> Enum.reject(fn {key, value} ->
+      key in @transition_opts or is_nil(value) or (value == false and key in @flag_opts)
+    end)
     |> Enum.sort()
   end
 
