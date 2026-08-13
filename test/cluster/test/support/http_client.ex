@@ -47,13 +47,7 @@ defmodule HologramClusterTests.HTTPClient do
   defp recv_chunk_times(conn, request_ref, chunk_times) do
     case Mint.HTTP.recv(conn, 0, @recv_timeout_ms) do
       {:ok, new_conn, entries} ->
-        now = System.monotonic_time(:millisecond)
-
-        new_chunk_times =
-          Enum.reduce(entries, chunk_times, fn
-            {:data, ^request_ref, _data}, acc -> [now | acc]
-            _entry, acc -> acc
-          end)
+        new_chunk_times = stamp_data_entries(entries, request_ref, chunk_times)
 
         if Enum.any?(entries, &match?({:done, ^request_ref}, &1)) do
           Mint.HTTP.close(new_conn)
@@ -62,10 +56,14 @@ defmodule HologramClusterTests.HTTPClient do
           recv_chunk_times(new_conn, request_ref, new_chunk_times)
         end
 
-      # A server that closes mid-stream ends the list rather than failing: the
-      # timestamps collected so far are the measurement.
-      {:error, _conn, _reason, _entries} ->
-        Enum.reverse(chunk_times)
+      # A server that closes mid-stream ends the list rather than failing: whatever was
+      # measured is the measurement. The error carries the entries parsed before it, so
+      # they are stamped too - dropping them would lose the last chunks the server did
+      # manage to send.
+      {:error, _conn, _reason, entries} ->
+        entries
+        |> stamp_data_entries(request_ref, chunk_times)
+        |> Enum.reverse()
     end
   end
 
@@ -110,5 +108,16 @@ defmodule HologramClusterTests.HTTPClient do
       Mint.HTTP.request(conn, "GET", request_path(uri), request_headers, nil)
 
     {new_conn, request_ref}
+  end
+
+  # One timestamp per recv batch: entries that arrived together did arrive together, and
+  # claiming otherwise would invent precision the socket read cannot give.
+  defp stamp_data_entries(entries, request_ref, chunk_times) do
+    now = System.monotonic_time(:millisecond)
+
+    Enum.reduce(entries, chunk_times, fn
+      {:data, ^request_ref, _data}, acc -> [now | acc]
+      _entry, acc -> acc
+    end)
   end
 end
