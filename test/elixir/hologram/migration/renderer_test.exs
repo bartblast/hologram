@@ -219,6 +219,247 @@ defmodule Hologram.Migration.RendererTest do
       assert first_reference < last_create
     end
 
+    test "renders an entity rename as its table and every name derived from it" do
+      pre =
+        model(%{
+          MyApp.Draft => %{
+            attributes: [{:status, :enum, [values: [:todo, :done]]}],
+            relationships: [{:author, MyApp.User, []}, {:tags, [MyApp.Tag], []}]
+          },
+          MyApp.Tag => %{},
+          MyApp.User => %{}
+        })
+
+      ops = [%{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 3}]
+
+      result = render(ops, pre)
+
+      assert result.tail == []
+
+      assert result.transactional == [
+               %{op: :rename_table, from: "my_app_draft", to: "my_app_sketch"},
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_sketch",
+                 from: "my_app_draft_$pk",
+                 to: "my_app_sketch_$pk"
+               },
+               %{
+                 op: :rename_enum_type,
+                 from: "my_app_draft_status_$enum",
+                 to: "my_app_sketch_status_$enum"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_sketch",
+                 from: "my_app_draft_author_id_$fk",
+                 to: "my_app_sketch_author_id_$fk"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_draft_author_id_$idx",
+                 to: "my_app_sketch_author_id_$idx"
+               },
+               %{
+                 op: :rename_table,
+                 from: "my_app_draft_tags_$join",
+                 to: "my_app_sketch_tags_$join"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_sketch_tags_$join",
+                 from: "my_app_draft_tags_$join_$pk",
+                 to: "my_app_sketch_tags_$join_$pk"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_sketch_tags_$join",
+                 from: "my_app_draft_tags_$join_source_id_$fk",
+                 to: "my_app_sketch_tags_$join_source_id_$fk"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_sketch_tags_$join",
+                 from: "my_app_draft_tags_$join_target_id_$fk",
+                 to: "my_app_sketch_tags_$join_target_id_$fk"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_draft_tags_$join_target_id_$idx",
+                 to: "my_app_sketch_tags_$join_target_id_$idx"
+               },
+               %{
+                 op: :rename_enum_value,
+                 enum_type: "hologram_role_grant_resource_type_$enum",
+                 from: "my_app_draft",
+                 to: "my_app_sketch"
+               }
+             ]
+    end
+
+    test "renders an attribute rename as its column, enum type following" do
+      pre =
+        model(%{
+          MyApp.Task => %{attributes: [{:state, :enum, [values: [:todo, :done]]}]}
+        })
+
+      ops = [%{op: :rename_attribute, entity: MyApp.Task, from: :state, to: :status, line: 3}]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{op: :rename_column, table: "my_app_task", from: "state", to: "status"},
+               %{
+                 op: :rename_enum_type,
+                 from: "my_app_task_state_$enum",
+                 to: "my_app_task_status_$enum"
+               }
+             ]
+    end
+
+    test "renders a to-one relationship rename as its reference column and derived names" do
+      pre =
+        model(%{MyApp.Task => %{relationships: [{:author, MyApp.User, []}]}, MyApp.User => %{}})
+
+      ops = [
+        %{op: :rename_relationship, entity: MyApp.Task, from: :author, to: :creator, line: 3}
+      ]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{op: :rename_column, table: "my_app_task", from: "author_id", to: "creator_id"},
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_task",
+                 from: "my_app_task_author_id_$fk",
+                 to: "my_app_task_creator_id_$fk"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_author_id_$idx",
+                 to: "my_app_task_creator_id_$idx"
+               }
+             ]
+    end
+
+    test "renders a to-many relationship rename as its join table and derived names" do
+      pre = model(%{MyApp.Tag => %{}, MyApp.Task => %{relationships: [{:tags, [MyApp.Tag], []}]}})
+
+      ops = [%{op: :rename_relationship, entity: MyApp.Task, from: :tags, to: :labels, line: 3}]
+
+      result = render(ops, pre)
+
+      assert op_kinds(result.transactional) == [
+               :rename_table,
+               :rename_constraint,
+               :rename_constraint,
+               :rename_constraint,
+               :rename_index
+             ]
+
+      assert hd(result.transactional) == %{
+               op: :rename_table,
+               from: "my_app_task_tags_$join",
+               to: "my_app_task_labels_$join"
+             }
+    end
+
+    test "renders a role rename as the grant store's value rename" do
+      pre = model(%{MyApp.Task => %{roles: [{:moderator, []}]}})
+
+      ops = [
+        %{op: :rename_role, entity: MyApp.Task, from: :moderator, to: :maintainer, line: 3}
+      ]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{
+                 op: :rename_enum_value,
+                 enum_type: "hologram_role_grant_role_$enum",
+                 from: "moderator",
+                 to: "maintainer"
+               }
+             ]
+    end
+
+    test "renders a global role rename as the grant store's value rename" do
+      pre = %{
+        entities: %{MyApp.Task => %{attributes: [], relationships: [], roles: []}},
+        roles: %{MyApp.Roles.Moderator => %{extends: []}}
+      }
+
+      ops = [
+        %{op: :rename_role, from: MyApp.Roles.Moderator, to: MyApp.Roles.Maintainer, line: 3}
+      ]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{
+                 op: :rename_enum_value,
+                 enum_type: "hologram_role_grant_role_$enum",
+                 from: "MyApp.Roles.Moderator",
+                 to: "MyApp.Roles.Maintainer"
+               }
+             ]
+    end
+
+    test "renders an enum value rename as the attribute type's value rename" do
+      pre =
+        model(%{MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :done]]}]}})
+
+      ops = [
+        %{
+          op: :rename_enum_value,
+          entity: MyApp.Task,
+          attribute: :status,
+          from: :done,
+          to: :completed,
+          line: 3
+        }
+      ]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{
+                 op: :rename_enum_value,
+                 enum_type: "my_app_task_status_$enum",
+                 from: "done",
+                 to: "completed"
+               }
+             ]
+    end
+
+    test "renders renames and other changes in file order" do
+      pre = model(%{MyApp.Draft => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 3},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Sketch,
+          name: :summary,
+          type: :string,
+          opts: [optional: true],
+          line: 4
+        }
+      ]
+
+      result = render(ops, pre)
+      kinds = op_kinds(result.transactional)
+
+      assert Enum.at(kinds, 0) == :rename_table
+      assert List.last(kinds) == :add_column
+
+      add_column = List.last(result.transactional)
+
+      assert add_column.table == "my_app_sketch"
+      assert add_column.column == "summary"
+    end
+
     test "renders an added enum value as its type value" do
       pre =
         model(%{MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :done]]}]}})
