@@ -41,6 +41,21 @@ defmodule HologramClusterTests.MigrationHelpers do
   end
 
   @doc """
+  Boots the app on the given peer, expecting it to refuse, and returns the message of
+  the exception that stopped it.
+
+  A refused boot arrives as a supervision failure wrapped in several layers of
+  start-child tuples - the message is what the scenario is about, so it is dug out
+  rather than asserted through the wrapping.
+  """
+  @spec boot_error_message(map) :: String.t()
+  def boot_error_message(peer) do
+    {:error, reason} = Cluster.boot_app(peer)
+
+    find_message(reason)
+  end
+
+  @doc """
   Returns the project's migration chain, in order.
   """
   @spec migrations() :: [%{atom => any}]
@@ -115,12 +130,16 @@ defmodule HologramClusterTests.MigrationHelpers do
   @doc """
   Returns whether the given peer serves pages.
 
-  A peer that applied its chain and came up answers this - one that refused its boot
-  never binds its port at all.
+  A peer that applied its chain and came up answers this. One that refused its boot
+  never binds its port, so the connection is refused rather than answered - a state
+  this reports as false, since "did the node come up" is the question being asked, and
+  the HTTP client treats an unreachable target as a broken premise.
   """
   @spec serving?(map) :: boolean
   def serving?(peer) do
     HTTPClient.get("http://localhost:#{peer.port}/plain").status == 200
+  rescue
+    MatchError -> false
   end
 
   @doc """
@@ -153,6 +172,20 @@ defmodule HologramClusterTests.MigrationHelpers do
       GenServer.stop(connection_pid)
     end
   end
+
+  defp find_message(%{__exception__: true} = error), do: Exception.message(error)
+
+  defp find_message([]), do: nil
+
+  defp find_message([head | tail]), do: find_message(head) || find_message(tail)
+
+  defp find_message(term) when is_tuple(term) do
+    term
+    |> Tuple.to_list()
+    |> find_message()
+  end
+
+  defp find_message(_other), do: nil
 
   defp migrations_db_opts do
     :hologram

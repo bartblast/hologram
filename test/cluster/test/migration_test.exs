@@ -94,6 +94,65 @@ defmodule HologramClusterTests.MigrationTest do
     end
   end
 
+  describe "refusals" do
+    test "drift refuses the booting node while the running one keeps serving" do
+      running_peer = start_migration_peer(1)
+
+      assert serving?(running_peer)
+
+      drop_title = ~s(ALTER TABLE "hologram_data"."entities_item" DROP COLUMN "title")
+      with_migrations_db(fn -> {:ok, _result} = Connection.query(drop_title) end)
+
+      booting_peer = start_migration_peer(2, boot_app: false)
+      message = boot_error_message(booting_peer)
+
+      assert message =~ "schema drift detected"
+
+      assert message =~
+               ~s(column "title" on table "entities_item" declared by the model is missing)
+
+      # The refusal is a boot-time gate: the node already serving finished its own boot
+      # long before, and nothing revisits that decision underneath it.
+      assert serving?(running_peer)
+      refute serving?(booting_peer)
+    end
+
+    test "a pre-flight refusal names the obstacle, and fixing the data unblocks the deploy" do
+      # Through f2 only: the slug column exists and still accepts NULL, which is the
+      # state the rows below are legal in and the next file is not.
+      plant_applied_prefix!(2)
+
+      insert_item = """
+      INSERT INTO "hologram_data"."entities_item" ("id", "title", "created_at", "updated_at")
+      VALUES (gen_random_uuid(), $1, now(), now())
+      """
+
+      with_migrations_db(fn ->
+        {:ok, _result} = Connection.query(insert_item, ["first"])
+        {:ok, _result} = Connection.query(insert_item, ["second"])
+      end)
+
+      refused_peer = start_migration_peer(1, boot_app: false)
+      message = boot_error_message(refused_peer)
+
+      assert message ==
+               ~s(cannot make column "slug" on table "entities_item" required - ) <>
+                 "found 2 rows with NULL - declare a default:, keep the attribute " <>
+                 "optional:, or fix the data"
+
+      # The way out the message names: give the rows a value, then deploy again.
+      fill_slugs = ~s(UPDATE "hologram_data"."entities_item" SET "slug" = "title")
+      with_migrations_db(fn -> {:ok, _result} = Connection.query(fill_slugs) end)
+
+      redeployed_peer = start_migration_peer(2)
+
+      assert serving?(redeployed_peer)
+
+      assert Enum.map(applied_version_rows(), fn {version, _applied_at} -> version end) ==
+               Enum.map(migrations(), & &1.version)
+    end
+  end
+
   describe "release step, then boot" do
     test "the boot-time apply finds nothing pending" do
       # The deploy pipeline's step, before any node rolls: same entry the boot uses,
