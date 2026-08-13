@@ -840,6 +840,50 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "process_message/4 on {:replace_subscriptions, ...}" do
+    test "replaces the bindings of the conn's instance" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      SubscriptionRegistry.apply_deltas(instance_id, [{:room_a, "page"}], [], "test-user-id")
+
+      # Seeding the binding emits a zero-crossing to this process. Consume it, or the
+      # pump's {:sub, channel} clause matches it ahead of the message under test.
+      assert_receive {:sub, :room_a}
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:replace_subscriptions, [{:room_b, "page"}], "test-user-id"})
+
+      process_message(conn, nil, nil)
+
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{
+               {:room_b, "page"} => "test-user-id"
+             }
+    end
+
+    test "emits the zero-crossings the replacement implies" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:replace_subscriptions, [{:room_a, "page"}], "test-user-id"})
+
+      process_message(conn, nil, nil)
+
+      assert_receive {:sub, :room_a}
+    end
+
+    test "continues the message pump" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:replace_subscriptions, [{:room_a, "page"}], "test-user-id"})
+
+      assert {:cont, _updated_conn} = process_message(conn, nil, nil)
+    end
+  end
+
   describe "process_message/4 on {:sub, ...}" do
     test "subscribes to the channel's PubSub topic" do
       conn = prepared_test_conn()

@@ -205,6 +205,19 @@ defmodule Hologram.Realtime.SSE do
             {:halt, conn}
         end
 
+      # A page render declares the complete subscription set, so the bindings are
+      # replaced rather than folded. Nothing is answered - the renderer computed the
+      # client's diff without the registry.
+      #
+      # TODO: nothing publishes this yet - the page-render path will.
+      {:replace_subscriptions, new_sub_keys, authorizing_user_id} ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        instance_id = conn.query_params["instance_id"]
+
+        SubscriptionRegistry.replace_bindings(instance_id, new_sub_keys, authorizing_user_id)
+
+        {:cont, conn}
+
       {:sub, channel} ->
         topic = Realtime.channel_topic(channel)
         Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
