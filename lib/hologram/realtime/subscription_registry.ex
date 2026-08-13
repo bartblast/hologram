@@ -324,46 +324,6 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @doc """
-  Transitions the registry's binding set for `instance_id` to the bindings
-  derived from `new_sub_keys`. Called after a page render's `init/3` returns
-  to reconcile the new page's subscription set against both the client's
-  previously-known bindings and the registry's prior bindings.
-
-  Computes two parallel set-differences:
-
-    * **Client-side diff** against `client_claimed_sub_keys` - returned as
-      `{add_keys, drop_keys}` so the caller can hand the client an
-      `{adds, drops}` payload to update its local subscription tracking.
-
-    * **PubSub-side diff** against the registry's prior `bindings` - drives
-      zero-crossing `{:sub, channel}` / `{:unsub, channel}` messages sent to
-      the entry's `sse_pid`. A channel only sees `:sub` on its first
-      cid-binding, and only sees `:unsub` when its last cid-binding is
-      dropped; adding or removing intermediate cids for an already-bound
-      channel is silent.
-
-  When an entry exists, the `bindings` field is replaced wholesale (page
-  navigation defines the complete set, not deltas), and each new binding is
-  tagged with `authorizing_user_id` (the authenticated user_id at handler
-  time, or `nil` for anonymous). The per-binding tag lets later identity
-  changes selectively drop bindings whose authorization no longer holds.
-
-  When no entry exists at call time (the SSE connection has already died and
-  been garbage-collected by the registry's `:DOWN` handler), the call is
-  alive-only: no entry is created and no zero-crossing messages are emitted,
-  but the client-side diff is still returned so the caller can respond
-  coherently.
-  """
-  @spec transition(String.t(), [{any, String.t()}], [{any, String.t()}], term | nil) ::
-          {[{any, String.t()}], [{any, String.t()}]}
-  def transition(instance_id, new_sub_keys, client_claimed_sub_keys, authorizing_user_id) do
-    GenServer.call(
-      __MODULE__,
-      {:transition, instance_id, new_sub_keys, client_claimed_sub_keys, authorizing_user_id}
-    )
-  end
-
-  @doc """
   Updates the `session_id` and `user_id` fields of the entry for the given
   `instance_id`. No-op when no entry exists.
   """
@@ -550,42 +510,6 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     end
 
     {:reply, :ok, state}
-  end
-
-  @impl GenServer
-  def handle_call(
-        {:transition, instance_id, new_sub_keys, client_claimed_sub_keys, authorizing_user_id},
-        _from,
-        state
-      ) do
-    new_keys_set = MapSet.new(new_sub_keys)
-    client_keys_set = MapSet.new(client_claimed_sub_keys)
-
-    add_keys =
-      new_keys_set
-      |> MapSet.difference(client_keys_set)
-      |> MapSet.to_list()
-
-    drop_keys =
-      client_keys_set
-      |> MapSet.difference(new_keys_set)
-      |> MapSet.to_list()
-
-    case :ets.lookup(@table_name, instance_id) do
-      [{^instance_id, entry}] ->
-        new_bindings_map = Map.new(new_sub_keys, fn key -> {key, authorizing_user_id} end)
-        :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings_map}})
-
-        prior_channels = channels_of(entry.bindings)
-        new_channels = channels_of(new_bindings_map)
-
-        emit_zero_crossings(entry.sse_pid, prior_channels, new_channels)
-
-      [] ->
-        :noop
-    end
-
-    {:reply, {add_keys, drop_keys}, state}
   end
 
   @impl GenServer
