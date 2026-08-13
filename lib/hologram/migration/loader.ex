@@ -79,6 +79,26 @@ defmodule Hologram.Migration.Loader do
     Enum.filter(ops, &(&1.op == :resolve!))
   end
 
+  @doc """
+  Validates that no op of the given migration file references an entity type by a name
+  the file renames away.
+
+  Sequential logs admit equivalent orderings, and only the misleading one is illegal:
+  once a file renames an entity type, its old name may not appear anywhere except the
+  rename op itself, so every line cross-references the current model instead of a name
+  that no longer exists. Returns :ok, or raises naming the offending line and the fix.
+  """
+  @spec verify_rename_order!(list(%{atom => any}), String.t()) :: :ok
+  def verify_rename_order!(ops, path) do
+    renames = Enum.filter(ops, &(&1.op == :rename_entity))
+
+    Enum.each(renames, fn rename ->
+      Enum.each(ops, &verify_rename_reference!(&1, rename, path))
+    end)
+
+    :ok
+  end
+
   defp load_file!(file_name, dir) do
     validate_file_name!(file_name, dir)
 
@@ -89,7 +109,23 @@ defmodule Hologram.Migration.Loader do
       |> File.read!()
       |> load_string!(path)
 
+    verify_rename_order!(ops, path)
+
     %{version: Path.rootname(file_name), path: path, ops: ops}
+  end
+
+  defp references_entity?(op, module) do
+    changes = Map.get(op, :changes, [])
+    changed_relationship_type = Keyword.get(changes, :type)
+
+    Map.get(op, :entity) == module or
+      Map.get(op, :from) == module or
+      relationship_target?(Map.get(op, :type), module) or
+      relationship_target?(changed_relationship_type, module)
+  end
+
+  defp relationship_target?(type, module) do
+    type == module or type == [module]
   end
 
   defp statements({:__block__, _meta, statements}), do: statements
@@ -133,5 +169,15 @@ defmodule Hologram.Migration.Loader do
 
     raise Hologram.CompileError,
       message: "migration files contain only migration ops - #{path}:#{line}"
+  end
+
+  defp verify_rename_reference!(op, rename, path) do
+    if op != rename and references_entity?(op, rename.from) do
+      raise Hologram.CompileError,
+        message:
+          "#{path}:#{op.line} references #{inspect(rename.from)}, " <>
+            "renamed on line #{rename.line} - " <>
+            "move the rename first and use #{inspect(rename.to)}"
+    end
   end
 end
