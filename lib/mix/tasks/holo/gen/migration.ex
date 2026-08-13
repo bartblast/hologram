@@ -38,7 +38,7 @@ defmodule Mix.Tasks.Holo.Gen.Migration do
     |> Generator.generate(model, DateTime.utc_now())
     |> report()
   rescue
-    error in RuntimeError -> Mix.raise(error.message)
+    error in [Hologram.CompileError, RuntimeError] -> Mix.raise(error.message)
   end
 
   defp pluralize(1, word), do: "1 #{word}"
