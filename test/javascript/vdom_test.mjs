@@ -9,6 +9,12 @@ import {
 
 import Vdom from "../../assets/js/vdom.mjs";
 
+import {
+  attributesModule,
+  eventListenersModule,
+  init,
+} from "../../assets/js/vendor/snabbdom/build/index.js";
+
 defineRuntimeGlobals();
 registerWebApis();
 
@@ -865,6 +871,184 @@ describe("Vdom", () => {
 
     it("non-string text", () => {
       assert.isNull(Vdom.markerKey(undefined));
+    });
+  });
+
+  describe("mirror()", () => {
+    const patch = init([attributesModule, eventListenersModule], undefined, {
+      experimental: {fragments: true},
+    });
+
+    const mount = (html) => {
+      const container = document.createElement("div");
+      container.innerHTML = html;
+      document.body.appendChild(container);
+
+      return container;
+    };
+
+    // Mirror against the container, then run the boot patch the way render() will: the mirrored
+    // tree as the old side, the rendered tree as the new one.
+    const adopt = (renderedChildren, html) => {
+      const container = mount(html);
+      const rendered = vnode("div", {attrs: {}}, renderedChildren);
+      const mirrored = Vdom.mirror(rendered, container);
+
+      return {container, mirrored, patched: () => patch(mirrored, rendered)};
+    };
+
+    it("adopts a matching tree, copying sel and key from the rendered side", () => {
+      const container = mount('<div id="app"><p>hello</p></div>');
+
+      const rendered = vnode("div", {attrs: {id: "app"}, key: "my_key"}, [
+        vnode("p", {attrs: {}}, ["hello"]),
+      ]);
+
+      const mirrored = Vdom.mirror(rendered, container.firstChild);
+
+      assert.equal(mirrored.sel, "div");
+      assert.equal(mirrored.key, "my_key");
+      assert.deepStrictEqual(mirrored.data.attrs, {id: "app"});
+      assert.equal(mirrored.elm, container.firstChild);
+
+      const [p] = mirrored.children;
+      assert.equal(p.sel, "p");
+      assert.equal(p.elm, container.firstChild.firstChild);
+      assert.equal(p.children[0].text, "hello");
+      assert.equal(p.children[0].elm, p.elm.firstChild);
+    });
+
+    it("keeps the server's nodes through the boot patch and attaches listeners", () => {
+      let clicks = 0;
+
+      const {container, patched} = adopt(
+        [vnode("button", {attrs: {}, on: {click: () => clicks++}}, ["go"])],
+        "<button>go</button>",
+      );
+
+      const serverButton = container.querySelector("button");
+      patched();
+
+      assert.equal(container.querySelector("button"), serverButton);
+
+      serverButton.dispatchEvent(new window.Event("click"));
+      assert.equal(clicks, 1);
+    });
+
+    it("syncs attributes to the rendered side without replacing the node", () => {
+      const {container, patched} = adopt(
+        [vnode("p", {attrs: {class: "fresh"}}, [])],
+        '<p class="stale" data-junk="1"></p>',
+      );
+
+      const serverP = container.querySelector("p");
+      patched();
+
+      assert.equal(container.querySelector("p"), serverP);
+      assert.equal(serverP.getAttribute("class"), "fresh");
+      assert.isFalse(serverP.hasAttribute("data-junk"));
+    });
+
+    it("adopts a text node whose content differs and patches it in place", () => {
+      const {container, patched} = adopt(
+        [vnode("p", {attrs: {}}, ["fresh"])],
+        "<p>stale</p>",
+      );
+
+      const serverText = container.querySelector("p").firstChild;
+      patched();
+
+      assert.equal(container.querySelector("p").firstChild, serverText);
+      assert.equal(serverText.textContent, "fresh");
+    });
+
+    it("replaces a subtree whose tag diverges", () => {
+      const {container, patched} = adopt(
+        [vnode("div", {attrs: {}}, [])],
+        "<span>old</span>",
+      );
+
+      const serverSpan = container.querySelector("span");
+      patched();
+
+      assert.isNull(container.querySelector("span"));
+      assert.notEqual(container.querySelector("div"), serverSpan);
+      assert.equal(container.firstChild.tagName, "DIV");
+    });
+
+    it("removes DOM nodes the rendered side doesn't know about", () => {
+      const {container, patched} = adopt(
+        [vnode("p", {attrs: {}}, [])],
+        "<p></p><i>injected</i>",
+      );
+
+      patched();
+
+      assert.isNull(container.querySelector("i"));
+      assert.equal(container.childNodes.length, 1);
+    });
+
+    it("creates rendered nodes with no DOM counterpart", () => {
+      const {container, patched} = adopt(
+        [vnode("p", {attrs: {}}, []), vnode("em", {attrs: {}}, [])],
+        "<p></p>",
+      );
+
+      const serverP = container.querySelector("p");
+      patched();
+
+      assert.equal(container.querySelector("p"), serverP);
+      assert.equal(container.querySelector("em").tagName, "EM");
+    });
+
+    it("mirrors a marked span as a fragment bracketing the server's nodes", () => {
+      const renderedChildren = Vdom.finalizeChildren([
+        vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
+        vnode("em", {attrs: {}}, ["*"]),
+        vnode("!", {key: "[h:1a2b3c:0:c]"}, "[h:1a2b3c:0:c]"),
+        vnode("input", {attrs: {}}, []),
+      ]);
+
+      const {container, mirrored, patched} = adopt(
+        renderedChildren,
+        "<!--[h:1a2b3c:0:o]--><em>*</em><!--[h:1a2b3c:0:c]--><input>",
+      );
+
+      const [mirroredFragment, mirroredInput] = mirrored.children;
+
+      assert.isUndefined(mirroredFragment.sel);
+      assert.equal(mirroredFragment.key, "[h:1a2b3c:0:o]");
+      assert.equal(mirroredFragment.children.length, 3);
+      assert.equal(
+        mirroredFragment.elm.firstChildNode,
+        container.childNodes[0],
+      );
+      assert.equal(mirroredFragment.elm.lastChildNode, container.childNodes[2]);
+      assert.equal(mirroredFragment.elm.parent, container);
+      assert.equal(mirroredInput.elm, container.querySelector("input"));
+
+      const serverEm = container.querySelector("em");
+      patched();
+
+      assert.equal(container.querySelector("em"), serverEm);
+    });
+
+    it("keeps a script whose rendered key matches, so it is not re-executed", () => {
+      const rendered = vnode(
+        "script",
+        {key: "__hologramScript__:my_src", attrs: {src: "my_src"}},
+        [],
+      );
+
+      const {container, patched} = adopt(
+        [rendered],
+        '<script src="my_src"></script>',
+      );
+
+      const serverScript = container.querySelector("script");
+      patched();
+
+      assert.equal(container.querySelector("script"), serverScript);
     });
   });
 });

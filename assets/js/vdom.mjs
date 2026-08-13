@@ -6,6 +6,7 @@ import {
   fragment,
   h as vnode,
   init,
+  vnode as rawVnode,
 } from "./vendor/snabbdom/build/index.js";
 
 // Fragments let a block occupy exactly one position in its parent's children list however many
@@ -195,6 +196,21 @@ export default class Vdom {
       : null;
   }
 
+  // Builds the old side of the boot patch: the rendered vdom mirrored onto the live DOM, sel and
+  // key copied from the rendered side and elm taken from the page, so the first patch adopts the
+  // server-rendered nodes instead of recreating them. The patch then does the rest through its
+  // ordinary machinery - attributes are re-set idempotently, event listeners attach, and the
+  // rendered side's stylesheet and script keys compare equal by construction, so neither is
+  // re-fetched or re-executed.
+  //
+  // Where the two sides disagree the DOM node is mirrored as itself instead, with its real tag,
+  // so the patch replaces that subtree through the same create/remove paths every later patch
+  // runs - repair is not implemented here. Extra DOM nodes are mirrored as themselves and
+  // removed; rendered nodes with no DOM counterpart contribute nothing and are created.
+  static mirror(renderedVnode, domNode) {
+    return $.#mirrorNode(renderedVnode, domNode) ?? $.#vnodeOfDomNode(domNode);
+  }
+
   // Covered in feature tests
   static patchVirtualDocument(oldVirtualDocument, newVirtualDocument) {
     const newRootVNode = {
@@ -251,12 +267,7 @@ export default class Vdom {
       Array.from(node.childNodes).map(Vdom.#buildVnodeFromDomNode),
     );
 
-    const attrs = {};
-
-    for (let attr of node.attributes) {
-      attrs[attr.name] = attr.value === "" ? true : attr.value;
-    }
-
+    const attrs = $.#domNodeAttrs(node);
     const tagName = node.tagName.toLowerCase();
     const data = {attrs: attrs};
 
@@ -274,6 +285,17 @@ export default class Vdom {
     }
 
     return vnode(tagName, data, children);
+  }
+
+  // An element's attributes in the vdom convention: a valueless attribute reads as true.
+  static #domNodeAttrs(domNode) {
+    const attrs = {};
+
+    for (const attr of domNode.attributes) {
+      attrs[attr.name] = attr.value === "" ? true : attr.value;
+    }
+
+    return attrs;
   }
 
   // The live node a fragment stands for, or undefined when there isn't one.
@@ -362,6 +384,168 @@ export default class Vdom {
     }
 
     return -1;
+  }
+
+  // Mirrors a rendered children list against a span of DOM nodes, advancing the shared cursor as
+  // nodes are consumed.
+  //
+  // A fragment shares its parent's DOM level - its children are the parent's real child nodes -
+  // so it recurses with the same cursor rather than descending, and is rebuilt around the
+  // mirrored span with the same elm bookkeeping the render side gets in groupBlockFragments.
+  //
+  // Leftover DOM nodes are NOT consumed here: only the element owning the list knows the span is
+  // exhausted, so #mirrorNode appends them after this returns.
+  static #mirrorChildren(renderedChildren, domNodes, cursor) {
+    const mirroredChildren = [];
+
+    for (const renderedChild of renderedChildren) {
+      if (
+        renderedChild.sel === undefined &&
+        Array.isArray(renderedChild.children)
+      ) {
+        const mirroredKids = $.#mirrorChildren(
+          renderedChild.children,
+          domNodes,
+          cursor,
+        );
+
+        const mirroredFragment = fragment(mirroredKids);
+
+        mirroredFragment.key = renderedChild.key;
+        mirroredFragment.data.key = renderedChild.key;
+
+        mirroredFragment.elm = $.#fragmentElm(
+          mirroredKids[0] ?? {},
+          mirroredKids[mirroredKids.length - 1] ?? {},
+        );
+
+        mirroredChildren.push(mirroredFragment);
+        continue;
+      }
+
+      const domChild = domNodes[cursor.index];
+      const mirroredChild = $.#mirrorNode(renderedChild, domChild);
+
+      if (mirroredChild !== null) {
+        mirroredChildren.push(mirroredChild);
+        cursor.index += 1;
+      } else if (domChild) {
+        // The two sides disagree: mirror the DOM node as itself, so the patch replaces this
+        // subtree instead of adopting it. The rendered child is not retried against later nodes -
+        // the walk stays in lockstep, and everything under the divergence is repaired wholesale.
+        console.warn(
+          "Hologram: server-rendered DOM diverges from the client render, repairing",
+          {rendered: renderedChild, dom: domChild},
+        );
+
+        mirroredChildren.push($.#vnodeOfDomNode(domChild));
+        cursor.index += 1;
+      }
+      // No DOM node left: the rendered child contributes nothing, the patch creates it.
+    }
+
+    return mirroredChildren;
+  }
+
+  // The old-side vnode for one rendered vnode paired with one DOM node, or null when they don't
+  // correspond and the mismatch policy in #mirrorChildren should take over.
+  static #mirrorNode(renderedVnode, domNode) {
+    if (!domNode) {
+      return null;
+    }
+
+    // Text: any text node is adopted, whatever it says - the patch rewrites text in place, which
+    // preserves the node, so a content difference is not a structural mismatch.
+    if (
+      renderedVnode.sel === undefined &&
+      !Array.isArray(renderedVnode.children)
+    ) {
+      return domNode.nodeType === Node.TEXT_NODE
+        ? rawVnode(
+            undefined,
+            undefined,
+            undefined,
+            domNode.textContent,
+            domNode,
+          )
+        : null;
+    }
+
+    if (renderedVnode.sel === "!") {
+      if (domNode.nodeType !== Node.COMMENT_NODE) {
+        return null;
+      }
+
+      const data = renderedVnode.key ? {key: renderedVnode.key} : {};
+
+      return rawVnode("!", data, undefined, domNode.textContent, domNode);
+    }
+
+    if (
+      domNode.nodeType !== Node.ELEMENT_NODE ||
+      domNode.tagName.toLowerCase() !== renderedVnode.sel
+    ) {
+      return null;
+    }
+
+    // Attributes are read from the DOM, not copied from the rendered side, so the patch sees what
+    // is really there: stale attributes are removed, missing ones added.
+    const data = {attrs: $.#domNodeAttrs(domNode)};
+
+    if (renderedVnode.key) {
+      data.key = renderedVnode.key;
+    }
+
+    const cursor = {index: 0};
+
+    const mirroredChildren = $.#mirrorChildren(
+      renderedVnode.children ?? [],
+      domNode.childNodes,
+      cursor,
+    );
+
+    // DOM nodes past the rendered children - third-party insertions or divergence - are mirrored
+    // as themselves, so the patch removes them.
+    while (cursor.index < domNode.childNodes.length) {
+      mirroredChildren.push(
+        $.#vnodeOfDomNode(domNode.childNodes[cursor.index]),
+      );
+      cursor.index += 1;
+    }
+
+    return rawVnode(
+      renderedVnode.sel,
+      data,
+      mirroredChildren,
+      undefined,
+      domNode,
+    );
+  }
+
+  // A vnode standing for a DOM node on its own terms, carrying its real identity. Used where the
+  // rendered side has no say: mismatched or extra nodes, which the patch then replaces or removes.
+  static #vnodeOfDomNode(domNode) {
+    if (domNode.nodeType === Node.TEXT_NODE) {
+      return rawVnode(
+        undefined,
+        undefined,
+        undefined,
+        domNode.textContent,
+        domNode,
+      );
+    }
+
+    if (domNode.nodeType === Node.COMMENT_NODE) {
+      return rawVnode("!", {}, [], domNode.textContent, domNode);
+    }
+
+    return rawVnode(
+      domNode.tagName.toLowerCase(),
+      {attrs: $.#domNodeAttrs(domNode)},
+      [],
+      undefined,
+      domNode,
+    );
   }
 }
 
