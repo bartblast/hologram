@@ -414,19 +414,25 @@ defmodule Hologram.DB.Mapper do
     end)
   end
 
-  # A model declaring no entity types has nothing to grant roles on, so it derives no
-  # grant store either - which keeps "the empty model has the empty schema" true, the
-  # premise a migration history replayed from empty rests on.
-  defp put_role_grant(%{entities: entities}) when entities == %{}, do: %{}
+  # The grant store exists only where its references can point: a model declaring no
+  # entity types has nothing to grant roles on, and one whose user entity type is absent
+  # cannot carry grants at all - which is the state early in a migration history, before
+  # the user entity type arrives. Deriving no store there keeps "the empty model has the
+  # empty schema" true, the premise a history replayed from empty rests on.
+  defp put_role_grant(%{entities: entities} = model) do
+    user_entity = RoleGrant.user_entity()
 
-  defp put_role_grant(model) do
-    Map.put(model.entities, RoleGrant, role_grant_entry(model))
+    if entities == %{} or is_nil(user_entity) or not Map.has_key?(entities, user_entity) do
+      entities
+    else
+      Map.put(entities, RoleGrant, role_grant_entry(model, user_entity))
+    end
   end
 
   # The grant store is derived, never declared: its enum values are the model's table names
   # and role names, and its relationships point at the designated user entity type - so a
   # replayed history derives the store as it stood at that point, with no op declaring it.
-  defp role_grant_entry(model) do
+  defp role_grant_entry(model, user_entity) do
     resource_type_values =
       model.entities
       |> Map.keys()
@@ -443,12 +449,6 @@ defmodule Hologram.DB.Mapper do
       |> Enum.concat(Map.keys(model.roles))
       |> Enum.uniq()
       |> Enum.sort_by(&Codec.encode(&1, :enum))
-
-    # TODO: The user entity designation is a module reflection with no term
-    # representation, so a replayed history resolves it against the current modules
-    # instead of the model as it stood - correct until a user entity type is renamed.
-    # Carrying the designation in the term (and in the ops that record it) closes it.
-    user_entity = RoleGrant.user_entity()
 
     %{
       attributes: [

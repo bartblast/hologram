@@ -7,6 +7,7 @@ defmodule Hologram.DB.MapperTest do
   alias Hologram.Entity.Model
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -317,10 +318,16 @@ defmodule Hologram.DB.MapperTest do
       assert List.last(mapping[Module2].columns).source == {:sort_key, :c}
     end
 
-    test "derives the role grant store even when it is not among the given entity types" do
+    test "derives the role grant store alongside the app's user entity type" do
+      mapping = derive!([Module1, Module14])
+
+      assert mapping[RoleGrant].table == "hologram_role_grant"
+    end
+
+    test "derives no role grant store for a model without the user entity type" do
       mapping = derive!([Module1])
 
-      assert mapping[Hologram.Auth.RoleGrant].table == "hologram_role_grant"
+      assert Map.has_key?(mapping, RoleGrant) == false
     end
 
     test "returns the mapping keyed by entity type" do
@@ -484,11 +491,7 @@ defmodule Hologram.DB.MapperTest do
     test "derives the grant store's enum values from the term" do
       model = %{
         entities: %{
-          Nonexistent.Ghost => %{
-            attributes: [],
-            relationships: [],
-            roles: [{:editor, []}]
-          }
+          Module14 => %{attributes: [], relationships: [], roles: [{:editor, []}]}
         },
         roles: %{Nonexistent.Roles.Admin => %{extends: []}}
       }
@@ -500,7 +503,7 @@ defmodule Hologram.DB.MapperTest do
 
       role_column = Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :role}))
 
-      assert resource_type_column.enum_values == ["nonexistent_ghost"]
+      assert resource_type_column.enum_values == ["test_fixtures_entity_module14"]
       assert role_column.enum_values == ["Nonexistent.Roles.Admin", "editor"]
     end
   end

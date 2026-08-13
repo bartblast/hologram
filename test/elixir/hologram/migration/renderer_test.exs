@@ -4,6 +4,7 @@ defmodule Hologram.Migration.RendererTest do
   import Hologram.Migration.Renderer
 
   alias Hologram.Entity.Model
+  alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
 
   defp model(entities) do
     entries =
@@ -34,7 +35,7 @@ defmodule Hologram.Migration.RendererTest do
         |> Enum.filter(&(&1.op == :create_table))
         |> Enum.map(& &1.table)
 
-      assert created_tables == ["hologram_role_grant", "my_app_task"]
+      assert created_tables == ["my_app_task"]
 
       task_table =
         Enum.find(result.transactional, &(&1.op == :create_table and &1.table == "my_app_task"))
@@ -107,7 +108,7 @@ defmodule Hologram.Migration.RendererTest do
     end
 
     test "renders a deleted entity as its table drop" do
-      pre = model(%{MyApp.Archive => %{}, MyApp.Task => %{}})
+      pre = model(%{MyApp.Archive => %{}, MyApp.Task => %{}, UserEntity => %{}})
 
       ops = [%{op: :delete_entity, entity: MyApp.Archive, line: 3}]
 
@@ -118,7 +119,7 @@ defmodule Hologram.Migration.RendererTest do
       assert op_kinds(result.transactional) == [:drop_table, :rebuild_enum_type]
 
       assert Enum.find(result.transactional, &(&1.op == :drop_table)).table == "my_app_archive"
-      assert result.post_model == model(%{MyApp.Task => %{}})
+      assert result.post_model == model(%{MyApp.Task => %{}, UserEntity => %{}})
     end
 
     test "renders a to-one relationship as its reference column, constraint, and index" do
@@ -215,7 +216,7 @@ defmodule Hologram.Migration.RendererTest do
       last_create = Enum.find_index(reversed_kinds, &(&1 == :create_table))
       first_reference = Enum.find_index(reversed_kinds, &(&1 == :add_foreign_key))
 
-      assert Enum.count(kinds, &(&1 == :create_table)) == 3
+      assert Enum.count(kinds, &(&1 == :create_table)) == 2
       assert first_reference < last_create
     end
 
@@ -227,7 +228,8 @@ defmodule Hologram.Migration.RendererTest do
             relationships: [{:author, MyApp.User, []}, {:tags, [MyApp.Tag], []}]
           },
           MyApp.Tag => %{},
-          MyApp.User => %{}
+          MyApp.User => %{},
+          UserEntity => %{}
         })
 
       ops = [%{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 3}]
@@ -366,7 +368,7 @@ defmodule Hologram.Migration.RendererTest do
     end
 
     test "renders a role rename as the grant store's value rename" do
-      pre = model(%{MyApp.Task => %{roles: [{:moderator, []}]}})
+      pre = model(%{MyApp.Task => %{roles: [{:moderator, []}]}, UserEntity => %{}})
 
       ops = [
         %{op: :rename_role, entity: MyApp.Task, from: :moderator, to: :maintainer, line: 3}
@@ -386,7 +388,10 @@ defmodule Hologram.Migration.RendererTest do
 
     test "renders a global role rename as the grant store's value rename" do
       pre = %{
-        entities: %{MyApp.Task => %{attributes: [], relationships: [], roles: []}},
+        entities: %{
+          MyApp.Task => %{attributes: [], relationships: [], roles: []},
+          UserEntity => %{attributes: [], relationships: [], roles: []}
+        },
         roles: %{MyApp.Roles.Moderator => %{extends: []}}
       }
 
@@ -458,6 +463,145 @@ defmodule Hologram.Migration.RendererTest do
 
       assert add_column.table == "my_app_sketch"
       assert add_column.column == "summary"
+    end
+
+    test "renders an attribute type change as its column alteration" do
+      pre = model(%{MyApp.Task => %{attributes: [{:estimate, :integer, []}]}})
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :estimate,
+          changes: [type: :float],
+          line: 3
+        }
+      ]
+
+      result = render(ops, pre)
+
+      assert [alter_column] = result.transactional
+      assert alter_column.op == :alter_column
+      assert alter_column.table == "my_app_task"
+      assert alter_column.column == "estimate"
+      assert alter_column.before.type == "int8"
+      assert alter_column.after.type == "float8"
+    end
+
+    test "renders an optional flip as its column nullability" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :title,
+          changes: [optional: true],
+          line: 3
+        }
+      ]
+
+      result = render(ops, pre)
+
+      assert [alter_column] = result.transactional
+      assert alter_column.op == :alter_column
+      assert alter_column.before.null == false
+      assert alter_column.after.null == true
+    end
+
+    test "renders nothing for changes the physical schema does not carry" do
+      pre =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:priority, :integer, [optional: true]}],
+            roles: [{:owner, []}]
+          }
+        })
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :priority,
+          changes: [default: 0],
+          line: 3
+        },
+        %{op: :change_role, entity: MyApp.Task, name: :owner, changes: [creator: true], line: 4}
+      ]
+
+      result = render(ops, pre)
+
+      assert result.transactional == []
+      assert result.tail == []
+
+      assert result.post_model ==
+               model(%{
+                 MyApp.Task => %{
+                   attributes: [{:priority, :integer, [default: 0, optional: true]}],
+                   roles: [{:owner, [creator: true]}]
+                 }
+               })
+    end
+
+    test "renders a deleted enum value as its type rebuild" do
+      pre =
+        model(%{
+          MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :doing, :done]]}]}
+        })
+
+      ops = [
+        %{op: :delete_enum_value, entity: MyApp.Task, attribute: :status, value: :doing, line: 3}
+      ]
+
+      result = render(ops, pre)
+
+      assert [rebuild] = result.transactional
+      assert rebuild.op == :rebuild_enum_type
+      assert rebuild.enum_type == "my_app_task_status_$enum"
+      assert rebuild.values == ["todo", "done"]
+      assert rebuild.columns == [{"my_app_task", "status"}]
+    end
+
+    test "renders reordered enum values as their type rebuild" do
+      pre =
+        model(%{
+          MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :doing, :done]]}]}
+        })
+
+      ops = [
+        %{
+          op: :reorder_enum_values,
+          entity: MyApp.Task,
+          attribute: :status,
+          values: [:done, :todo, :doing],
+          line: 3
+        }
+      ]
+
+      result = render(ops, pre)
+
+      assert [rebuild] = result.transactional
+      assert rebuild.op == :rebuild_enum_type
+      assert rebuild.values == ["done", "todo", "doing"]
+    end
+
+    test "renders a global role addition as the grant store's value" do
+      pre = %{
+        entities: %{
+          MyApp.Task => %{attributes: [], relationships: [], roles: []},
+          UserEntity => %{attributes: [], relationships: [], roles: []}
+        },
+        roles: %{}
+      }
+
+      ops = [%{op: :add_role, role: MyApp.Roles.Admin, opts: [], line: 3}]
+
+      result = render(ops, pre)
+
+      assert [add_enum_value] = result.transactional
+      assert add_enum_value.op == :add_enum_value
+      assert add_enum_value.enum_type == "hologram_role_grant_role_$enum"
+      assert add_enum_value.value == "MyApp.Roles.Admin"
     end
 
     test "renders an added enum value as its type value" do
