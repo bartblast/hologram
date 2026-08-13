@@ -39,6 +39,18 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     task
   end
 
+  # The ref a parked caller carries, which the connection's holder echoes back to address
+  # exactly that waiter.
+  defp parked_waiter_ref(instance_id) do
+    [{_from, waiter_ref, _adds, _drops, _user_id}] =
+      SubscriptionRegistry
+      |> :sys.get_state()
+      |> Map.fetch!(:waiters)
+      |> Map.fetch!(instance_id)
+
+    waiter_ref
+  end
+
   describe "apply_deltas/4" do
     test "adds new bindings tagged with authorizing_user_id" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
@@ -1036,6 +1048,83 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       :ok = update_identity("test-unknown-instance-id", "test-session-id", "test-user-id")
 
       assert identity_of("test-unknown-instance-id") == nil
+    end
+  end
+
+  describe "handle {:apply_deltas_remote_reply, ...}" do
+    test "releases the parked caller with the holder's result" do
+      task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+      waiter_ref = parked_waiter_ref("test-instance-id")
+
+      send(
+        Process.whereis(SubscriptionRegistry),
+        {:apply_deltas_remote_reply, "test-instance-id", waiter_ref,
+         {[{:room_a, "page"}], [{:room_b, "comp_1"}]}}
+      )
+
+      assert Task.await(task) == {[{:room_a, "page"}], [{:room_b, "comp_1"}]}
+    end
+
+    test "drops the released waiter from the parked set" do
+      task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+      waiter_ref = parked_waiter_ref("test-instance-id")
+
+      send(
+        Process.whereis(SubscriptionRegistry),
+        {:apply_deltas_remote_reply, "test-instance-id", waiter_ref, {[], []}}
+      )
+
+      # get_state queues behind the reply, so the waiter must already be gone by the time
+      # it returns - well inside the window, which would otherwise clear it on timeout.
+      assert :sys.get_state(SubscriptionRegistry).waiters == %{}
+
+      Task.await(task)
+    end
+
+    test "logs nothing when the waiter's timer fires after the holder answered" do
+      task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+      waiter_ref = parked_waiter_ref("test-instance-id")
+
+      log =
+        capture_log(fn ->
+          send(
+            Process.whereis(SubscriptionRegistry),
+            {:apply_deltas_remote_reply, "test-instance-id", waiter_ref, {[], []}}
+          )
+
+          Task.await(task)
+
+          # Outlast the window so the stale timer fires against an absent waiter.
+          Process.sleep(@attach_wait_ms * 2)
+          :sys.get_state(SubscriptionRegistry)
+        end)
+
+      refute log =~ "No connection attached"
+    end
+
+    test "leaves parked callers untouched when no waiter carries the ref" do
+      task = park_apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      send(
+        Process.whereis(SubscriptionRegistry),
+        {:apply_deltas_remote_reply, "test-instance-id", make_ref(), {[], []}}
+      )
+
+      assert Map.has_key?(:sys.get_state(SubscriptionRegistry).waiters, "test-instance-id")
+
+      # The caller stays parked and is answered by its own timer.
+      capture_log(fn -> assert Task.await(task) == {[{:room_a, "page"}], []} end)
+    end
+
+    test "is a no-op for an instance with no parked callers" do
+      state_before = :sys.get_state(SubscriptionRegistry)
+
+      send(
+        Process.whereis(SubscriptionRegistry),
+        {:apply_deltas_remote_reply, "test-unknown-instance-id", make_ref(), {[], []}}
+      )
+
+      assert :sys.get_state(SubscriptionRegistry) == state_before
     end
   end
 

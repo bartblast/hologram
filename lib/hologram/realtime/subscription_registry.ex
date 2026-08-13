@@ -562,27 +562,29 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @impl GenServer
-  def handle_info({:apply_deltas_timeout, instance_id, timer_ref}, state) do
-    case Map.get(state.waiters, instance_id) do
-      nil ->
+  def handle_info({:apply_deltas_remote_reply, instance_id, waiter_ref, result}, state) do
+    case pop_waiter(state.waiters, instance_id, waiter_ref) do
+      # The waiter is already gone - a local attach drained it, or it timed out - so the
+      # holder's answer arrived too late to be anyone's. Nothing to do.
+      {nil, _waiters} ->
         {:noreply, state}
 
-      waiter_list ->
-        {matching, remaining} =
-          Enum.split_with(waiter_list, fn {_from, ref, _adds, _drops, _user_id} ->
-            ref == timer_ref
-          end)
+      {{from, _ref, _adds, _drops, _user_id}, new_waiters} ->
+        GenServer.reply(from, result)
 
-        Enum.each(matching, fn {from, _ref, adds, drops, _user_id} ->
-          log_unapplied_deltas(instance_id, adds, drops, state.attach_wait_ms)
-          GenServer.reply(from, {adds, drops})
-        end)
+        {:noreply, %{state | waiters: new_waiters}}
+    end
+  end
 
-        new_waiters =
-          case remaining do
-            [] -> Map.delete(state.waiters, instance_id)
-            _remaining_waiters -> Map.put(state.waiters, instance_id, remaining)
-          end
+  @impl GenServer
+  def handle_info({:apply_deltas_timeout, instance_id, timer_ref}, state) do
+    case pop_waiter(state.waiters, instance_id, timer_ref) do
+      {nil, _waiters} ->
+        {:noreply, state}
+
+      {{from, _ref, adds, drops, _user_id}, new_waiters} ->
+        log_unapplied_deltas(instance_id, adds, drops, state.attach_wait_ms)
+        GenServer.reply(from, {adds, drops})
 
         {:noreply, %{state | waiters: new_waiters}}
     end
@@ -681,6 +683,33 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     # The ref goes back to the caller so it can be sent to the connection's holder as a
     # correlation id, letting a reply address exactly this waiter.
     {%{state | waiters: waiters}, timer_ref}
+  end
+
+  # Removes the waiter carrying `waiter_ref` and returns it alongside the remaining
+  # waiters, or `{nil, waiters}` when none carries it. Refs are unique per park, so at
+  # most one can match. Shared by the two ways a parked caller is released, which differ
+  # only in what they answer with.
+  defp pop_waiter(waiters, instance_id, waiter_ref) do
+    waiter_list = Map.get(waiters, instance_id, [])
+
+    {matching, remaining} =
+      Enum.split_with(waiter_list, fn {_from, ref, _adds, _drops, _user_id} ->
+        ref == waiter_ref
+      end)
+
+    case matching do
+      [] ->
+        {nil, waiters}
+
+      [waiter] ->
+        remaining_waiters =
+          case remaining do
+            [] -> Map.delete(waiters, instance_id)
+            _other -> Map.put(waiters, instance_id, remaining)
+          end
+
+        {waiter, remaining_waiters}
+    end
   end
 
   defp resolve_by_field(field, value) do
