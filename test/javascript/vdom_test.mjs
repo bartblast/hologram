@@ -311,6 +311,43 @@ describe("Vdom", () => {
     });
   });
 
+  describe("finalizeChildren()", () => {
+    it("numbers repeated marker keys, then gathers each marked span into a fragment", () => {
+      const marker = (side, index) =>
+        vnode(
+          "!",
+          {key: `[h:1a2b3c:${index}:${side}]`},
+          `[h:1a2b3c:${index}:${side}]`,
+        );
+
+      const children = [
+        marker("o", 0),
+        vnode("div", {attrs: {}}, []),
+        marker("c", 0),
+        marker("o", 0),
+        vnode("span", {attrs: {}}, []),
+        marker("c", 0),
+      ];
+
+      const result = Vdom.finalizeChildren(children);
+
+      assert.deepStrictEqual(
+        result.map((child) => child.key),
+        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]:1"],
+      );
+
+      assert.deepStrictEqual(
+        result.map((fragment) =>
+          fragment.children.map((child) => child.key ?? child.sel),
+        ),
+        [
+          ["[h:1a2b3c:0:o]", "div", "[h:1a2b3c:0:c]"],
+          ["[h:1a2b3c:0:o]:1", "span", "[h:1a2b3c:0:c]:1"],
+        ],
+      );
+    });
+  });
+
   describe("from()", () => {
     it("builds virtual DOM from HTML markup", () => {
       const html =

@@ -74,7 +74,7 @@ export default class Vdom {
         Vdom.addKeysToVnodes(childNode);
       }
 
-      node.children = $.groupBlockFragments($.dedupeMarkerKeys(node.children));
+      node.children = $.finalizeChildren(node.children);
     }
   }
 
@@ -109,6 +109,21 @@ export default class Vdom {
     }
 
     return children;
+  }
+
+  // Turns a complete children list into the form the diff works on: repeated marker keys numbered,
+  // then each marked span gathered into a fragment.
+  //
+  // Numbering runs first: a fragment pairs its markers by key, and a repeat's key is only unique
+  // once numbered.
+  //
+  // This runs on the children of one element, never on a part of them, which is what makes the two
+  // sides of a diff agree: the keys a repeat gets depend on what else the list holds, and the side
+  // read back from server-rendered markup only ever sees whole children lists. Numbering a loop's
+  // body on its own would give every iteration the same keys, since a block occurs once in the body
+  // however many times the body is rendered.
+  static finalizeChildren(children) {
+    return $.groupBlockFragments($.dedupeMarkerKeys(children));
   }
 
   static from(html) {
@@ -232,10 +247,8 @@ export default class Vdom {
         : vnode("!", node.textContent);
     }
 
-    const children = $.groupBlockFragments(
-      $.dedupeMarkerKeys(
-        Array.from(node.childNodes).map(Vdom.#buildVnodeFromDomNode),
-      ),
+    const children = $.finalizeChildren(
+      Array.from(node.childNodes).map(Vdom.#buildVnodeFromDomNode),
     );
 
     const attrs = {};

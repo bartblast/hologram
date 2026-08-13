@@ -164,6 +164,26 @@ describe("Renderer", () => {
   const parentTagName = "div";
   const slots = Type.keywordList();
 
+  const element = (tagName, childrenDom = []) =>
+    Type.tuple([
+      Type.atom("element"),
+      Type.bitstring(tagName),
+      Type.list(),
+      Type.list(childrenDom),
+    ]);
+
+  // A block marker comment, e.g. <!--[h:1a2b3c:0:o]-->
+  const marker = (index, side) =>
+    Type.tuple([
+      Type.atom("public_comment"),
+      Type.list([
+        Type.tuple([
+          Type.atom("text"),
+          Type.bitstring(`[h:1a2b3c:${index}:${side}]`),
+        ]),
+      ]),
+    ]);
+
   it("text node", () => {
     const node = Type.tuple([Type.atom("text"), Type.bitstring("abc")]);
 
@@ -273,16 +293,9 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("numbers repeated block markers in one list", () => {
-      // <!--[h:1a2b3c:0:o]--><!--[h:1a2b3c:0:o]-->
-      const marker = Type.tuple([
-        Type.atom("public_comment"),
-        Type.list([
-          Type.tuple([Type.atom("text"), Type.bitstring("[h:1a2b3c:0:o]")]),
-        ]),
-      ]);
-
-      const node = Type.list([marker, marker]);
+    it("numbers repeated block markers in one children list", () => {
+      // <span><!--[h:1a2b3c:0:o]--><!--[h:1a2b3c:0:o]--></span>
+      const node = element("span", [marker(0, "o"), marker(0, "o")]);
 
       const result = Renderer.renderDom(
         node,
@@ -293,41 +306,22 @@ describe("Renderer", () => {
       );
 
       assert.deepStrictEqual(
-        result.map((child) => child.key),
+        result.children.map((child) => child.key),
         ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]:1"],
       );
 
       assert.deepStrictEqual(
-        result.map((child) => child.text),
+        result.children.map((child) => child.text),
         ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]"],
       );
     });
 
     it("gathers a marked span into one fragment", () => {
-      // <!--[h:1a2b3c:0:o]--><div></div><!--[h:1a2b3c:0:c]--><input />
-      const marker = (side) =>
-        Type.tuple([
-          Type.atom("public_comment"),
-          Type.list([
-            Type.tuple([
-              Type.atom("text"),
-              Type.bitstring(`[h:1a2b3c:0:${side}]`),
-            ]),
-          ]),
-        ]);
-
-      const element = (tagName) =>
-        Type.tuple([
-          Type.atom("element"),
-          Type.bitstring(tagName),
-          Type.list(),
-          Type.list(),
-        ]);
-
-      const node = Type.list([
-        marker("o"),
+      // <span><!--[h:1a2b3c:0:o]--><div></div><!--[h:1a2b3c:0:c]--><input /></span>
+      const node = element("span", [
+        marker(0, "o"),
         element("div"),
-        marker("c"),
+        marker(0, "c"),
         element("input"),
       ]);
 
@@ -340,14 +334,77 @@ describe("Renderer", () => {
       );
 
       // The block holds one position whatever it renders, so the input never shifts.
-      assert.equal(result.length, 2);
-      assert.isUndefined(result[0].sel);
-      assert.equal(result[0].key, "[h:1a2b3c:0:o]");
-      assert.equal(result[1].sel, "input");
+      assert.equal(result.children.length, 2);
+      assert.isUndefined(result.children[0].sel);
+      assert.equal(result.children[0].key, "[h:1a2b3c:0:o]");
+      assert.equal(result.children[1].sel, "input");
 
       assert.deepStrictEqual(
-        result[0].children.map((child) => child.key ?? child.sel),
+        result.children[0].children.map((child) => child.key ?? child.sel),
         ["[h:1a2b3c:0:o]", "div", "[h:1a2b3c:0:c]"],
+      );
+    });
+
+    // A loop's iterations are lists of their own, so the block inside the body occurs once in each
+    // of them - the repeat only exists in the children list they are spliced into, which is where
+    // the numbering has to happen for the keys to come out unique.
+    it("numbers a block repeated by a loop", () => {
+      // <span>
+      //   <!--[h:1a2b3c:0:o]-->
+      //   {%for ...}<!--[h:1a2b3c:1:o]--><em></em><!--[h:1a2b3c:1:c]--><div></div>{/for}
+      //   <!--[h:1a2b3c:0:c]-->
+      // </span>
+      const iteration = () =>
+        Type.list([
+          marker(1, "o"),
+          element("em"),
+          marker(1, "c"),
+          element("div"),
+        ]);
+
+      const node = element("span", [
+        marker(0, "o"),
+        Type.list([iteration(), iteration(), iteration()]),
+        marker(0, "c"),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const [loopFragment] = result.children;
+
+      assert.deepStrictEqual(
+        loopFragment.children.map((child) => child.key ?? child.sel),
+        [
+          "[h:1a2b3c:0:o]",
+          "[h:1a2b3c:1:o]",
+          "div",
+          "[h:1a2b3c:1:o]:1",
+          "div",
+          "[h:1a2b3c:1:o]:2",
+          "div",
+          "[h:1a2b3c:0:c]",
+        ],
+      );
+
+      // The markers a fragment holds are numbered the same as the fragment itself, since they are
+      // part of the same children list.
+      assert.deepStrictEqual(
+        loopFragment.children
+          .filter((child) => typeof child.sel === "undefined")
+          .map((fragment) =>
+            fragment.children.map((child) => child.key ?? child.sel),
+          ),
+        [
+          ["[h:1a2b3c:1:o]", "em", "[h:1a2b3c:1:c]"],
+          ["[h:1a2b3c:1:o]:1", "em", "[h:1a2b3c:1:c]:1"],
+          ["[h:1a2b3c:1:o]:2", "em", "[h:1a2b3c:1:c]:2"],
+        ],
       );
     });
 
