@@ -621,6 +621,44 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
   end
 
+  describe "diff_sub_keys/2" do
+    test "returns every new key as an add and every claimed key as a drop when disjoint" do
+      assert diff_sub_keys([{:room_a, "page"}], [{:room_b, "page"}]) ==
+               {[{:room_a, "page"}], [{:room_b, "page"}]}
+    end
+
+    test "excludes keys held on both sides" do
+      new_sub_keys = [{:room_a, "page"}, {:room_b, "page"}]
+      client_claimed_sub_keys = [{:room_b, "page"}, {:room_c, "page"}]
+
+      assert diff_sub_keys(new_sub_keys, client_claimed_sub_keys) ==
+               {[{:room_a, "page"}], [{:room_c, "page"}]}
+    end
+
+    test "returns empty diffs for identical key sets" do
+      keys = [{:room_a, "page"}, {:room_b, "comp_1"}]
+
+      assert diff_sub_keys(keys, keys) == {[], []}
+    end
+
+    test "returns empty diffs when both sides are empty" do
+      assert diff_sub_keys([], []) == {[], []}
+    end
+
+    test "distinguishes cids of the same channel" do
+      assert diff_sub_keys([{:room_a, "page"}], [{:room_a, "comp_1"}]) ==
+               {[{:room_a, "page"}], [{:room_a, "comp_1"}]}
+    end
+
+    test "ignores the registry's own bindings" do
+      :ok = register_connection("test-instance-id", self())
+
+      apply_deltas("test-instance-id", [{:room_z, "page"}], [], "test-user-id")
+
+      assert diff_sub_keys([{:room_a, "page"}], []) == {[{:room_a, "page"}], []}
+    end
+  end
+
   describe "drop_for_identity_change/2" do
     test "drops bindings whose authorizing_user_id is non-nil and not equal to new_user_id" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)

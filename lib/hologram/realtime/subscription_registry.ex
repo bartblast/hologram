@@ -169,6 +169,34 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @doc """
+  Returns `{add_keys, drop_keys}` between the subscription keys a page declares
+  and the ones the client claims to hold: keys only the page declares, and keys
+  only the client holds.
+
+  Pure set arithmetic over the two given lists. Neither the registry's own
+  bindings nor any process state takes part, so the answer is the same on any
+  node.
+  """
+  @spec diff_sub_keys([{any, String.t()}], [{any, String.t()}]) ::
+          {[{any, String.t()}], [{any, String.t()}]}
+  def diff_sub_keys(new_sub_keys, client_claimed_sub_keys) do
+    new_keys_set = MapSet.new(new_sub_keys)
+    client_keys_set = MapSet.new(client_claimed_sub_keys)
+
+    add_keys =
+      new_keys_set
+      |> MapSet.difference(client_keys_set)
+      |> MapSet.to_list()
+
+    drop_keys =
+      client_keys_set
+      |> MapSet.difference(new_keys_set)
+      |> MapSet.to_list()
+
+    {add_keys, drop_keys}
+  end
+
+  @doc """
   Drops every binding from the entry for `instance_id` whose
   `authorizing_user_id` is non-nil and does not equal `new_user_id`.
   Anonymous-authorized bindings (`authorizing_user_id == nil`) stay live -
