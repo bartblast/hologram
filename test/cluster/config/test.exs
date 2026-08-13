@@ -18,6 +18,12 @@ config :hologram_cluster_tests, HologramClusterTestsWeb.Endpoint,
 # exactly as the proxy's routing policy decides.
 config :hologram_cluster_tests, :proxy_port, 4005
 
+# Every peer of every test connects its own pool - the app declares entities, which
+# activates the database everywhere the app boots. A small pool keeps a suite of
+# multi-peer tests far below the server's connection limit, and no cluster test issues
+# concurrent queries from one node.
+config :hologram, :database, pool_size: 2
+
 config :logger, level: :warning
 
 config :wallaby,

@@ -1,3 +1,8 @@
+# Boot the cluster test databases before the app starts: the app declares entities, which
+# activates the Hologram database - the databases themselves must exist before any pool
+# connects, on this node or on a peer.
+HologramClusterTests.DatabaseBootstrap.run!()
+
 Hologram.Test.setup()
 
 if System.get_env("GITHUB_ACTIONS") == "true" do
