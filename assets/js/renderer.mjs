@@ -125,10 +125,13 @@ export default class Renderer {
     const cid = Type.bitstring("page");
     const pageComponentStruct = ComponentRegistry.getComponentStruct(cid);
 
-    const pageVdom = Renderer.#renderPageInsideLayout(
-      pageModuleProxy,
-      pageParams,
-      pageComponentStruct,
+    // The document's own children, the one children list with no element to own it.
+    const pageVdom = Vdom.finalizeChildren(
+      Renderer.#renderPageInsideLayout(
+        pageModuleProxy,
+        pageParams,
+        pageComponentStruct,
+      ),
     );
 
     const htmlVnode = pageVdom.find((vnode) => vnode.sel === "html");
@@ -1427,12 +1430,16 @@ export default class Renderer {
 
     const childrenDom = dom.data[3];
 
-    const childrenVdom = Renderer.renderDom(
-      childrenDom,
-      context,
-      slots,
-      defaultTarget,
-      currentTagName,
+    // The element's children are complete here, whatever nesting of blocks, loops and components
+    // produced them, so this is where marker keys are settled and marked spans become fragments.
+    const childrenVdom = Vdom.finalizeChildren(
+      Renderer.renderDom(
+        childrenDom,
+        context,
+        slots,
+        defaultTarget,
+        currentTagName,
+      ),
     );
 
     const data = {attrs: attrsVdom, on: eventListenersVdom};
@@ -1557,31 +1564,25 @@ export default class Renderer {
   }
 
   // Based on render_dom/3 (list case)
+  //
+  // Blocks are left alone here: a block's body and a loop's iterations are lists of their own, and
+  // the markers they hold are only ever part of the enclosing element's children. Numbering and
+  // grouping them belongs to whoever owns that list - see Vdom.finalizeChildren.
   static #renderNodes(nodes, context, slots, defaultTarget, parentTagName) {
-    // A block rendered more than once into this list carries the same marker key each time, so the
-    // repeats are numbered here, where the list is finalized, and each marked span is then gathered
-    // into one fragment so the block holds a single position however much it renders.
-    //
-    // Numbering runs first: a fragment pairs its markers by key, and a repeat's key is only unique
-    // once numbered.
-    return Vdom.groupBlockFragments(
-      Vdom.dedupeMarkerKeys(
-        Renderer.#mergeNeighbouringTextNodes(
-          nodes.data
-            // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if} or DOCTYPE
-            .filter((node) => !Type.isNil(node))
-            .map((node) =>
-              Renderer.renderDom(
-                node,
-                context,
-                slots,
-                defaultTarget,
-                parentTagName,
-              ),
-            )
-            .flat(),
-        ),
-      ),
+    return Renderer.#mergeNeighbouringTextNodes(
+      nodes.data
+        // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if} or DOCTYPE
+        .filter((node) => !Type.isNil(node))
+        .map((node) =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        )
+        .flat(),
     );
   }
 
