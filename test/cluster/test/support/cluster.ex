@@ -20,6 +20,11 @@ defmodule HologramClusterTests.Cluster do
 
   @cookie :hologram_cluster_tests
 
+  # 10ms between attempts, so a stopped node gets the same ~10s to leave the cluster that
+  # convergence gets to form it. Both wait on the same distribution layer, and a loaded
+  # runner slows shutdown as readily as it slows a merge.
+  @node_down_attempts 1_000
+
   # Orchestrator default is 4003 (never bound - its endpoint runs with server: false)
   # and the proxy owns 4005, so peers live in their own range above both.
   @base_port 4010
@@ -174,7 +179,7 @@ defmodule HologramClusterTests.Cluster do
     forward_loop(forward_to)
   end
 
-  defp await_node_down(node, attempt) when attempt > @convergence_attempts do
+  defp await_node_down(node, attempt) when attempt > @node_down_attempts do
     raise "#{inspect(node)} did not leave the cluster after being stopped"
   end
 
