@@ -103,8 +103,30 @@ defmodule HologramTest do
     end
   end
 
-  test "env/0" do
-    assert env() == :test
+  describe "env/0" do
+    setup do
+      original = System.get_env("HOLOGRAM_ENV")
+
+      on_exit(fn ->
+        if original do
+          System.put_env("HOLOGRAM_ENV", original)
+        else
+          System.delete_env("HOLOGRAM_ENV")
+        end
+      end)
+
+      :ok
+    end
+
+    test "returns the current environment" do
+      assert env() == :test
+    end
+
+    test "returns an environment whose atom does not exist yet" do
+      System.put_env("HOLOGRAM_ENV", "staging")
+
+      assert env() == :staging
+    end
   end
 
   describe "secret_key_base/0" do
