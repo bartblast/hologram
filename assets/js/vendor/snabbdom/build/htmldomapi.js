@@ -28,6 +28,12 @@ function insertBefore(parentNode, newNode, referenceNode) {
     if (referenceNode && isDocumentFragment(referenceNode)) {
         referenceNode = parseFragment(referenceNode).firstChildNode;
     }
+    // HOLOGRAM PATCH: gather back the span a spent fragment stands for, so that inserting it
+    // again moves the nodes it left behind. A fragment empties itself into the page the first
+    // time it is inserted, and the diff hands the same one back when a block changes places
+    // among its siblings - without this the move inserts nothing and the block's nodes stay
+    // where they were, while everything around them takes its new place.
+    gatherFragmentSpan(newNode);
     parentNode.insertBefore(newNode, referenceNode);
 }
 function removeChild(node, child) {
@@ -83,6 +89,33 @@ function isComment(node) {
 }
 function isDocumentFragment(node) {
     return node.nodeType === 11;
+}
+// HOLOGRAM PATCH: moves the nodes an already inserted fragment stands for back into it, leaving
+// anything else alone. The span runs from the fragment's first node to its last, both recorded
+// when it was inserted, and is contiguous because the block's markers bracket it.
+//
+// The span is walked in full before anything moves, so that a fragment whose recorded ends no
+// longer bracket a span in the page moves nothing at all, rather than carrying off whatever
+// follows its first node.
+function gatherFragmentSpan(node) {
+    if (!isDocumentFragment(node) ||
+        node.childNodes.length > 0 ||
+        !node.firstChildNode ||
+        !node.firstChildNode.parentNode) {
+        return;
+    }
+    const spanNodes = [];
+    let childNode = node.firstChildNode;
+    while (childNode) {
+        spanNodes.push(childNode);
+        if (childNode === node.lastChildNode) {
+            for (let i = 0; i < spanNodes.length; ++i) {
+                node.appendChild(spanNodes[i]);
+            }
+            return;
+        }
+        childNode = childNode.nextSibling;
+    }
 }
 function parseFragment(fragmentNode, parentNode) {
     var _a, _b, _c;

@@ -77,4 +77,77 @@ describe("vendored snabbdom", () => {
       assert.isNull(after.elm.querySelector(".hint"));
     });
   });
+
+  describe("moving a fragment among its siblings", () => {
+    const block = (key, text) =>
+      blockFragment(`${key}:o`, [
+        marker(`${key}:o`),
+        h("em", {}, [text]),
+        marker(`${key}:c`),
+      ]);
+
+    // A fragment empties itself into the page when it is inserted, so the diff moving a block
+    // among its siblings hands back a fragment with nothing in it. Without the deviation the move
+    // inserts nothing and the block's nodes stay where they were, while its siblings take their
+    // new places - the shape a reorder produces once the diff trusts the keys.
+    it("carries the nodes the fragment stands for", () => {
+      const before = render([
+        block("a", "A"),
+        h("p", {}, ["one"]),
+        block("b", "B"),
+        h("p", {}, ["two"]),
+      ]);
+
+      const after = patch(
+        before,
+        h("div", {}, [
+          block("b", "B"),
+          h("p", {}, ["two"]),
+          block("a", "A"),
+          h("p", {}, ["one"]),
+        ]),
+      );
+
+      assert.equal(
+        after.elm.innerHTML,
+        "<!--b:o--><em>B</em><!--b:c--><p>two</p>" +
+          "<!--a:o--><em>A</em><!--a:c--><p>one</p>",
+      );
+    });
+
+    it("keeps the nodes a fragment holds, so their state survives the move", () => {
+      const input = (id) => h("input", {attrs: {id: id}}, []);
+
+      const before = render([
+        blockFragment("a:o", [marker("a:o"), input("field_a"), marker("a:c")]),
+        h("p", {}, ["one"]),
+        blockFragment("b:o", [marker("b:o"), input("field_b"), marker("b:c")]),
+        h("p", {}, ["two"]),
+      ]);
+
+      const fieldA = before.elm.querySelector("#field_a");
+      fieldA.value = "typed a";
+
+      const after = patch(
+        before,
+        h("div", {}, [
+          blockFragment("b:o", [
+            marker("b:o"),
+            input("field_b"),
+            marker("b:c"),
+          ]),
+          h("p", {}, ["two"]),
+          blockFragment("a:o", [
+            marker("a:o"),
+            input("field_a"),
+            marker("a:c"),
+          ]),
+          h("p", {}, ["one"]),
+        ]),
+      );
+
+      assert.equal(after.elm.querySelector("#field_a"), fieldA);
+      assert.equal(fieldA.value, "typed a");
+    });
+  });
 });
