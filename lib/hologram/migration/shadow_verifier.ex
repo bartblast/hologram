@@ -20,9 +20,15 @@ defmodule Hologram.Migration.ShadowVerifier do
   cannot: rendering and apply-order defects. The scratch database is dropped
   afterwards, pass or fail. Raises with one line per difference when the replayed
   schema does not match.
+
+  Verification opens its own connections, so it starts the driver rather than assuming
+  one is running - a mix task loads config without starting applications, and this is
+  the only part of generating or checking a migration that reaches a database.
   """
   @spec verify!(list(%{atom => any}), %{atom => map}) :: :ok
   def verify!(migrations, current_model) do
+    {:ok, _apps} = Application.ensure_all_started(:postgrex)
+
     database_opts = resolve_database_opts()
     shadow_database = database_opts[:database] <> "_shadow"
     maintenance_pid = start_connection(database_opts, "postgres")
