@@ -3,6 +3,7 @@ defmodule HologramFeatureTests.Helpers do
   import Hologram.Commons.Guards, only: [is_regex: 1]
   import Hologram.Test.FeatureHelpers, only: [visit: 2, visit: 3]
 
+  alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
   alias Wallaby.Browser
   alias Wallaby.Element
@@ -170,41 +171,43 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Returns the `instance_id` of the currently-attached SSE process.
+  Returns the `instance_id` of the given `session`'s browser.
 
-  Assumes exactly one SSE process is currently registered. Useful for tests
-  that need to target the connected client from outside the connection
-  (e.g., `Realtime.unsubscribe_all({:instance, current_instance_id()}, channel)`).
+  Read from the browser's own JS context rather than from the registry, so it
+  holds however many connections are registered, and keeps working when this
+  one has no registry entry - after `simulate_sse_disconnect/1`, or before the
+  stream has attached.
   """
-  @spec current_instance_id() :: String.t()
-  def current_instance_id do
-    [{instance_id, _entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
-    instance_id
+  @spec current_instance_id(Wallaby.Session.t()) :: String.t()
+  def current_instance_id(session) do
+    script_result(session, "return globalThis.Hologram.instanceId;")
   end
 
   @doc """
-  Returns the `session_id` recorded for the currently-attached SSE process.
-
-  Assumes exactly one SSE process is currently registered. Useful for capturing
-  a connection's session id before a second connection opens, e.g. to target it
-  via `Realtime.broadcast_action_except({:session, current_session_id()}, ...)`.
+  Returns the `session_id` recorded for the given `session`'s connection, or
+  `nil` when it has no registry entry.
   """
-  @spec current_session_id() :: term
-  def current_session_id do
-    [{_instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
-    entry.session_id
+  @spec current_session_id(Wallaby.Session.t()) :: term
+  def current_session_id(session) do
+    case registry_entry(session) do
+      nil -> nil
+      entry -> entry.session_id
+    end
   end
 
   @doc """
-  Returns the `user_id` recorded for the currently-attached SSE process.
+  Returns the `user_id` recorded for the given `session`'s connection, or `nil`
+  when it has no registry entry.
 
-  Assumes exactly one SSE process is currently registered. Useful for gating on
-  a handler-driven identity change having propagated to the connection.
+  Returning `nil` rather than raising lets a poller keep waiting through the
+  window where a connection has not attached yet, or has just been reaped.
   """
-  @spec current_user_id() :: term
-  def current_user_id do
-    [{_instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
-    entry.user_id
+  @spec current_user_id(Wallaby.Session.t()) :: term
+  def current_user_id(session) do
+    case registry_entry(session) do
+      nil -> nil
+      entry -> entry.user_id
+    end
   end
 
   @doc """
@@ -349,6 +352,27 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Arms a delay on this browser's next SSE attach, then returns the `session` so
+  the helper can be piped.
+
+  Holds the stream open long enough for a command dispatched during page boot to
+  reach the server while the instance still has no `SubscriptionRegistry` entry.
+  That race is real but unreproducible over a local loop, where the attach always
+  wins: the client calls `Sse.connect()` synchronously at mount while the action
+  queued by `init/3` is dispatched a tick later.
+
+  Scoped by cookie, so concurrently running test files are unaffected. Navigates
+  to a blank page first, since a cookie cannot be set before the browser holds a
+  document.
+  """
+  @spec simulate_slow_sse_attach(Wallaby.Session.t(), pos_integer) :: Wallaby.Session.t()
+  def simulate_slow_sse_attach(session, delay_ms) do
+    session
+    |> visit("/external")
+    |> Browser.set_cookie(SSE.attach_delay_cookie(), to_string(delay_ms))
+  end
+
+  @doc """
   Simulates a network blip by killing the SSE process attached to the given
   `instance_id`.
 
@@ -486,17 +510,22 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Blocks until the currently-attached SSE process records `user_id`, then
-  returns the `session`. Gates on a handler-driven identity change (login or
-  logout) having propagated to the connection before its effects are asserted -
-  e.g. before broadcasting to check whether a binding was kept or dropped.
-  Raises if the value does not appear within `@max_wait_time`.
+  Blocks until the `session`'s own SSE process records `user_id`, then returns
+  the `session`. Gates on a handler-driven identity change (login or logout)
+  having propagated to the connection before its effects are asserted - e.g.
+  before broadcasting to check whether a binding was kept or dropped. Raises if
+  the value does not appear within `@max_wait_time`.
+
+  Resolves this browser's connection specifically, so another tab of the same
+  session lingering in the registry does not affect it. A departed tab's SSE
+  process is only reaped once a write to its dead socket fails, which may not
+  happen until the next heartbeat.
   """
   def wait_for_user_id(session, user_id, start_time \\ nil) do
     start_time = start_time || current_time()
 
     cond do
-      current_user_id() == user_id ->
+      current_user_id(session) == user_id ->
         session
 
       timed_out?(start_time) ->
@@ -574,6 +603,15 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   # credo:disable-for-lines:9 Credo.Check.Refactor.IoPuts
+  defp registry_entry(session) do
+    instance_id = current_instance_id(session)
+
+    case :ets.lookup(SubscriptionRegistry.ets_table_name(), instance_id) do
+      [{^instance_id, entry}] -> entry
+      [] -> nil
+    end
+  end
+
   defp subscription_count(channel, cid) do
     SubscriptionRegistry.ets_table_name()
     |> :ets.tab2list()

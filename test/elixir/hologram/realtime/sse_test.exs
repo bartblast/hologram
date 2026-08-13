@@ -76,6 +76,14 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  # Pulls the signed token out of an encoded add_sub_receipts chunk, which carries it as
+  # the third element of each {channel, cid, token} tuple.
+  defp extract_receipt_token(resp_body) do
+    [_full_match, token] = Regex.run(~r/Type\.bitstring\("(SFMyNTY\.[^"]+)"\)/, resp_body)
+
+    token
+  end
+
   defp prepared_test_conn do
     conn =
       :get
@@ -221,6 +229,233 @@ defmodule Hologram.Realtime.SSETest do
 
       assert updated_conn.resp_body =~ "event: add_sub_receipts\nid: "
       assert updated_conn.resp_body =~ "\ndata: "
+    end
+  end
+
+  describe "process_message/4 on {:add_subscription, ...}" do
+    test "registers the binding under the connection's current user_id" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:add_subscription, :room_a, "page"})
+
+      process_message(conn, "test-session-id", "test-user-id")
+
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{
+               {:room_a, "page"} => "test-user-id"
+             }
+    end
+
+    test "pushes an add_sub_receipts SSE event for the granted binding" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:add_subscription, :room_a, "page"})
+
+      {:cont, updated_conn} = process_message(conn, "test-session-id", "test-user-id")
+
+      assert updated_conn.resp_body =~ "event: add_sub_receipts\nid: "
+      assert updated_conn.resp_body =~ "\ndata: "
+    end
+
+    test "signs the pushed receipt for this connection and its current identity" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:add_subscription, :room_a, "page"})
+
+      {:cont, updated_conn} = process_message(conn, "test-session-id", "test-user-id")
+
+      {:ok, receipt} =
+        updated_conn.resp_body
+        |> extract_receipt_token()
+        |> Receipt.verify()
+
+      assert receipt.channel == :room_a
+      assert receipt.cid == "page"
+      assert receipt.instance_id == instance_id
+      assert receipt.user_id == "test-user-id"
+    end
+
+    test "signs the receipt for an anonymous connection with a nil user_id" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:add_subscription, :room_a, "page"})
+
+      {:cont, updated_conn} = process_message(conn, "test-session-id", nil)
+
+      {:ok, receipt} =
+        updated_conn.resp_body
+        |> extract_receipt_token()
+        |> Receipt.verify()
+
+      assert receipt.user_id == nil
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{{:room_a, "page"} => nil}
+    end
+
+    test "emits the zero-crossing for the granted channel" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:add_subscription, :room_a, "page"})
+
+      process_message(conn, "test-session-id", "test-user-id")
+
+      assert_receive {:sub, :room_a}
+    end
+  end
+
+  describe "process_message/4 on {:apply_deltas_remote, ...}" do
+    test "applies the deltas to the addressed instance's bindings" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn()
+
+      send(
+        self(),
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [], "test-user-id", self(),
+         make_ref()}
+      )
+
+      process_message(conn, nil, nil)
+
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{
+               {:room_a, "page"} => "test-user-id"
+             }
+    end
+
+    test "replies to the requesting process with the applied deltas" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn()
+      waiter_ref = make_ref()
+
+      send(
+        self(),
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [], "test-user-id", self(),
+         waiter_ref}
+      )
+
+      process_message(conn, nil, nil)
+
+      assert_receive {:apply_deltas_remote_reply, ^instance_id, ^waiter_ref,
+                      {[{:room_a, "page"}], []}}
+    end
+
+    test "replies with the idempotence-filtered deltas, not the requested ones" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      SubscriptionRegistry.apply_deltas(instance_id, [{:room_a, "page"}], [], "test-user-id")
+
+      # Seeding the binding emits a zero-crossing to this process. Consume it, or the
+      # pump's {:sub, channel} clause matches it ahead of the message under test.
+      assert_receive {:sub, :room_a}
+
+      conn = prepared_test_conn()
+      waiter_ref = make_ref()
+
+      # Re-adds a binding that is already present and drops one that is absent, so both
+      # requested deltas filter out.
+      send(
+        self(),
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [{:room_b, "page"}],
+         "test-user-id", self(), waiter_ref}
+      )
+
+      process_message(conn, nil, nil)
+
+      assert_receive {:apply_deltas_remote_reply, ^instance_id, ^waiter_ref, {[], []}}
+    end
+
+    test "registers the binding once when the same request is delivered twice" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn()
+      waiter_ref = make_ref()
+
+      request =
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [], "test-user-id", self(),
+         waiter_ref}
+
+      send(self(), request)
+      send(self(), request)
+
+      process_message(conn, nil, nil)
+      assert_receive {:sub, :room_a}
+      process_message(conn, nil, nil)
+
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{
+               {:room_a, "page"} => "test-user-id"
+             }
+
+      # The first answer carries the applied deltas, the duplicate answers filtered-empty
+      # - and the requester drops whichever arrives after its waiter is gone.
+      assert_receive {:apply_deltas_remote_reply, ^instance_id, ^waiter_ref,
+                      {[{:room_a, "page"}], []}}
+
+      assert_receive {:apply_deltas_remote_reply, ^instance_id, ^waiter_ref, {[], []}}
+
+      refute_receive {:sub, :room_a}
+    end
+
+    test "emits the zero-crossing for a channel the deltas newly bind" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn()
+
+      send(
+        self(),
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [], "test-user-id", self(),
+         make_ref()}
+      )
+
+      process_message(conn, nil, nil)
+
+      assert_receive {:sub, :room_a}
+    end
+
+    test "continues the message pump with the conn untouched" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn()
+
+      send(
+        self(),
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [], "test-user-id", self(),
+         make_ref()}
+      )
+
+      assert process_message(conn, nil, nil) == {:cont, conn}
+    end
+
+    test "stays silent when this node does not hold the connection" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      conn = prepared_test_conn()
+      waiter_ref = make_ref()
+
+      send(
+        self(),
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [], "test-user-id", self(),
+         waiter_ref}
+      )
+
+      assert process_message(conn, nil, nil) == {:cont, conn}
+
+      assert SubscriptionRegistry.bindings_of(instance_id) == nil
+      refute_receive {:apply_deltas_remote_reply, ^instance_id, ^waiter_ref, _result}
     end
   end
 
@@ -742,6 +977,50 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "process_message/4 on {:replace_subscriptions, ...}" do
+    test "replaces the bindings of the conn's instance" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      SubscriptionRegistry.apply_deltas(instance_id, [{:room_a, "page"}], [], "test-user-id")
+
+      # Seeding the binding emits a zero-crossing to this process. Consume it, or the
+      # pump's {:sub, channel} clause matches it ahead of the message under test.
+      assert_receive {:sub, :room_a}
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:replace_subscriptions, [{:room_b, "page"}], "test-user-id"})
+
+      process_message(conn, nil, nil)
+
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{
+               {:room_b, "page"} => "test-user-id"
+             }
+    end
+
+    test "emits the zero-crossings the replacement implies" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:replace_subscriptions, [{:room_a, "page"}], "test-user-id"})
+
+      process_message(conn, nil, nil)
+
+      assert_receive {:sub, :room_a}
+    end
+
+    test "continues the message pump" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:replace_subscriptions, [{:room_a, "page"}], "test-user-id"})
+
+      assert {:cont, _updated_conn} = process_message(conn, nil, nil)
+    end
+  end
+
   describe "process_message/4 on {:sub, ...}" do
     test "subscribes to the channel's PubSub topic" do
       conn = prepared_test_conn()
@@ -1117,6 +1396,48 @@ defmodule Hologram.Realtime.SSETest do
       assert result.halted == true
       assert result.status == 400
       assert result.resp_body == "Handshake identity mismatch"
+    end
+
+    test "applies an announce message published before the connection attaches" do
+      Application.put_env(:hologram, :__sse_attach_delay_enabled__, true)
+      on_exit(fn -> Application.delete_env(:hologram, :__sse_attach_delay_enabled__) end)
+
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      handshake_id = "test-handshake-#{:erlang.unique_integer([:positive])}"
+      expires_at = System.system_time(:millisecond) + Handshake.stash_ttl_ms()
+
+      Handshake.insert(handshake_id, [], {instance_id, session_id, nil}, expires_at)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/?instance_id=#{instance_id}&handshake_id=#{handshake_id}")
+        |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+        # The window under test is the attach delay, and both the assertion and the
+        # publish below have to land inside it. A second is long enough that a stall
+        # able to close it early would be breaking most of this suite too, and it is
+        # paid once, by this test alone.
+        |> Plug.Test.put_req_cookie(attach_delay_cookie(), "1000")
+
+      pid = spawn(fn -> stream(conn, server_wait_ms: 200) end)
+      on_exit(fn -> Process.exit(pid, :kill) end)
+
+      topic = Realtime.instance_announce_topic(instance_id)
+      wait_until(fn -> Registry.lookup(Hologram.PubSub, topic) != [] end)
+
+      # Listening already, attached not yet. Without this the test would still pass with
+      # the publish landing after the attach, proving nothing about the window.
+      assert SubscriptionRegistry.bindings_of(instance_id) == nil
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        topic,
+        {:replace_subscriptions, [{:room_a, "page"}], "test-user-id"}
+      )
+
+      wait_until(fn ->
+        SubscriptionRegistry.bindings_of(instance_id) == %{{:room_a, "page"} => "test-user-id"}
+      end)
     end
 
     test "redeems a handshake whose gossip arrives within the wait budget" do
