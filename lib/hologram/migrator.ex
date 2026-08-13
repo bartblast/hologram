@@ -1,6 +1,7 @@
 defmodule Hologram.Migrator do
   @moduledoc false
 
+  alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
   alias Hologram.DB.Introspection
@@ -256,6 +257,28 @@ defmodule Hologram.Migrator do
   end
 
   @doc """
+  Rebuilds the indexes PostgreSQL left invalid, and returns :ok.
+
+  A concurrent build spans several internal transactions, so a node that dies partway
+  through one leaves its index in the catalog flagged invalid - holding the derived
+  name, serving no query, and maintained by every write. Nothing else notices it: the
+  file that ordered the build committed before the build began, so it is no longer
+  pending, and an invalid index still reads as present to the drift check.
+
+  The rebuild runs on a connection of its own, holding a session-scoped advisory lock:
+  a concurrent rebuild cannot run inside a transaction, and nodes rebuilding the same
+  index at the same moment deadlock each other. Nodes that wait re-read the catalog and
+  find nothing left to do.
+  """
+  @spec repair_invalid_indexes() :: :ok
+  def repair_invalid_indexes do
+    case invalid_indexes() do
+      [] -> :ok
+      _indexes -> with_repair_connection(&rebuild_invalid_indexes/0)
+    end
+  end
+
+  @doc """
   Applies the pending migrations of the project's migrations directory to the connected
   database as the current model's history.
 
@@ -295,6 +318,8 @@ defmodule Hologram.Migrator do
     migrations
     |> pending(applied)
     |> apply_pending(pre_model, context)
+
+    repair_invalid_indexes()
 
     # The query-derived companions are not converged here - they follow the registered
     # queries, which are not known until the query cache boots, and the drift check
@@ -499,6 +524,12 @@ defmodule Hologram.Migrator do
     Enum.map(rows, fn [name] -> name end)
   end
 
+  defp invalid_indexes do
+    {:ok, %{rows: rows}} = Connection.query(DDL.invalid_indexes_statement())
+
+    Enum.map(rows, fn [index] -> index end)
+  end
+
   defp mapping_column(mapping, table, column_name) do
     entity_mapping =
       mapping
@@ -515,6 +546,20 @@ defmodule Hologram.Migrator do
             "at another database"
   end
 
+  # Re-read inside the lock: the node that held it before may have rebuilt everything
+  # already, which is the common case for every node of a deploy but the first.
+  defp rebuild_invalid_indexes do
+    {:ok, _result} = Connection.query("SELECT pg_advisory_lock($1)", [@advisory_lock_key])
+
+    try do
+      Enum.each(invalid_indexes(), &execute_statements([DDL.reindex_statement(&1)]))
+    after
+      {:ok, _result} = Connection.query("SELECT pg_advisory_unlock($1)", [@advisory_lock_key])
+    end
+
+    :ok
+  end
+
   defp run_context do
     %{
       otp_app: Atom.to_string(Reflection.otp_app()),
@@ -522,5 +567,20 @@ defmodule Hologram.Migrator do
       hologram_version: to_string(Application.spec(:hologram, :vsn)),
       timestamp: DateTime.utc_now(:microsecond)
     }
+  end
+
+  # Opened against the database currently connected rather than the configured one:
+  # they are the same at boot, and following the caller keeps the repair honest wherever
+  # else the applier is pointed.
+  defp with_repair_connection(fun) do
+    {:ok, %{rows: [[database]]}} = Connection.query("SELECT current_database()")
+    connection_opts = Config.connection_opts(database: database)
+    {:ok, connection_pid} = Postgrex.start_link(connection_opts)
+
+    try do
+      Connection.with_connection(connection_pid, fun)
+    after
+      GenServer.stop(connection_pid)
+    end
   end
 end

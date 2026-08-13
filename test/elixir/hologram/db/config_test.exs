@@ -3,6 +3,22 @@ defmodule Hologram.DB.ConfigTest do
 
   import Hologram.DB.Config
 
+  describe "connection_opts/1" do
+    test "returns the configured database as Postgrex options" do
+      opts = connection_opts()
+
+      assert opts[:database] == "hologram_test"
+      assert opts[:hostname] == "localhost"
+      assert opts[:password] == "postgres"
+      assert opts[:port] == 5432
+      assert opts[:username] == "postgres"
+    end
+
+    test "applies the given overrides" do
+      assert connection_opts(database: "other")[:database] == "other"
+    end
+  end
+
   describe "resolve!/2" do
     test "applies dev defaults when no config is given" do
       assert resolve!([], :dev) == [

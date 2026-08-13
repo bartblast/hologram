@@ -85,6 +85,27 @@ defmodule Hologram.DB.ConnectionTest do
   end
 
   describe "with_connection/2" do
+    test "restores the enclosing connection when nested" do
+      maintenance_opts = Config.connection_opts(database: "postgres")
+
+      {:ok, outer_pid} = Postgrex.start_link(maintenance_opts)
+      {:ok, inner_pid} = Postgrex.start_link(Config.connection_opts())
+
+      after_nesting =
+        with_connection(outer_pid, fn ->
+          with_connection(inner_pid, fn -> :inner end)
+
+          {:ok, %Postgrex.Result{rows: [[database]]}} = query("SELECT current_database()")
+
+          database
+        end)
+
+      GenServer.stop(outer_pid)
+      GenServer.stop(inner_pid)
+
+      assert after_nesting == "postgres"
+    end
+
     test "routes queries to the given connection and restores the pool afterwards" do
       database_opts =
         :hologram

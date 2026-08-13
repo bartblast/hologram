@@ -114,10 +114,26 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "invalid_indexes_statement/0" do
+    test "lists the invalid indexes of the data schema" do
+      statement = normalize_newlines(invalid_indexes_statement())
+
+      assert statement =~ "SELECT ic.relname"
+      assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid"
+    end
+  end
+
   describe "null_check_statement/2" do
     test "counts rows with a NULL in the column" do
       assert null_check_statement("task", "subtitle") ==
                ~s{SELECT COUNT(*) FROM "hologram_data"."task" WHERE "subtitle" IS NULL}
+    end
+  end
+
+  describe "reindex_statement/1" do
+    test "rebuilds the index in place, concurrently" do
+      assert reindex_statement("task_project_id_$idx") ==
+               ~s{REINDEX INDEX CONCURRENTLY "hologram_data"."task_project_id_$idx"}
     end
   end
 

@@ -159,6 +159,36 @@ defmodule Hologram.DB.DDL do
   end
 
   @doc """
+  Returns the statement listing the names of the invalid indexes of the data schema.
+
+  A concurrent build that failed partway leaves its index in the catalog flagged
+  invalid: it holds the derived name, serves no query, and every write maintains it.
+  """
+  @spec invalid_indexes_statement() :: String.t()
+  def invalid_indexes_statement do
+    """
+    SELECT ic.relname
+    FROM pg_catalog.pg_index i
+    JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+    JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = '#{@data_schema}' AND NOT i.indisvalid\
+    """
+  end
+
+  @doc """
+  Returns the statement rebuilding the given index in place, concurrently.
+
+  Rebuilding is what clears an invalid index: it replaces the failed build without
+  taking the table's writes offline, and without the index ever being absent - which a
+  drop-and-recreate pair could not promise if the node died between the two.
+  """
+  @spec reindex_statement(String.t()) :: String.t()
+  def reindex_statement(index) do
+    ~s(REINDEX INDEX CONCURRENTLY "#{@data_schema}".#{Mapper.quote_identifier(index)})
+  end
+
+  @doc """
   Returns the pre-flight check statement counting the rows of the given table - the
   rows that block adding a required column without a fill.
   """

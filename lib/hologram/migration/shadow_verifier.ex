@@ -29,13 +29,12 @@ defmodule Hologram.Migration.ShadowVerifier do
   def verify!(migrations, current_model) do
     {:ok, _apps} = Application.ensure_all_started(:postgrex)
 
-    database_opts = resolve_database_opts()
-    shadow_database = database_opts[:database] <> "_shadow"
-    maintenance_pid = start_connection(database_opts, "postgres")
+    shadow_database = Config.connection_opts()[:database] <> "_shadow"
+    maintenance_pid = start_connection("postgres")
 
     try do
       recreate_shadow!(maintenance_pid, shadow_database)
-      run_in_shadow!(database_opts, shadow_database, migrations, current_model)
+      run_in_shadow!(shadow_database, migrations, current_model)
     after
       drop_shadow(maintenance_pid, shadow_database)
       GenServer.stop(maintenance_pid)
@@ -87,12 +86,6 @@ defmodule Hologram.Migration.ShadowVerifier do
     :ok
   end
 
-  defp resolve_database_opts do
-    :hologram
-    |> Application.get_env(:database, [])
-    |> Config.resolve!(Hologram.env())
-  end
-
   defp run_context do
     %{
       otp_app: Atom.to_string(Reflection.otp_app()),
@@ -102,8 +95,8 @@ defmodule Hologram.Migration.ShadowVerifier do
     }
   end
 
-  defp run_in_shadow!(database_opts, shadow_database, migrations, current_model) do
-    shadow_pid = start_connection(database_opts, shadow_database)
+  defp run_in_shadow!(shadow_database, migrations, current_model) do
+    shadow_pid = start_connection(shadow_database)
 
     try do
       Connection.with_connection(shadow_pid, fn ->
@@ -114,15 +107,9 @@ defmodule Hologram.Migration.ShadowVerifier do
     end
   end
 
-  defp start_connection(database_opts, database) do
-    {:ok, connection_pid} =
-      Postgrex.start_link(
-        database: database,
-        hostname: database_opts[:host],
-        password: database_opts[:password],
-        port: database_opts[:port],
-        username: database_opts[:user]
-      )
+  defp start_connection(database) do
+    connection_opts = Config.connection_opts(database: database)
+    {:ok, connection_pid} = Postgrex.start_link(connection_opts)
 
     connection_pid
   end

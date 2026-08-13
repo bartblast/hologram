@@ -64,22 +64,23 @@ defmodule Hologram.DB.Connection do
   Runs the given function with the calling process's queries and transactions routed to
   the given started connection instead of the pool, restoring the previous routing
   afterwards - a suspended sandbox mode included, so a sandboxed process can operate on
-  another database and return to its sandbox transaction untouched.
+  another database and return to its sandbox transaction untouched. Nesting restores the
+  enclosing routing rather than clearing it, so an inner connection cannot strand the
+  outer one.
   """
   @spec with_connection(GenServer.server(), (-> any)) :: any
   def with_connection(connection, fun) do
     outer_mode = Process.get(@transaction_key)
+    outer_connection = Process.get(@connection_key)
+
     Process.delete(@transaction_key)
     Process.put(@connection_key, connection)
 
     try do
       fun.()
     after
-      Process.delete(@connection_key)
-
-      if outer_mode do
-        Process.put(@transaction_key, outer_mode)
-      end
+      restore_key(@connection_key, outer_connection)
+      restore_key(@transaction_key, outer_mode)
     end
   end
 
@@ -91,6 +92,10 @@ defmodule Hologram.DB.Connection do
       {:transaction, connection} -> connection
     end
   end
+
+  defp restore_key(key, nil), do: Process.delete(key)
+
+  defp restore_key(key, value), do: Process.put(key, value)
 
   # Emulates the outermost transaction inside the externally managed sandbox transaction:
   # a savepoint stands in for BEGIN, so that commit/abort of the emulated transaction

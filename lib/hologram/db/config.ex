@@ -12,6 +12,32 @@ defmodule Hologram.DB.Config do
   @required_keys [:database, :host, :password, :user]
 
   @doc """
+  Returns the Postgrex options of the configured database in the current environment,
+  with the given overrides applied.
+
+  For a connection opened outside the pool - one that has to stay the same connection
+  across several statements, or reach a different database on the same server.
+  """
+  @spec connection_opts(keyword) :: keyword
+  def connection_opts(overrides \\ []) do
+    resolved =
+      :hologram
+      |> Application.get_env(:database, [])
+      |> resolve!(Hologram.env())
+
+    Keyword.merge(
+      [
+        database: resolved[:database],
+        hostname: resolved[:host],
+        password: resolved[:password],
+        port: resolved[:port],
+        username: resolved[:user]
+      ],
+      overrides
+    )
+  end
+
+  @doc """
   Resolves the database connection options for the given environment from the given
   config keyword list (the value of `config :hologram, :database`).
 
