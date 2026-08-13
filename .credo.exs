@@ -10,6 +10,7 @@
           ~r"/_build/",
           ~r"/deps/",
           ~r"/node_modules/",
+          "test/cluster/",
           "test/features/",
           "test/elixir/support/fixtures/compiler/normalizer/module_7.ex",
           "test/elixir/support/fixtures/compiler/normalizer/module_8.ex",

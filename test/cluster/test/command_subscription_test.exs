@@ -26,7 +26,8 @@ defmodule HologramClusterTests.CommandSubscriptionTest do
     feature @feature_name,
             %{session: session, sse_peer: sse_peer, other_peer: other_peer} do
       placement = @placement
-      token = Proxy.register_policy(placement_policy(placement, sse_peer, other_peer))
+      policy = placement_policy(placement, sse_peer, other_peer)
+      token = Proxy.register_policy(policy)
 
       session =
         session
