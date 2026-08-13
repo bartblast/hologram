@@ -118,6 +118,47 @@ defmodule Hologram.DB.DDL do
   end
 
   @doc """
+  Returns the pre-flight check statement counting the key groups of the given table's
+  columns that hold more than one row - the duplicates that block a unique index build.
+
+  Nulls compare as values when nulls_distinct is false, matching the index being built.
+  """
+  @spec duplicate_check_statement(String.t(), list(String.t()), boolean) :: String.t()
+  def duplicate_check_statement(table, columns, nulls_distinct) do
+    quoted_columns = Enum.map(columns, &Mapper.quote_identifier/1)
+    grouped = Enum.join(quoted_columns, ", ")
+
+    not_null_part =
+      if nulls_distinct do
+        " WHERE " <> Enum.map_join(quoted_columns, " AND ", &"#{&1} IS NOT NULL")
+      else
+        ""
+      end
+
+    "SELECT COUNT(*) FROM (SELECT 1 FROM #{qualified(table)}#{not_null_part} " <>
+      "GROUP BY #{grouped} HAVING COUNT(*) > 1) AS duplicates"
+  end
+
+  @doc """
+  Returns the check statement counting the invalid indexes carrying the given name - the
+  leftovers of a concurrent build that failed partway.
+
+  A concurrent build spans several internal transactions, so PostgreSQL cannot roll one
+  back: the failed index stays in the catalog flagged invalid, unused by queries and
+  maintained by every write, holding its derived name.
+  """
+  @spec invalid_index_check_statement(String.t()) :: String.t()
+  def invalid_index_check_statement(index) do
+    """
+    SELECT COUNT(*)
+    FROM pg_catalog.pg_index i
+    JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = '#{@data_schema}' AND c.relname = '#{index}' AND i.indisvalid = FALSE\
+    """
+  end
+
+  @doc """
   Returns the pre-flight check statement counting the rows of the given table - the
   rows that block adding a required column without a fill.
   """
@@ -216,9 +257,10 @@ defmodule Hologram.DB.DDL do
     columns = Enum.map_join(op.columns, ", ", &Mapper.quote_identifier/1)
     unique_sql = if op.unique, do: "UNIQUE ", else: ""
     nulls_sql = if op.nulls_distinct, do: "", else: " NULLS NOT DISTINCT"
+    concurrently_sql = if op[:concurrently], do: "CONCURRENTLY ", else: ""
 
     [
-      "CREATE #{unique_sql}INDEX #{Mapper.quote_identifier(op.index)} " <>
+      "CREATE #{unique_sql}INDEX #{concurrently_sql}#{Mapper.quote_identifier(op.index)} " <>
         "ON #{qualified(op.table)} (#{columns})#{nulls_sql}"
     ]
   end

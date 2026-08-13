@@ -72,11 +72,44 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "duplicate_check_statement/3" do
+    test "counts the duplicate key groups, nulls compared as values" do
+      statement = duplicate_check_statement("task", ["project_id", "slug"], false)
+
+      assert statement ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
+                 ~s{GROUP BY "project_id", "slug" HAVING COUNT(*) > 1) AS duplicates}
+    end
+
+    test "skips the rows holding nulls when nulls are distinct" do
+      statement = duplicate_check_statement("task", ["slug"], true)
+
+      assert statement ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
+                 ~s{WHERE "slug" IS NOT NULL GROUP BY "slug" HAVING COUNT(*) > 1) AS duplicates}
+    end
+  end
+
   describe "enum_values_check_statement/3" do
     test "counts rows holding any of the given values" do
       assert enum_values_check_statement("task", "status", ["wip", "blocked"]) ==
                ~s{SELECT COUNT(*) FROM "hologram_data"."task" } <>
                  ~s{WHERE "status"::text IN ('wip', 'blocked')}
+    end
+  end
+
+  describe "invalid_index_check_statement/1" do
+    test "counts the invalid indexes carrying the name" do
+      expected =
+        normalize_newlines("""
+        SELECT COUNT(*)
+        FROM pg_catalog.pg_index i
+        JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'hologram_data' AND c.relname = 'task_project_id_$idx' AND i.indisvalid = FALSE\
+        """)
+
+      assert invalid_index_check_statement("task_project_id_$idx") == expected
     end
   end
 
@@ -298,6 +331,23 @@ defmodule Hologram.DB.DDLTest do
 
       assert statements(op) == [
                ~s{CREATE INDEX "task_project_id_$idx" ON "hologram_data"."task" ("project_id")}
+             ]
+    end
+
+    test "renders a concurrent build when the op asks for one" do
+      op = %{
+        op: :create_index,
+        table: "task",
+        index: "task_project_id_$idx",
+        columns: ["project_id"],
+        nulls_distinct: true,
+        unique: false,
+        concurrently: true
+      }
+
+      assert statements(op) == [
+               ~s{CREATE INDEX CONCURRENTLY "task_project_id_$idx" } <>
+                 ~s{ON "hologram_data"."task" ("project_id")}
              ]
     end
 
