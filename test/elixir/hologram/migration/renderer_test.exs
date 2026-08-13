@@ -604,6 +604,86 @@ defmodule Hologram.Migration.RendererTest do
       assert add_enum_value.value == "MyApp.Roles.Admin"
     end
 
+    test "renders a widened relationship as its join table, the values moving into it" do
+      pre = model(%{MyApp.Tag => %{}, MyApp.Task => %{relationships: [{:tags, MyApp.Tag, []}]}})
+
+      ops = [
+        %{
+          op: :change_relationship,
+          entity: MyApp.Task,
+          name: :tags,
+          changes: [type: [MyApp.Tag]],
+          line: 3
+        }
+      ]
+
+      result = render(ops, pre)
+      kinds = op_kinds(result.transactional)
+
+      # The join table exists before the values move, and the column they came from
+      # survives until they have.
+      assert Enum.find_index(kinds, &(&1 == :create_table)) <
+               Enum.find_index(kinds, &(&1 == :widen_to_many))
+
+      assert Enum.find_index(kinds, &(&1 == :widen_to_many)) <
+               Enum.find_index(kinds, &(&1 == :drop_column))
+
+      assert Enum.find(result.transactional, &(&1.op == :widen_to_many)) == %{
+               op: :widen_to_many,
+               table: "my_app_task",
+               join_table: "my_app_task_tags_$join",
+               column: "tags_id"
+             }
+    end
+
+    test "refuses to narrow a relationship whose rows may hold several targets" do
+      pre = model(%{MyApp.Tag => %{}, MyApp.Task => %{relationships: [{:tags, [MyApp.Tag], []}]}})
+
+      ops = [
+        %{
+          op: :change_relationship,
+          entity: MyApp.Task,
+          name: :tags,
+          changes: [type: MyApp.Tag],
+          line: 3
+        }
+      ]
+
+      expected_msg =
+        "changing relationship :tags on MyApp.Task from to-many to to-one is not supported - " <>
+          "a row holding several targets has no one target to keep - " <>
+          "delete the relationship and add it with the new cardinality, " <>
+          "or write the migration that picks the survivors"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> render(ops, pre) end
+    end
+
+    test "renders a relationship pointed at another entity type as its reference change" do
+      pre =
+        model(%{
+          MyApp.Account => %{},
+          MyApp.Task => %{relationships: [{:author, MyApp.User, []}]},
+          MyApp.User => %{}
+        })
+
+      ops = [
+        %{
+          op: :change_relationship,
+          entity: MyApp.Task,
+          name: :author,
+          changes: [type: MyApp.Account],
+          line: 3
+        }
+      ]
+
+      result = render(ops, pre)
+
+      assert op_kinds(result.transactional) == [:drop_foreign_key, :add_foreign_key]
+
+      assert Enum.find(result.transactional, &(&1.op == :add_foreign_key)).references ==
+               "my_app_account"
+    end
+
     test "renders an added enum value as its type value" do
       pre =
         model(%{MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :done]]}]}})

@@ -7,9 +7,8 @@ defmodule Hologram.Migration.Renderer do
   alias Hologram.DB.Schema
   alias Hologram.Entity.Model
 
-  # Physical ops that reference objects rather than defining them, so they run once
-  # everything they name exists - the file-scope form of 02b's phase order.
-  @deferred_ops [:add_foreign_key, :create_index]
+  # The ops that take an object away - a widening keeps them until its data has moved.
+  @drop_ops [:drop_column, :drop_foreign_key, :drop_index]
 
   # A name-keyed diff cannot express a rename - it sees a name gone and a name new - so
   # these ops render by pairing the names the mapper derives before and after them.
@@ -40,16 +39,15 @@ defmodule Hologram.Migration.Renderer do
   def render(logical_ops, pre_model) do
     {physical_ops, post_model} =
       logical_ops
-      |> Enum.chunk_by(&(&1.op in @rename_ops))
+      |> Enum.chunk_by(&segment_kind/1)
       |> Enum.reduce({[], pre_model}, fn chunk, {acc, model} ->
         {ops, next_model} = render_chunk(chunk, model)
 
         {acc ++ ops, next_model}
       end)
 
-    ordered = order(physical_ops)
-    born_here = born_here(ordered)
-    {transactional, tail} = Enum.split_with(ordered, &(not concurrent?(&1, born_here)))
+    born_here = born_here(physical_ops)
+    {transactional, tail} = Enum.split_with(physical_ops, &(not concurrent?(&1, born_here)))
 
     %{
       transactional: transactional,
@@ -145,15 +143,6 @@ defmodule Hologram.Migration.Renderer do
   end
 
   defp enum_value_ops(_op, _pre_mapping, _post_mapping), do: []
-
-  # Foreign key drops run first and the referencing ops last, so an op never names an
-  # object a later op in the same file creates.
-  defp order(ops) do
-    {fk_drops, rest} = Enum.split_with(ops, &(&1.op == :drop_foreign_key))
-    {deferred, middle} = Enum.split_with(rest, &(&1.op in @deferred_ops))
-
-    fk_drops ++ middle ++ deferred
-  end
 
   # Every derived name of the entity, paired before and after the rename - whatever
   # differs is renamed. The table goes first, so the constraint and index renames that
@@ -262,6 +251,18 @@ defmodule Hologram.Migration.Renderer do
     end
   end
 
+  defp render_chunk([%{op: :change_relationship} = first | _rest] = chunk, model) do
+    if retarget?(first) do
+      Enum.reduce(chunk, {[], model}, fn op, {acc, current_model} ->
+        next_model = Model.fold(current_model, [op])
+
+        {acc ++ retarget_ops_for(op, current_model, next_model), next_model}
+      end)
+    else
+      render_plain_chunk(chunk, model)
+    end
+  end
+
   defp render_chunk([%{op: kind} | _rest] = chunk, model) when kind in @rename_ops do
     Enum.reduce(chunk, {[], model}, fn op, {acc, current_model} ->
       next_model = Model.fold(current_model, [op])
@@ -270,7 +271,9 @@ defmodule Hologram.Migration.Renderer do
     end)
   end
 
-  defp render_chunk(chunk, model) do
+  defp render_chunk(chunk, model), do: render_plain_chunk(chunk, model)
+
+  defp render_plain_chunk(chunk, model) do
     next_model = Model.fold(model, chunk)
 
     physical_ops =
@@ -280,6 +283,84 @@ defmodule Hologram.Migration.Renderer do
       |> attach_backfills(chunk)
 
     {physical_ops, next_model}
+  end
+
+  # A cardinality change moves data, which no schema difference expresses: the join table
+  # has to exist before the reference values move into it, and the old column has to
+  # survive until they have. The phase order the schema diff applies would drop it first.
+  defp retarget_ops_for(op, pre_model, post_model) do
+    pre_type = relationship_type(pre_model, op.entity, op.name)
+    post_type = relationship_type(post_model, op.entity, op.name)
+
+    case {pre_type, post_type} do
+      {[_target], to_one} when not is_list(to_one) ->
+        raise_narrowing!(op)
+
+      {to_one, [_target]} when not is_list(to_one) ->
+        widen_ops(op, pre_model, post_model)
+
+      _same_cardinality ->
+        pre_model
+        |> term()
+        |> Schema.diff(term(post_model))
+    end
+  end
+
+  defp retarget?(%{op: :change_relationship} = op), do: Keyword.has_key?(op.changes, :type)
+
+  defp retarget?(_op), do: false
+
+  defp relationship_type(model, entity_type, name) do
+    model.entities
+    |> Map.fetch!(entity_type)
+    |> Map.fetch!(:relationships)
+    |> Enum.find_value(fn {member_name, type, _opts} -> member_name == name && type end)
+  end
+
+  defp raise_narrowing!(op) do
+    raise Hologram.CompileError,
+      message:
+        "changing relationship #{inspect(op.name)} on #{inspect(op.entity)} " <>
+          "from to-many to to-one is not supported - a row holding several targets " <>
+          "has no one target to keep - delete the relationship and add it with the " <>
+          "new cardinality, or write the migration that picks the survivors"
+  end
+
+  defp segment_kind(op) do
+    cond do
+      op.op in @rename_ops -> :rename
+      retarget?(op) -> :retarget
+      true -> :plain
+    end
+  end
+
+  # The join table first, then the reference values, then the column they came from.
+  defp widen_ops(op, pre_model, post_model) do
+    physical_ops =
+      pre_model
+      |> term()
+      |> Schema.diff(term(post_model))
+
+    {drops, creates} = Enum.split_with(physical_ops, &(&1.op in @drop_ops))
+    mapping = Mapper.derive_from_model!(pre_model)
+    entity_mapping = Map.fetch!(mapping, op.entity)
+    column = Enum.find(entity_mapping.columns, &(&1.source == {:relationship, op.name}))
+
+    join_table =
+      post_model
+      |> Mapper.derive_from_model!()
+      |> Map.fetch!(op.entity)
+      |> Map.fetch!(:join_tables)
+      |> Enum.find(&(&1.relationship == op.name))
+
+    widen_op = %{
+      op: :widen_to_many,
+      table: entity_mapping.table,
+      join_table: join_table.name,
+      column: column.name
+    }
+
+    creates ++ [widen_op] ++ drops
   end
 
   defp rename_ops_for(op, pre_model, post_model) do

@@ -590,6 +590,23 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "statements/1 for widen_to_many" do
+    test "renders the move of the reference values into the join table" do
+      op = %{
+        op: :widen_to_many,
+        table: "task",
+        join_table: "task_tags_$join",
+        column: "tag_id"
+      }
+
+      assert statements(op) == [
+               ~s{INSERT INTO "hologram_data"."task_tags_$join" ("source_id", "target_id") } <>
+                 ~s{SELECT "id", "tag_id" FROM "hologram_data"."task" } <>
+                 ~s{WHERE "tag_id" IS NOT NULL}
+             ]
+    end
+  end
+
   describe "statements/1 for rename_column" do
     test "renders the column rename" do
       op = %{op: :rename_column, table: "task", from: "name", to: "title"}

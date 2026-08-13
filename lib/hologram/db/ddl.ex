@@ -183,9 +183,11 @@ defmodule Hologram.DB.DDL do
   :drop_index renders the schema-qualified drop (indexes are schema-level objects).
 
   The rename ops - :rename_table, :rename_column, :rename_index, :rename_enum_type -
-  render their one-statement forms. They come from the migration applier only: a
-  name-keyed diff cannot detect a rename, so schema reconciliation never emits them,
-  while a migration log carries the confirmed intent.
+  render their one-statement forms, and :widen_to_many moves the reference values of a
+  relationship that became to-many into its new join table. They come from the migration
+  applier only: a name-keyed diff cannot detect a rename or a cardinality change, so
+  schema reconciliation never emits them, while a migration log carries the confirmed
+  intent.
 
   :create_enum_type, :drop_enum_type, :add_enum_value (with its BEFORE anchor when
   positioned), and :rename_enum_value render one statement each. :rebuild_enum_type
@@ -365,6 +367,16 @@ defmodule Hologram.DB.DDL do
 
   def statements(%{op: :rename_table} = op) do
     ["ALTER TABLE #{qualified(op.from)} RENAME TO #{Mapper.quote_identifier(op.to)}"]
+  end
+
+  def statements(%{op: :widen_to_many} = op) do
+    [
+      "INSERT INTO #{qualified(op.join_table)} " <>
+        ~s{("source_id", "target_id") } <>
+        "SELECT #{Mapper.quote_identifier("id")}, #{Mapper.quote_identifier(op.column)} " <>
+        "FROM #{qualified(op.table)} " <>
+        "WHERE #{Mapper.quote_identifier(op.column)} IS NOT NULL"
+    ]
   end
 
   defp column_definition(name, definition) do
