@@ -5,6 +5,7 @@ defmodule HologramClusterTests.MigrationTest do
 
   import HologramClusterTests.MigrationHelpers
 
+  alias Hologram.DB.Mapper
   alias Hologram.Migrator
 
   setup do
@@ -18,6 +19,35 @@ defmodule HologramClusterTests.MigrationTest do
       rpc(peer, Hologram.DB.Connection, :query, ["SELECT current_database()", []])
 
     database
+  end
+
+  describe "concurrent boot" do
+    test "the chain applies exactly once across nodes booting at the same moment" do
+      # Started sequentially and left idle: :peer.start_link ties a peer's lifetime to
+      # the process that started it, so starting them inside the tasks below would kill
+      # them with the tasks. Only the app boot - a plain rpc - goes concurrent, and that
+      # is the part the advisory lock arbitrates.
+      peers = Enum.map(1..3, &start_migration_peer(&1, boot_app: false))
+
+      results =
+        peers
+        |> Enum.map(fn peer -> Task.async(fn -> boot_app(peer) end) end)
+        |> Task.await_many(60_000)
+
+      assert Enum.all?(results, &match?({:ok, _apps}, &1))
+      assert Enum.all?(peers, &serving?/1)
+
+      # One row per version and nothing repeated: the node that took the lock applied
+      # the chain, and the others re-read the bookkeeping inside their own transaction
+      # and found the work already done.
+      versions = Enum.map(applied_version_rows(), fn {version, _applied_at} -> version end)
+
+      assert versions == Enum.map(migrations(), & &1.version)
+
+      mapping = Mapper.derive_from_model!(model())
+
+      assert with_migrations_db(fn -> Migrator.check_drift!(mapping) end) == :ok
+    end
   end
 
   describe "release step, then boot" do

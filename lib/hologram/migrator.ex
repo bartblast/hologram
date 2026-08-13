@@ -182,9 +182,17 @@ defmodule Hologram.Migrator do
   message: Hologram schemas without a marker, a marker belonging to another app or env,
   or a database managed by schema reconciliation - dev's mechanism, which never shares a
   database with production.
+
+  The advisory lock the appliers share is taken first, because a virgin database is the
+  one state every node of a deploy resolves the same way: without it they all read "no
+  schemas" and all run CREATE SCHEMA, and the losers of that race fail their boot. Held
+  until the caller's transaction ends, so the claim is complete before the next node
+  looks - which then finds the marker and returns :managed.
   """
   @spec ensure_managed!(%{atom => any}) :: :claimed | :managed
   def ensure_managed!(context) do
+    {:ok, _result} = Connection.query("SELECT pg_advisory_xact_lock($1)", [@advisory_lock_key])
+
     case hologram_schemas() do
       [] -> claim(context)
       ["hologram_data", "hologram_system"] -> check_marker!(context)
