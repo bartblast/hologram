@@ -69,12 +69,37 @@ defmodule Hologram.Entity.Model do
     add_member(model, op.entity, :attributes, "attribute", {op.name, op.type, op.opts})
   end
 
+  defp apply_op(%{op: :add_enum_value} = op, model) do
+    update_enum_attribute(model, op, fn values, opts ->
+      if op.value in values do
+        raise_enum_value_exists!(op, op.value)
+      end
+
+      {insert_enum_value(values, op), opts}
+    end)
+  end
+
   defp apply_op(%{op: :add_relationship} = op, model) do
     add_member(model, op.entity, :relationships, "relationship", {op.name, op.type, op.opts})
   end
 
   defp apply_op(%{op: :add_role, entity: _entity} = op, model) do
     add_member(model, op.entity, :roles, "role", {op.name, op.opts})
+  end
+
+  defp apply_op(%{op: :add_role, role: _role} = op, model) do
+    if Map.has_key?(model.roles, op.role) do
+      raise Hologram.CompileError,
+        message: "role #{inspect(op.role)} already exists at this point in migration history"
+    end
+
+    extends =
+      op.opts
+      |> Keyword.get(:extends)
+      |> List.wrap()
+      |> Enum.sort()
+
+    put_in(model, [:roles, op.role], %{extends: extends})
   end
 
   defp apply_op(%{op: :change_attribute} = op, model) do
@@ -122,12 +147,47 @@ defmodule Hologram.Entity.Model do
     update_in(model, [:entities], &Map.delete(&1, op.entity))
   end
 
+  defp apply_op(%{op: :delete_enum_value} = op, model) do
+    update_enum_attribute(model, op, fn values, opts ->
+      if op.value not in values do
+        raise_no_enum_value!(op, op.value)
+      end
+
+      if opts[:default] == op.value do
+        raise Hologram.CompileError,
+          message:
+            "enum value #{inspect(op.value)} is the default of attribute " <>
+              "#{inspect(op.attribute)} on #{inspect(op.entity)} - " <>
+              "change the default before deleting the value"
+      end
+
+      {values -- [op.value], opts}
+    end)
+  end
+
   defp apply_op(%{op: :delete_relationship} = op, model) do
     delete_member(model, op.entity, :relationships, "relationship", op.name)
   end
 
   defp apply_op(%{op: :delete_role, entity: _entity} = op, model) do
     delete_member(model, op.entity, :roles, "role", op.name)
+  end
+
+  defp apply_op(%{op: :delete_role, role: _role} = op, model) do
+    fetch_role!(model, op.role)
+
+    extended_by =
+      for {module, %{extends: extends}} <- model.roles, op.role in extends, do: module
+
+    if extended_by != [] do
+      raise Hologram.CompileError,
+        message:
+          "role #{inspect(op.role)} is extended by " <>
+            "#{Enum.map_join(Enum.sort(extended_by), ", ", &inspect/1)} - " <>
+            "delete or change the extending roles first"
+    end
+
+    update_in(model, [:roles], &Map.delete(&1, op.role))
   end
 
   defp apply_op(%{op: :rename_attribute} = op, model) do
@@ -147,12 +207,45 @@ defmodule Hologram.Entity.Model do
     %{model | entities: entities}
   end
 
+  defp apply_op(%{op: :rename_enum_value} = op, model) do
+    update_enum_attribute(model, op, &rename_enum_value_member(&1, &2, op))
+  end
+
   defp apply_op(%{op: :rename_relationship} = op, model) do
     rename_member(model, op.entity, :relationships, "relationship", op.from, op.to)
   end
 
   defp apply_op(%{op: :rename_role, entity: _entity} = op, model) do
     rename_member(model, op.entity, :roles, "role", op.from, op.to)
+  end
+
+  defp apply_op(%{op: :rename_role, from: _from} = op, model) do
+    entry = fetch_role!(model, op.from)
+
+    if Map.has_key?(model.roles, op.to) do
+      raise Hologram.CompileError,
+        message: "role #{inspect(op.to)} already exists at this point in migration history"
+    end
+
+    roles =
+      model.roles
+      |> Map.delete(op.from)
+      |> Map.put(op.to, entry)
+      |> Map.new(fn {module, role_entry} ->
+        {module, retarget_extends(role_entry, op.from, op.to)}
+      end)
+
+    %{model | roles: roles}
+  end
+
+  defp apply_op(%{op: :reorder_enum_values} = op, model) do
+    update_enum_attribute(model, op, fn values, opts ->
+      if Enum.sort(op.values) != Enum.sort(values) do
+        raise_not_a_permutation!(op, values)
+      end
+
+      {op.values, opts}
+    end)
   end
 
   defp apply_op(%{op: :resolve!} = op, _model) do
@@ -209,6 +302,45 @@ defmodule Hologram.Entity.Model do
     end
   end
 
+  defp describe_enum_values([], _word), do: nil
+
+  defp describe_enum_values([value], word), do: "#{inspect(value)} is #{word}"
+
+  defp describe_enum_values(values, word) do
+    "#{Enum.map_join(values, ", ", &inspect/1)} are #{word}"
+  end
+
+  defp fetch_role!(model, role) do
+    case Map.fetch(model.roles, role) do
+      {:ok, entry} ->
+        entry
+
+      :error ->
+        raise Hologram.CompileError,
+          message: "no such role #{inspect(role)} at this point in migration history"
+    end
+  end
+
+  defp insert_enum_value(values, op) do
+    before_ref = Keyword.get(op.opts, :before)
+    after_ref = Keyword.get(op.opts, :after)
+
+    cond do
+      before_ref && after_ref ->
+        raise Hologram.CompileError,
+          message: "add_enum_value takes at most one of before: and after:"
+
+      before_ref ->
+        List.insert_at(values, position_index!(values, before_ref, op), op.value)
+
+      after_ref ->
+        List.insert_at(values, position_index!(values, after_ref, op) + 1, op.value)
+
+      true ->
+        List.insert_at(values, -1, op.value)
+    end
+  end
+
   defp member?(members, name) do
     Enum.any?(members, &(elem(&1, 0) == name))
   end
@@ -241,12 +373,26 @@ defmodule Hologram.Entity.Model do
     |> Enum.sort()
   end
 
+  defp position_index!(values, ref, op) do
+    case Enum.find_index(values, &(&1 == ref)) do
+      nil -> raise_no_enum_value!(op, ref)
+      index -> index
+    end
+  end
+
   defp prune_values(opts, :enum), do: opts
 
   defp prune_values(opts, _type), do: Keyword.delete(opts, :values)
 
   defp put_members(model, entity_type, list_key, members) do
     put_in(model, [:entities, entity_type, list_key], Enum.sort(members))
+  end
+
+  defp raise_enum_value_exists!(op, value) do
+    raise Hologram.CompileError,
+      message:
+        "enum value #{inspect(value)} already exists on attribute #{inspect(op.attribute)} " <>
+          "of #{inspect(op.entity)} at this point in migration history"
   end
 
   defp raise_member_exists!(kind, name, entity_type) do
@@ -256,11 +402,52 @@ defmodule Hologram.Entity.Model do
           "at this point in migration history"
   end
 
+  defp raise_no_enum_value!(op, value) do
+    raise Hologram.CompileError,
+      message:
+        "no such enum value #{inspect(value)} on attribute #{inspect(op.attribute)} " <>
+          "of #{inspect(op.entity)} at this point in migration history"
+  end
+
   defp raise_no_member!(kind, name, entity_type) do
     raise Hologram.CompileError,
       message:
         "no such #{kind} #{inspect(name)} on #{inspect(entity_type)} " <>
           "at this point in migration history"
+  end
+
+  defp raise_not_a_permutation!(op, current_values) do
+    missing = current_values -- op.values
+    new = op.values -- current_values
+
+    segments =
+      [describe_enum_values(missing, "missing"), describe_enum_values(new, "new")]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.join(" and ")
+
+    raise Hologram.CompileError,
+      message:
+        "reorder_enum_values changes order only - #{segments} - " <>
+          "a rename is rename_enum_value, a removal is delete_enum_value, " <>
+          "an addition is add_enum_value"
+  end
+
+  defp rename_enum_value_member(values, opts, op) do
+    if op.from not in values do
+      raise_no_enum_value!(op, op.from)
+    end
+
+    if op.to in values do
+      raise_enum_value_exists!(op, op.to)
+    end
+
+    renamed = Enum.map(values, fn value -> if value == op.from, do: op.to, else: value end)
+
+    # The retargeting principle one level down: value-referencing options follow the
+    # renamed value, so a rename is always one instruction.
+    new_opts = if opts[:default] == op.from, do: Keyword.put(opts, :default, op.to), else: opts
+
+    {renamed, new_opts}
   end
 
   defp rename_member(model, entity_type, list_key, kind, from, to) do
@@ -293,6 +480,30 @@ defmodule Hologram.Entity.Model do
       end)
 
     %{entry | relationships: relationships}
+  end
+
+  defp retarget_extends(%{extends: extends} = role_entry, from, to) do
+    retargeted = Enum.map(extends, fn target -> if target == from, do: to, else: target end)
+
+    %{role_entry | extends: Enum.sort(retargeted)}
+  end
+
+  defp update_enum_attribute(model, op, fun) do
+    update_member(model, op.entity, :attributes, "attribute", op.attribute, fn
+      {name, type, opts} ->
+        if type != :enum do
+          raise Hologram.CompileError,
+            message:
+              "attribute #{inspect(op.attribute)} on #{inspect(op.entity)} " <>
+                "is not an :enum attribute"
+        end
+
+        current_values = Keyword.fetch!(opts, :values)
+        {values, new_opts} = fun.(current_values, opts)
+        final_opts = Keyword.put(new_opts, :values, values)
+
+        {name, type, normalize_opts(final_opts)}
+    end)
   end
 
   defp update_member(model, entity_type, list_key, kind, name, fun) do

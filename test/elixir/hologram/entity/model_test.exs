@@ -58,6 +58,62 @@ defmodule Hologram.Entity.ModelTest do
                })
     end
 
+    test "adds enum values at the given positions" do
+      model = task_model(%{attributes: [{:status, :enum, [values: [:todo, :done]]}]})
+
+      ops = [
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :status,
+          value: :archived,
+          opts: [],
+          line: 3
+        },
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :status,
+          value: :draft,
+          opts: [before: :todo],
+          line: 4
+        },
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :status,
+          value: :doing,
+          opts: [after: :todo],
+          line: 5
+        }
+      ]
+
+      assert fold(model, ops) ==
+               task_model(%{
+                 attributes: [
+                   {:status, :enum, [values: [:draft, :todo, :doing, :done, :archived]]}
+                 ]
+               })
+    end
+
+    test "adds, renames, and deletes global roles" do
+      ops = [
+        %{op: :add_role, role: MyApp.Roles.Admin, opts: [], line: 3},
+        %{op: :add_role, role: MyApp.Roles.Owner, opts: [extends: MyApp.Roles.Admin], line: 4},
+        %{op: :add_role, role: MyApp.Roles.Support, opts: [], line: 5},
+        %{op: :rename_role, from: MyApp.Roles.Admin, to: MyApp.Roles.Manager, line: 6},
+        %{op: :delete_role, role: MyApp.Roles.Support, line: 7}
+      ]
+
+      assert fold(empty(), ops) == %{
+               entities: %{},
+               roles: %{
+                 MyApp.Roles.Manager => %{extends: []},
+                 MyApp.Roles.Owner => %{extends: [MyApp.Roles.Manager]}
+               }
+             }
+    end
+
     test "changes an attribute's type and options as deltas" do
       model = task_model(%{attributes: [{:estimate, :integer, [min: 0]}]})
 
@@ -150,6 +206,59 @@ defmodule Hologram.Entity.ModelTest do
 
       assert fold(model, ops) ==
                task_model(%{roles: [{:owner, [creator: true, extends: :editor]}]})
+    end
+
+    test "deletes an enum value" do
+      model = task_model(%{attributes: [{:status, :enum, [values: [:todo, :doing, :done]]}]})
+
+      ops = [
+        %{op: :delete_enum_value, entity: MyApp.Task, attribute: :status, value: :doing, line: 3}
+      ]
+
+      assert fold(model, ops) ==
+               task_model(%{attributes: [{:status, :enum, [values: [:todo, :done]]}]})
+    end
+
+    test "renames an enum value in place and rewrites the default" do
+      model =
+        task_model(%{
+          attributes: [{:status, :enum, [default: :done, values: [:todo, :done, :archived]]}]
+        })
+
+      ops = [
+        %{
+          op: :rename_enum_value,
+          entity: MyApp.Task,
+          attribute: :status,
+          from: :done,
+          to: :completed,
+          line: 3
+        }
+      ]
+
+      assert fold(model, ops) ==
+               task_model(%{
+                 attributes: [
+                   {:status, :enum, [default: :completed, values: [:todo, :completed, :archived]]}
+                 ]
+               })
+    end
+
+    test "reorders enum values" do
+      model = task_model(%{attributes: [{:status, :enum, [values: [:todo, :doing, :done]]}]})
+
+      ops = [
+        %{
+          op: :reorder_enum_values,
+          entity: MyApp.Task,
+          attribute: :status,
+          values: [:done, :todo, :doing],
+          line: 3
+        }
+      ]
+
+      assert fold(model, ops) ==
+               task_model(%{attributes: [{:status, :enum, [values: [:done, :todo, :doing]]}]})
     end
 
     test "renames attributes, relationships, and roles" do
@@ -419,6 +528,148 @@ defmodule Hologram.Entity.ModelTest do
 
       expected_msg =
         "attribute :title already exists on MyApp.Task at this point in migration history"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when an enum op targets a non-enum attribute" do
+      model = task_model(%{attributes: [{:status, :string, []}]})
+
+      ops = [
+        %{op: :delete_enum_value, entity: MyApp.Task, attribute: :status, value: :done, line: 3}
+      ]
+
+      expected_msg = "attribute :status on MyApp.Task is not an :enum attribute"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when adding an enum value that already exists" do
+      model = task_model(%{attributes: [{:status, :enum, [values: [:todo, :done]]}]})
+
+      ops = [
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :status,
+          value: :done,
+          opts: [],
+          line: 3
+        }
+      ]
+
+      expected_msg =
+        "enum value :done already exists on attribute :status " <>
+          "of MyApp.Task at this point in migration history"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when adding an enum value with both position options" do
+      model = task_model(%{attributes: [{:status, :enum, [values: [:todo, :done]]}]})
+
+      ops = [
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :status,
+          value: :doing,
+          opts: [before: :done, after: :todo],
+          line: 3
+        }
+      ]
+
+      expected_msg = "add_enum_value takes at most one of before: and after:"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when renaming an enum value that does not exist" do
+      model = task_model(%{attributes: [{:status, :enum, [values: [:todo, :done]]}]})
+
+      ops = [
+        %{
+          op: :rename_enum_value,
+          entity: MyApp.Task,
+          attribute: :status,
+          from: :doing,
+          to: :in_progress,
+          line: 3
+        }
+      ]
+
+      expected_msg =
+        "no such enum value :doing on attribute :status " <>
+          "of MyApp.Task at this point in migration history"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when deleting an enum value that is the default" do
+      model =
+        task_model(%{attributes: [{:status, :enum, [default: :done, values: [:todo, :done]]}]})
+
+      ops = [
+        %{op: :delete_enum_value, entity: MyApp.Task, attribute: :status, value: :done, line: 3}
+      ]
+
+      expected_msg =
+        "enum value :done is the default of attribute :status on MyApp.Task - " <>
+          "change the default before deleting the value"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when a reorder is not a permutation of the current values" do
+      model = task_model(%{attributes: [{:status, :enum, [values: [:todo, :done]]}]})
+
+      ops = [
+        %{
+          op: :reorder_enum_values,
+          entity: MyApp.Task,
+          attribute: :status,
+          values: [:todo, :completed],
+          line: 3
+        }
+      ]
+
+      expected_msg =
+        "reorder_enum_values changes order only - :done is missing and :completed is new - " <>
+          "a rename is rename_enum_value, a removal is delete_enum_value, " <>
+          "an addition is add_enum_value"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when adding a global role that already exists" do
+      model = fold(empty(), [%{op: :add_role, role: MyApp.Roles.Admin, opts: [], line: 3}])
+      ops = [%{op: :add_role, role: MyApp.Roles.Admin, opts: [], line: 4}]
+
+      expected_msg = "role MyApp.Roles.Admin already exists at this point in migration history"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when deleting a global role that does not exist" do
+      ops = [%{op: :delete_role, role: MyApp.Roles.Admin, line: 3}]
+
+      expected_msg = "no such role MyApp.Roles.Admin at this point in migration history"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(empty(), ops) end
+    end
+
+    test "raises when deleting a global role that other roles extend" do
+      model =
+        fold(empty(), [
+          %{op: :add_role, role: MyApp.Roles.Admin, opts: [], line: 3},
+          %{op: :add_role, role: MyApp.Roles.Owner, opts: [extends: MyApp.Roles.Admin], line: 4}
+        ])
+
+      ops = [%{op: :delete_role, role: MyApp.Roles.Admin, line: 5}]
+
+      expected_msg =
+        "role MyApp.Roles.Admin is extended by MyApp.Roles.Owner - " <>
+          "delete or change the extending roles first"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
     end
