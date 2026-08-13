@@ -167,7 +167,7 @@ defmodule HologramClusterTests.Cluster do
   dies. Started on a chosen node via `Node.spawn/4`, which is what makes it
   useful: a long-lived subscriber on that node, observable from the caller.
   """
-  @spec subscribe_and_forward(String.t(), pid) :: no_return
+  @spec subscribe_and_forward(String.t(), pid) :: :ok
   def subscribe_and_forward(topic, forward_to) do
     Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
     Process.monitor(forward_to)
