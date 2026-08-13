@@ -1,15 +1,24 @@
 import Config
 
-config :hologram_feature_tests, HologramFeatureTestsWeb.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: 4002],
-  secret_key_base: "+c4nzKpOujvWTRjsuvgfREOT8nnWvr/ZL0t+CR5AeWkiJQl36INDkV7uAvyGgnBa",
-  server: true
+# Every app instance in the cluster runs from this same build, so the port comes from an
+# env var - the orchestrator assigns each peer its own before starting the app there.
+#
+# `server: false` because this config belongs to the ORCHESTRATOR - the node running
+# ExUnit, Wallaby and the proxy, which serves no app traffic itself. Peers get the env
+# copied with `server: true` and their own port before the app starts there.
+config :hologram_cluster_tests, HologramClusterTestsWeb.Endpoint,
+  http: [
+    ip: {127, 0, 0, 1},
+    port: String.to_integer(System.get_env("HOLOGRAM_CLUSTER_TESTS_PORT") || "4003")
+  ],
+  secret_key_base: "wK5c8mQnJ2vRfTz9BxYhE3aGdN7pLsU4C6jViObM0WqXtZrAeD1kFyHgPnSuIlo0",
+  server: false
+
+# The one origin the browser ever sees. Browser traffic distributes across the peers
+# exactly as the proxy's routing policy decides.
+config :hologram_cluster_tests, :proxy_port, 4005
 
 config :logger, level: :warning
-
-# Lets a feature test hold the SSE attach open via cookie, so a boot-time command can
-# reach the server before the connection exists. Never enabled outside the test env.
-config :hologram, :__sse_attach_delay_enabled__, true
 
 config :wallaby,
   chromedriver: [
@@ -35,6 +44,6 @@ config :wallaby,
   # Fixes occasional HTTPoison timeouts, see: https://github.com/elixir-wallaby/wallaby/issues/365
   hackney_options: [timeout: 60_000, recv_timeout: 60_000],
   max_wait_time: 30_000,
-  otp_app: :hologram_feature_tests,
+  otp_app: :hologram_cluster_tests,
   screenshot_dir: "./tmp/screenshots",
   screenshot_on_failure: true

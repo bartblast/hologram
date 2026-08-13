@@ -4,7 +4,6 @@ defmodule Hologram.RealtimeTest do
   import Hologram.Realtime
 
   alias Hologram.Component.Action
-  alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
   alias Hologram.Server
@@ -480,64 +479,40 @@ defmodule Hologram.RealtimeTest do
   end
 
   describe "subscribe/3" do
-    test "registers the binding in the registry for the resolved instance" do
-      :ok = SubscriptionRegistry.register_connection("instance-1", self())
-      SubscriptionRegistry.update_identity("instance-1", "session-1", 7)
-
-      subscribe({:user, 7}, :notifications, "c1")
-
-      assert SubscriptionRegistry.bindings_of("instance-1") == %{{:notifications, "c1"} => 7}
-    end
-
-    test "sends a signed receipt via {:add_sub_receipts, ...} to the target SSE process" do
-      :ok = SubscriptionRegistry.register_connection("instance-1", self())
-      SubscriptionRegistry.update_identity("instance-1", "session-1", 7)
-
-      subscribe({:user, 7}, :notifications, "c1")
-
-      assert_receive {:add_sub_receipts, [{:notifications, "c1", token}]}
-      assert {:ok, receipt} = Receipt.verify(token)
-      assert receipt.channel == :notifications
-      assert receipt.cid == "c1"
-      assert receipt.instance_id == "instance-1"
-      assert receipt.user_id == 7
-    end
-
-    test "fans out to every connection resolved by the identity (multi-tab)" do
-      test_pid = self()
-
-      sse_a =
-        spawn(fn ->
-          receive do
-            {:add_sub_receipts, _receipts} = msg -> send(test_pid, {:tab_a, msg})
-          end
-        end)
-
-      sse_b =
-        spawn(fn ->
-          receive do
-            {:add_sub_receipts, _receipts} = msg -> send(test_pid, {:tab_b, msg})
-          end
-        end)
-
-      :ok = SubscriptionRegistry.register_connection("instance-a", sse_a)
-      :ok = SubscriptionRegistry.register_connection("instance-b", sse_b)
-      SubscriptionRegistry.update_identity("instance-a", "session-a", 7)
-      SubscriptionRegistry.update_identity("instance-b", "session-b", 7)
-
-      subscribe({:user, 7}, :notifications, "c1")
-
-      assert_receive {:tab_a, {:add_sub_receipts, [{:notifications, "c1", _token_a}]}}
-      assert_receive {:tab_b, {:add_sub_receipts, [{:notifications, "c1", _token_b}]}}
-    end
-
-    test "tags the binding with the entry's current authorizing_user_id (anonymous stays anonymous)" do
-      :ok = SubscriptionRegistry.register_connection("instance-1", self())
-      SubscriptionRegistry.update_identity("instance-1", "session-1", nil)
+    test "publishes the grant on the instance announce topic" do
+      topic = instance_announce_topic("instance-1")
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       subscribe({:instance, "instance-1"}, :notifications, "c1")
 
-      assert SubscriptionRegistry.bindings_of("instance-1") == %{{:notifications, "c1"} => nil}
+      assert_receive {:add_subscription, :notifications, "c1"}
+    end
+
+    test "publishes the grant on the session announce topic" do
+      topic = session_announce_topic("session-1")
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      subscribe({:session, "session-1"}, :notifications, "c1")
+
+      assert_receive {:add_subscription, :notifications, "c1"}
+    end
+
+    test "publishes the grant on the user announce topic" do
+      topic = user_announce_topic(7)
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      subscribe({:user, 7}, :notifications, "c1")
+
+      assert_receive {:add_subscription, :notifications, "c1"}
+    end
+
+    test "publishes nothing on another identity's announce topic" do
+      topic = user_announce_topic(999)
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      subscribe({:user, 7}, :notifications, "c1")
+
+      refute_receive {:add_subscription, _channel, _cid}
     end
 
     test "raises ArgumentError on an invalid channel" do

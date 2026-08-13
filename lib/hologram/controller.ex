@@ -139,11 +139,20 @@ defmodule Hologram.Controller do
         module: module,
         name: name,
         params: params,
+        sub_receipts: sub_receipts,
         target: target
       } = payload
 
       if caller_owns_instance_id?(conn, instance_id) do
-        handle_validated_command_request(conn, instance_id, module, name, params, target)
+        handle_validated_command_request(
+          conn,
+          instance_id,
+          module,
+          name,
+          params,
+          sub_receipts,
+          target
+        )
       else
         Logger.warning("instance_id cross-check failed")
 
@@ -178,8 +187,29 @@ defmodule Hologram.Controller do
     end
   end
 
-  defp handle_validated_command_request(conn, instance_id, module, name, params, target) do
-    bindings = SubscriptionRegistry.bindings_of(instance_id) || %{}
+  # The tab's own signed receipts stand in for a registry read, which would come back
+  # empty whenever the command lands on a node that does not hold the connection. A
+  # verified receipt is also the stronger statement: it is bound to this instance and
+  # checked against tombstones, where the local table only reports what it happens to
+  # know.
+  defp handle_validated_command_request(
+         conn,
+         instance_id,
+         module,
+         name,
+         params,
+         sub_receipts,
+         target
+       ) do
+    {validated_bindings, _refreshed_receipts} =
+      verify_and_refresh_receipts(
+        sub_receipts,
+        instance_id,
+        Session.get_session_id(conn),
+        Session.get_user_id(conn)
+      )
+
+    bindings = Map.new(validated_bindings)
 
     target_subscriptions =
       for {{_channel, cid} = key, _user_id} <- bindings, cid == target, do: key
@@ -678,15 +708,19 @@ defmodule Hologram.Controller do
          %Server{instance_id: instance_id, subscriptions: subscriptions} = server,
          client_claimed_sub_keys
        ) do
-    {actually_added, actually_dropped} =
-      SubscriptionRegistry.transition(
-        instance_id,
-        subscriptions,
-        client_claimed_sub_keys,
-        server.user_id
-      )
+    {add_keys, drop_keys} =
+      SubscriptionRegistry.diff_sub_keys(subscriptions, client_claimed_sub_keys)
 
-    {build_receipts(actually_added, server), actually_dropped}
+    # Addressed to the connection rather than applied here, since another node may hold
+    # it. Nothing is awaited: the diff above needed no registry read, and a miss is
+    # legitimate on an initial render, where no connection exists yet and the receipts
+    # ride this response into the handshake.
+    topic = Realtime.instance_announce_topic(instance_id)
+    envelope = {:replace_subscriptions, subscriptions, server.user_id}
+
+    Phoenix.PubSub.broadcast(Hologram.PubSub, topic, envelope)
+
+    {build_receipts(add_keys, server), drop_keys}
   end
 
   defp validate_csrf_token(conn) do

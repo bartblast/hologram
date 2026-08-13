@@ -1,4 +1,4 @@
-defmodule HologramFeatureTests.MixProject do
+defmodule HologramClusterTests.MixProject do
   use Mix.Project
 
   defp aliases do
@@ -13,7 +13,7 @@ defmodule HologramFeatureTests.MixProject do
 
   def application do
     [
-      mod: {HologramFeatureTests.Application, []},
+      mod: {HologramClusterTests.Application, []},
       extra_applications: [:iex, :logger, :runtime_tools]
     ]
   end
@@ -24,12 +24,11 @@ defmodule HologramFeatureTests.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
-       ref: "e012db9b201929fc90e07a11432b01f7e2ef0b2d"},
+       ref: "9a151aa90c2cba1635d262c28c0896162d5be232"},
       {:jason, "~> 1.0"},
+      {:mint, "~> 1.0", only: :test},
       {:phoenix, "~> 1.7"},
       {:plug_cowboy, "~> 2.0"},
-      {:telemetry_metrics, "~> 1.0"},
-      {:telemetry_poller, "~> 1.0"},
       {:wallaby, "~> 0.30", only: :test}
     ]
   end
@@ -45,7 +44,7 @@ defmodule HologramFeatureTests.MixProject do
   def project do
     [
       aliases: aliases(),
-      app: :hologram_feature_tests,
+      app: :hologram_cluster_tests,
       # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
       compilers: Mix.compilers() ++ [:hologram],
       deps: deps(),
