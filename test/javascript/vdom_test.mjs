@@ -1033,6 +1033,74 @@ describe("Vdom", () => {
       assert.equal(container.querySelector("em"), serverEm);
     });
 
+    // The boot render omits the runtime's own scripts: they are guarded by page_mounted?, which
+    // the server sets to true in the struct it serializes to the client. So the render is not a
+    // node-for-node prefix of the head, and the stylesheet after those scripts still has to be
+    // adopted rather than re-fetched.
+    it("passes over nodes the render omits and adopts what follows", () => {
+      const {container, patched} = adopt(
+        [
+          vnode("meta", {attrs: {charset: "utf-8"}}, []),
+          vnode(
+            "link",
+            {
+              key: "__hologramLink__:/app.css",
+              attrs: {rel: "stylesheet", href: "/app.css"},
+            },
+            [],
+          ),
+          vnode("style", {attrs: {}}, ["body { color: red; }"]),
+        ],
+        '<meta charset="utf-8">' +
+          "<script>globalThis.Hologram = {}</script>" +
+          '<script src="/hologram/runtime.js"></script>' +
+          '<link rel="stylesheet" href="/app.css">' +
+          "<style>body { color: red; }</style>",
+      );
+
+      const serverMeta = container.querySelector("meta");
+      const serverLink = container.querySelector("link");
+      const serverStyle = container.querySelector("style");
+
+      patched();
+
+      assert.equal(container.querySelector("meta"), serverMeta);
+      assert.equal(container.querySelector("link"), serverLink);
+      assert.equal(container.querySelector("style"), serverStyle);
+      assert.equal(container.querySelectorAll("script").length, 0);
+
+      // A node mirrored as itself has to report its children truthfully, or the patch appends
+      // content it already holds.
+      assert.equal(serverStyle.textContent, "body { color: red; }");
+    });
+
+    it("does not adopt a script element for a different source", () => {
+      const {container, patched} = adopt(
+        [
+          vnode(
+            "script",
+            {
+              key: "__hologramScript__:/fresh.js",
+              attrs: {src: "/fresh.js"},
+            },
+            [],
+          ),
+        ],
+        '<script src="/stale.js"></script>',
+      );
+
+      const serverScript = container.querySelector("script");
+      patched();
+
+      // Adopting would have left the stale code running, since changing src on a script that has
+      // already executed does not run the new one.
+      assert.notEqual(container.querySelector("script"), serverScript);
+      assert.equal(
+        container.querySelector("script").getAttribute("src"),
+        "/fresh.js",
+      );
+    });
+
     it("keeps a script whose rendered key matches, so it is not re-executed", () => {
       const rendered = vnode(
         "script",

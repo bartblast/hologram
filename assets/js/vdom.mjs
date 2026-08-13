@@ -203,12 +203,14 @@ export default class Vdom {
   // rendered side's stylesheet and script keys compare equal by construction, so neither is
   // re-fetched or re-executed.
   //
-  // Where the two sides disagree the DOM node is mirrored as itself instead, with its real tag,
-  // so the patch replaces that subtree through the same create/remove paths every later patch
-  // runs - repair is not implemented here. Extra DOM nodes are mirrored as themselves and
-  // removed; rendered nodes with no DOM counterpart contribute nothing and are created.
+  // Nodes the render has no counterpart for are mirrored as they really are, children and
+  // resource keys included, so the patch aligns and repairs that region on its own terms through
+  // the same create, move and remove paths every later patch runs. Repair is not implemented
+  // here.
   static mirror(renderedVnode, domNode) {
-    return $.#mirrorNode(renderedVnode, domNode) ?? $.#vnodeOfDomNode(domNode);
+    return $.#correspondsTo(renderedVnode, domNode)
+      ? $.#mirrorNode(renderedVnode, domNode)
+      : $.#vnodeOfDomNode(domNode);
   }
 
   // Covered in feature tests
@@ -268,23 +270,14 @@ export default class Vdom {
     );
 
     const attrs = $.#domNodeAttrs(node);
-    const tagName = node.tagName.toLowerCase();
     const data = {attrs: attrs};
+    const key = $.#resourceKey(node, attrs);
 
-    if (tagName === "link" && typeof attrs.href === "string") {
-      data.key = `__hologramLink__:${attrs.href}`;
-    } else if (
-      tagName === "script" &&
-      typeof attrs.src === "string" &&
-      attrs.src
-    ) {
-      data.key = `__hologramScript__:${attrs.src}`;
-    } else if (tagName === "script" && node.textContent) {
-      // Make sure the script is executed if the code changes.
-      data.key = `__hologramScript__:${node.textContent}`;
+    if (key) {
+      data.key = key;
     }
 
-    return vnode(tagName, data, children);
+    return vnode(node.tagName.toLowerCase(), data, children);
   }
 
   // An element's attributes in the vdom convention: a valueless attribute reads as true.
@@ -423,69 +416,47 @@ export default class Vdom {
         continue;
       }
 
-      const domChild = domNodes[cursor.index];
-      const mirroredChild = $.#mirrorNode(renderedChild, domChild);
+      // The render is not always a prefix-by-prefix match for the page: a boot render omits the
+      // runtime's own scripts, which the server did emit. So the rendered child takes the first
+      // DOM node it can correspond to rather than only the one at the cursor, and the nodes
+      // passed over are mirrored as they are, for the patch to match or remove.
+      const domIndex = $.#correspondingIndex(renderedChild, domNodes, cursor);
 
-      if (mirroredChild !== null) {
-        mirroredChildren.push(mirroredChild);
-        cursor.index += 1;
-      } else if (domChild) {
-        // The two sides disagree: mirror the DOM node as itself, so the patch replaces this
-        // subtree instead of adopting it. The rendered child is not retried against later nodes -
-        // the walk stays in lockstep, and everything under the divergence is repaired wholesale.
-        console.warn(
-          "Hologram: server-rendered DOM diverges from the client render, repairing",
-          {rendered: renderedChild, dom: domChild},
-        );
+      if (domIndex === -1) {
+        // Nothing left this child could be: the patch creates it.
+        continue;
+      }
 
-        mirroredChildren.push($.#vnodeOfDomNode(domChild));
+      while (cursor.index < domIndex) {
+        mirroredChildren.push($.#vnodeOfDomNode(domNodes[cursor.index]));
         cursor.index += 1;
       }
-      // No DOM node left: the rendered child contributes nothing, the patch creates it.
+
+      mirroredChildren.push($.#mirrorNode(renderedChild, domNodes[domIndex]));
+      cursor.index = domIndex + 1;
     }
 
     return mirroredChildren;
   }
 
-  // The old-side vnode for one rendered vnode paired with one DOM node, or null when they don't
-  // correspond and the mismatch policy in #mirrorChildren should take over.
+  // The old-side vnode for one rendered vnode paired with the DOM node it corresponds to.
   static #mirrorNode(renderedVnode, domNode) {
-    if (!domNode) {
-      return null;
-    }
-
-    // Text: any text node is adopted, whatever it says - the patch rewrites text in place, which
-    // preserves the node, so a content difference is not a structural mismatch.
-    if (
-      renderedVnode.sel === undefined &&
-      !Array.isArray(renderedVnode.children)
-    ) {
-      return domNode.nodeType === Node.TEXT_NODE
-        ? rawVnode(
-            undefined,
-            undefined,
-            undefined,
-            domNode.textContent,
-            domNode,
-          )
-        : null;
+    // Text is adopted whatever it says: the patch rewrites text in place, which keeps the node,
+    // so differing content is not a reason to rebuild.
+    if (renderedVnode.sel === undefined) {
+      return rawVnode(
+        undefined,
+        undefined,
+        undefined,
+        domNode.textContent,
+        domNode,
+      );
     }
 
     if (renderedVnode.sel === "!") {
-      if (domNode.nodeType !== Node.COMMENT_NODE) {
-        return null;
-      }
-
       const data = renderedVnode.key ? {key: renderedVnode.key} : {};
 
       return rawVnode("!", data, undefined, domNode.textContent, domNode);
-    }
-
-    if (
-      domNode.nodeType !== Node.ELEMENT_NODE ||
-      domNode.tagName.toLowerCase() !== renderedVnode.sel
-    ) {
-      return null;
     }
 
     // Attributes are read from the DOM, not copied from the rendered side, so the patch sees what
@@ -522,8 +493,83 @@ export default class Vdom {
     );
   }
 
-  // A vnode standing for a DOM node on its own terms, carrying its real identity. Used where the
-  // rendered side has no say: mismatched or extra nodes, which the patch then replaces or removes.
+  // Whether a rendered vnode can stand for a DOM node, which is what makes adopting it safe.
+  //
+  // A resource key names what the element loads, and is the one thing a tag match is not enough
+  // for: adopting a script element for a different src would leave the old code running, since a
+  // script that has already executed does not run again when its src changes. Keys the DOM cannot
+  // carry - a block marker's, a slot's - do not constrain the pairing, being identity rather than
+  // content.
+  static #correspondsTo(renderedVnode, domNode) {
+    if (renderedVnode.sel === undefined) {
+      return (
+        !Array.isArray(renderedVnode.children) &&
+        domNode.nodeType === Node.TEXT_NODE
+      );
+    }
+
+    if (renderedVnode.sel === "!") {
+      return domNode.nodeType === Node.COMMENT_NODE;
+    }
+
+    if (
+      domNode.nodeType !== Node.ELEMENT_NODE ||
+      domNode.tagName.toLowerCase() !== renderedVnode.sel
+    ) {
+      return false;
+    }
+
+    return $.#isResourceKey(renderedVnode.key)
+      ? $.#resourceKey(domNode, $.#domNodeAttrs(domNode)) === renderedVnode.key
+      : true;
+  }
+
+  // The index of the first DOM node from the cursor on that the rendered vnode can stand for, or
+  // -1 when there is none left.
+  static #correspondingIndex(renderedVnode, domNodes, cursor) {
+    for (let index = cursor.index; index < domNodes.length; index += 1) {
+      if ($.#correspondsTo(renderedVnode, domNodes[index])) {
+        return index;
+      }
+    }
+
+    return -1;
+  }
+
+  static #isResourceKey(key) {
+    return (
+      typeof key === "string" &&
+      (key.startsWith("__hologramLink__:") ||
+        key.startsWith("__hologramScript__:"))
+    );
+  }
+
+  // The key a link or script element carries by what it loads, or null for anything else. Mirrors
+  // what the renderer derives for the same element, so the two sides compare equal.
+  static #resourceKey(domNode, attrs) {
+    const tagName = domNode.tagName.toLowerCase();
+
+    if (tagName === "link" && typeof attrs.href === "string") {
+      return `__hologramLink__:${attrs.href}`;
+    }
+
+    if (tagName === "script" && typeof attrs.src === "string" && attrs.src) {
+      return `__hologramScript__:${attrs.src}`;
+    }
+
+    if (tagName === "script" && domNode.textContent) {
+      // Make sure the script is executed if the code changes.
+      return `__hologramScript__:${domNode.textContent}`;
+    }
+
+    return null;
+  }
+
+  // A vnode standing for a DOM node on its own terms: its own tag, attributes, children and
+  // resource key, with the live node attached. Used wherever the rendered side has no counterpart,
+  // so the patch decides what happens to it - matching it by tag or key and keeping it, or
+  // removing it. It has to describe the node truthfully, children included: a vnode that claims
+  // to be empty makes the patch append content the node already has.
   static #vnodeOfDomNode(domNode) {
     if (domNode.nodeType === Node.TEXT_NODE) {
       return rawVnode(
@@ -536,13 +582,30 @@ export default class Vdom {
     }
 
     if (domNode.nodeType === Node.COMMENT_NODE) {
-      return rawVnode("!", {}, [], domNode.textContent, domNode);
+      const key = $.markerKey(domNode.textContent);
+      const data = key ? {key: key} : {};
+
+      return rawVnode("!", data, undefined, domNode.textContent, domNode);
     }
+
+    const attrs = $.#domNodeAttrs(domNode);
+    const data = {attrs: attrs};
+    const key = $.#resourceKey(domNode, attrs);
+
+    if (key) {
+      data.key = key;
+    }
+
+    const children = $.finalizeChildren(
+      Array.from(domNode.childNodes).map((childNode) =>
+        $.#vnodeOfDomNode(childNode),
+      ),
+    );
 
     return rawVnode(
       domNode.tagName.toLowerCase(),
-      {attrs: $.#domNodeAttrs(domNode)},
-      [],
+      data,
+      children,
       undefined,
       domNode,
     );
