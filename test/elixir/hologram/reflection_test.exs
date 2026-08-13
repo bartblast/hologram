@@ -386,7 +386,7 @@ defmodule Hologram.ReflectionTest do
 
     assert Calendar.ISO in result
     assert Hologram.Template.Tokenizer in result
-    assert Mix.Tasks.Holo.Test.CheckFileNames in result
+    assert Mix.Tasks.Holo.Check.TestFileNames in result
     assert Sobelow.CI in result
     assert Mix.Tasks.Sobelow in result
 
@@ -403,7 +403,7 @@ defmodule Hologram.ReflectionTest do
 
       assert Calendar.ISO in result
       assert Hologram.Template.Tokenizer in result
-      assert Mix.Tasks.Holo.Test.CheckFileNames in result
+      assert Mix.Tasks.Holo.Check.TestFileNames in result
       refute Sobelow.CI in result
       refute Mix.Tasks.Sobelow in result
 
