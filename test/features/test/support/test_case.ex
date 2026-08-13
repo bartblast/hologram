@@ -1,6 +1,8 @@
 defmodule HologramFeatureTests.TestCase do
   use ExUnit.CaseTemplate
 
+  alias Hologram.Test.FeatureHelpers
+
   # Based on Wallaby.Feature.__using__/1
   using do
     quote do
@@ -30,7 +32,7 @@ defmodule HologramFeatureTests.TestCase do
       import Wallaby.Query
 
       setup context do
-        Hologram.Test.FeatureHelpers.start_sessions(context)
+        FeatureHelpers.start_sessions(context)
       end
     end
   end

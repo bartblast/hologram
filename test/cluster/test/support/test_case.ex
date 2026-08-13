@@ -1,6 +1,8 @@
 defmodule HologramClusterTests.TestCase do
   use ExUnit.CaseTemplate
 
+  alias Hologram.Test.FeatureHelpers
+
   # Based on Wallaby.Feature.__using__/1
   using do
     quote do
@@ -17,7 +19,7 @@ defmodule HologramClusterTests.TestCase do
       alias HologramClusterTests.Proxy
 
       setup context do
-        Hologram.Test.FeatureHelpers.start_sessions(context)
+        FeatureHelpers.start_sessions(context)
       end
     end
   end
