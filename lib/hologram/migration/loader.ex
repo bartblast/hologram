@@ -10,6 +10,11 @@ defmodule Hologram.Migration.Loader do
 
   # The top-level vocabulary, as imported by the header - a migration file holds these
   # statements and nothing else, so imperative code cannot enter the format.
+  #
+  # TODO: only the statement HEADS are checked, so an argument could still carry an
+  # expression that runs at load. Walking the argument AST for literals closes the gap
+  # in the "migration files hold no imperative code" claim - the trust class is the same
+  # as any source file meanwhile, which is why evaluating them is sound.
   @flat_ops [
     :add_role,
     :change_entity,

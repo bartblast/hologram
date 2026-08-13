@@ -43,9 +43,13 @@ defmodule Hologram.DB.Preflight do
   end
 
   defp check_op!(%{op: :add_column} = op, _actual, mapping) do
-    checked? =
-      not op.definition.null and
-        not match?({:ok, _value}, fill_value(mapping, op.table, op.column))
+    # An op carrying its own backfill needs no declared default - a migration states what
+    # the rows that predate the column receive.
+    filled? =
+      Map.has_key?(op, :backfill) or
+        match?({:ok, _value}, fill_value(mapping, op.table, op.column))
+
+    checked? = not op.definition.null and not filled?
 
     count = if checked?, do: count_result(DDL.rows_check_statement(op.table)), else: 0
 

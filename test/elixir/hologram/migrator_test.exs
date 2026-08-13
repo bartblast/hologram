@@ -7,7 +7,9 @@ defmodule Hologram.MigratorTest do
   import Hologram.Migrator
 
   alias Hologram.DB.Connection
+  alias Hologram.DB.Introspection
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.Entity.Model
 
   @context %{
     otp_app: "hologram",
@@ -36,9 +38,189 @@ defmodule Hologram.MigratorTest do
     {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
   end
 
+  defp migration(version, ops) do
+    %{version: version, path: "#{version}.exs", ops: ops}
+  end
+
+  defp table_columns(table) do
+    statement = """
+    SELECT a.attname
+    FROM pg_catalog.pg_attribute a
+    JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'hologram_data' AND c.relname = $1
+      AND a.attnum > 0 AND NOT a.attisdropped
+    ORDER BY a.attname
+    """
+
+    {:ok, %{rows: rows}} = Connection.query(statement, [table])
+
+    Enum.map(rows, fn [name] -> name end)
+  end
+
   setup do
     drop_hologram_schemas()
     :ok
+  end
+
+  describe "apply_pending/3" do
+    # TODO: Two claims of the apply loop cannot be made here, because every test shares
+    # one sandboxed connection: that concurrent appliers serialize (advisory locks are
+    # per-session, so two processes on one connection share the lock instead of
+    # contending for it), and that a killed applier resumes at the file it failed on.
+    # The cluster feature tests, whose nodes run as separate systems, cover both.
+    setup do
+      ensure_managed!(@context)
+      :ok
+    end
+
+    test "applies a chain, recording each file as it commits" do
+      migrations = [
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            type: :string,
+            opts: [],
+            line: 4
+          }
+        ]),
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :priority,
+            type: :integer,
+            opts: [optional: true],
+            line: 3
+          }
+        ])
+      ]
+
+      post_model = apply_pending(migrations, Model.empty(), @context)
+
+      assert table_columns("my_app_task") == [
+               "created_at",
+               "id",
+               "priority",
+               "title",
+               "updated_at"
+             ]
+
+      assert applied_versions() ==
+               MapSet.new(["20260813091522", "20260813142237"])
+
+      assert post_model.entities[MyApp.Task].attributes == [
+               {:priority, :integer, [optional: true]},
+               {:title, :string, []}
+             ]
+    end
+
+    test "fills the rows that predate a required column with its backfill" do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            type: :string,
+            opts: [],
+            line: 4
+          }
+        ])
+
+      apply_pending([create], Model.empty(), @context)
+
+      insert = """
+      INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "updated_at")
+      VALUES ('00000000-0000-0000-0000-000000000001', 'existing',
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+      """
+
+      {:ok, _result} = Connection.query(insert)
+
+      backfilled =
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :priority,
+            type: :integer,
+            opts: [backfill: 7],
+            line: 3
+          }
+        ])
+
+      model = apply_pending([create], Model.empty(), @context)
+      apply_pending([backfilled], model, @context)
+
+      {:ok, %{rows: rows}} =
+        Connection.query(~s(SELECT "priority" FROM "hologram_data"."my_app_task"))
+
+      assert rows == [[7]]
+    end
+
+    test "skips the migrations another applier already recorded" do
+      migrations = [
+        migration("20260813091522", [%{op: :create_entity, entity: MyApp.Task, line: 3}])
+      ]
+
+      apply_pending(migrations, Model.empty(), @context)
+      schema_after_first = Introspection.schema()
+
+      apply_pending(migrations, Model.empty(), @context)
+
+      assert Introspection.schema() == schema_after_first
+      assert applied_versions() == MapSet.new(["20260813091522"])
+    end
+
+    test "leaves the earlier files applied when a later one refuses" do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            type: :string,
+            opts: [],
+            line: 4
+          }
+        ])
+
+      apply_pending([create], Model.empty(), @context)
+
+      insert = """
+      INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "updated_at")
+      VALUES ('00000000-0000-0000-0000-000000000002', 'existing',
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+      """
+
+      {:ok, _result} = Connection.query(insert)
+
+      # A required column with no backfill has nothing to give the existing row.
+      refused =
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :priority,
+            type: :integer,
+            opts: [],
+            line: 3
+          }
+        ])
+
+      model = apply_pending([create], Model.empty(), @context)
+
+      assert_raise RuntimeError, fn -> apply_pending([refused], model, @context) end
+
+      assert applied_versions() == MapSet.new(["20260813091522"])
+      assert "priority" not in table_columns("my_app_task")
+    end
   end
 
   describe "applied_versions/0" do

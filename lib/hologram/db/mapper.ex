@@ -419,6 +419,10 @@ defmodule Hologram.DB.Mapper do
   # cannot carry grants at all - which is the state early in a migration history, before
   # the user entity type arrives. Deriving no store there keeps "the empty model has the
   # empty schema" true, the premise a history replayed from empty rests on.
+  # TODO: The designation of WHICH entity type is the user one is a module reflection
+  # with no representation in the model term, so a replayed history resolves it against
+  # the current modules - correct until a user entity type is renamed. Carrying the
+  # designation in the term, and in the ops that record it, closes that.
   defp put_role_grant(%{entities: entities} = model) do
     user_entity = RoleGrant.user_entity()
 

@@ -60,9 +60,12 @@ defmodule Hologram.Migration.Generator do
     format(text)
   end
 
-  # The ops that can express each ambiguity, with what each one does to existing data -
-  # move_attribute is absent until its lens payload ships, so the menu never names an op
-  # the loader would reject.
+  # The ops that can express each ambiguity, with what each one does to existing data.
+  #
+  # TODO: move_attribute belongs in the attribute menu, and in the relationship one if it
+  # grows a counterpart - it is reserved vocabulary with no implementation yet, so naming
+  # it here would point at an op the loader rejects. Adding it waits on the lens payload
+  # that says where the value travels and what happens when several rows converge on one.
   defp api_entries(:attributes) do
     [
       "rename_attribute :old, :new             - the column is renamed, its data kept",

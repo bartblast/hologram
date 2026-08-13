@@ -63,7 +63,7 @@ defmodule Hologram.Migration.Renderer do
       for %{op: :add_attribute} = op <- logical_ops,
           {:ok, value} <- [Keyword.fetch(op.opts, :backfill)],
           into: %{} do
-        {{Mapper.table_name(op.entity), Atom.to_string(op.name)}, value}
+        {{Mapper.table_name(op.entity), Atom.to_string(op.name)}, Codec.encode(value, op.type)}
       end
 
     Enum.map(physical_ops, &put_backfill(&1, backfills))

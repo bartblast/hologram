@@ -2,7 +2,19 @@ defmodule Hologram.Migrator do
   @moduledoc false
 
   alias Hologram.DB.Connection
+  alias Hologram.DB.DDL
+  alias Hologram.DB.Introspection
+  alias Hologram.DB.Mapper
+  alias Hologram.DB.Preflight
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.Migration.Renderer
+
+  # Fixed application-defined key for pg_advisory_xact_lock - serializes the appliers of
+  # a deploy, whichever node gets there first. The value is frozen forever: a different
+  # key breaks mutual exclusion across Hologram versions, so it must survive any code
+  # move or rename. Provenance (for uniqueness, not for re-derivation): first 8 bytes of
+  # md5("hologram_migrations") as a signed int64.
+  @advisory_lock_key -335_777_576_117_788_795
 
   @managed_by "migrations"
 
@@ -16,6 +28,26 @@ defmodule Hologram.Migrator do
     {:ok, %{rows: rows}} = Connection.query(statement)
 
     MapSet.new(rows, fn [version] -> version end)
+  end
+
+  @doc """
+  Applies the given migrations to the connected database, one transaction each, and
+  returns the model the last of them leaves behind.
+
+  A file's statements and its bookkeeping row commit together, so the record can never
+  disagree with the schema, and a failure leaves the earlier files applied - every
+  inter-file state is a reviewed historical model state, which makes file boundaries the
+  right transaction boundaries. An advisory lock serializes the appliers of a deploy: the
+  first node does the work, the rest wait, re-read the bookkeeping inside their own
+  transaction, and find the file already applied. Index builds that cannot run inside a
+  transaction follow after the commit.
+
+  The managed-object registry is deliberately left alone - it is schema reconciliation's
+  record of what it created, and a migration-managed database has no use for it.
+  """
+  @spec apply_pending(list(%{atom => any}), %{atom => map}, %{atom => any}) :: %{atom => map}
+  def apply_pending(migrations, pre_model, context) do
+    Enum.reduce(migrations, pre_model, &apply_migration(&1, &2, context))
   end
 
   @doc """
@@ -61,6 +93,63 @@ defmodule Hologram.Migrator do
     {:ok, _result} = Connection.query(statement, [version, timestamp])
 
     :ok
+  end
+
+  defp apply_migration(migration, model, context) do
+    render = Renderer.render(migration.ops, model)
+
+    {:ok, status} =
+      Connection.transaction(fn ->
+        {:ok, _result} =
+          Connection.query("SELECT pg_advisory_xact_lock($1)", [@advisory_lock_key])
+
+        if migration.version in applied_versions() do
+          :skipped
+        else
+          apply_transactional(render, migration.version, context)
+        end
+      end)
+
+    if status == :applied do
+      execute_statements(Enum.flat_map(render.tail, &DDL.statements/1))
+    end
+
+    render.post_model
+  end
+
+  # A required column arriving with a backfill is added nullable, filled, then tightened -
+  # the value never travels in the DDL, and the rows that predate the column receive it.
+  defp apply_op(%{op: :add_column, backfill: value} = op) do
+    nullable_definition = %{op.definition | null: true}
+
+    execute_statements(DDL.statements(%{op | definition: nullable_definition}))
+    fill_column(op.table, op.column, value)
+
+    if not op.definition.null do
+      tighten_op = %{
+        op: :alter_column,
+        table: op.table,
+        column: op.column,
+        before: nullable_definition,
+        after: op.definition
+      }
+
+      execute_statements(DDL.statements(tighten_op))
+    end
+  end
+
+  defp apply_op(op), do: execute_statements(DDL.statements(op))
+
+  defp apply_transactional(render, version, context) do
+    actual = Introspection.schema()
+    mapping = Mapper.derive_from_model!(render.post_model)
+
+    Preflight.run!(render.transactional, actual, mapping)
+
+    Enum.each(render.transactional, &apply_op/1)
+    record_applied(version, context.timestamp)
+
+    :applied
   end
 
   defp check_marker!(context) do
@@ -109,6 +198,18 @@ defmodule Hologram.Migrator do
     })
 
     :claimed
+  end
+
+  defp execute_statements(statements) do
+    Enum.each(statements, fn statement ->
+      {:ok, _result} = Connection.query(statement)
+    end)
+  end
+
+  defp fill_column(table, column, encoded_value) do
+    fill_statement = DDL.fill_statement(table, column)
+
+    {:ok, _result} = Connection.query(fill_statement, [encoded_value])
   end
 
   defp hologram_schemas do
