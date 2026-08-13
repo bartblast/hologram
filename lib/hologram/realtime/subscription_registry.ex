@@ -5,6 +5,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
   require Logger
 
+  alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
 
   # One client round trip on a slow connection: the span between a boot-time command
@@ -69,18 +70,25 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   longer holds.
 
   When no entry exists at call time the caller is parked rather than answered.
-  A lookup miss has two causes with opposite correct responses: the connection
-  is attaching right now (a command issued during page boot races the SSE
-  handshake), or it is genuinely gone (the connection died and was
-  garbage-collected by the registry's `:DOWN` handler). Answering immediately
-  assumes the second and silently discards the deltas in the first.
+  A lookup miss has three causes with different correct responses: the
+  connection is attaching right now (a command issued during page boot races the
+  SSE handshake), it is live on another node of the cluster, or it is genuinely
+  gone (the connection died and was garbage-collected by the registry's `:DOWN`
+  handler). Answering immediately assumes the last and silently discards the
+  deltas in the other two.
 
-  A parked caller is released by `attach_connection/5`, which applies its
-  deltas against the entry it has just created and replies with the real
-  result. Ordering is therefore correct by construction: the attach establishes
-  the handshake baseline and the parked deltas fold in on top of it, rather
-  than the two racing. Callers parked for the same instance are released in the
-  order they were issued.
+  So a parked caller is released by whichever of these resolves first:
+
+    * `attach_connection/5`, which applies the deltas against the entry it has
+      just created and replies with the real result. Ordering is therefore
+      correct by construction: the attach establishes the handshake baseline and
+      the parked deltas fold in on top of it, rather than the two racing.
+      Callers parked for the same instance are released in the order they were
+      issued.
+
+    * The node that holds the connection, which is asked over the instance's
+      announce topic when the caller is parked, applies the deltas against its
+      own registry and answers.
 
   If no connection attaches within `attach_wait_ms/0`, no entry is created and
   no zero-crossing messages are emitted, and the input `adds` and `drops` are
@@ -367,8 +375,22 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
         {:reply, reply, state}
 
+      # The connection may be attaching right now, live on another node, or gone. Park
+      # the caller and ask the cluster in the same breath - whichever resolves first
+      # releases it.
       [] ->
-        {:noreply, park_caller(state, instance_id, from, adds, drops, authorizing_user_id)}
+        {new_state, waiter_ref} =
+          park_caller(state, instance_id, from, adds, drops, authorizing_user_id)
+
+        topic = Realtime.instance_announce_topic(instance_id)
+
+        message =
+          {:apply_deltas_remote, instance_id, adds, drops, authorizing_user_id, self(),
+           waiter_ref}
+
+        Phoenix.PubSub.broadcast(Hologram.PubSub, topic, message)
+
+        {:noreply, new_state}
     end
   end
 
@@ -656,7 +678,9 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     # instance apply in the order they were issued.
     waiters = Map.update(state.waiters, instance_id, [waiter], &[waiter | &1])
 
-    %{state | waiters: waiters}
+    # The ref goes back to the caller so it can be sent to the connection's holder as a
+    # correlation id, letting a reply address exactly this waiter.
+    {%{state | waiters: waiters}, timer_ref}
   end
 
   defp resolve_by_field(field, value) do

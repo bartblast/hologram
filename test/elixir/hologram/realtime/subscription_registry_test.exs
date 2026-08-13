@@ -4,6 +4,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   import ExUnit.CaptureLog
   import Hologram.Realtime.SubscriptionRegistry
 
+  alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.SubscriptionRegistry
 
@@ -12,6 +13,11 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   @attach_wait_ms 50
 
   setup do
+    # Parking a caller asks the cluster over PubSub, so it must be up first - the same
+    # order Hologram.Application starts them in.
+    wait_for_process_cleanup(Hologram.PubSub)
+    start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
     wait_for_process_cleanup(SubscriptionRegistry)
     start_supervised!({SubscriptionRegistry, attach_wait_ms: @attach_wait_ms})
 
@@ -285,6 +291,36 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       apply_deltas("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
       assert :sys.get_state(SubscriptionRegistry).waiters == %{}
+    end
+
+    test "asks the connection's holder to apply the deltas when the caller is parked" do
+      instance_id = "test-unknown-instance-id"
+      Phoenix.PubSub.subscribe(Hologram.PubSub, Realtime.instance_announce_topic(instance_id))
+
+      registry_pid = Process.whereis(SubscriptionRegistry)
+
+      capture_log(fn ->
+        apply_deltas(instance_id, [{:room_a, "page"}], [{:room_b, "comp_1"}], "test-user-id")
+      end)
+
+      assert_receive {:apply_deltas_remote, ^instance_id, [{:room_a, "page"}],
+                      [{:room_b, "comp_1"}], "test-user-id", ^registry_pid, waiter_ref}
+
+      assert is_reference(waiter_ref)
+    end
+
+    test "asks nobody when the connection is registered on this node" do
+      :ok = register_connection("test-instance-id", self())
+
+      Phoenix.PubSub.subscribe(
+        Hologram.PubSub,
+        Realtime.instance_announce_topic("test-instance-id")
+      )
+
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      refute_receive {:apply_deltas_remote, _instance_id, _adds, _drops, _user_id, _pid,
+                      _waiter_ref}
     end
 
     test "logs the unapplied deltas when no connection attaches within the wait window" do
