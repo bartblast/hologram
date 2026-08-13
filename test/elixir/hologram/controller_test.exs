@@ -195,11 +195,17 @@ defmodule Hologram.ControllerTest do
   defp serialize_payload(payload) do
     instance_id = Map.get(payload, :instance_id, "test-instance-id")
 
+    serialized_sub_receipts =
+      payload
+      |> Map.get(:sub_receipts, [])
+      |> Enum.map(fn token -> "b0#{binary_to_hex(token)}" end)
+
     serialized_map_data = [
       ["ainstance_id", "b0#{binary_to_hex(instance_id)}"],
       ["amodule", "a#{payload.module}"],
       ["aname", "a#{payload.name}"],
       ["aparams", serialize_params(payload.params)],
+      ["asub_receipts", %{"t" => "l", "d" => serialized_sub_receipts}],
       ["atarget", "b0#{binary_to_hex(payload.target)}"]
     ]
 
@@ -652,22 +658,19 @@ defmodule Hologram.ControllerTest do
                ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_instance_id")], [Type.atom("params"), Type.map([[Type.atom("instance_id"), Type.bitstring("my-instance-id")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
     end
 
-    test "pre-populates server.subscriptions with only the target component's bindings on the request's instance_id" do
-      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
-      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
-
-      SubscriptionRegistry.apply_deltas(
-        "my-instance-id",
-        [{:room_a, "my_target_1"}, {:room_b, "other_target"}],
-        [],
-        "test-user-id"
-      )
-
+    test "pre-populates server.subscriptions with only the target component's receipts" do
+      # No registry entry is registered anywhere - the subscriptions come entirely from
+      # the tab's own signed receipts, which is what makes this work when the command
+      # lands on a node that does not hold the connection.
       payload = %{
         instance_id: "my-instance-id",
         module: Module6,
         name: :my_command_accessing_subscriptions,
         params: %{},
+        sub_receipts: [
+          Receipt.issue(:room_a, "my_target_1", "my-instance-id", nil),
+          Receipt.issue(:room_b, "other_target", "my-instance-id", nil)
+        ],
         target: "my_target_1"
       }
 
@@ -676,6 +679,27 @@ defmodule Hologram.ControllerTest do
 
       assert response["action"] ==
                ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("my_target_1")])])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+    end
+
+    test "ignores a receipt whose binding has been tombstoned" do
+      Tombstone.insert(
+        {{:instance, "my-instance-id"}, :room_a, "my_target_1"},
+        System.system_time(:millisecond)
+      )
+
+      payload = %{
+        instance_id: "my-instance-id",
+        module: Module6,
+        name: :my_command_accessing_subscriptions,
+        params: %{},
+        sub_receipts: [Receipt.issue(:room_a, "my_target_1", "my-instance-id", nil)],
+        target: "my_target_1"
+      }
+
+      conn = execute_command_request(payload)
+      response = Jason.decode!(conn.resp_body)
+
+      assert response["action"] =~ ~s'Type.atom("subscriptions"), Type.list([])'
     end
 
     test "pre-populates server.subscriptions to an empty list when no registry entry exists" do
@@ -1234,21 +1258,17 @@ defmodule Hologram.ControllerTest do
     end
 
     test "self-echoes reach every cid on the originating instance subscribed to the channel, not just the target" do
-      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
-      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
-
-      SubscriptionRegistry.apply_deltas(
-        "my-instance-id",
-        [{:room_a, "my_target_1"}, {:room_a, "sibling"}],
-        [],
-        "test-user-id"
-      )
-
+      # Again with no registry entry - the instance-wide echo set is derived from the
+      # receipts the tab presented.
       payload = %{
         instance_id: "my-instance-id",
         module: Module6,
         name: :my_command_self_echo_broadcast_only,
         params: %{},
+        sub_receipts: [
+          Receipt.issue(:room_a, "my_target_1", "my-instance-id", nil),
+          Receipt.issue(:room_a, "sibling", "my-instance-id", nil)
+        ],
         target: "my_target_1"
       }
 

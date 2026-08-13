@@ -138,11 +138,20 @@ defmodule Hologram.Controller do
         module: module,
         name: name,
         params: params,
+        sub_receipts: sub_receipts,
         target: target
       } = payload
 
       if caller_owns_instance_id?(conn, instance_id) do
-        handle_validated_command_request(conn, instance_id, module, name, params, target)
+        handle_validated_command_request(
+          conn,
+          instance_id,
+          module,
+          name,
+          params,
+          sub_receipts,
+          target
+        )
       else
         Logger.warning("instance_id cross-check failed")
 
@@ -177,8 +186,29 @@ defmodule Hologram.Controller do
     end
   end
 
-  defp handle_validated_command_request(conn, instance_id, module, name, params, target) do
-    bindings = SubscriptionRegistry.bindings_of(instance_id) || %{}
+  # The tab's own signed receipts stand in for a registry read, which would come back
+  # empty whenever the command lands on a node that does not hold the connection. A
+  # verified receipt is also the stronger statement: it is bound to this instance and
+  # checked against tombstones, where the local table only reports what it happens to
+  # know.
+  defp handle_validated_command_request(
+         conn,
+         instance_id,
+         module,
+         name,
+         params,
+         sub_receipts,
+         target
+       ) do
+    {validated_bindings, _refreshed_receipts} =
+      verify_and_refresh_receipts(
+        sub_receipts,
+        instance_id,
+        Session.get_session_id(conn),
+        Session.get_user_id(conn)
+      )
+
+    bindings = Map.new(validated_bindings)
 
     target_subscriptions =
       for {{_channel, cid} = key, _user_id} <- bindings, cid == target, do: key
