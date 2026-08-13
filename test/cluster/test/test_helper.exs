@@ -1,7 +1,8 @@
 # Boot the cluster test databases before the app starts: the app declares entities, which
 # activates the Hologram database - the databases themselves must exist before any pool
-# connects, on this node or on a peer.
-HologramClusterTests.DatabaseBootstrap.run!()
+# connects, on this node or on a peer. The second database is the one the migration
+# scenarios claim for the production mechanism.
+Hologram.Test.DatabaseBootstrap.run!(["hologram_cluster_tests_migrations"])
 
 Hologram.Test.setup()
 

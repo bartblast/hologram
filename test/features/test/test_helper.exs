@@ -1,7 +1,7 @@
 # Boot the feature test database before the app starts: the feature app declares
 # entities, which activates the Hologram database - the database itself must exist
 # before the pool connects, and the schema drop makes every run converge from scratch.
-HologramFeatureTests.DatabaseBootstrap.run!()
+Hologram.Test.DatabaseBootstrap.run!()
 
 Hologram.Test.setup()
 
