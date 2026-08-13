@@ -3,6 +3,14 @@ defmodule Hologram.Entity.Model do
 
   alias Hologram.Auth.RoleGrant
 
+  # Flag options, whose false is neutral. The option-introduction rule: no option may
+  # give nil (or false, for flags) a meaning distinct from absence - every option
+  # decides its neutral value at introduction, and normalization collapses neutrals to
+  # absence, so two spellings of one model always produce one term. Value options treat
+  # nil as neutral uniformly (default: false stays - a boolean default of false is a
+  # real default, not a flag).
+  @flag_opts [:creator, :optional, :server_only]
+
   @doc """
   Returns the empty model term - a model with no entity types and no global roles.
   """
@@ -57,6 +65,45 @@ defmodule Hologram.Entity.Model do
     Enum.reduce(ops, model, &apply_op/2)
   end
 
+  defp apply_op(%{op: :add_attribute} = op, model) do
+    add_member(model, op.entity, :attributes, "attribute", {op.name, op.type, op.opts})
+  end
+
+  defp apply_op(%{op: :add_relationship} = op, model) do
+    add_member(model, op.entity, :relationships, "relationship", {op.name, op.type, op.opts})
+  end
+
+  defp apply_op(%{op: :add_role, entity: _entity} = op, model) do
+    add_member(model, op.entity, :roles, "role", {op.name, op.opts})
+  end
+
+  defp apply_op(%{op: :change_attribute} = op, model) do
+    update_member(
+      model,
+      op.entity,
+      :attributes,
+      "attribute",
+      op.name,
+      &change_attribute_member(&1, op)
+    )
+  end
+
+  defp apply_op(%{op: :change_relationship} = op, model) do
+    update_member(model, op.entity, :relationships, "relationship", op.name, fn
+      {name, type, opts} ->
+        new_type = Keyword.get(op.changes, :type, type)
+        new_opts = Keyword.merge(opts, Keyword.delete(op.changes, :type))
+
+        {name, new_type, normalize_opts(new_opts)}
+    end)
+  end
+
+  defp apply_op(%{op: :change_role, entity: _entity} = op, model) do
+    update_member(model, op.entity, :roles, "role", op.name, fn {name, opts} ->
+      {name, normalize_opts(Keyword.merge(opts, op.changes))}
+    end)
+  end
+
   defp apply_op(%{op: :create_entity} = op, model) do
     validate_absent!(model, op.entity)
 
@@ -65,10 +112,26 @@ defmodule Hologram.Entity.Model do
     put_in(model, [:entities, op.entity], entry)
   end
 
+  defp apply_op(%{op: :delete_attribute} = op, model) do
+    delete_member(model, op.entity, :attributes, "attribute", op.name)
+  end
+
   defp apply_op(%{op: :delete_entity} = op, model) do
     fetch_entity!(model, op.entity)
 
     update_in(model, [:entities], &Map.delete(&1, op.entity))
+  end
+
+  defp apply_op(%{op: :delete_relationship} = op, model) do
+    delete_member(model, op.entity, :relationships, "relationship", op.name)
+  end
+
+  defp apply_op(%{op: :delete_role, entity: _entity} = op, model) do
+    delete_member(model, op.entity, :roles, "role", op.name)
+  end
+
+  defp apply_op(%{op: :rename_attribute} = op, model) do
+    rename_member(model, op.entity, :attributes, "attribute", op.from, op.to)
   end
 
   defp apply_op(%{op: :rename_entity} = op, model) do
@@ -84,11 +147,55 @@ defmodule Hologram.Entity.Model do
     %{model | entities: entities}
   end
 
+  defp apply_op(%{op: :rename_relationship} = op, model) do
+    rename_member(model, op.entity, :relationships, "relationship", op.from, op.to)
+  end
+
+  defp apply_op(%{op: :rename_role, entity: _entity} = op, model) do
+    rename_member(model, op.entity, :roles, "role", op.from, op.to)
+  end
+
   defp apply_op(%{op: :resolve!} = op, _model) do
     raise Hologram.CompileError,
       message:
         "unresolved resolve! op at line #{op.line} - " <>
           "a draft migration is resolved by hand before it can be replayed"
+  end
+
+  defp add_member(model, entity_type, list_key, kind, member) do
+    name = elem(member, 0)
+    members = members!(model, entity_type, list_key)
+
+    if member?(members, name) do
+      raise_member_exists!(kind, name, entity_type)
+    end
+
+    put_members(model, entity_type, list_key, [normalize_member(member) | members])
+  end
+
+  defp change_attribute_member({name, type, opts}, op) do
+    new_type = Keyword.get(op.changes, :type, type)
+
+    validate_values_change!(op, type, new_type)
+
+    new_opts =
+      opts
+      |> Keyword.merge(Keyword.delete(op.changes, :type))
+      |> prune_values(new_type)
+
+    validate_enum_values!(op, new_type, new_opts)
+
+    {name, new_type, normalize_opts(new_opts)}
+  end
+
+  defp delete_member(model, entity_type, list_key, kind, name) do
+    members = members!(model, entity_type, list_key)
+
+    if not member?(members, name) do
+      raise_no_member!(kind, name, entity_type)
+    end
+
+    put_members(model, entity_type, list_key, Enum.reject(members, &(elem(&1, 0) == name)))
   end
 
   defp fetch_entity!(model, entity_type) do
@@ -102,16 +209,77 @@ defmodule Hologram.Entity.Model do
     end
   end
 
+  defp member?(members, name) do
+    Enum.any?(members, &(elem(&1, 0) == name))
+  end
+
+  defp members!(model, entity_type, list_key) do
+    model
+    |> fetch_entity!(entity_type)
+    |> Map.fetch!(list_key)
+  end
+
+  defp normalize_member({name, type, opts}), do: {name, type, normalize_opts(opts)}
+
+  defp normalize_member({name, opts}), do: {name, normalize_opts(opts)}
+
   defp normalize_members(members) do
     members
-    |> Enum.map(fn {name, type, opts} -> {name, type, Enum.sort(opts)} end)
+    |> Enum.map(&normalize_member/1)
+    |> Enum.sort()
+  end
+
+  defp normalize_opts(opts) do
+    opts
+    |> Enum.reject(fn {key, value} -> is_nil(value) or (value == false and key in @flag_opts) end)
     |> Enum.sort()
   end
 
   defp normalize_roles(roles) do
     roles
-    |> Enum.map(fn {name, opts} -> {name, Enum.sort(opts)} end)
+    |> Enum.map(&normalize_member/1)
     |> Enum.sort()
+  end
+
+  defp prune_values(opts, :enum), do: opts
+
+  defp prune_values(opts, _type), do: Keyword.delete(opts, :values)
+
+  defp put_members(model, entity_type, list_key, members) do
+    put_in(model, [:entities, entity_type, list_key], Enum.sort(members))
+  end
+
+  defp raise_member_exists!(kind, name, entity_type) do
+    raise Hologram.CompileError,
+      message:
+        "#{kind} #{inspect(name)} already exists on #{inspect(entity_type)} " <>
+          "at this point in migration history"
+  end
+
+  defp raise_no_member!(kind, name, entity_type) do
+    raise Hologram.CompileError,
+      message:
+        "no such #{kind} #{inspect(name)} on #{inspect(entity_type)} " <>
+          "at this point in migration history"
+  end
+
+  defp rename_member(model, entity_type, list_key, kind, from, to) do
+    members = members!(model, entity_type, list_key)
+
+    if not member?(members, from) do
+      raise_no_member!(kind, from, entity_type)
+    end
+
+    if member?(members, to) do
+      raise_member_exists!(kind, to, entity_type)
+    end
+
+    renamed =
+      Enum.map(members, fn member ->
+        if elem(member, 0) == from, do: put_elem(member, 0, to), else: member
+      end)
+
+    put_members(model, entity_type, list_key, renamed)
   end
 
   # A renamed entity type is still the target of every relationship that pointed at it,
@@ -127,11 +295,52 @@ defmodule Hologram.Entity.Model do
     %{entry | relationships: relationships}
   end
 
+  defp update_member(model, entity_type, list_key, kind, name, fun) do
+    members = members!(model, entity_type, list_key)
+
+    if not member?(members, name) do
+      raise_no_member!(kind, name, entity_type)
+    end
+
+    updated =
+      Enum.map(members, fn member ->
+        if elem(member, 0) == name, do: fun.(member), else: member
+      end)
+
+    put_members(model, entity_type, list_key, updated)
+  end
+
   defp validate_absent!(model, entity_type) do
     if Map.has_key?(model.entities, entity_type) do
       raise Hologram.CompileError,
         message:
           "entity #{inspect(entity_type)} already exists at this point in migration history"
+    end
+  end
+
+  defp validate_enum_values!(op, :enum, opts) do
+    if opts[:values] in [nil, []] do
+      raise Hologram.CompileError,
+        message:
+          "changing attribute #{inspect(op.name)} on #{inspect(op.entity)} " <>
+            "to :enum requires values:"
+    end
+  end
+
+  defp validate_enum_values!(_op, _type, _opts), do: :ok
+
+  # The rename-vs-replace footgun guard: writing a new value list is never a legal
+  # move - the only exception is a type change TO :enum, which must bring the initial
+  # values.
+  defp validate_values_change!(op, old_type, new_type) do
+    becoming_enum? = old_type != :enum and new_type == :enum
+
+    if Keyword.has_key?(op.changes, :values) and not becoming_enum? do
+      raise Hologram.CompileError,
+        message:
+          "enum values change through add_enum_value, rename_enum_value, " <>
+            "delete_enum_value, or reorder_enum_values - change_attribute never " <>
+            "carries values:"
     end
   end
 end
