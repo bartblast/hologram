@@ -56,6 +56,11 @@ defmodule Hologram.Migration.Loader do
   after it must be a migration op - anything else raises, naming the file and the line.
   """
   @spec load_string!(String.t(), String.t()) :: list(%{atom => any})
+  # Migration files are the app's own code artifacts - generated into priv/, reviewed
+  # in PRs, and shipped with the release like any source file. Evaluating them is the
+  # format's designed behavior, and whoever could plant a malicious migration could
+  # plant a malicious module instead.
+  # sobelow_skip ["RCE.CodeModule"]
   def load_string!(contents, path) do
     [header | op_statements] =
       contents
