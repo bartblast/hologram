@@ -104,6 +104,213 @@ defmodule Hologram.Migration.DiffTest do
              }
     end
 
+    test "emits member add and delete ops for a surviving entity type" do
+      replayed =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:title, :string, []}],
+            relationships: [{:legacy_project, MyApp.Project, []}]
+          }
+        })
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:priority, :integer, [optional: true]}, {:title, :string, []}],
+            roles: [{:editor, []}]
+          }
+        })
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :add_attribute,
+                   entity: MyApp.Task,
+                   name: :priority,
+                   type: :integer,
+                   opts: [optional: true]
+                 },
+                 %{op: :delete_relationship, entity: MyApp.Task, name: :legacy_project},
+                 %{op: :add_role, entity: MyApp.Task, name: :editor, opts: []}
+               ],
+               questions: []
+             }
+    end
+
+    test "emits change deltas for surviving members" do
+      replayed =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:estimate, :integer, [default: 0, min: 0, optional: true]}],
+            relationships: [{:tags, [MyApp.Tag], []}],
+            roles: [{:owner, [creator: true]}]
+          }
+        })
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:estimate, :float, [max: 10, min: 0]}],
+            relationships: [{:tags, [MyApp.Label], [optional: true]}],
+            roles: [{:owner, [extends: :editor]}]
+          }
+        })
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :change_attribute,
+                   entity: MyApp.Task,
+                   name: :estimate,
+                   changes: [default: nil, max: 10, optional: false, type: :float]
+                 },
+                 %{
+                   op: :change_relationship,
+                   entity: MyApp.Task,
+                   name: :tags,
+                   changes: [optional: true, type: [MyApp.Label]]
+                 },
+                 %{
+                   op: :change_role,
+                   entity: MyApp.Task,
+                   name: :owner,
+                   changes: [creator: false, extends: :editor]
+                 }
+               ],
+               questions: []
+             }
+    end
+
+    test "includes the initial values when an attribute becomes an enum" do
+      replayed = model(%{MyApp.Task => %{attributes: [{:status, :string, []}]}})
+
+      current =
+        model(%{MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :done]]}]}})
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :change_attribute,
+                   entity: MyApp.Task,
+                   name: :status,
+                   changes: [type: :enum, values: [:todo, :done]]
+                 }
+               ],
+               questions: []
+             }
+    end
+
+    test "excludes the values from the delta of a surviving enum attribute" do
+      replayed =
+        model(%{MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :done]]}]}})
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:status, :enum, [optional: true, values: [:todo, :done, :archived]]}]
+          }
+        })
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :change_attribute,
+                   entity: MyApp.Task,
+                   name: :status,
+                   changes: [optional: true]
+                 }
+               ],
+               questions: []
+             }
+    end
+
+    test "excludes the values from the delta when an attribute leaves enum" do
+      replayed =
+        model(%{MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :done]]}]}})
+
+      current = model(%{MyApp.Task => %{attributes: [{:status, :string, []}]}})
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :change_attribute,
+                   entity: MyApp.Task,
+                   name: :status,
+                   changes: [type: :string]
+                 }
+               ],
+               questions: []
+             }
+    end
+
+    test "withholds member additions and deletions into a question" do
+      replayed =
+        model(%{
+          MyApp.Task => %{
+            attributes: [
+              {:estimate, :integer, []},
+              {:name, :string, []},
+              {:notes, :string, []}
+            ]
+          }
+        })
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:estimate, :float, []}, {:title, :string, []}]
+          }
+        })
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :change_attribute,
+                   entity: MyApp.Task,
+                   name: :estimate,
+                   changes: [type: :float]
+                 }
+               ],
+               questions: [
+                 %{
+                   kind: :attributes,
+                   entity: MyApp.Task,
+                   deleted: [:name, :notes],
+                   added: [:title],
+                   hints: [],
+                   withheld_ops: [
+                     %{
+                       op: :add_attribute,
+                       entity: MyApp.Task,
+                       name: :title,
+                       type: :string,
+                       opts: []
+                     },
+                     %{op: :delete_attribute, entity: MyApp.Task, name: :name},
+                     %{op: :delete_attribute, entity: MyApp.Task, name: :notes}
+                   ]
+                 }
+               ]
+             }
+    end
+
+    test "hints the unambiguous same-type pair in a member question" do
+      replayed =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:name, :string, []}, {:priority, :integer, []}]
+          }
+        })
+
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      assert %{questions: [question]} = diff(replayed, current)
+
+      assert question.hints == [{:rename, :name, :title}]
+      assert question.deleted == [:name, :priority]
+      assert question.added == [:title]
+    end
+
     test "emits global role ops" do
       replayed =
         model(%{}, %{
