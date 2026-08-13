@@ -42,12 +42,14 @@ describe("Client", () => {
 
     beforeEach(() => {
       ComponentRegistry.clear();
+      App.subscriptionReceiptRegistry.entries.clear();
 
       originalInstanceId = App.instanceId;
       App.instanceId = "test-instance-id";
     });
 
     afterEach(() => {
+      App.subscriptionReceiptRegistry.entries.clear();
       App.instanceId = originalInstanceId;
     });
 
@@ -62,10 +64,41 @@ describe("Client", () => {
         [Type.atom("module"), module],
         [Type.atom("name"), name],
         [Type.atom("params"), params],
+        [Type.atom("sub_receipts"), Type.list([])],
         [Type.atom("target"), target],
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("includes the tokens held in the subscription receipt registry", () => {
+      const entry = componentRegistryEntryFixture({module: module});
+      ComponentRegistry.putEntry(target, entry);
+
+      App.subscriptionReceiptRegistry.entries.set(
+        encodedSubscriptionReceiptKey(Type.atom("room_a"), "page"),
+        Type.tuple([
+          Type.atom("room_a"),
+          Type.bitstring("page"),
+          Type.bitstring("token-a"),
+        ]),
+      );
+
+      App.subscriptionReceiptRegistry.entries.set(
+        encodedSubscriptionReceiptKey(Type.atom("room_b"), "comp_1"),
+        Type.tuple([
+          Type.atom("room_b"),
+          Type.bitstring("comp_1"),
+          Type.bitstring("token-b"),
+        ]),
+      );
+
+      const result = Client.buildCommandPayload(command);
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("sub_receipts"), result),
+        Type.list([Type.bitstring("token-a"), Type.bitstring("token-b")]),
+      );
     });
 
     it("throws error when target component is not registered", () => {
@@ -617,6 +650,7 @@ describe("Client", () => {
             [Type.atom("module"), module],
             [Type.atom("name"), name],
             [Type.atom("params"), params],
+            [Type.atom("sub_receipts"), Type.list([])],
             [Type.atom("target"), target],
           ]),
           "server",
