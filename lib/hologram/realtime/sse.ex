@@ -125,8 +125,6 @@ defmodule Hologram.Realtime.SSE do
       # A subscription granted from outside any handler. The binding is registered and
       # its receipt signed here rather than by the grantor, so the authorization carries
       # the identity this connection holds at delivery time.
-      #
-      # TODO: nothing publishes this yet - Realtime.subscribe/3 will.
       {:add_subscription, channel, cid} ->
         conn = Plug.Conn.fetch_query_params(conn)
         instance_id = conn.query_params["instance_id"]
@@ -145,8 +143,6 @@ defmodule Hologram.Realtime.SSE do
       # Deltas a node that does not hold this connection could not apply itself. The
       # instance id travels in the message rather than being read from the query params,
       # since the sender identified the connection, not this stream.
-      #
-      # TODO: nothing publishes this yet - the registry's lookup-miss path will.
       {:apply_deltas_remote, instance_id, adds, drops, authorizing_user_id, reply_to, waiter_ref} ->
         result =
           SubscriptionRegistry.apply_deltas(instance_id, adds, drops, authorizing_user_id)
@@ -228,8 +224,6 @@ defmodule Hologram.Realtime.SSE do
       # A page render declares the complete subscription set, so the bindings are
       # replaced rather than folded. Nothing is answered - the renderer computed the
       # client's diff without the registry.
-      #
-      # TODO: nothing publishes this yet - the page-render path will.
       {:replace_subscriptions, new_sub_keys, authorizing_user_id} ->
         conn = Plug.Conn.fetch_query_params(conn)
         instance_id = conn.query_params["instance_id"]
