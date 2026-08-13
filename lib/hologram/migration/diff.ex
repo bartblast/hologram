@@ -103,6 +103,8 @@ defmodule Hologram.Migration.Diff do
     old_by_name = Map.new(old_members, fn {name, type, opts} -> {name, {type, opts}} end)
     change_ops = Enum.flat_map(new_members, &attribute_change_op(entity_type, old_by_name, &1))
 
+    enum_plans = Enum.map(new_members, &enum_value_plan(entity_type, old_by_name, &1))
+
     question_fun = fn withheld_ops ->
       deleted_members = Enum.filter(old_members, &(elem(&1, 0) in deleted))
       added_members = Enum.filter(new_members, &(elem(&1, 0) in added))
@@ -117,7 +119,9 @@ defmodule Hologram.Migration.Diff do
       }
     end
 
-    class_plan(add_ops, change_ops, delete_ops, deleted, added, question_fun)
+    class_plan = class_plan(add_ops, change_ops, delete_ops, deleted, added, question_fun)
+
+    merge_plans([class_plan | enum_plans])
   end
 
   defp diff_entities(replayed, current) do
@@ -283,6 +287,115 @@ defmodule Hologram.Migration.Diff do
     end
   end
 
+  # The replace interpretation of an enum value change: drop what left, add what arrived
+  # positioned against the values already in place, and reorder when the surviving
+  # values also moved (positions alone cannot express that).
+  defp enum_replace_ops(entity_type, attribute, old_values, new_values) do
+    deleted = old_values -- new_values
+    surviving = old_values -- deleted
+
+    delete_ops =
+      Enum.map(deleted, fn value ->
+        %{op: :delete_enum_value, entity: entity_type, attribute: attribute, value: value}
+      end)
+
+    {add_ops, placed} = enum_add_ops(entity_type, attribute, surviving, new_values)
+
+    reorder_ops =
+      if placed == new_values do
+        []
+      else
+        [
+          %{
+            op: :reorder_enum_values,
+            entity: entity_type,
+            attribute: attribute,
+            values: new_values
+          }
+        ]
+      end
+
+    delete_ops ++ add_ops ++ reorder_ops
+  end
+
+  defp enum_add_ops(entity_type, attribute, surviving, new_values) do
+    added = Enum.reject(new_values, &(&1 in surviving))
+
+    {reversed_ops, placed} =
+      Enum.reduce(added, {[], surviving}, fn value, {ops, placed} ->
+        opts = enum_position_opts(value, new_values, placed)
+
+        op = %{
+          op: :add_enum_value,
+          entity: entity_type,
+          attribute: attribute,
+          value: value,
+          opts: opts
+        }
+
+        {[op | ops], place_enum_value(placed, value, opts)}
+      end)
+
+    {Enum.reverse(reversed_ops), placed}
+  end
+
+  # A new value is placed after the nearest already-placed value preceding it, or before
+  # the nearest one following it when it comes first - an all-new list just appends.
+  defp enum_position_opts(value, new_values, placed) do
+    index = Enum.find_index(new_values, &(&1 == value))
+    {preceding, [_value | following]} = Enum.split(new_values, index)
+
+    preceding_ref =
+      preceding
+      |> Enum.reverse()
+      |> Enum.find(&(&1 in placed))
+
+    following_ref = Enum.find(following, &(&1 in placed))
+
+    cond do
+      preceding_ref -> [after: preceding_ref]
+      following_ref -> [before: following_ref]
+      true -> []
+    end
+  end
+
+  defp enum_value_plan(entity_type, old_by_name, {name, :enum, new_opts}) do
+    case old_by_name[name] do
+      {:enum, old_opts} ->
+        old_values = Keyword.fetch!(old_opts, :values)
+        new_values = Keyword.fetch!(new_opts, :values)
+
+        enum_values_plan(entity_type, name, old_values, new_values)
+
+      _other ->
+        {[], []}
+    end
+  end
+
+  defp enum_value_plan(_entity_type, _old_by_name, _member), do: {[], []}
+
+  defp enum_values_plan(entity_type, attribute, old_values, new_values) do
+    deleted = old_values -- new_values
+    added = new_values -- old_values
+    ops = enum_replace_ops(entity_type, attribute, old_values, new_values)
+
+    if deleted != [] and added != [] do
+      question = %{
+        kind: :enum_values,
+        entity: entity_type,
+        attribute: attribute,
+        deleted: deleted,
+        added: added,
+        hints: pair_hint(deleted, added),
+        withheld_ops: ops
+      }
+
+      {[], [question]}
+    else
+      {ops, []}
+    end
+  end
+
   defp entity_role_change_op(entity_type, old_by_name, {name, new_opts}) do
     case old_by_name[name] do
       nil ->
@@ -345,6 +458,19 @@ defmodule Hologram.Migration.Diff do
   defp pair_hint([old], [new]), do: [{:rename, old, new}]
 
   defp pair_hint(_deleted, _added), do: []
+
+  defp place_enum_value(placed, value, opts) do
+    cond do
+      opts[:after] ->
+        List.insert_at(placed, Enum.find_index(placed, &(&1 == opts[:after])) + 1, value)
+
+      opts[:before] ->
+        List.insert_at(placed, Enum.find_index(placed, &(&1 == opts[:before])), value)
+
+      true ->
+        List.insert_at(placed, -1, value)
+    end
+  end
 
   defp relationship_change_op(entity_type, old_by_name, {name, new_type, new_opts}) do
     case old_by_name[name] do

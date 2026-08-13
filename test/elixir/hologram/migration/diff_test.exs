@@ -218,6 +218,13 @@ defmodule Hologram.Migration.DiffTest do
                    entity: MyApp.Task,
                    name: :status,
                    changes: [optional: true]
+                 },
+                 %{
+                   op: :add_enum_value,
+                   entity: MyApp.Task,
+                   attribute: :status,
+                   value: :archived,
+                   opts: [after: :done]
                  }
                ],
                questions: []
@@ -309,6 +316,161 @@ defmodule Hologram.Migration.DiffTest do
       assert question.hints == [{:rename, :name, :title}]
       assert question.deleted == [:name, :priority]
       assert question.added == [:title]
+    end
+
+    test "positions added enum values against the values already in place" do
+      replayed =
+        model(%{MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :done]]}]}})
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:status, :enum, [values: [:draft, :todo, :doing, :done, :archived]]}]
+          }
+        })
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :add_enum_value,
+                   entity: MyApp.Task,
+                   attribute: :status,
+                   value: :draft,
+                   opts: [before: :todo]
+                 },
+                 %{
+                   op: :add_enum_value,
+                   entity: MyApp.Task,
+                   attribute: :status,
+                   value: :doing,
+                   opts: [after: :todo]
+                 },
+                 %{
+                   op: :add_enum_value,
+                   entity: MyApp.Task,
+                   attribute: :status,
+                   value: :archived,
+                   opts: [after: :done]
+                 }
+               ],
+               questions: []
+             }
+    end
+
+    test "emits delete ops for removed enum values" do
+      replayed =
+        model(%{
+          MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :doing, :done]]}]}
+        })
+
+      current =
+        model(%{MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :done]]}]}})
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :delete_enum_value,
+                   entity: MyApp.Task,
+                   attribute: :status,
+                   value: :doing
+                 }
+               ],
+               questions: []
+             }
+    end
+
+    test "emits a reorder op for an order-only enum change" do
+      replayed =
+        model(%{
+          MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :doing, :done]]}]}
+        })
+
+      current =
+        model(%{
+          MyApp.Task => %{attributes: [{:status, :enum, [values: [:done, :todo, :doing]]}]}
+        })
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :reorder_enum_values,
+                   entity: MyApp.Task,
+                   attribute: :status,
+                   values: [:done, :todo, :doing]
+                 }
+               ],
+               questions: []
+             }
+    end
+
+    test "follows added enum values with a reorder when the surviving values also moved" do
+      replayed =
+        model(%{MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :done]]}]}})
+
+      current =
+        model(%{
+          MyApp.Task => %{attributes: [{:status, :enum, [values: [:done, :doing, :todo]]}]}
+        })
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :add_enum_value,
+                   entity: MyApp.Task,
+                   attribute: :status,
+                   value: :doing,
+                   opts: [after: :done]
+                 },
+                 %{
+                   op: :reorder_enum_values,
+                   entity: MyApp.Task,
+                   attribute: :status,
+                   values: [:done, :doing, :todo]
+                 }
+               ],
+               questions: []
+             }
+    end
+
+    test "withholds enum value additions and deletions into a question" do
+      replayed =
+        model(%{
+          MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :done]]}]}
+        })
+
+      current =
+        model(%{
+          MyApp.Task => %{attributes: [{:status, :enum, [values: [:todo, :completed]]}]}
+        })
+
+      assert diff(replayed, current) == %{
+               ops: [],
+               questions: [
+                 %{
+                   kind: :enum_values,
+                   entity: MyApp.Task,
+                   attribute: :status,
+                   deleted: [:done],
+                   added: [:completed],
+                   hints: [{:rename, :done, :completed}],
+                   withheld_ops: [
+                     %{
+                       op: :delete_enum_value,
+                       entity: MyApp.Task,
+                       attribute: :status,
+                       value: :done
+                     },
+                     %{
+                       op: :add_enum_value,
+                       entity: MyApp.Task,
+                       attribute: :status,
+                       value: :completed,
+                       opts: [after: :todo]
+                     }
+                   ]
+                 }
+               ]
+             }
     end
 
     test "emits global role ops" do
