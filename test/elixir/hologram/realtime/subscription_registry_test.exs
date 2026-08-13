@@ -24,6 +24,15 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     :ok
   end
 
+  defp flush_remote_requests do
+    receive do
+      {:apply_deltas_remote, _instance_id, _adds, _drops, _user_id, _registry_pid, _waiter_ref} ->
+        flush_remote_requests()
+    after
+      0 -> :ok
+    end
+  end
+
   # Issues apply_deltas/4 from a task and returns once the registry has actually
   # parked it, so a test can attach without racing the park.
   defp park_apply_deltas(instance_id, adds, drops, authorizing_user_id) do
@@ -333,6 +342,50 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
       refute_receive {:apply_deltas_remote, _instance_id, _adds, _drops, _user_id, _pid,
                       _waiter_ref}
+    end
+
+    test "repeats the ask while the caller stays parked" do
+      stop_supervised!(SubscriptionRegistry)
+
+      start_supervised!({SubscriptionRegistry, attach_wait_ms: 200, republish_interval_ms: 10})
+
+      instance_id = "test-unknown-instance-id"
+      Phoenix.PubSub.subscribe(Hologram.PubSub, Realtime.instance_announce_topic(instance_id))
+
+      capture_log(fn ->
+        apply_deltas(instance_id, [{:room_a, "page"}], [], "test-user-id")
+      end)
+
+      assert_receive {:apply_deltas_remote, ^instance_id, [{:room_a, "page"}], [], "test-user-id",
+                      _registry_pid, waiter_ref}
+
+      assert_receive {:apply_deltas_remote, ^instance_id, [{:room_a, "page"}], [], "test-user-id",
+                      _registry_pid, ^waiter_ref}
+    end
+
+    test "stops repeating once the caller is released" do
+      stop_supervised!(SubscriptionRegistry)
+
+      start_supervised!({SubscriptionRegistry, attach_wait_ms: 2_000, republish_interval_ms: 10})
+
+      instance_id = "test-instance-id"
+      Phoenix.PubSub.subscribe(Hologram.PubSub, Realtime.instance_announce_topic(instance_id))
+
+      task = park_apply_deltas(instance_id, [{:room_a, "page"}], [], "test-user-id")
+
+      assert_receive {:apply_deltas_remote, ^instance_id, _adds, _drops, _user_id, registry_pid,
+                      waiter_ref}
+
+      send(registry_pid, {:apply_deltas_remote_reply, instance_id, waiter_ref, {[], []}})
+      Task.await(task)
+
+      # Give in-flight ticks time to drain, then a released waiter must stay silent.
+      Process.sleep(50)
+      flush_remote_requests()
+
+      refute_receive {:apply_deltas_remote, _instance_id, _adds, _drops, _user_id, _registry_pid,
+                      _waiter_ref},
+                     100
     end
 
     test "logs the unapplied deltas when no connection attaches within the wait window" do
@@ -1007,6 +1060,27 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       )
 
       assert :sys.get_state(SubscriptionRegistry) == state_before
+    end
+  end
+
+  describe "handle {:apply_deltas_republish, ...}" do
+    test "is a no-op when no waiter carries the ref" do
+      Phoenix.PubSub.subscribe(
+        Hologram.PubSub,
+        Realtime.instance_announce_topic("test-instance-id")
+      )
+
+      state_before = :sys.get_state(SubscriptionRegistry)
+
+      send(
+        Process.whereis(SubscriptionRegistry),
+        {:apply_deltas_republish, "test-instance-id", make_ref()}
+      )
+
+      assert :sys.get_state(SubscriptionRegistry) == state_before
+
+      refute_receive {:apply_deltas_remote, _instance_id, _adds, _drops, _user_id, _registry_pid,
+                      _waiter_ref}
     end
   end
 

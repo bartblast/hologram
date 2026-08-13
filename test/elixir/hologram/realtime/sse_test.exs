@@ -376,6 +376,38 @@ defmodule Hologram.Realtime.SSETest do
       assert_receive {:apply_deltas_remote_reply, ^instance_id, ^waiter_ref, {[], []}}
     end
 
+    test "registers the binding once when the same request is delivered twice" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      :ok = SubscriptionRegistry.register_connection(instance_id, self())
+
+      conn = prepared_test_conn()
+      waiter_ref = make_ref()
+
+      request =
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [], "test-user-id", self(),
+         waiter_ref}
+
+      send(self(), request)
+      send(self(), request)
+
+      process_message(conn, nil, nil)
+      assert_receive {:sub, :room_a}
+      process_message(conn, nil, nil)
+
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{
+               {:room_a, "page"} => "test-user-id"
+             }
+
+      # The first answer carries the applied deltas, the duplicate answers filtered-empty
+      # - and the requester drops whichever arrives after its waiter is gone.
+      assert_receive {:apply_deltas_remote_reply, ^instance_id, ^waiter_ref,
+                      {[{:room_a, "page"}], []}}
+
+      assert_receive {:apply_deltas_remote_reply, ^instance_id, ^waiter_ref, {[], []}}
+
+      refute_receive {:sub, :room_a}
+    end
+
     test "emits the zero-crossing for a channel the deltas newly bind" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       :ok = SubscriptionRegistry.register_connection(instance_id, self())

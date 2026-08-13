@@ -40,6 +40,13 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   # response while a working recovery is already under way.
   @attach_wait_ms @client_round_trip_ms + @redeem_wait_ms + @server_queueing_ms
 
+  # A single routed ask can be published before the connection has attached anywhere -
+  # into an announce topic nobody subscribes to yet - and a lost publish is never
+  # retried by PubSub. So a parked caller repeats the ask on this cadence until it is
+  # released or times out. Policy: fast enough that an attach at any point inside the
+  # window is heard within half a second, bounded to ~10 cheap publishes worst case.
+  @republish_interval_ms 500
+
   @table_name :hologram_subscriptions
 
   @doc """
@@ -87,8 +94,12 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
       issued.
 
     * The node that holds the connection, which is asked over the instance's
-      announce topic when the caller is parked, applies the deltas against its
-      own registry and answers.
+      announce topic, applies the deltas against its own registry and answers.
+      The ask is repeated on a short cadence while the caller stays parked,
+      since the first one can fire before the connection has attached anywhere -
+      into an announce topic with no subscriber yet. Repeats are harmless:
+      applying the same deltas again is a no-op, and a second answer finds no
+      waiter carrying its ref.
 
   If no connection attaches within `attach_wait_ms/0`, no entry is created and
   no zero-crossing messages are emitted, and the input `adds` and `drops` are
@@ -317,6 +328,9 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
     * `:attach_wait_ms` - overrides how long `apply_deltas/4` parks a caller
       whose instance has no entry yet. Defaults to `attach_wait_ms/0`.
+
+    * `:republish_interval_ms` - overrides the cadence on which a parked
+      caller's routed ask is repeated.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -337,11 +351,18 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
 
     attach_wait_ms = Keyword.get(opts, :attach_wait_ms, @attach_wait_ms)
+    republish_interval_ms = Keyword.get(opts, :republish_interval_ms, @republish_interval_ms)
 
     # `refs` maps each monitor reference to its instance_id, so a :DOWN can find
     # the entry to delete. `waiters` holds callers parked because their instance
     # has no entry yet, keyed by instance_id.
-    {:ok, %{attach_wait_ms: attach_wait_ms, refs: %{}, waiters: %{}}}
+    {:ok,
+     %{
+       attach_wait_ms: attach_wait_ms,
+       refs: %{},
+       republish_interval_ms: republish_interval_ms,
+       waiters: %{}
+     }}
   end
 
   @impl GenServer
@@ -359,13 +380,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
         {new_state, waiter_ref} =
           park_caller(state, instance_id, from, adds, drops, authorizing_user_id)
 
-        topic = Realtime.instance_announce_topic(instance_id)
-
-        message =
-          {:apply_deltas_remote, instance_id, adds, drops, authorizing_user_id, self(),
-           waiter_ref}
-
-        Phoenix.PubSub.broadcast(Hologram.PubSub, topic, message)
+        publish_remote_request(instance_id, adds, drops, authorizing_user_id, waiter_ref)
 
         {:noreply, new_state}
     end
@@ -542,6 +557,23 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @impl GenServer
+  def handle_info({:apply_deltas_republish, instance_id, waiter_ref}, state) do
+    case find_waiter(state.waiters, instance_id, waiter_ref) do
+      # Released or timed out in the meantime - the cadence simply stops.
+      nil ->
+        {:noreply, state}
+
+      {_from, _ref, adds, drops, authorizing_user_id} ->
+        publish_remote_request(instance_id, adds, drops, authorizing_user_id, waiter_ref)
+
+        republish_message = {:apply_deltas_republish, instance_id, waiter_ref}
+        Process.send_after(self(), republish_message, state.republish_interval_ms)
+
+        {:noreply, state}
+    end
+  end
+
+  @impl GenServer
   def handle_info({:apply_deltas_timeout, instance_id, timer_ref}, state) do
     case pop_waiter(state.waiters, instance_id, timer_ref) do
       {nil, _waiters} ->
@@ -618,6 +650,12 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     |> Enum.each(fn channel -> send(sse_pid, {:unsub, channel}) end)
   end
 
+  defp find_waiter(waiters, instance_id, waiter_ref) do
+    waiters
+    |> Map.get(instance_id, [])
+    |> Enum.find(fn {_from, ref, _adds, _drops, _user_id} -> ref == waiter_ref end)
+  end
+
   defp log_unapplied_deltas(instance_id, adds, drops, wait_ms) do
     message = """
     No connection attached for instance #{inspect(instance_id)} within #{wait_ms}ms, \
@@ -633,8 +671,10 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   defp park_caller(state, instance_id, from, adds, drops, authorizing_user_id) do
     timer_ref = make_ref()
     timeout_message = {:apply_deltas_timeout, instance_id, timer_ref}
+    republish_message = {:apply_deltas_republish, instance_id, timer_ref}
 
     Process.send_after(self(), timeout_message, state.attach_wait_ms)
+    Process.send_after(self(), republish_message, state.republish_interval_ms)
 
     # The timer is left to fire even when the waiter is released early. Its handler
     # matches on timer_ref, finds nothing, and returns - cheaper than tracking a
@@ -675,6 +715,15 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
         {waiter, remaining_waiters}
     end
+  end
+
+  defp publish_remote_request(instance_id, adds, drops, authorizing_user_id, waiter_ref) do
+    topic = Realtime.instance_announce_topic(instance_id)
+
+    message =
+      {:apply_deltas_remote, instance_id, adds, drops, authorizing_user_id, self(), waiter_ref}
+
+    Phoenix.PubSub.broadcast(Hologram.PubSub, topic, message)
   end
 
   defp unsub_channels(prior_channels, new_channels) do
