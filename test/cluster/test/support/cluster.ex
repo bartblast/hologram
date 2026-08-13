@@ -133,8 +133,13 @@ defmodule HologramClusterTests.Cluster do
 
     # Peers die with the test process through the link, but asynchronously - and the next
     # test claims the same node names and ports. Waiting here is what keeps that handover
-    # from racing.
-    ExUnit.Callbacks.on_exit(fn -> stop_peer(peer) end)
+    # from racing. Outside a test there is nothing to register the wait with, and nothing
+    # queued behind this peer either, so a probe run from iex or `mix run` skips it.
+    try do
+      ExUnit.Callbacks.on_exit(fn -> stop_peer(peer) end)
+    rescue
+      ArgumentError -> :ok
+    end
 
     peer
   end
