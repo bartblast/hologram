@@ -143,11 +143,19 @@ defmodule Hologram.Realtime.SSE do
       # Deltas a node that does not hold this connection could not apply itself. The
       # instance id travels in the message rather than being read from the query params,
       # since the sender identified the connection, not this stream.
+      #
+      # Only the node holding the connection answers. Being subscribed to the announce
+      # topic implies holding the entry in every steady state, but not in recovery ones
+      # (a registry restart empties the table while streams live on) - and applying
+      # against a missing entry would park this pump for the whole attach window.
+      # Staying silent leaves the ask to the requester's republish cadence instead.
       {:apply_deltas_remote, instance_id, adds, drops, authorizing_user_id, reply_to, waiter_ref} ->
-        result =
-          SubscriptionRegistry.apply_deltas(instance_id, adds, drops, authorizing_user_id)
+        if SubscriptionRegistry.bindings_of(instance_id) do
+          result =
+            SubscriptionRegistry.apply_deltas(instance_id, adds, drops, authorizing_user_id)
 
-        send(reply_to, {:apply_deltas_remote_reply, instance_id, waiter_ref, result})
+          send(reply_to, {:apply_deltas_remote_reply, instance_id, waiter_ref, result})
+        end
 
         {:cont, conn}
 

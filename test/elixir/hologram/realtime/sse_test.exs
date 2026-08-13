@@ -439,6 +439,24 @@ defmodule Hologram.Realtime.SSETest do
 
       assert process_message(conn, nil, nil) == {:cont, conn}
     end
+
+    test "stays silent when this node does not hold the connection" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      conn = prepared_test_conn()
+      waiter_ref = make_ref()
+
+      send(
+        self(),
+        {:apply_deltas_remote, instance_id, [{:room_a, "page"}], [], "test-user-id", self(),
+         waiter_ref}
+      )
+
+      assert process_message(conn, nil, nil) == {:cont, conn}
+
+      assert SubscriptionRegistry.bindings_of(instance_id) == nil
+      refute_receive {:apply_deltas_remote_reply, ^instance_id, ^waiter_ref, _result}
+    end
   end
 
   describe "process_message/4 on {:broadcast_action, ...}" do
