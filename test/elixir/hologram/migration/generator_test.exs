@@ -149,6 +149,139 @@ defmodule Hologram.Migration.GeneratorTest do
       assert render(plan) == normalize_newlines(expected)
     end
 
+    test "renders an entity-scoped question inside its block, before the ops" do
+      plan = %{
+        ops: [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :priority,
+            type: :integer,
+            opts: [backfill: 0]
+          }
+        ],
+        questions: [
+          %{
+            kind: :attributes,
+            entity: MyApp.Task,
+            deleted: [:desc, :name],
+            added: [:body, :title],
+            hints: [{:rename, :name, :title}],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      expected = """
+      use Hologram.Migration
+
+      change_entity MyApp.Task do
+        # RESOLVE: :desc, :name disappeared from the attributes - :body, :title appeared.
+        # Write the ops that express what happened, then delete the resolve! line. API:
+        #   rename_attribute :old, :new             - the column is renamed, its data kept
+        #   delete_attribute :name                  - the column and its data are dropped
+        #   add_attribute :name, :type, opts        - a new column, empty for existing rows
+        # Looks likely: rename_attribute :name, :title
+        resolve! :attributes, deleted: [:desc, :name], added: [:body, :title]
+        add_attribute :priority, :integer, backfill: 0
+      end
+      """
+
+      assert render(plan) == normalize_newlines(expected)
+    end
+
+    test "renders an entity question at the top level" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :entities,
+            deleted: [MyApp.Draft],
+            added: [MyApp.Sketch],
+            hints: [{:rename, MyApp.Draft, MyApp.Sketch}],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      expected = """
+      use Hologram.Migration
+
+      # RESOLVE: MyApp.Draft disappeared from the entity types - MyApp.Sketch appeared.
+      # Write the ops that express what happened, then delete the resolve! line. API:
+      #   rename_entity MyApp.Old, MyApp.New      - the table is renamed, its rows kept
+      #   delete_entity MyApp.Old                 - the table and its rows are dropped
+      #   create_entity MyApp.New do ... end      - a new table
+      # Looks likely: rename_entity MyApp.Draft, MyApp.Sketch
+      resolve! :entities, deleted: [MyApp.Draft], added: [MyApp.Sketch]
+      """
+
+      assert render(plan) == normalize_newlines(expected)
+    end
+
+    test "names the attribute in an enum value question" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :enum_values,
+            entity: MyApp.Task,
+            attribute: :status,
+            deleted: [:done],
+            added: [:completed],
+            hints: [{:rename, :done, :completed}],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      expected = """
+      use Hologram.Migration
+
+      change_entity MyApp.Task do
+        # RESOLVE: :done disappeared from the values of :status - :completed appeared.
+        # Write the ops that express what happened, then delete the resolve! line. API:
+        #   rename_enum_value :attr, :old, :new     - the rows holding it follow the label
+        #   delete_enum_value :attr, :value         - refused while rows still hold it
+        #   add_enum_value :attr, :value, opts      - before:/after: place it in the order
+        # Looks likely: rename_enum_value :status, :done, :completed
+        resolve! :enum_values, attribute: :status, deleted: [:done], added: [:completed]
+      end
+      """
+
+      assert render(plan) == normalize_newlines(expected)
+    end
+
+    test "renders a question without hints" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :roles,
+            deleted: [MyApp.Roles.Moderator, MyApp.Roles.Legacy],
+            added: [MyApp.Roles.Maintainer],
+            hints: [],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      expected = """
+      use Hologram.Migration
+
+      # RESOLVE: MyApp.Roles.Moderator, MyApp.Roles.Legacy disappeared from the roles - MyApp.Roles.Maintainer appeared.
+      # Write the ops that express what happened, then delete the resolve! line. API:
+      #   rename_role :old, :new                  - existing grants follow the label
+      #   delete_role :name                       - the grants of that role die with it
+      #   add_role :name, opts                    - a new grantable role
+      resolve! :roles,
+        deleted: [MyApp.Roles.Moderator, MyApp.Roles.Legacy],
+        added: [MyApp.Roles.Maintainer]
+      """
+
+      assert render(plan) == normalize_newlines(expected)
+    end
+
     test "renders text the loader reads back as the given ops" do
       ops = [
         %{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch},
@@ -170,6 +303,33 @@ defmodule Hologram.Migration.GeneratorTest do
         |> Loader.load_string!("20260813091522.exs")
 
       assert Enum.map(loaded, &Map.delete(&1, :line)) == ops
+    end
+
+    test "renders a draft the loader reads back with its resolve! op" do
+      question = %{
+        kind: :attributes,
+        entity: MyApp.Task,
+        deleted: [:name],
+        added: [:title],
+        hints: [{:rename, :name, :title}],
+        withheld_ops: []
+      }
+
+      loaded =
+        %{ops: [], questions: [question]}
+        |> render()
+        |> Loader.load_string!("20260813091522.exs")
+
+      assert Enum.map(loaded, &Map.delete(&1, :line)) == [
+               %{
+                 op: :resolve!,
+                 entity: MyApp.Task,
+                 kind: :attributes,
+                 payload: [deleted: [:name], added: [:title]]
+               }
+             ]
+
+      assert Loader.unresolved(loaded) == loaded
     end
   end
 end

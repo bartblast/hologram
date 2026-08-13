@@ -354,6 +354,15 @@ defmodule Hologram.MigrationTest do
     end
   end
 
+  describe "locals_without_parens/0" do
+    test "is exported by the framework formatter config" do
+      {config, _binding} = Code.eval_file(".formatter.exs")
+      exported = get_in(config, [:export, :locals_without_parens])
+
+      assert locals_without_parens() -- exported == []
+    end
+  end
+
   describe "create_entity/1" do
     test "returns the op with the entity type and the call line" do
       result = create_entity(MyApp.Task)

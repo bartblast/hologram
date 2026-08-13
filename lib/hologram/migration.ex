@@ -10,6 +10,42 @@ defmodule Hologram.Migration do
   history - the name stays a valid reference after the module is renamed or deleted.
   """
 
+  @locals_without_parens [
+    add_attribute: 2,
+    add_attribute: 3,
+    add_enum_value: 2,
+    add_enum_value: 3,
+    add_relationship: 2,
+    add_relationship: 3,
+    add_role: 1,
+    add_role: 2,
+    change_attribute: 2,
+    change_relationship: 2,
+    change_role: 2,
+    create_entity: 1,
+    delete_attribute: 1,
+    delete_entity: 1,
+    delete_enum_value: 2,
+    delete_relationship: 1,
+    delete_role: 1,
+    rename_attribute: 2,
+    rename_entity: 2,
+    rename_enum_value: 3,
+    rename_relationship: 2,
+    rename_role: 2,
+    reorder_enum_values: 2,
+    resolve!: 1,
+    resolve!: 2
+  ]
+
+  @doc """
+  Returns the vocabulary's parens-free calls, as the formatter's locals_without_parens
+  option takes them - the generator formats migration files with it, and the framework
+  exports the same list so a project's mix format leaves those files alone.
+  """
+  @spec locals_without_parens() :: keyword(pos_integer)
+  def locals_without_parens, do: @locals_without_parens
+
   defmacro __using__(_opts) do
     quote do
       import Hologram.Migration,

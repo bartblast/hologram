@@ -135,7 +135,7 @@ defmodule Hologram.Migration.Diff do
       question = %{
         kind: :entities,
         deleted: deleted,
-        created: created,
+        added: created,
         hints: entity_rename_hints(deleted, created, replayed, current),
         withheld_ops: create_ops ++ delete_ops
       }

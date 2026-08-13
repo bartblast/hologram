@@ -85,7 +85,7 @@ defmodule Hologram.Migration.DiffTest do
                  %{
                    kind: :entities,
                    deleted: [MyApp.Draft],
-                   created: [MyApp.Marker, MyApp.Sketch],
+                   added: [MyApp.Marker, MyApp.Sketch],
                    hints: [{:rename, MyApp.Draft, MyApp.Sketch}],
                    withheld_ops: [
                      %{op: :create_entity, entity: MyApp.Marker},

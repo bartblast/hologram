@@ -1,6 +1,8 @@
 defmodule Hologram.Migration.Generator do
   @moduledoc false
 
+  alias Hologram.Migration
+
   @indent "  "
 
   # Entity-level ops are flat statements even though they name an entity - blocks scope
@@ -18,13 +20,57 @@ defmodule Hologram.Migration.Generator do
   @spec render(%{atom => any}) :: String.t()
   def render(plan) do
     sections =
-      plan.ops
-      |> group_ops()
+      plan
+      |> group_sections()
       |> Enum.map(&render_section/1)
 
     body = Enum.join(sections, "\n\n")
+    text = "use Hologram.Migration\n\n" <> body <> "\n"
 
-    "use Hologram.Migration\n\n" <> body <> "\n"
+    format(text)
+  end
+
+  # The ops that can express each ambiguity, with what each one does to existing data -
+  # move_attribute is absent until its lens payload ships, so the menu never names an op
+  # the loader would reject.
+  defp api_entries(:attributes) do
+    [
+      "rename_attribute :old, :new             - the column is renamed, its data kept",
+      "delete_attribute :name                  - the column and its data are dropped",
+      "add_attribute :name, :type, opts        - a new column, empty for existing rows"
+    ]
+  end
+
+  defp api_entries(:entities) do
+    [
+      "rename_entity MyApp.Old, MyApp.New      - the table is renamed, its rows kept",
+      "delete_entity MyApp.Old                 - the table and its rows are dropped",
+      "create_entity MyApp.New do ... end      - a new table"
+    ]
+  end
+
+  defp api_entries(:enum_values) do
+    [
+      "rename_enum_value :attr, :old, :new     - the rows holding it follow the label",
+      "delete_enum_value :attr, :value         - refused while rows still hold it",
+      "add_enum_value :attr, :value, opts      - before:/after: place it in the order"
+    ]
+  end
+
+  defp api_entries(:relationships) do
+    [
+      "rename_relationship :old, :new          - the reference is renamed, its data kept",
+      "delete_relationship :name               - the reference and its data are dropped",
+      "add_relationship :name, Target, opts    - a new reference, empty for existing rows"
+    ]
+  end
+
+  defp api_entries(:roles) do
+    [
+      "rename_role :old, :new                  - existing grants follow the label",
+      "delete_role :name                       - the grants of that role die with it",
+      "add_role :name, opts                    - a new grantable role"
+    ]
   end
 
   defp block_op?(op) do
@@ -33,24 +79,62 @@ defmodule Hologram.Migration.Generator do
 
   defp entity_of(op), do: Map.get(op, :entity)
 
-  # Sections in canonical order: renames first (the ordering rule - every later line
-  # names the current model's spelling), then the entity blocks, then the flat ops that
-  # take no scope.
-  defp group_ops(ops) do
-    {entity_ops, flat_ops} = Enum.split_with(ops, &block_op?/1)
+  # Generated text is formatted text: a long payload wraps here rather than the first
+  # time someone runs mix format, so a fresh file is never a pending diff.
+  defp format(text) do
+    formatted =
+      Code.format_string!(text, locals_without_parens: Migration.locals_without_parens())
+
+    IO.iodata_to_binary([formatted, "\n"])
+  end
+
+  # Sections in canonical order: the questions demanding attention first, then the
+  # renames (the ordering rule - every later line names the current model's spelling),
+  # then the entity blocks, then the flat ops that take no scope.
+  defp group_sections(plan) do
+    {entity_ops, flat_ops} = Enum.split_with(plan.ops, &block_op?/1)
     {renames, other_flat_ops} = Enum.split_with(flat_ops, &(&1.op == :rename_entity))
+    {block_questions, flat_questions} = Enum.split_with(plan.questions, &(entity_of(&1) != nil))
+
+    ops_by_entity = Enum.group_by(entity_ops, &entity_of/1)
+    questions_by_entity = Enum.group_by(block_questions, &entity_of/1)
 
     blocks =
-      entity_ops
-      |> Enum.group_by(&entity_of/1)
-      |> Enum.sort_by(fn {entity_type, _ops} -> inspect(entity_type) end)
-      |> Enum.map(fn {entity_type, block_ops} -> {:block, entity_type, block_ops} end)
+      ops_by_entity
+      |> Map.keys()
+      |> Enum.concat(Map.keys(questions_by_entity))
+      |> Enum.uniq()
+      |> Enum.sort_by(&inspect/1)
+      |> Enum.map(fn entity_type ->
+        {:block, entity_type, Map.get(ops_by_entity, entity_type, []),
+         Map.get(questions_by_entity, entity_type, [])}
+      end)
 
-    Enum.map(renames, &{:flat, &1}) ++ blocks ++ Enum.map(other_flat_ops, &{:flat, &1})
+    Enum.map(flat_questions, &{:question, &1}) ++
+      Enum.map(renames, &{:flat, &1}) ++
+      blocks ++ Enum.map(other_flat_ops, &{:flat, &1})
+  end
+
+  defp indent(text) do
+    text
+    |> String.split("\n")
+    |> Enum.map_join("\n", &"#{@indent}#{&1}")
+  end
+
+  defp name_list(names) do
+    Enum.map_join(names, ", ", &inspect/1)
   end
 
   defp render_args(args) do
     Enum.map_join(args, ", ", &inspect/1)
+  end
+
+  defp render_hint({:rename, old, new}, %{kind: :enum_values} = question) do
+    "rename_enum_value #{inspect(question.attribute)}, #{inspect(old)}, #{inspect(new)}"
+  end
+
+  defp render_hint({:rename, old, new}, question) do
+    "#{rename_verb(question.kind)} #{inspect(old)}, #{inspect(new)}"
   end
 
   # An op renders as its verb followed by its arguments, keyword payloads spelled bare -
@@ -161,15 +245,80 @@ defmodule Hologram.Migration.Generator do
     Enum.map_join(opts, ", ", fn {key, value} -> "#{key}: #{inspect(value)}" end)
   end
 
+  # The draft form: the detected facts, the op API that expresses them, what looks
+  # likely - and the resolve! line the human deletes once the ops are written. No
+  # resolution is ever emitted as code: the lazy path must not be the destructive one.
+  defp render_question(question) do
+    fact_lines = [
+      "RESOLVE: #{name_list(question.deleted)} disappeared from #{subject(question)} - " <>
+        "#{name_list(question.added)} appeared.",
+      "Write the ops that express what happened, then delete the resolve! line. API:"
+    ]
+
+    api_lines =
+      question.kind
+      |> api_entries()
+      |> Enum.map(&"  #{&1}")
+
+    hint_lines = Enum.map(question.hints, &"Looks likely: #{render_hint(&1, question)}")
+
+    all_lines = fact_lines ++ api_lines ++ hint_lines
+    comment_lines = Enum.map(all_lines, &"# #{&1}")
+
+    comment_lines
+    |> Enum.concat([render_resolve_op(question)])
+    |> Enum.join("\n")
+  end
+
+  defp render_resolve_op(question) do
+    payload =
+      case question do
+        %{attribute: attribute} -> [attribute: attribute]
+        _other -> []
+      end
+
+    render_call(
+      "resolve!",
+      [question.kind],
+      payload ++ [deleted: question.deleted, added: question.added]
+    )
+  end
+
   # An entity block whose ops include the creation renders as create_entity - the
-  # creation itself is the header, never a member line.
-  defp render_section({:block, entity_type, ops}) do
+  # creation itself is the header, never a member line. Questions come first inside the
+  # block, so what needs a human is what a reader meets.
+  defp render_section({:block, entity_type, ops, questions}) do
     {creations, member_ops} = Enum.split_with(ops, &(&1.op == :create_entity))
     verb = if creations == [], do: "change_entity", else: "create_entity"
-    member_lines = Enum.map_join(member_ops, "\n", &"#{@indent}#{render_op(&1)}")
 
-    "#{verb} #{inspect(entity_type)} do\n#{member_lines}\nend"
+    question_lines = Enum.map(questions, &indent(render_question(&1)))
+    op_lines = Enum.map(member_ops, &"#{@indent}#{render_op(&1)}")
+    body = Enum.join(question_lines ++ op_lines, "\n")
+
+    "#{verb} #{inspect(entity_type)} do\n#{body}\nend"
   end
 
   defp render_section({:flat, op}), do: render_op(op)
+
+  defp render_section({:question, question}), do: render_question(question)
+
+  defp rename_verb(:attributes), do: "rename_attribute"
+
+  defp rename_verb(:entities), do: "rename_entity"
+
+  defp rename_verb(:relationships), do: "rename_relationship"
+
+  defp rename_verb(:roles), do: "rename_role"
+
+  defp subject(%{kind: :attributes}), do: "the attributes"
+
+  defp subject(%{kind: :entities}), do: "the entity types"
+
+  defp subject(%{kind: :enum_values} = question) do
+    "the values of #{inspect(question.attribute)}"
+  end
+
+  defp subject(%{kind: :relationships}), do: "the relationships"
+
+  defp subject(%{kind: :roles}), do: "the roles"
 end
