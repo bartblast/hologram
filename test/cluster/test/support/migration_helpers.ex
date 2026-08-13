@@ -9,6 +9,7 @@ defmodule HologramClusterTests.MigrationHelpers do
 
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
+  alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
   alias Hologram.Migration.Loader
   alias Hologram.Migrator
@@ -108,6 +109,28 @@ defmodule HologramClusterTests.MigrationHelpers do
   @spec prod_context() :: %{atom => any}
   def prod_context do
     %{
+      otp_app: "hologram_cluster_tests",
+      env: "prod",
+      hologram_version: to_string(Application.spec(:hologram, :vsn)),
+      timestamp: DateTime.utc_now(:microsecond)
+    }
+  end
+
+  @doc """
+  Returns the context of a schema reconciliation run against the migrations database.
+
+  Mirrors the shape `Hologram.DB.reconciliation_context/0` builds: the derived mapping
+  plus the guard facts and marker diagnostics. Used to claim the database for the OTHER
+  mechanism, which is a state production must refuse rather than adopt.
+
+  The app and env are the booting node's own, so what refuses is the marker's MECHANISM
+  rather than its identity - a mismatched app or env is refused a step earlier, by a
+  different guard with its own message.
+  """
+  @spec reconciliation_context() :: %{atom => any}
+  def reconciliation_context do
+    %{
+      mapping: Mapper.derive!(Reflection.list_entities()),
       otp_app: "hologram_cluster_tests",
       env: "prod",
       hologram_version: to_string(Application.spec(:hologram, :vsn)),

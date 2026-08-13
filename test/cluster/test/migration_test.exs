@@ -7,6 +7,7 @@ defmodule HologramClusterTests.MigrationTest do
 
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias Hologram.DB.SchemaReconciler
   alias Hologram.Migrator
 
   setup do
@@ -180,6 +181,38 @@ defmodule HologramClusterTests.MigrationTest do
 
       assert "slug" in columns
       assert "parent_id" in columns
+    end
+  end
+
+  describe "mechanism selection" do
+    test "a production node applies its chain at boot" do
+      peer = start_migration_peer(1)
+
+      assert serving?(peer)
+
+      # The migration mechanism ran because the node's environment selected it - the
+      # dev and test halves of that choice are pinned where they are reachable, in the
+      # framework's own child-spec test, since a dev node here would need the live
+      # reload watcher, which assumes Mix.
+      assert rpc(peer, Hologram, :env, []) == :prod
+
+      assert Enum.map(applied_version_rows(), fn {version, _applied_at} -> version end) ==
+               Enum.map(migrations(), & &1.version)
+    end
+
+    test "a production node refuses a database managed by schema reconciliation" do
+      # The database dev's mechanism would leave behind: converged from the model and
+      # carrying a reconciliation marker, with no migration history at all.
+      with_migrations_db(fn -> SchemaReconciler.reconcile(reconciliation_context()) end)
+
+      peer = start_migration_peer(1, boot_app: false)
+
+      assert boot_error_message(peer) ==
+               "the configured database is managed by schema reconciliation, which " <>
+                 "converges dev databases from the model - migrations never apply to " <>
+                 "one - point the config at a database of this environment"
+
+      refute serving?(peer)
     end
   end
 
