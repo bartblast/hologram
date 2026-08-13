@@ -5,18 +5,8 @@
       files: %{
         # You can give explicit globs or simply directories.
         # In the latter case `**/*.{ex,exs}` will be used.
-        included: ["*.{ex,exs}", "benchmarks/", "config/", "lib/", "priv/", "test/"],
-        excluded: [
-          ~r"/_build/",
-          ~r"/deps/",
-          ~r"/node_modules/",
-          "test/cluster/",
-          "test/features/",
-          "test/elixir/support/fixtures/compiler/normalizer/module_7.ex",
-          "test/elixir/support/fixtures/compiler/normalizer/module_8.ex",
-          "test/elixir/support/fixtures/umbrella/",
-          "test/umbrella/"
-        ]
+        included: ["*.{ex,exs}", "config/", "lib/", "priv/", "test/"],
+        excluded: [~r"/_build/", ~r"/deps/", ~r"/node_modules/"]
       },
       strict: true,
       checks: %{
@@ -57,7 +47,6 @@
           {Credo.Check.Readability.SingleFunctionToBlockPipe, []},
           {Credo.Check.Readability.SinglePipe, []},
           {Credo.Check.Readability.SpaceAfterCommas, []},
-          {Credo.Check.Readability.Specs, []},
           # Order based on: https://github.com/christopheradams/elixir_style_guide#module-attribute-ordering
           {Credo.Check.Readability.StrictModuleLayout,
            [order: [:shortdoc, :moduledoc, :behaviour, :use, :import, :require, :alias]]},
@@ -123,6 +112,7 @@
           {Credo.Check.Design.TagTODO, []},
           {Credo.Check.Readability.AliasAs, []},
           {Credo.Check.Readability.ModuleDoc, []},
+          {Credo.Check.Readability.Specs, []},
           {Credo.Check.Refactor.ABCSize, []},
           {Credo.Check.Refactor.MapMap, []},
           {Credo.Check.Refactor.ModuleDependencies, []},

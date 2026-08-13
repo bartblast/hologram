@@ -9,9 +9,21 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Session
 
+  # Read only when the host app enables the attach-delay seam - see maybe_delay_attach/1.
+  @attach_delay_cookie "hologram_sse_attach_delay_ms"
+
   @heartbeat_interval_ms 15_000
   @max_heap_size_words 1_000_000
   @receipts_refresh_interval_ms 12 * 60 * 60 * 1000
+
+  @doc """
+  Returns the name of the cookie carrying the test-only attach delay.
+
+  Honored only when the host app sets `:__sse_attach_delay_enabled__`, so it has
+  no effect in production. See `maybe_delay_attach/1`.
+  """
+  @spec attach_delay_cookie() :: String.t()
+  def attach_delay_cookie, do: @attach_delay_cookie
 
   @doc """
   Builds the SSE event-stream chunk for an `action` broadcast: the standard
@@ -110,6 +122,43 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
+      # A subscription granted from outside any handler. The binding is registered and
+      # its receipt signed here rather than by the grantor, so the authorization carries
+      # the identity this connection holds at delivery time.
+      {:add_subscription, channel, cid} ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        instance_id = conn.query_params["instance_id"]
+
+        SubscriptionRegistry.apply_deltas(instance_id, [{channel, cid}], [], user_id)
+
+        token = Receipt.issue(channel, cid, instance_id, user_id)
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = encode_add_sub_receipts_envelope(id, [{channel, cid, token}])
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
+      # Deltas a node that does not hold this connection could not apply itself. The
+      # instance id travels in the message rather than being read from the query params,
+      # since the sender identified the connection, not this stream.
+      #
+      # Only the node holding the connection answers. Being subscribed to the announce
+      # topic implies holding the entry in every steady state, but not in recovery ones
+      # (a registry restart empties the table while streams live on) - and applying
+      # against a missing entry would park this pump for the whole attach window.
+      # Staying silent leaves the ask to the requester's republish cadence instead.
+      {:apply_deltas_remote, instance_id, adds, drops, authorizing_user_id, reply_to, waiter_ref} ->
+        if SubscriptionRegistry.bindings_of(instance_id) do
+          result =
+            SubscriptionRegistry.apply_deltas(instance_id, adds, drops, authorizing_user_id)
+
+          send(reply_to, {:apply_deltas_remote_reply, instance_id, waiter_ref, result})
+        end
+
+        {:cont, conn}
+
       {:broadcast_action, channel, action_name, params, excluded_identities} ->
         conn = Plug.Conn.fetch_query_params(conn)
         instance_id = conn.query_params["instance_id"]
@@ -180,6 +229,17 @@ defmodule Hologram.Realtime.SSE do
             {:halt, conn}
         end
 
+      # A page render declares the complete subscription set, so the bindings are
+      # replaced rather than folded. Nothing is answered - the renderer computed the
+      # client's diff without the registry.
+      {:replace_subscriptions, new_sub_keys, authorizing_user_id} ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        instance_id = conn.query_params["instance_id"]
+
+        SubscriptionRegistry.replace_bindings(instance_id, new_sub_keys, authorizing_user_id)
+
+        {:cont, conn}
+
       {:sub, channel} ->
         topic = Realtime.channel_topic(channel)
         Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
@@ -234,9 +294,15 @@ defmodule Hologram.Realtime.SSE do
 
         {_instance_id, session_id, user_id} = claimed
 
+        # Announce topics are joined before the registry attach, so the window between
+        # the connection becoming discoverable and this process listening does not
+        # exist. Anything published in the meantime waits in the mailbox and is applied
+        # once the pump starts, by which point the attach has folded in the handshake's
+        # own bindings.
         conn
-        |> attach_validated_subscriptions(validated_bindings)
         |> subscribe_to_announce_topics()
+        |> maybe_delay_attach()
+        |> attach_validated_subscriptions(validated_bindings)
         |> prepare()
         |> message_pump(session_id, user_id, message_pump_opts)
 
@@ -460,6 +526,29 @@ defmodule Hologram.Realtime.SSE do
     instance_id
     |> own_identities(session_id, user_id)
     |> Enum.any?(&(&1 in excluded_identities))
+  end
+
+  # Test-only seam. Holds the stream open before it attaches, so a test can put a
+  # command on the wire while the instance still has no registry entry - the boot-time
+  # race a subscription declared from a command has to survive. That race is otherwise
+  # unreproducible over a local loop, where the attach reliably wins.
+  #
+  # Scoped by cookie rather than application env so concurrently running test files
+  # cannot disturb each other, and gated on the host app opting in so a client can
+  # never slow its own attach in production.
+  defp maybe_delay_attach(initial_conn) do
+    if Application.get_env(:hologram, :__sse_attach_delay_enabled__, false) do
+      conn = Plug.Conn.fetch_cookies(initial_conn)
+
+      with value when is_binary(value) <- conn.cookies[@attach_delay_cookie],
+           {delay_ms, ""} when delay_ms > 0 <- Integer.parse(value) do
+        Process.sleep(delay_ms)
+      end
+
+      conn
+    else
+      initial_conn
+    end
   end
 
   defp maybe_drop_identity_change_bindings(conn, _instance_id, user_id, user_id),
