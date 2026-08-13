@@ -169,10 +169,12 @@ defmodule HologramClusterTests.ProxyTest do
 
       chunk_times = HTTPClient.chunk_times("http://127.0.0.1:#{proxy_port}/stream")
 
-      # The upstream sleeps 300ms twice between its three chunks. A buffering proxy
-      # would deliver everything in one burst at the end - spread across the chunks
+      # The upstream sends three chunks, sleeping 300ms between them. Asserted first, so
+      # a missing chunk reads as a missing chunk rather than as a short spread.
+      assert length(chunk_times) == 3
+
+      # A buffering proxy would deliver all three in one burst at the end - the spread
       # proves each was relayed as it was produced.
-      assert length(chunk_times) >= 2
       assert List.last(chunk_times) - List.first(chunk_times) >= 400
     end
   end
