@@ -9,6 +9,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page12
   alias HologramFeatureTests.Patching.Page13
   alias HologramFeatureTests.Patching.Page14
+  alias HologramFeatureTests.Patching.Page15
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
@@ -1028,6 +1029,25 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_count(".hint", 3)
       |> assert_script_result(typed_values, ["typed 1", "typed 2", "typed 3"])
       |> assert_script_result(kept_nodes, fields)
+    end
+
+    feature "reordering a list whose body holds a block", %{session: session} do
+      # Read as one line of text so an entry rendered twice, or one that lost its star, shows up
+      # here - the failure leaves the list half-updated rather than empty.
+      rendered_feed = """
+      return document.getElementById("feed").innerText.replace(/\\s+/g, " ").trim();
+      """
+
+      session
+      |> visit(Page15)
+      |> assert_text(css("#result"), "Alpha, Bravo, Charlie, Delta")
+      |> assert_script_result(rendered_feed, "* Alpha * Bravo * Charlie * Delta")
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Charlie, Alpha, Delta, Bravo")
+      |> assert_script_result(rendered_feed, "* Charlie * Alpha * Delta * Bravo")
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Delta, Charlie, Bravo, Alpha")
+      |> assert_script_result(rendered_feed, "* Delta * Charlie * Bravo * Alpha")
     end
   end
 end
