@@ -67,6 +67,7 @@ defmodule Hologram.RouterTest do
             ["amodule", "a#{Module2}"],
             ["aname", "amy_command"],
             ["aparams", %{"t" => "m", "d" => []}],
+            ["asub_receipts", %{"t" => "l", "d" => []}],
             ["atarget", "b0746573745f746172676574"]
           ]
         }
