@@ -122,6 +122,43 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
+      # A subscription granted from outside any handler. The binding is registered and
+      # its receipt signed here rather than by the grantor, so the authorization carries
+      # the identity this connection holds at delivery time.
+      {:add_subscription, channel, cid} ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        instance_id = conn.query_params["instance_id"]
+
+        SubscriptionRegistry.apply_deltas(instance_id, [{channel, cid}], [], user_id)
+
+        token = Receipt.issue(channel, cid, instance_id, user_id)
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = encode_add_sub_receipts_envelope(id, [{channel, cid, token}])
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
+      # Deltas a node that does not hold this connection could not apply itself. The
+      # instance id travels in the message rather than being read from the query params,
+      # since the sender identified the connection, not this stream.
+      #
+      # Only the node holding the connection answers. Being subscribed to the announce
+      # topic implies holding the entry in every steady state, but not in recovery ones
+      # (a registry restart empties the table while streams live on) - and applying
+      # against a missing entry would park this pump for the whole attach window.
+      # Staying silent leaves the ask to the requester's republish cadence instead.
+      {:apply_deltas_remote, instance_id, adds, drops, authorizing_user_id, reply_to, waiter_ref} ->
+        if SubscriptionRegistry.bindings_of(instance_id) do
+          result =
+            SubscriptionRegistry.apply_deltas(instance_id, adds, drops, authorizing_user_id)
+
+          send(reply_to, {:apply_deltas_remote_reply, instance_id, waiter_ref, result})
+        end
+
+        {:cont, conn}
+
       {:broadcast_action, channel, action_name, params, excluded_identities} ->
         conn = Plug.Conn.fetch_query_params(conn)
         instance_id = conn.query_params["instance_id"]
@@ -192,6 +229,17 @@ defmodule Hologram.Realtime.SSE do
             {:halt, conn}
         end
 
+      # A page render declares the complete subscription set, so the bindings are
+      # replaced rather than folded. Nothing is answered - the renderer computed the
+      # client's diff without the registry.
+      {:replace_subscriptions, new_sub_keys, authorizing_user_id} ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        instance_id = conn.query_params["instance_id"]
+
+        SubscriptionRegistry.replace_bindings(instance_id, new_sub_keys, authorizing_user_id)
+
+        {:cont, conn}
+
       {:sub, channel} ->
         topic = Realtime.channel_topic(channel)
         Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
@@ -246,10 +294,15 @@ defmodule Hologram.Realtime.SSE do
 
         {_instance_id, session_id, user_id} = claimed
 
+        # Announce topics are joined before the registry attach, so the window between
+        # the connection becoming discoverable and this process listening does not
+        # exist. Anything published in the meantime waits in the mailbox and is applied
+        # once the pump starts, by which point the attach has folded in the handshake's
+        # own bindings.
         conn
+        |> subscribe_to_announce_topics()
         |> maybe_delay_attach()
         |> attach_validated_subscriptions(validated_bindings)
-        |> subscribe_to_announce_topics()
         |> prepare()
         |> message_pump(session_id, user_id, message_pump_opts)
 
