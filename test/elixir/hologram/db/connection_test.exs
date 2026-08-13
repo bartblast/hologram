@@ -3,6 +3,8 @@ defmodule Hologram.DB.ConnectionTest do
 
   import Hologram.DB.Connection
 
+  alias Hologram.DB.Config
+
   @insert_returning_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "updated_at") VALUES (gen_random_uuid(), now(), now()) RETURNING "id"|
 
   defp count_by_id(id) do
@@ -79,6 +81,39 @@ defmodule Hologram.DB.ConnectionTest do
       end
 
       assert count_by_id(Process.get(:inserted_id)) == 0
+    end
+  end
+
+  describe "with_connection/2" do
+    test "routes queries to the given connection and restores the pool afterwards" do
+      database_opts =
+        :hologram
+        |> Application.get_env(:database, [])
+        |> Config.resolve!(:test)
+
+      {:ok, maintenance_pid} =
+        Postgrex.start_link(
+          database: "postgres",
+          hostname: database_opts[:host],
+          password: database_opts[:password],
+          port: database_opts[:port],
+          username: database_opts[:user]
+        )
+
+      current_database_sql = "SELECT current_database()"
+
+      inside_result =
+        with_connection(maintenance_pid, fn ->
+          {:ok, %Postgrex.Result{rows: [[database]]}} = query(current_database_sql)
+          database
+        end)
+
+      GenServer.stop(maintenance_pid)
+
+      {:ok, %Postgrex.Result{rows: [[outside_database]]}} = query(current_database_sql)
+
+      assert inside_result == "postgres"
+      assert outside_database == database_opts[:database]
     end
   end
 end

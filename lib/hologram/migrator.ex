@@ -99,7 +99,7 @@ defmodule Hologram.Migrator do
       |> Enum.reject(&artifact_op?(&1, mapping))
 
     if drift_ops != [] do
-      lines = Enum.map_join(drift_ops, "\n", &"  * #{describe_drift(&1)}")
+      lines = Enum.map_join(drift_ops, "\n", &"  * #{describe_difference(&1)}")
 
       raise "schema drift detected - the database does not match the model:\n" <>
               lines <>
@@ -108,6 +108,68 @@ defmodule Hologram.Migrator do
     end
 
     :ok
+  end
+
+  @doc """
+  Returns a line describing the given schema-diff op as a difference between the
+  database and the model - what the model declares that is missing, or what stands
+  that the model does not derive.
+  """
+  @spec describe_difference(%{atom => any}) :: String.t()
+  def describe_difference(%{op: :add_column} = op) do
+    ~s(column "#{op.column}" on table "#{op.table}" declared by the model is missing)
+  end
+
+  def describe_difference(%{op: :add_enum_value} = op) do
+    ~s(enum type "#{op.enum_type}" is missing the declared value '#{op.value}')
+  end
+
+  def describe_difference(%{op: :add_foreign_key} = op) do
+    ~s(constraint "#{op.constraint}" on table "#{op.table}" declared by the model is missing)
+  end
+
+  def describe_difference(%{op: :alter_column} = op) do
+    ~s(column "#{op.column}" on table "#{op.table}" does not match its declaration)
+  end
+
+  def describe_difference(%{op: :create_enum_type} = op) do
+    ~s(enum type "#{op.enum_type}" declared by the model is missing)
+  end
+
+  def describe_difference(%{op: :create_index} = op) do
+    ~s(index "#{op.index}" declared by the model is missing)
+  end
+
+  def describe_difference(%{op: :create_table} = op) do
+    ~s(table "#{op.table}" declared by the model is missing)
+  end
+
+  def describe_difference(%{op: :drop_column} = op) do
+    ~s(column "#{op.column}" on table "#{op.table}" is not derived from the model)
+  end
+
+  def describe_difference(%{op: :drop_enum_type} = op) do
+    ~s(enum type "#{op.enum_type}" is not derived from the model)
+  end
+
+  def describe_difference(%{op: :drop_foreign_key} = op) do
+    ~s(constraint "#{op.constraint}" on table "#{op.table}" is not derived from the model)
+  end
+
+  def describe_difference(%{op: :drop_index} = op) do
+    ~s(index "#{op.index}" is not derived from the model)
+  end
+
+  def describe_difference(%{op: :drop_table} = op) do
+    ~s(table "#{op.table}" is not derived from the model)
+  end
+
+  def describe_difference(%{op: :rebuild_enum_type} = op) do
+    ~s(enum type "#{op.enum_type}" does not hold the declared values in their order)
+  end
+
+  def describe_difference(%{op: :rename_constraint} = op) do
+    ~s(constraint "#{op.from}" on table "#{op.table}" is named outside the derived scheme)
   end
 
   @doc """
@@ -368,62 +430,6 @@ defmodule Hologram.Migrator do
     {:ok, %{rows: [[count]]}} = Connection.query(statement)
 
     count
-  end
-
-  defp describe_drift(%{op: :add_column} = op) do
-    ~s(column "#{op.column}" on table "#{op.table}" declared by the model is missing)
-  end
-
-  defp describe_drift(%{op: :add_enum_value} = op) do
-    ~s(enum type "#{op.enum_type}" is missing the declared value '#{op.value}')
-  end
-
-  defp describe_drift(%{op: :add_foreign_key} = op) do
-    ~s(constraint "#{op.constraint}" on table "#{op.table}" declared by the model is missing)
-  end
-
-  defp describe_drift(%{op: :alter_column} = op) do
-    ~s(column "#{op.column}" on table "#{op.table}" does not match its declaration)
-  end
-
-  defp describe_drift(%{op: :create_enum_type} = op) do
-    ~s(enum type "#{op.enum_type}" declared by the model is missing)
-  end
-
-  defp describe_drift(%{op: :create_index} = op) do
-    ~s(index "#{op.index}" declared by the model is missing)
-  end
-
-  defp describe_drift(%{op: :create_table} = op) do
-    ~s(table "#{op.table}" declared by the model is missing)
-  end
-
-  defp describe_drift(%{op: :drop_column} = op) do
-    ~s(column "#{op.column}" on table "#{op.table}" is not derived from the model)
-  end
-
-  defp describe_drift(%{op: :drop_enum_type} = op) do
-    ~s(enum type "#{op.enum_type}" is not derived from the model)
-  end
-
-  defp describe_drift(%{op: :drop_foreign_key} = op) do
-    ~s(constraint "#{op.constraint}" on table "#{op.table}" is not derived from the model)
-  end
-
-  defp describe_drift(%{op: :drop_index} = op) do
-    ~s(index "#{op.index}" is not derived from the model)
-  end
-
-  defp describe_drift(%{op: :drop_table} = op) do
-    ~s(table "#{op.table}" is not derived from the model)
-  end
-
-  defp describe_drift(%{op: :rebuild_enum_type} = op) do
-    ~s(enum type "#{op.enum_type}" does not hold the declared values in their order)
-  end
-
-  defp describe_drift(%{op: :rename_constraint} = op) do
-    ~s(constraint "#{op.from}" on table "#{op.table}" is named outside the derived scheme)
   end
 
   defp differing_names(replayed, current) do

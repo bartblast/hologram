@@ -7,6 +7,8 @@ defmodule Hologram.DB.Connection do
 
   alias Hologram.DB
 
+  @connection_key {__MODULE__, :connection}
+
   @sandbox_rollback_throw {__MODULE__, :sandbox_rollback}
 
   @sandbox_savepoint "hologram_transaction"
@@ -58,9 +60,32 @@ defmodule Hologram.DB.Connection do
     end
   end
 
+  @doc """
+  Runs the given function with the calling process's queries and transactions routed to
+  the given started connection instead of the pool, restoring the previous routing
+  afterwards - a suspended sandbox mode included, so a sandboxed process can operate on
+  another database and return to its sandbox transaction untouched.
+  """
+  @spec with_connection(GenServer.server(), (-> any)) :: any
+  def with_connection(connection, fun) do
+    outer_mode = Process.get(@transaction_key)
+    Process.delete(@transaction_key)
+    Process.put(@connection_key, connection)
+
+    try do
+      fun.()
+    after
+      Process.delete(@connection_key)
+
+      if outer_mode do
+        Process.put(@transaction_key, outer_mode)
+      end
+    end
+  end
+
   defp current_connection do
     case Process.get(@transaction_key) do
-      nil -> DB.pool_name()
+      nil -> Process.get(@connection_key, DB.pool_name())
       {:sandbox, pool_name} -> pool_name
       {:sandbox_transaction, pool_name} -> pool_name
       {:transaction, connection} -> connection
@@ -92,8 +117,10 @@ defmodule Hologram.DB.Connection do
   end
 
   defp run_transaction(fun, opts) do
+    connection = Process.get(@connection_key, DB.pool_name())
+
     Postgrex.transaction(
-      DB.pool_name(),
+      connection,
       fn connection ->
         Process.put(@transaction_key, {:transaction, connection})
 
