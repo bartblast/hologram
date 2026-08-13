@@ -56,6 +56,15 @@ defmodule HologramClusterTests.MixProject do
         plt_core_path: "priv/plts/core.plt",
         plt_local_path: "priv/plts/project.plt"
       ],
+      # TODO: drop these entries once a patched cowlib is registered - the audit itself
+      # says when that has happened, printing that an entry no longer matches any
+      # advisory and can be removed.
+      #
+      # cowlib reaches the build only through the Wallaby test-server stack
+      # (plug_cowboy -> cowboy -> cowlib), and no cowlib version is registered as patched
+      # for these two, so even 2.19.0 with its cow_http_struct_hd hardening is still
+      # flagged. The MEDIUM one is mitigated by cowboy's CR/LF header validation.
+      hex: [ignore_advisories: ["EEF-CVE-2026-43966", "EEF-CVE-2026-43969"]],
       listeners: [Phoenix.CodeReloader],
       start_permanent: Mix.env() == :prod,
       version: "0.1.0"
