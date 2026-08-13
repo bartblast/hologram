@@ -141,6 +141,11 @@ defmodule Hologram.DB.DDL do
   their ALTER TABLE forms. :create_index renders a named index over its columns -
   :drop_index renders the schema-qualified drop (indexes are schema-level objects).
 
+  The rename ops - :rename_table, :rename_column, :rename_index, :rename_enum_type -
+  render their one-statement forms. They come from the migration applier only: a
+  name-keyed diff cannot detect a rename, so schema reconciliation never emits them,
+  while a migration log carries the confirmed intent.
+
   :create_enum_type, :drop_enum_type, :add_enum_value (with its BEFORE anchor when
   positioned), and :rename_enum_value render one statement each. :rebuild_enum_type
   renders the rebuild sequence: rename the old type aside, create the replacement
@@ -293,11 +298,31 @@ defmodule Hologram.DB.DDL do
     ]
   end
 
+  def statements(%{op: :rename_column} = op) do
+    [
+      "ALTER TABLE #{qualified(op.table)} " <>
+        "RENAME COLUMN #{Mapper.quote_identifier(op.from)} " <>
+        "TO #{Mapper.quote_identifier(op.to)}"
+    ]
+  end
+
+  def statements(%{op: :rename_enum_type} = op) do
+    ["ALTER TYPE #{qualified(op.from)} RENAME TO #{Mapper.quote_identifier(op.to)}"]
+  end
+
   def statements(%{op: :rename_enum_value} = op) do
     [
       "ALTER TYPE #{qualified(op.enum_type)} " <>
         "RENAME VALUE #{enum_literal(op.from)} TO #{enum_literal(op.to)}"
     ]
+  end
+
+  def statements(%{op: :rename_index} = op) do
+    ["ALTER INDEX #{qualified(op.from)} RENAME TO #{Mapper.quote_identifier(op.to)}"]
+  end
+
+  def statements(%{op: :rename_table} = op) do
+    ["ALTER TABLE #{qualified(op.from)} RENAME TO #{Mapper.quote_identifier(op.to)}"]
   end
 
   defp column_definition(name, definition) do

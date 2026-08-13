@@ -540,6 +540,27 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "statements/1 for rename_column" do
+    test "renders the column rename" do
+      op = %{op: :rename_column, table: "task", from: "name", to: "title"}
+
+      assert statements(op) == [
+               ~s(ALTER TABLE "hologram_data"."task" RENAME COLUMN "name" TO "title")
+             ]
+    end
+  end
+
+  describe "statements/1 for rename_enum_type" do
+    test "renders the type rename" do
+      op = %{op: :rename_enum_type, from: "draft_status_$enum", to: "sketch_status_$enum"}
+
+      assert statements(op) == [
+               ~s(ALTER TYPE "hologram_data"."draft_status_$enum" ) <>
+                 ~s(RENAME TO "sketch_status_$enum")
+             ]
+    end
+  end
+
   describe "statements/1 for rename_enum_value" do
     test "renders the value rename" do
       op = %{
@@ -552,6 +573,27 @@ defmodule Hologram.DB.DDLTest do
       assert statements(op) == [
                ~s(ALTER TYPE "hologram_data"."task_status_$enum" ) <>
                  "RENAME VALUE 'done' TO 'completed'"
+             ]
+    end
+  end
+
+  describe "statements/1 for rename_index" do
+    test "renders the index rename" do
+      op = %{op: :rename_index, from: "draft_author_id_$idx", to: "sketch_author_id_$idx"}
+
+      assert statements(op) == [
+               ~s(ALTER INDEX "hologram_data"."draft_author_id_$idx" ) <>
+                 ~s(RENAME TO "sketch_author_id_$idx")
+             ]
+    end
+  end
+
+  describe "statements/1 for rename_table" do
+    test "renders the table rename" do
+      op = %{op: :rename_table, from: "draft", to: "sketch"}
+
+      assert statements(op) == [
+               ~s(ALTER TABLE "hologram_data"."draft" RENAME TO "sketch")
              ]
     end
   end
