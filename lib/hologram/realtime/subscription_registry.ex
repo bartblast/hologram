@@ -258,6 +258,31 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @doc """
+  Replaces the entire binding set for `instance_id` with the bindings derived
+  from `new_sub_keys`, each tagged with `authorizing_user_id`.
+
+  A page navigation declares the complete set rather than a delta, so unlike
+  `apply_deltas/4` every binding is retagged - including keys that survive the
+  replacement.
+
+  Emits zero-crossing `{:sub, channel}` / `{:unsub, channel}` messages to the
+  entry's `sse_pid`: a channel bound on only one side of the replacement is
+  announced, one bound on both is silent.
+
+  Returns `:ok`. When no entry exists nothing is written and no messages are
+  emitted, which is the correct reading of an initial page render - no
+  connection exists yet, and the receipts ride the page response into the
+  handshake.
+  """
+  @spec replace_bindings(String.t(), [{any, String.t()}], term | nil) :: :ok
+  def replace_bindings(instance_id, new_sub_keys, authorizing_user_id) do
+    GenServer.call(
+      __MODULE__,
+      {:replace_bindings, instance_id, new_sub_keys, authorizing_user_id}
+    )
+  end
+
+  @doc """
   Resolves an identity tuple to the list of live `{instance_id, sse_pid}`
   entries whose registry record matches.
 
@@ -509,6 +534,30 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     new_refs = Map.put(state.refs, sse_ref, instance_id)
 
     {:reply, :ok, %{state | refs: new_refs}}
+  end
+
+  @impl GenServer
+  def handle_call(
+        {:replace_bindings, instance_id, new_sub_keys, authorizing_user_id},
+        _from,
+        state
+      ) do
+    case :ets.lookup(@table_name, instance_id) do
+      [{^instance_id, entry}] ->
+        new_bindings = Map.new(new_sub_keys, fn key -> {key, authorizing_user_id} end)
+
+        :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings}})
+
+        prior_channels = channels_of(entry.bindings)
+        new_channels = channels_of(new_bindings)
+
+        emit_zero_crossings(entry.sse_pid, prior_channels, new_channels)
+
+      [] ->
+        :noop
+    end
+
+    {:reply, :ok, state}
   end
 
   @impl GenServer

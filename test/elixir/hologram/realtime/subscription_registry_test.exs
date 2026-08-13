@@ -790,6 +790,74 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
   end
 
+  describe "replace_bindings/3" do
+    test "replaces the binding set wholesale" do
+      :ok = register_connection("test-instance-id", self())
+
+      apply_deltas(
+        "test-instance-id",
+        [{:room_a, "page"}, {:room_b, "comp_1"}],
+        [],
+        "test-user-id"
+      )
+
+      :ok = replace_bindings("test-instance-id", [{:room_c, "page"}], "test-user-id")
+
+      assert bindings_of("test-instance-id") == %{{:room_c, "page"} => "test-user-id"}
+    end
+
+    test "retags surviving keys with the new authorizing_user_id" do
+      :ok = register_connection("test-instance-id", self())
+
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-original-user-id")
+
+      :ok = replace_bindings("test-instance-id", [{:room_a, "page"}], "test-new-user-id")
+
+      assert bindings_of("test-instance-id") == %{{:room_a, "page"} => "test-new-user-id"}
+    end
+
+    test "sends {:sub, channel} for a channel the replacement newly binds" do
+      :ok = register_connection("test-instance-id", self())
+
+      :ok = replace_bindings("test-instance-id", [{:room_a, "page"}], "test-user-id")
+
+      assert_receive {:sub, :room_a}
+    end
+
+    test "sends {:unsub, channel} for a channel the replacement drops" do
+      :ok = register_connection("test-instance-id", self())
+
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      assert_receive {:sub, :room_a}
+
+      :ok = replace_bindings("test-instance-id", [], "test-user-id")
+
+      assert_receive {:unsub, :room_a}
+    end
+
+    test "sends no message for a channel bound on both sides of the replacement" do
+      :ok = register_connection("test-instance-id", self())
+
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      assert_receive {:sub, :room_a}
+
+      :ok = replace_bindings("test-instance-id", [{:room_a, "comp_1"}], "test-user-id")
+
+      refute_receive {:sub, :room_a}
+      refute_receive {:unsub, :room_a}
+    end
+
+    test "writes nothing when no entry exists" do
+      assert replace_bindings("test-unknown-instance-id", [{:room_a, "page"}], "test-user-id") ==
+               :ok
+
+      assert :ets.lookup(ets_table_name(), "test-unknown-instance-id") == []
+      refute_receive {:sub, _channel}
+    end
+  end
+
   describe "resolve_identity/1" do
     test "resolves {:instance, instance_id} to the matching entry" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
