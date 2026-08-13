@@ -1,13 +1,43 @@
 defmodule Hologram.Migration.Generator do
   @moduledoc false
 
+  alias Hologram.Entity.Model
   alias Hologram.Migration
+  alias Hologram.Migration.Diff
+  alias Hologram.Migration.Loader
 
   @indent "  "
 
   # Entity-level ops are flat statements even though they name an entity - blocks scope
   # member ops, and these two scope nothing.
   @flat_entity_ops [:delete_entity, :rename_entity]
+
+  @doc """
+  Writes the migration file taking the given directory's history to the given model,
+  and returns what happened: :nothing_to_do when the history already produces the model,
+  {:ok, path, question_count} when a file was written, or {:error, {:unresolved, entries}}
+  when a draft is still waiting for its answers.
+
+  An unresolved draft blocks generation - its questions are answered while the change is
+  fresh, never stacked behind newer diffs that might change their meaning. The file is
+  named after the given timestamp, bumped by a second while that name is taken.
+  """
+  @spec generate(String.t(), %{atom => map}, DateTime.t()) ::
+          :nothing_to_do | {:ok, String.t(), non_neg_integer} | {:error, {:unresolved, list}}
+  def generate(dir, current_model, timestamp) do
+    migrations = Loader.load_dir!(dir)
+
+    unresolved =
+      Enum.flat_map(migrations, fn migration ->
+        Enum.map(Loader.unresolved(migration.ops), &{migration.path, &1})
+      end)
+
+    if unresolved == [] do
+      generate_file(dir, migrations, current_model, timestamp)
+    else
+      {:error, {:unresolved, unresolved}}
+    end
+  end
 
   @doc """
   Returns the text of the migration file expressing the given plan.
@@ -88,6 +118,22 @@ defmodule Hologram.Migration.Generator do
     IO.iodata_to_binary([formatted, "\n"])
   end
 
+  defp generate_file(dir, migrations, current_model, timestamp) do
+    replayed = Enum.reduce(migrations, Model.empty(), &Model.fold(&2, &1.ops))
+    plan = Diff.diff(replayed, current_model)
+
+    if plan.ops == [] and plan.questions == [] do
+      :nothing_to_do
+    else
+      path = Path.join(dir, "#{next_version(dir, timestamp)}.exs")
+
+      File.mkdir_p!(dir)
+      File.write!(path, render(plan))
+
+      {:ok, path, length(plan.questions)}
+    end
+  end
+
   # Sections in canonical order: the questions demanding attention first, then the
   # renames (the ordering rule - every later line names the current model's spelling),
   # then the entity blocks, then the flat ops that take no scope.
@@ -123,6 +169,21 @@ defmodule Hologram.Migration.Generator do
 
   defp name_list(names) do
     Enum.map_join(names, ", ", &inspect/1)
+  end
+
+  # Two generations within one second on one machine would mint the same name - the
+  # version bumps until free, so the collision closes where names are minted rather
+  # than by widening every file name.
+  defp next_version(dir, timestamp) do
+    version = Calendar.strftime(timestamp, "%Y%m%d%H%M%S")
+
+    path = Path.join(dir, "#{version}.exs")
+
+    if File.exists?(path) do
+      next_version(dir, DateTime.add(timestamp, 1, :second))
+    else
+      version
+    end
   end
 
   defp render_args(args) do

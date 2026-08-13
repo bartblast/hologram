@@ -4,6 +4,120 @@ defmodule Hologram.Migration.GeneratorTest do
   import Hologram.Migration.Generator
 
   alias Hologram.Migration.Loader
+  alias Hologram.Reflection
+
+  @tmp_dir Path.join([Reflection.tmp_dir(), "tests", "migration", "generator"])
+
+  @timestamp ~U[2026-08-13 09:15:22Z]
+
+  defp model(entities) do
+    entries =
+      Map.new(entities, fn {entity_type, entry_overrides} ->
+        entry = Map.merge(%{attributes: [], relationships: [], roles: []}, entry_overrides)
+
+        {entity_type, entry}
+      end)
+
+    %{entities: entries, roles: %{}}
+  end
+
+  defp migrations_dir!(test_dir, files \\ []) do
+    dir = Path.join(@tmp_dir, test_dir)
+
+    File.rm_rf!(dir)
+    File.mkdir_p!(dir)
+
+    Enum.each(files, fn {file_name, contents} ->
+      dir
+      |> Path.join(file_name)
+      |> File.write!(contents)
+    end)
+
+    dir
+  end
+
+  describe "generate/3" do
+    test "writes the migration taking the history to the model" do
+      dir = migrations_dir!("writes_migration")
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      assert {:ok, path, 0} = generate(dir, current, @timestamp)
+      assert path == Path.join(dir, "20260813091522.exs")
+
+      expected =
+        normalize_newlines("""
+        use Hologram.Migration
+
+        create_entity MyApp.Task do
+          add_attribute :title, :string
+        end
+        """)
+
+      assert File.read!(path) == expected
+    end
+
+    test "returns the question count of a generated draft" do
+      contents = """
+      use Hologram.Migration
+
+      create_entity MyApp.Task do
+        add_attribute :name, :string
+      end
+      """
+
+      dir = migrations_dir!("draft_count", [{"20260813091522.exs", contents}])
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      assert {:ok, path, 1} = generate(dir, current, @timestamp)
+
+      assert path
+             |> File.read!()
+             |> String.contains?("resolve! :attributes")
+    end
+
+    test "does nothing when the history already produces the model" do
+      contents = """
+      use Hologram.Migration
+
+      create_entity MyApp.Task do
+        add_attribute :title, :string
+      end
+      """
+
+      dir = migrations_dir!("nothing_to_do", [{"20260813091522.exs", contents}])
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      assert generate(dir, current, @timestamp) == :nothing_to_do
+      assert File.ls!(dir) == ["20260813091522.exs"]
+    end
+
+    test "bumps the version while the minted name is taken" do
+      dir = migrations_dir!("bumps_version", [{"20260813091522.exs", "use Hologram.Migration\n"}])
+      current = model(%{MyApp.Task => %{}})
+
+      assert {:ok, path, 0} = generate(dir, current, @timestamp)
+      assert path == Path.join(dir, "20260813091523.exs")
+    end
+
+    test "refuses to generate while a draft holds unanswered questions" do
+      contents = """
+      use Hologram.Migration
+
+      change_entity MyApp.Task do
+        resolve! :attributes, deleted: [:name], added: [:title]
+      end
+      """
+
+      dir = migrations_dir!("unresolved", [{"20260813091522.exs", contents}])
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      assert {:error, {:unresolved, [{path, op}]}} = generate(dir, current, @timestamp)
+      assert path == Path.join(dir, "20260813091522.exs")
+      assert op.kind == :attributes
+      assert op.line == 4
+      assert File.ls!(dir) == ["20260813091522.exs"]
+    end
+  end
 
   describe "render/1" do
     test "renders entity blocks in alphabetical order after the renames" do
