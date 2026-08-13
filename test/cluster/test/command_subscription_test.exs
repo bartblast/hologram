@@ -1,14 +1,11 @@
 defmodule HologramClusterTests.CommandSubscriptionTest do
   use HologramClusterTests.TestCase, async: false
 
+  import HologramClusterTests.RealtimeHelpers
+
   alias Hologram.Realtime
-  alias Hologram.Realtime.SubscriptionRegistry
 
   @channel {:room, :command}
-
-  # Bounded at 100 x 100ms: the binding lands within a round trip when routing works, so
-  # ten seconds without it is a broken premise, not slowness.
-  @binding_attempts 100
 
   setup do
     [sse_peer, other_peer] = peers = start_peers(2)
@@ -74,35 +71,6 @@ defmodule HologramClusterTests.CommandSubscriptionTest do
       else
         other_peer.port
       end
-    end
-  end
-
-  defp registry_entries(peer) do
-    table = rpc(peer, SubscriptionRegistry, :ets_table_name, [])
-    rpc(peer, :ets, :tab2list, [table])
-  end
-
-  defp wait_for_channel_binding(peer, channel, attempt \\ 1)
-
-  defp wait_for_channel_binding(peer, channel, attempt) when attempt > @binding_attempts do
-    raise "no binding on #{inspect(channel)} ever appeared on #{inspect(peer.node)}"
-  end
-
-  defp wait_for_channel_binding(peer, channel, attempt) do
-    bound? =
-      peer
-      |> registry_entries()
-      |> Enum.any?(fn {_instance_id, entry} ->
-        Enum.any?(entry.bindings, fn {{bound_channel, _cid}, _user_id} ->
-          bound_channel == channel
-        end)
-      end)
-
-    if bound? do
-      :ok
-    else
-      Process.sleep(100)
-      wait_for_channel_binding(peer, channel, attempt + 1)
     end
   end
 end

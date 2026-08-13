@@ -25,24 +25,30 @@ defmodule HologramClusterTests.Cluster do
   @base_port 4010
 
   @doc """
-  Blocks until a broadcast published on each of the given peers reaches this
-  node, proving the PubSub groups of all involved nodes have merged. Returns
-  `:ok`, or raises when a peer's broadcasts never arrive within the attempt
-  budget.
+  Blocks until a broadcast published on every node of the cluster (this one and
+  each peer) has been delivered to a subscriber on every other node - all
+  ordered pairs, not just each peer to this node. Returns `:ok`, or raises
+  naming the first pair whose delivery never arrived within the attempt budget.
 
-  Group membership propagates asynchronously after nodes connect, so a
-  broadcast published before the merge is silently lost - a test asserting
-  delivery before this gate can pass or fail on boot timing alone.
+  Group membership propagates asynchronously and pairwise after nodes connect,
+  so peers can converge with this node noticeably before they converge with
+  each other - a broadcast between them in that window is silently lost. A test
+  asserting delivery before this gate would pass or fail on boot timing alone.
   """
   @spec await_pubsub_convergence([map]) :: :ok
   def await_pubsub_convergence(peers) do
     topic = "hologram_cluster_tests:convergence:#{:erlang.unique_integer([:positive])}"
-    Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+    nodes = [node() | Enum.map(peers, & &1.node)]
 
-    Enum.each(peers, &await_peer_convergence(&1, topic, 1))
+    for receiver_node <- nodes do
+      Node.spawn(receiver_node, __MODULE__, :subscribe_and_forward, [topic, self()])
+    end
 
-    Phoenix.PubSub.unsubscribe(Hologram.PubSub, topic)
-    flush_convergence_messages()
+    for sender_node <- nodes, receiver_node <- nodes, sender_node != receiver_node do
+      await_pair_convergence(sender_node, receiver_node, topic, 1)
+    end
+
+    flush_forwarded_messages()
   end
 
   @doc """
@@ -139,6 +145,19 @@ defmodule HologramClusterTests.Cluster do
     await_node_down(peer.node, 1)
   end
 
+  @doc """
+  Subscribes on the local node's PubSub to `topic` and forwards every received
+  message to `forward_to` as `{:forwarded, node(), message}`, until `forward_to`
+  dies. Started on a chosen node via `Node.spawn/4`, which is what makes it
+  useful: a long-lived subscriber on that node, observable from the caller.
+  """
+  @spec subscribe_and_forward(String.t(), pid) :: no_return
+  def subscribe_and_forward(topic, forward_to) do
+    Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+    Process.monitor(forward_to)
+    forward_loop(forward_to)
+  end
+
   defp await_node_down(node, attempt) when attempt > @convergence_attempts do
     raise "#{inspect(node)} did not leave the cluster after being stopped"
   end
@@ -152,23 +171,22 @@ defmodule HologramClusterTests.Cluster do
     end
   end
 
-  defp await_peer_convergence(peer, _topic, attempt) when attempt > @convergence_attempts do
-    raise "PubSub groups never converged with #{inspect(peer.node)}"
+  defp await_pair_convergence(sender_node, receiver_node, _topic, attempt)
+       when attempt > @convergence_attempts do
+    raise "PubSub never converged from #{inspect(sender_node)} to #{inspect(receiver_node)}"
   end
 
-  defp await_peer_convergence(peer, topic, attempt) do
-    rpc(peer, Phoenix.PubSub, :broadcast, [
+  defp await_pair_convergence(sender_node, receiver_node, topic, attempt) do
+    rpc(sender_node, Phoenix.PubSub, :broadcast, [
       Hologram.PubSub,
       topic,
-      {:pubsub_converged, peer.node}
+      {:pubsub_converged, sender_node, receiver_node}
     ])
 
-    node = peer.node
-
     receive do
-      {:pubsub_converged, ^node} -> :ok
+      {:forwarded, ^receiver_node, {:pubsub_converged, ^sender_node, ^receiver_node}} -> :ok
     after
-      50 -> await_peer_convergence(peer, topic, attempt + 1)
+      50 -> await_pair_convergence(sender_node, receiver_node, topic, attempt + 1)
     end
   end
 
@@ -194,13 +212,24 @@ defmodule HologramClusterTests.Cluster do
     rpc(node, Application, :put_env, [@app, HologramClusterTestsWeb.Endpoint, endpoint_config])
   end
 
-  # Late broadcasts from earlier attempts must not linger, or a test's later
+  # Late forwards from earlier attempts must not linger, or a test's later
   # refute_receive could trip on them.
-  defp flush_convergence_messages do
+  defp flush_forwarded_messages do
     receive do
-      {:pubsub_converged, _node} -> flush_convergence_messages()
+      {:forwarded, _node, _message} -> flush_forwarded_messages()
     after
       0 -> :ok
+    end
+  end
+
+  defp forward_loop(forward_to) do
+    receive do
+      {:DOWN, _ref, :process, ^forward_to, _reason} ->
+        :ok
+
+      message ->
+        send(forward_to, {:forwarded, node(), message})
+        forward_loop(forward_to)
     end
   end
 end
