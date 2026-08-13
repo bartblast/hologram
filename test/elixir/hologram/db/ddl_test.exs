@@ -109,7 +109,8 @@ defmodule Hologram.DB.DDLTest do
         WHERE n.nspname = 'hologram_data' AND c.relname = 'task_project_id_$idx' AND i.indisvalid = FALSE\
         """)
 
-      assert invalid_index_check_statement("task_project_id_$idx") == expected
+      assert normalize_newlines(invalid_index_check_statement("task_project_id_$idx")) ==
+               expected
     end
   end
 
