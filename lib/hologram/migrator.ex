@@ -189,9 +189,9 @@ defmodule Hologram.Migrator do
   Applies the pending migrations of the project's migrations directory to the connected
   database as the current model's history.
 
-  The public entry a deploy pipeline may call before rolling nodes (`bin/app eval
-  "Hologram.Migrator.run()"`) - the boot-time apply then finds nothing pending. Same
-  mechanism either way, nothing to configure.
+  Idempotent, so it is safe to run ahead of boot as a release step (`bin/app eval
+  "Hologram.Migrator.run()"`) - an apply that already ran leaves nothing pending, and
+  the boot-time apply passes through. Same mechanism either way, nothing to configure.
   """
   @spec run() :: :ok
   def run do

@@ -10,6 +10,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.QueryRunner
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Entity.Validator
+  alias Hologram.Migrator
   alias Hologram.Query
   alias Hologram.Reflection
 
@@ -169,6 +170,17 @@ defmodule Hologram.DB do
   def mapping_key, do: @mapping_key
 
   @doc """
+  Runs the migration applier as a one-shot supervision child after the pool starts and
+  returns :ignore (no process stays running). A failed apply fails the boot loudly.
+  """
+  @spec migrate_at_boot() :: :ignore
+  def migrate_at_boot do
+    Migrator.run()
+
+    :ignore
+  end
+
+  @doc """
   Returns the name of the connection pool process.
   """
   @spec pool_name() :: atom
@@ -223,7 +235,8 @@ defmodule Hologram.DB do
 
   @doc """
   Starts the database: derives and caches the mapping, then starts the connection pool -
-  in dev, schema reconciliation runs as a one-shot boot step right after the pool is up.
+  in dev, schema reconciliation runs as a one-shot boot step right after the pool is up,
+  and outside dev and test the migration applier runs there instead.
   The given opts override the resolved connection options. The database is a VM-wide
   singleton - starting while an instance is already running yields :ignore instead of
   failing the caller's supervision tree.
@@ -269,11 +282,19 @@ defmodule Hologram.DB do
 
     pool_child = {Postgrex, postgrex_opts}
 
+    # The environment selects the schema mechanism: dev converges from the model, test
+    # manages its schema from the test helpers, and every other env applies the
+    # migration history.
     children =
-      if Hologram.env() == :dev do
-        [pool_child, %{id: :schema_reconciliation, start: {__MODULE__, :reconcile_at_boot, []}}]
-      else
-        [pool_child]
+      case Hologram.env() do
+        :dev ->
+          [pool_child, %{id: :schema_reconciliation, start: {__MODULE__, :reconcile_at_boot, []}}]
+
+        :test ->
+          [pool_child]
+
+        _env ->
+          [pool_child, %{id: :migrations, start: {__MODULE__, :migrate_at_boot, []}}]
       end
 
     Supervisor.init(children, strategy: :one_for_one)
