@@ -662,15 +662,19 @@ defmodule Hologram.Controller do
          %Server{instance_id: instance_id, subscriptions: subscriptions} = server,
          client_claimed_sub_keys
        ) do
-    {actually_added, actually_dropped} =
-      SubscriptionRegistry.transition(
-        instance_id,
-        subscriptions,
-        client_claimed_sub_keys,
-        server.user_id
-      )
+    {add_keys, drop_keys} =
+      SubscriptionRegistry.diff_sub_keys(subscriptions, client_claimed_sub_keys)
 
-    {build_receipts(actually_added, server), actually_dropped}
+    # Addressed to the connection rather than applied here, since another node may hold
+    # it. Nothing is awaited: the diff above needed no registry read, and a miss is
+    # legitimate on an initial render, where no connection exists yet and the receipts
+    # ride this response into the handshake.
+    topic = Realtime.instance_announce_topic(instance_id)
+    envelope = {:replace_subscriptions, subscriptions, server.user_id}
+
+    Phoenix.PubSub.broadcast(Hologram.PubSub, topic, envelope)
+
+    {build_receipts(add_keys, server), drop_keys}
   end
 
   defp validate_csrf_token(conn) do

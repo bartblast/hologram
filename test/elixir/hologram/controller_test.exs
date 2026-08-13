@@ -62,6 +62,11 @@ defmodule Hologram.ControllerTest do
   setup :set_mox_global
 
   setup do
+    # Both the page-render and command paths address the connection over PubSub, so it
+    # must be up first - the same order Hologram.Application starts them in.
+    wait_for_process_cleanup(Hologram.PubSub)
+    start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
     wait_for_process_cleanup(SubscriptionRegistry)
     start_supervised!(SubscriptionRegistry)
 
@@ -415,9 +420,6 @@ defmodule Hologram.ControllerTest do
 
   describe "handle_command_request/1" do
     setup do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       wait_for_process_cleanup(Tombstone)
       start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
 
@@ -1689,9 +1691,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "fires broadcasts queued during page init after successful render" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module12, :dummy_module_12_digest)
 
       topic = Realtime.identity_topic(:user, "test-broadcast-user")
@@ -1742,26 +1741,28 @@ defmodule Hologram.ControllerTest do
       assert String.contains?(conn.resp_body, "marker=injected_by_middleware")
     end
 
-    test "drives SubscriptionRegistry.transition with the page's accumulated subscriptions" do
-      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+    test "asks the connection to replace its bindings with the page's accumulated subscriptions" do
+      topic = Realtime.instance_announce_topic("test-instance-id")
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       render_page_with_instance(Module14, "test-instance-id")
 
-      bindings = SubscriptionRegistry.bindings_of("test-instance-id")
+      assert_receive {:replace_subscriptions, new_sub_keys, nil}
 
-      assert {:room_page, "page"} in Map.keys(bindings)
-      assert {:room_layout, "layout"} in Map.keys(bindings)
-      assert {:room_component, "my_component"} in Map.keys(bindings)
+      assert {:room_page, "page"} in new_sub_keys
+      assert {:room_layout, "layout"} in new_sub_keys
+      assert {:room_component, "my_component"} in new_sub_keys
     end
 
-    test "does not flush subscriptions when init/3 raises" do
-      :ok = SubscriptionRegistry.register_connection("raising-instance-id", self())
+    test "asks for no replacement when init/3 raises" do
+      topic = Realtime.instance_announce_topic("raising-instance-id")
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       assert_raise RuntimeError, "boom", fn ->
         render_page_with_instance(Module15, "raising-instance-id")
       end
 
-      assert SubscriptionRegistry.bindings_of("raising-instance-id") == %{}
+      refute_receive {:replace_subscriptions, _new_sub_keys, _authorizing_user_id}
     end
 
     test "substitutes the self_echoes placeholder in the rendered HTML" do
@@ -1817,30 +1818,30 @@ defmodule Hologram.ControllerTest do
       refute Map.has_key?(bindings, {:room_a, "page"})
     end
 
-    test "shared layout binding survives a transition between pages with the same layout without PubSub churn" do
-      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+    test "keeps a shared layout binding in both envelopes across a same-layout navigation" do
+      topic = Realtime.instance_announce_topic("test-instance-id")
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
-      # Render page 1 (Module14) - its layout Module16 puts :room_layout.
+      # Page 1 (Module14) - its layout Module16 puts :room_layout.
       render_page_with_instance(Module14, "test-instance-id")
 
-      # Drain initial sub messages from page 1.
-      assert_receive {:sub, :room_page}
-      assert_receive {:sub, :room_layout}
-      assert_receive {:sub, :room_component}
+      assert_receive {:replace_subscriptions, first_keys, nil}
+      assert {:room_layout, "layout"} in first_keys
 
-      # Render page 2 (Module20) - reuses the same Module16 layout, so the
-      # layout's {:room_layout, "layout"} binding is unchanged in the diff.
+      # Page 2 (Module20) reuses that same layout, so the layout's binding is declared
+      # again rather than dropped. Asking for it on both sides is what lets the holder
+      # skip the zero-crossing - see replace_bindings/3 for that half.
       render_page_with_instance(Module20, "test-instance-id")
 
-      # Layout binding is preserved across the transition - no zero-crossing
-      # messages for :room_layout in either direction.
-      refute_receive {:sub, :room_layout}
-      refute_receive {:unsub, :room_layout}
+      assert_receive {:replace_subscriptions, second_keys, nil}
+      assert {:room_layout, "layout"} in second_keys
     end
 
     test "treats client-claimed keys as advisory so a lying client cannot manufacture subscriptions" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
-      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      topic = Realtime.instance_announce_topic("test-instance-id")
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       # Client claims a fake key that the server never issued. Module4's
       # init/3 puts no subscriptions.
@@ -1848,14 +1849,12 @@ defmodule Hologram.ControllerTest do
         {:fake_room, "page"}
       ])
 
-      # The fake key never lands in the canonical bindings - adds come from
-      # init/3 only, not from the client's claimed list.
-      assert SubscriptionRegistry.bindings_of("test-instance-id") == %{}
+      # The fake key never reaches the connection - the declared set comes from init/3
+      # only, not from the client's claimed list.
+      assert_receive {:replace_subscriptions, [], nil}
     end
 
     test "broadcasts {:identity_changed, ...} on the pre session's announce topic when init/3 changes identity" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
@@ -1876,8 +1875,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "does not broadcast {:identity_changed, ...} when init/3 leaves identity unchanged" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
@@ -1898,8 +1895,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "does not broadcast {:identity_changed, ...} when init/3 changes identity but raises" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
@@ -1922,9 +1917,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "broadcasts {:identity_changed, ...} on the pre session's announce topic when page middleware changes identity and terminates" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
       topic = Realtime.session_announce_topic(session_id)
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
@@ -1943,9 +1935,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "does not broadcast {:identity_changed, ...} when page middleware terminates without changing identity" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
       topic = Realtime.session_announce_topic(session_id)
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
@@ -1964,8 +1953,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "persists the changed user_id into the session when init/3 changes identity" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       conn =
@@ -1983,8 +1970,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "leaves the session user_id untouched when init/3 does not change identity" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       conn =
@@ -2023,9 +2008,6 @@ defmodule Hologram.ControllerTest do
 
   describe "handle_sse_handshake_request/1" do
     setup do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       wait_for_process_cleanup(Handshake)
       start_supervised!({Handshake, boot_sync_timeout_ms: 0})
 
@@ -2354,18 +2336,15 @@ defmodule Hologram.ControllerTest do
       assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
     end
 
-    test "drives SubscriptionRegistry.transition with instance_id and client_claimed_sub_keys from the request body" do
+    test "addresses the replacement to the instance named in the request body" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
-      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
-      # Seed a canonical {:room_a, "page"} binding so transition's drop path
-      # has something to remove on the upcoming navigation.
-      SubscriptionRegistry.transition("test-instance-id", [{:room_a, "page"}], [], nil)
+      topic = Realtime.instance_announce_topic("test-instance-id")
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
-      assert_receive {:sub, :room_a}
-
-      # Client claims it currently holds {:room_a, "page"}. Module4 puts no
-      # subscriptions, so transition's drop_keys ends up as [{:room_a, "page"}].
+      # Client claims it currently holds {:room_a, "page"}. Module4 declares none, so the
+      # replacement empties the set. What the claimed keys do to the response is covered
+      # by the sub_receipt_drops placeholder test.
       body = page_request_body("test-instance-id", [{:room_a, "page"}])
 
       :post
@@ -2374,7 +2353,7 @@ defmodule Hologram.ControllerTest do
       |> Map.put(:body_params, %{"_json" => body})
       |> handle_subsequent_page_request(Module4)
 
-      assert_receive {:unsub, :room_a}
+      assert_receive {:replace_subscriptions, [], nil}
     end
   end
 
@@ -2412,9 +2391,6 @@ defmodule Hologram.ControllerTest do
 
   describe "verify_and_refresh_receipts/4" do
     setup do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       wait_for_process_cleanup(Tombstone)
       start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
 
