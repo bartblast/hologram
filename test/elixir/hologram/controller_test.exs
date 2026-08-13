@@ -682,9 +682,14 @@ defmodule Hologram.ControllerTest do
     end
 
     test "ignores a receipt whose binding has been tombstoned" do
+      token = Receipt.issue(:room_a, "my_target_1", "my-instance-id", nil)
+      {:ok, %Receipt{created_at: receipt_created_at}} = Receipt.verify(token)
+
+      # Anchored to the receipt rather than to the clock, since a tombstone stamped in an
+      # earlier millisecond than the receipt legitimately does not reject it.
       Tombstone.insert(
         {{:instance, "my-instance-id"}, :room_a, "my_target_1"},
-        System.system_time(:millisecond)
+        receipt_created_at + 1
       )
 
       payload = %{
@@ -692,7 +697,7 @@ defmodule Hologram.ControllerTest do
         module: Module6,
         name: :my_command_accessing_subscriptions,
         params: %{},
-        sub_receipts: [Receipt.issue(:room_a, "my_target_1", "my-instance-id", nil)],
+        sub_receipts: [token],
         target: "my_target_1"
       }
 
