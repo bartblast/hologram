@@ -52,6 +52,18 @@ defmodule Hologram.Entity.Model do
   end
 
   @doc """
+  Returns the neutral value of the given option - the value whose meaning equals the
+  option's absence: false for flag options, nil for value options.
+
+  The removal spelling of the migration change ops: a change setting an option to its
+  neutral value removes it from the term.
+  """
+  @spec neutral_value(atom) :: false | nil
+  def neutral_value(key) when key in @flag_opts, do: false
+
+  def neutral_value(_key), do: nil
+
+  @doc """
   Returns the given model term with the given migration ops applied, in order.
 
   Replaying a history from empty/0 reconstructs the model as it stood at that point,
@@ -127,6 +139,18 @@ defmodule Hologram.Entity.Model do
     update_member(model, op.entity, :roles, "role", op.name, fn {name, opts} ->
       {name, normalize_opts(Keyword.merge(opts, op.changes))}
     end)
+  end
+
+  defp apply_op(%{op: :change_role, role: _role} = op, model) do
+    entry = fetch_role!(model, op.role)
+
+    extends =
+      op.changes
+      |> Keyword.get(:extends, entry.extends)
+      |> List.wrap()
+      |> Enum.sort()
+
+    put_in(model, [:roles, op.role], %{entry | extends: extends})
   end
 
   defp apply_op(%{op: :create_entity} = op, model) do

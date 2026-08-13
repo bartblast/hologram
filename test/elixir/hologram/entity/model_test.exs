@@ -197,6 +197,36 @@ defmodule Hologram.Entity.ModelTest do
                task_model(%{relationships: [{:tags, [MyApp.Label], [optional: true]}]})
     end
 
+    test "changes a global role's extends as deltas" do
+      model =
+        fold(empty(), [
+          %{op: :add_role, role: MyApp.Roles.Admin, opts: [], line: 3},
+          %{op: :add_role, role: MyApp.Roles.Owner, opts: [], line: 4}
+        ])
+
+      change_ops = [
+        %{
+          op: :change_role,
+          role: MyApp.Roles.Owner,
+          changes: [extends: MyApp.Roles.Admin],
+          line: 5
+        }
+      ]
+
+      removal_ops = [
+        %{op: :change_role, role: MyApp.Roles.Owner, changes: [extends: nil], line: 6}
+      ]
+
+      changed = fold(model, change_ops)
+
+      assert changed.roles == %{
+               MyApp.Roles.Admin => %{extends: []},
+               MyApp.Roles.Owner => %{extends: [MyApp.Roles.Admin]}
+             }
+
+      assert fold(changed, removal_ops) == model
+    end
+
     test "changes a role's options as deltas" do
       model = task_model(%{roles: [{:owner, [extends: :editor]}]})
 
@@ -753,6 +783,16 @@ defmodule Hologram.Entity.ModelTest do
 
     test "returns equal terms regardless of the given module order" do
       assert from_modules([Module13, Module2]) == from_modules([Module2, Module13])
+    end
+  end
+
+  describe "neutral_value/1" do
+    test "returns false for a flag option" do
+      assert neutral_value(:optional) == false
+    end
+
+    test "returns nil for a value option" do
+      assert neutral_value(:default) == nil
     end
   end
 end

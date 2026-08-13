@@ -17,6 +17,7 @@ defmodule Hologram.Migration do
           add_role: 1,
           add_role: 2,
           change_entity: 2,
+          change_role: 2,
           create_entity: 1,
           create_entity: 2,
           delete_entity: 1,
@@ -54,6 +55,21 @@ defmodule Hologram.Migration do
     block
     |> block_statements()
     |> Enum.map(&member_op(&1, entity_type, __CALLER__))
+  end
+
+  @doc """
+  Returns the op recording that the given global role module's options changed, the
+  changes as deltas.
+
+  Entity roles change inside entity blocks - this flat form takes a role module.
+  """
+  defmacro change_role(role, changes) do
+    validate_global_role_args!([role], :change_role, __CALLER__)
+    line = __CALLER__.line
+
+    quote do
+      %{op: :change_role, role: unquote(role), changes: unquote(changes), line: unquote(line)}
+    end
   end
 
   @doc """
@@ -166,7 +182,7 @@ defmodule Hologram.Migration do
          _entity_type,
          caller
        )
-       when name in [:add_role, :delete_role, :rename_role] do
+       when name in [:add_role, :change_role, :delete_role, :rename_role] do
     raise Hologram.CompileError,
       message:
         "#{name} with a role module is a flat top-level statement - " <>

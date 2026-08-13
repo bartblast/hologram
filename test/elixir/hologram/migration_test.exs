@@ -323,6 +323,37 @@ defmodule Hologram.MigrationTest do
     end
   end
 
+  describe "change_role/2" do
+    test "returns the op with the role module, the changes, and the call line" do
+      result = change_role(MyApp.Roles.Owner, extends: MyApp.Roles.Admin)
+
+      assert result == %{
+               op: :change_role,
+               role: MyApp.Roles.Owner,
+               changes: [extends: MyApp.Roles.Admin],
+               line: result.line
+             }
+
+      assert is_integer(result.line)
+    end
+
+    test "rejects an atom arg naming an entity role" do
+      code = """
+      import Hologram.Migration
+
+      change_role :owner, creator: true
+      """
+
+      expected_msg =
+        "change_role :owner is an entity-role op - " <>
+          "it lives inside a change_entity or create_entity block (line 3)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string(code)
+      end
+    end
+  end
+
   describe "create_entity/1" do
     test "returns the op with the entity type and the call line" do
       result = create_entity(MyApp.Task)
