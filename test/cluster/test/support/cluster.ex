@@ -124,7 +124,14 @@ defmodule HologramClusterTests.Cluster do
     rpc(node, Application, :load, [@app])
     {:ok, _apps} = rpc(node, Application, :ensure_all_started, [@app])
 
-    %{index: index, node: node, pid: pid, port: port}
+    peer = %{index: index, node: node, pid: pid, port: port}
+
+    # Peers die with the test process through the link, but asynchronously - and the next
+    # test claims the same node names and ports. Waiting here is what keeps that handover
+    # from racing.
+    ExUnit.Callbacks.on_exit(fn -> stop_peer(peer) end)
+
+    peer
   end
 
   @doc """
@@ -138,10 +145,19 @@ defmodule HologramClusterTests.Cluster do
   @doc """
   Stops the given peer and returns once the node has left the cluster, so its
   name and port are free for a replacement.
+
+  Stopping a peer that is already gone is not an error: the link may have taken
+  it down first, and the wait for the node to leave is the part that matters
+  either way.
   """
   @spec stop_peer(map) :: :ok
   def stop_peer(peer) do
-    :peer.stop(peer.pid)
+    try do
+      :peer.stop(peer.pid)
+    catch
+      :exit, _reason -> :ok
+    end
+
     await_node_down(peer.node, 1)
   end
 
