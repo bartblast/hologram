@@ -6,6 +6,7 @@ defmodule Hologram.Migrator do
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Preflight
+  alias Hologram.DB.Schema
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Entity.Model
   alias Hologram.Migration.Loader
@@ -72,6 +73,32 @@ defmodule Hologram.Migrator do
       raise "migration history does not produce this model - " <>
               "#{length(differing)} model #{changes_phrase(differing)} no migration " <>
               "(#{names}) - run mix holo.gen.migration"
+    end
+
+    :ok
+  end
+
+  @doc """
+  Validates that the connected database's schema is exactly what the given model derives.
+
+  Any difference refuses, one line per object - in a migration-managed database, removal
+  ships as a migration whose drop already ran, so "ours but no longer in the model" never
+  exists and every difference is drift: something added by hand, or something the model
+  declares hand-dropped. One rule, no classifying - hologram_data is model-managed
+  everywhere, and the wrong-database cases never reach this check (the marker refused
+  them).
+  """
+  @spec check_drift!(%{module => %{atom => any}}) :: :ok
+  def check_drift!(mapping) do
+    drift_ops = Schema.diff(Introspection.schema(), Schema.from_mapping(mapping))
+
+    if drift_ops != [] do
+      lines = Enum.map_join(drift_ops, "\n", &"  * #{describe_drift(&1)}")
+
+      raise "schema drift detected - the database does not match the model:\n" <>
+              lines <>
+              "\nhologram_data is model-managed - restore what is missing, remove what " <>
+              "was added by hand, or express the change as a migration"
     end
 
     :ok
@@ -162,6 +189,11 @@ defmodule Hologram.Migrator do
     migrations
     |> pending(applied)
     |> apply_pending(pre_model, context)
+
+    # TODO: query-artifact reconciliation slots in right here - the `_$sort` companions
+    # and their indexes are part of the expected schema, so the drift check must see
+    # them converged rather than reporting them.
+    check_drift!(Mapper.derive_from_model!(current_model))
 
     :ok
   end
@@ -284,6 +316,62 @@ defmodule Hologram.Migrator do
     {:ok, %{rows: [[count]]}} = Connection.query(statement)
 
     count
+  end
+
+  defp describe_drift(%{op: :add_column} = op) do
+    ~s(column "#{op.column}" on table "#{op.table}" declared by the model is missing)
+  end
+
+  defp describe_drift(%{op: :add_enum_value} = op) do
+    ~s(enum type "#{op.enum_type}" is missing the declared value '#{op.value}')
+  end
+
+  defp describe_drift(%{op: :add_foreign_key} = op) do
+    ~s(constraint "#{op.constraint}" on table "#{op.table}" declared by the model is missing)
+  end
+
+  defp describe_drift(%{op: :alter_column} = op) do
+    ~s(column "#{op.column}" on table "#{op.table}" does not match its declaration)
+  end
+
+  defp describe_drift(%{op: :create_enum_type} = op) do
+    ~s(enum type "#{op.enum_type}" declared by the model is missing)
+  end
+
+  defp describe_drift(%{op: :create_index} = op) do
+    ~s(index "#{op.index}" declared by the model is missing)
+  end
+
+  defp describe_drift(%{op: :create_table} = op) do
+    ~s(table "#{op.table}" declared by the model is missing)
+  end
+
+  defp describe_drift(%{op: :drop_column} = op) do
+    ~s(column "#{op.column}" on table "#{op.table}" is not derived from the model)
+  end
+
+  defp describe_drift(%{op: :drop_enum_type} = op) do
+    ~s(enum type "#{op.enum_type}" is not derived from the model)
+  end
+
+  defp describe_drift(%{op: :drop_foreign_key} = op) do
+    ~s(constraint "#{op.constraint}" on table "#{op.table}" is not derived from the model)
+  end
+
+  defp describe_drift(%{op: :drop_index} = op) do
+    ~s(index "#{op.index}" is not derived from the model)
+  end
+
+  defp describe_drift(%{op: :drop_table} = op) do
+    ~s(table "#{op.table}" is not derived from the model)
+  end
+
+  defp describe_drift(%{op: :rebuild_enum_type} = op) do
+    ~s(enum type "#{op.enum_type}" does not hold the declared values in their order)
+  end
+
+  defp describe_drift(%{op: :rename_constraint} = op) do
+    ~s(constraint "#{op.from}" on table "#{op.table}" is named outside the derived scheme)
   end
 
   defp differing_names(replayed, current) do

@@ -372,6 +372,64 @@ defmodule Hologram.MigratorTest do
     end
   end
 
+  describe "check_drift!/1" do
+    setup do
+      ensure_managed!(@context)
+
+      migrations = [
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            type: :string,
+            opts: [],
+            line: 4
+          }
+        ])
+      ]
+
+      model = apply_pending(migrations, Model.empty(), @context)
+
+      [mapping: Mapper.derive_from_model!(model)]
+    end
+
+    test "passes a database exactly matching the model", %{mapping: mapping} do
+      assert check_drift!(mapping) == :ok
+    end
+
+    test "refuses a hand-added object", %{mapping: mapping} do
+      create_index =
+        ~s{CREATE INDEX "task_title_hotfix" ON "hologram_data"."my_app_task" ("title")}
+
+      {:ok, _result} = Connection.query(create_index)
+
+      expected_msg =
+        normalize_newlines("""
+        schema drift detected - the database does not match the model:
+          * index "task_title_hotfix" is not derived from the model
+        hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
+        """)
+
+      assert_error RuntimeError, expected_msg, fn -> check_drift!(mapping) end
+    end
+
+    test "refuses a hand-dropped object", %{mapping: mapping} do
+      drop_column = ~s(ALTER TABLE "hologram_data"."my_app_task" DROP COLUMN "title")
+      {:ok, _result} = Connection.query(drop_column)
+
+      expected_msg =
+        normalize_newlines("""
+        schema drift detected - the database does not match the model:
+          * column "title" on table "my_app_task" declared by the model is missing
+        hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
+        """)
+
+      assert_error RuntimeError, expected_msg, fn -> check_drift!(mapping) end
+    end
+  end
+
   describe "ensure_managed!/1" do
     test "claims a virgin database for migrations" do
       assert ensure_managed!(@context) == :claimed
