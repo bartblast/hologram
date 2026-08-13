@@ -5,8 +5,6 @@ defmodule Hologram.Realtime do
 
   alias Hologram.Component.Action
   alias Hologram.Realtime.Channel
-  alias Hologram.Realtime.Receipt
-  alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
   alias Hologram.Server
   alias Hologram.Server.Broadcast
@@ -182,33 +180,33 @@ defmodule Hologram.Realtime do
   for the given `cid`. An explicit subscribe is a re-grant that supersedes any
   prior `unsubscribe`/`unsubscribe_all` for the same identity and channel.
 
-  When `identity` resolves to no live connection, the call has no effect on
+  When no live connection matches the identity, the call has no effect on
   delivery. Returns `:ok`. Raises `ArgumentError` on an invalid channel.
   """
-  # For each live connection the identity resolves to (via
-  # SubscriptionRegistry.resolve_identity/1): registers the binding through
-  # SubscriptionRegistry.apply_deltas/4 (which emits a {:sub, channel}
-  # self-message to the SSE process on a zero-crossing channel), signs a fresh
-  # receipt under the connection's current user_id (so the authorization stamp
-  # tracks identity at issue time, per the elevation rule), and sends
-  # {:add_sub_receipts, [{channel, cid, token}]} to the SSE process for
-  # client-side merge. Then gossips a cluster-wide tombstone auto-purge for both
-  # the binding-level key {identity, channel, cid} and the channel-wide key
-  # {identity, channel} - the re-grant supersedes any prior revocation. The
-  # purge fires regardless of whether any connection matched.
+  # Published on the identity's announce topic, which every matching connection
+  # subscribes to at stream open - so the grant reaches them wherever in the cluster
+  # they live, exactly as unsubscribe/3's revocation does. Each connection registers
+  # the binding against its own node's registry (emitting a {:sub, channel}
+  # zero-crossing), signs a receipt under the user_id it holds at delivery time (so
+  # the authorization stamp tracks identity at issue time, per the elevation rule),
+  # and pushes {:add_sub_receipts, [{channel, cid, token}]} to the client. Then
+  # gossips a cluster-wide tombstone auto-purge for both the binding-level key
+  # {identity, channel, cid} and the channel-wide key {identity, channel} - the
+  # re-grant supersedes any prior revocation. The purge fires regardless of whether
+  # any connection is listening.
   @spec subscribe(
           {:instance, String.t()} | {:session, term} | {:user, term},
           atom | tuple,
           String.t()
         ) :: :ok
-  def subscribe(identity, channel, cid) when is_binary(cid) do
+  def subscribe({kind, id} = identity, channel, cid)
+      when kind in [:instance, :session, :user] and is_binary(cid) do
     Channel.validate!(channel)
 
-    identity
-    |> SubscriptionRegistry.resolve_identity()
-    |> Enum.each(fn {instance_id, sse_pid} ->
-      subscribe_target(instance_id, sse_pid, channel, cid)
-    end)
+    topic = announce_topic_for(kind, id)
+    envelope = {:add_subscription, channel, cid}
+
+    Phoenix.PubSub.broadcast(Hologram.PubSub, topic, envelope)
 
     gossip_topic = Tombstone.gossip_topic()
     binding_key = {identity, channel, cid}
@@ -301,23 +299,5 @@ defmodule Hologram.Realtime do
     topic = channel_topic(channel)
     message = {:broadcast_action, channel, action_name, Map.new(params), excluded_identities}
     Phoenix.PubSub.broadcast(Hologram.PubSub, topic, message)
-  end
-
-  defp subscribe_target(instance_id, sse_pid, channel, cid) do
-    case SubscriptionRegistry.identity_of(instance_id) do
-      {_session_id, authorizing_user_id} ->
-        SubscriptionRegistry.apply_deltas(
-          instance_id,
-          [{channel, cid}],
-          [],
-          authorizing_user_id
-        )
-
-        token = Receipt.issue(channel, cid, instance_id, authorizing_user_id)
-        send(sse_pid, {:add_sub_receipts, [{channel, cid, token}]})
-
-      nil ->
-        :ok
-    end
   end
 end
