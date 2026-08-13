@@ -26,21 +26,21 @@ defmodule Hologram.Migration.LoaderTest do
     test "returns the migrations ordered by version" do
       dir =
         write_migrations!("ordered", [
-          {"20260813120000.exs", "use Hologram.Migration\n\ndelete_entity MyApp.Archive\n"},
-          {"20260813090000.exs", "use Hologram.Migration\n\ncreate_entity MyApp.Task\n"}
+          {"20260813142237.exs", "use Hologram.Migration\n\ndelete_entity MyApp.Archive\n"},
+          {"20260813091522.exs", "use Hologram.Migration\n\ncreate_entity MyApp.Task\n"}
         ])
 
       assert [first, second] = load_dir!(dir)
 
       assert first == %{
-               version: "20260813090000",
-               path: Path.join(dir, "20260813090000.exs"),
+               version: "20260813091522",
+               path: Path.join(dir, "20260813091522.exs"),
                ops: [%{op: :create_entity, entity: MyApp.Task, line: 3}]
              }
 
       assert second == %{
-               version: "20260813120000",
-               path: Path.join(dir, "20260813120000.exs"),
+               version: "20260813142237",
+               path: Path.join(dir, "20260813142237.exs"),
                ops: [%{op: :delete_entity, entity: MyApp.Archive, line: 3}]
              }
     end
@@ -64,10 +64,10 @@ defmodule Hologram.Migration.LoaderTest do
       rename_entity MyApp.Draft, MyApp.Sketch
       """
 
-      dir = write_migrations!("pre_rename_reference", [{"20260813090000.exs", contents}])
+      dir = write_migrations!("pre_rename_reference", [{"20260813091522.exs", contents}])
 
       expected_msg =
-        "#{Path.join(dir, "20260813090000.exs")}:4 references MyApp.Draft, " <>
+        "#{Path.join(dir, "20260813091522.exs")}:4 references MyApp.Draft, " <>
           "renamed on line 7 - move the rename first and use MyApp.Sketch"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
@@ -78,11 +78,11 @@ defmodule Hologram.Migration.LoaderTest do
     test "rejects a file whose name is not a version" do
       dir =
         write_migrations!("invalid_name", [
-          {"20260813090000_add_priority.exs", "use Hologram.Migration\n"}
+          {"20260813091522_add_priority.exs", "use Hologram.Migration\n"}
         ])
 
       expected_msg =
-        "invalid migration file name #{Path.join(dir, "20260813090000_add_priority.exs")} - " <>
+        "invalid migration file name #{Path.join(dir, "20260813091522_add_priority.exs")} - " <>
           "a migration file is named after its version: 14 timestamp digits with the " <>
           "\".exs\" extension, e.g. \"20260813091500.exs\""
 
@@ -101,7 +101,7 @@ defmodule Hologram.Migration.LoaderTest do
       delete_entity MyApp.Archive
       """
 
-      assert [rename_op, delete_op] = load_string!(contents, "20260813000000.exs")
+      assert [rename_op, delete_op] = load_string!(contents, "20260813075841.exs")
 
       assert rename_op == %{
                op: :rename_entity,
@@ -128,7 +128,7 @@ defmodule Hologram.Migration.LoaderTest do
       """
 
       assert [rename_op, add_op, create_op, body_op] =
-               load_string!(contents, "20260813000000.exs")
+               load_string!(contents, "20260813075841.exs")
 
       assert rename_op == %{
                op: :rename_attribute,
@@ -160,7 +160,7 @@ defmodule Hologram.Migration.LoaderTest do
     end
 
     test "returns an empty list for a file holding only the header" do
-      assert load_string!("use Hologram.Migration\n", "20260813000000.exs") == []
+      assert load_string!("use Hologram.Migration\n", "20260813075841.exs") == []
     end
 
     test "rejects a file without the header" do
@@ -169,10 +169,10 @@ defmodule Hologram.Migration.LoaderTest do
       """
 
       expected_msg =
-        "migration file 20260813000000.exs must start with the use Hologram.Migration header"
+        "migration file 20260813075841.exs must start with the use Hologram.Migration header"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        load_string!(contents, "20260813000000.exs")
+        load_string!(contents, "20260813075841.exs")
       end
     end
 
@@ -187,10 +187,10 @@ defmodule Hologram.Migration.LoaderTest do
       end
       """
 
-      expected_msg = "migration files contain only migration ops - 20260813000000.exs:5"
+      expected_msg = "migration files contain only migration ops - 20260813075841.exs:5"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        load_string!(contents, "20260813000000.exs")
+        load_string!(contents, "20260813075841.exs")
       end
     end
 
@@ -201,10 +201,10 @@ defmodule Hologram.Migration.LoaderTest do
       drop_entity MyApp.Archive
       """
 
-      expected_msg = "migration files contain only migration ops - 20260813000000.exs:3"
+      expected_msg = "migration files contain only migration ops - 20260813075841.exs:3"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        load_string!(contents, "20260813000000.exs")
+        load_string!(contents, "20260813075841.exs")
       end
     end
   end
@@ -220,7 +220,7 @@ defmodule Hologram.Migration.LoaderTest do
       end
       """
 
-      ops = load_string!(contents, "20260813000000.exs")
+      ops = load_string!(contents, "20260813075841.exs")
 
       assert unresolved(ops) == [
                %{
@@ -253,13 +253,13 @@ defmodule Hologram.Migration.LoaderTest do
         %{op: :delete_entity, entity: MyApp.Archive, line: 5}
       ]
 
-      assert verify_rename_order!(ops, "20260813090000.exs") == :ok
+      assert verify_rename_order!(ops, "20260813091522.exs") == :ok
     end
 
     test "passes a file without renames" do
       ops = [%{op: :delete_entity, entity: MyApp.Archive, line: 3}]
 
-      assert verify_rename_order!(ops, "20260813090000.exs") == :ok
+      assert verify_rename_order!(ops, "20260813091522.exs") == :ok
     end
 
     test "rejects an op scoped to the pre-rename name" do
@@ -276,11 +276,11 @@ defmodule Hologram.Migration.LoaderTest do
       ]
 
       expected_msg =
-        "20260813090000.exs:3 references MyApp.Draft, renamed on line 4 - " <>
+        "20260813091522.exs:3 references MyApp.Draft, renamed on line 4 - " <>
           "move the rename first and use MyApp.Sketch"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        verify_rename_order!(ops, "20260813090000.exs")
+        verify_rename_order!(ops, "20260813091522.exs")
       end
     end
 
@@ -298,11 +298,11 @@ defmodule Hologram.Migration.LoaderTest do
       ]
 
       expected_msg =
-        "20260813090000.exs:4 references MyApp.Draft, renamed on line 3 - " <>
+        "20260813091522.exs:4 references MyApp.Draft, renamed on line 3 - " <>
           "move the rename first and use MyApp.Sketch"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        verify_rename_order!(ops, "20260813090000.exs")
+        verify_rename_order!(ops, "20260813091522.exs")
       end
     end
   end
