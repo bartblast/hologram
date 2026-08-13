@@ -32,6 +32,7 @@ defmodule HologramClusterTests.CommandSubscriptionTest do
         |> visit("/command-subscribe")
 
       wait_for_channel_binding(sse_peer, @channel)
+      wait_for_channel_subscriber(sse_peer, @channel)
 
       Realtime.broadcast_action(@channel, :show, message: "delivered across the cluster")
 

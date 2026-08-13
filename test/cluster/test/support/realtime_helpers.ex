@@ -6,6 +6,7 @@ defmodule HologramClusterTests.RealtimeHelpers do
 
   import HologramClusterTests.Cluster, only: [rpc: 4]
 
+  alias Hologram.Realtime
   alias Hologram.Realtime.SubscriptionRegistry
 
   # Bounded at 100 x 100ms: the awaited effect lands within a round trip when routing
@@ -59,6 +60,33 @@ defmodule HologramClusterTests.RealtimeHelpers do
     else
       Process.sleep(100)
       wait_for_channel_binding(peer, channel, attempt + 1)
+    end
+  end
+
+  @doc """
+  Blocks until a subscriber for `channel`'s PubSub topic exists on the given
+  peer, or raises once the attempt budget is spent.
+
+  A binding in the registry does not yet mean deliverability: the stream joins
+  the channel's topic one message-pump iteration after the binding is written,
+  and a broadcast dispatched into that gap is silently lost. This is the gate
+  for "a broadcast will now reach the tab".
+  """
+  @spec wait_for_channel_subscriber(map, any) :: :ok
+  def wait_for_channel_subscriber(peer, channel, attempt \\ 1)
+
+  def wait_for_channel_subscriber(peer, channel, attempt) when attempt > @attempts do
+    raise "no subscriber for #{inspect(channel)} ever appeared on #{inspect(peer.node)}"
+  end
+
+  def wait_for_channel_subscriber(peer, channel, attempt) do
+    topic = Realtime.channel_topic(channel)
+
+    if rpc(peer, Registry, :lookup, [Hologram.PubSub, topic]) == [] do
+      Process.sleep(100)
+      wait_for_channel_subscriber(peer, channel, attempt + 1)
+    else
+      :ok
     end
   end
 

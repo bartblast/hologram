@@ -34,6 +34,7 @@ defmodule HologramClusterTests.OutsideHandlerSubscriptionTest do
     rpc(other_peer, Realtime, :subscribe, [{:instance, instance_id}, @channel, "page"])
 
     wait_for_channel_binding(sse_peer, @channel)
+    wait_for_channel_subscriber(sse_peer, @channel)
 
     rpc(other_peer, Realtime, :broadcast_action, [
       @channel,
