@@ -3,10 +3,10 @@ defmodule Hologram.DB.SchemaReconciler do
 
   require Logger
 
-  alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
   alias Hologram.DB.Introspection
+  alias Hologram.DB.Preflight
   alias Hologram.DB.Schema
 
   # Fixed application-defined key for pg_advisory_xact_lock - serializes concurrent
@@ -134,7 +134,7 @@ defmodule Hologram.DB.SchemaReconciler do
         ops = Schema.diff(actual, target)
 
         check_aliens!(ops, registry())
-        preflight!(ops, actual, context.mapping)
+        Preflight.run!(ops, actual, context.mapping)
 
         apply_ops(ops, context.mapping)
         update_registry(ops)
@@ -210,7 +210,8 @@ defmodule Hologram.DB.SchemaReconciler do
   # A required add with a declared default applies as add-nullable, parameterized fill,
   # then tighten - so existing rows receive the default and the DDL never carries values.
   defp apply_op(%{op: :add_column} = op, mapping) do
-    fill = if op.definition.null, do: :none, else: fill_value(mapping, op.table, op.column)
+    fill =
+      if op.definition.null, do: :none, else: Preflight.fill_value(mapping, op.table, op.column)
 
     case fill do
       :none ->
@@ -239,7 +240,7 @@ defmodule Hologram.DB.SchemaReconciler do
   defp apply_op(%{op: :alter_column} = op, mapping) do
     fill =
       if op.before.null and not op.after.null and op.before.type == op.after.type do
-        fill_value(mapping, op.table, op.column)
+        Preflight.fill_value(mapping, op.table, op.column)
       else
         :none
       end
@@ -343,12 +344,6 @@ defmodule Hologram.DB.SchemaReconciler do
     :claimed
   end
 
-  defp count_result(statement) do
-    {:ok, %{rows: [[count]]}} = Connection.query(statement)
-
-    count
-  end
-
   defp deregister(kind, parent, name) do
     statement = """
     DELETE FROM "hologram_system"."schema_object"
@@ -370,21 +365,6 @@ defmodule Hologram.DB.SchemaReconciler do
     fill_statement = DDL.fill_statement(table, column)
 
     {:ok, _result} = Connection.query(fill_statement, [encoded_value])
-  end
-
-  defp fill_value(mapping, table, column_name) do
-    entity_mapping =
-      mapping
-      |> Map.values()
-      |> Enum.find(&(&1.table == table))
-
-    column = entity_mapping && Enum.find(entity_mapping.columns, &(&1.name == column_name))
-
-    case column do
-      %{default: nil} -> :none
-      %{default: default, type: type} -> {:ok, Codec.encode(default, type)}
-      nil -> :none
-    end
   end
 
   defp hologram_schemas do
@@ -445,104 +425,6 @@ defmodule Hologram.DB.SchemaReconciler do
     {:ok, %{rows: rows}} = Connection.query(statement)
 
     rows != []
-  end
-
-  defp pluralize_rows(1), do: "row"
-
-  defp pluralize_rows(_count), do: "rows"
-
-  defp pluralize_values([_value]), do: "value"
-
-  defp pluralize_values(_values), do: "values"
-
-  defp preflight!(ops, actual, mapping) do
-    Enum.each(ops, &preflight_op!(&1, actual, mapping))
-  end
-
-  defp preflight_cast_rows!(op) do
-    count =
-      count_result(DDL.cast_check_statement(op.table, op.column, op.before.type, op.after.type))
-
-    if count > 0 do
-      raise ~s(#{count} #{pluralize_rows(count)} in "#{op.table}"."#{op.column}" ) <>
-              "cannot convert from #{op.before.type} to #{op.after.type} - " <>
-              "fix the data or remove the attribute and re-add it with the new type"
-    end
-  end
-
-  defp preflight_null_tightening!(op, mapping) do
-    fillable? =
-      op.before.type == op.after.type and
-        match?({:ok, _value}, fill_value(mapping, op.table, op.column))
-
-    checked? = op.before.null and not op.after.null and not fillable?
-    count = if checked?, do: count_result(DDL.null_check_statement(op.table, op.column)), else: 0
-
-    if count > 0 do
-      raise ~s(cannot make column "#{op.column}" on table "#{op.table}" required - ) <>
-              "found #{count} #{pluralize_rows(count)} with NULL - " <>
-              "declare a default:, keep the attribute optional:, or fix the data"
-    end
-  end
-
-  defp preflight_op!(%{op: :add_column} = op, _actual, mapping) do
-    checked? =
-      not op.definition.null and
-        not match?({:ok, _value}, fill_value(mapping, op.table, op.column))
-
-    count = if checked?, do: count_result(DDL.rows_check_statement(op.table)), else: 0
-
-    if count > 0 do
-      raise ~s(cannot add required column "#{op.column}" to table "#{op.table}" - ) <>
-              "#{count} existing #{pluralize_rows(count)} would have no value - " <>
-              "declare a default:, make the attribute optional:, or clear the rows"
-    end
-  end
-
-  defp preflight_op!(%{op: :alter_column} = op, _actual, mapping) do
-    preflight_type_change!(op)
-    preflight_null_tightening!(op, mapping)
-  end
-
-  defp preflight_op!(%{op: :rebuild_enum_type} = op, actual, _mapping) do
-    removed_values = actual.enum_types[op.enum_type] -- op.values
-
-    if removed_values != [] do
-      Enum.each(op.columns, fn {table, column} ->
-        preflight_removed_enum_values!(table, column, removed_values)
-      end)
-    end
-  end
-
-  defp preflight_op!(_op, _actual, _mapping), do: :ok
-
-  defp preflight_removed_enum_values!(table, column, removed_values) do
-    count = count_result(DDL.enum_values_check_statement(table, column, removed_values))
-
-    if count > 0 do
-      values = Enum.map_join(removed_values, ", ", &"'#{&1}'")
-
-      raise ~s(found #{count} #{pluralize_rows(count)} in "#{table}"."#{column}" ) <>
-              "holding removed enum #{pluralize_values(removed_values)} #{values} - " <>
-              "update the rows or re-add the #{pluralize_values(removed_values)}"
-    end
-  end
-
-  defp preflight_type_change!(op) do
-    if op.before.type != op.after.type do
-      case DDL.cast_class(op.before.type, op.after.type) do
-        :safe ->
-          :ok
-
-        :data_dependent ->
-          preflight_cast_rows!(op)
-
-        :unsupported ->
-          raise ~s(changing column "#{op.column}" on table "#{op.table}" ) <>
-                  "from #{op.before.type} to #{op.after.type} is not supported - " <>
-                  "remove the attribute and re-add it with the new type"
-      end
-    end
   end
 
   defp raise_alien!(description) do
