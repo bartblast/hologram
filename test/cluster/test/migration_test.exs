@@ -57,6 +57,16 @@ defmodule HologramClusterTests.MigrationTest do
     end)
   end
 
+  defp invalidate_index(index) do
+    statement = """
+    UPDATE pg_catalog.pg_index SET "indisvalid" = false
+    FROM pg_catalog.pg_class ic
+    WHERE ic.oid = pg_index."indexrelid" AND ic."relname" = $1
+    """
+
+    with_migrations_db(fn -> {:ok, _result} = Connection.query(statement, [index]) end)
+  end
+
   defp peer_database(peer) do
     {:ok, %{rows: [[database]]}} =
       rpc(peer, Hologram.DB.Connection, :query, ["SELECT current_database()", []])
@@ -121,6 +131,26 @@ defmodule HologramClusterTests.MigrationTest do
 
       assert Enum.map(applied_version_rows(), fn {version, _applied_at} -> version end) ==
                Enum.map(migrations(), & &1.version)
+    end
+
+    test "a build interrupted partway is rebuilt by the next boot" do
+      first_peer = start_migration_peer(1)
+
+      assert serving?(first_peer)
+
+      index = "entities_item_parent_id_$idx"
+
+      # What a node killed during its concurrent build leaves behind: the file is
+      # recorded applied - it committed before the build began - while the index stays
+      # in the catalog serving no query and slowing every write.
+      invalidate_index(index)
+
+      assert index_validity(index) == false
+
+      next_peer = start_migration_peer(2)
+
+      assert serving?(next_peer)
+      assert index_validity(index) == true
     end
   end
 
