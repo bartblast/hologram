@@ -223,8 +223,11 @@ defmodule Hologram.DB.QueryCache do
     end
   end
 
+  # The environment selects the schema mechanism, the same rule the database boots by -
+  # asking the database instead would mean reading the marker of a database that
+  # reconciliation has not created yet, which is exactly the state this runs in.
   defp migrations_managed? do
-    match?(%{managed_by: "migrations"}, SchemaReconciler.read_marker())
+    Hologram.env() not in [:dev, :test]
   end
 
   defp populate do
