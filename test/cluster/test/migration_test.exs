@@ -29,6 +29,34 @@ defmodule HologramClusterTests.MigrationTest do
     end)
   end
 
+  defp index_validity(index) do
+    statement = """
+    SELECT i."indisvalid"
+    FROM pg_catalog.pg_index i
+    JOIN pg_catalog.pg_class ic ON ic.oid = i."indexrelid"
+    JOIN pg_catalog.pg_class c ON c.oid = i."indrelid"
+    JOIN pg_catalog.pg_namespace n ON n.oid = c."relnamespace"
+    WHERE n."nspname" = 'hologram_data' AND ic."relname" = $1
+    """
+
+    with_migrations_db(fn ->
+      case Connection.query(statement, [index]) do
+        {:ok, %{rows: [[valid]]}} -> valid
+        {:ok, %{rows: []}} -> :absent
+      end
+    end)
+  end
+
+  defp item_count do
+    statement = ~s{SELECT COUNT(*) FROM "hologram_data"."entities_item"}
+
+    with_migrations_db(fn ->
+      {:ok, %{rows: [[count]]}} = Connection.query(statement)
+
+      count
+    end)
+  end
+
   defp peer_database(peer) do
     {:ok, %{rows: [[database]]}} =
       rpc(peer, Hologram.DB.Connection, :query, ["SELECT current_database()", []])
@@ -62,6 +90,37 @@ defmodule HologramClusterTests.MigrationTest do
       mapping = Mapper.derive_from_model!(model())
 
       assert with_migrations_db(fn -> Migrator.check_drift!(mapping) end) == :ok
+    end
+  end
+
+  describe "concurrent index build" do
+    test "the tail index is built on a populated table and comes out valid" do
+      # Through f3: the table stands and carries rows, so f4's index cannot be built
+      # inside its transaction and goes to the tail, which builds it concurrently.
+      plant_applied_prefix!(3)
+
+      insert_item = """
+      INSERT INTO "hologram_data"."entities_item" ("id", "slug", "title", "created_at", "updated_at")
+      VALUES (gen_random_uuid(), $1, $2, now(), now())
+      """
+
+      with_migrations_db(fn ->
+        {:ok, _result} = Connection.query(insert_item, ["one", "First"])
+        {:ok, _result} = Connection.query(insert_item, ["two", "Second"])
+        {:ok, _result} = Connection.query(insert_item, ["three", "Third"])
+      end)
+
+      peer = start_migration_peer(1)
+
+      assert serving?(peer)
+      assert item_count() == 3
+
+      # Valid, not merely present: a concurrent build that fails partway leaves the
+      # index in the catalog serving no query while every write maintains it.
+      assert index_validity("entities_item_parent_id_$idx") == true
+
+      assert Enum.map(applied_version_rows(), fn {version, _applied_at} -> version end) ==
+               Enum.map(migrations(), & &1.version)
     end
   end
 
