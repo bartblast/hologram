@@ -324,6 +324,54 @@ defmodule Hologram.MigratorTest do
     end
   end
 
+  describe "check_covered!/2" do
+    test "passes a history that produces the model" do
+      migrations = [
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            type: :string,
+            opts: [],
+            line: 4
+          }
+        ])
+      ]
+
+      model = %{
+        entities: %{
+          MyApp.Task => %{attributes: [{:title, :string, []}], relationships: [], roles: []}
+        },
+        roles: %{}
+      }
+
+      assert check_covered!(migrations, model) == :ok
+    end
+
+    test "raises when model changes have no migration" do
+      migrations = [
+        migration("20260813091522", [%{op: :create_entity, entity: MyApp.Task, line: 3}])
+      ]
+
+      model = %{
+        entities: %{
+          MyApp.Comment => %{attributes: [], relationships: [], roles: []},
+          MyApp.Task => %{attributes: [], relationships: [], roles: []}
+        },
+        roles: %{MyApp.Roles.Admin => %{extends: []}}
+      }
+
+      expected_msg =
+        "migration history does not produce this model - " <>
+          "2 model changes have no migration (MyApp.Comment, MyApp.Roles.Admin) - " <>
+          "run mix holo.gen.migration"
+
+      assert_error RuntimeError, expected_msg, fn -> check_covered!(migrations, model) end
+    end
+  end
+
   describe "ensure_managed!/1" do
     test "claims a virgin database for migrations" do
       assert ensure_managed!(@context) == :claimed
@@ -414,6 +462,83 @@ defmodule Hologram.MigratorTest do
       migrations = [%{version: "20260813091522", path: "a.exs", ops: []}]
 
       assert pending(migrations, MapSet.new(["20260813091522"])) == []
+    end
+  end
+
+  describe "run/3" do
+    test "claims the database and applies the pending suffix" do
+      migrations = [
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            type: :string,
+            opts: [],
+            line: 4
+          }
+        ]),
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :priority,
+            type: :integer,
+            opts: [optional: true],
+            line: 3
+          }
+        ])
+      ]
+
+      model = %{
+        entities: %{
+          MyApp.Task => %{
+            attributes: [{:priority, :integer, [optional: true]}, {:title, :string, []}],
+            relationships: [],
+            roles: []
+          }
+        },
+        roles: %{}
+      }
+
+      assert run(migrations, model, @context) == :ok
+
+      assert table_columns("my_app_task") == [
+               "created_at",
+               "id",
+               "priority",
+               "title",
+               "updated_at"
+             ]
+
+      assert applied_versions() == MapSet.new(["20260813091522", "20260813142237"])
+
+      # A second run finds nothing pending and changes nothing.
+      assert run(migrations, model, @context) == :ok
+      assert applied_versions() == MapSet.new(["20260813091522", "20260813142237"])
+    end
+
+    test "refuses an uncovered model before touching the database" do
+      migrations = []
+
+      model = %{
+        entities: %{MyApp.Task => %{attributes: [], relationships: [], roles: []}},
+        roles: %{}
+      }
+
+      assert_raise RuntimeError, fn -> run(migrations, model, @context) end
+
+      # The check ran before the guard: nothing was claimed.
+      statement = """
+      SELECT nspname
+      FROM pg_catalog.pg_namespace
+      WHERE nspname IN ('hologram_data', 'hologram_system')
+      """
+
+      {:ok, %{rows: rows}} = Connection.query(statement)
+
+      assert rows == []
     end
   end
 

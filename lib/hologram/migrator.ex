@@ -7,7 +7,10 @@ defmodule Hologram.Migrator do
   alias Hologram.DB.Mapper
   alias Hologram.DB.Preflight
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.Entity.Model
+  alias Hologram.Migration.Loader
   alias Hologram.Migration.Renderer
+  alias Hologram.Reflection
 
   # Fixed application-defined key for pg_advisory_xact_lock - serializes the appliers of
   # a deploy, whichever node gets there first. The value is frozen forever: a different
@@ -51,6 +54,30 @@ defmodule Hologram.Migrator do
   end
 
   @doc """
+  Validates that folding the given migrations from the empty model produces the given
+  model.
+
+  Pure - it needs no database access, so it runs before anything is touched: a deploy
+  whose model changes never became migrations refuses here, whether generation was
+  skipped or CI was.
+  """
+  @spec check_covered!(list(%{atom => any}), %{atom => map}) :: :ok
+  def check_covered!(migrations, current_model) do
+    replayed = Enum.reduce(migrations, Model.empty(), &Model.fold(&2, &1.ops))
+
+    if replayed != current_model do
+      differing = differing_names(replayed, current_model)
+      names = Enum.map_join(differing, ", ", &inspect/1)
+
+      raise "migration history does not produce this model - " <>
+              "#{length(differing)} model #{changes_phrase(differing)} no migration " <>
+              "(#{names}) - run mix holo.gen.migration"
+    end
+
+    :ok
+  end
+
+  @doc """
   Ensures the connected database is managed by migrations, claiming it when virgin -
   runs in the caller's transaction.
 
@@ -91,6 +118,50 @@ defmodule Hologram.Migrator do
     """
 
     {:ok, _result} = Connection.query(statement, [version, timestamp])
+
+    :ok
+  end
+
+  @doc """
+  Applies the pending migrations of the project's migrations directory to the connected
+  database as the current model's history.
+
+  The public entry a deploy pipeline may call before rolling nodes (`bin/app eval
+  "Hologram.Migrator.run()"`) - the boot-time apply then finds nothing pending. Same
+  mechanism either way, nothing to configure.
+  """
+  @spec run() :: :ok
+  def run do
+    migrations = Loader.load_dir!(Loader.migrations_dir())
+    current_model = Model.from_modules(Reflection.list_entities(), Reflection.list_roles())
+
+    run(migrations, current_model, run_context())
+  end
+
+  @doc """
+  Applies the given migrations' pending suffix to the connected database as the given
+  model's history.
+
+  The not-covered check runs first, before any database access - then the guard claims
+  or verifies the database, and the pending files apply from the model the applied ones
+  produce.
+  """
+  @spec run(list(%{atom => any}), %{atom => map}, %{atom => any}) :: :ok
+  def run(migrations, current_model, context) do
+    check_covered!(migrations, current_model)
+
+    {:ok, _status} = Connection.transaction(fn -> ensure_managed!(context) end)
+
+    applied = applied_versions()
+
+    pre_model =
+      migrations
+      |> Enum.filter(&(&1.version in applied))
+      |> Enum.reduce(Model.empty(), &Model.fold(&2, &1.ops))
+
+    migrations
+    |> pending(applied)
+    |> apply_pending(pre_model, context)
 
     :ok
   end
@@ -157,6 +228,10 @@ defmodule Hologram.Migrator do
     :applied
   end
 
+  defp changes_phrase([_one]), do: "change has"
+
+  defp changes_phrase(_differing), do: "changes have"
+
   defp check_marker!(context) do
     marker = SchemaReconciler.read_marker()
 
@@ -211,6 +286,24 @@ defmodule Hologram.Migrator do
     count
   end
 
+  defp differing_names(replayed, current) do
+    entity_names =
+      replayed.entities
+      |> Map.keys()
+      |> Enum.concat(Map.keys(current.entities))
+      |> Enum.uniq()
+      |> Enum.filter(&(replayed.entities[&1] != current.entities[&1]))
+
+    role_names =
+      replayed.roles
+      |> Map.keys()
+      |> Enum.concat(Map.keys(current.roles))
+      |> Enum.uniq()
+      |> Enum.filter(&(replayed.roles[&1] != current.roles[&1]))
+
+    Enum.sort(entity_names ++ role_names)
+  end
+
   # A concurrent build that failed partway leaves the index in the catalog flagged
   # invalid: it holds the name, serves no query, and every write maintains it. Clearing
   # it before building makes the tail safe to run again, so a crashed deploy retries
@@ -250,6 +343,15 @@ defmodule Hologram.Migrator do
     {:ok, %{rows: rows}} = Connection.query(statement)
 
     Enum.map(rows, fn [name] -> name end)
+  end
+
+  defp run_context do
+    %{
+      otp_app: Atom.to_string(Reflection.otp_app()),
+      env: Atom.to_string(Hologram.env()),
+      hologram_version: to_string(Application.spec(:hologram, :vsn)),
+      timestamp: DateTime.utc_now(:microsecond)
+    }
   end
 
   defp raise_not_managed! do
