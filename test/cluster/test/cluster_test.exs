@@ -3,6 +3,8 @@ defmodule HologramClusterTests.ClusterTest do
 
   import HologramClusterTests.Cluster
 
+  alias HologramClusterTests.HTTPClient
+
   describe "await_pubsub_convergence/1" do
     test "returns :ok once every peer's broadcast reaches this node" do
       peers = start_peers(2)
@@ -68,8 +70,8 @@ defmodule HologramClusterTests.ClusterTest do
     test "serves app traffic on each peer's own port" do
       [peer_1, peer_2] = start_peers(2)
 
-      assert http_get_status(peer_1.port, "/external") == 200
-      assert http_get_status(peer_2.port, "/external") == 200
+      assert HTTPClient.get("http://127.0.0.1:#{peer_1.port}/external").status == 200
+      assert HTTPClient.get("http://127.0.0.1:#{peer_2.port}/external").status == 200
     end
 
     test "enables the framework runtime on the peer through the inherited environment" do
@@ -89,12 +91,5 @@ defmodule HologramClusterTests.ClusterTest do
 
       refute peer.node in Node.list(:connected)
     end
-  end
-
-  defp http_get_status(port, path) do
-    {:ok, status, _headers, _client_ref} =
-      :hackney.request(:get, "http://127.0.0.1:#{port}#{path}", [], "", [])
-
-    status
   end
 end

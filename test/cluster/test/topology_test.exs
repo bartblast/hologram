@@ -1,6 +1,8 @@
 defmodule HologramClusterTests.TopologyTest do
   use HologramClusterTests.TestCase, async: false
 
+  alias HologramClusterTests.HTTPClient
+
   # The smoke test for the premises every cluster test stands on. When the cluster or the
   # proxy regresses to something a single node could satisfy, this file fails by name -
   # instead of the tenant tests passing vacuously against a one-node "cluster".
@@ -25,10 +27,7 @@ defmodule HologramClusterTests.TopologyTest do
 
     statuses =
       Enum.map(1..4, fn _request_number ->
-        {:ok, status, _headers, _body} =
-          :hackney.request(:get, "http://127.0.0.1:#{proxy_port}/external", [], "", [:with_body])
-
-        status
+        HTTPClient.get("http://127.0.0.1:#{proxy_port}/external").status
       end)
 
     assert statuses == [200, 200, 200, 200]

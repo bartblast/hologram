@@ -3,6 +3,7 @@ defmodule HologramClusterTests.ProxyTest do
 
   import HologramClusterTests.Proxy
 
+  alias HologramClusterTests.HTTPClient
   alias HologramClusterTests.Proxy
 
   defmodule StubUpstream do
@@ -69,12 +70,7 @@ defmodule HologramClusterTests.ProxyTest do
   defp get_through_proxy(path, request_headers \\ []) do
     proxy_port = Application.fetch_env!(:hologram_cluster_tests, :proxy_port)
 
-    {:ok, status, headers, body} =
-      :hackney.request(:get, "http://127.0.0.1:#{proxy_port}#{path}", request_headers, "", [
-        :with_body
-      ])
-
-    %{body: body, headers: headers, status: status}
+    HTTPClient.get("http://127.0.0.1:#{proxy_port}#{path}", request_headers)
   end
 
   defp served_by(response) do
@@ -171,34 +167,13 @@ defmodule HologramClusterTests.ProxyTest do
     test "streams response chunks as the upstream produces them" do
       proxy_port = Application.fetch_env!(:hologram_cluster_tests, :proxy_port)
 
-      {:ok, ref} =
-        :hackney.request(:get, "http://127.0.0.1:#{proxy_port}/stream", [], "", [:async])
-
-      chunk_times = collect_chunk_times(ref, [])
+      chunk_times = HTTPClient.chunk_times("http://127.0.0.1:#{proxy_port}/stream")
 
       # The upstream sleeps 300ms twice between its three chunks. A buffering proxy
       # would deliver everything in one burst at the end - spread across the chunks
       # proves each was relayed as it was produced.
       assert length(chunk_times) >= 2
       assert List.last(chunk_times) - List.first(chunk_times) >= 400
-    end
-  end
-
-  defp collect_chunk_times(ref, chunk_times) do
-    receive do
-      {:hackney_response, ^ref, {:status, _code, _reason}} ->
-        collect_chunk_times(ref, chunk_times)
-
-      {:hackney_response, ^ref, {:headers, _headers}} ->
-        collect_chunk_times(ref, chunk_times)
-
-      {:hackney_response, ^ref, :done} ->
-        Enum.reverse(chunk_times)
-
-      {:hackney_response, ^ref, chunk} when is_binary(chunk) ->
-        collect_chunk_times(ref, [System.monotonic_time(:millisecond) | chunk_times])
-    after
-      5_000 -> Enum.reverse(chunk_times)
     end
   end
 end
