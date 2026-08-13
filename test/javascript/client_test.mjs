@@ -596,6 +596,7 @@ describe("Client", () => {
 
     beforeEach(() => {
       ComponentRegistry.clear();
+      App.subscriptionReceiptRegistry.entries.clear();
 
       const entry = componentRegistryEntryFixture({module: module});
       ComponentRegistry.putEntry(Type.bitstring("my_target"), entry);
@@ -611,6 +612,7 @@ describe("Client", () => {
 
     afterEach(() => {
       sinon.restore();
+      App.subscriptionReceiptRegistry.entries.clear();
       globalThis.Hologram = originalHologram;
       App.instanceId = originalInstanceId;
     });
