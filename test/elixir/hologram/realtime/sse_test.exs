@@ -1380,6 +1380,43 @@ defmodule Hologram.Realtime.SSETest do
       assert result.resp_body == "Handshake identity mismatch"
     end
 
+    test "applies an announce message published before the connection attaches" do
+      Application.put_env(:hologram, :__sse_attach_delay_enabled__, true)
+      on_exit(fn -> Application.delete_env(:hologram, :__sse_attach_delay_enabled__) end)
+
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      handshake_id = "test-handshake-#{:erlang.unique_integer([:positive])}"
+      expires_at = System.system_time(:millisecond) + Handshake.stash_ttl_ms()
+
+      Handshake.insert(handshake_id, [], {instance_id, session_id, nil}, expires_at)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/?instance_id=#{instance_id}&handshake_id=#{handshake_id}")
+        |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+        |> Plug.Test.put_req_cookie(attach_delay_cookie(), "300")
+
+      spawn(fn -> stream(conn, server_wait_ms: 200) end)
+
+      topic = Realtime.instance_announce_topic(instance_id)
+      wait_until(fn -> Registry.lookup(Hologram.PubSub, topic) != [] end)
+
+      # The window under test: listening already, attached not yet. Publishing here is
+      # what the old order dropped.
+      assert SubscriptionRegistry.bindings_of(instance_id) == nil
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        topic,
+        {:replace_subscriptions, [{:room_a, "page"}], "test-user-id"}
+      )
+
+      wait_until(fn ->
+        SubscriptionRegistry.bindings_of(instance_id) == %{{:room_a, "page"} => "test-user-id"}
+      end)
+    end
+
     test "redeems a handshake whose gossip arrives within the wait budget" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"

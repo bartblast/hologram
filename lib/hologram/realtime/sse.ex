@@ -286,10 +286,15 @@ defmodule Hologram.Realtime.SSE do
 
         {_instance_id, session_id, user_id} = claimed
 
+        # Announce topics are joined before the registry attach, so the window between
+        # the connection becoming discoverable and this process listening does not
+        # exist. Anything published in the meantime waits in the mailbox and is applied
+        # once the pump starts, by which point the attach has folded in the handshake's
+        # own bindings.
         conn
+        |> subscribe_to_announce_topics()
         |> maybe_delay_attach()
         |> attach_validated_subscriptions(validated_bindings)
-        |> subscribe_to_announce_topics()
         |> prepare()
         |> message_pump(session_id, user_id, message_pump_opts)
 
