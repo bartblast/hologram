@@ -5,6 +5,7 @@ defmodule HologramClusterTests.MigrationTest do
 
   import HologramClusterTests.MigrationHelpers
 
+  alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Migrator
 
@@ -12,6 +13,20 @@ defmodule HologramClusterTests.MigrationTest do
     reset_migrations_database!()
 
     :ok
+  end
+
+  defp data_columns(table) do
+    statement = """
+    SELECT "column_name"
+    FROM "information_schema"."columns"
+    WHERE "table_schema" = 'hologram_data' AND "table_name" = $1
+    """
+
+    with_migrations_db(fn ->
+      {:ok, %{rows: rows}} = Connection.query(statement, [table])
+
+      Enum.map(rows, fn [name] -> name end)
+    end)
   end
 
   defp peer_database(peer) do
@@ -47,6 +62,35 @@ defmodule HologramClusterTests.MigrationTest do
       mapping = Mapper.derive_from_model!(model())
 
       assert with_migrations_db(fn -> Migrator.check_drift!(mapping) end) == :ok
+    end
+  end
+
+  describe "kill and resume" do
+    test "the next boot applies only what the interrupted deploy had not" do
+      # A node killed after file one commits and a database with only file one applied
+      # are the same state - per-file transactions leave nothing in between - so the
+      # interrupted deploy is planted rather than raced.
+      plant_applied_prefix!(1)
+
+      [planted_row] = applied_version_rows()
+
+      peer = start_migration_peer(1)
+
+      assert serving?(peer)
+
+      rows = applied_version_rows()
+
+      assert Enum.map(rows, fn {version, _applied_at} -> version end) ==
+               Enum.map(migrations(), & &1.version)
+
+      # Untouched timestamp: the resumed node started at the first pending file rather
+      # than replaying one already recorded.
+      assert hd(rows) == planted_row
+
+      columns = data_columns("entities_item")
+
+      assert "slug" in columns
+      assert "parent_id" in columns
     end
   end
 
