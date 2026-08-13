@@ -1,5 +1,7 @@
 defmodule Hologram.Migration.GeneratorTest do
-  use Hologram.Test.BasicCase, async: true
+  # async: false - resolve!-free generate outcomes shadow-verify against the scratch
+  # database, a per-suite singleton (the configured name + "_shadow").
+  use Hologram.Test.BasicCase, async: false
 
   import Hologram.Migration.Generator
 

@@ -14,6 +14,10 @@ defmodule Mix.Tasks.Holo.Gen.Migration do
 
   A generated file is never amended: when several small files pile up in one branch,
   delete the unmerged ones and run the task again to get a single consolidated file.
+
+  A resolve!-free run ends in shadow verification: the full history is applied to a
+  scratch database and must produce the model's schema. Passing it is what finalizes
+  a resolved draft - there is no separate finalization step or marker.
   """
 
   use Mix.Task
@@ -33,6 +37,8 @@ defmodule Mix.Tasks.Holo.Gen.Migration do
     Loader.migrations_dir()
     |> Generator.generate(model, DateTime.utc_now())
     |> report()
+  rescue
+    error in RuntimeError -> Mix.raise(error.message)
   end
 
   defp pluralize(1, word), do: "1 #{word}"
@@ -46,10 +52,12 @@ defmodule Mix.Tasks.Holo.Gen.Migration do
 
   defp report(:nothing_to_do) do
     print("The migration history already produces the model - nothing to generate.")
+    print("Verified - migration finalized.")
   end
 
   defp report({:ok, path, 0}) do
     print("Generated #{path}")
+    print("Verified - migration finalized.")
   end
 
   defp report({:ok, path, question_count}) do

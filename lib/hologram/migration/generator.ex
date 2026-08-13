@@ -5,6 +5,7 @@ defmodule Hologram.Migration.Generator do
   alias Hologram.Migration
   alias Hologram.Migration.Diff
   alias Hologram.Migration.Loader
+  alias Hologram.Migration.ShadowVerifier
 
   @indent "  "
 
@@ -21,6 +22,11 @@ defmodule Hologram.Migration.Generator do
   An unresolved draft blocks generation - its questions are answered while the change is
   fresh, never stacked behind newer diffs that might change their meaning. The file is
   named after the given timestamp, bumped by a second while that name is taken.
+
+  A resolve!-free outcome is a finalized history, and finalization is passing shadow
+  verification - the full chain, a freshly written file included, is applied to a
+  scratch database and must produce the model's schema, raising otherwise. A draft
+  still holding questions is not verified: its marker ops carry no physical form yet.
   """
   @spec generate(String.t(), %{atom => map}, DateTime.t()) ::
           :nothing_to_do | {:ok, String.t(), non_neg_integer} | {:error, {:unresolved, list}}
@@ -33,7 +39,9 @@ defmodule Hologram.Migration.Generator do
       end)
 
     if unresolved == [] do
-      generate_file(dir, migrations, current_model, timestamp)
+      dir
+      |> generate_file(migrations, current_model, timestamp)
+      |> verify_finalized(dir, current_model)
     else
       {:error, {:unresolved, unresolved}}
     end
@@ -385,4 +393,20 @@ defmodule Hologram.Migration.Generator do
   defp subject(%{kind: :relationships}), do: "the relationships"
 
   defp subject(%{kind: :roles}), do: "the roles"
+
+  defp verify_finalized(:nothing_to_do, dir, current_model) do
+    migrations = Loader.load_dir!(dir)
+    ShadowVerifier.verify!(migrations, current_model)
+
+    :nothing_to_do
+  end
+
+  defp verify_finalized({:ok, _path, 0} = outcome, dir, current_model) do
+    migrations = Loader.load_dir!(dir)
+    ShadowVerifier.verify!(migrations, current_model)
+
+    outcome
+  end
+
+  defp verify_finalized(outcome, _dir, _current_model), do: outcome
 end
