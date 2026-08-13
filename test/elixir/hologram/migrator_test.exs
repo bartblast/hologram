@@ -7,7 +7,10 @@ defmodule Hologram.MigratorTest do
   import Hologram.Migrator
 
   alias Hologram.DB.Connection
+  alias Hologram.DB.DDL
   alias Hologram.DB.Introspection
+  alias Hologram.DB.Mapper
+  alias Hologram.DB.Preflight
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Entity.Model
 
@@ -220,6 +223,87 @@ defmodule Hologram.MigratorTest do
 
       assert applied_versions() == MapSet.new(["20260813091522"])
       assert "priority" not in table_columns("my_app_task")
+    end
+  end
+
+  describe "apply_pending/3 tail" do
+    setup do
+      ensure_managed!(@context)
+      :ok
+    end
+
+    test "refuses a file whose unique index would meet duplicate rows" do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            type: :string,
+            opts: [optional: true],
+            line: 4
+          }
+        ])
+
+      model = apply_pending([create], Model.empty(), @context)
+
+      insert = """
+      INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "updated_at")
+      VALUES ('00000000-0000-0000-0000-000000000003', 'taken',
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00'),
+             ('00000000-0000-0000-0000-000000000004', 'taken',
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+      """
+
+      {:ok, _result} = Connection.query(insert)
+
+      # The unique: attribute option is not declarable yet, so the op the tail would
+      # carry is checked directly - the applier runs the same check over its tail.
+      unique_index_op = %{
+        op: :create_index,
+        table: "my_app_task",
+        index: "my_app_task_slug_$uidx",
+        columns: ["slug"],
+        nulls_distinct: true,
+        unique: true
+      }
+
+      expected_msg =
+        ~s{found 1 duplicate key in "my_app_task" over ("slug") - } <>
+          "a unique index cannot be built while rows repeat a key - " <>
+          "update the rows or drop the unique declaration"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        Preflight.run!(
+          [unique_index_op],
+          Introspection.schema(),
+          Mapper.derive_from_model!(model)
+        )
+      end
+    end
+
+    test "leaves a valid index of the same name alone" do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.User, line: 3},
+          %{op: :create_entity, entity: MyApp.Task, line: 4},
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :author,
+            type: MyApp.User,
+            opts: [optional: true],
+            line: 5
+          }
+        ])
+
+      apply_pending([create], Model.empty(), @context)
+
+      statement = DDL.invalid_index_check_statement("my_app_task_author_id_$idx")
+      {:ok, %{rows: [[count]]}} = Connection.query(statement)
+
+      assert count == 0
     end
   end
 

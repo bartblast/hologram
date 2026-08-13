@@ -52,6 +52,21 @@ defmodule Hologram.DB.PreflightTest do
       assert run!(ops, %{}, mapping(nil)) == :ok
     end
 
+    test "skips the duplicate check for a unique index on a table this run creates" do
+      ops = [
+        %{
+          op: :create_index,
+          table: "task",
+          index: "task_slug_$uidx",
+          columns: ["slug"],
+          nulls_distinct: true,
+          unique: true
+        }
+      ]
+
+      assert run!(ops, %{tables: %{}}, mapping(nil)) == :ok
+    end
+
     test "raises on a cast with no supported conversion" do
       ops = [alter_column_op("uuid", "int8")]
 

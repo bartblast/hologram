@@ -65,6 +65,25 @@ defmodule Hologram.DB.Preflight do
     check_null_tightening!(op, mapping)
   end
 
+  # Only a table that already stands can hold duplicates - one this run creates is born
+  # empty, and its rows would not be there to query anyway.
+  defp check_op!(%{op: :create_index, unique: true} = op, actual, _mapping) do
+    count =
+      if Map.has_key?(actual.tables, op.table) do
+        count_result(DDL.duplicate_check_statement(op.table, op.columns, op.nulls_distinct))
+      else
+        0
+      end
+
+    if count > 0 do
+      columns = Enum.map_join(op.columns, ", ", &~s("#{&1}"))
+
+      raise ~s{found #{count} duplicate #{pluralize_keys(count)} in "#{op.table}" } <>
+              "over (#{columns}) - a unique index cannot be built while rows repeat a " <>
+              "key - update the rows or drop the unique declaration"
+    end
+  end
+
   defp check_op!(%{op: :rebuild_enum_type} = op, actual, _mapping) do
     removed_values = actual.enum_types[op.enum_type] -- op.values
 
@@ -137,6 +156,10 @@ defmodule Hologram.DB.Preflight do
 
     count
   end
+
+  defp pluralize_keys(1), do: "key"
+
+  defp pluralize_keys(_count), do: "keys"
 
   defp pluralize_rows(1), do: "row"
 

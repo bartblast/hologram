@@ -111,7 +111,7 @@ defmodule Hologram.Migrator do
       end)
 
     if status == :applied do
-      execute_statements(Enum.flat_map(render.tail, &DDL.statements/1))
+      Enum.each(render.tail, &execute_tail_op/1)
     end
 
     render.post_model
@@ -145,8 +145,13 @@ defmodule Hologram.Migrator do
     mapping = Mapper.derive_from_model!(render.post_model)
 
     Preflight.run!(render.transactional, actual, mapping)
-
     Enum.each(render.transactional, &apply_op/1)
+
+    # The tail's checks run here, against the columns the statements above just created
+    # and before anything commits: a file whose index cannot be built does not apply at
+    # all, rather than committing and failing afterwards.
+    Preflight.run!(render.tail, actual, mapping)
+
     record_applied(version, context.timestamp)
 
     :applied
@@ -200,10 +205,32 @@ defmodule Hologram.Migrator do
     :claimed
   end
 
+  defp count_result(statement) do
+    {:ok, %{rows: [[count]]}} = Connection.query(statement)
+
+    count
+  end
+
+  # A concurrent build that failed partway leaves the index in the catalog flagged
+  # invalid: it holds the name, serves no query, and every write maintains it. Clearing
+  # it before building makes the tail safe to run again, so a crashed deploy retries
+  # without anyone opening psql.
+  defp drop_invalid_index(index) do
+    if count_result(DDL.invalid_index_check_statement(index)) > 0 do
+      execute_statements(DDL.statements(%{op: :drop_index, index: index}))
+    end
+  end
+
   defp execute_statements(statements) do
     Enum.each(statements, fn statement ->
       {:ok, _result} = Connection.query(statement)
     end)
+  end
+
+  defp execute_tail_op(%{op: :create_index} = op) do
+    drop_invalid_index(op.index)
+
+    execute_statements(DDL.statements(op))
   end
 
   defp fill_column(table, column, encoded_value) do
