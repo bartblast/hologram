@@ -11,6 +11,7 @@ defmodule Hologram.DB.QueryCache do
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SortKey
   alias Hologram.Entity
+  alias Hologram.Migrator
   alias Hologram.Policy
   alias Hologram.Query.Registry
   alias Hologram.Reflection
@@ -149,22 +150,41 @@ defmodule Hologram.DB.QueryCache do
 
   defp declare_verb(_entity_types), do: "declare"
 
+  # A reconciliation-managed database converges wholesale from the enriched mapping. A
+  # migration-managed one takes model changes only through its migration history - the
+  # query-derived companions are the one part that rides no migration, so only they
+  # converge here.
+  defp converge_artifacts(mapping) do
+    if migrations_managed?() do
+      Migrator.reconcile_artifacts(mapping)
+    else
+      SchemaReconciler.reconcile(DB.reconciliation_context()).ops
+    end
+  end
+
   # The registered queries' ordered pairs enrich the mapping with sort-key
   # companions - the cache owns this derivation because extraction needs no
   # mapping and the cache boots right after the database. With no pairs the boot
-  # mapping stands, and orphaned companions drop on the next model
-  # reconciliation, which targets the plain mapping.
+  # mapping stands - a reconciliation-managed database drops orphaned companions
+  # on the next model reconciliation, which targets the plain mapping, while a
+  # migration-managed one drops them here, the one convergence that reaches them.
   defp ensure_mapping(terms) do
     ordered_pairs = Registry.ordered_string_pairs(terms)
 
     if MapSet.size(ordered_pairs) == 0 do
-      DB.mapping()
+      mapping = DB.mapping()
+
+      if migrations_managed?() do
+        Migrator.reconcile_artifacts(mapping)
+      end
+
+      mapping
     else
       mapping = Mapper.derive!(Reflection.list_entities(), ordered_pairs)
       :persistent_term.put(DB.mapping_key(), mapping)
 
-      reconcile_result = SchemaReconciler.reconcile(DB.reconciliation_context())
-      backfill_sort_keys!(reconcile_result.ops, mapping)
+      ops = converge_artifacts(mapping)
+      backfill_sort_keys!(ops, mapping)
 
       mapping
     end
@@ -201,6 +221,10 @@ defmodule Hologram.DB.QueryCache do
       _other_column ->
         :ok
     end
+  end
+
+  defp migrations_managed? do
+    match?(%{managed_by: "migrations"}, SchemaReconciler.read_marker())
   end
 
   defp populate do
