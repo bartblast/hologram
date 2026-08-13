@@ -85,7 +85,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   end
 
   describe "create_system_tables/0" do
-    test "creates the marker and registry tables" do
+    test "creates the marker, registry, and migration tables" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
 
@@ -93,6 +93,18 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       assert read_marker() == nil
       assert registry() == MapSet.new()
+
+      statement = """
+      SELECT c.relname
+      FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'hologram_system' AND c.relkind = 'r'
+      ORDER BY c.relname
+      """
+
+      {:ok, %{rows: rows}} = Connection.query(statement)
+
+      assert rows == [["database"], ["migration"], ["schema_object"]]
     end
   end
 

@@ -20,7 +20,13 @@ defmodule Hologram.DB.SchemaReconciler do
 
   # Control-plane bookkeeping DDL - static and framework-owned, never model-derived.
   # The database table is the managed-database marker (single row, maintained by
-  # write_marker/1) - the schema_object table is the managed-object registry.
+  # write_marker/1) - the schema_object table is the managed-object registry - the
+  # migration table records the applied migration versions.
+  #
+  # Every environment gets the same tables, and which of them a database uses follows
+  # from how it is managed: reconciliation writes the registry and never the migration
+  # table, the migration applier the other way around. One schema everywhere keeps
+  # existence checks and the framework's own system-table evolution uniform.
   @system_statements [
     """
     CREATE TABLE "hologram_system"."database" (
@@ -29,6 +35,13 @@ defmodule Hologram.DB.SchemaReconciler do
       "managed_by" text NOT NULL,
       "hologram_version" text NOT NULL,
       "last_reconciled_at" timestamptz NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE "hologram_system"."migration" (
+      "version" text NOT NULL,
+      "applied_at" timestamptz NOT NULL,
+      PRIMARY KEY ("version")
     )
     """,
     """
