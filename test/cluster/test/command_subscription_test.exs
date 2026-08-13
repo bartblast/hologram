@@ -22,8 +22,7 @@ defmodule HologramClusterTests.CommandSubscriptionTest do
 
     feature @feature_name,
             %{session: session, sse_peer: sse_peer, other_peer: other_peer} do
-      placement = @placement
-      policy = placement_policy(placement, sse_peer, other_peer)
+      policy = placement_policy(@placement, sse_peer, other_peer)
       token = Proxy.register_policy(policy)
 
       session =
@@ -38,24 +37,28 @@ defmodule HologramClusterTests.CommandSubscriptionTest do
 
       assert_text(session, "delivered across the cluster")
 
-      if placement == :remote do
-        # The premise, not assumed but proven: the command was served by a different
-        # upstream than the stream, and the connection lives on the stream's peer only.
-        log = Proxy.log()
-
-        command_upstreams =
-          for entry <- log, entry.path == "/hologram/command", uniq: true, do: entry.upstream
-
-        stream_upstreams =
-          for entry <- log, entry.path == "/hologram/sse", uniq: true, do: entry.upstream
-
-        assert command_upstreams == [other_peer.port]
-        assert stream_upstreams == [sse_peer.port]
-
-        assert registry_entries(sse_peer) != []
-        assert registry_entries(other_peer) == []
-      end
+      assert_placement_premises(@placement, sse_peer, other_peer)
     end
+  end
+
+  defp assert_placement_premises(:colocated, _sse_peer, _other_peer), do: :ok
+
+  # The premise, not assumed but proven: the command was served by a different upstream
+  # than the stream, and the connection lives on the stream's peer only.
+  defp assert_placement_premises(:remote, sse_peer, other_peer) do
+    log = Proxy.log()
+
+    command_upstreams =
+      for entry <- log, entry.path == "/hologram/command", uniq: true, do: entry.upstream
+
+    stream_upstreams =
+      for entry <- log, entry.path == "/hologram/sse", uniq: true, do: entry.upstream
+
+    assert command_upstreams == [other_peer.port]
+    assert stream_upstreams == [sse_peer.port]
+
+    assert registry_entries(sse_peer) != []
+    assert registry_entries(other_peer) == []
   end
 
   # The 992-specific placement vocabulary lives here, in the tenant test - the proxy knows
