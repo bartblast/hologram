@@ -1395,15 +1395,20 @@ defmodule Hologram.Realtime.SSETest do
         :get
         |> Plug.Test.conn("/?instance_id=#{instance_id}&handshake_id=#{handshake_id}")
         |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
-        |> Plug.Test.put_req_cookie(attach_delay_cookie(), "300")
+        # The window under test is the attach delay, and both the assertion and the
+        # publish below have to land inside it. A second is long enough that a stall
+        # able to close it early would be breaking most of this suite too, and it is
+        # paid once, by this test alone.
+        |> Plug.Test.put_req_cookie(attach_delay_cookie(), "1000")
 
-      spawn(fn -> stream(conn, server_wait_ms: 200) end)
+      pid = spawn(fn -> stream(conn, server_wait_ms: 200) end)
+      on_exit(fn -> Process.exit(pid, :kill) end)
 
       topic = Realtime.instance_announce_topic(instance_id)
       wait_until(fn -> Registry.lookup(Hologram.PubSub, topic) != [] end)
 
-      # The window under test: listening already, attached not yet. Publishing here is
-      # what the old order dropped.
+      # Listening already, attached not yet. Without this the test would still pass with
+      # the publish landing after the attach, proving nothing about the window.
       assert SubscriptionRegistry.bindings_of(instance_id) == nil
 
       Phoenix.PubSub.broadcast(
