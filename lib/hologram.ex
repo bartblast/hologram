@@ -78,15 +78,17 @@ defmodule Hologram do
   is detected.
   """
   @spec env() :: atom
+  # The name comes from the deployment's own configuration - an env var whoever runs the
+  # release sets - so the atoms this can create are bounded by the environments they run,
+  # never by anything a request carries. Requiring an existing atom instead would tie the
+  # framework to Mix: a release carries no Mix, so an environment name that no loaded
+  # module happens to mention has no atom yet, and the boot dies on it (found 2026-08-13
+  # booting a bare node as "prod").
+  # sobelow_skip ["DOS.StringToAtom"]
   def env do
     env_str = System.get_env("HOLOGRAM_ENV") || System.get_env("MIX_ENV")
 
     if env_str do
-      # The name comes from the deployment's own configuration, so the atoms this can
-      # create are bounded by the environments the operator runs. Requiring an existing
-      # atom would tie the framework to Mix: a release carries no Mix, so an environment
-      # name that no loaded module happens to mention has no atom yet, and the boot dies
-      # on it (found 2026-08-13 booting a bare node as "prod").
       # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       String.to_atom(env_str)
     else
