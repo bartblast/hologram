@@ -24,8 +24,8 @@ defmodule HologramFeatureTests.Patching.Page16 do
   # It also stamps the nodes the server rendered, which is only trustworthy while the counter reads
   # 1 - a re-run would stamp whatever the patch had just built and report those as the server's.
   #
-  # The conditional is here so a block, and the markers bracketing it, are part of what has to be
-  # adopted.
+  # The conditional is here so that a block, whose node count the client cannot know from the
+  # markup alone, is part of what has to be adopted.
   def template do
     ~HOLO"""
     <!DOCTYPE html>

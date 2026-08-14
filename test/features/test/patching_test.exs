@@ -957,9 +957,9 @@ defmodule HologramFeatureTests.PatchingTest do
 
       script_result(session, mark_nodes)
 
-      # Switching the conditional inside the loop body renders the same marker once per item, so
-      # this is the patch that throws when repeated keys reach the diff unnumbered. It takes three
-      # of them: with two the diff realigns on its own and the failure does not surface.
+      # Switching the conditional inside the loop body renders the same key once per item, so this
+      # is the patch that throws when repeated keys reach the diff unnumbered. It takes three of
+      # them: with two the diff realigns on its own and the failure does not surface.
       session
       |> click(button("Toggle badges"))
       |> assert_count(".badge", 0)
@@ -1069,6 +1069,42 @@ defmodule HologramFeatureTests.PatchingTest do
       |> click(button("Sort"))
       |> assert_text(css("#result"), "Charlie, Alpha, Delta, Bravo")
       |> assert_script_result(framework_attributes, [])
+    end
+
+    feature "no node of the framework's own is left in the page", %{session: session} do
+      # Blocks used to be bracketed in comment markers so that a block changing how many nodes it
+      # renders could not shift the identity of its siblings. Keys do that job now, and the page
+      # holds only the nodes the template asks for.
+      #
+      # Every comment in the document is collected rather than only the ones near the block, since
+      # a marker anywhere would be one too many, and the list is asserted whole: the author's own
+      # comment has to be there, which is what shows the walk would have found a marker too.
+      comments = """
+      const walker = document.createTreeWalker(
+        document.documentElement,
+        NodeFilter.SHOW_COMMENT,
+      );
+
+      const found = [];
+
+      while (walker.nextNode()) {
+        found.push(walker.currentNode.textContent.trim());
+      }
+
+      return found;
+      """
+
+      authored = ["a comment the template author wrote"]
+
+      session
+      |> visit(Page15)
+      |> assert_script_result(comments, authored)
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Charlie, Alpha, Delta, Bravo")
+      |> assert_script_result(comments, authored)
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Delta, Charlie, Bravo, Alpha")
+      |> assert_script_result(comments, authored)
     end
   end
 

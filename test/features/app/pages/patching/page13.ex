@@ -19,17 +19,18 @@ defmodule HologramFeatureTests.Patching.Page13 do
   #
   # Panel A changes the loop's length around a keeper that follows it.
   #
-  # Panel B holds a conditional inside the loop body, switched for every item at once. The compiler
-  # gives that conditional one marker, so every iteration renders the same one, and a children list
-  # cannot carry a repeated key - the diff indexes them and would reach for a node it already
-  # consumed. Three items make the repeat wide enough to matter.
+  # Panel B holds a conditional inside the loop body, switched for every item at once. The
+  # conditional's element is one place in the template, so every iteration renders the same key,
+  # and a children list cannot carry a repeated key - the diff indexes them and would reach for a
+  # node it already consumed. Three items make the repeat wide enough to matter.
   #
   # Its loop body is written on one line deliberately. Whitespace between iterations gives the diff
   # text nodes to stay aligned on, and the failure stops reproducing - reformatting that line would
   # leave a test that passes whether or not repeated keys are handled.
   #
   # Only the keepers are checked for identity. Which DOM node a given item keeps across a reorder
-  # is a separate question, answered by keys rather than by markers.
+  # is a separate question, answered by keys the template author writes rather than by the ones the
+  # compiler assigns to places.
   def template do
     ~HOLO"""
     <!DOCTYPE html>
