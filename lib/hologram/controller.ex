@@ -799,7 +799,18 @@ defmodule Hologram.Controller do
         send_response(conn, server)
 
       to ->
-        send_page_data(conn, build_page_data_payload(resolve_redirect_target(to)))
+        # The headers travel even though the redirect itself does not. Middleware that sets one
+        # alongside a redirect means it for the response, and the HTML path keeps it, so dropping
+        # it here would make the same middleware behave differently for a navigation. Location is
+        # left behind: the payload carries the target, and a location on the 200 this sends names
+        # somewhere the client is not going.
+        conn
+        |> Plug.Conn.merge_resp_headers(
+          server.response_headers
+          |> Map.delete("location")
+          |> Map.to_list()
+        )
+        |> send_page_data(build_page_data_payload(resolve_redirect_target(to)))
     end
   end
 

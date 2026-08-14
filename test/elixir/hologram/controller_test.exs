@@ -43,6 +43,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module29
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module30
+  alias Hologram.Test.Fixtures.Controller.Module31
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
@@ -2450,6 +2451,33 @@ defmodule Hologram.ControllerTest do
       assert response["type"] == "redirect"
       assert response["to"] == Module4.__route__()
       assert response["pageModule"] == Encoder.encode_term!(Module4)
+    end
+
+    # The redirect itself cannot survive the trip, but a header set alongside it was meant for the
+    # response, and the HTML path keeps it.
+    test "keeps a header the redirecting middleware set" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module31, :dummy_module_31_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module31"
+        |> subsequent_page_request_conn()
+        |> handle_subsequent_page_request(Module31)
+
+      assert Plug.Conn.get_resp_header(conn, "x-my-header") == ["my_value"]
+      assert Jason.decode!(conn.resp_body)["type"] == "redirect"
+    end
+
+    # The payload names where the client is going, so a location header on this 200 would name
+    # somewhere it is not.
+    test "does not send the redirect's location header" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module29, :dummy_module_29_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module29"
+        |> subsequent_page_request_conn()
+        |> handle_subsequent_page_request(Module29)
+
+      assert Plug.Conn.get_resp_header(conn, "location") == []
     end
 
     # A dead end rather than a navigation: sent as it stands, so the client can hand the path to the
