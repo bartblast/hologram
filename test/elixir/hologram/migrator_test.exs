@@ -491,6 +491,7 @@ defmodule Hologram.MigratorTest do
                env: "test",
                managed_by: "migrations",
                hologram_version: "0.5.0",
+               system_schema_version: 1,
                last_reconciled_at: @context.timestamp
              }
 

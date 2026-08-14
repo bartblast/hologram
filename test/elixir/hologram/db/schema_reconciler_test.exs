@@ -34,6 +34,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     env: "test",
     managed_by: "reconciliation",
     hologram_version: "0.5.0",
+    system_schema_version: 1,
     last_reconciled_at: ~U[2026-07-20 12:30:00.000000Z]
   }
 
@@ -119,6 +120,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                env: "test",
                managed_by: "reconciliation",
                hologram_version: "0.5.0",
+               system_schema_version: 1,
                last_reconciled_at: ~U[2026-07-20 12:30:00.000000Z]
              }
 
@@ -759,6 +761,12 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   end
 
   describe "write_marker/1" do
+    test "stamps the writer's system schema layout version over the given one" do
+      write_marker(%{@marker | system_schema_version: 99})
+
+      assert read_marker().system_schema_version == 1
+    end
+
     test "replaces the previous marker row" do
       write_marker(@marker)
       write_marker(%{@marker | env: "dev", last_reconciled_at: ~U[2026-07-20 13:00:00.000000Z]})

@@ -18,6 +18,15 @@ defmodule Hologram.DB.SchemaReconciler do
   # signed int64.
   @advisory_lock_key 4_787_000_136_577_093_832
 
+  # The layout version of the hologram_system tables themselves - bumped when the
+  # bookkeeping DDL below or the marker's columns change. Stamped into every marker so a
+  # database states which layout it was built with: the alternative is introspecting the
+  # tables to find out, which only works while the differences are visible in the catalog.
+  # An integer rather than the package version, so the check is a monotonic comparison
+  # rather than version-string parsing, and a release that changes nothing here leaves it
+  # alone.
+  @system_schema_version 1
+
   # Control-plane bookkeeping DDL - static and framework-owned, never model-derived.
   # The database table is the managed-database marker (single row, maintained by
   # write_marker/1) - the schema_object table is the managed-object registry - the
@@ -34,6 +43,7 @@ defmodule Hologram.DB.SchemaReconciler do
       "env" text NOT NULL,
       "managed_by" text NOT NULL,
       "hologram_version" text NOT NULL,
+      "system_schema_version" integer NOT NULL,
       "last_reconciled_at" timestamptz NOT NULL
     )
     """,
@@ -91,12 +101,14 @@ defmodule Hologram.DB.SchemaReconciler do
   Returns the managed-database marker, or nil when none has been written.
 
   The marker is a map with :otp_app, :env, and :managed_by (the guard facts, as
-  strings) plus :hologram_version and :last_reconciled_at (diagnostics).
+  strings) plus :hologram_version, :system_schema_version (the layout version of the
+  hologram_system tables) and :last_reconciled_at (diagnostics).
   """
   @spec read_marker() :: %{atom => any} | nil
   def read_marker do
     statement = """
-    SELECT "otp_app", "env", "managed_by", "hologram_version", "last_reconciled_at"
+    SELECT "otp_app", "env", "managed_by", "hologram_version", "system_schema_version",
+           "last_reconciled_at"
     FROM "hologram_system"."database"
     """
 
@@ -106,12 +118,13 @@ defmodule Hologram.DB.SchemaReconciler do
       [] ->
         nil
 
-      [[otp_app, env, managed_by, hologram_version, last_reconciled_at]] ->
+      [[otp_app, env, managed_by, hologram_version, system_schema_version, last_reconciled_at]] ->
         %{
           otp_app: otp_app,
           env: env,
           managed_by: managed_by,
           hologram_version: hologram_version,
+          system_schema_version: system_schema_version,
           last_reconciled_at: last_reconciled_at
         }
     end
@@ -196,6 +209,10 @@ defmodule Hologram.DB.SchemaReconciler do
   @doc """
   Writes the given marker as the single row of the managed-database marker table,
   replacing any previous row.
+
+  The system schema layout version is the writer's own, not the caller's - the caller
+  states what it knows about the app, and the layout is a fact about the code doing the
+  writing.
   """
   @spec write_marker(%{atom => any}) :: :ok
   def write_marker(marker) do
@@ -203,8 +220,9 @@ defmodule Hologram.DB.SchemaReconciler do
 
     insert_statement = """
     INSERT INTO "hologram_system"."database"
-      ("otp_app", "env", "managed_by", "hologram_version", "last_reconciled_at")
-    VALUES ($1, $2, $3, $4, $5)
+      ("otp_app", "env", "managed_by", "hologram_version", "system_schema_version",
+       "last_reconciled_at")
+    VALUES ($1, $2, $3, $4, $5, $6)
     """
 
     params = [
@@ -212,6 +230,7 @@ defmodule Hologram.DB.SchemaReconciler do
       marker.env,
       marker.managed_by,
       marker.hologram_version,
+      @system_schema_version,
       marker.last_reconciled_at
     ]
 
