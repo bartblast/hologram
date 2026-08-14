@@ -38,9 +38,14 @@ defmodule Hologram.Template.DOM do
   """
   @spec build_ast(list(Parser.parsed_tag())) :: AST.t()
   def build_ast(tags) do
+    # Both the markers and the keys name places in this template, so both are built from the hash
+    # of the template as written, before either has added anything to it.
+    hash = template_hash(tags)
+
     {code, _last_tag_type} =
       tags
-      |> add_block_markers()
+      |> add_block_markers(hash)
+      |> add_slot_keys(hash)
       |> Enum.reduce({"", nil}, fn tag, {code_acc, last_tag_type} ->
         current_tag_type = if is_tuple(tag), do: elem(tag, 0), else: tag
 
@@ -68,13 +73,59 @@ defmodule Hologram.Template.DOM do
   # Blocks inside <script> and <style> are left alone: a comment there would be part of the script
   # or stylesheet source rather than markup, and their text-only children have no identity to
   # protect anyway.
-  defp add_block_markers(tags) do
-    hash = template_hash(tags)
-
+  defp add_block_markers(tags, hash) do
     {marked_tags, _state} =
       Enum.flat_map_reduce(tags, {0, [], 0}, &inject_block_markers(&1, &2, hash))
 
     marked_tags
+  end
+
+  # Gives every element the key of the place it holds in this template, counted in source order.
+  #
+  # A key is what lets the diff pair an element with itself across renders whatever happens around
+  # it: a block that starts rendering an extra node shifts its siblings' positions but not their
+  # keys, so the sibling is still matched with itself rather than with the block's content.
+  #
+  # Counted per template rather than globally, and prefixed with the template's hash, because slot
+  # content is spliced into a children list belonging to another template, where bare counters
+  # would collide.
+  #
+  # Only elements are keyed. A component has no node of its own - it renders the nodes of its own
+  # template, which carry their own keys - and the tags that produce no node at all have nothing to
+  # key.
+  defp add_slot_keys(tags, hash) do
+    {keyed_tags, _index} = Enum.map_reduce(tags, 0, &inject_slot_key(&1, &2, hash))
+
+    keyed_tags
+  end
+
+  defp inject_slot_key({tag_type, {tag_name, attributes}}, index, hash)
+       when tag_type in [:start_tag, :self_closing_tag] do
+    if keyable_tag?(tag_name) do
+      {{tag_type, {tag_name, add_slot_key(attributes, hash, index)}}, index + 1}
+    else
+      {{tag_type, {tag_name, attributes}}, index}
+    end
+  end
+
+  defp inject_slot_key(tag, index, _hash), do: {tag, index}
+
+  # The key trails the attributes the template author wrote, so that reading a tag reads what was
+  # written first, and appending is the point rather than an oversight.
+  # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
+  defp add_slot_key(attributes, hash, index), do: attributes ++ [slot_key_attribute(hash, index)]
+
+  # A dynamic tag is keyed too: it renders an element whenever its expression names one, and a key
+  # reaching a component instead is dropped with the rest of the props it does not declare.
+  defp keyable_tag?({:expression, _templ_expr}), do: true
+
+  defp keyable_tag?(tag_name) do
+    Helpers.tag_type(tag_name) == :element and
+      tag_name not in ["document", "slot", "window"]
+  end
+
+  defp slot_key_attribute(hash, index) do
+    {"$key", [{:text, "#{hash}:#{index}"}]}
   end
 
   # Builds one marker comment, whose text is four bracketed segments, e.g. "[h:a3f2b1c4:0:o]":
@@ -332,15 +383,20 @@ defmodule Hologram.Template.DOM do
     inspect(EventModifiers.parse(base_name, modifiers))
   end
 
-  # Distinguishes markers belonging to different templates, since slot content is spliced into the
-  # surrounding template's children and bare block indexes would collide there. Derived from the
-  # tags rather than the module name so that it stays stable across renames and needs no caller
-  # context. Two byte-identical templates share a hash, which degrades to marker churn rather than
-  # element identity loss.
-  #
-  # :erlang.phash2/2 is documented to return the same value for a given term regardless of machine
-  # architecture and ERTS version, which is what lets tests assert marker text verbatim.
-  defp template_hash(tags) do
+  @doc """
+  Names the template a marker or a key belongs to.
+
+  Distinguishes them from another template's, since slot content is spliced into the surrounding
+  template's children and bare indexes would collide there. Derived from the tags rather than the
+  module name so that it stays stable across renames and needs no caller context. Two byte-identical
+  templates share a hash, which leaves their keys to be told apart by their position among siblings,
+  the same way a loop's repeats are.
+
+  `:erlang.phash2/2` is documented to return the same value for a given term regardless of machine
+  architecture and ERTS version, which is what lets tests assert marker text verbatim.
+  """
+  @spec template_hash(list(Parser.parsed_tag())) :: String.t()
+  def template_hash(tags) do
     tags
     |> normalize_newlines()
     |> :erlang.phash2(4_294_967_296)

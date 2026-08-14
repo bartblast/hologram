@@ -12,7 +12,7 @@ defmodule Hologram.Template do
   ## Examples
 
       iex> dom_ast("<div>content</div>")
-      [{:{}, [line: 1], [:element, "div", [], [{:text, "content"}]]}]
+      [{:{}, [line: 1], [:element, "div", [{"$key", [text: "kcndqf:0"]}], [{:text, "content"}]]}]
   """
   @spec dom_ast(String.t()) :: AST.t()
   def dom_ast(markup) do
