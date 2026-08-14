@@ -259,7 +259,6 @@ defmodule Hologram.Entity.Model do
   # refuse a file the generator wrote.
   defp apply_op(%{op: :designate_user_entity} = op, model) do
     fetch_entity!(model, op.entity)
-    validate_designation_move!(model, op.entity)
 
     %{model | user_entity: op.entity}
   end
@@ -701,26 +700,6 @@ defmodule Hologram.Entity.Model do
             "#{Enum.join(Enum.sort(dangling), ", ")} - delete the relationship in the " <>
             "migration that deletes its target, or an earlier one"
     end
-  end
-
-  # Grants reference the designated type's rows, so they cannot follow the designation to
-  # another type - the direct move is the one spelling that implies they survive it. The
-  # two-step says what actually happens: removing the designation drops the grant store,
-  # and designating the new type builds an empty one.
-  defp validate_designation_move!(%{user_entity: nil}, _entity_type), do: :ok
-
-  defp validate_designation_move!(%{user_entity: current}, entity_type)
-       when current == entity_type,
-       do: :ok
-
-  defp validate_designation_move!(%{user_entity: current}, entity_type) do
-    raise Hologram.CompileError,
-      message:
-        "the user entity designation cannot move directly from #{inspect(current)} to " <>
-          "#{inspect(entity_type)} - role grants reference #{inspect(current)} rows, so " <>
-          "they cannot follow it - remove `user: true` from #{inspect(current)} and run " <>
-          "`mix holo.gen.migration` (that migration drops the role grant store), then add " <>
-          "`user: true` to #{inspect(entity_type)} and run it again"
   end
 
   defp validate_enum_values!(op, :enum, opts) do

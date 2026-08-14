@@ -456,6 +456,20 @@ defmodule Hologram.Entity.ModelTest do
       assert fold(model, ops).user_entity == MyApp.User
     end
 
+    test "moves the designation to another entity type" do
+      model =
+        empty()
+        |> fold([
+          %{op: :create_entity, entity: MyApp.Account, line: 3},
+          %{op: :create_entity, entity: MyApp.User, line: 4}
+        ])
+        |> Map.put(:user_entity, MyApp.User)
+
+      ops = [%{op: :designate_user_entity, entity: MyApp.Account, line: 5}]
+
+      assert fold(model, ops).user_entity == MyApp.Account
+    end
+
     test "designates an entity type once the previous designation was removed" do
       model =
         empty()
@@ -1025,27 +1039,6 @@ defmodule Hologram.Entity.ModelTest do
       expected_msg = "no such entity MyApp.Ghost at this point in migration history"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(empty(), ops) end
-    end
-
-    test "raises when moving the designation between entity types directly" do
-      model =
-        empty()
-        |> fold([
-          %{op: :create_entity, entity: MyApp.Account, line: 3},
-          %{op: :create_entity, entity: MyApp.User, line: 4}
-        ])
-        |> Map.put(:user_entity, MyApp.User)
-
-      ops = [%{op: :designate_user_entity, entity: MyApp.Account, line: 5}]
-
-      expected_msg =
-        "the user entity designation cannot move directly from MyApp.User to " <>
-          "MyApp.Account - role grants reference MyApp.User rows, so they cannot follow " <>
-          "it - remove `user: true` from MyApp.User and run `mix holo.gen.migration` " <>
-          "(that migration drops the role grant store), then add `user: true` to " <>
-          "MyApp.Account and run it again"
-
-      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
     end
   end
 

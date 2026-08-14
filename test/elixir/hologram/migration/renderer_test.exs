@@ -637,19 +637,9 @@ defmodule Hologram.Migration.RendererTest do
       assert result.tail == []
     end
 
-    # Generation cannot produce this: the fold refuses a designation moving from one type
-    # to another, and a file removing the designation before granting it to another type
-    # renders as one segment, so the diff collapses back to a retarget. That collapse is
-    # only reachable by hand-writing both ops into a single file - pinned here because it
-    # is the one spelling where the store's rows outlive a designation change, and the
-    # references then point at a table their ids are not in.
-    test "renders both designation ops in one file as the grant store's retargeted references" do
+    test "renders a moved user entity designation as the grant store's retargeted references" do
       pre = model(%{MyApp.Member => %{}, UserEntity => %{}})
-
-      ops = [
-        %{op: :designate_user_entity, entity: nil, line: 3},
-        %{op: :designate_user_entity, entity: MyApp.Member, line: 4}
-      ]
+      ops = [%{op: :designate_user_entity, entity: MyApp.Member, line: 3}]
 
       result = render(ops, pre)
 
