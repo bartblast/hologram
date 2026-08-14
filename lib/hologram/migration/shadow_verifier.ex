@@ -10,6 +10,14 @@ defmodule Hologram.Migration.ShadowVerifier do
   alias Hologram.Migrator
   alias Hologram.Reflection
 
+  # Fixed application-defined key for pg_advisory_lock - one verification at a time per
+  # server, since the scratch database is named after the configured one and two runs
+  # would race to create and drop the same name. Session-scoped rather than transactional:
+  # creating a database cannot run inside a transaction. Provenance (for uniqueness, not
+  # for re-derivation): first 8 bytes of md5("hologram_shadow_verification") as a signed
+  # int64.
+  @advisory_lock_key 2_569_918_074_951_200_709
+
   @doc """
   Validates that applying the given migrations from the empty model onto a scratch
   database produces exactly the given model's schema.
@@ -23,7 +31,10 @@ defmodule Hologram.Migration.ShadowVerifier do
 
   Verification opens its own connections, so it starts the driver rather than assuming
   one is running - a mix task loads config without starting applications, and this is
-  the only part of generating or checking a migration that reaches a database.
+  the only part of generating or checking a migration that reaches a database. An
+  advisory lock admits one verification at a time per server: the scratch database is
+  named after the configured one, so concurrent runs would otherwise race to create and
+  drop the same name.
   """
   @spec verify!(list(%{atom => any}), %{atom => map}) :: :ok
   def verify!(migrations, current_model) do
@@ -31,6 +42,10 @@ defmodule Hologram.Migration.ShadowVerifier do
 
     shadow_database = Config.connection_opts()[:database] <> "_shadow"
     maintenance_pid = start_connection("postgres")
+
+    # Held for the whole lifecycle and released when the connection stops, so a crash
+    # frees it too. A waiting run finds the scratch database gone rather than half-built.
+    Postgrex.query!(maintenance_pid, "SELECT pg_advisory_lock($1)", [@advisory_lock_key])
 
     try do
       recreate_shadow!(maintenance_pid, shadow_database)

@@ -66,6 +66,19 @@ defmodule Hologram.Migration.ShadowVerifierTest do
       refute shadow_database_exists?()
     end
 
+    test "serializes concurrent verifications" do
+      model = Model.fold(Model.empty(), @ops)
+
+      results =
+        1..3
+        |> Enum.map(fn _i -> Task.async(fn -> verify!(@migrations, model) end) end)
+        |> Task.await_many(120_000)
+
+      # Without the lock they race to create and drop one scratch database named after
+      # the configured one, and every run fails rather than one winning.
+      assert results == [:ok, :ok, :ok]
+    end
+
     test "raises when the replay does not produce the model's schema" do
       assert_error RuntimeError, mismatch_message(), fn ->
         verify!(@migrations, mismatched_model())
