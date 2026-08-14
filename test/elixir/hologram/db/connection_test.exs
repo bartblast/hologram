@@ -86,10 +86,31 @@ defmodule Hologram.DB.ConnectionTest do
 
   describe "with_timeout/2" do
     test "applies the timeout to queries that name none" do
-      # A short one rather than the infinite one the migration paths use: the effect is
-      # observable in a moment instead of after the driver's default fifteen seconds.
-      assert {:error, %Postgrex.Error{postgres: %{code: :query_canceled}}} =
-               with_timeout(50, fn -> query("SELECT pg_sleep(1)") end)
+      # A short timeout rather than the infinite one the migration paths use, so the effect
+      # shows in a moment instead of after the driver's fifteen second default - and on a
+      # connection of its own, because the pool answers a client that outstays its timeout
+      # by dropping the connection, which on the shared pool would disturb every other test.
+      {:ok, connection_pid} = Postgrex.start_link(Config.connection_opts())
+
+      # The drop is logged as an error, which is expected here and alarming in a CI log
+      # that cannot tell an intended timeout from a real outage.
+      {result, _log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          with_connection(connection_pid, fn ->
+            with_timeout(50, fn -> query("SELECT pg_sleep(1)") end)
+          end)
+        end)
+
+      GenServer.stop(connection_pid)
+
+      assert {:error, error} = result
+
+      # Which error arrives is the driver racing itself: it asks the server to cancel the
+      # statement and drops the connection, so the answer is the cancellation when the
+      # server replies first and a closed socket when it does not. Either way the timeout
+      # fired - without it the query returns {:ok, _}, which is what makes this an assertion
+      # about the timeout rather than about the driver's internals.
+      assert error.__struct__ in [DBConnection.ConnectionError, Postgrex.Error]
     end
 
     test "leaves a query carrying its own timeout alone" do
