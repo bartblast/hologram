@@ -45,7 +45,13 @@ defmodule Hologram.Migration.ShadowVerifier do
 
     # Held for the whole lifecycle and released when the connection stops, so a crash
     # frees it too. A waiting run finds the scratch database gone rather than half-built.
-    Postgrex.query!(maintenance_pid, "SELECT pg_advisory_lock($1)", [@advisory_lock_key])
+    #
+    # The wait is unbounded because the run ahead sets its length, and the driver's
+    # fifteen second default would end it as an error rather than a wait. This is a direct
+    # driver call, so the process-scoped timeout the migration paths set does not reach it.
+    Postgrex.query!(maintenance_pid, "SELECT pg_advisory_lock($1)", [@advisory_lock_key],
+      timeout: :infinity
+    )
 
     try do
       recreate_shadow!(maintenance_pid, shadow_database)
