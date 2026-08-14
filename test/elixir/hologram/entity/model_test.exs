@@ -638,6 +638,37 @@ defmodule Hologram.Entity.ModelTest do
       assert entities[MyApp.Task].relationships == []
     end
 
+    test "allows a migration deleting and recreating an entity type a relationship targets" do
+      model =
+        fold(empty(), [
+          %{op: :create_entity, entity: MyApp.User, line: 3},
+          %{op: :create_entity, entity: MyApp.Task, line: 4},
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :author,
+            type: MyApp.User,
+            opts: [],
+            line: 5
+          }
+        ])
+
+      ops = [
+        %{op: :delete_entity, entity: MyApp.User, line: 3},
+        %{op: :create_entity, entity: MyApp.User, line: 4}
+      ]
+
+      assert %{entities: entities} = fold(model, ops)
+
+      entity_types =
+        entities
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert entity_types == [MyApp.Task, MyApp.User]
+      assert entities[MyApp.Task].relationships == [{:author, MyApp.User, []}]
+    end
+
     test "raises when adding an :enum attribute without values" do
       ops = [
         %{

@@ -660,8 +660,10 @@ defmodule Hologram.Entity.Model do
     dangling =
       for {entity_type, entry} <- model.entities,
           {name, target, _opts} <- entry.relationships,
-          target_type(target) in deleted_types do
-        "#{inspect(name)} on #{inspect(entity_type)} targets #{inspect(target_type(target))}"
+          type <- [target_type(target)],
+          type in deleted_types,
+          not Map.has_key?(model.entities, type) do
+        "#{inspect(name)} on #{inspect(entity_type)} targets #{inspect(type)}"
       end
 
     if dangling != [] do
