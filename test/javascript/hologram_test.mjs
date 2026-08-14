@@ -179,7 +179,7 @@ describe("Hologram", () => {
       successCallbacks = [];
 
       clientFetchPageDataStub = sinon
-        .stub(Client, "fetchPageData")
+        .stub(Client, "fetchPage")
         .callsFake((_toParam, successCallback) => {
           successCallbacks.push(successCallback);
         });
@@ -192,7 +192,7 @@ describe("Hologram", () => {
     });
 
     afterEach(() => {
-      Client.fetchPageData.restore();
+      Client.fetchPage.restore();
       Hologram.handlePrefetchPageSuccess.restore();
     });
 
@@ -1018,7 +1018,7 @@ describe("Hologram", () => {
   });
 
   describe("loadNewPage()", () => {
-    let assignedUrls, assignStub, fetchPageDataStub;
+    let assignedUrls, assignStub, fetchPageStub;
 
     const encodedModule7 = `Type.atom("Elixir.Hologram.Test.Fixtures.Module7")`;
     const encodedNoParams = "Type.map([])";
@@ -1037,11 +1037,11 @@ describe("Hologram", () => {
         .stub(Hologram, "leaveApp")
         .callsFake((url) => assignedUrls.push(url));
 
-      fetchPageDataStub = sinon.stub(Client, "fetchPageData");
+      fetchPageStub = sinon.stub(Client, "fetchPage");
     });
 
     afterEach(() => {
-      Client.fetchPageData.restore();
+      Client.fetchPage.restore();
       assignStub.restore();
     });
 
@@ -1053,11 +1053,11 @@ describe("Hologram", () => {
       });
 
       assert.deepStrictEqual(assignedUrls, ["https://example.com/x"]);
-      sinon.assert.notCalled(fetchPageDataStub);
+      sinon.assert.notCalled(fetchPageStub);
     });
 
     it("follows a redirect by asking for the page it names", async () => {
-      fetchPageDataStub.callsFake((toParam, _onSuccess, _onNotPage) => {
+      fetchPageStub.callsFake((toParam, _onSuccess, _onNotPage) => {
         assert.equal(
           toParam.data[0].value,
           "Elixir.Hologram.Test.Fixtures.Module7",
@@ -1067,13 +1067,13 @@ describe("Hologram", () => {
 
       await Hologram.loadNewPage("/clicked", redirectTo("/target"));
 
-      sinon.assert.calledOnce(fetchPageDataStub);
+      sinon.assert.calledOnce(fetchPageStub);
     });
 
     // A redirect can point at a page that redirects again, and a cycle would otherwise fetch
     // forever without anything to show for it.
     it("gives up after too many redirect hops", async () => {
-      fetchPageDataStub.callsFake((_toParam, onSuccess, _onNotPage) =>
+      fetchPageStub.callsFake((_toParam, onSuccess, _onNotPage) =>
         onSuccess(redirectTo("/loop")),
       );
 
@@ -1086,7 +1086,7 @@ describe("Hologram", () => {
       }
 
       assert.match(thrownError?.message ?? "", /Too many redirects/);
-      assert.isAtMost(fetchPageDataStub.callCount, 10);
+      assert.isAtMost(fetchPageStub.callCount, 10);
     });
   });
 

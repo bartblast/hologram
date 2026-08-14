@@ -502,15 +502,15 @@ defmodule Hologram.Controller do
   end
 
   @doc """
-  Handles a page data HTTP request, answering with the page described as data rather than as
-  markup, for a client that renders it itself.
+  Handles a request for a page the client navigated to, answering with the page described as data
+  for a client that renders it itself.
 
-  Runs the same lifecycle a page response always runs - session, middleware, render, subscription
+  Runs the same lifecycle the initial request runs - session, middleware, render, subscription
   transition, broadcasts - and differs only in what it sends back, so a page behaves the same way
-  whichever form it is asked for.
+  however it is reached.
   """
-  @spec handle_page_data_request(Plug.Conn.t(), module) :: Plug.Conn.t()
-  def handle_page_data_request(initial_conn, page_module) do
+  @spec handle_subsequent_page_request(Plug.Conn.t(), module) :: Plug.Conn.t()
+  def handle_subsequent_page_request(initial_conn, page_module) do
     conn = PlugConnUtils.init_conn(initial_conn)
 
     {instance_id, client_claimed_sub_keys} = extract_page_request_payload(conn)
@@ -625,7 +625,7 @@ defmodule Hologram.Controller do
     end)
   end
 
-  # Reads the Hologram-serialized JSON body produced by `Client.fetchPageData` and
+  # Reads the Hologram-serialized JSON body produced by `Client.fetchPage` and
   # pulls out the two fields the page-render path needs from the client:
   # the stable JS-context `instance_id` and the subscription keys the client claims to
   # currently hold in its subscription receipt registry.

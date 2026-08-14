@@ -330,7 +330,7 @@ describe("Client", () => {
     });
   });
 
-  describe("fetchPageData()", () => {
+  describe("fetchPage()", () => {
     let fetchStub, onNotPageStub, onSuccessStub, originalInstanceId;
 
     const pageModule = Type.alias("MyPage");
@@ -362,11 +362,11 @@ describe("Client", () => {
         .stub(globalThis, "fetch")
         .resolves(pageDataResponse({type: "page"}));
 
-      await Client.fetchPageData(pageModule, onSuccessStub, onNotPageStub);
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
 
       const [url, opts] = fetchStub.firstCall.args;
 
-      assert.equal(url, "/hologram/page-data/MyPage");
+      assert.equal(url, "/hologram/page/MyPage");
       assert.equal(opts.method, "POST");
 
       // Redirects are for the browser to follow, not this fetch: one followed here would be
@@ -381,7 +381,7 @@ describe("Client", () => {
         .stub(globalThis, "fetch")
         .resolves(pageDataResponse(payload));
 
-      await Client.fetchPageData(pageModule, onSuccessStub, onNotPageStub);
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
 
       sinon.assert.calledOnceWithExactly(onSuccessStub, payload);
       sinon.assert.notCalled(onNotPageStub);
@@ -396,7 +396,7 @@ describe("Client", () => {
         json: sinon.stub().resolves({}),
       });
 
-      await Client.fetchPageData(pageModule, onSuccessStub, onNotPageStub);
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
 
       sinon.assert.calledOnce(onNotPageStub);
       sinon.assert.notCalled(onSuccessStub);
@@ -409,7 +409,7 @@ describe("Client", () => {
         status: 403,
       });
 
-      await Client.fetchPageData(pageModule, onSuccessStub, onNotPageStub);
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
 
       sinon.assert.calledOnce(onNotPageStub);
       sinon.assert.notCalled(onSuccessStub);
@@ -425,7 +425,7 @@ describe("Client", () => {
         type: "opaqueredirect",
       });
 
-      await Client.fetchPageData(pageModule, onSuccessStub, onNotPageStub);
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
 
       sinon.assert.calledOnce(onNotPageStub);
       sinon.assert.notCalled(onSuccessStub);

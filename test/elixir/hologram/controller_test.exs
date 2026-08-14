@@ -1874,7 +1874,7 @@ defmodule Hologram.ControllerTest do
     # seam: tests can drive a render with a known instance_id without going
     # through the auto-generating handle_initial_page_request/2 wrapper. Its
     # behavior is otherwise covered implicitly through the public wrappers'
-    # tests (handle_initial_page_request/2, handle_page_data_request/2).
+    # tests (handle_initial_page_request/2, handle_subsequent_page_request/2).
     # The tests below assert the subscription-wiring and cid-binding slices.
 
     setup do
@@ -2367,7 +2367,7 @@ defmodule Hologram.ControllerTest do
     end
   end
 
-  describe "handle_page_data_request/2" do
+  describe "handle_subsequent_page_request/2" do
     setup do
       stub_page_module_resolver([Module4])
     end
@@ -2376,9 +2376,9 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
       conn =
-        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module4"
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
         |> subsequent_page_request_conn()
-        |> handle_page_data_request(Module4)
+        |> handle_subsequent_page_request(Module4)
 
       response = Jason.decode!(conn.resp_body)
 
@@ -2395,9 +2395,9 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
       conn =
-        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module1?aaa=111&bbb=222"
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module1?aaa=111&bbb=222"
         |> subsequent_page_request_conn()
-        |> handle_page_data_request(Module1)
+        |> handle_subsequent_page_request(Module1)
 
       response = Jason.decode!(conn.resp_body)
 
@@ -2409,9 +2409,9 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
       conn =
-        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module4"
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
         |> subsequent_page_request_conn()
-        |> handle_page_data_request(Module4)
+        |> handle_subsequent_page_request(Module4)
 
       assert Plug.Conn.get_resp_header(conn, "hologram-page-data") == ["true"]
     end
@@ -2422,9 +2422,9 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module29, :dummy_module_29_digest)
 
       conn =
-        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module29"
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module29"
         |> subsequent_page_request_conn()
-        |> handle_page_data_request(Module29)
+        |> handle_subsequent_page_request(Module29)
 
       response = Jason.decode!(conn.resp_body)
 
@@ -2442,9 +2442,9 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module25, :dummy_module_25_digest)
 
       conn =
-        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module25"
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module25"
         |> subsequent_page_request_conn()
-        |> handle_page_data_request(Module25)
+        |> handle_subsequent_page_request(Module25)
 
       assert conn.status == 403
       assert Plug.Conn.get_resp_header(conn, "hologram-page-data") == []
@@ -2456,9 +2456,9 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module30, :dummy_module_30_digest)
 
       conn =
-        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module30"
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module30"
         |> subsequent_page_request_conn()
-        |> handle_page_data_request(Module30)
+        |> handle_subsequent_page_request(Module30)
 
       assert conn.status == 200
       assert conn.resp_body == "answered by middleware"
@@ -2469,9 +2469,9 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module3, :dummy_module_3_digest)
 
       conn =
-        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module3"
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module3"
         |> subsequent_page_request_conn()
-        |> handle_page_data_request(Module3)
+        |> handle_subsequent_page_request(Module3)
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
     end
@@ -2480,9 +2480,9 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
       conn =
-        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module4"
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
         |> subsequent_page_request_conn()
-        |> handle_page_data_request(Module4)
+        |> handle_subsequent_page_request(Module4)
 
       session_id = Session.get_session_id(conn)
 
@@ -2494,9 +2494,9 @@ defmodule Hologram.ControllerTest do
 
       # URL encoded: "hello world" -> "hello%20world", "foo/bar" -> "foo%2Fbar"
       conn =
-        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module11?param_a=hello%20world&param_b=foo%2Fbar"
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module11?param_a=hello%20world&param_b=foo%2Fbar"
         |> subsequent_page_request_conn()
-        |> handle_page_data_request(Module11)
+        |> handle_subsequent_page_request(Module11)
 
       response = Jason.decode!(conn.resp_body)
 
@@ -2508,9 +2508,9 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module10, :dummy_module_10_digest)
 
       conn =
-        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module10"
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module10"
         |> subsequent_page_request_conn()
-        |> handle_page_data_request(Module10)
+        |> handle_subsequent_page_request(Module10)
 
       assert Map.has_key?(conn.private.plug_session, "my_session_key")
     end
@@ -2521,9 +2521,9 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
       conn =
-        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module4"
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
         |> subsequent_page_request_conn()
-        |> handle_page_data_request(Module4)
+        |> handle_subsequent_page_request(Module4)
 
       assert is_nil(Plug.Conn.get_session(conn, @csrf_token_session_key))
     end
@@ -2540,12 +2540,12 @@ defmodule Hologram.ControllerTest do
 
       :post
       |> Plug.Test.conn(
-        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module4",
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4",
         ""
       )
       |> Plug.Test.init_test_session(%{})
       |> Map.put(:body_params, %{"_json" => body})
-      |> handle_page_data_request(Module4)
+      |> handle_subsequent_page_request(Module4)
 
       assert_receive {:replace_subscriptions, [], nil}
     end

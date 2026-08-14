@@ -216,7 +216,7 @@ export default class Hologram {
       // A prefetch keeps whatever the server described, a page or a redirect, and acts on it only
       // once the user commits to going there - following a redirect on hover would fetch pages
       // nobody asked for.
-      Client.fetchPageData(
+      Client.fetchPage(
         toParam,
         (payload) => Hologram.handlePrefetchPageSuccess(mapKey, payload),
         () => Hologram.prefetchedPages.delete(mapKey),
@@ -1131,7 +1131,7 @@ export default class Hologram {
   static async #navigateToPage(toParam) {
     const pagePath = $.#buildPagePath(toParam);
 
-    return Client.fetchPageData(
+    return Client.fetchPage(
       toParam,
       (payload) => Hologram.loadNewPage(pagePath, payload),
       () => Hologram.leaveApp(pagePath),
@@ -1178,7 +1178,7 @@ export default class Hologram {
       Interpreter.evaluateJavaScriptExpression(payload.pageParams),
     ]);
 
-    return Client.fetchPageData(
+    return Client.fetchPage(
       toParam,
       (nextPayload) =>
         Hologram.loadNewPage(payload.to, nextPayload, hopCount + 1),

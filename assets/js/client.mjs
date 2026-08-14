@@ -109,7 +109,7 @@ export default class Client {
   // what tells the two apart. Anything that is not a page goes to onNotPage, for the caller to hand
   // to the browser - which is also where an opaque redirect lands, redirects being left to the
   // browser rather than followed here.
-  static async fetchPageData(toParam, onSuccess, onNotPage) {
+  static async fetchPage(toParam, onSuccess, onNotPage) {
     let pageModule, queryString;
 
     if (Type.isAlias(toParam)) {
@@ -122,7 +122,7 @@ export default class Client {
 
     try {
       const pageModuleName = Interpreter.moduleExName(pageModule);
-      const url = `/hologram/page-data/${pageModuleName}${queryString}`;
+      const url = `/hologram/page/${pageModuleName}${queryString}`;
 
       const response = await fetch(url, {
         method: "POST",
