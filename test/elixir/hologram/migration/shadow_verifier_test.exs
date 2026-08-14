@@ -29,7 +29,7 @@ defmodule Hologram.Migration.ShadowVerifierTest do
       entity: MyApp.Task,
       name: :done,
       type: :boolean,
-      opts: [],
+      opts: [default: false],
       line: 5
     }
 

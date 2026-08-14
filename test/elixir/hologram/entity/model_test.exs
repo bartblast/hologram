@@ -489,6 +489,61 @@ defmodule Hologram.Entity.ModelTest do
       end
     end
 
+    test "raises when a required attribute is added to an entity type the history carries" do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :title,
+          type: :string,
+          opts: [],
+          line: 3
+        }
+      ]
+
+      expected_msg =
+        "required attributes added without a value for existing rows - " <>
+          ":title on MyApp.Task - add backfill: for a one-time value, default: to give " <>
+          "every row one, or optional: to leave them empty"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
+    end
+
+    test "allows a required attribute on an entity type created by the same ops" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Comment, line: 3},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Comment,
+          name: :body,
+          type: :string,
+          opts: [],
+          line: 4
+        }
+      ]
+
+      # The table is born here, so there are no rows to leave without a value.
+      assert %{entities: entities} = fold(task_model(%{}), ops)
+      assert entities[MyApp.Comment].attributes == [{:body, :string, []}]
+    end
+
+    test "allows a required attribute carrying a backfill" do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :title,
+          type: :string,
+          opts: [backfill: "untitled"],
+          line: 3
+        }
+      ]
+
+      # The backfill is a transition value, so it never reaches the model it unblocks.
+      assert %{entities: entities} = fold(task_model(%{}), ops)
+      assert entities[MyApp.Task].attributes == [{:title, :string, []}]
+    end
+
     test "raises when a backfill carries no value" do
       ops = [
         %{

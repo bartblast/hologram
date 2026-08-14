@@ -189,40 +189,37 @@ defmodule Hologram.MigratorTest do
             entity: MyApp.Task,
             name: :title,
             type: :string,
-            opts: [],
+            opts: [optional: true],
             line: 4
-          }
-        ])
-
-      apply_pending([create], Model.empty(), @context)
-
-      insert = """
-      INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "updated_at")
-      VALUES ('00000000-0000-0000-0000-000000000002', 'existing',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
-      """
-
-      {:ok, _result} = Connection.query(insert)
-
-      # A required column with no backfill has nothing to give the existing row.
-      refused =
-        migration("20260813142237", [
-          %{
-            op: :add_attribute,
-            entity: MyApp.Task,
-            name: :priority,
-            type: :integer,
-            opts: [],
-            line: 3
           }
         ])
 
       model = apply_pending([create], Model.empty(), @context)
 
+      insert = """
+      INSERT INTO "hologram_data"."my_app_task" ("id", "created_at", "updated_at")
+      VALUES ('00000000-0000-0000-0000-000000000002',
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+      """
+
+      {:ok, _result} = Connection.query(insert)
+
+      # The existing row holds no title, so requiring one has nothing to give it.
+      refused =
+        migration("20260813142237", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            changes: [optional: false],
+            line: 3
+          }
+        ])
+
       assert_raise RuntimeError, fn -> apply_pending([refused], model, @context) end
 
       assert applied_versions() == MapSet.new(["20260813091522"])
-      assert "priority" not in table_columns("my_app_task")
+      assert "title" in table_columns("my_app_task")
     end
   end
 

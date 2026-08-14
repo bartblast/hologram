@@ -80,8 +80,10 @@ defmodule Hologram.Entity.Model do
   def fold(model, ops) do
     folded = Enum.reduce(ops, model, &apply_op/2)
     deleted_types = for %{op: :delete_entity, entity: entity_type} <- ops, do: entity_type
+    created_types = for %{op: :create_entity, entity: entity_type} <- ops, do: entity_type
 
     validate_deleted_targets!(folded, deleted_types)
+    validate_filled_adds!(ops, created_types)
 
     folded
   end
@@ -585,29 +587,6 @@ defmodule Hologram.Entity.Model do
 
   defp validate_added_enum_values!(_op), do: :ok
 
-  defp validate_enum_values!(op, :enum, opts) do
-    if opts[:values] in [nil, []] do
-      raise Hologram.CompileError,
-        message:
-          "changing attribute #{inspect(op.name)} on #{inspect(op.entity)} " <>
-            "to :enum requires values:"
-    end
-  end
-
-  defp validate_enum_values!(_op, _type, _opts), do: :ok
-
-  # Checked on what the ops leave behind rather than op by op, because their order inside
-  # one file is free: deleting the entity before its inbound relationship is fine, and the
-  # generator emits exactly that.
-  #
-  # A reference outliving its target is not merely an odd model. Every model a file leaves
-  # behind is applied on its own, and the table cannot be dropped while a foreign key still
-  # points at it - PostgreSQL refuses the file mid-deploy, in wording of its own. Refusing
-  # while folding moves that to where the history is read: before the boot touches
-  # anything, and in a message naming the relationship to delete.
-  #
-  # Scoped to the types this fold deletes, so a model built around one entity type may
-  # still name targets it does not carry.
   # A backfill is the value the rows predating the column receive, so nil is not one - it
   # is the absence the backfill exists to fill. Left to run, it reads as a fill to the
   # pre-flight, which then skips the check that would have refused, and the column is
@@ -622,6 +601,18 @@ defmodule Hologram.Entity.Model do
     end
   end
 
+  # Checked on what the ops leave behind rather than op by op, because their order inside
+  # one file is free: deleting the entity before its inbound relationship is fine, and the
+  # generator emits exactly that.
+  #
+  # A reference outliving its target is not merely an odd model. Every model a file leaves
+  # behind is applied on its own, and the table cannot be dropped while a foreign key still
+  # points at it - PostgreSQL refuses the file mid-deploy, in wording of its own. Refusing
+  # while folding moves that to where the history is read: before the boot touches
+  # anything, and in a message naming the relationship to delete.
+  #
+  # Scoped to the types this fold deletes, so a model built around one entity type may
+  # still name targets it does not carry.
   defp validate_deleted_targets!(model, deleted_types) do
     dangling =
       for {entity_type, entry} <- model.entities,
@@ -639,9 +630,46 @@ defmodule Hologram.Entity.Model do
     end
   end
 
+  defp validate_enum_values!(op, :enum, opts) do
+    if opts[:values] in [nil, []] do
+      raise Hologram.CompileError,
+        message:
+          "changing attribute #{inspect(op.name)} on #{inspect(op.entity)} " <>
+            "to :enum requires values:"
+    end
+  end
+
+  defp validate_enum_values!(_op, _type, _opts), do: :ok
+
   # The rename-vs-replace footgun guard: writing a new value list is never a legal
   # move - the only exception is a type change TO :enum, which must bring the initial
   # values.
+  # A required attribute added to a table that already stands meets the rows that predate
+  # it, and leaves them without a value - which the apply refuses once it counts them. The
+  # value is the author's to supply: the model cannot carry it, and the database this file
+  # will meet is not the one it was generated against, so an empty table today proves
+  # nothing about the one that runs it next.
+  #
+  # Entities created by the same ops are exempt - their table is born here, holding nothing.
+  defp validate_filled_adds!(ops, created_types) do
+    unfilled =
+      for %{op: :add_attribute} = op <- ops,
+          op.entity not in created_types,
+          op.opts[:optional] != true,
+          not Keyword.has_key?(op.opts, :default),
+          not Keyword.has_key?(op.opts, :backfill) do
+        "#{inspect(op.name)} on #{inspect(op.entity)}"
+      end
+
+    if unfilled != [] do
+      raise Hologram.CompileError,
+        message:
+          "required attributes added without a value for existing rows - " <>
+            "#{Enum.join(Enum.sort(unfilled), ", ")} - add backfill: for a one-time " <>
+            "value, default: to give every row one, or optional: to leave them empty"
+    end
+  end
+
   defp validate_values_change!(op, old_type, new_type) do
     becoming_enum? = old_type != :enum and new_type == :enum
 
