@@ -380,13 +380,6 @@ defmodule Hologram.Migrator do
     end
   end
 
-  defp actual_indexes(actual, table) do
-    case actual.tables[table] do
-      %{indexes: indexes} -> indexes
-      nil -> %{}
-    end
-  end
-
   defp apply_transactional(render, version, context) do
     actual = Introspection.schema()
     mapping = Mapper.derive_from_model!(render.post_model)
@@ -568,13 +561,15 @@ defmodule Hologram.Migrator do
   # Re-read inside the lock: the node that held it before may have finished everything
   # already, which is the common case for every node of a deploy but the first.
   # Only what the model derives: an index the mapping does not name is drift for the
-  # check to report, never something to create.
+  # check to report, never something to create. A table the database does not have is
+  # drift as well, and the pattern skips it - creating its indexes would raise a relation
+  # error here, before check_drift!/1 gets to name the missing table as the cause.
   defp missing_indexes(mapping) do
     actual = Introspection.schema()
     expected = Schema.from_mapping(mapping)
 
     for {table, %{indexes: indexes}} <- expected.tables,
-        standing = actual_indexes(actual, table),
+        %{indexes: standing} <- [actual.tables[table]],
         {index, definition} <- indexes,
         not Map.has_key?(standing, index) do
       %{

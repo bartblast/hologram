@@ -640,6 +640,43 @@ defmodule Hologram.MigratorTest do
     end
   end
 
+  describe "repair_indexes/1" do
+    setup do
+      ensure_managed!(@context)
+
+      migrations = [
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.User, line: 3},
+          %{op: :create_entity, entity: MyApp.Task, line: 4},
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :author,
+            type: MyApp.User,
+            opts: [],
+            line: 5
+          }
+        ])
+      ]
+
+      model = apply_pending(migrations, Model.empty(), @context)
+
+      [mapping: Mapper.derive_from_model!(model)]
+    end
+
+    test "passes a database carrying every index the model derives", %{mapping: mapping} do
+      assert repair_indexes(mapping) == :ok
+    end
+
+    test "leaves a table the database does not have to the drift check", %{mapping: mapping} do
+      {:ok, _result} = Connection.query(~s{DROP TABLE "hologram_data"."my_app_task"})
+
+      # Its indexes went with it. Creating them here would raise a relation error before
+      # check_drift!/1 reports the missing table, which is the cause worth naming.
+      assert repair_indexes(mapping) == :ok
+    end
+  end
+
   describe "run/3" do
     test "claims the database and applies the pending suffix" do
       migrations = [
