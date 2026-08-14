@@ -1082,8 +1082,9 @@ export default class Hologram {
   // on screen stays with no sign that anything went wrong.
   //
   // Throwing from the handler does not reach whoever started the navigation, since the handler
-  // runs off the event loop. It goes to the "error" listener #init registers, which is what puts
-  // it in front of the user.
+  // runs off the event loop. It surfaces as an uncaught error instead, which is what the console
+  // and the feature tests read. handleUncaughtError/1 passes it over rather than showing the
+  // overlay, that being reserved for errors a page raised.
   //
   // The pending payload is dropped only while it is still the one this bundle was fetched for. A
   // navigation started while this one was in flight has already replaced it and still needs it,

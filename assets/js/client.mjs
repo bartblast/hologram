@@ -131,10 +131,13 @@ export default class Client {
         redirect: "manual",
       });
 
+      // Awaited so that whatever the callback goes on to do is part of this promise. A redirect
+      // answers by fetching the next page, and without the await a failure there - the hop limit
+      // being one - would reject a promise nobody holds instead of reaching the caller.
       if (response.headers.get("hologram-page-data") === "true") {
-        onSuccess(await response.json());
+        await onSuccess(await response.json());
       } else {
-        onNotPage();
+        await onNotPage();
       }
     } catch (error) {
       if (error instanceof HologramRuntimeError) {

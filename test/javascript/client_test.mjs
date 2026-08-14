@@ -374,6 +374,49 @@ describe("Client", () => {
       assert.equal(opts.redirect, "manual");
     });
 
+    // A redirect answers by fetching the next page, so whatever the callback goes on to do is part
+    // of this call. Without the await a failure there would reject a promise nobody holds.
+    it("carries a failure from the success callback to the caller", async () => {
+      sinon
+        .stub(globalThis, "fetch")
+        .resolves(pageDataResponse({type: "page"}));
+
+      const failing = async () => {
+        throw new HologramRuntimeError("callback failed");
+      };
+
+      let thrownError = null;
+
+      try {
+        await Client.fetchPage(pageModule, failing, onNotPageStub);
+      } catch (error) {
+        thrownError = error;
+      }
+
+      assert.equal(thrownError?.message, "callback failed");
+    });
+
+    it("carries a failure from the not-a-page callback to the caller", async () => {
+      sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers({}),
+        ok: true,
+      });
+
+      const failing = async () => {
+        throw new HologramRuntimeError("callback failed");
+      };
+
+      let thrownError = null;
+
+      try {
+        await Client.fetchPage(pageModule, onSuccessStub, failing);
+      } catch (error) {
+        thrownError = error;
+      }
+
+      assert.equal(thrownError?.message, "callback failed");
+    });
+
     it("hands over a marked payload", async () => {
       const payload = {pageDigest: "abc", type: "page"};
 
