@@ -37,22 +37,30 @@ const patch = init([attributesModule, eventListenersModule], undefined, {
 const MARKER_KEY_REGEX = /^\[h:[a-z0-9]+:\d+:[oc]\]$/;
 
 export default class Vdom {
-  // Numbers repeats of a marker key within one children list, in document order: the second
-  // occurrence becomes "<key>:1", the third "<key>:2".
+  // Numbers repeats of a key within one children list, in document order: the second occurrence
+  // becomes "<key>:1", the third "<key>:2".
   //
-  // A block carries one marker from the compiler, but it can be rendered more than once into the
-  // same list - a loop whose body holds a block, or the same component placed twice. Keys have to
-  // be unique among siblings, since the diff indexes them by key and a repeat makes it reach for a
-  // node it has already consumed.
+  // A key names a place in a template, and one place can be rendered into the same list more than
+  // once - a loop's body, or the same component placed twice. Keys have to be unique among
+  // siblings, since the diff indexes them by key and a repeat makes it reach for a node it has
+  // already consumed.
   //
-  // Only the vnode key is renumbered, never the comment's text, so server-rendered and
-  // client-rendered markup stay byte-identical. Both sides walk a children list in document order,
+  // Every kind of key is numbered by the same rule, since every kind can repeat: the marker of a
+  // block, the key of an element, and the href or src a resource is named by.
+  //
+  // Only the vnode key is renumbered, never anything in the markup, so server-rendered and
+  // client-rendered pages stay byte-identical. Both sides walk a children list in document order,
   // so both arrive at the same keys.
-  static dedupeMarkerKeys(children) {
+  static dedupeKeys(children) {
+    // Nothing can repeat on its own, and a children list of one is the common case.
+    if (children.length < 2) {
+      return children;
+    }
+
     const counts = new Map();
 
     for (const child of children) {
-      if (child?.sel !== "!" || !child.key) {
+      if (!child?.key) {
         continue;
       }
 
@@ -70,8 +78,8 @@ export default class Vdom {
     return children;
   }
 
-  // Turns a complete children list into the form the diff works on: repeated marker keys numbered,
-  // then each marked span gathered into a fragment.
+  // Turns a complete children list into the form the diff works on: repeated keys numbered, then
+  // each marked span gathered into a fragment.
   //
   // Numbering runs first: a fragment pairs its markers by key, and a repeat's key is only unique
   // once numbered.
@@ -81,7 +89,7 @@ export default class Vdom {
   // iteration the same keys, a block occurring once in the body however many times the body is
   // rendered.
   static finalizeChildren(children) {
-    return $.groupBlockFragments($.dedupeMarkerKeys(children));
+    return $.groupBlockFragments($.dedupeKeys(children));
   }
 
   // Wraps each marked span into a keyed fragment, so a block takes one position in its parent's

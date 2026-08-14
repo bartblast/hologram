@@ -19,14 +19,14 @@ defineRuntimeGlobals();
 registerWebApis();
 
 describe("Vdom", () => {
-  describe("dedupeMarkerKeys()", () => {
+  describe("dedupeKeys()", () => {
     it("distinct marker keys", () => {
       const children = [
         vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
         vnode("!", {key: "[h:1a2b3c:0:c]"}, "[h:1a2b3c:0:c]"),
       ];
 
-      Vdom.dedupeMarkerKeys(children);
+      Vdom.dedupeKeys(children);
 
       assert.deepStrictEqual(
         children.map((child) => child.key),
@@ -41,7 +41,7 @@ describe("Vdom", () => {
         vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
       ];
 
-      Vdom.dedupeMarkerKeys(children);
+      Vdom.dedupeKeys(children);
 
       assert.deepStrictEqual(
         children.map((child) => child.key),
@@ -55,7 +55,7 @@ describe("Vdom", () => {
         vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
       ];
 
-      Vdom.dedupeMarkerKeys(children);
+      Vdom.dedupeKeys(children);
 
       assert.deepStrictEqual(
         children.map((child) => child.text),
@@ -73,11 +73,89 @@ describe("Vdom", () => {
         vnode("div", {attrs: {}}, []),
       ];
 
-      Vdom.dedupeMarkerKeys(children);
+      Vdom.dedupeKeys(children);
 
       assert.deepStrictEqual(
         children.map((child) => child.key),
         [undefined, undefined, undefined, undefined],
+      );
+    });
+
+    it("repeated element keys", () => {
+      // What a loop renders: one place in the template, once per iteration.
+      const children = [
+        vnode("li", {attrs: {}, key: "1a2b3c:0"}, []),
+        vnode("li", {attrs: {}, key: "1a2b3c:0"}, []),
+        vnode("li", {attrs: {}, key: "1a2b3c:0"}, []),
+      ];
+
+      Vdom.dedupeKeys(children);
+
+      assert.deepStrictEqual(
+        children.map((child) => child.key),
+        ["1a2b3c:0", "1a2b3c:0:1", "1a2b3c:0:2"],
+      );
+    });
+
+    it("renumbers the vnode key and the data it was read from", () => {
+      const children = [
+        vnode("li", {attrs: {}, key: "1a2b3c:0"}, []),
+        vnode("li", {attrs: {}, key: "1a2b3c:0"}, []),
+      ];
+
+      Vdom.dedupeKeys(children);
+
+      assert.equal(children[1].data.key, "1a2b3c:0:1");
+    });
+
+    it("each key is counted on its own", () => {
+      const children = [
+        vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
+        vnode("li", {attrs: {}, key: "1a2b3c:1"}, []),
+        vnode("li", {attrs: {}, key: "1a2b3c:2"}, []),
+        vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]"),
+        vnode("li", {attrs: {}, key: "1a2b3c:1"}, []),
+        vnode("li", {attrs: {}, key: "1a2b3c:2"}, []),
+      ];
+
+      Vdom.dedupeKeys(children);
+
+      assert.deepStrictEqual(
+        children.map((child) => child.key),
+        [
+          "[h:1a2b3c:0:o]",
+          "1a2b3c:1",
+          "1a2b3c:2",
+          "[h:1a2b3c:0:o]:1",
+          "1a2b3c:1:1",
+          "1a2b3c:2:1",
+        ],
+      );
+    });
+
+    it("repeated resource keys", () => {
+      // The same stylesheet named twice in one list still has to name two nodes.
+      const children = [
+        vnode("link", {attrs: {}, key: "__hologramLink__:/my.css"}, []),
+        vnode("link", {attrs: {}, key: "__hologramLink__:/my.css"}, []),
+      ];
+
+      Vdom.dedupeKeys(children);
+
+      assert.deepStrictEqual(
+        children.map((child) => child.key),
+        ["__hologramLink__:/my.css", "__hologramLink__:/my.css:1"],
+      );
+    });
+
+    it("a single child is left alone", () => {
+      const children = [vnode("li", {attrs: {}, key: "1a2b3c:0"}, [])];
+
+      Vdom.dedupeKeys(children);
+
+      assert.deepStrictEqual(
+        children.map((child) => child.key),
+        ["1a2b3c:0"],
       );
     });
   });
@@ -116,6 +194,39 @@ describe("Vdom", () => {
           ["[h:1a2b3c:0:o]:1", "span", "[h:1a2b3c:0:c]:1"],
         ],
       );
+    });
+
+    it("a loop whose body holds a block leaves every sibling with its own key", () => {
+      // The shape issue #1019 was reported for: each iteration renders the same element and the
+      // same block, so nothing in the list is unique until it is numbered.
+      const marker = (side) =>
+        vnode("!", {key: `[h:1a2b3c:0:${side}]`}, `[h:1a2b3c:0:${side}]`);
+
+      const iteration = () => [
+        vnode("li", {attrs: {}, key: "1a2b3c:0"}, []),
+        marker("o"),
+        vnode("p", {attrs: {}, key: "1a2b3c:1"}, []),
+        marker("c"),
+      ];
+
+      const result = Vdom.finalizeChildren([
+        ...iteration(),
+        ...iteration(),
+        ...iteration(),
+      ]);
+
+      const keys = result.map((child) => child.key);
+
+      assert.deepStrictEqual(keys, [
+        "1a2b3c:0",
+        "[h:1a2b3c:0:o]",
+        "1a2b3c:0:1",
+        "[h:1a2b3c:0:o]:1",
+        "1a2b3c:0:2",
+        "[h:1a2b3c:0:o]:2",
+      ]);
+
+      assert.equal(new Set(keys).size, keys.length);
     });
   });
 
@@ -255,7 +366,7 @@ describe("Vdom", () => {
         marker("[h:1a2b3c:0:c]"),
       ];
 
-      Vdom.dedupeMarkerKeys(children);
+      Vdom.dedupeKeys(children);
 
       const result = Vdom.groupBlockFragments(children);
 
@@ -287,7 +398,7 @@ describe("Vdom", () => {
         marker("[h:1a2b3c:0:c]"),
       ];
 
-      Vdom.dedupeMarkerKeys(children);
+      Vdom.dedupeKeys(children);
 
       const result = Vdom.groupBlockFragments(children);
       const depth = (children) =>
@@ -314,7 +425,7 @@ describe("Vdom", () => {
         marker("[h:1a2b3c:0:c]"),
       ];
 
-      Vdom.dedupeMarkerKeys(children);
+      Vdom.dedupeKeys(children);
 
       const result = Vdom.groupBlockFragments(children);
 
