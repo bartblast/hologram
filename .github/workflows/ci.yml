@@ -258,6 +258,11 @@ jobs:
               Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
             } catch {
               Write-Host "download attempt $attempt failed: $_"
+
+              # A failed transfer leaves what it managed to write, and those bytes would
+              # fail the checksum below - which is fatal by design, turning a dropped
+              # connection into a failed job. Removing them lets the retry mean something.
+              Remove-Item $installer -Force -ErrorAction SilentlyContinue
             }
 
             if (Test-Path $installer) {
