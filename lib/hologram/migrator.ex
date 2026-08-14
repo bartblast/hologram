@@ -50,7 +50,7 @@ defmodule Hologram.Migrator do
   The managed-object registry is deliberately left alone - it is schema reconciliation's
   record of what it created, and a migration-managed database has no use for it.
   """
-  @spec apply_pending(list(%{atom => any}), %{atom => map}, %{atom => any}) :: %{atom => map}
+  @spec apply_pending(list(%{atom => any}), %{atom => any}, %{atom => any}) :: %{atom => any}
   def apply_pending(migrations, pre_model, context) do
     Enum.reduce(migrations, pre_model, &apply_migration(&1, &2, context))
   end
@@ -63,7 +63,7 @@ defmodule Hologram.Migrator do
   whose model changes never became migrations refuses here, whether generation was
   skipped or CI was.
   """
-  @spec check_covered!(list(%{atom => any}), %{atom => map}) :: :ok
+  @spec check_covered!(list(%{atom => any}), %{atom => any}) :: :ok
   def check_covered!(migrations, current_model) do
     replayed = Enum.reduce(migrations, Model.empty(), &Model.fold(&2, &1.ops))
 
@@ -309,7 +309,7 @@ defmodule Hologram.Migrator do
   or verifies the database, and the pending files apply from the model the applied ones
   produce.
   """
-  @spec run(list(%{atom => any}), %{atom => map}, %{atom => any}) :: :ok
+  @spec run(list(%{atom => any}), %{atom => any}, %{atom => any}) :: :ok
   def run(migrations, current_model, context) do
     Connection.with_timeout(:infinity, fn ->
       run_migrations(migrations, current_model, context)

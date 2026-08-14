@@ -14,7 +14,7 @@ defmodule Hologram.Migration.RendererTest do
         {entity_type, entry}
       end)
 
-    %{entities: entries, roles: %{}}
+    %{entities: entries, roles: %{}, user_entity: nil}
   end
 
   defp op_kinds(ops), do: Enum.map(ops, & &1.op)
@@ -591,7 +591,8 @@ defmodule Hologram.Migration.RendererTest do
           MyApp.Task => %{attributes: [], relationships: [], roles: []},
           UserEntity => %{attributes: [], relationships: [], roles: []}
         },
-        roles: %{}
+        roles: %{},
+        user_entity: nil
       }
 
       ops = [%{op: :add_role, role: MyApp.Roles.Admin, opts: [], line: 3}]

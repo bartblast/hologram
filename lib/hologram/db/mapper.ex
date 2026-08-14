@@ -76,7 +76,7 @@ defmodule Hologram.DB.Mapper do
   any module, so a mapping is obtainable for entity types that no longer exist as code
   (a replayed migration history names them as plain module atoms).
   """
-  @spec derive_from_model!(%{atom => map}, MapSet.t()) :: %{module => %{atom => any}}
+  @spec derive_from_model!(%{atom => any}, MapSet.t()) :: %{module => %{atom => any}}
   def derive_from_model!(model, ordered_pairs \\ MapSet.new()) do
     entities = put_role_grant(model)
 

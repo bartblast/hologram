@@ -2,6 +2,7 @@ defmodule Hologram.Entity.Model do
   @moduledoc false
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Reflection
 
   # Flag options, whose false is neutral. The option-introduction rule: no option may
   # give nil (or false, for flags) a meaning distinct from absence - every option
@@ -16,10 +17,11 @@ defmodule Hologram.Entity.Model do
   @transition_opts [:backfill]
 
   @doc """
-  Returns the empty model term - a model with no entity types and no global roles.
+  Returns the empty model term - a model with no entity types, no global roles, and no
+  designated user entity type.
   """
-  @spec empty() :: %{atom => map}
-  def empty, do: %{entities: %{}, roles: %{}}
+  @spec empty() :: %{atom => any}
+  def empty, do: %{entities: %{}, roles: %{}, user_entity: nil}
 
   @doc """
   Returns the model term derived from the given entity type modules and global role
@@ -31,11 +33,16 @@ defmodule Hologram.Entity.Model do
   keyword list is sorted by key, so two terms describing the same model always compare
   equal.
 
+  :user_entity is the entity type module designated as the app's user (nil when none is
+  designated) - a declared fact like any other, carried in the term so a replayed history
+  states the designation as it stood at that point rather than as the current modules
+  spell it.
+
   The role grant store is left out - it is derived from the rest of the model rather than
   declared (its enum values are the entity table names and role names), so it is computed
   when the physical mapping is derived, at any point in history.
   """
-  @spec from_modules(list(module), list(module)) :: %{atom => map}
+  @spec from_modules(list(module), list(module)) :: %{atom => any}
   def from_modules(entity_types, role_modules \\ []) do
     entities =
       entity_types
@@ -51,8 +58,9 @@ defmodule Hologram.Entity.Model do
       end)
 
     roles = Map.new(role_modules, &{&1, %{extends: Enum.sort(&1.__extends__())}})
+    user_entity = Enum.find(entity_types, &Reflection.user_entity?/1)
 
-    %{entities: entities, roles: roles}
+    %{entities: entities, roles: roles, user_entity: user_entity}
   end
 
   @doc """
@@ -76,7 +84,7 @@ defmodule Hologram.Entity.Model do
   type that is not there, a create of one that already is - and so does an unresolved
   draft op, which has no meaning to replay.
   """
-  @spec fold(%{atom => map}, list(%{atom => any})) :: %{atom => map}
+  @spec fold(%{atom => any}, list(%{atom => any})) :: %{atom => any}
   def fold(model, ops) do
     folded = Enum.reduce(ops, model, &apply_op/2)
     deleted_types = for %{op: :delete_entity, entity: entity_type} <- ops, do: entity_type
@@ -182,7 +190,10 @@ defmodule Hologram.Entity.Model do
   defp apply_op(%{op: :delete_entity} = op, model) do
     fetch_entity!(model, op.entity)
 
-    update_in(model, [:entities], &Map.delete(&1, op.entity))
+    entities = Map.delete(model.entities, op.entity)
+    user_entity = if model.user_entity == op.entity, do: nil, else: model.user_entity
+
+    %{model | entities: entities, user_entity: user_entity}
   end
 
   defp apply_op(%{op: :delete_enum_value} = op, model) do
@@ -252,7 +263,9 @@ defmodule Hologram.Entity.Model do
       |> Map.put(op.to, entry)
       |> Map.new(fn {entity_type, entry} -> {entity_type, retarget(entry, op.from, op.to)} end)
 
-    %{model | entities: entities}
+    user_entity = if model.user_entity == op.from, do: op.to, else: model.user_entity
+
+    %{model | entities: entities, user_entity: user_entity}
   end
 
   defp apply_op(%{op: :rename_enum_value} = op, model) do

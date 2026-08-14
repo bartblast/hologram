@@ -28,7 +28,7 @@ defmodule Hologram.Migration.Generator do
   scratch database and must produce the model's schema, raising otherwise. A draft
   still holding questions is not verified: its marker ops carry no physical form yet.
   """
-  @spec generate(String.t(), %{atom => map}, DateTime.t()) ::
+  @spec generate(String.t(), %{atom => any}, DateTime.t()) ::
           :nothing_to_do | {:ok, String.t(), non_neg_integer} | {:error, {:unresolved, list}}
   def generate(dir, current_model, timestamp) do
     migrations = Loader.load_dir!(dir)

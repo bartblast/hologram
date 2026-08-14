@@ -35,7 +35,7 @@ defmodule Hologram.Migration.Renderer do
   one keeps the statements minimal: an entity arriving with its attributes is one CREATE
   TABLE, not a table followed by a column at a time.
   """
-  @spec render(list(%{atom => any}), %{atom => map}) :: %{atom => any}
+  @spec render(list(%{atom => any}), %{atom => any}) :: %{atom => any}
   def render(logical_ops, pre_model) do
     {physical_ops, post_model} =
       logical_ops

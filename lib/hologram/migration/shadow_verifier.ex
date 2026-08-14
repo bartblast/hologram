@@ -36,7 +36,7 @@ defmodule Hologram.Migration.ShadowVerifier do
   named after the configured one, so concurrent runs would otherwise race to create and
   drop the same name.
   """
-  @spec verify!(list(%{atom => any}), %{atom => map}) :: :ok
+  @spec verify!(list(%{atom => any}), %{atom => any}) :: :ok
   def verify!(migrations, current_model) do
     {:ok, _apps} = Application.ensure_all_started(:postgrex)
 

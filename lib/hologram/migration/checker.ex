@@ -14,7 +14,7 @@ defmodule Hologram.Migration.Checker do
   ops with their locations, the uncovered model changes, or the schema differences
   the replay leaves.
   """
-  @spec check!(String.t(), %{atom => map}) :: :ok
+  @spec check!(String.t(), %{atom => any}) :: :ok
   def check!(dir, current_model) do
     migrations = Loader.load_dir!(dir)
 

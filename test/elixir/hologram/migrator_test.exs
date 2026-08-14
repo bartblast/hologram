@@ -387,7 +387,8 @@ defmodule Hologram.MigratorTest do
         entities: %{
           MyApp.Task => %{attributes: [{:title, :string, []}], relationships: [], roles: []}
         },
-        roles: %{}
+        roles: %{},
+        user_entity: nil
       }
 
       assert check_covered!(migrations, model) == :ok
@@ -712,7 +713,8 @@ defmodule Hologram.MigratorTest do
             roles: []
           }
         },
-        roles: %{}
+        roles: %{},
+        user_entity: nil
       }
 
       assert run(migrations, model, @context) == :ok
@@ -737,7 +739,8 @@ defmodule Hologram.MigratorTest do
 
       model = %{
         entities: %{MyApp.Task => %{attributes: [], relationships: [], roles: []}},
-        roles: %{}
+        roles: %{},
+        user_entity: nil
       }
 
       assert_raise RuntimeError, fn -> run(migrations, model, @context) end

@@ -32,7 +32,7 @@ defmodule Hologram.Migration.CheckerTest do
         {entity_type, entry}
       end)
 
-    %{entities: entries, roles: %{}}
+    %{entities: entries, roles: %{}, user_entity: nil}
   end
 
   describe "check!/2" do

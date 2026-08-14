@@ -6,6 +6,7 @@ defmodule Hologram.Entity.ModelTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module13
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
@@ -17,12 +18,12 @@ defmodule Hologram.Entity.ModelTest do
         entry_overrides
       )
 
-    %{entities: %{MyApp.Task => entry}, roles: %{}}
+    %{entities: %{MyApp.Task => entry}, roles: %{}, user_entity: nil}
   end
 
   describe "empty/0" do
-    test "returns a model with no entity types and no global roles" do
-      assert empty() == %{entities: %{}, roles: %{}}
+    test "returns a model with no entity types, no global roles, and no designated user entity type" do
+      assert empty() == %{entities: %{}, roles: %{}, user_entity: nil}
     end
   end
 
@@ -110,7 +111,8 @@ defmodule Hologram.Entity.ModelTest do
                roles: %{
                  MyApp.Roles.Manager => %{extends: []},
                  MyApp.Roles.Owner => %{extends: [MyApp.Roles.Manager]}
-               }
+               },
+               user_entity: nil
              }
     end
 
@@ -364,7 +366,8 @@ defmodule Hologram.Entity.ModelTest do
                  MyApp.Draft => %{attributes: [], relationships: [], roles: []},
                  MyApp.Sketch => %{attributes: [], relationships: [], roles: []}
                },
-               roles: %{}
+               roles: %{},
+               user_entity: nil
              }
     end
 
@@ -373,7 +376,8 @@ defmodule Hologram.Entity.ModelTest do
 
       assert fold(empty(), ops) == %{
                entities: %{MyApp.Task => %{attributes: [], relationships: [], roles: []}},
-               roles: %{}
+               roles: %{},
+               user_entity: nil
              }
     end
 
@@ -390,8 +394,59 @@ defmodule Hologram.Entity.ModelTest do
 
       assert fold(model, ops) == %{
                entities: %{MyApp.Sketch => %{attributes: [], relationships: [], roles: []}},
-               roles: %{}
+               roles: %{},
+               user_entity: nil
              }
+    end
+
+    test "points the designation at the new name when the designated entity type is renamed" do
+      model =
+        empty()
+        |> fold([%{op: :create_entity, entity: MyApp.Draft, line: 3}])
+        |> Map.put(:user_entity, MyApp.Draft)
+
+      ops = [%{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 4}]
+
+      assert fold(model, ops).user_entity == MyApp.Sketch
+    end
+
+    test "leaves the designation alone when another entity type is renamed" do
+      model =
+        empty()
+        |> fold([
+          %{op: :create_entity, entity: MyApp.Draft, line: 3},
+          %{op: :create_entity, entity: MyApp.Task, line: 4}
+        ])
+        |> Map.put(:user_entity, MyApp.Task)
+
+      ops = [%{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 5}]
+
+      assert fold(model, ops).user_entity == MyApp.Task
+    end
+
+    test "clears the designation when the designated entity type is deleted" do
+      model =
+        empty()
+        |> fold([%{op: :create_entity, entity: MyApp.Task, line: 3}])
+        |> Map.put(:user_entity, MyApp.Task)
+
+      ops = [%{op: :delete_entity, entity: MyApp.Task, line: 4}]
+
+      assert fold(model, ops).user_entity == nil
+    end
+
+    test "leaves the designation alone when another entity type is deleted" do
+      model =
+        empty()
+        |> fold([
+          %{op: :create_entity, entity: MyApp.Draft, line: 3},
+          %{op: :create_entity, entity: MyApp.Task, line: 4}
+        ])
+        |> Map.put(:user_entity, MyApp.Task)
+
+      ops = [%{op: :delete_entity, entity: MyApp.Draft, line: 5}]
+
+      assert fold(model, ops).user_entity == MyApp.Task
     end
 
     test "points the relationships targeting a renamed entity type at its new name" do
@@ -408,7 +463,8 @@ defmodule Hologram.Entity.ModelTest do
             roles: []
           }
         },
-        roles: %{}
+        roles: %{},
+        user_entity: nil
       }
 
       ops = [%{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 3}]
@@ -426,7 +482,8 @@ defmodule Hologram.Entity.ModelTest do
                    roles: []
                  }
                },
-               roles: %{}
+               roles: %{},
+               user_entity: nil
              }
     end
 
@@ -918,10 +975,19 @@ defmodule Hologram.Entity.ModelTest do
   end
 
   describe "from_modules/2" do
+    test "records the designated user entity type" do
+      assert from_modules([Module1, Module14]).user_entity == Module14
+    end
+
+    test "records no designation when none of the given entity types carries it" do
+      assert from_modules([Module1, Module2]).user_entity == nil
+    end
+
     test "derives an entry for an entity type without declarations" do
       assert from_modules([Module1]) == %{
                entities: %{Module1 => %{attributes: [], relationships: [], roles: []}},
-               roles: %{}
+               roles: %{},
+               user_entity: nil
              }
     end
 
@@ -938,7 +1004,8 @@ defmodule Hologram.Entity.ModelTest do
                    roles: []
                  }
                },
-               roles: %{}
+               roles: %{},
+               user_entity: nil
              }
     end
 
@@ -955,7 +1022,8 @@ defmodule Hologram.Entity.ModelTest do
                    roles: [{:editor, []}, {:owner, [creator: true, extends: :editor]}]
                  }
                },
-               roles: %{}
+               roles: %{},
+               user_entity: nil
              }
     end
 
@@ -965,7 +1033,8 @@ defmodule Hologram.Entity.ModelTest do
                roles: %{
                  RoleModule1 => %{extends: RoleModule1.__extends__()},
                  RoleModule2 => %{extends: RoleModule2.__extends__()}
-               }
+               },
+               user_entity: nil
              }
     end
 
@@ -989,7 +1058,8 @@ defmodule Hologram.Entity.ModelTest do
                    roles: []
                  }
                },
-               roles: %{}
+               roles: %{},
+               user_entity: nil
              }
     end
 

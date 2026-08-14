@@ -13,7 +13,7 @@ defmodule Hologram.Migration.Diff do
   no-intent interpretation, emitted only if the human confirms it). Ops carry no lines -
   the generator assigns them at render.
   """
-  @spec diff(%{atom => map}, %{atom => map}) :: %{atom => any}
+  @spec diff(%{atom => any}, %{atom => any}) :: %{atom => any}
   def diff(replayed, current) do
     {entity_ops, entity_questions} = diff_entities(replayed, current)
     {member_ops, member_questions} = diff_members(replayed, current)
