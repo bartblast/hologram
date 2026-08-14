@@ -119,7 +119,10 @@ defmodule Hologram.Migration.Diff do
       }
     end
 
-    class_plan = class_plan(add_ops, change_ops, delete_ops, deleted, added, question_fun)
+    class_plan =
+      add_ops
+      |> class_plan(change_ops, delete_ops, deleted, added, question_fun)
+      |> withhold_unfilled_adds(entity_type)
 
     merge_plans([class_plan | enum_plans])
   end
@@ -486,6 +489,35 @@ defmodule Hologram.Migration.Diff do
         else
           [%{op: :change_relationship, entity: entity_type, name: name, changes: changes}]
         end
+    end
+  end
+
+  defp unfilled_add?(%{op: :add_attribute} = op) do
+    op.opts[:optional] != true and not Keyword.has_key?(op.opts, :default)
+  end
+
+  defp unfilled_add?(_op), do: false
+
+  # An attribute added to an entity the history already carries meets rows that predate
+  # it, and a required one leaves them without a value. Which value is the author's to
+  # know - the model cannot hold it, and the database it will meet is not the one being
+  # generated against - so the op is withheld and asked about, the same way an ambiguous
+  # rename is. Entities created in this file are exempt: their table is born empty.
+  defp withhold_unfilled_adds({ops, questions}, entity_type) do
+    {unfilled, filled} = Enum.split_with(ops, &unfilled_add?/1)
+
+    if unfilled == [] do
+      {ops, questions}
+    else
+      question = %{
+        kind: :fill,
+        entity: entity_type,
+        attributes: Enum.map(unfilled, & &1.name),
+        members: Enum.map(unfilled, &{&1.name, &1.type, &1.opts}),
+        withheld_ops: unfilled
+      }
+
+      {filled, Enum.concat(questions, [question])}
     end
   end
 end

@@ -229,6 +229,36 @@ defmodule Hologram.Migration.GeneratorTest do
       assert render(plan) == normalize_newlines(expected)
     end
 
+    test "renders a fill question with the op spelled out three ways" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:title],
+            members: [{:title, :string, []}],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      expected = """
+      use Hologram.Migration
+
+      change_entity MyApp.Task do
+        # RESOLVE: :title is required, and MyApp.Task already holds rows - they need a value.
+        # Write the op with one of these, then delete the resolve! line. API:
+        #   add_attribute :title, :string, backfill: <value>  - existing rows receive it, once
+        #   add_attribute :title, :string, default: <value>   - every row created without one, from now on
+        #   add_attribute :title, :string, optional: true     - existing rows stay empty
+        resolve! :fill, attributes: [:title]
+      end
+      """
+
+      assert render(plan) == normalize_newlines(expected)
+    end
+
     test "renders every entity-scoped op kind" do
       plan = %{
         ops: [

@@ -137,6 +137,55 @@ defmodule Hologram.Migration.DiffTest do
              }
     end
 
+    test "withholds a required attribute added to a surviving entity type into a question" do
+      replayed = model(%{MyApp.Task => %{}})
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      assert diff(replayed, current) == %{
+               ops: [],
+               questions: [
+                 %{
+                   kind: :fill,
+                   entity: MyApp.Task,
+                   attributes: [:title],
+                   members: [{:title, :string, []}],
+                   withheld_ops: [
+                     %{
+                       op: :add_attribute,
+                       entity: MyApp.Task,
+                       name: :title,
+                       type: :string,
+                       opts: []
+                     }
+                   ]
+                 }
+               ]
+             }
+    end
+
+    test "emits a required attribute of a created entity type without a question" do
+      replayed = model(%{})
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      # The table is born in this migration, so it holds no rows to leave without a value.
+      assert %{ops: ops, questions: []} = diff(replayed, current)
+      assert Enum.map(ops, & &1.op) == [:create_entity, :add_attribute]
+    end
+
+    test "emits an added attribute carrying a fill without a question" do
+      replayed = model(%{MyApp.Task => %{}})
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:done, :boolean, [default: false]}, {:note, :string, [optional: true]}]
+          }
+        })
+
+      assert %{ops: ops, questions: []} = diff(replayed, current)
+      assert Enum.map(ops, & &1.name) == [:done, :note]
+    end
+
     test "emits change deltas for surviving members" do
       replayed =
         model(%{

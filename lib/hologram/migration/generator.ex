@@ -122,6 +122,22 @@ defmodule Hologram.Migration.Generator do
 
   # Generated text is formatted text: a long payload wraps here rather than the first
   # time someone runs mix format, so a fresh file is never a pending diff.
+  # Written out per attribute with its own name and type, so the answer is an edit of a
+  # line rather than a recall of the option's spelling.
+  defp fill_entries(members) do
+    Enum.flat_map(members, fn {name, type, opts} ->
+      declared_opts = render_opts(opts)
+      suffix = if declared_opts == "", do: "", else: ", " <> declared_opts
+      call = "add_attribute #{inspect(name)}, #{inspect(type)}#{suffix}"
+
+      [
+        "#{call}, backfill: <value>  - existing rows receive it, once",
+        "#{call}, default: <value>   - every row created without one, from now on",
+        "#{call}, optional: true     - existing rows stay empty"
+      ]
+    end)
+  end
+
   defp format(text) do
     formatted =
       Code.format_string!(text, locals_without_parens: Migration.locals_without_parens())
@@ -196,6 +212,10 @@ defmodule Hologram.Migration.Generator do
       version
     end
   end
+
+  defp plural_verb([_one]), do: "is"
+
+  defp plural_verb(_many), do: "are"
 
   defp render_args(args) do
     Enum.map_join(args, ", ", &inspect/1)
@@ -320,6 +340,21 @@ defmodule Hologram.Migration.Generator do
   # The draft form: the detected facts, the op API that expresses them, what looks
   # likely - and the resolve! line the human deletes once the ops are written. No
   # resolution is ever emitted as code: the lazy path must not be the destructive one.
+  defp render_question(%{kind: :fill} = question) do
+    fact_lines = [
+      "RESOLVE: #{name_list(question.attributes)} #{plural_verb(question.attributes)} required, " <>
+        "and #{inspect(question.entity)} already holds rows - they need a value.",
+      "Write the op with one of these, then delete the resolve! line. API:"
+    ]
+
+    api_lines =
+      question.members
+      |> fill_entries()
+      |> Enum.map(&"  #{&1}")
+
+    render_comment_block(fact_lines ++ api_lines, question)
+  end
+
   defp render_question(question) do
     fact_lines = [
       "RESOLVE: #{name_list(question.deleted)} disappeared from #{subject(question)} - " <>
@@ -334,12 +369,18 @@ defmodule Hologram.Migration.Generator do
 
     hint_lines = Enum.map(question.hints, &"Looks likely: #{render_hint(&1, question)}")
 
-    all_lines = fact_lines ++ api_lines ++ hint_lines
-    comment_lines = Enum.map(all_lines, &"# #{&1}")
+    render_comment_block(fact_lines ++ api_lines ++ hint_lines, question)
+  end
 
-    comment_lines
+  defp render_comment_block(lines, question) do
+    lines
+    |> Enum.map(&"# #{&1}")
     |> Enum.concat([render_resolve_op(question)])
     |> Enum.join("\n")
+  end
+
+  defp render_resolve_op(%{kind: :fill} = question) do
+    render_call("resolve!", [question.kind], attributes: question.attributes)
   end
 
   defp render_resolve_op(question) do

@@ -8,6 +8,18 @@ defmodule Hologram.Migration do
   of maps that the loader flattens. Every op map carries :op, :line, and the op's payload.
   Entity types are referenced by fully-qualified module name as spelled at that point in
   history - the name stays a valid reference after the module is renamed or deleted.
+
+  An op's options are the ones its declaration takes, with one addition: `add_attribute`
+  accepts `backfill:`, the value the rows that predate the column receive. It is a
+  one-time transition value rather than a declaration, so it never enters the model and
+  never needs repeating in a later file - once applied, the column reads as though it had
+  always been declared that way.
+
+  A backfill must carry a value. `backfill: nil` is refused, because nil is the absence a
+  backfill exists to fill. Adding a required attribute to a table that already holds rows
+  needs one of these: a `backfill:`, a `default:` on the declaration, or making the
+  attribute optional. Without any of them the apply refuses, naming the table and how many
+  rows would have been left without a value.
   """
 
   @locals_without_parens [
