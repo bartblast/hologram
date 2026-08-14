@@ -22,11 +22,20 @@ defmodule Hologram.DB.Connection do
   sandbox): queries route to the pool as usual, transaction/2 emulates the outermost
   transaction with a savepoint instead of issuing BEGIN/COMMIT, and rollback/1 rolls back
   to that savepoint - so the externally managed transaction itself is never committed or
-  aborted.
+  aborted. Queries carry no driver timeout in this mode - the test framework's per-test
+  timeout is the time bound.
   """
   @spec enter_sandbox() :: :ok
   def enter_sandbox do
     Process.put(@transaction_key, {:sandbox, DB.pool_name()})
+
+    # The driver's fifteen second default is a second, lower bound under the per-test one,
+    # and the worse of the two: it fires by killing the connection, which takes the
+    # sandbox transaction and every row the test wrote with it, so the test fails later on
+    # data that silently vanished. With no driver bound a stalled query gets its full
+    # per-test window, and a genuine hang is ended by the test framework naming the test.
+    Process.put(@timeout_key, :infinity)
+
     :ok
   end
 
