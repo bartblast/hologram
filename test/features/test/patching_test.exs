@@ -1050,6 +1050,26 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_text(css("#result"), "Delta, Charlie, Bravo, Alpha")
       |> assert_script_result(rendered_feed, "* Delta * Charlie * Bravo * Alpha")
     end
+
+    feature "the key an element is diffed by never reaches the markup", %{session: session} do
+      # The key is written as an attribute because that is how a value reaches an element through
+      # every path a template has, but it is never one: the server leaves it out of the markup and
+      # the client turns it into the vnode's key. Checked on both renderers' output, since either
+      # could leak it on its own.
+      framework_attributes = """
+      return [...document.querySelectorAll("*")]
+        .flatMap((element) => [...element.attributes])
+        .map((attribute) => attribute.name)
+        .filter((name) => name.startsWith("$"));
+      """
+
+      session
+      |> visit(Page15)
+      |> assert_script_result(framework_attributes, [])
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Charlie, Alpha, Delta, Bravo")
+      |> assert_script_result(framework_attributes, [])
+    end
   end
 
   describe "adopting the server-rendered page" do
