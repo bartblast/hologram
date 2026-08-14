@@ -39,6 +39,7 @@ exported_locals_without_parens = [
   delete_enum_value: 2,
   delete_relationship: 1,
   delete_role: 1,
+  designate_user_entity: 1,
   rename_attribute: 2,
   rename_entity: 2,
   rename_enum_value: 3,

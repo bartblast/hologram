@@ -9,6 +9,12 @@ defmodule Hologram.Migration do
   Entity types are referenced by fully-qualified module name as spelled at that point in
   history - the name stays a valid reference after the module is renamed or deleted.
 
+  One op declares nothing an entity type declares of itself: `designate_user_entity`
+  records which entity type is the app's user, the designation `use Hologram.Entity,
+  user: true` makes in the model. It rides the history like any other fact, so a replay
+  knows which type the role grant store referenced at that point rather than resolving it
+  against the modules as they are spelled today.
+
   An op's options are the ones its declaration takes, with one addition: `add_attribute`
   accepts `backfill:`, the value the rows that predate the column receive. It is a
   one-time transition value rather than a declaration, so it never enters the model and
@@ -40,6 +46,7 @@ defmodule Hologram.Migration do
     delete_enum_value: 2,
     delete_relationship: 1,
     delete_role: 1,
+    designate_user_entity: 1,
     rename_attribute: 2,
     rename_entity: 2,
     rename_enum_value: 3,
@@ -70,6 +77,7 @@ defmodule Hologram.Migration do
           create_entity: 2,
           delete_entity: 1,
           delete_role: 1,
+          designate_user_entity: 1,
           rename_entity: 2,
           rename_role: 2,
           resolve!: 1,
@@ -173,6 +181,19 @@ defmodule Hologram.Migration do
 
     quote do
       %{op: :delete_role, role: unquote(role), line: unquote(line)}
+    end
+  end
+
+  @doc """
+  Returns the op recording that the given entity type became the designated user entity
+  type - the one the role grant store references and the policy layer resolves the acting
+  user against. `nil` records that the designation was removed.
+  """
+  defmacro designate_user_entity(entity_type) do
+    line = __CALLER__.line
+
+    quote do
+      %{op: :designate_user_entity, entity: unquote(entity_type), line: unquote(line)}
     end
   end
 

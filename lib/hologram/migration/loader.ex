@@ -22,6 +22,7 @@ defmodule Hologram.Migration.Loader do
     :create_entity,
     :delete_entity,
     :delete_role,
+    :designate_user_entity,
     :rename_entity,
     :rename_role,
     :resolve!

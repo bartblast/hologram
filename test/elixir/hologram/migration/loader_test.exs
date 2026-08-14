@@ -143,6 +143,30 @@ defmodule Hologram.Migration.LoaderTest do
       assert delete_op == %{op: :delete_entity, entity: MyApp.Archive, line: 4}
     end
 
+    test "returns the ops of a file designating the user entity type" do
+      contents = """
+      use Hologram.Migration
+
+      designate_user_entity MyApp.Account
+      """
+
+      assert load_string!(contents, "20260813075841.exs") == [
+               %{op: :designate_user_entity, entity: MyApp.Account, line: 3}
+             ]
+    end
+
+    test "returns the op of a file removing the user entity designation" do
+      contents = """
+      use Hologram.Migration
+
+      designate_user_entity nil
+      """
+
+      assert load_string!(contents, "20260813075841.exs") == [
+               %{op: :designate_user_entity, entity: nil, line: 3}
+             ]
+    end
+
     test "flattens entity blocks into the op list" do
       contents = """
       use Hologram.Migration
@@ -307,6 +331,21 @@ defmodule Hologram.Migration.LoaderTest do
 
       expected_msg =
         "20260813091522.exs:3 references MyApp.Draft, renamed on line 4 - " <>
+          "move the rename first and use MyApp.Sketch"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        verify_rename_order!(ops, "20260813091522.exs")
+      end
+    end
+
+    test "rejects a designation naming the pre-rename name" do
+      ops = [
+        %{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 3},
+        %{op: :designate_user_entity, entity: MyApp.Draft, line: 4}
+      ]
+
+      expected_msg =
+        "20260813091522.exs:4 references MyApp.Draft, renamed on line 3 - " <>
           "move the rename first and use MyApp.Sketch"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
