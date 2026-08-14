@@ -166,6 +166,52 @@ defmodule Hologram.MigratorTest do
       assert rows == [[7]]
     end
 
+    test "fills the rows that predate a required column with its declared default" do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            type: :string,
+            opts: [],
+            line: 4
+          }
+        ])
+
+      model = apply_pending([create], Model.empty(), @context)
+
+      insert = """
+      INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "updated_at")
+      VALUES ('00000000-0000-0000-0000-000000000003', 'existing',
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+      """
+
+      {:ok, _result} = Connection.query(insert)
+
+      # Schema reconciliation fills from a declared default in dev, so the applier has to
+      # leave the same rows behind for the same declaration, not merely the same column.
+      defaulted =
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :state,
+            type: :string,
+            opts: [default: "new"],
+            line: 3
+          }
+        ])
+
+      apply_pending([defaulted], model, @context)
+
+      {:ok, %{rows: rows}} =
+        Connection.query(~s(SELECT "state" FROM "hologram_data"."my_app_task"))
+
+      assert rows == [["new"]]
+    end
+
     test "skips the migrations another applier already recorded" do
       migrations = [
         migration("20260813091522", [%{op: :create_entity, entity: MyApp.Task, line: 3}])

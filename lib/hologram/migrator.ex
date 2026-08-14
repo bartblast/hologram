@@ -232,7 +232,7 @@ defmodule Hologram.Migrator do
           |> Schema.diff(Schema.from_mapping(mapping))
           |> Enum.filter(&artifact_op?(&1, mapping))
 
-        Enum.each(ops, &apply_op/1)
+        Enum.each(ops, &apply_op(&1, mapping))
 
         ops
       end)
@@ -338,13 +338,34 @@ defmodule Hologram.Migrator do
     render.post_model
   end
 
-  # A required column arriving with a backfill is added nullable, filled, then tightened -
-  # the value never travels in the DDL, and the rows that predate the column receive it.
-  defp apply_op(%{op: :add_column, backfill: value} = op) do
+  defp apply_op(%{op: :add_column, backfill: value} = op, _mapping) do
+    add_column_filled(op, value)
+  end
+
+  # A required column with no backfill takes its declared default, which is what schema
+  # reconciliation does for the same declaration in dev - the two mechanisms have to leave
+  # the same rows behind, not merely the same columns.
+  defp apply_op(%{op: :add_column} = op, mapping) do
+    fill =
+      if op.definition.null,
+        do: :none,
+        else: Preflight.fill_value(mapping, op.table, op.column)
+
+    case fill do
+      :none -> execute_statements(DDL.statements(op))
+      {:ok, encoded_value} -> add_column_filled(op, encoded_value)
+    end
+  end
+
+  defp apply_op(op, _mapping), do: execute_statements(DDL.statements(op))
+
+  # Added nullable, filled, then tightened - the value never travels in the DDL, and the
+  # rows that predate the column receive it.
+  defp add_column_filled(op, encoded_value) do
     nullable_definition = %{op.definition | null: true}
 
     execute_statements(DDL.statements(%{op | definition: nullable_definition}))
-    fill_column(op.table, op.column, value)
+    fill_column(op.table, op.column, encoded_value)
 
     if not op.definition.null do
       tighten_op = %{
@@ -359,8 +380,6 @@ defmodule Hologram.Migrator do
     end
   end
 
-  defp apply_op(op), do: execute_statements(DDL.statements(op))
-
   defp actual_indexes(actual, table) do
     case actual.tables[table] do
       %{indexes: indexes} -> indexes
@@ -373,7 +392,7 @@ defmodule Hologram.Migrator do
     mapping = Mapper.derive_from_model!(render.post_model)
 
     Preflight.run!(render.transactional, actual, mapping)
-    Enum.each(render.transactional, &apply_op/1)
+    Enum.each(render.transactional, &apply_op(&1, mapping))
 
     # The tail's checks run here, against the columns the statements above just created
     # and before anything commits: a file whose index cannot be built does not apply at
