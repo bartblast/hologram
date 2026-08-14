@@ -44,6 +44,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module30
   alias Hologram.Test.Fixtures.Controller.Module31
+  alias Hologram.Test.Fixtures.Controller.Module32
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
@@ -529,7 +530,7 @@ defmodule Hologram.ControllerTest do
 
   describe "resolve_redirect_target/1" do
     setup do
-      stub_page_module_resolver([Module1, Module4, Module11])
+      stub_page_module_resolver([Module1, Module11, Module32, Module4])
     end
 
     test "resolves a path to the page that owns it" do
@@ -545,10 +546,19 @@ defmodule Hologram.ControllerTest do
                )
     end
 
-    test "casts params carried by the query string" do
+    test "decodes params carried by the path" do
       assert {:redirect, _to, Module11, %{param_a: "hello world", param_b: "x"}} =
                resolve_redirect_target(
                  "/hologram-test-fixtures-controller-module11/hello%20world/x"
+               )
+    end
+
+    # Module32 declares params its route does not name, so these can only have come from the query
+    # string, and param_b being an integer shows they are cast rather than passed through.
+    test "casts params carried by the query string" do
+      assert {:redirect, _to, Module32, %{param_a: "hello world", param_b: 42}} =
+               resolve_redirect_target(
+                 "/hologram-test-fixtures-controller-module32?param_a=hello+world&param_b=42"
                )
     end
 
