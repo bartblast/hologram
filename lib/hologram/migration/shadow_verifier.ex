@@ -43,21 +43,27 @@ defmodule Hologram.Migration.ShadowVerifier do
     shadow_database = Config.connection_opts()[:database] <> "_shadow"
     maintenance_pid = start_connection("postgres")
 
-    # Held for the whole lifecycle and released when the connection stops, so a crash
-    # frees it too. A waiting run finds the scratch database gone rather than half-built.
-    #
-    # The wait is unbounded because the run ahead sets its length, and the driver's
-    # fifteen second default would end it as an error rather than a wait. This is a direct
-    # driver call, so the process-scoped timeout the migration paths set does not reach it.
-    Postgrex.query!(maintenance_pid, "SELECT pg_advisory_lock($1)", [@advisory_lock_key],
-      timeout: :infinity
-    )
-
+    # Stopping the connection is what releases the lock, so it is the outermost step - a
+    # failure to drop the scratch database must not leave the lock held, or every later run
+    # waits on it forever.
     try do
-      recreate_shadow!(maintenance_pid, shadow_database)
-      run_in_shadow!(shadow_database, migrations, current_model)
+      # Held for the whole lifecycle and released when the connection stops, so a crash
+      # frees it too. A waiting run finds the scratch database gone rather than half-built.
+      #
+      # The wait is unbounded because the run ahead sets its length, and the driver's
+      # fifteen second default would end it as an error rather than a wait. This is a direct
+      # driver call, so the process-scoped timeout the migration paths set does not reach it.
+      Postgrex.query!(maintenance_pid, "SELECT pg_advisory_lock($1)", [@advisory_lock_key],
+        timeout: :infinity
+      )
+
+      try do
+        recreate_shadow!(maintenance_pid, shadow_database)
+        run_in_shadow!(shadow_database, migrations, current_model)
+      after
+        drop_shadow(maintenance_pid, shadow_database)
+      end
     after
-      drop_shadow(maintenance_pid, shadow_database)
       GenServer.stop(maintenance_pid)
     end
   end
