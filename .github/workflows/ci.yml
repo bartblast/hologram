@@ -299,9 +299,22 @@ jobs:
           # only needed to wait. Two-second probes for a minute - a server that has not
           # answered by then is not slow, it is broken, and the message says so.
           foreach ($attempt in 1..30) {
-            & $psql -U postgres -c "SELECT version();"
+            $reported = & $psql -U postgres -tAc "SHOW server_version_num"
 
-            if ($LASTEXITCODE -eq 0) { break }
+            if ($LASTEXITCODE -eq 0) {
+              $serverVersion = ($reported | Out-String).Trim()
+
+              # Answering is not the same as being ours: the client is 16, but the port is
+              # whatever holds it, and this image ships PostgreSQL 14. A running 14 service
+              # would answer here and the suite would quietly run below Hologram's floor.
+              if ([int]$serverVersion -lt 160000) {
+                throw "port 5432 is served by server_version_num $serverVersion, not the 16 this job installed - another server is holding it"
+              }
+
+              & $psql -U postgres -c "SELECT version();"
+
+              break
+            }
 
             if ($attempt -eq 30) {
               throw "Postgres 16 installed but never accepted connections - see the output above"
