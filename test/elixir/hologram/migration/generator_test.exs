@@ -508,7 +508,8 @@ defmodule Hologram.Migration.GeneratorTest do
           value: :doing,
           opts: [after: :todo]
         },
-        %{op: :add_role, role: MyApp.Roles.Support, opts: []}
+        %{op: :add_role, role: MyApp.Roles.Support, opts: []},
+        %{op: :change_role, role: MyApp.Roles.Support, changes: [extends: [MyApp.Roles.Staff]]}
       ]
 
       loaded =

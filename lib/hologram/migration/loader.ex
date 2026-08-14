@@ -18,6 +18,7 @@ defmodule Hologram.Migration.Loader do
   @flat_ops [
     :add_role,
     :change_entity,
+    :change_role,
     :create_entity,
     :delete_entity,
     :delete_role,
