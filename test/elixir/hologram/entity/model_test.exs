@@ -489,6 +489,23 @@ defmodule Hologram.Entity.ModelTest do
       end
     end
 
+    test "raises when adding an :enum attribute without values" do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :status,
+          type: :enum,
+          opts: [],
+          line: 3
+        }
+      ]
+
+      expected_msg = "adding attribute :status to MyApp.Task as :enum requires values:"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
+    end
+
     test "raises when changing an attribute to :enum without values" do
       model = task_model(%{attributes: [{:status, :string, []}]})
 

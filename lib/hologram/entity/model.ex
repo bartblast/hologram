@@ -82,6 +82,8 @@ defmodule Hologram.Entity.Model do
   end
 
   defp apply_op(%{op: :add_attribute} = op, model) do
+    validate_added_enum_values!(op)
+
     add_member(model, op.entity, :attributes, "attribute", {op.name, op.type, op.opts})
   end
 
@@ -558,6 +560,20 @@ defmodule Hologram.Entity.Model do
           "entity #{inspect(entity_type)} already exists at this point in migration history"
     end
   end
+
+  # The same requirement change_attribute enforces when a type becomes :enum, at the other
+  # door into an enum attribute - without it the values are missing from the model and the
+  # first enum op raises a bare KeyError, naming neither the attribute nor its entity.
+  defp validate_added_enum_values!(%{type: :enum} = op) do
+    if op.opts[:values] in [nil, []] do
+      raise Hologram.CompileError,
+        message:
+          "adding attribute #{inspect(op.name)} to #{inspect(op.entity)} " <>
+            "as :enum requires values:"
+    end
+  end
+
+  defp validate_added_enum_values!(_op), do: :ok
 
   defp validate_enum_values!(op, :enum, opts) do
     if opts[:values] in [nil, []] do
