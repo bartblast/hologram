@@ -16,6 +16,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
+  alias Hologram.Router.SearchTree
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Session
@@ -60,6 +61,7 @@ defmodule Hologram.ControllerTest do
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
+  use_module_stub :page_module_resolver
 
   setup :set_mox_global
 
@@ -471,33 +473,87 @@ defmodule Hologram.ControllerTest do
       assert decoded["componentRegistry"] == payload.componentRegistry
     end
 
-    test "describes a middleware response instead of a page" do
-      server = %Server{
-        response_headers: %{"location" => "/other-page"},
-        status: 302
-      }
+    test "describes a redirect to a page the client can ask for itself" do
+      payload = build_page_data_payload({:redirect, "/my-target", Module1, %{key: "value"}})
 
-      assert build_page_data_payload(server) == %{
-               headers: %{"location" => "/other-page"},
-               status: 302,
-               type: "response"
+      assert payload.type == "redirect"
+      assert payload.to == "/my-target"
+      assert payload.pageModule == Encoder.encode_term!(Module1)
+      assert payload.pageParams == Encoder.encode_term!(%{key: "value"})
+    end
+
+    # A target no page owns is the client's cue to hand it to the browser, so it carries nothing to
+    # ask for.
+    test "describes a redirect to a target no page owns" do
+      assert build_page_data_payload({:redirect, "https://example.com/x", nil, nil}) == %{
+               to: "https://example.com/x",
+               type: "redirect"
              }
     end
 
-    test "middleware response survives the JSON encoding it is sent over" do
-      server = %Server{response_headers: %{"location" => "/other-page"}, status: 302}
+    test "redirect survives the JSON encoding it is sent over" do
+      payload = build_page_data_payload({:redirect, "/my-target", Module1, %{key: "value"}})
 
       decoded =
-        server
-        |> build_page_data_payload()
+        payload
         |> Jason.encode!()
         |> Jason.decode!()
 
-      assert decoded == %{
-               "headers" => %{"location" => "/other-page"},
-               "status" => 302,
-               "type" => "response"
-             }
+      assert decoded["type"] == "redirect"
+      assert decoded["to"] == "/my-target"
+      assert decoded["pageModule"] == payload.pageModule
+    end
+  end
+
+  describe "resolve_redirect_target/1" do
+    # Gives the resolver a search tree holding just the pages these tests redirect to, rather than
+    # standing up the registry process over whatever pages happen to be compiled.
+    setup do
+      persistent_term_key = :resolve_redirect_target_test_search_tree
+
+      stub(PageModuleResolverMock, :persistent_term_key, fn -> persistent_term_key end)
+
+      search_tree =
+        %SearchTree.Node{}
+        |> SearchTree.add_route(Module1.__route__(), Module1)
+        |> SearchTree.add_route(Module4.__route__(), Module4)
+        |> SearchTree.add_route(Module11.__route__(), Module11)
+
+      :persistent_term.put(persistent_term_key, search_tree)
+
+      on_exit(fn -> :persistent_term.erase(persistent_term_key) end)
+
+      :ok
+    end
+
+    test "resolves a path to the page that owns it" do
+      to = Module4.__route__()
+
+      assert resolve_redirect_target(to) == {:redirect, to, Module4, %{}}
+    end
+
+    test "casts params carried by the path" do
+      assert {:redirect, _to, Module1, %{aaa: 111, bbb: 222}} =
+               resolve_redirect_target(
+                 "/hologram-test-fixtures-runtime-controller-module1/111/ccc/222"
+               )
+    end
+
+    test "casts params carried by the query string" do
+      assert {:redirect, _to, Module11, %{param_a: "hello world", param_b: "x"}} =
+               resolve_redirect_target(
+                 "/hologram-test-fixtures-controller-module11/hello%20world/x"
+               )
+    end
+
+    test "resolves a target no page owns to no module" do
+      assert resolve_redirect_target("https://example.com/x") ==
+               {:redirect, "https://example.com/x", nil, nil}
+    end
+
+    test "resolves a path the framework itself serves to no module" do
+      assert resolve_redirect_target("/hologram/ping") ==
+               {:redirect, "/hologram/ping", nil, nil}
     end
   end
 

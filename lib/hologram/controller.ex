@@ -11,6 +11,7 @@ defmodule Hologram.Controller do
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
+  alias Hologram.Router.PageModuleResolver
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Deserializer
@@ -100,16 +101,25 @@ defmodule Hologram.Controller do
   Terms are encoded the way a command's response encodes them, as JavaScript the client evaluates,
   since that is the form its runtime already reads.
 
-  A page whose middleware answered before anything was rendered has no such payload. It carries the
-  response's status and headers instead, so that a redirect stays a redirect rather than being
-  mounted as a page.
+  A redirect is a payload of its own, since a client-side navigation cannot be answered with a real
+  one: a `fetch` following redirects consumes the 302 invisibly, and one set to leave it alone gets
+  a response whose Location it is not allowed to read. Carrying the target as data is what lets the
+  client go there without reloading the document, which is the whole point of navigating in the
+  first place. The target's own page module and params ride along, resolved server-side, so the
+  client can ask for that page's data without a round trip to find out what it is. A target no page
+  owns carries no module, and the client hands it to the browser.
   """
-  @spec build_page_data_payload(map | Server.t()) :: map
-  def build_page_data_payload(%Server{} = server) do
+  @spec build_page_data_payload(map | {:redirect, String.t(), module | nil, map | nil}) :: map
+  def build_page_data_payload({:redirect, to, nil, _params}) do
+    %{to: to, type: "redirect"}
+  end
+
+  def build_page_data_payload({:redirect, to, page_module, params}) do
     %{
-      headers: server.response_headers,
-      status: server.status,
-      type: "response"
+      pageModule: Encoder.encode_term!(page_module),
+      pageParams: Encoder.encode_term!(params),
+      to: to,
+      type: "redirect"
     }
   end
 
@@ -132,6 +142,39 @@ defmodule Hologram.Controller do
       subReceiptDrops: Encoder.encode_term!(sub_receipt_drops),
       type: "page"
     }
+  end
+
+  @doc """
+  Resolves a redirect target into the page it names, so a client that navigates by page module can
+  ask for that page's data directly.
+
+  Uses the same resolution the router uses for an incoming request, which is what keeps a redirect
+  landing on the page a browser would have landed on. Params come from both places a page can carry
+  them, the path and the query string, cast the way the page declares them.
+
+  A target no page owns - an external URL, or a path the framework itself serves - resolves to no
+  module, leaving the client to hand it to the browser.
+  """
+  @spec resolve_redirect_target(String.t()) :: {:redirect, String.t(), module | nil, map | nil}
+  def resolve_redirect_target(to) do
+    %URI{path: path, query: query} = URI.parse(to)
+
+    # The resolver answers false, not nil, when no page owns the path.
+    page_module = path && PageModuleResolver.resolve(path)
+
+    if page_module do
+      query_params = if query, do: URI.decode_query(query), else: %{}
+
+      params =
+        path
+        |> extract_params(page_module)
+        |> Map.merge(query_params)
+        |> Page.cast_params(page_module)
+
+      {:redirect, to, page_module, params}
+    else
+      {:redirect, to, nil, nil}
+    end
   end
 
   @doc """
