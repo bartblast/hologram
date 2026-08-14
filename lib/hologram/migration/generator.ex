@@ -401,9 +401,20 @@ defmodule Hologram.Migration.Generator do
     :nothing_to_do
   end
 
-  defp verify_finalized({:ok, _path, 0} = outcome, dir, current_model) do
+  defp verify_finalized({:ok, path, 0} = outcome, dir, current_model) do
     migrations = Loader.load_dir!(dir)
-    ShadowVerifier.verify!(migrations, current_model)
+
+    try do
+      ShadowVerifier.verify!(migrations, current_model)
+    rescue
+      error ->
+        # A file that cannot build the model is not history - left on disk it becomes the
+        # history of the next run, which then replays the rejected ops and reports the same
+        # failure forever, with nothing to say the file is the cause.
+        File.rm(path)
+
+        reraise error, __STACKTRACE__
+    end
 
     outcome
   end

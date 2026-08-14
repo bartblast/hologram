@@ -161,6 +161,32 @@ defmodule Hologram.Migration.GeneratorTest do
         generate(dir, current, @timestamp)
       end
     end
+
+    test "leaves no file behind when the written migration fails verification" do
+      create_contents = """
+      use Hologram.Migration
+
+      create_entity MyApp.Tag
+
+      create_entity MyApp.Task do
+        add_relationship :tags, [MyApp.Tag]
+      end
+      """
+
+      dir = migrations_dir!("unverifiable", [{"20260813091522.exs", create_contents}])
+
+      current =
+        model(%{
+          MyApp.Tag => %{},
+          MyApp.Task => %{relationships: [{:tags, MyApp.Tag, []}]}
+        })
+
+      assert_raise Hologram.CompileError, fn -> generate(dir, current, @timestamp) end
+
+      # The rejected file would otherwise become the next run's history, which replays the
+      # ops that failed and reports the same error with nothing naming the cause.
+      assert File.ls!(dir) == ["20260813091522.exs"]
+    end
   end
 
   describe "render/1" do
