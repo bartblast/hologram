@@ -610,6 +610,71 @@ defmodule Hologram.Migration.RendererTest do
       assert add_enum_value.value == "MyApp.Roles.Admin"
     end
 
+    # The designation op carries no physical form of its own - the grant store is derived,
+    # so its DDL falls out of the diff between the models the op folds between. These pin
+    # what that produces, which is why they needed no renderer change to pass.
+    test "renders the first user entity designation as the grant store's creation" do
+      undesignated = model(%{UserEntity => %{}})
+      pre = Map.put(undesignated, :user_entity, nil)
+      ops = [%{op: :designate_user_entity, entity: UserEntity, line: 3}]
+
+      result = render(ops, pre)
+
+      assert op_kinds(result.transactional) == [
+               :create_enum_type,
+               :create_enum_type,
+               :create_table,
+               :add_foreign_key,
+               :add_foreign_key,
+               :create_index,
+               :create_index,
+               :create_index
+             ]
+
+      assert Enum.find(result.transactional, &(&1.op == :create_table)).table ==
+               "hologram_role_grant"
+
+      assert result.tail == []
+    end
+
+    test "renders a moved user entity designation as the grant store's retargeted references" do
+      pre = model(%{MyApp.Member => %{}, UserEntity => %{}})
+      ops = [%{op: :designate_user_entity, entity: MyApp.Member, line: 3}]
+
+      result = render(ops, pre)
+
+      # The table and its rows stay - only the two references follow the designation.
+      assert op_kinds(result.transactional) == [
+               :drop_foreign_key,
+               :drop_foreign_key,
+               :add_foreign_key,
+               :add_foreign_key
+             ]
+
+      assert Enum.map(result.transactional, & &1.constraint) == [
+               "hologram_role_grant_granted_by_id_$fk",
+               "hologram_role_grant_user_id_$fk",
+               "hologram_role_grant_granted_by_id_$fk",
+               "hologram_role_grant_user_id_$fk"
+             ]
+
+      assert result.tail == []
+    end
+
+    test "renders a removed user entity designation as the grant store's drop" do
+      pre = model(%{UserEntity => %{}})
+      ops = [%{op: :designate_user_entity, entity: nil, line: 3}]
+
+      result = render(ops, pre)
+
+      assert op_kinds(result.transactional) == [:drop_table, :drop_enum_type, :drop_enum_type]
+
+      assert Enum.find(result.transactional, &(&1.op == :drop_table)).table ==
+               "hologram_role_grant"
+
+      assert result.tail == []
+    end
+
     test "renders a widened relationship as its join table, the values moving into it" do
       pre = model(%{MyApp.Tag => %{}, MyApp.Task => %{relationships: [{:tags, MyApp.Tag, []}]}})
 
