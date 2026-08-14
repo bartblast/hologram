@@ -269,8 +269,8 @@ jobs:
                 throw "Postgres installer checksum mismatch - expected $expectedSha256, got $sha256"
               }
 
-              # The installer returns before the service is registered, so its exit code is
-              # not the signal - the binary's presence is.
+              # The installer's exit code is not the signal - it reports on unpacking, not
+              # on the server being usable, so the checks below decide instead.
               Start-Process -FilePath $installer -Wait -ArgumentList @(
                 "--mode", "unattended",
                 "--unattendedmodeui", "none",
@@ -289,7 +289,21 @@ jobs:
             Start-Sleep -Seconds (15 * $attempt)
           }
 
-          & $psql -U postgres -c "SELECT version();"
+          # Installed is not the same as accepting connections: the service registers and
+          # starts on its own schedule, and a query issued in that window fails a job that
+          # only needed to wait. Two-second probes for a minute - a server that has not
+          # answered by then is not slow, it is broken, and the message says so.
+          foreach ($attempt in 1..30) {
+            & $psql -U postgres -c "SELECT version();"
+
+            if ($LASTEXITCODE -eq 0) { break }
+
+            if ($attempt -eq 30) {
+              throw "Postgres 16 installed but never accepted connections - see the output above"
+            }
+
+            Start-Sleep -Seconds 2
+          }
 
       # Step: Execute lib Elixir tests.
       - name: Run lib Elixir tests
