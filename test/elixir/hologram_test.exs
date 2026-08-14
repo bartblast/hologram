@@ -123,9 +123,14 @@ defmodule HologramTest do
     end
 
     test "returns an environment whose atom does not exist yet" do
-      System.put_env("HOLOGRAM_ENV", "staging")
+      # Built at runtime and compared as a string: writing the name as an atom literal
+      # anywhere in this file would create it at compile time, and the test would pass
+      # against an implementation that only ever resolves existing atoms.
+      env_name = "holo_env_#{System.unique_integer([:positive])}"
 
-      assert env() == :staging
+      System.put_env("HOLOGRAM_ENV", env_name)
+
+      assert Atom.to_string(env()) == env_name
     end
   end
 
