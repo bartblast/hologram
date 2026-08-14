@@ -107,6 +107,10 @@ defmodule HologramTest do
     setup do
       original = System.get_env("HOLOGRAM_ENV")
 
+      # An override the runner happens to carry would answer for the environment the tests
+      # are asserting about, so they start from none.
+      System.delete_env("HOLOGRAM_ENV")
+
       on_exit(fn ->
         if original do
           System.put_env("HOLOGRAM_ENV", original)
