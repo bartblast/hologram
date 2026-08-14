@@ -2964,6 +2964,33 @@ describe("Renderer", () => {
           assert.equal(render(node).key, "__hologramScript__:my_src");
         });
 
+        // An inline script is keyed by its own code, and the live node is keyed by its
+        // textContent, so the two agree only while the whole body renders as one child. Everything
+        // a script can hold renders to text and adjacent text is merged, which is what makes that
+        // true - if it stopped being true, the boot patch would rebuild every inline script and
+        // the page would re-run its own code.
+        it("keys an inline script by the whole of its body", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("script"),
+            Type.list(),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("let x = ")]),
+              Type.tuple([
+                Type.atom("expression"),
+                Type.tuple([Type.integer(123)]),
+              ]),
+              Type.tuple([Type.atom("text"), Type.bitstring("; go();")]),
+            ]),
+          ]);
+
+          const result = render(node);
+
+          assert.equal(result.children.length, 1);
+          assert.equal(result.children[0].text, "let x = 123; go();");
+          assert.equal(result.key, "__hologramScript__:let x = 123; go();");
+        });
+
         // The key is found without expanding the spread, so a tag carrying one has to keep
         // reaching its key.
         it("is found on a tag that also carries a spread", () => {

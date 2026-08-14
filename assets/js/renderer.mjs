@@ -1516,6 +1516,12 @@ export default class Renderer {
       data.key = `__hologramScript__:${attrsVdom.src}`;
     } else if (currentTagName === "script" && childrenVdom[0]) {
       // Make sure the script is executed if the code changes.
+      //
+      // The one child is the whole body: everything a script can hold renders to text, and
+      // #mergeNeighbouringTextNodes joins adjacent text into a single child. That is what lets
+      // this equal the textContent Vdom.#resourceKey reads off the live node, which is what the
+      // boot patch compares the two sides by. Splitting a script body into more than one child
+      // would part the two keys and make the page re-run its own scripts on boot.
       data.key = `__hologramScript__:${childrenVdom[0]}`;
     } else {
       // What the element loads names it better than where it sits, so a slot key only applies to
