@@ -554,41 +554,6 @@ defmodule Hologram.Controller do
   end
 
   @doc """
-  Handles a subsequent page HTTP GET request by building HTTP response.
-  Exracts page parameters from the query string.
-
-  ## Parameters
-
-    * `conn` - The Plug.Conn struct representing the HTTP request
-    * `page_module` - The page module to render
-
-  ## Returns
-
-  The updated and halted Plug.Conn struct with the rendered HTML and applied cookies.
-  """
-  @spec handle_subsequent_page_request(Plug.Conn.t(), module) :: Plug.Conn.t()
-  def handle_subsequent_page_request(initial_conn, page_module) do
-    conn = PlugConnUtils.init_conn(initial_conn)
-
-    {instance_id, client_claimed_sub_keys} = extract_page_request_payload(conn)
-
-    params =
-      conn
-      |> Plug.Conn.fetch_query_params()
-      |> Map.get(:query_params)
-      |> Page.cast_params(page_module)
-
-    handle_page_request(
-      conn,
-      page_module,
-      params,
-      client_claimed_sub_keys,
-      initial_page?: false,
-      instance_id: instance_id
-    )
-  end
-
-  @doc """
   Sends the terminal response built from the server struct's response fields.
 
   Merges `response_headers` onto the connection and sends `status` with `response_body`
@@ -660,7 +625,7 @@ defmodule Hologram.Controller do
     end)
   end
 
-  # Reads the Hologram-serialized JSON body produced by `Client.fetchPage` and
+  # Reads the Hologram-serialized JSON body produced by `Client.fetchPageData` and
   # pulls out the two fields the page-render path needs from the client:
   # the stable JS-context `instance_id` and the subscription keys the client claims to
   # currently hold in its subscription receipt registry.

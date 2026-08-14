@@ -1874,7 +1874,7 @@ defmodule Hologram.ControllerTest do
     # seam: tests can drive a render with a known instance_id without going
     # through the auto-generating handle_initial_page_request/2 wrapper. Its
     # behavior is otherwise covered implicitly through the public wrappers'
-    # tests (handle_initial_page_request/2, handle_subsequent_page_request/2).
+    # tests (handle_initial_page_request/2, handle_page_data_request/2).
     # The tests below assert the subscription-wiring and cid-binding slices.
 
     setup do
@@ -2488,138 +2488,44 @@ defmodule Hologram.ControllerTest do
 
       assert {:ok, _info} = UUID.info(session_id)
     end
-  end
-
-  describe "handle_subsequent_page_request/3" do
-    test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
-
-      conn =
-        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
-        |> subsequent_page_request_conn()
-        |> handle_subsequent_page_request(Module4)
-
-      assert conn.halted == true
-      assert conn.state == :sent
-      assert conn.status == 200
-    end
-
-    # TODO: uncomment when standalone Hologram is supported
-    # test "initializes Hologram session" do
-    #   ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
-
-    #   conn =
-    #     :get
-    #     |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4")
-    #     |> handle_subsequent_page_request(Module4)
-
-    #   assert Map.has_key?(conn.resp_cookies, "hologram_session")
-    # end
-
-    test "establishes a Hologram session ID" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
-
-      conn =
-        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
-        |> subsequent_page_request_conn()
-        |> handle_subsequent_page_request(Module4)
-
-      session_id = Session.get_session_id(conn)
-
-      assert {:ok, _info} = UUID.info(session_id)
-    end
-
-    test "casts page params and passes them to page renderer" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
-
-      conn =
-        "/hologram/page/Hologram.Test.Fixtures.Controller.Module1?aaa=111&bbb=222"
-        |> subsequent_page_request_conn()
-        |> handle_subsequent_page_request(Module1)
-
-      assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
-    end
 
     test "decodes URL-encoded query params" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module11, :dummy_module_11_digest)
 
       # URL encoded: "hello world" -> "hello%20world", "foo/bar" -> "foo%2Fbar"
       conn =
-        "/hologram/page/Hologram.Test.Fixtures.Controller.Module11?param_a=hello%20world&param_b=foo%2Fbar"
+        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module11?param_a=hello%20world&param_b=foo%2Fbar"
         |> subsequent_page_request_conn()
-        |> handle_subsequent_page_request(Module11)
+        |> handle_page_data_request(Module11)
 
-      assert conn.resp_body == "param_a = hello world, param_b = foo/bar"
-    end
+      response = Jason.decode!(conn.resp_body)
 
-    test "passes server struct with session to page init/3" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module9, :dummy_module_9_digest)
-
-      conn =
-        "/hologram/page/Hologram.Test.Fixtures.Controller.Module9"
-        |> subsequent_page_request_conn(%{"my_session_key" => "my_session_value"})
-        |> handle_subsequent_page_request(Module9)
-
-      assert conn.resp_body == "session = my_session_value"
-    end
-
-    test "passes server struct with cookies to page init/3" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
-
-      conn =
-        "/hologram/page/Hologram.Test.Fixtures.Controller.Module2"
-        |> subsequent_page_request_conn()
-        |> Map.put(:req_headers, [{"cookie", "my_cookie_name=my_cookie_value"}])
-        |> handle_subsequent_page_request(Module2)
-
-      assert conn.resp_body == "cookie = my_cookie_value"
-    end
-
-    test "passes to renderer the initial_page? opt set to false" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
-
-      conn =
-        "/hologram/page/Hologram.Test.Fixtures.Controller.Module5"
-        |> subsequent_page_request_conn()
-        |> handle_subsequent_page_request(Module5)
-
-      # Initial pages include runtime script
-      refute String.contains?(conn.resp_body, "hologram/runtime")
-    end
-
-    test "does not generate CSRF token for subsequent page requests" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
-
-      conn =
-        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
-        |> subsequent_page_request_conn()
-        |> handle_subsequent_page_request(Module4)
-
-      # Should not have a CSRF token in the session for subsequent page requests
-      csrf_token = Plug.Conn.get_session(conn, @csrf_token_session_key)
-      assert is_nil(csrf_token)
+      assert response["pageParams"] =~ "hello world"
+      assert response["pageParams"] =~ "foo/bar"
     end
 
     test "updates Plug.Conn session" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module10, :dummy_module_10_digest)
 
       conn =
-        "/hologram/page/Hologram.Test.Fixtures.Controller.Module10"
+        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module10"
         |> subsequent_page_request_conn()
-        |> handle_subsequent_page_request(Module10)
+        |> handle_page_data_request(Module10)
 
       assert Map.has_key?(conn.private.plug_session, "my_session_key")
     end
 
-    test "updates Plug.Conn cookies" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module3, :dummy_module_3_digest)
+    # A navigation is not where a CSRF token is minted: the page it navigates from already carries
+    # one.
+    test "does not generate a CSRF token" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
       conn =
-        "/hologram/page/Hologram.Test.Fixtures.Controller.Module3"
+        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module4"
         |> subsequent_page_request_conn()
-        |> handle_subsequent_page_request(Module3)
+        |> handle_page_data_request(Module4)
 
-      assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
+      assert is_nil(Plug.Conn.get_session(conn, @csrf_token_session_key))
     end
 
     test "addresses the replacement to the instance named in the request body" do
@@ -2629,15 +2535,17 @@ defmodule Hologram.ControllerTest do
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       # Client claims it currently holds {:room_a, "page"}. Module4 declares none, so the
-      # replacement empties the set. What the claimed keys do to the response is covered
-      # by the sub_receipt_drops placeholder test.
+      # replacement empties the set.
       body = page_request_body("test-instance-id", [{:room_a, "page"}])
 
       :post
-      |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4", "")
+      |> Plug.Test.conn(
+        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module4",
+        ""
+      )
       |> Plug.Test.init_test_session(%{})
       |> Map.put(:body_params, %{"_json" => body})
-      |> handle_subsequent_page_request(Module4)
+      |> handle_page_data_request(Module4)
 
       assert_receive {:replace_subscriptions, [], nil}
     end

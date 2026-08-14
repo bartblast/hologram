@@ -102,42 +102,6 @@ export default class Client {
     HttpTransport.restartPing(sendImmediatePing);
   }
 
-  static async fetchPage(toParam, onSuccess) {
-    let pageModule, queryString;
-
-    if (Type.isAlias(toParam)) {
-      pageModule = toParam;
-      queryString = "";
-    } else {
-      pageModule = toParam.data[0];
-      queryString = $.buildPageQueryString(toParam.data[1]);
-    }
-
-    try {
-      const pageModuleName = Interpreter.moduleExName(pageModule);
-      const url = `/hologram/page/${pageModuleName}${queryString}`;
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: Serializer.serialize($.buildPageRequestPayload(), "server"),
-      });
-
-      if (!response.ok) {
-        $.#handleFetchPageError(response.status);
-      }
-
-      const html = await response.text();
-      onSuccess(html);
-    } catch (error) {
-      if (error instanceof HologramRuntimeError) {
-        throw error;
-      }
-
-      $.#handleFetchPageError(error);
-    }
-  }
-
   // Asks the server to describe a page rather than render it, for a client that renders it itself.
   //
   // The answer is a page only when it says so: a page's middleware can answer the request instead,
