@@ -449,6 +449,49 @@ defmodule Hologram.Entity.ModelTest do
       assert fold(model, ops).user_entity == MyApp.Task
     end
 
+    test "designates an entity type as the user entity type" do
+      model = fold(empty(), [%{op: :create_entity, entity: MyApp.Task, line: 3}])
+      ops = [%{op: :designate_user_entity, entity: MyApp.Task, line: 4}]
+
+      assert fold(model, ops).user_entity == MyApp.Task
+    end
+
+    test "moves the designation to another entity type" do
+      model =
+        empty()
+        |> fold([
+          %{op: :create_entity, entity: MyApp.Account, line: 3},
+          %{op: :create_entity, entity: MyApp.Task, line: 4}
+        ])
+        |> Map.put(:user_entity, MyApp.Task)
+
+      ops = [%{op: :designate_user_entity, entity: MyApp.Account, line: 5}]
+
+      assert fold(model, ops).user_entity == MyApp.Account
+    end
+
+    test "keeps the model unchanged when designating the entity type already designated" do
+      model =
+        empty()
+        |> fold([%{op: :create_entity, entity: MyApp.Task, line: 3}])
+        |> Map.put(:user_entity, MyApp.Task)
+
+      ops = [%{op: :designate_user_entity, entity: MyApp.Task, line: 4}]
+
+      assert fold(model, ops) == model
+    end
+
+    test "removes the designation with nil" do
+      model =
+        empty()
+        |> fold([%{op: :create_entity, entity: MyApp.Task, line: 3}])
+        |> Map.put(:user_entity, MyApp.Task)
+
+      ops = [%{op: :designate_user_entity, entity: nil, line: 4}]
+
+      assert fold(model, ops).user_entity == nil
+    end
+
     test "points the relationships targeting a renamed entity type at its new name" do
       model = %{
         entities: %{
@@ -971,6 +1014,14 @@ defmodule Hologram.Entity.ModelTest do
           "delete or change the extending roles first"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when designating an entity type that does not exist" do
+      ops = [%{op: :designate_user_entity, entity: MyApp.Ghost, line: 3}]
+
+      expected_msg = "no such entity MyApp.Ghost at this point in migration history"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(empty(), ops) end
     end
   end
 

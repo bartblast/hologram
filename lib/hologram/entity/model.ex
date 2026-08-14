@@ -249,6 +249,20 @@ defmodule Hologram.Entity.Model do
     update_in(model, [:roles], &Map.delete(&1, op.role))
   end
 
+  defp apply_op(%{op: :designate_user_entity, entity: nil}, model) do
+    %{model | user_entity: nil}
+  end
+
+  # Designating the type already designated is a plain re-set rather than an error: a
+  # question resolved as a rename retargets the designation while folding, which can make
+  # the file's own designation op redundant by the time it applies - refusing there would
+  # refuse a file the generator wrote.
+  defp apply_op(%{op: :designate_user_entity} = op, model) do
+    fetch_entity!(model, op.entity)
+
+    %{model | user_entity: op.entity}
+  end
+
   defp apply_op(%{op: :rename_attribute} = op, model) do
     rename_member(model, op.entity, :attributes, "attribute", op.from, op.to)
   end
