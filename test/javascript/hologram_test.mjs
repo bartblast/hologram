@@ -143,6 +143,40 @@ describe("Hologram", () => {
       sinon.assert.calledOnceWithExactly(loadNewPageStub, pagePath, payload);
     });
 
+    // Dropping the entry instead would leave the link dead: the click looks the target up here,
+    // and an entry that is not there does nothing at all.
+    it("hands the target to the browser when the prefetch found no page", () => {
+      const leaveAppStub = sinon.stub(Hologram, "leaveApp");
+
+      eventTargetNode = {__hologramId__: "dummy_hologram_id"};
+      const mapKey = "dummy_hologram_id:/hologram-test-fixtures-module7";
+
+      Hologram.prefetchedPages = new Map([
+        [
+          mapKey,
+          {
+            isNavigateConfirmed: false,
+            isPage: false,
+            pagePath: pagePath,
+            payload: null,
+            timestamp: Date.now(),
+          },
+        ],
+      ]);
+
+      Hologram.executeLoadPrefetchedPageAction(
+        loadPrefetchedPageAction,
+        eventTargetNode,
+      );
+
+      assert.equal(Hologram.prefetchedPages.size, 0);
+
+      sinon.assert.calledOnceWithExactly(leaveAppStub, pagePath);
+      sinon.assert.notCalled(loadNewPageStub);
+
+      leaveAppStub.restore();
+    });
+
     it("is a no-op if there is no prefeteched pages map entry for the given map key", () => {
       Hologram.prefetchedPages = new Map();
 
@@ -224,9 +258,10 @@ describe("Hologram", () => {
       const mapValue = Hologram.prefetchedPages.get(mapKey);
 
       assert.deepStrictEqual(mapValue, {
-        payload: null,
         isNavigateConfirmed: false,
+        isPage: true,
         pagePath: pagePath,
+        payload: null,
         timestamp: mapValue.timestamp,
       });
 
@@ -274,9 +309,10 @@ describe("Hologram", () => {
       const mapValue = Hologram.prefetchedPages.get(mapKey);
 
       assert.deepStrictEqual(Hologram.prefetchedPages.get(mapKey), {
-        payload: null,
         isNavigateConfirmed: false,
+        isPage: true,
         pagePath: pagePath,
+        payload: null,
         timestamp: mapValue.timestamp,
       });
 
@@ -1087,6 +1123,70 @@ describe("Hologram", () => {
 
       assert.match(thrownError?.message ?? "", /Too many redirects/);
       assert.isAtMost(fetchPageStub.callCount, 10);
+    });
+  });
+
+  describe("handlePrefetchPageNotPage()", () => {
+    let leaveAppStub;
+
+    beforeEach(() => {
+      leaveAppStub = sinon.stub(Hologram, "leaveApp");
+    });
+
+    afterEach(() => leaveAppStub.restore());
+
+    it("leaves the app when navigate has already been confirmed", () => {
+      Hologram.prefetchedPages = new Map([
+        [
+          "dummy_map_key",
+          {
+            isNavigateConfirmed: true,
+            isPage: true,
+            pagePath: "/my-page-path",
+            payload: null,
+            timestamp: Date.now(),
+          },
+        ],
+      ]);
+
+      Hologram.handlePrefetchPageNotPage("dummy_map_key");
+
+      assert.equal(Hologram.prefetchedPages.size, 0);
+      sinon.assert.calledOnceWithExactly(leaveAppStub, "/my-page-path");
+    });
+
+    // Before the click, the answer is only remembered: leaving the app on hover would take the
+    // user somewhere they have not asked to go.
+    it("marks the entry when navigate hasn't been confirmed", () => {
+      const mapKey = "dummy_map_key";
+
+      Hologram.prefetchedPages = new Map([
+        [
+          mapKey,
+          {
+            isNavigateConfirmed: false,
+            isPage: true,
+            pagePath: "/my-page-path",
+            payload: null,
+            timestamp: Date.now(),
+          },
+        ],
+      ]);
+
+      Hologram.handlePrefetchPageNotPage(mapKey);
+
+      assert.equal(Hologram.prefetchedPages.size, 1);
+      assert.isFalse(Hologram.prefetchedPages.get(mapKey).isPage);
+      sinon.assert.notCalled(leaveAppStub);
+    });
+
+    it("no prefetchedPages map entry", () => {
+      Hologram.prefetchedPages = new Map();
+
+      Hologram.handlePrefetchPageNotPage("dummy_map_key");
+
+      assert.equal(Hologram.prefetchedPages.size, 0);
+      sinon.assert.notCalled(leaveAppStub);
     });
   });
 

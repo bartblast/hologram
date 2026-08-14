@@ -182,7 +182,10 @@ export default class Hologram {
       return;
     }
 
-    if (mapValue.payload === null) {
+    if (mapValue.isPage === false) {
+      Hologram.prefetchedPages.delete(mapKey);
+      Hologram.leaveApp(pagePath);
+    } else if (mapValue.payload === null) {
       mapValue.isNavigateConfirmed = true;
     } else {
       Hologram.prefetchedPages.delete(mapKey);
@@ -208,6 +211,7 @@ export default class Hologram {
     ) {
       Hologram.prefetchedPages.set(mapKey, {
         isNavigateConfirmed: false,
+        isPage: true,
         pagePath: pagePath,
         payload: null,
         timestamp: Date.now(),
@@ -219,8 +223,28 @@ export default class Hologram {
       Client.fetchPage(
         toParam,
         (payload) => Hologram.handlePrefetchPageSuccess(mapKey, payload),
-        () => Hologram.prefetchedPages.delete(mapKey),
+        () => Hologram.handlePrefetchPageNotPage(mapKey),
       );
+    }
+  }
+
+  // Made public to make tests easier
+  //
+  // What a prefetch found instead of a page: a denial, or a response the page's middleware wrote
+  // itself. The entry is kept rather than dropped, because a click looks the target up here and
+  // would otherwise find nothing and do nothing at all, leaving the link dead.
+  static handlePrefetchPageNotPage(mapKey) {
+    const mapValue = Hologram.prefetchedPages.get(mapKey);
+
+    if (typeof mapValue === "undefined") {
+      return;
+    }
+
+    if (mapValue.isNavigateConfirmed) {
+      Hologram.prefetchedPages.delete(mapKey);
+      Hologram.leaveApp(mapValue.pagePath);
+    } else {
+      mapValue.isPage = false;
     }
   }
 
