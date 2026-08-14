@@ -6,6 +6,8 @@ defmodule Hologram.Migration.RendererTest do
   alias Hologram.Entity.Model
   alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
 
+  # A term holding the user entity type designates it - the grant store derives from the
+  # designation, so the tests that include it are the ones exercising the store.
   defp model(entities) do
     entries =
       Map.new(entities, fn {entity_type, entry_overrides} ->
@@ -14,7 +16,9 @@ defmodule Hologram.Migration.RendererTest do
         {entity_type, entry}
       end)
 
-    %{entities: entries, roles: %{}, user_entity: nil}
+    user_entity = if Map.has_key?(entries, UserEntity), do: UserEntity
+
+    %{entities: entries, roles: %{}, user_entity: user_entity}
   end
 
   defp op_kinds(ops), do: Enum.map(ops, & &1.op)
@@ -392,7 +396,8 @@ defmodule Hologram.Migration.RendererTest do
           MyApp.Task => %{attributes: [], relationships: [], roles: []},
           UserEntity => %{attributes: [], relationships: [], roles: []}
         },
-        roles: %{MyApp.Roles.Moderator => %{extends: []}}
+        roles: %{MyApp.Roles.Moderator => %{extends: []}},
+        user_entity: UserEntity
       }
 
       ops = [
@@ -592,7 +597,7 @@ defmodule Hologram.Migration.RendererTest do
           UserEntity => %{attributes: [], relationships: [], roles: []}
         },
         roles: %{},
-        user_entity: nil
+        user_entity: UserEntity
       }
 
       ops = [%{op: :add_role, role: MyApp.Roles.Admin, opts: [], line: 3}]

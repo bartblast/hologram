@@ -480,7 +480,8 @@ defmodule Hologram.DB.MapperTest do
             roles: []
           }
         },
-        roles: %{}
+        roles: %{},
+        user_entity: nil
       }
 
       mapping = derive_from_model!(model)
@@ -488,12 +489,40 @@ defmodule Hologram.DB.MapperTest do
       assert mapping[Nonexistent.Ghost].table == "nonexistent_ghost"
     end
 
+    # The designation is a term fact rather than a module reflection, so a history whose
+    # user entity type was renamed later still derives the store at every point - before
+    # this, the rename made the store vanish from every model preceding it.
+    test "derives the grant store for the entity type the term designates" do
+      model = %{
+        entities: %{Module1 => %{attributes: [], relationships: [], roles: []}},
+        roles: %{},
+        user_entity: Module1
+      }
+
+      mapping = derive_from_model!(model)
+
+      assert mapping[RoleGrant].table == "hologram_role_grant"
+    end
+
+    test "derives no grant store for a term designating no user entity type" do
+      model = %{
+        entities: %{Module14 => %{attributes: [], relationships: [], roles: []}},
+        roles: %{},
+        user_entity: nil
+      }
+
+      mapping = derive_from_model!(model)
+
+      assert Map.has_key?(mapping, RoleGrant) == false
+    end
+
     test "derives the grant store's enum values from the term" do
       model = %{
         entities: %{
           Module14 => %{attributes: [], relationships: [], roles: [{:editor, []}]}
         },
-        roles: %{Nonexistent.Roles.Admin => %{extends: []}}
+        roles: %{Nonexistent.Roles.Admin => %{extends: []}},
+        user_entity: Module14
       }
 
       mapping = derive_from_model!(model)
