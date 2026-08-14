@@ -1438,7 +1438,7 @@ export default class Renderer {
     const childrenDom = dom.data[3];
 
     // The element's children are complete here, whatever nesting of blocks, loops and components
-    // produced them, so this is where marker keys are settled and marked spans become fragments.
+    // produced them, so this is where a repeated key is settled against the rest of the list.
     const childrenVdom = Vdom.finalizeChildren(
       Renderer.renderDom(
         childrenDom,
@@ -1581,8 +1581,8 @@ export default class Renderer {
   // Based on render_dom/3 (list case)
   //
   // Blocks are left alone here: a block's body and a loop's iterations are lists of their own, and
-  // the markers they hold are only ever part of the enclosing element's children. Numbering and
-  // grouping them belongs to whoever owns that list - see Vdom.finalizeChildren.
+  // the nodes they render are only ever part of the enclosing element's children. Numbering the
+  // keys belongs to whoever owns that list - see Vdom.finalizeChildren.
   static #renderNodes(nodes, context, slots, defaultTarget, parentTagName) {
     return Renderer.#mergeNeighbouringTextNodes(
       nodes.data
@@ -1668,14 +1668,7 @@ export default class Renderer {
       .map((child) => (typeof child === "string" ? child : vnodeToHtml(child)))
       .join("");
 
-    // Block markers are emitted as comments, so they arrive here like any other comment node and
-    // are told apart by their marker text. Keying them here keeps client-rendered markers matching
-    // the ones recovered from server-rendered markup.
-    const key = Vdom.markerKey(commentContent);
-
-    return key
-      ? vnode("!", {key: key}, commentContent)
-      : vnode("!", commentContent);
+    return vnode("!", commentContent);
   }
 
   // The key an element carries for the place it holds in its template, or null when it has none.

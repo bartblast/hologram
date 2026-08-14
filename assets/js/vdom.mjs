@@ -3,38 +3,11 @@
 import {
   attributesModule,
   eventListenersModule,
-  fragment,
   init,
   vnode as rawVnode,
 } from "./vendor/snabbdom/build/index.js";
 
-// Fragments let a block occupy exactly one position in its parent's children list however many
-// nodes it renders, so its siblings never shift and never get paired with the block's content.
-// The flag is opt-in upstream, which is why the library version is pinned exactly.
-const patch = init([attributesModule, eventListenersModule], undefined, {
-  experimental: {fragments: true},
-});
-
-// Text of a block marker comment, e.g. "[h:1a2b3c:0:o]" - four bracketed segments:
-//
-//   h       namespace, distinguishing a marker from an ordinary comment
-//   1a2b3c  hash of the template module the block was written in
-//   0       index of the block within that template
-//   o       side of the pair, "o" opening or "c" closing
-//
-// The module hash is what keeps keys unique: slot splicing merges nodes from different templates
-// into one children list, where bare block indexes would collide.
-//
-// Markers bracket a template block so that changing how many nodes the block renders can't shift
-// the identity of the block's siblings. The diff pairs keyless children by tag and position, so
-// an unbracketed block that starts rendering an extra node lets a sibling be matched against the
-// block's content and rebuilt, destroying focus, scroll position and media state.
-//
-// The marker doubles as the vnode key. Nothing reads it back out of markup any more - both sides
-// of every diff are rendered by this client - so the text is now only a name the two renderers
-// agree on, and the format outlives its original reason: it had to survive HTML serialization
-// when the client built a virtual document by parsing the page.
-const MARKER_KEY_REGEX = /^\[h:[a-z0-9]+:\d+:[oc]\]$/;
+const patch = init([attributesModule, eventListenersModule]);
 
 export default class Vdom {
   // Numbers repeats of a key within one children list, in document order: the second occurrence
@@ -45,8 +18,8 @@ export default class Vdom {
   // siblings, since the diff indexes them by key and a repeat makes it reach for a node it has
   // already consumed.
   //
-  // Every kind of key is numbered by the same rule, since every kind can repeat: the marker of a
-  // block, the key of an element, and the href or src a resource is named by.
+  // Every kind of key is numbered by the same rule, since every kind can repeat: the key an
+  // element carries for its place, and the href or src a resource is named by.
   //
   // Only the vnode key is renumbered, never anything in the markup, so server-rendered and
   // client-rendered pages stay byte-identical. Both sides walk a children list in document order,
@@ -78,80 +51,14 @@ export default class Vdom {
     return children;
   }
 
-  // Turns a complete children list into the form the diff works on: repeated keys numbered, then
-  // each marked span gathered into a fragment.
-  //
-  // Numbering runs first: a fragment pairs its markers by key, and a repeat's key is only unique
-  // once numbered.
+  // Turns a complete children list into the form the diff works on: repeated keys numbered.
   //
   // This runs on the children of one element, never on a part of them: the keys a repeat gets
   // depend on what else the list holds, so numbering a loop's body on its own would give every
   // iteration the same keys, a block occurring once in the body however many times the body is
   // rendered.
   static finalizeChildren(children) {
-    return $.groupBlockFragments($.dedupeKeys(children));
-  }
-
-  // Wraps each marked span into a keyed fragment, so a block takes one position in its parent's
-  // children list whatever it renders. Positions of the nodes around it then hold still, which is
-  // what stops them being paired with the block's own content.
-  //
-  // The markers stay as the fragment's first and last children, so this models the same nodes the
-  // markup has, and both sides of a diff can be built the same way. An open marker with no
-  // matching close leaves the list flat - the behaviour from before fragments rather than a broken
-  // tree. Interiors are grouped recursively, since blocks nest.
-  //
-  // The list is only copied once a fragment is actually found: most children lists contain no
-  // blocks at all, and this runs on every one of them.
-  static groupBlockFragments(children) {
-    let grouped = null;
-    let index = 0;
-
-    while (index < children.length) {
-      const child = children[index];
-      const openKey = $.#markerOpenKey(child);
-
-      const closeIndex =
-        openKey === null ? -1 : $.#matchingCloseIndex(children, index, openKey);
-
-      if (closeIndex === -1) {
-        if (grouped !== null) {
-          grouped.push(child);
-        }
-
-        index += 1;
-        continue;
-      }
-
-      if (grouped === null) {
-        grouped = children.slice(0, index);
-      }
-
-      const interior = $.groupBlockFragments(
-        children.slice(index + 1, closeIndex),
-      );
-
-      const closingChild = children[closeIndex];
-
-      const blockFragment = fragment([child, ...interior, closingChild]);
-
-      blockFragment.key = openKey;
-      blockFragment.data.key = openKey;
-      blockFragment.elm = $.#fragmentElm(child, closingChild);
-
-      grouped.push(blockFragment);
-      index = closeIndex + 1;
-    }
-
-    return grouped ?? children;
-  }
-
-  // Returns the vnode key carried by a block marker comment's text, or null when the text belongs
-  // to an ordinary comment.
-  static markerKey(text) {
-    return typeof text === "string" && MARKER_KEY_REGEX.test(text)
-      ? text
-      : null;
+    return $.dedupeKeys(children);
   }
 
   // Builds the old side of the boot patch: the rendered vdom mirrored onto the live DOM, sel and
@@ -221,30 +128,6 @@ export default class Vdom {
     return attrs;
   }
 
-  // The live node a fragment stands for, or undefined when there isn't one.
-  //
-  // A fragment grouped out of vnodes that already carry live nodes - the boot walk over the
-  // server-rendered page - has to stand for the span those nodes occupy, because it is the old
-  // side of the first patch and the diff resolves a fragment's real parent through it. A
-  // DocumentFragment empties itself once inserted, so the boundary nodes and the parent are
-  // recorded on it, which is the same bookkeeping the diff does for fragments it creates itself.
-  //
-  // Vnodes built from parsed markup carry no live nodes: they are only ever the new side of a
-  // patch, where the diff assigns them.
-  static #fragmentElm(openingChild, closingChild) {
-    if (!openingChild.elm) {
-      return undefined;
-    }
-
-    const elm = document.createDocumentFragment();
-
-    elm.parent = openingChild.elm.parentNode;
-    elm.firstChildNode = openingChild.elm;
-    elm.lastChildNode = closingChild.elm;
-
-    return elm;
-  }
-
   // We're checking html element children,
   // so the nodes are either: head element, body element or text (whitespace) nodes
   static #isBodyVnode(vnode) {
@@ -257,64 +140,8 @@ export default class Vdom {
     return vnode.sel?.[0] === "h";
   }
 
-  // The marker text a key was built from, with any number added for a repeat dropped, so that
-  // every rendering of one block compares equal.
-  static #markerBaseKey(key) {
-    return key.slice(0, key.indexOf("]") + 1);
-  }
-
-  // The opening side of a marker pair, or null for anything else. Read off the key rather than
-  // the comment's text, so a key renumbered for a repeat still pairs with its own closing side.
-  static #markerOpenKey(child) {
-    return child?.sel === "!" &&
-      typeof child.key === "string" &&
-      child.key.includes(":o]")
-      ? child.key
-      : null;
-  }
-
-  // The closing side matching the given opening key, or -1.
-  //
-  // Counts depth rather than taking the first close, because a block can contain itself: a
-  // component whose template holds a block that renders the component again, with nothing between
-  // them, splices both renderings into one children list, and both carry the block's marker. The
-  // numbering that keeps their keys unique runs outwards on the opening sides and inwards on the
-  // closing ones, so an opening side cannot find its own close by name either.
-  static #matchingCloseIndex(children, openIndex, openKey) {
-    const baseOpenKey = $.#markerBaseKey(openKey);
-    const baseCloseKey = baseOpenKey.replace(":o]", ":c]");
-
-    let depth = 1;
-
-    for (let index = openIndex + 1; index < children.length; index += 1) {
-      const child = children[index];
-
-      if (child?.sel !== "!" || typeof child.key !== "string") {
-        continue;
-      }
-
-      const baseKey = $.#markerBaseKey(child.key);
-
-      if (baseKey === baseOpenKey) {
-        depth += 1;
-      } else if (baseKey === baseCloseKey) {
-        depth -= 1;
-
-        if (depth === 0) {
-          return index;
-        }
-      }
-    }
-
-    return -1;
-  }
-
   // Mirrors a rendered children list against a span of DOM nodes, advancing the shared cursor as
   // nodes are consumed.
-  //
-  // A fragment shares its parent's DOM level - its children are the parent's real child nodes -
-  // so it recurses with the same cursor rather than descending, and is rebuilt around the
-  // mirrored span with the same elm bookkeeping the render side gets in groupBlockFragments.
   //
   // Leftover DOM nodes are NOT consumed here: only the element owning the list knows the span is
   // exhausted, so #mirrorNode appends them after this returns.
@@ -322,30 +149,6 @@ export default class Vdom {
     const mirroredChildren = [];
 
     for (const renderedChild of renderedChildren) {
-      if (
-        renderedChild.sel === undefined &&
-        Array.isArray(renderedChild.children)
-      ) {
-        const mirroredKids = $.#mirrorChildren(
-          renderedChild.children,
-          domNodes,
-          cursor,
-        );
-
-        const mirroredFragment = fragment(mirroredKids);
-
-        mirroredFragment.key = renderedChild.key;
-        mirroredFragment.data.key = renderedChild.key;
-
-        mirroredFragment.elm = $.#fragmentElm(
-          mirroredKids[0] ?? {},
-          mirroredKids[mirroredKids.length - 1] ?? {},
-        );
-
-        mirroredChildren.push(mirroredFragment);
-        continue;
-      }
-
       // The render is not always a prefix-by-prefix match for the page: a boot render omits the
       // runtime's own scripts, which the server did emit. So the rendered child takes the first
       // DOM node it can correspond to rather than only the one at the cursor, and the nodes
@@ -427,9 +230,9 @@ export default class Vdom {
   //
   // A resource key names what the element loads, and is the one thing a tag match is not enough
   // for: adopting a script element for a different src would leave the old code running, since a
-  // script that has already executed does not run again when its src changes. Keys the DOM cannot
-  // carry - a block marker's, a slot's - do not constrain the pairing, being identity rather than
-  // content.
+  // script that has already executed does not run again when its src changes. The key an element
+  // carries for its place, which the DOM never held, does not constrain the pairing - it is
+  // identity rather than content.
   static #correspondsTo(renderedVnode, domNode) {
     if (renderedVnode.sel === undefined) {
       return (
@@ -512,10 +315,7 @@ export default class Vdom {
     }
 
     if (domNode.nodeType === Node.COMMENT_NODE) {
-      const key = $.markerKey(domNode.textContent);
-      const data = key ? {key: key} : {};
-
-      return rawVnode("!", data, undefined, domNode.textContent, domNode);
+      return rawVnode("!", {}, undefined, domNode.textContent, domNode);
     }
 
     const attrs = $.#domNodeAttrs(domNode);
