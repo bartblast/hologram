@@ -4,7 +4,6 @@ import {
   attributesModule,
   eventListenersModule,
   fragment,
-  h as vnode,
   init,
   vnode as rawVnode,
 } from "./vendor/snabbdom/build/index.js";
@@ -31,54 +30,13 @@ const patch = init([attributesModule, eventListenersModule], undefined, {
 // an unbracketed block that starts rendering an extra node lets a sibling be matched against the
 // block's content and rebuilt, destroying focus, scroll position and media state.
 //
-// The marker doubles as the vnode key: keys must survive HTML serialization, since the client
-// diffs against a vdom derived from server-rendered markup, and a comment's own text is the only
-// carrier that round-trips. Unkeyed markers would be matched against unrelated comments, which
-// desyncs the pairing and reopens the same failure.
+// The marker doubles as the vnode key. Nothing reads it back out of markup any more - both sides
+// of every diff are rendered by this client - so the text is now only a name the two renderers
+// agree on, and the format outlives its original reason: it had to survive HTML serialization
+// when the client built a virtual document by parsing the page.
 const MARKER_KEY_REGEX = /^\[h:[a-z0-9]+:\d+:[oc]\]$/;
 
 export default class Vdom {
-  static addKeysToVnodes(node) {
-    let key;
-
-    switch (node.sel) {
-      case "!":
-        key = $.markerKey(node.text);
-        break;
-
-      case "link":
-        if (
-          node.data?.attrs?.href &&
-          typeof node.data.attrs.href === "string"
-        ) {
-          key = `__hologramLink__:${node.data.attrs.href}`;
-        }
-        break;
-
-      case "script":
-        if (typeof node.data?.attrs?.src === "string" && node.data.attrs.src) {
-          key = `__hologramScript__:${node.data.attrs.src}`;
-        } else if (node.textContent) {
-          // Make sure the script is executed if the code changes.
-          key = `__hologramScript__:${node.textContent}`;
-        }
-        break;
-    }
-
-    if (key) {
-      node.key = key;
-      node.data.key = key;
-    }
-
-    if (Array.isArray(node.children)) {
-      for (const childNode of node.children) {
-        Vdom.addKeysToVnodes(childNode);
-      }
-
-      node.children = $.finalizeChildren(node.children);
-    }
-  }
-
   // Numbers repeats of a marker key within one children list, in document order: the second
   // occurrence becomes "<key>:1", the third "<key>:2".
   //
@@ -118,20 +76,12 @@ export default class Vdom {
   // Numbering runs first: a fragment pairs its markers by key, and a repeat's key is only unique
   // once numbered.
   //
-  // This runs on the children of one element, never on a part of them, which is what makes the two
-  // sides of a diff agree: the keys a repeat gets depend on what else the list holds, and the side
-  // read back from server-rendered markup only ever sees whole children lists. Numbering a loop's
-  // body on its own would give every iteration the same keys, since a block occurs once in the body
-  // however many times the body is rendered.
+  // This runs on the children of one element, never on a part of them: the keys a repeat gets
+  // depend on what else the list holds, so numbering a loop's body on its own would give every
+  // iteration the same keys, a block occurring once in the body however many times the body is
+  // rendered.
   static finalizeChildren(children) {
     return $.groupBlockFragments($.dedupeMarkerKeys(children));
-  }
-
-  static from(html) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-
-    return Vdom.#buildVnodeFromDomNode(doc.documentElement);
   }
 
   // Wraps each marked span into a keyed fragment, so a block takes one position in its parent's
@@ -250,34 +200,6 @@ export default class Vdom {
     );
 
     return patchedVirtualDocument;
-  }
-
-  static #buildVnodeFromDomNode(node) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      return node.textContent;
-    }
-
-    if (node.nodeType === Node.COMMENT_NODE) {
-      const key = $.markerKey(node.textContent);
-
-      return key
-        ? vnode("!", {key: key}, node.textContent)
-        : vnode("!", node.textContent);
-    }
-
-    const children = $.finalizeChildren(
-      Array.from(node.childNodes).map(Vdom.#buildVnodeFromDomNode),
-    );
-
-    const attrs = $.#domNodeAttrs(node);
-    const data = {attrs: attrs};
-    const key = $.#resourceKey(node, attrs);
-
-    if (key) {
-      data.key = key;
-    }
-
-    return vnode(node.tagName.toLowerCase(), data, children);
   }
 
   // An element's attributes in the vdom convention: a valueless attribute reads as true.
