@@ -246,9 +246,28 @@ jobs:
           $installer = "$env:RUNNER_TEMP\postgresql-16-windows-x64.exe"
           $url = "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-windows-x64.exe"
 
+          # EDB publishes no checksum file, so this one was taken from the artifact itself
+          # and corroborated against the checksum the Chocolatey package pins for the same
+          # installer - two parties that fetched it independently agree on it. Nothing else
+          # authenticates what is about to run as administrator: the URL pins a name, not
+          # the bytes served under it.
+          $expectedSha256 = "F4BF0AC4B33471F18AAD7D1D9CC52613003F3A3A612AAE167366BF7F7840B2BC"
+
           foreach ($attempt in 1..3) {
             try {
               Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+            } catch {
+              Write-Host "download attempt $attempt failed: $_"
+            }
+
+            if (Test-Path $installer) {
+              $sha256 = (Get-FileHash -Path $installer -Algorithm SHA256).Hash
+
+              # Fatal rather than retried: a mismatch means the bytes are not the artifact
+              # this workflow pinned, and downloading them again cannot make them so.
+              if ($sha256 -ne $expectedSha256) {
+                throw "Postgres installer checksum mismatch - expected $expectedSha256, got $sha256"
+              }
 
               # The installer returns before the service is registered, so its exit code is
               # not the signal - the binary's presence is.
@@ -259,8 +278,6 @@ jobs:
                 "--serverport", "5432",
                 "--disable-components", "stackbuilder"
               )
-            } catch {
-              Write-Host "attempt $attempt failed: $_"
             }
 
             if (Test-Path $psql) { break }
