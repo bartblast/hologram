@@ -182,6 +182,10 @@ defmodule Hologram.DB.DDL do
   Rebuilding is what clears an invalid index: it replaces the failed build without
   taking the table's writes offline, and without the index ever being absent - which a
   drop-and-recreate pair could not promise if the node died between the two.
+
+  Runs on a connection with no open transaction, as every concurrent operation must -
+  PostgreSQL rejects one inside a transaction with 25001. The repair holds a
+  session-scoped lock rather than a transactional one for exactly this reason.
   """
   @spec reindex_statement(String.t()) :: String.t()
   def reindex_statement(index) do
@@ -285,6 +289,10 @@ defmodule Hologram.DB.DDL do
     ["CREATE TYPE #{qualified(op.enum_type)} AS ENUM (#{values})"]
   end
 
+  # A `concurrently: true` op must reach the database on a connection with no open
+  # transaction - PostgreSQL rejects a concurrent build inside one with 25001. That is why
+  # such ops are split into the applier's tail and run after their file commits, rather
+  # than being a property of the statement itself.
   def statements(%{op: :create_index} = op) do
     columns = Enum.map_join(op.columns, ", ", &Mapper.quote_identifier/1)
     unique_sql = if op.unique, do: "UNIQUE ", else: ""
