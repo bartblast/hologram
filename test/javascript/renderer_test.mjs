@@ -3042,6 +3042,39 @@ describe("Renderer", () => {
 
           assert.equal(render(node).key, "__hologramScript__:my_src");
         });
+
+        // The key is found without expanding the spread, so a tag carrying one has to keep
+        // reaching its key.
+        it("is found on a tag that also carries a spread", () => {
+          const node = elementWithKey("div", [
+            Type.tuple([
+              Type.atom("spread"),
+              Type.tuple([
+                Type.map([
+                  [Type.bitstring("class"), Type.bitstring("my_class")],
+                ]),
+              ]),
+            ]),
+            keyAttr("t7:4"),
+          ]);
+
+          assert.equal(render(node).key, "t7:4");
+        });
+
+        it("a spread on its own carries no key", () => {
+          const node = elementWithKey("div", [
+            Type.tuple([
+              Type.atom("spread"),
+              Type.tuple([
+                Type.map([
+                  [Type.bitstring("class"), Type.bitstring("my_class")],
+                ]),
+              ]),
+            ]),
+          ]);
+
+          assert.isUndefined(render(node).key);
+        });
       });
 
       describe("input element value handling", () => {

@@ -1684,12 +1684,29 @@ export default class Renderer {
   // every path a template has - spreads, dynamic tags, a component passing attributes on - but it
   // is never one: the server leaves it out of the markup and the client turns it into the vnode's
   // key here, so it exists only between the two renderers.
+  //
+  // Read straight off the attributes rather than through expand_attribute_spreads/1, which
+  // #renderAttributesAndProps has already run over the same list: this runs for every element of
+  // every render, and no spread has to be expanded to find the key. Spread entries are skipped
+  // rather than looked into, since a spread carrying a $-prefixed name is refused before it gets
+  // here.
+  //
+  // Scanned from the end because the compiler appends the key after everything the template author
+  // wrote, so the scan ends on its first step.
   static #renderSlotKey(attrsDom) {
-    const attrDom = $.#expandAttributeSpreads(attrsDom).find(
-      ([name]) => name === "$key",
-    );
+    for (let index = attrsDom.data.length - 1; index >= 0; index -= 1) {
+      const attrDom = attrsDom.data[index];
 
-    return attrDom ? $.#valueDomToText(attrDom[1]) : null;
+      if (Type.isRecordTuple(attrDom, "spread", 2)) {
+        continue;
+      }
+
+      if (Bitstring.toText(attrDom.data[0]) === "$key") {
+        return $.#valueDomToText(attrDom.data[1]);
+      }
+    }
+
+    return null;
   }
 
   // Based on render_dom/3 (slot case)
