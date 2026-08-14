@@ -456,7 +456,7 @@ defmodule Hologram.Entity.ModelTest do
       assert fold(model, ops).user_entity == MyApp.Task
     end
 
-    test "moves the designation to another entity type" do
+    test "designates an entity type once the previous designation was removed" do
       model =
         empty()
         |> fold([
@@ -465,7 +465,10 @@ defmodule Hologram.Entity.ModelTest do
         ])
         |> Map.put(:user_entity, MyApp.Task)
 
-      ops = [%{op: :designate_user_entity, entity: MyApp.Account, line: 5}]
+      ops = [
+        %{op: :designate_user_entity, entity: nil, line: 5},
+        %{op: :designate_user_entity, entity: MyApp.Account, line: 6}
+      ]
 
       assert fold(model, ops).user_entity == MyApp.Account
     end
@@ -1022,6 +1025,26 @@ defmodule Hologram.Entity.ModelTest do
       expected_msg = "no such entity MyApp.Ghost at this point in migration history"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(empty(), ops) end
+    end
+
+    test "raises when moving the designation between entity types directly" do
+      model =
+        empty()
+        |> fold([
+          %{op: :create_entity, entity: MyApp.Account, line: 3},
+          %{op: :create_entity, entity: MyApp.Task, line: 4}
+        ])
+        |> Map.put(:user_entity, MyApp.Task)
+
+      ops = [%{op: :designate_user_entity, entity: MyApp.Account, line: 5}]
+
+      expected_msg =
+        "the designated user entity type is MyApp.Task - designating MyApp.Account " <>
+          "directly implies the existing grants survive the move, and they cannot - " <>
+          "remove the user: true designation and generate (that migration drops the " <>
+          "role grant store), then designate MyApp.Account and generate again"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
     end
   end
 

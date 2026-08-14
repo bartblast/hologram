@@ -101,6 +101,9 @@ defmodule Hologram.Migration.DiffTest do
              }
     end
 
+    # The diff still emits the move - the fold is what refuses it, so generation writes the
+    # file, verification folds it, and the raise carries the two-step instructions while the
+    # rejected file is removed. Keeping the diff simple keeps the teaching in one place.
     test "emits the designation when it moves to another entity type" do
       built = model(%{MyApp.Account => %{}, MyApp.Member => %{}})
       replayed = Map.put(built, :user_entity, MyApp.Account)
