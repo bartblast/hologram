@@ -573,6 +573,108 @@ describe("Client", () => {
     });
   });
 
+  describe("fetchPageData()", () => {
+    let fetchStub, onNotPageStub, onSuccessStub, originalInstanceId;
+
+    const pageModule = Type.alias("MyPage");
+
+    const pageDataResponse = (payload) => ({
+      headers: new Headers({"hologram-page-data": "true"}),
+      ok: true,
+      json: sinon.stub().resolves(payload),
+    });
+
+    beforeEach(() => {
+      onNotPageStub = sinon.stub();
+      onSuccessStub = sinon.stub();
+
+      App.subscriptionReceiptRegistry.entries.clear();
+
+      originalInstanceId = App.instanceId;
+      App.instanceId = "test-instance-id";
+    });
+
+    afterEach(() => {
+      sinon.restore();
+      App.subscriptionReceiptRegistry.entries.clear();
+      App.instanceId = originalInstanceId;
+    });
+
+    it("asks the page data route for the page", async () => {
+      fetchStub = sinon
+        .stub(globalThis, "fetch")
+        .resolves(pageDataResponse({type: "page"}));
+
+      await Client.fetchPageData(pageModule, onSuccessStub, onNotPageStub);
+
+      const [url, opts] = fetchStub.firstCall.args;
+
+      assert.equal(url, "/hologram/page-data/MyPage");
+      assert.equal(opts.method, "POST");
+
+      // Redirects are for the browser to follow, not this fetch: one followed here would be
+      // consumed out of sight.
+      assert.equal(opts.redirect, "manual");
+    });
+
+    it("hands over a marked payload", async () => {
+      const payload = {pageBundlePath: "/hologram/page-abc.js", type: "page"};
+
+      fetchStub = sinon
+        .stub(globalThis, "fetch")
+        .resolves(pageDataResponse(payload));
+
+      await Client.fetchPageData(pageModule, onSuccessStub, onNotPageStub);
+
+      sinon.assert.calledOnceWithExactly(onSuccessStub, payload);
+      sinon.assert.notCalled(onNotPageStub);
+    });
+
+    // A page's middleware can answer with any status it likes, a plain 200 included, so the marker
+    // rather than the status is what says an answer describes a page.
+    it("treats an unmarked success as something other than a page", async () => {
+      fetchStub = sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers(),
+        ok: true,
+        json: sinon.stub().resolves({}),
+      });
+
+      await Client.fetchPageData(pageModule, onSuccessStub, onNotPageStub);
+
+      sinon.assert.calledOnce(onNotPageStub);
+      sinon.assert.notCalled(onSuccessStub);
+    });
+
+    it("treats a denied response as something other than a page", async () => {
+      fetchStub = sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers(),
+        ok: false,
+        status: 403,
+      });
+
+      await Client.fetchPageData(pageModule, onSuccessStub, onNotPageStub);
+
+      sinon.assert.calledOnce(onNotPageStub);
+      sinon.assert.notCalled(onSuccessStub);
+    });
+
+    // An opaque redirect carries no headers at all, which is the shape a redirect takes when the
+    // fetch is told not to follow it.
+    it("treats an opaque redirect as something other than a page", async () => {
+      fetchStub = sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers(),
+        ok: false,
+        status: 0,
+        type: "opaqueredirect",
+      });
+
+      await Client.fetchPageData(pageModule, onSuccessStub, onNotPageStub);
+
+      sinon.assert.calledOnce(onNotPageStub);
+      sinon.assert.notCalled(onSuccessStub);
+    });
+  });
+
   describe("sendCommand()", () => {
     let fetchStub,
       hologramScheduleActionStub,

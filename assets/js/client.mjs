@@ -138,6 +138,49 @@ export default class Client {
     }
   }
 
+  // Asks the server to describe a page rather than render it, for a client that renders it itself.
+  //
+  // The answer is a page only when it says so: a page's middleware can answer the request instead,
+  // with any status it likes including a plain 200, so the marker header rather than the status is
+  // what tells the two apart. Anything that is not a page goes to onNotPage, for the caller to hand
+  // to the browser - which is also where an opaque redirect lands, redirects being left to the
+  // browser rather than followed here.
+  static async fetchPageData(toParam, onSuccess, onNotPage) {
+    let pageModule, queryString;
+
+    if (Type.isAlias(toParam)) {
+      pageModule = toParam;
+      queryString = "";
+    } else {
+      pageModule = toParam.data[0];
+      queryString = $.buildPageQueryString(toParam.data[1]);
+    }
+
+    try {
+      const pageModuleName = Interpreter.moduleExName(pageModule);
+      const url = `/hologram/page-data/${pageModuleName}${queryString}`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: Serializer.serialize($.buildPageRequestPayload(), "server"),
+        redirect: "manual",
+      });
+
+      if (response.headers.get("hologram-page-data") === "true") {
+        onSuccess(await response.json());
+      } else {
+        onNotPage();
+      }
+    } catch (error) {
+      if (error instanceof HologramRuntimeError) {
+        throw error;
+      }
+
+      $.#handleFetchPageError(error);
+    }
+  }
+
   // Covered in feature tests
   static fetchPageBundlePath(pageModule, onSuccess, onFail) {
     const opts = {
