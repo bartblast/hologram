@@ -80,6 +80,54 @@ defmodule Hologram.DB.PreflightTest do
       assert run!(ops, %{tables: %{}}, mapping(nil)) == :ok
     end
 
+    test "skips the null-tightening check for a table this run creates" do
+      ops = [
+        %{
+          op: :alter_column,
+          table: "task",
+          column: "title",
+          before: %{type: "text", null: true},
+          after: %{type: "text", null: false}
+        }
+      ]
+
+      assert run!(ops, %{tables: %{}}, mapping(nil)) == :ok
+    end
+
+    test "skips the cast check for a table this run creates" do
+      ops = [alter_column_op("text", "int8")]
+
+      assert run!(ops, %{tables: %{}}, mapping(nil)) == :ok
+    end
+
+    test "skips the required-column check for a table this run creates" do
+      ops = [
+        %{
+          op: :add_column,
+          table: "task",
+          column: "title",
+          definition: %{type: "text", null: false}
+        }
+      ]
+
+      assert run!(ops, %{tables: %{}}, mapping(nil)) == :ok
+    end
+
+    test "skips the removed-value check for a column of a table this run creates" do
+      ops = [
+        %{
+          op: :rebuild_enum_type,
+          enum_type: "task_status_$enum",
+          values: ["done"],
+          columns: [{"task", "status"}]
+        }
+      ]
+
+      actual = %{tables: %{}, enum_types: %{"task_status_$enum" => ["done", "todo"]}}
+
+      assert run!(ops, actual, mapping(nil)) == :ok
+    end
+
     test "raises on a cast with no supported conversion" do
       ops = [alter_column_op("uuid", "int8")]
 

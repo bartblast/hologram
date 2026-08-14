@@ -42,7 +42,7 @@ defmodule Hologram.DB.Preflight do
     Enum.each(ops, &check_op!(&1, actual, mapping))
   end
 
-  defp check_op!(%{op: :add_column} = op, _actual, mapping) do
+  defp check_op!(%{op: :add_column} = op, actual, mapping) do
     # An op carrying its own backfill needs no declared default - a migration states what
     # the rows that predate the column receive.
     filled? =
@@ -51,7 +51,10 @@ defmodule Hologram.DB.Preflight do
 
     checked? = not op.definition.null and not filled?
 
-    count = if checked?, do: count_result(DDL.rows_check_statement(op.table)), else: 0
+    count =
+      if checked?,
+        do: count_existing(actual, op.table, DDL.rows_check_statement(op.table)),
+        else: 0
 
     if count > 0 do
       raise ~s(cannot add required column "#{op.column}" to table "#{op.table}" - ) <>
@@ -60,20 +63,14 @@ defmodule Hologram.DB.Preflight do
     end
   end
 
-  defp check_op!(%{op: :alter_column} = op, _actual, mapping) do
-    check_type_change!(op)
-    check_null_tightening!(op, mapping)
+  defp check_op!(%{op: :alter_column} = op, actual, mapping) do
+    check_type_change!(op, actual)
+    check_null_tightening!(op, actual, mapping)
   end
 
-  # Only a table that already stands can hold duplicates - one this run creates is born
-  # empty, and its rows would not be there to query anyway.
   defp check_op!(%{op: :create_index, unique: true} = op, actual, _mapping) do
-    count =
-      if Map.has_key?(actual.tables, op.table) do
-        count_result(DDL.duplicate_check_statement(op.table, op.columns, op.nulls_distinct))
-      else
-        0
-      end
+    statement = DDL.duplicate_check_statement(op.table, op.columns, op.nulls_distinct)
+    count = count_existing(actual, op.table, statement)
 
     if count > 0 do
       columns = Enum.map_join(op.columns, ", ", &~s("#{&1}"))
@@ -94,16 +91,16 @@ defmodule Hologram.DB.Preflight do
 
     if removed_values != [] do
       Enum.each(op.columns, fn {table, column} ->
-        check_removed_enum_values!(table, column, removed_values)
+        check_removed_enum_values!(actual, table, column, removed_values)
       end)
     end
   end
 
   defp check_op!(_op, _actual, _mapping), do: :ok
 
-  defp check_cast_rows!(op) do
-    count =
-      count_result(DDL.cast_check_statement(op.table, op.column, op.before.type, op.after.type))
+  defp check_cast_rows!(op, actual) do
+    statement = DDL.cast_check_statement(op.table, op.column, op.before.type, op.after.type)
+    count = count_existing(actual, op.table, statement)
 
     if count > 0 do
       raise ~s(#{count} #{pluralize_rows(count)} in "#{op.table}"."#{op.column}" ) <>
@@ -112,13 +109,14 @@ defmodule Hologram.DB.Preflight do
     end
   end
 
-  defp check_null_tightening!(op, mapping) do
+  defp check_null_tightening!(op, actual, mapping) do
     fillable? =
       op.before.type == op.after.type and
         match?({:ok, _value}, fill_value(mapping, op.table, op.column))
 
     checked? = op.before.null and not op.after.null and not fillable?
-    count = if checked?, do: count_result(DDL.null_check_statement(op.table, op.column)), else: 0
+    statement = DDL.null_check_statement(op.table, op.column)
+    count = if checked?, do: count_existing(actual, op.table, statement), else: 0
 
     if count > 0 do
       raise ~s(cannot make column "#{op.column}" on table "#{op.table}" required - ) <>
@@ -127,8 +125,9 @@ defmodule Hologram.DB.Preflight do
     end
   end
 
-  defp check_removed_enum_values!(table, column, removed_values) do
-    count = count_result(DDL.enum_values_check_statement(table, column, removed_values))
+  defp check_removed_enum_values!(actual, table, column, removed_values) do
+    statement = DDL.enum_values_check_statement(table, column, removed_values)
+    count = count_existing(actual, table, statement)
 
     if count > 0 do
       values = Enum.map_join(removed_values, ", ", &"'#{&1}'")
@@ -139,14 +138,14 @@ defmodule Hologram.DB.Preflight do
     end
   end
 
-  defp check_type_change!(op) do
+  defp check_type_change!(op, actual) do
     if op.before.type != op.after.type do
       case DDL.cast_class(op.before.type, op.after.type) do
         :safe ->
           :ok
 
         :data_dependent ->
-          check_cast_rows!(op)
+          check_cast_rows!(op, actual)
 
         :unsupported ->
           raise ~s(changing column "#{op.column}" on table "#{op.table}" ) <>
@@ -154,6 +153,15 @@ defmodule Hologram.DB.Preflight do
                   "remove the attribute and re-add it with the new type"
       end
     end
+  end
+
+  # Every check here counts the rows that cannot follow a change, and a table this file
+  # creates has none to count - it does not exist in the schema this runs against, so the
+  # query would raise undefined_table instead of answering zero. The renderer can put the
+  # create and a later change to the same table in different chunks, which is how an op
+  # naming a table absent from the introspected schema reaches this at all.
+  defp count_existing(actual, table, statement) do
+    if Map.has_key?(actual.tables, table), do: count_result(statement), else: 0
   end
 
   defp count_result(statement) do
