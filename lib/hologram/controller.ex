@@ -3,6 +3,7 @@ defmodule Hologram.Controller do
 
   require Logger
 
+  alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Page
@@ -417,61 +418,28 @@ defmodule Hologram.Controller do
         client_claimed_sub_keys,
         renderer_opts
       ) do
-    conn = Session.init(initial_conn)
+    case run_page_lifecycle(
+           initial_conn,
+           page_module,
+           params,
+           client_claimed_sub_keys,
+           renderer_opts
+         ) do
+      {:terminal, conn, server_struct} ->
+        conn
+        |> send_response(server_struct)
+        |> Plug.Conn.halt()
 
-    server_struct = %{
-      Server.from(conn)
-      | cid: "page",
-        instance_id: renderer_opts[:instance_id]
-    }
+      {:rendered, conn, result} ->
+        final_html =
+          result.html
+          |> Renderer.interpolate_self_echoes_js(result.self_echoes)
+          |> Renderer.interpolate_sub_receipt_adds_js(result.sub_receipt_adds)
+          |> Renderer.interpolate_sub_receipt_drops_js(result.sub_receipt_drops)
 
-    middleware_server_struct =
-      Middleware.run(server_struct, page_module.__middleware__())
-
-    if middleware_server_struct.status do
-      # Middleware produced a terminal response - skip the render and send it,
-      # still applying the decorations accumulated by the steps that ran.
-      Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
-
-      conn
-      |> apply_session_ops(middleware_server_struct.__meta__.session_ops)
-      |> apply_cookie_ops(middleware_server_struct.__meta__.cookie_ops)
-      |> maybe_persist_user_id(server_struct, middleware_server_struct)
-      |> send_response(middleware_server_struct)
-      |> Plug.Conn.halt()
-    else
-      {rendered_html, _component_registry, rendered_server_struct} =
-        Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
-
-      # Transition subscriptions before flushing broadcasts so a registry failure
-      # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
-      # effectively infallible, so once transition succeeds both side effects land.
-      {sub_receipt_adds, sub_receipt_drops} =
-        transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
-
-      Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
-
-      # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The
-      # renderer leaves `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so
-      # this Realtime-domain computation lives in the controller; substituting
-      # back into HTML here keeps the renderer Realtime-agnostic.
-      self_echoes =
-        Realtime.get_self_echoes(rendered_server_struct, rendered_server_struct.subscriptions)
-
-      flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
-
-      final_html =
-        rendered_html
-        |> Renderer.interpolate_self_echoes_js(self_echoes)
-        |> Renderer.interpolate_sub_receipt_adds_js(sub_receipt_adds)
-        |> Renderer.interpolate_sub_receipt_drops_js(sub_receipt_drops)
-
-      conn
-      |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
-      |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-      |> maybe_persist_user_id(server_struct, flushed_server_struct)
-      |> Controller.html(final_html)
-      |> Plug.Conn.halt()
+        conn
+        |> Controller.html(final_html)
+        |> Plug.Conn.halt()
     end
   end
 
@@ -529,6 +497,58 @@ defmodule Hologram.Controller do
           handshakeId: handshake_id,
           refreshedReceipts: encoded_refreshed_receipts
         })
+        |> Plug.Conn.halt()
+    end
+  end
+
+  @doc """
+  Handles a page data HTTP request, answering with the page described as data rather than as
+  markup, for a client that renders it itself.
+
+  Runs the same lifecycle a page response always runs - session, middleware, render, subscription
+  transition, broadcasts - and differs only in what it sends back, so a page behaves the same way
+  whichever form it is asked for.
+  """
+  @spec handle_page_data_request(Plug.Conn.t(), module) :: Plug.Conn.t()
+  def handle_page_data_request(initial_conn, page_module) do
+    conn = PlugConnUtils.init_conn(initial_conn)
+
+    {instance_id, client_claimed_sub_keys} = extract_page_request_payload(conn)
+
+    params =
+      conn
+      |> Plug.Conn.fetch_query_params()
+      |> Map.get(:query_params)
+      |> Page.cast_params(page_module)
+
+    renderer_opts = [initial_page?: false, instance_id: instance_id]
+
+    case run_page_lifecycle(
+           conn,
+           page_module,
+           params,
+           client_claimed_sub_keys,
+           renderer_opts
+         ) do
+      {:terminal, lifecycle_conn, server_struct} ->
+        lifecycle_conn
+        |> send_terminal_page_data(server_struct)
+        |> Plug.Conn.halt()
+
+      {:rendered, lifecycle_conn, result} ->
+        payload =
+          build_page_data_payload(%{
+            component_registry: result.component_registry,
+            page_digest: PageDigestRegistry.lookup(page_module),
+            page_module: page_module,
+            page_params: params,
+            self_echoes: result.self_echoes,
+            sub_receipt_adds: result.sub_receipt_adds,
+            sub_receipt_drops: result.sub_receipt_drops
+          })
+
+        lifecycle_conn
+        |> send_page_data(payload)
         |> Plug.Conn.halt()
     end
   end
@@ -708,6 +728,107 @@ defmodule Hologram.Controller do
       _fallback ->
         {server_struct, nil}
     end
+  end
+
+  # Everything a page response does before it is a response: session, middleware, render,
+  # subscription transition, broadcasts. Returns the connection with the session and cookie
+  # operations the run accumulated already applied, so the caller only chooses what to send.
+  #
+  # A page must behave the same whichever form it is asked for, markup or data, which it only does
+  # while there is one of these to run.
+  defp run_page_lifecycle(
+         initial_conn,
+         page_module,
+         params,
+         client_claimed_sub_keys,
+         renderer_opts
+       ) do
+    conn = Session.init(initial_conn)
+
+    server_struct = %{
+      Server.from(conn)
+      | cid: "page",
+        instance_id: renderer_opts[:instance_id]
+    }
+
+    middleware_server_struct =
+      Middleware.run(server_struct, page_module.__middleware__())
+
+    if middleware_server_struct.status do
+      # Middleware answered before anything was rendered - skip the render, still applying the
+      # decorations accumulated by the steps that ran.
+      Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
+
+      {:terminal, decorate_conn(conn, server_struct, middleware_server_struct),
+       middleware_server_struct}
+    else
+      {rendered_html, component_registry, rendered_server_struct} =
+        Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
+
+      # Transition subscriptions before flushing broadcasts so a registry failure
+      # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
+      # effectively infallible, so once transition succeeds both side effects land.
+      {sub_receipt_adds, sub_receipt_drops} =
+        transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
+
+      Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
+
+      # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The renderer leaves
+      # `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so this Realtime-domain computation
+      # lives in the controller, which is also why it is returned rather than interpolated here.
+      self_echoes =
+        Realtime.get_self_echoes(rendered_server_struct, rendered_server_struct.subscriptions)
+
+      flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
+
+      result = %{
+        component_registry: component_registry,
+        html: rendered_html,
+        self_echoes: self_echoes,
+        sub_receipt_adds: sub_receipt_adds,
+        sub_receipt_drops: sub_receipt_drops
+      }
+
+      {:rendered, decorate_conn(conn, server_struct, flushed_server_struct), result}
+    end
+  end
+
+  defp decorate_conn(conn, server_struct, final_server_struct) do
+    conn
+    |> apply_session_ops(final_server_struct.__meta__.session_ops)
+    |> apply_cookie_ops(final_server_struct.__meta__.cookie_ops)
+    |> maybe_persist_user_id(server_struct, final_server_struct)
+  end
+
+  # Marks a response as carrying page data, so the client can tell one from a response a page's
+  # middleware wrote itself. Status alone cannot: middleware is free to answer 200 with a body of
+  # its own, which is a page's answer rather than a page.
+  defp send_page_data(conn, payload) do
+    conn
+    |> Plug.Conn.put_resp_header("hologram-page-data", "true")
+    |> Controller.json(payload)
+  end
+
+  # What a page's middleware answered, in the form the client can act on.
+  #
+  # A redirect is data, because a redirect cannot survive the trip: the fetch this answers either
+  # follows it out of sight or is refused its Location. Everything else is sent as it stands, status
+  # and all, since those are dead ends rather than navigations - the client hands the path to the
+  # browser, which shows exactly what a typed-in URL would have shown. Keeping the real status is
+  # also what keeps a denial legible to logs and proxies rather than reading as success.
+  defp send_terminal_page_data(conn, %Server{status: status} = server)
+       when status >= 300 and status < 400 do
+    case server.response_headers["location"] do
+      nil ->
+        send_response(conn, server)
+
+      to ->
+        send_page_data(conn, build_page_data_payload(resolve_redirect_target(to)))
+    end
+  end
+
+  defp send_terminal_page_data(conn, %Server{} = server) do
+    send_response(conn, server)
   end
 
   defp refresh_unless_tombstoned(receipt, instance_id, session_id, authorizing_user_id) do

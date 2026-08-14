@@ -40,7 +40,9 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module26
   alias Hologram.Test.Fixtures.Controller.Module27
   alias Hologram.Test.Fixtures.Controller.Module28
+  alias Hologram.Test.Fixtures.Controller.Module29
   alias Hologram.Test.Fixtures.Controller.Module3
+  alias Hologram.Test.Fixtures.Controller.Module30
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
@@ -221,6 +223,25 @@ defmodule Hologram.ControllerTest do
     |> Plug.Test.conn(path, "")
     |> Plug.Test.init_test_session(session_data)
     |> Map.put(:body_params, %{"_json" => page_request_body()})
+  end
+
+  # Gives the resolver a search tree holding just the given pages, rather than standing up the
+  # registry process over whatever pages happen to be compiled.
+  defp stub_page_module_resolver(page_modules) do
+    persistent_term_key = :controller_test_search_tree
+
+    stub(PageModuleResolverMock, :persistent_term_key, fn -> persistent_term_key end)
+
+    search_tree =
+      Enum.reduce(page_modules, %SearchTree.Node{}, fn page_module, acc ->
+        SearchTree.add_route(acc, page_module.__route__(), page_module)
+      end)
+
+    :persistent_term.put(persistent_term_key, search_tree)
+
+    on_exit(fn -> :persistent_term.erase(persistent_term_key) end)
+
+    :ok
   end
 
   setup do
@@ -506,24 +527,8 @@ defmodule Hologram.ControllerTest do
   end
 
   describe "resolve_redirect_target/1" do
-    # Gives the resolver a search tree holding just the pages these tests redirect to, rather than
-    # standing up the registry process over whatever pages happen to be compiled.
     setup do
-      persistent_term_key = :resolve_redirect_target_test_search_tree
-
-      stub(PageModuleResolverMock, :persistent_term_key, fn -> persistent_term_key end)
-
-      search_tree =
-        %SearchTree.Node{}
-        |> SearchTree.add_route(Module1.__route__(), Module1)
-        |> SearchTree.add_route(Module4.__route__(), Module4)
-        |> SearchTree.add_route(Module11.__route__(), Module11)
-
-      :persistent_term.put(persistent_term_key, search_tree)
-
-      on_exit(fn -> :persistent_term.erase(persistent_term_key) end)
-
-      :ok
+      stub_page_module_resolver([Module1, Module4, Module11])
     end
 
     test "resolves a path to the page that owns it" do
@@ -2359,6 +2364,129 @@ defmodule Hologram.ControllerTest do
 
       assert String.contains?(encoded, ~s'Type.atom("room_a")')
       assert String.contains?(encoded, ~s'Type.bitstring("page")')
+    end
+  end
+
+  describe "handle_page_data_request/2" do
+    setup do
+      stub_page_module_resolver([Module4])
+    end
+
+    test "answers with the page described as data and halts the pipeline" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module4"
+        |> subsequent_page_request_conn()
+        |> handle_page_data_request(Module4)
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 200
+
+      assert response["type"] == "page"
+      assert response["pageDigest"] == "dummy_module_4_digest"
+      assert response["componentRegistry"] =~ "page"
+    end
+
+    test "casts page params and carries them in the payload" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
+
+      conn =
+        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module1?aaa=111&bbb=222"
+        |> subsequent_page_request_conn()
+        |> handle_page_data_request(Module1)
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response["pageParams"] =~ "111"
+      assert response["pageParams"] =~ "222"
+    end
+
+    test "marks a page payload as page data" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module4"
+        |> subsequent_page_request_conn()
+        |> handle_page_data_request(Module4)
+
+      assert Plug.Conn.get_resp_header(conn, "hologram-page-data") == ["true"]
+    end
+
+    # A redirect cannot survive the trip: the fetch this answers either follows it out of sight or
+    # is refused its Location. So it travels as data, naming the page the client should ask for.
+    test "describes a redirecting middleware's target as data" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module29, :dummy_module_29_digest)
+
+      conn =
+        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module29"
+        |> subsequent_page_request_conn()
+        |> handle_page_data_request(Module29)
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert conn.status == 200
+      assert Plug.Conn.get_resp_header(conn, "hologram-page-data") == ["true"]
+
+      assert response["type"] == "redirect"
+      assert response["to"] == Module4.__route__()
+      assert response["pageModule"] == Encoder.encode_term!(Module4)
+    end
+
+    # A dead end rather than a navigation: sent as it stands, so the client can hand the path to the
+    # browser and get what a typed-in URL would have given, and so logs and proxies see the denial.
+    test "sends a denying middleware's response as it stands" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module25, :dummy_module_25_digest)
+
+      conn =
+        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module25"
+        |> subsequent_page_request_conn()
+        |> handle_page_data_request(Module25)
+
+      assert conn.status == 403
+      assert Plug.Conn.get_resp_header(conn, "hologram-page-data") == []
+    end
+
+    # Status alone cannot tell a page payload from a page's own answer, which is what the marker
+    # header is for.
+    test "sends a terminal 200 from middleware without marking it as page data" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module30, :dummy_module_30_digest)
+
+      conn =
+        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module30"
+        |> subsequent_page_request_conn()
+        |> handle_page_data_request(Module30)
+
+      assert conn.status == 200
+      assert conn.resp_body == "answered by middleware"
+      assert Plug.Conn.get_resp_header(conn, "hologram-page-data") == []
+    end
+
+    test "applies the cookie operations the run accumulated" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module3, :dummy_module_3_digest)
+
+      conn =
+        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module3"
+        |> subsequent_page_request_conn()
+        |> handle_page_data_request(Module3)
+
+      assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
+    end
+
+    test "establishes a Hologram session ID" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        "/hologram/page-data/Hologram.Test.Fixtures.Controller.Module4"
+        |> subsequent_page_request_conn()
+        |> handle_page_data_request(Module4)
+
+      session_id = Session.get_session_id(conn)
+
+      assert {:ok, _info} = UUID.info(session_id)
     end
   end
 
