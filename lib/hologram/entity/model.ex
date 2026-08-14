@@ -88,6 +88,7 @@ defmodule Hologram.Entity.Model do
 
   defp apply_op(%{op: :add_attribute} = op, model) do
     validate_added_enum_values!(op)
+    validate_backfill_value!(op)
 
     add_member(model, op.entity, :attributes, "attribute", {op.name, op.type, op.opts})
   end
@@ -607,6 +608,20 @@ defmodule Hologram.Entity.Model do
   #
   # Scoped to the types this fold deletes, so a model built around one entity type may
   # still name targets it does not carry.
+  # A backfill is the value the rows predating the column receive, so nil is not one - it
+  # is the absence the backfill exists to fill. Left to run, it reads as a fill to the
+  # pre-flight, which then skips the check that would have refused, and the column is
+  # tightened over the NULLs it just wrote - a not-null violation from PostgreSQL, mid-apply.
+  defp validate_backfill_value!(op) do
+    if Keyword.has_key?(op.opts, :backfill) and is_nil(op.opts[:backfill]) do
+      raise Hologram.CompileError,
+        message:
+          "backfill: nil on attribute #{inspect(op.name)} of #{inspect(op.entity)} - " <>
+            "a backfill is the value existing rows receive, so it needs one - make the " <>
+            "attribute optional: instead, or give the backfill a value"
+    end
+  end
+
   defp validate_deleted_targets!(model, deleted_types) do
     dangling =
       for {entity_type, entry} <- model.entities,

@@ -489,6 +489,26 @@ defmodule Hologram.Entity.ModelTest do
       end
     end
 
+    test "raises when a backfill carries no value" do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :status,
+          type: :string,
+          opts: [backfill: nil],
+          line: 3
+        }
+      ]
+
+      expected_msg =
+        "backfill: nil on attribute :status of MyApp.Task - a backfill is the value " <>
+          "existing rows receive, so it needs one - make the attribute optional: " <>
+          "instead, or give the backfill a value"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
+    end
+
     test "raises when a deleted entity type is still targeted by a relationship" do
       model =
         fold(empty(), [
