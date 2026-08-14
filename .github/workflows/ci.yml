@@ -228,6 +228,22 @@ jobs:
           sudo systemctl start postgresql.service
           sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
 
+          # Make the server self-report what a stalled query was waiting on: lock waits
+          # name the blocking session, checkpoints show an I/O storm, and any statement
+          # over two seconds logs its true duration - the backend finishes and logs even
+          # when the client has given up on it. Dumped by the failure-only step below.
+          sudo -u postgres psql -c "ALTER SYSTEM SET log_lock_waits = on;"
+          sudo -u postgres psql -c "ALTER SYSTEM SET log_min_duration_statement = 2000;"
+          sudo -u postgres psql -c "ALTER SYSTEM SET log_checkpoints = on;"
+          sudo -u postgres psql -c "SELECT pg_reload_conf();"
+
+      # Step: Sample the runner, so a stalled query can be told apart from a stalled
+      # machine - the st column is CPU stolen by the hypervisor, r is the run queue.
+      # Read by the failure-only step below.
+      - name: Sample runner activity (Linux)
+        if: runner.os == 'Linux'
+        run: nohup vmstat -t 5 > "$RUNNER_TEMP/vmstat.log" 2>&1 &
+
       # The windows-2022 image preinstalls Postgres 14, below Hologram's Postgres 15 floor
       # (NULLS NOT DISTINCT index + indnullsnotdistinct introspection) - install 16 instead
       # of starting the preinstalled service.
@@ -335,6 +351,15 @@ jobs:
       # Step: Execute lib JavaScript tests.
       - name: Run lib JavaScript tests
         run: mix test.js
+
+      # Step: On failure, print what the server and the machine were doing - a stalled
+      # query is diagnosable only from this side, because the client's timeout destroys
+      # the evidence when it fires.
+      - name: Dump stall diagnostics (Linux)
+        if: ${{ failure() && runner.os == 'Linux' }}
+        run: |
+          sudo tail -n 300 /var/log/postgresql/postgresql-*-main.log || true
+          tail -n 200 "$RUNNER_TEMP/vmstat.log" || true
 
   feature_tests:
     runs-on: ubuntu-latest
