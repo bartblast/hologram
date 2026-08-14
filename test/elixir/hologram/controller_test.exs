@@ -453,7 +453,7 @@ defmodule Hologram.ControllerTest do
     setup do
       fields = %{
         component_registry: %{"page" => %{module: Module1, struct: %Component{state: %{a: 1}}}},
-        page_digest: "abcdef1234567890",
+        page_bundle_path: "/hologram/page-abcdef1234567890.js",
         page_module: Module1,
         page_params: %{"key" => "value"},
         self_echoes: [:echo_1, :echo_2],
@@ -464,8 +464,9 @@ defmodule Hologram.ControllerTest do
       [fields: fields]
     end
 
-    test "carries the digest naming the page's bundle", %{fields: fields} do
-      assert %{pageDigest: "abcdef1234567890", type: "page"} = build_page_data_payload(fields)
+    test "carries where the page's bundle lives", %{fields: fields} do
+      assert %{pageBundlePath: "/hologram/page-abcdef1234567890.js", type: "page"} =
+               build_page_data_payload(fields)
     end
 
     # Each term lands under its own key: the encoded values are opaque strings, so a pair of them
@@ -490,7 +491,7 @@ defmodule Hologram.ControllerTest do
         |> Jason.decode!()
 
       assert decoded["type"] == "page"
-      assert decoded["pageDigest"] == "abcdef1234567890"
+      assert decoded["pageBundlePath"] == "/hologram/page-abcdef1234567890.js"
       assert decoded["componentRegistry"] == payload.componentRegistry
     end
 
@@ -2387,7 +2388,7 @@ defmodule Hologram.ControllerTest do
       assert conn.status == 200
 
       assert response["type"] == "page"
-      assert response["pageDigest"] == "dummy_module_4_digest"
+      assert response["pageBundlePath"] == "/hologram/page-dummy_module_4_digest.js"
       assert response["componentRegistry"] =~ "page"
     end
 

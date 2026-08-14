@@ -12,6 +12,7 @@ defmodule Hologram.Controller do
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
+  alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Router.PageModuleResolver
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
@@ -96,8 +97,9 @@ defmodule Hologram.Controller do
   the markup.
 
   Carries what a mount needs and nothing about how the page looks: the component registry the
-  render produced, the page module and its params, the realtime bookkeeping, and the digest naming
-  the page's bundle, so the client can load the code without asking again.
+  render produced, the page module and its params, the realtime bookkeeping, and where the page's
+  bundle lives, so the client can load the code without asking again. The bundle's URL is built
+  here rather than by the client, so its shape has one definition.
 
   Terms are encoded the way a command's response encodes them, as JavaScript the client evaluates,
   since that is the form its runtime already reads.
@@ -126,7 +128,7 @@ defmodule Hologram.Controller do
 
   def build_page_data_payload(%{
         component_registry: component_registry,
-        page_digest: page_digest,
+        page_bundle_path: page_bundle_path,
         page_module: page_module,
         page_params: page_params,
         self_echoes: self_echoes,
@@ -135,7 +137,7 @@ defmodule Hologram.Controller do
       }) do
     %{
       componentRegistry: Encoder.encode_term!(component_registry),
-      pageDigest: page_digest,
+      pageBundlePath: page_bundle_path,
       pageModule: Encoder.encode_term!(page_module),
       pageParams: Encoder.encode_term!(page_params),
       selfEchoes: Encoder.encode_term!(self_echoes),
@@ -539,7 +541,10 @@ defmodule Hologram.Controller do
         payload =
           build_page_data_payload(%{
             component_registry: result.component_registry,
-            page_digest: PageDigestRegistry.lookup(page_module),
+            page_bundle_path:
+              page_module
+              |> PageDigestRegistry.lookup()
+              |> RouterHelpers.page_bundle_path(),
             page_module: page_module,
             page_params: params,
             self_echoes: result.self_echoes,
