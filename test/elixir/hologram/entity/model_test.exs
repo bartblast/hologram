@@ -313,6 +313,28 @@ defmodule Hologram.Entity.ModelTest do
                })
     end
 
+    test "retargets the roles that extend a renamed entity role" do
+      model =
+        task_model(%{
+          roles: [
+            {:admin, [extends: [:editor, :owner]]},
+            {:editor, []},
+            {:owner, [creator: true]}
+          ]
+        })
+
+      ops = [%{op: :rename_role, entity: MyApp.Task, from: :editor, to: :reviewer, line: 3}]
+
+      assert fold(model, ops) ==
+               task_model(%{
+                 roles: [
+                   {:admin, [extends: [:reviewer, :owner]]},
+                   {:owner, [creator: true]},
+                   {:reviewer, []}
+                 ]
+               })
+    end
+
     test "deletes attributes, relationships, and roles" do
       model =
         task_model(%{
@@ -680,6 +702,21 @@ defmodule Hologram.Entity.ModelTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         fold(task_model(%{}), ops)
       end
+    end
+
+    test "raises when deleting an entity role that other roles extend" do
+      model =
+        task_model(%{
+          roles: [{:admin, [extends: [:viewer]]}, {:owner, [extends: :viewer]}, {:viewer, []}]
+        })
+
+      ops = [%{op: :delete_role, entity: MyApp.Task, name: :viewer, line: 3}]
+
+      expected_msg =
+        "role :viewer on MyApp.Task is extended by :admin, :owner - " <>
+          "delete or change the extending roles first"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
     end
 
     test "raises when renaming a member that does not exist" do

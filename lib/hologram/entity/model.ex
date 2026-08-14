@@ -208,6 +208,16 @@ defmodule Hologram.Entity.Model do
   end
 
   defp apply_op(%{op: :delete_role, entity: _entity} = op, model) do
+    extended_by = extending_roles(model, op.entity, op.name)
+
+    if extended_by != [] do
+      raise Hologram.CompileError,
+        message:
+          "role #{inspect(op.name)} on #{inspect(op.entity)} is extended by " <>
+            "#{Enum.map_join(Enum.sort(extended_by), ", ", &inspect/1)} - " <>
+            "delete or change the extending roles first"
+    end
+
     delete_member(model, op.entity, :roles, "role", op.name)
   end
 
@@ -254,7 +264,14 @@ defmodule Hologram.Entity.Model do
   end
 
   defp apply_op(%{op: :rename_role, entity: _entity} = op, model) do
-    rename_member(model, op.entity, :roles, "role", op.from, op.to)
+    renamed = rename_member(model, op.entity, :roles, "role", op.from, op.to)
+
+    roles =
+      renamed
+      |> members!(op.entity, :roles)
+      |> Enum.map(&retarget_role_opts(&1, op.from, op.to))
+
+    put_members(renamed, op.entity, :roles, roles)
   end
 
   defp apply_op(%{op: :rename_role, from: _from} = op, model) do
@@ -327,6 +344,13 @@ defmodule Hologram.Entity.Model do
     end
 
     put_members(model, entity_type, list_key, Enum.reject(members, &(elem(&1, 0) == name)))
+  end
+
+  defp extending_roles(model, entity_type, name) do
+    for {role_name, opts} <- members!(model, entity_type, :roles),
+        role_name != name,
+        name in List.wrap(opts[:extends]),
+        do: role_name
   end
 
   defp fetch_entity!(model, entity_type) do
@@ -526,6 +550,25 @@ defmodule Hologram.Entity.Model do
     retargeted = Enum.map(extends, fn target -> if target == from, do: to, else: target end)
 
     %{role_entry | extends: Enum.sort(retargeted)}
+  end
+
+  # The extends option accepts a single role name as well as a list of them,
+  # and Keyword.replace/3 keeps the option in place, so the opts stay sorted.
+  defp retarget_role_opts({name, opts}, from, to) do
+    case Keyword.fetch(opts, :extends) do
+      {:ok, targets} when is_list(targets) ->
+        {name, Keyword.replace(opts, :extends, retarget_targets(targets, from, to))}
+
+      {:ok, ^from} ->
+        {name, Keyword.replace(opts, :extends, to)}
+
+      _other_target ->
+        {name, opts}
+    end
+  end
+
+  defp retarget_targets(targets, from, to) do
+    Enum.map(targets, fn target -> if target == from, do: to, else: target end)
   end
 
   defp update_enum_attribute(model, op, fun) do
