@@ -1039,10 +1039,11 @@ defmodule Hologram.Entity.ModelTest do
       ops = [%{op: :designate_user_entity, entity: MyApp.Account, line: 5}]
 
       expected_msg =
-        "the designated user entity type is MyApp.User - designating MyApp.Account " <>
-          "directly implies the existing grants survive the move, and they cannot - " <>
-          "remove the user: true designation and generate (that migration drops the " <>
-          "role grant store), then designate MyApp.Account and generate again"
+        "the user entity designation cannot move directly from MyApp.User to " <>
+          "MyApp.Account - role grants reference MyApp.User rows, so they cannot follow " <>
+          "it - remove `user: true` from MyApp.User and run `mix holo.gen.migration` " <>
+          "(that migration drops the role grant store), then add `user: true` to " <>
+          "MyApp.Account and run it again"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
     end

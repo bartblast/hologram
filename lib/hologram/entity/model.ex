@@ -716,11 +716,11 @@ defmodule Hologram.Entity.Model do
   defp validate_designation_move!(%{user_entity: current}, entity_type) do
     raise Hologram.CompileError,
       message:
-        "the designated user entity type is #{inspect(current)} - designating " <>
-          "#{inspect(entity_type)} directly implies the existing grants survive the " <>
-          "move, and they cannot - remove the user: true designation and generate " <>
-          "(that migration drops the role grant store), then designate " <>
-          "#{inspect(entity_type)} and generate again"
+        "the user entity designation cannot move directly from #{inspect(current)} to " <>
+          "#{inspect(entity_type)} - role grants reference #{inspect(current)} rows, so " <>
+          "they cannot follow it - remove `user: true` from #{inspect(current)} and run " <>
+          "`mix holo.gen.migration` (that migration drops the role grant store), then add " <>
+          "`user: true` to #{inspect(entity_type)} and run it again"
   end
 
   defp validate_enum_values!(op, :enum, opts) do
