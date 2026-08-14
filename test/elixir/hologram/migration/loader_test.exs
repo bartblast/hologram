@@ -143,6 +143,18 @@ defmodule Hologram.Migration.LoaderTest do
       assert delete_op == %{op: :delete_entity, entity: MyApp.Archive, line: 4}
     end
 
+    test "returns the op of a file deleting the role grants" do
+      contents = """
+      use Hologram.Migration
+
+      delete_role_grants()
+      """
+
+      assert load_string!(contents, "20260813075841.exs") == [
+               %{op: :delete_role_grants, line: 3}
+             ]
+    end
+
     test "returns the ops of a file designating the user entity type" do
       contents = """
       use Hologram.Migration

@@ -309,6 +309,10 @@ defmodule Hologram.Migration.Generator do
     render_call("delete_role", [role], [])
   end
 
+  # The one op with parens: a zero-arity call written bare parses as a variable rather
+  # than a call, so the vocabulary's parens-free style cannot reach it.
+  defp render_op(%{op: :delete_role_grants}), do: "delete_role_grants()"
+
   defp render_op(%{op: :designate_user_entity} = op) do
     render_call("designate_user_entity", [op.entity], [])
   end

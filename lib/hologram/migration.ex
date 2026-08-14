@@ -15,6 +15,12 @@ defmodule Hologram.Migration do
   knows which type the role grant store referenced at that point rather than resolving it
   against the modules as they are spelled today.
 
+  One op changes rows rather than the model: `delete_role_grants` empties the role grant
+  store. A migration whose designation moves to another entity type or is removed must
+  carry it, because grants reference the designated type's rows and cannot follow the
+  designation elsewhere. Requiring the line rather than deleting the grants silently keeps
+  the destruction in the file, where a reviewer sees it.
+
   An op's options are the ones its declaration takes, with one addition: `add_attribute`
   accepts `backfill:`, the value the rows that predate the column receive. It is a
   one-time transition value rather than a declaration, so it never enters the model and
@@ -77,6 +83,7 @@ defmodule Hologram.Migration do
           create_entity: 2,
           delete_entity: 1,
           delete_role: 1,
+          delete_role_grants: 0,
           designate_user_entity: 1,
           rename_entity: 2,
           rename_role: 2,
@@ -181,6 +188,21 @@ defmodule Hologram.Migration do
 
     quote do
       %{op: :delete_role, role: unquote(role), line: unquote(line)}
+    end
+  end
+
+  @doc """
+  Returns the op deleting every grant in the role grant store.
+
+  Required in a migration whose user entity designation moves to another entity type or
+  is removed: grants reference the designated type's rows, so they cannot follow the
+  designation. The deletion runs in the same transaction as the change it accompanies.
+  """
+  defmacro delete_role_grants do
+    line = __CALLER__.line
+
+    quote do
+      %{op: :delete_role_grants, line: unquote(line)}
     end
   end
 

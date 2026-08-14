@@ -249,6 +249,10 @@ defmodule Hologram.Entity.Model do
     update_in(model, [:roles], &Map.delete(&1, op.role))
   end
 
+  # A data op folds to nothing: the model term carries declarations, and deleting rows
+  # declares nothing. It rides the history so the file states the deletion it performs.
+  defp apply_op(%{op: :delete_role_grants}, model), do: model
+
   defp apply_op(%{op: :designate_user_entity, entity: nil}, model) do
     %{model | user_entity: nil}
   end

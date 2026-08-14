@@ -252,6 +252,18 @@ defmodule Hologram.Migration.GeneratorTest do
       assert render(plan) == normalize_newlines(expected)
     end
 
+    test "renders the role grant deletion, the one op carrying parens" do
+      plan = %{ops: [%{op: :delete_role_grants}], questions: []}
+
+      expected = """
+      use Hologram.Migration
+
+      delete_role_grants()
+      """
+
+      assert render(plan) == normalize_newlines(expected)
+    end
+
     test "renders a removed user entity designation as nil" do
       plan = %{ops: [%{op: :designate_user_entity, entity: nil}], questions: []}
 
@@ -545,6 +557,7 @@ defmodule Hologram.Migration.GeneratorTest do
         },
         %{op: :add_role, role: MyApp.Roles.Support, opts: []},
         %{op: :change_role, role: MyApp.Roles.Support, changes: [extends: [MyApp.Roles.Staff]]},
+        %{op: :delete_role_grants},
         %{op: :designate_user_entity, entity: MyApp.Comment}
       ]
 
