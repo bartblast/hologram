@@ -573,13 +573,13 @@ defmodule Hologram.DB.DDLTest do
       assert Enum.at(cast_statements, 1) =~ ~s(ALTER TABLE "hologram_data"."task")
     end
 
-    test "renders the remap as a CASE expression in the cast" do
+    test "renders an unscoped remap entry as a CASE expression in the cast" do
       op = %{
         op: :rebuild_enum_type,
         enum_type: "task_status_$enum",
         values: ["todo", "done"],
         columns: [{"task", "status"}],
-        remap: %{"wip" => "todo"}
+        remap: [%{from: "wip", to: "todo", scope: nil}]
       }
 
       cast_statement =
@@ -590,8 +590,53 @@ defmodule Hologram.DB.DDLTest do
       assert cast_statement ==
                ~s(ALTER TABLE "hologram_data"."task" ) <>
                  ~s(ALTER COLUMN "status" TYPE "hologram_data"."task_status_$enum" ) <>
-                 ~s{USING (CASE "status"::text WHEN 'wip' THEN 'todo' } <>
+                 ~s{USING (CASE WHEN "status"::text = 'wip' THEN 'todo' } <>
                  ~s{ELSE "status"::text END)::"hologram_data"."task_status_$enum"}
+    end
+
+    test "renders a scoped remap entry with its second column in the condition" do
+      op = %{
+        op: :rebuild_enum_type,
+        enum_type: "hologram_role_grant_role_$enum",
+        values: ["editor", "reviewer"],
+        columns: [{"hologram_role_grant", "role"}],
+        remap: [%{from: "editor", to: "reviewer", scope: {"resource_type", "my_app_task"}}]
+      }
+
+      cast_statement =
+        op
+        |> statements()
+        |> Enum.at(2)
+
+      assert cast_statement =~
+               ~s{USING (CASE WHEN "role"::text = 'editor' } <>
+                 ~s{AND "resource_type" = 'my_app_task' THEN 'reviewer' } <>
+                 ~s{ELSE "role"::text END)}
+    end
+
+    test "renders a scoped remap entry before an unscoped one for the same value" do
+      op = %{
+        op: :rebuild_enum_type,
+        enum_type: "hologram_role_grant_role_$enum",
+        values: ["editor", "reviewer", "viewer"],
+        columns: [{"hologram_role_grant", "role"}],
+        remap: [
+          %{from: "editor", to: "viewer", scope: nil},
+          %{from: "editor", to: "reviewer", scope: {"resource_type", "my_app_task"}}
+        ]
+      }
+
+      cast_statement =
+        op
+        |> statements()
+        |> Enum.at(2)
+
+      # First match wins in a searched CASE, so an unscoped branch rendered first would
+      # swallow every row the scoped one singles out.
+      {scoped_at, _length} = :binary.match(cast_statement, "'my_app_task'")
+      {unscoped_at, _length} = :binary.match(cast_statement, "THEN 'viewer'")
+
+      assert scoped_at < unscoped_at
     end
 
     test "shortens the temporary type name over the PostgreSQL identifier limit" do

@@ -232,7 +232,10 @@ defmodule Hologram.DB.DDL do
   positioned), and :rename_enum_value render one statement each. :rebuild_enum_type
   renders the rebuild sequence: rename the old type aside, create the replacement
   under the canonical name, cast every column using the type (through text, applying
-  the optional old-to-new value remap as a CASE expression), then drop the old type.
+  the optional value remap as a searched CASE expression), then drop the old type. A
+  remap entry carries :from, :to, and :scope - nil to remap the value wherever it
+  stands, or {column, value} to remap it only in the rows where that other column holds
+  that value.
   """
   @spec statements(%{atom => any}) :: list(String.t())
   def statements(%{op: :add_column} = op) do
@@ -357,7 +360,7 @@ defmodule Hologram.DB.DDL do
 
   def statements(%{op: :rebuild_enum_type} = op) do
     old_type = Mapper.fit_identifier("#{op.enum_type}_$old")
-    remap = Map.get(op, :remap, %{})
+    remap = Map.get(op, :remap, [])
 
     rename_statement =
       "ALTER TYPE #{qualified(op.enum_type)} RENAME TO #{Mapper.quote_identifier(old_type)}"
@@ -467,19 +470,31 @@ defmodule Hologram.DB.DDL do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(name)}"
   end
 
-  defp rebuild_cast(quoted_column, remap) when remap == %{} do
+  defp rebuild_cast(quoted_column, []) do
     "#{quoted_column}::text"
   end
 
+  # The searched form rather than the simple one, because a scoped entry conditions on a
+  # SECOND column and CASE <expr> WHEN <value> can only compare the one. First match wins,
+  # so the sort puts scoped branches before the unscoped branch for the same value - the
+  # unscoped one would otherwise swallow every row the scoped one meant to single out.
   defp rebuild_cast(quoted_column, remap) do
     branches =
       remap
-      |> Enum.sort()
-      |> Enum.map_join(" ", fn {old_value, new_value} ->
-        "WHEN #{literal(old_value)} THEN #{literal(new_value)}"
-      end)
+      |> Enum.sort_by(&{&1.from, &1.scope == nil, &1.to})
+      |> Enum.map_join(" ", &remap_branch(&1, quoted_column))
 
-    "(CASE #{quoted_column}::text #{branches} ELSE #{quoted_column}::text END)"
+    "(CASE #{branches} ELSE #{quoted_column}::text END)"
+  end
+
+  defp remap_branch(%{scope: nil} = entry, quoted_column) do
+    "WHEN #{quoted_column}::text = #{literal(entry.from)} THEN #{literal(entry.to)}"
+  end
+
+  defp remap_branch(%{scope: {column, value}} = entry, quoted_column) do
+    "WHEN #{quoted_column}::text = #{literal(entry.from)} " <>
+      "AND #{Mapper.quote_identifier(column)} = #{literal(value)} " <>
+      "THEN #{literal(entry.to)}"
   end
 
   defp type_sql(type) when type in @builtin_types, do: type
