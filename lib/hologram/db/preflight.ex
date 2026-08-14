@@ -84,8 +84,13 @@ defmodule Hologram.DB.Preflight do
     end
   end
 
+  # An enum type this run creates has no values to lose - it reaches the database with
+  # exactly the ones being rebuilt. One file can hold both: a rendering chunk creates the
+  # type, and a later chunk of the same file reorders or drops values in it, while the
+  # schema this checks against is the one from before the file ran.
   defp check_op!(%{op: :rebuild_enum_type} = op, actual, _mapping) do
-    removed_values = actual.enum_types[op.enum_type] -- op.values
+    existing_values = Map.get(actual.enum_types, op.enum_type, [])
+    removed_values = existing_values -- op.values
 
     if removed_values != [] do
       Enum.each(op.columns, fn {table, column} ->

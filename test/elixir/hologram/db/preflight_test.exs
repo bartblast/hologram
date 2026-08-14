@@ -52,6 +52,19 @@ defmodule Hologram.DB.PreflightTest do
       assert run!(ops, %{}, mapping(nil)) == :ok
     end
 
+    test "skips the removed-value check for an enum type this run creates" do
+      ops = [
+        %{
+          op: :rebuild_enum_type,
+          enum_type: "task_status_$enum",
+          values: ["done", "todo"],
+          columns: [{"task", "status"}]
+        }
+      ]
+
+      assert run!(ops, %{tables: %{}, enum_types: %{}}, mapping(nil)) == :ok
+    end
+
     test "skips the duplicate check for a unique index on a table this run creates" do
       ops = [
         %{
