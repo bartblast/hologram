@@ -8,11 +8,6 @@ defmodule Hologram.Template.DOM do
   alias Hologram.Template.Parser
   alias Hologram.TemplateSyntaxError
 
-  # Blocks whose rendered node count can change between renders, shifting the position of every
-  # sibling that follows them. "raw" and "else" are absent because neither delimits a region whose
-  # size can vary: "raw" only marks source to reconstruct, and "else" is a branch within an "if".
-  @marked_blocks ["for", "if"]
-
   # Tags a key would name nothing new. "document" and "window" render no node at all, and "slot"
   # renders whatever is put in its place. The three page-level elements are each the only one of
   # their kind, so a key cannot tell them from a sibling - and the patch reaches them by name
@@ -46,13 +41,12 @@ defmodule Hologram.Template.DOM do
   """
   @spec build_ast(list(Parser.parsed_tag())) :: AST.t()
   def build_ast(tags) do
-    # Both the markers and the keys name places in this template, so both are built from the hash
-    # of the template as written, before either has added anything to it.
+    # The keys name places in this template, so they are built from the hash of the template as
+    # written, before any of them has been added to it.
     hash = template_hash(tags)
 
     {code, _last_tag_type} =
       tags
-      |> add_block_markers(hash)
       |> add_slot_keys(hash)
       |> Enum.reduce({"", nil}, fn tag, {code_acc, last_tag_type} ->
         current_tag_type = if is_tuple(tag), do: elem(tag, 0), else: tag
@@ -73,16 +67,16 @@ defmodule Hologram.Template.DOM do
   end
 
   @doc """
-  Names the template a marker or a key belongs to.
+  Names the template a key belongs to.
 
-  Distinguishes them from another template's, since slot content is spliced into the surrounding
+  Distinguishes a key from another template's, since slot content is spliced into the surrounding
   template's children and bare indexes would collide there. Derived from the tags rather than the
   module name so that it stays stable across renames and needs no caller context. Two byte-identical
   templates share a hash, which leaves their keys to be told apart by their position among siblings,
   the same way a loop's repeats are.
 
   `:erlang.phash2/2` is documented to return the same value for a given term regardless of machine
-  architecture and ERTS version, which is what lets tests assert marker text verbatim.
+  architecture and ERTS version, which is what lets tests assert key text verbatim.
   """
   @spec template_hash(list(Parser.parsed_tag())) :: String.t()
   def template_hash(tags) do
@@ -91,22 +85,6 @@ defmodule Hologram.Template.DOM do
     |> :erlang.phash2(4_294_967_296)
     |> Integer.to_string(36)
     |> String.downcase()
-  end
-
-  # Brackets each block in a pair of marker comments, so that changing how many nodes the block
-  # renders can't change the identity of the block's siblings. The client diffs children by tag and
-  # position, so without the markers a block that starts rendering an extra node lets the following
-  # sibling be paired with the block's content and rebuilt, destroying focus, scroll position and
-  # media state.
-  #
-  # Blocks inside <script> and <style> are left alone: a comment there would be part of the script
-  # or stylesheet source rather than markup, and their text-only children have no identity to
-  # protect anyway.
-  defp add_block_markers(tags, hash) do
-    {marked_tags, _state} =
-      Enum.flat_map_reduce(tags, {0, [], 0}, &inject_block_markers(&1, &2, hash))
-
-    marked_tags
   end
 
   # The key trails the attributes the template author wrote, so that reading a tag reads what was
@@ -167,53 +145,6 @@ defmodule Hologram.Template.DOM do
     |> String.trim()
   end
 
-  # State is {next block index, stack of open blocks, nesting depth inside <script>/<style>}. A
-  # block opened inside raw text pushes :skipped so that its end tag pops the stack without
-  # emitting a closing marker.
-  defp inject_block_markers({:start_tag, {tag_name, _attrs}} = tag, {index, open, depth}, _hash)
-       when tag_name in ["script", "style"] do
-    {[tag], {index, open, depth + 1}}
-  end
-
-  defp inject_block_markers({:end_tag, tag_name} = tag, {index, open, depth}, _hash)
-       when tag_name in ["script", "style"] do
-    {[tag], {index, open, max(depth - 1, 0)}}
-  end
-
-  defp inject_block_markers({:block_start, {block_name, _expr}} = tag, {index, open, 0}, hash)
-       when block_name in @marked_blocks do
-    {marker_tags(hash, index, "o", [tag]), {index + 1, [index | open], 0}}
-  end
-
-  defp inject_block_markers(
-         {:block_start, {block_name, _expr}} = tag,
-         {index, open, depth},
-         _hash
-       )
-       when block_name in @marked_blocks do
-    {[tag], {index, [:skipped | open], depth}}
-  end
-
-  defp inject_block_markers(
-         {:block_end, block_name} = tag,
-         {index, [:skipped | open], depth},
-         _hash
-       )
-       when block_name in @marked_blocks do
-    {[tag], {index, open, depth}}
-  end
-
-  defp inject_block_markers(
-         {:block_end, block_name} = tag,
-         {index, [block_index | open], depth},
-         hash
-       )
-       when block_name in @marked_blocks do
-    {[tag | marker_tags(hash, block_index, "c")], {index, open, depth}}
-  end
-
-  defp inject_block_markers(tag, state, _hash), do: {[tag], state}
-
   defp inject_slot_key({tag_type, {tag_name, attributes}}, index, hash)
        when tag_type in [:start_tag, :self_closing_tag] do
     if keyable_tag?(tag_name) do
@@ -233,29 +164,6 @@ defmodule Hologram.Template.DOM do
     Helpers.tag_type(tag_name) == :element and tag_name not in @unkeyable_tags
   end
 
-  # Builds one marker comment, whose text is four bracketed segments, e.g. "[h:a3f2b1c4:0:o]":
-  #
-  #   h         namespace, distinguishing a marker from a comment written in the template
-  #   a3f2b1c4  template hash, see template_hash/1
-  #   0         index of the block within its template, counted in source order
-  #   o         side of the pair, "o" opening or "c" closing
-  #
-  # The marker text doubles as the client-side vnode key, which is why it has to be part of the
-  # markup: the client diffs against a virtual DOM derived from server-rendered HTML, and a
-  # comment's own text is the only carrier that survives serialization. The client recognizes the
-  # same format in Vdom.markerKey/1.
-  #
-  # Takes the tags that follow the marker, so an opening marker can be built in front of its block
-  # without appending to the list it just built.
-  defp marker_tags(hash, index, side, tail \\ []) do
-    [
-      :public_comment_start,
-      {:text, "[h:#{hash}:#{index}:#{side}]"},
-      :public_comment_end
-      | tail
-    ]
-  end
-
   # Wraps implicit keyword list.
   # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
   defp normalize_implicit_keyword_list(templ_expr) do
@@ -271,7 +179,7 @@ defmodule Hologram.Template.DOM do
   end
 
   # Templates checked out on Windows carry CRLF line endings, which would otherwise give the same
-  # template a different hash per platform, so markers could not be asserted verbatim.
+  # template a different hash per platform, so keys could not be asserted verbatim.
   defp normalize_newlines(term) when is_binary(term) do
     StringUtils.normalize_newlines(term)
   end
