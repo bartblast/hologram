@@ -18,15 +18,11 @@ defmodule HologramFeatureTests.Patching.Page15 do
   end
 
   # A loop whose body holds a block at the top level, reordered without adding or removing
-  # anything. The compiler gives that block one marker, so every iteration renders the same one,
-  # and a children list cannot carry a repeated key - the diff indexes them and would reach for a
-  # node it already consumed. Page 13 renders the same shape, but its diff realigns on its own and
-  # never consults the keys; what makes this one consult them is the dynamic tag, which gives the
-  # entries different tag names, so the diff's positional probes all fail on a reorder.
-  #
-  # Reordering also moves the blocks themselves, which is the other half of what this exercises:
-  # a block occupies one position however much it renders, so taking a different position has to
-  # carry the nodes it stands for with it.
+  # anything. Each place in the body is one place in the template, so every iteration renders the
+  # same keys, and a children list cannot carry a repeated key - the diff indexes them and would
+  # reach for a node it already consumed. Page 13 renders the same shape, but its diff realigns on
+  # its own and never consults the keys; what makes this one consult them is the dynamic tag, which
+  # gives the entries different tag names, so the diff's positional probes all fail on a reorder.
   def template do
     ~HOLO"""
     <!DOCTYPE html>
@@ -41,6 +37,8 @@ defmodule HologramFeatureTests.Patching.Page15 do
         <p>
           <button $click="sort">Sort</button>
         </p>
+
+        <!-- a comment the template author wrote -->
 
         <div id="feed">
           {%for item <- @items}

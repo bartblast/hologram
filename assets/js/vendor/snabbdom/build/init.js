@@ -206,13 +206,7 @@ export function init(modules, domApi, options) {
                 }
                 else {
                     // Text node
-                    // HOLOGRAM PATCH: resolve the node's own parent, falling back to the one
-                    // passed in. When these children belong to a fragment, parentElm is that
-                    // fragment's DocumentFragment, which emptied itself into the page on
-                    // insertion - so the text node's real parent is the page and removing it
-                    // through parentElm throws. The element branch above already resolves the
-                    // parent this way, through createRmCb.
-                    api.removeChild(api.parentNode(ch.elm) ?? parentElm, ch.elm);
+                    api.removeChild(parentElm, ch.elm);
                 }
             }
         }

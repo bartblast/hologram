@@ -331,16 +331,18 @@ describe("Client", () => {
   });
 
   describe("fetchPage()", () => {
-    let fetchStub, onSuccessStub, originalInstanceId;
+    let fetchStub, onNotPageStub, onSuccessStub, originalInstanceId;
 
     const pageModule = Type.alias("MyPage");
 
-    const params = Type.map([
-      [Type.atom("user_id"), Type.integer(123)],
-      [Type.atom("status"), Type.atom("active")],
-    ]);
+    const pageDataResponse = (payload) => ({
+      headers: new Headers({"hologram-page-data": "true"}),
+      ok: true,
+      json: sinon.stub().resolves(payload),
+    });
 
     beforeEach(() => {
+      onNotPageStub = sinon.stub();
       onSuccessStub = sinon.stub();
 
       App.subscriptionReceiptRegistry.entries.clear();
@@ -355,221 +357,121 @@ describe("Client", () => {
       App.instanceId = originalInstanceId;
     });
 
-    describe("fetch parameters", () => {
-      it("constructs correct URL when toParam is a page module", async () => {
-        const mockResponse = {
-          ok: true,
-          text: sinon.stub().resolves("<html>Response</html>"),
-        };
+    it("asks the page data route for the page", async () => {
+      fetchStub = sinon
+        .stub(globalThis, "fetch")
+        .resolves(pageDataResponse({type: "page"}));
 
-        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
 
-        await Client.fetchPage(pageModule, onSuccessStub);
+      const [url, opts] = fetchStub.firstCall.args;
 
-        sinon.assert.calledOnce(fetchStub);
-        const [url] = fetchStub.firstCall.args;
-        assert.equal(url, "/hologram/page/MyPage");
-      });
+      assert.equal(url, "/hologram/page/MyPage");
+      assert.equal(opts.method, "POST");
 
-      it("constructs correct URL when toParam is a tuple with page module and params", async () => {
-        const mockResponse = {
-          ok: true,
-          text: sinon.stub().resolves("<html>Response</html>"),
-        };
-
-        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
-
-        const toParam = Type.tuple([pageModule, params]);
-
-        await Client.fetchPage(toParam, onSuccessStub);
-
-        sinon.assert.calledOnce(fetchStub);
-        const [url] = fetchStub.firstCall.args;
-        assert.equal(url, "/hologram/page/MyPage?user_id=123&status=active");
-      });
-
-      it("issues a POST request with a JSON content-type header", async () => {
-        const mockResponse = {
-          ok: true,
-          text: sinon.stub().resolves("<html>Response</html>"),
-        };
-
-        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
-
-        await Client.fetchPage(pageModule, onSuccessStub);
-
-        sinon.assert.calledOnce(fetchStub);
-
-        const [, options] = fetchStub.firstCall.args;
-
-        assert.equal(options.method, "POST");
-
-        assert.deepStrictEqual(options.headers, {
-          "Content-Type": "application/json",
-        });
-      });
-
-      it("includes instance_id and client_claimed_sub_keys from the subscription receipt registry in the request body", async () => {
-        App.subscriptionReceiptRegistry.entries.set(
-          encodedSubscriptionReceiptKey(Type.atom("room_a"), "page"),
-          Type.tuple([
-            Type.atom("room_a"),
-            Type.bitstring("page"),
-            Type.bitstring("token-a"),
-          ]),
-        );
-
-        const mockResponse = {
-          ok: true,
-          text: sinon.stub().resolves("<html>Response</html>"),
-        };
-
-        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
-
-        await Client.fetchPage(pageModule, onSuccessStub);
-
-        const [, options] = fetchStub.firstCall.args;
-
-        assert.deepStrictEqual(
-          options.body,
-          Serializer.serialize(
-            Type.map([
-              [
-                Type.atom("client_claimed_sub_keys"),
-                Type.list([
-                  Type.tuple([Type.atom("room_a"), Type.bitstring("page")]),
-                ]),
-              ],
-              [Type.atom("instance_id"), Type.bitstring("test-instance-id")],
-            ]),
-            "server",
-          ),
-        );
-      });
+      // Redirects are for the browser to follow, not this fetch: one followed here would be
+      // consumed out of sight.
+      assert.equal(opts.redirect, "manual");
     });
 
-    describe("response handling", () => {
-      it("calls onSuccess callback with response HTML when fetch succeeds", async () => {
-        const expectedHtml = "<html><body>Success!</body></html>";
+    // A redirect answers by fetching the next page, so whatever the callback goes on to do is part
+    // of this call. Without the await a failure there would reject a promise nobody holds.
+    it("carries a failure from the success callback to the caller", async () => {
+      sinon
+        .stub(globalThis, "fetch")
+        .resolves(pageDataResponse({type: "page"}));
 
-        const mockResponse = {
-          ok: true,
-          text: sinon.stub().resolves(expectedHtml),
-        };
+      const failing = async () => {
+        throw new HologramRuntimeError("callback failed");
+      };
 
-        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+      let thrownError = null;
 
-        await Client.fetchPage(pageModule, onSuccessStub);
+      try {
+        await Client.fetchPage(pageModule, failing, onNotPageStub);
+      } catch (error) {
+        thrownError = error;
+      }
 
-        sinon.assert.calledOnceWithExactly(onSuccessStub, expectedHtml);
-      });
-
-      it("throws HologramRuntimeError when response status is not ok", async () => {
-        const mockResponse = {
-          ok: false,
-          status: 404,
-        };
-
-        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
-
-        let errorThrown = false;
-
-        try {
-          await Client.fetchPage(pageModule, onSuccessStub);
-        } catch (error) {
-          errorThrown = true;
-          assert.instanceOf(error, HologramRuntimeError);
-          assert.equal(error.message, "page fetch failed: 404");
-        }
-
-        assert.isTrue(
-          errorThrown,
-          "Expected HologramRuntimeError to be thrown",
-        );
-        sinon.assert.notCalled(onSuccessStub);
-      });
-
-      it("throws HologramRuntimeError when fetch fails due to network problems", async () => {
-        const networkError = new TypeError("Failed to fetch");
-
-        fetchStub = sinon.stub(globalThis, "fetch").rejects(networkError);
-
-        let errorThrown = false;
-
-        try {
-          await Client.fetchPage(pageModule, onSuccessStub);
-        } catch (error) {
-          errorThrown = true;
-          assert.instanceOf(error, HologramRuntimeError);
-          assert.equal(
-            error.message,
-            "page fetch failed: TypeError: Failed to fetch",
-          );
-        }
-
-        assert.isTrue(
-          errorThrown,
-          "Expected HologramRuntimeError to be thrown",
-        );
-        sinon.assert.notCalled(onSuccessStub);
-      });
-
-      it("rethrows HologramRuntimeError when error occurs during URL construction", async () => {
-        const invalidParams = Type.map([
-          [Type.bitstring("status"), Type.atom("pending")], // key is not an atom
-        ]);
-
-        const toParam = Type.tuple([pageModule, invalidParams]);
-
-        let errorThrown = false;
-
-        try {
-          await Client.fetchPage(toParam, onSuccessStub);
-        } catch (error) {
-          errorThrown = true;
-          assert.instanceOf(error, HologramRuntimeError);
-          assert.equal(
-            error.message,
-            'invalid param key type (only atom type is allowed), got: "status"',
-          );
-        }
-
-        assert.isTrue(
-          errorThrown,
-          "Expected original HologramRuntimeError to be rethrown",
-        );
-        sinon.assert.notCalled(onSuccessStub);
-      });
+      assert.equal(thrownError?.message, "callback failed");
     });
 
-    describe("edge cases", () => {
-      it("handles response.text() rejection", async () => {
-        const mockResponse = {
-          ok: true,
-          text: sinon.stub().rejects(new Error("Text parsing failed")),
-        };
-
-        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
-
-        let errorThrown = false;
-
-        try {
-          await Client.fetchPage(pageModule, onSuccessStub);
-        } catch (error) {
-          errorThrown = true;
-          assert.instanceOf(error, HologramRuntimeError);
-          assert.equal(
-            error.message,
-            "page fetch failed: Error: Text parsing failed",
-          );
-        }
-
-        assert.isTrue(
-          errorThrown,
-          "Expected HologramRuntimeError to be thrown",
-        );
-        sinon.assert.notCalled(onSuccessStub);
+    it("carries a failure from the not-a-page callback to the caller", async () => {
+      sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers({}),
+        ok: true,
       });
+
+      const failing = async () => {
+        throw new HologramRuntimeError("callback failed");
+      };
+
+      let thrownError = null;
+
+      try {
+        await Client.fetchPage(pageModule, onSuccessStub, failing);
+      } catch (error) {
+        thrownError = error;
+      }
+
+      assert.equal(thrownError?.message, "callback failed");
+    });
+
+    it("hands over a marked payload", async () => {
+      const payload = {pageDigest: "abc", type: "page"};
+
+      fetchStub = sinon
+        .stub(globalThis, "fetch")
+        .resolves(pageDataResponse(payload));
+
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
+
+      sinon.assert.calledOnceWithExactly(onSuccessStub, payload);
+      sinon.assert.notCalled(onNotPageStub);
+    });
+
+    // A page's middleware can answer with any status it likes, a plain 200 included, so the marker
+    // rather than the status is what says an answer describes a page.
+    it("treats an unmarked success as something other than a page", async () => {
+      fetchStub = sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers(),
+        ok: true,
+        json: sinon.stub().resolves({}),
+      });
+
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
+
+      sinon.assert.calledOnce(onNotPageStub);
+      sinon.assert.notCalled(onSuccessStub);
+    });
+
+    it("treats a denied response as something other than a page", async () => {
+      fetchStub = sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers(),
+        ok: false,
+        status: 403,
+      });
+
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
+
+      sinon.assert.calledOnce(onNotPageStub);
+      sinon.assert.notCalled(onSuccessStub);
+    });
+
+    // An opaque redirect carries no headers at all, which is the shape a redirect takes when the
+    // fetch is told not to follow it.
+    it("treats an opaque redirect as something other than a page", async () => {
+      fetchStub = sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers(),
+        ok: false,
+        status: 0,
+        type: "opaqueredirect",
+      });
+
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
+
+      sinon.assert.calledOnce(onNotPageStub);
+      sinon.assert.notCalled(onSuccessStub);
     });
   });
 

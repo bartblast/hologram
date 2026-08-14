@@ -1214,8 +1214,7 @@ defmodule Hologram.Template.RendererTest do
 
       {html, component_registry, server_struct} = render_dom(node, @env, @server)
 
-      assert normalize_newlines(html) ==
-               "\n  <!--[h:g1vmo2:0:o]--><!--[h:g1vmo2:0:c]-->\n"
+      assert normalize_newlines(html) == "\n  \n"
 
       assert component_registry == %{}
       assert server_struct == @server

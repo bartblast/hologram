@@ -61,11 +61,14 @@ import ManuallyPortedElixirStringTokenizer from "./elixir/string/tokenizer.mjs";
 import ManuallyPortedElixirTask from "./elixir/task.mjs";
 import ManuallyPortedElixirURI from "./elixir/uri.mjs";
 
-import {toVNode} from "./vendor/snabbdom/build/index.js";
-
 // TODO: test
 export default class Hologram {
   static #ETS_STORAGE_KEY = "hologram_ets";
+
+  // A redirect can point at a page that redirects again, so a cycle would fetch forever without a
+  // limit. Browsers stop at 20; this is lower because these hops are page renders, not lookups.
+  static #MAX_REDIRECT_HOPS = 10;
+
   static #PAGE_SNAPSHOT_KEY_PREFIX = "hologram_page_snapshot_";
 
   // Made public to make tests easier
@@ -93,6 +96,13 @@ export default class Hologram {
   static #pageModule = null;
   static #pageParams = null;
   static #pendingJsInteropActions = [];
+
+  // The page description a navigation fetched, waiting for the mount to read it. An initial load
+  // has none: there the server put the same data in the page itself.
+  //
+  // Made public to make tests easier
+  static pendingMountPayload = null;
+
   static #registeredPageModules = new Set();
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
@@ -174,11 +184,14 @@ export default class Hologram {
       return;
     }
 
-    if (mapValue.html === null) {
+    if (mapValue.isPage === false) {
+      Hologram.prefetchedPages.delete(mapKey);
+      Hologram.leaveApp(pagePath);
+    } else if (mapValue.payload === null) {
       mapValue.isNavigateConfirmed = true;
     } else {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.loadNewPage(pagePath, mapValue.html);
+      Hologram.loadNewPage(pagePath, mapValue.payload);
     }
   }
 
@@ -199,19 +212,30 @@ export default class Hologram {
       Hologram.#isPrefetchPageTimedOut(mapKey)
     ) {
       Hologram.prefetchedPages.set(mapKey, {
-        html: null,
         isNavigateConfirmed: false,
+        isPage: true,
         pagePath: pagePath,
+        payload: null,
         timestamp: Date.now(),
       });
 
-      Client.fetchPage(toParam, (resp) =>
-        Hologram.handlePrefetchPageSuccess(mapKey, resp),
+      // A prefetch keeps whatever the server described, a page or a redirect, and acts on it only
+      // once the user commits to going there - following a redirect on hover would fetch pages
+      // nobody asked for.
+      Client.fetchPage(
+        toParam,
+        (payload) => Hologram.handlePrefetchPageSuccess(mapKey, payload),
+        () => Hologram.handlePrefetchPageNotPage(mapKey),
       );
     }
   }
 
-  static handlePrefetchPageSuccess(mapKey, html) {
+  // Made public to make tests easier
+  //
+  // What a prefetch found instead of a page: a denial, or a response the page's middleware wrote
+  // itself. The entry is kept rather than dropped, because a click looks the target up here and
+  // would otherwise find nothing and do nothing at all, leaving the link dead.
+  static handlePrefetchPageNotPage(mapKey) {
     const mapValue = Hologram.prefetchedPages.get(mapKey);
 
     if (typeof mapValue === "undefined") {
@@ -220,9 +244,24 @@ export default class Hologram {
 
     if (mapValue.isNavigateConfirmed) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.loadNewPage(mapValue.pagePath, html);
+      Hologram.leaveApp(mapValue.pagePath);
     } else {
-      mapValue.html = html;
+      mapValue.isPage = false;
+    }
+  }
+
+  static handlePrefetchPageSuccess(mapKey, payload) {
+    const mapValue = Hologram.prefetchedPages.get(mapKey);
+
+    if (typeof mapValue === "undefined") {
+      return;
+    }
+
+    if (mapValue.isNavigateConfirmed) {
+      Hologram.prefetchedPages.delete(mapKey);
+      Hologram.loadNewPage(mapValue.pagePath, payload);
+    } else {
+      mapValue.payload = payload;
     }
   }
 
@@ -339,12 +378,30 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
-  static async loadNewPage(pagePath, html) {
+  //
+  // Gives the path back to the browser, which is how Hologram answers anything it cannot mount: a
+  // target outside the app, or a response a page's middleware wrote itself. The browser then gets
+  // the same answer a typed-in URL would have got, address bar and history included.
+  static leaveApp(url) {
+    window.location.assign(url);
+  }
+
+  // Made public to make tests easier
+  //
+  // Takes the page the server described, or where it says to go instead. A redirect is followed by
+  // asking for the page it names, so only the page actually arrived at is mounted and only its path
+  // enters history - the same trail a browser leaves, where the pages passed through on the way are
+  // not places the user can go back to.
+  static async loadNewPage(pagePath, payload, hopCount = 0) {
+    if (payload.type === "redirect") {
+      return Hologram.#followRedirect(payload, hopCount);
+    }
+
     await $.#savePageSnapshot();
     $.#historyId = Utils.randomUUID();
 
     window.requestAnimationFrame(() => {
-      Hologram.#patchPage(html);
+      Hologram.#mountNewPage(payload);
       window.scrollTo(0, 0);
 
       history.pushState($.#historyId, null, pagePath);
@@ -400,6 +457,16 @@ export default class Hologram {
       Hologram.#pageModule,
       Hologram.#pageParams,
     );
+
+    // On a full document load there is no previous render to diff against, only the page the
+    // server sent, so the old side is built by mirroring this render onto it. The patch then
+    // adopts those nodes instead of recreating the whole page.
+    if (Hologram.virtualDocument === null) {
+      Hologram.virtualDocument = Vdom.mirror(
+        newVirtualDocument,
+        document.documentElement,
+      );
+    }
 
     Hologram.virtualDocument = Vdom.patchVirtualDocument(
       Hologram.virtualDocument,
@@ -868,12 +935,7 @@ export default class Hologram {
 
     await Client.fetchPageBundlePath(
       Hologram.#pageModule,
-      (resp) => {
-        const script = document.createElement("script");
-        script.src = resp;
-        script.fetchpriority = "high";
-        document.head.appendChild(script);
-      },
+      (resp) => $.#loadPageBundle(resp),
       (_resp) => {
         throw new HologramRuntimeError(
           "Failed to fetch page bundle path for: " +
@@ -948,8 +1010,10 @@ export default class Hologram {
 
     Hologram.#defineManuallyPortedFunctions();
 
-    Hologram.virtualDocument = toVNode(document.documentElement);
-    Vdom.addKeysToVnodes(Hologram.virtualDocument);
+    // virtualDocument stays null here: the first render() mirrors itself onto the server's DOM,
+    // which is what makes those nodes survive the first patch. Reading the page into a vdom of
+    // its own instead would describe it in terms the render never uses - the keys it carries are
+    // the render's, not the markup's - and every node would fail to match and be rebuilt.
 
     console.inspect = (term) => console.log(Interpreter.inspect(term));
 
@@ -992,8 +1056,15 @@ export default class Hologram {
     );
   }
 
+  // What the page was mounted with, from whichever side supplied it: a navigation fetched it as
+  // data, while an initial load reads it from the page the server sent.
   static #loadMountData() {
-    const mountData = globalThis.Hologram.pageMountData(Hologram.#deps);
+    const payload = $.pendingMountPayload;
+    $.pendingMountPayload = null;
+
+    const mountData = payload
+      ? $.#mountDataFromPayload(payload)
+      : globalThis.Hologram.pageMountData(Hologram.#deps);
 
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
@@ -1001,6 +1072,55 @@ export default class Hologram {
     ComponentRegistry.populate(mountData.componentRegistry);
 
     return mountData;
+  }
+
+  // Fetches a page's own code. Running it is what announces the page is ready to mount, by
+  // dispatching hologram:pageScriptLoaded, which the runtime listens for.
+  //
+  // Without the failure path a bundle that never loads ends the navigation in silence: nothing
+  // dispatches the event, so the mount never runs, the URL is never pushed, and the page already
+  // on screen stays with no sign that anything went wrong.
+  //
+  // Throwing from the handler does not reach whoever started the navigation, since the handler
+  // runs off the event loop. It surfaces as an uncaught error instead, which is what the console
+  // and the feature tests read. handleUncaughtError/1 passes it over rather than showing the
+  // overlay, that being reserved for errors a page raised.
+  //
+  // The pending payload is dropped only while it is still the one this bundle was fetched for. A
+  // navigation started while this one was in flight has already replaced it and still needs it,
+  // and #loadMountData reads a missing payload as the initial page's, which would mount the page
+  // the server first sent instead of the one being navigated to.
+  static #loadPageBundle(src, payload = null) {
+    const script = document.createElement("script");
+
+    script.src = src;
+    script.fetchpriority = "high";
+
+    script.onerror = () => {
+      if (payload !== null && $.pendingMountPayload === payload) {
+        $.pendingMountPayload = null;
+      }
+
+      throw new HologramRuntimeError(`Failed to load page bundle: ${src}`);
+    };
+
+    document.head.appendChild(script);
+  }
+
+  // The payload's terms arrive as JavaScript the runtime evaluates, the same form a command's
+  // response uses.
+  static #mountDataFromPayload(payload) {
+    const evaluate = (encodedTerm) =>
+      Interpreter.evaluateJavaScriptExpression(encodedTerm);
+
+    return {
+      componentRegistry: evaluate(payload.componentRegistry),
+      pageModule: evaluate(payload.pageModule),
+      pageParams: evaluate(payload.pageParams),
+      selfEchoes: evaluate(payload.selfEchoes),
+      subReceiptAdds: evaluate(payload.subReceiptAdds),
+      subReceiptDrops: evaluate(payload.subReceiptDrops),
+    };
   }
 
   static #maybeInitAssetPathRegistry() {
@@ -1065,8 +1185,10 @@ export default class Hologram {
   static async #navigateToPage(toParam) {
     const pagePath = $.#buildPagePath(toParam);
 
-    return Client.fetchPage(toParam, (resp) =>
-      Hologram.loadNewPage(pagePath, resp),
+    return Client.fetchPage(
+      toParam,
+      (payload) => Hologram.loadNewPage(pagePath, payload),
+      () => Hologram.leaveApp(pagePath),
     );
   }
 
@@ -1088,16 +1210,56 @@ export default class Hologram {
     return `${$.#PAGE_SNAPSHOT_KEY_PREFIX}${historyId}`;
   }
 
-  // TODO: raise error if there is no head or body
-  static #patchPage(html) {
+  // Goes where a page's middleware said to go instead, by asking for the page it named.
+  //
+  // A target outside the app carries no page to ask for, so the browser takes it. The hop limit is
+  // there because a redirect can point at a page that redirects again: a cycle would otherwise
+  // fetch forever, silently.
+  static #followRedirect(payload, hopCount) {
+    if (!payload.pageModule) {
+      Hologram.leaveApp(payload.to);
+      return null;
+    }
+
+    if (hopCount >= $.#MAX_REDIRECT_HOPS) {
+      throw new HologramRuntimeError(
+        `Too many redirects (over ${$.#MAX_REDIRECT_HOPS}), last one to: ${payload.to}`,
+      );
+    }
+
+    const toParam = Type.tuple([
+      Interpreter.evaluateJavaScriptExpression(payload.pageModule),
+      Interpreter.evaluateJavaScriptExpression(payload.pageParams),
+    ]);
+
+    return Client.fetchPage(
+      toParam,
+      (nextPayload) =>
+        Hologram.loadNewPage(payload.to, nextPayload, hopCount + 1),
+      () => Hologram.leaveApp(payload.to),
+    );
+  }
+
+  // Takes ownership of a page the server described: the payload is left for the mount to read, and
+  // the page's own code is fetched when this client hasn't run that page before, which is what
+  // announces the page is ready to mount. A page already registered has nothing to fetch, so it
+  // mounts straight away.
+  static #mountNewPage(payload) {
+    $.pendingMountPayload = payload;
+
+    if (
+      $.#isPageModuleRegistered(
+        Interpreter.evaluateJavaScriptExpression(payload.pageModule),
+      )
+    ) {
+      $.#mountPage(true);
+      return;
+    }
+
     globalThis.Hologram.pageScriptLoaded = false;
 
-    const newVirtualDocument = Vdom.from(html);
-
-    Hologram.virtualDocument = Vdom.patchVirtualDocument(
-      Hologram.virtualDocument,
-      newVirtualDocument,
-    );
+    // Mirrors Hologram.Router.Helpers.page_bundle_path/1
+    $.#loadPageBundle(`/hologram/page-${payload.pageDigest}.js`, payload);
   }
 
   // Deps: [:maps.get/2, :maps.put/3]

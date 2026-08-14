@@ -92,7 +92,7 @@ defmodule Hologram.RouterTest do
   end
 
   describe "/hologram/page" do
-    test "routes POST subsequent page request" do
+    test "routes POST page data request" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
       # Simulate that JSON has already been parsed upstream by Plug.Parsers
@@ -118,10 +118,12 @@ defmodule Hologram.RouterTest do
         |> Map.put(:body_params, %{"_json" => parsed_json})
         |> call([])
 
-      assert String.contains?(conn.resp_body, "Module1 page, a = 123, b = :xyz")
+      response = Jason.decode!(conn.resp_body)
 
-      # Initial pages include runtime script
-      refute String.contains?(conn.resp_body, "hologram/runtime")
+      assert Plug.Conn.get_resp_header(conn, "hologram-page-data") == ["true"]
+      assert response["type"] == "page"
+      assert response["pageParams"] =~ "123"
+      assert response["pageParams"] =~ "xyz"
     end
   end
 

@@ -287,6 +287,13 @@ export default class Renderer {
 
     const originalEventName = attributeName.substring(1);
 
+    // $key names the place an element holds in its template rather than something that happens to
+    // it, so it binds nothing. Without this it would register a listener for an event called "key",
+    // which no browser fires.
+    if (originalEventName === "key") {
+      return null;
+    }
+
     // click_outside is not a per-element listener: the dismissing click lands on another element,
     // so it is collected as a document-level "click" binding in #renderElement. Returning null here
     // keeps it out of the element's "on" map.
@@ -1431,7 +1438,7 @@ export default class Renderer {
     const childrenDom = dom.data[3];
 
     // The element's children are complete here, whatever nesting of blocks, loops and components
-    // produced them, so this is where marker keys are settled and marked spans become fragments.
+    // produced them, so this is where a repeated key is settled against the rest of the list.
     const childrenVdom = Vdom.finalizeChildren(
       Renderer.renderDom(
         childrenDom,
@@ -1509,7 +1516,21 @@ export default class Renderer {
       data.key = `__hologramScript__:${attrsVdom.src}`;
     } else if (currentTagName === "script" && childrenVdom[0]) {
       // Make sure the script is executed if the code changes.
+      //
+      // The one child is the whole body: everything a script can hold renders to text, and
+      // #mergeNeighbouringTextNodes joins adjacent text into a single child. That is what lets
+      // this equal the textContent Vdom.#resourceKey reads off the live node, which is what the
+      // boot patch compares the two sides by. Splitting a script body into more than one child
+      // would part the two keys and make the page re-run its own scripts on boot.
       data.key = `__hologramScript__:${childrenVdom[0]}`;
+    } else {
+      // What the element loads names it better than where it sits, so a slot key only applies to
+      // elements that load nothing.
+      const slotKey = $.#renderSlotKey(attrsDom);
+
+      if (slotKey !== null) {
+        data.key = slotKey;
+      }
     }
 
     const elementVnode = vnode(currentTagName, data, childrenVdom);
@@ -1566,8 +1587,8 @@ export default class Renderer {
   // Based on render_dom/3 (list case)
   //
   // Blocks are left alone here: a block's body and a loop's iterations are lists of their own, and
-  // the markers they hold are only ever part of the enclosing element's children. Numbering and
-  // grouping them belongs to whoever owns that list - see Vdom.finalizeChildren.
+  // the nodes they render are only ever part of the enclosing element's children. Numbering the
+  // keys belongs to whoever owns that list - see Vdom.finalizeChildren.
   static #renderNodes(nodes, context, slots, defaultTarget, parentTagName) {
     return Renderer.#mergeNeighbouringTextNodes(
       nodes.data
@@ -1653,14 +1674,38 @@ export default class Renderer {
       .map((child) => (typeof child === "string" ? child : vnodeToHtml(child)))
       .join("");
 
-    // Block markers are emitted as comments, so they arrive here like any other comment node and
-    // are told apart by their marker text. Keying them here keeps client-rendered markers matching
-    // the ones recovered from server-rendered markup.
-    const key = Vdom.markerKey(commentContent);
+    return vnode("!", commentContent);
+  }
 
-    return key
-      ? vnode("!", {key: key}, commentContent)
-      : vnode("!", commentContent);
+  // The key an element carries for the place it holds in its template, or null when it has none.
+  //
+  // The key is written as an attribute because that is how a value reaches an element through
+  // every path a template has - spreads, dynamic tags, a component passing attributes on - but it
+  // is never one: the server leaves it out of the markup and the client turns it into the vnode's
+  // key here, so it exists only between the two renderers.
+  //
+  // Read straight off the attributes rather than through expand_attribute_spreads/1, which
+  // #renderAttributesAndProps has already run over the same list: this runs for every element of
+  // every render, and no spread has to be expanded to find the key. Spread entries are skipped
+  // rather than looked into, since a spread carrying a $-prefixed name is refused before it gets
+  // here.
+  //
+  // Scanned from the end because the compiler appends the key after everything the template author
+  // wrote, so the scan ends on its first step.
+  static #renderSlotKey(attrsDom) {
+    for (let index = attrsDom.data.length - 1; index >= 0; index -= 1) {
+      const attrDom = attrsDom.data[index];
+
+      if (Type.isRecordTuple(attrDom, "spread", 2)) {
+        continue;
+      }
+
+      if (Bitstring.toText(attrDom.data[0]) === "$key") {
+        return $.#valueDomToText(attrDom.data[1]);
+      }
+    }
+
+    return null;
   }
 
   // Based on render_dom/3 (slot case)

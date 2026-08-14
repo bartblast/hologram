@@ -10,6 +10,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page13
   alias HologramFeatureTests.Patching.Page14
   alias HologramFeatureTests.Patching.Page15
+  alias HologramFeatureTests.Patching.Page16
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
@@ -956,9 +957,9 @@ defmodule HologramFeatureTests.PatchingTest do
 
       script_result(session, mark_nodes)
 
-      # Switching the conditional inside the loop body renders the same marker once per item, so
-      # this is the patch that throws when repeated keys reach the diff unnumbered. It takes three
-      # of them: with two the diff realigns on its own and the failure does not surface.
+      # Switching the conditional inside the loop body renders the same key once per item, so this
+      # is the patch that throws when repeated keys reach the diff unnumbered. It takes three of
+      # them: with two the diff realigns on its own and the failure does not surface.
       session
       |> click(button("Toggle badges"))
       |> assert_count(".badge", 0)
@@ -1048,6 +1049,96 @@ defmodule HologramFeatureTests.PatchingTest do
       |> click(button("Sort"))
       |> assert_text(css("#result"), "Delta, Charlie, Bravo, Alpha")
       |> assert_script_result(rendered_feed, "* Delta * Charlie * Bravo * Alpha")
+    end
+
+    feature "the key an element is diffed by never reaches the markup", %{session: session} do
+      # The key is written as an attribute because that is how a value reaches an element through
+      # every path a template has, but it is never one: the server leaves it out of the markup and
+      # the client turns it into the vnode's key. Checked on both renderers' output, since either
+      # could leak it on its own.
+      framework_attributes = """
+      return [...document.querySelectorAll("*")]
+        .flatMap((element) => [...element.attributes])
+        .map((attribute) => attribute.name)
+        .filter((name) => name.startsWith("$"));
+      """
+
+      session
+      |> visit(Page15)
+      |> assert_script_result(framework_attributes, [])
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Charlie, Alpha, Delta, Bravo")
+      |> assert_script_result(framework_attributes, [])
+    end
+
+    feature "no node of the framework's own is left in the page", %{session: session} do
+      # Blocks used to be bracketed in comment markers so that a block changing how many nodes it
+      # renders could not shift the identity of its siblings. Keys do that job now, and the page
+      # holds only the nodes the template asks for.
+      #
+      # Every comment in the document is collected rather than only the ones near the block, since
+      # a marker anywhere would be one too many, and the list is asserted whole: the author's own
+      # comment has to be there, which is what shows the walk would have found a marker too.
+      comments = """
+      const walker = document.createTreeWalker(
+        document.documentElement,
+        NodeFilter.SHOW_COMMENT,
+      );
+
+      const found = [];
+
+      while (walker.nextNode()) {
+        found.push(walker.currentNode.textContent.trim());
+      }
+
+      return found;
+      """
+
+      authored = ["a comment the template author wrote"]
+
+      session
+      |> visit(Page15)
+      |> assert_script_result(comments, authored)
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Charlie, Alpha, Delta, Bravo")
+      |> assert_script_result(comments, authored)
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Delta, Charlie, Bravo, Alpha")
+      |> assert_script_result(comments, authored)
+    end
+  end
+
+  describe "adopting the server-rendered page" do
+    feature "the first render keeps the nodes the server sent", %{session: session} do
+      server_nodes = """
+      return ["kept", "hint", "field", "marked", "result"].filter(
+        (id) => document.getElementById(id).__fromServer === true,
+      );
+      """
+
+      ids = ["kept", "hint", "field", "marked", "result"]
+
+      session =
+        session
+        |> visit(Page16)
+        |> assert_text(css("#result"), "0")
+        |> fill_in(css("#field"), with: "typed")
+
+      # Waiting for a click to land proves the client has rendered: the assertions below would
+      # pass on their own against a page that had booted no further than the server's markup.
+      session
+      |> click(button("Increment"))
+      |> assert_text(css("#result"), "1")
+      # A script element runs when it is created, so a second run means the first patch rebuilt
+      # the page rather than adopting it - and it would fire a real page's analytics twice.
+      |> assert_script_result("return window.__scriptRuns;", 1)
+      |> assert_script_result(server_nodes, ids)
+      |> assert_input_value("#field", "typed")
+      |> click(button("Increment"))
+      |> assert_text(css("#result"), "2")
+      |> assert_script_result("return window.__scriptRuns;", 1)
+      |> assert_script_result(server_nodes, ids)
+      |> assert_input_value("#field", "typed")
     end
   end
 end
