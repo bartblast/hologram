@@ -90,6 +90,51 @@ defmodule Hologram.Controller do
   end
 
   @doc """
+  Builds the payload describing a page for a client that renders it itself, rather than being sent
+  the markup.
+
+  Carries what a mount needs and nothing about how the page looks: the component registry the
+  render produced, the page module and its params, the realtime bookkeeping, and the digest naming
+  the page's bundle, so the client can load the code without asking again.
+
+  Terms are encoded the way a command's response encodes them, as JavaScript the client evaluates,
+  since that is the form its runtime already reads.
+
+  A page whose middleware answered before anything was rendered has no such payload. It carries the
+  response's status and headers instead, so that a redirect stays a redirect rather than being
+  mounted as a page.
+  """
+  @spec build_page_data_payload(map | Server.t()) :: map
+  def build_page_data_payload(%Server{} = server) do
+    %{
+      headers: server.response_headers,
+      status: server.status,
+      type: "response"
+    }
+  end
+
+  def build_page_data_payload(%{
+        component_registry: component_registry,
+        page_digest: page_digest,
+        page_module: page_module,
+        page_params: page_params,
+        self_echoes: self_echoes,
+        sub_receipt_adds: sub_receipt_adds,
+        sub_receipt_drops: sub_receipt_drops
+      }) do
+    %{
+      componentRegistry: Encoder.encode_term!(component_registry),
+      pageDigest: page_digest,
+      pageModule: Encoder.encode_term!(page_module),
+      pageParams: Encoder.encode_term!(page_params),
+      selfEchoes: Encoder.encode_term!(self_echoes),
+      subReceiptAdds: Encoder.encode_term!(sub_receipt_adds),
+      subReceiptDrops: Encoder.encode_term!(sub_receipt_drops),
+      type: "page"
+    }
+  end
+
+  @doc """
   Extracts (uncast) params from the given URL path corresponding to the route of the given page module.
   """
   @spec extract_params(String.t(), module) :: %{String.t() => String.t()}

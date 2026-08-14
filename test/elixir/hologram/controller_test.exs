@@ -9,6 +9,8 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
+  alias Hologram.Compiler.Encoder
+  alias Hologram.Component
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
@@ -420,6 +422,81 @@ defmodule Hologram.ControllerTest do
                plug_session_fetch: :done,
                plug_session: %{"existing_key" => "existing_value"},
                plug_session_info: :write
+             }
+    end
+  end
+
+  describe "build_page_data_payload/1" do
+    setup do
+      fields = %{
+        component_registry: %{"page" => %{module: Module1, struct: %Component{state: %{a: 1}}}},
+        page_digest: "abcdef1234567890",
+        page_module: Module1,
+        page_params: %{"key" => "value"},
+        self_echoes: [:echo_1, :echo_2],
+        sub_receipt_adds: [{"topic_1", "key_1"}],
+        sub_receipt_drops: [{"topic_2", "key_2"}]
+      }
+
+      [fields: fields]
+    end
+
+    test "carries the digest naming the page's bundle", %{fields: fields} do
+      assert %{pageDigest: "abcdef1234567890", type: "page"} = build_page_data_payload(fields)
+    end
+
+    # Each term lands under its own key: the encoded values are opaque strings, so a pair of them
+    # swapped would be caught here rather than by a client behaving oddly.
+    test "encodes each term under its own key", %{fields: fields} do
+      payload = build_page_data_payload(fields)
+
+      assert payload.componentRegistry == Encoder.encode_term!(fields.component_registry)
+      assert payload.pageModule == Encoder.encode_term!(fields.page_module)
+      assert payload.pageParams == Encoder.encode_term!(fields.page_params)
+      assert payload.selfEchoes == Encoder.encode_term!(fields.self_echoes)
+      assert payload.subReceiptAdds == Encoder.encode_term!(fields.sub_receipt_adds)
+      assert payload.subReceiptDrops == Encoder.encode_term!(fields.sub_receipt_drops)
+    end
+
+    test "survives the JSON encoding it is sent over", %{fields: fields} do
+      payload = build_page_data_payload(fields)
+
+      decoded =
+        payload
+        |> Jason.encode!()
+        |> Jason.decode!()
+
+      assert decoded["type"] == "page"
+      assert decoded["pageDigest"] == "abcdef1234567890"
+      assert decoded["componentRegistry"] == payload.componentRegistry
+    end
+
+    test "describes a middleware response instead of a page" do
+      server = %Server{
+        response_headers: %{"location" => "/other-page"},
+        status: 302
+      }
+
+      assert build_page_data_payload(server) == %{
+               headers: %{"location" => "/other-page"},
+               status: 302,
+               type: "response"
+             }
+    end
+
+    test "middleware response survives the JSON encoding it is sent over" do
+      server = %Server{response_headers: %{"location" => "/other-page"}, status: 302}
+
+      decoded =
+        server
+        |> build_page_data_payload()
+        |> Jason.encode!()
+        |> Jason.decode!()
+
+      assert decoded == %{
+               "headers" => %{"location" => "/other-page"},
+               "status" => 302,
+               "type" => "response"
              }
     end
   end
