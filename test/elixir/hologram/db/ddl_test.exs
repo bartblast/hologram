@@ -112,6 +112,12 @@ defmodule Hologram.DB.DDLTest do
       assert normalize_newlines(invalid_index_check_statement("task_project_id_$idx")) ==
                expected
     end
+
+    test "escapes a quote in the index name" do
+      statement = normalize_newlines(invalid_index_check_statement("od'd_$idx"))
+
+      assert statement =~ ~s(c.relname = 'od''d_$idx')
+    end
   end
 
   describe "invalid_indexes_statement/0" do

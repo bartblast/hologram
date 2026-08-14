@@ -92,7 +92,7 @@ defmodule Hologram.DB.DDL do
   """
   @spec enum_values_check_statement(String.t(), String.t(), list(String.t())) :: String.t()
   def enum_values_check_statement(table, column, values) do
-    literals = Enum.map_join(values, ", ", &enum_literal/1)
+    literals = Enum.map_join(values, ", ", &literal/1)
 
     count_statement(table, "#{Mapper.quote_identifier(column)}::text IN (#{literals})")
   end
@@ -154,7 +154,7 @@ defmodule Hologram.DB.DDL do
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = '#{@data_schema}' AND c.relname = '#{index}' AND i.indisvalid = FALSE\
+    WHERE n.nspname = '#{@data_schema}' AND c.relname = #{literal(index)} AND i.indisvalid = FALSE\
     """
   end
 
@@ -236,13 +236,13 @@ defmodule Hologram.DB.DDL do
   def statements(%{op: :add_enum_value} = op) do
     position_part =
       case op.position do
-        {:before, anchor} -> " BEFORE #{enum_literal(anchor)}"
+        {:before, anchor} -> " BEFORE #{literal(anchor)}"
         nil -> ""
       end
 
     [
       "ALTER TYPE #{qualified(op.enum_type)} " <>
-        "ADD VALUE #{enum_literal(op.value)}#{position_part}"
+        "ADD VALUE #{literal(op.value)}#{position_part}"
     ]
   end
 
@@ -280,7 +280,7 @@ defmodule Hologram.DB.DDL do
   end
 
   def statements(%{op: :create_enum_type} = op) do
-    values = Enum.map_join(op.values, ", ", &enum_literal/1)
+    values = Enum.map_join(op.values, ", ", &literal/1)
 
     ["CREATE TYPE #{qualified(op.enum_type)} AS ENUM (#{values})"]
   end
@@ -347,7 +347,7 @@ defmodule Hologram.DB.DDL do
 
     create_statement =
       "CREATE TYPE #{qualified(op.enum_type)} AS ENUM " <>
-        "(#{Enum.map_join(op.values, ", ", &enum_literal/1)})"
+        "(#{Enum.map_join(op.values, ", ", &literal/1)})"
 
     cast_statements =
       Enum.map(op.columns, fn {table, column} ->
@@ -387,7 +387,7 @@ defmodule Hologram.DB.DDL do
   def statements(%{op: :rename_enum_value} = op) do
     [
       "ALTER TYPE #{qualified(op.enum_type)} " <>
-        "RENAME VALUE #{enum_literal(op.from)} TO #{enum_literal(op.to)}"
+        "RENAME VALUE #{literal(op.from)} TO #{literal(op.to)}"
     ]
   end
 
@@ -442,7 +442,7 @@ defmodule Hologram.DB.DDL do
 
   defp delete_action(:restrict), do: "RESTRICT"
 
-  defp enum_literal(value) do
+  defp literal(value) do
     "'#{String.replace(value, "'", "''")}'"
   end
 
@@ -459,7 +459,7 @@ defmodule Hologram.DB.DDL do
       remap
       |> Enum.sort()
       |> Enum.map_join(" ", fn {old_value, new_value} ->
-        "WHEN #{enum_literal(old_value)} THEN #{enum_literal(new_value)}"
+        "WHEN #{literal(old_value)} THEN #{literal(new_value)}"
       end)
 
     "(CASE #{quoted_column}::text #{branches} ELSE #{quoted_column}::text END)"
