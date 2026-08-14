@@ -661,6 +661,50 @@ defmodule Hologram.Migration.RendererTest do
       assert result.tail == []
     end
 
+    test "empties the grant store before re-pointing its references" do
+      pre = model(%{MyApp.Member => %{}, UserEntity => %{}})
+
+      ops = [
+        %{op: :delete_role_grants, line: 3},
+        %{op: :designate_user_entity, entity: MyApp.Member, line: 4}
+      ]
+
+      result = render(ops, pre)
+
+      # The delete comes FIRST: the added keys validate against whatever rows remain, so
+      # emptying the store after them would be emptying it too late.
+      assert op_kinds(result.transactional) == [
+               :delete_role_grants,
+               :drop_foreign_key,
+               :drop_foreign_key,
+               :add_foreign_key,
+               :add_foreign_key
+             ]
+
+      assert hd(result.transactional).table == "hologram_role_grant"
+      assert result.tail == []
+    end
+
+    test "empties the grant store before dropping it" do
+      pre = model(%{UserEntity => %{}})
+
+      ops = [
+        %{op: :delete_role_grants, line: 3},
+        %{op: :designate_user_entity, entity: nil, line: 4}
+      ]
+
+      result = render(ops, pre)
+
+      assert op_kinds(result.transactional) == [
+               :delete_role_grants,
+               :drop_table,
+               :drop_enum_type,
+               :drop_enum_type
+             ]
+
+      assert result.tail == []
+    end
+
     test "renders a removed user entity designation as the grant store's drop" do
       pre = model(%{UserEntity => %{}})
       ops = [%{op: :designate_user_entity, entity: nil, line: 3}]

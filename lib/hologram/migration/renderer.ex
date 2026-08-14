@@ -281,8 +281,21 @@ defmodule Hologram.Migration.Renderer do
       |> term()
       |> Schema.diff(term(next_model))
       |> attach_backfills(chunk)
+      |> prepend_grant_deletes(chunk)
 
     {physical_ops, next_model}
+  end
+
+  # The op deletes rows, so it folds to nothing and the schema diff cannot see it - the
+  # physical form is added here instead. FIRST, because the designation change it
+  # accompanies re-points the store's foreign keys, and the new keys validate against the
+  # rows still standing: emptying the store after them is emptying it too late.
+  defp prepend_grant_deletes(physical_ops, chunk) do
+    if Enum.any?(chunk, &(&1.op == :delete_role_grants)) do
+      [%{op: :delete_role_grants, table: Mapper.table_name(RoleGrant)} | physical_ops]
+    else
+      physical_ops
+    end
   end
 
   # A cardinality change moves data, which no schema difference expresses: the join table

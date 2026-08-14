@@ -485,6 +485,14 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "statements/1 for delete_role_grants" do
+    test "renders the schema-qualified delete" do
+      op = %{op: :delete_role_grants, table: "hologram_role_grant"}
+
+      assert statements(op) == [~s(DELETE FROM "hologram_data"."hologram_role_grant")]
+    end
+  end
+
   describe "statements/1 for drop_column" do
     test "renders the column drop" do
       op = %{op: :drop_column, table: "task", column: "name"}

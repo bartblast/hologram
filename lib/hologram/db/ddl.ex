@@ -223,6 +223,11 @@ defmodule Hologram.DB.DDL do
   schema reconciliation never emits them, while a migration log carries the confirmed
   intent.
 
+  :delete_role_grants empties the role grant store, the second op that touches rows
+  rather than the schema. It too comes from the applier only, and for a stronger reason:
+  the migration file has to SAY it deletes the grants, so the destruction is reviewed
+  rather than inferred from a designation change.
+
   :create_enum_type, :drop_enum_type, :add_enum_value (with its BEFORE anchor when
   positioned), and :rename_enum_value render one statement each. :rebuild_enum_type
   renders the rebuild sequence: rename the old type aside, create the replacement
@@ -321,6 +326,10 @@ defmodule Hologram.DB.DDL do
     lines = Enum.join(column_lines, ",\n") <> ",\n" <> pk_line
 
     ["CREATE TABLE #{qualified(op.table)} (\n#{lines}\n)"]
+  end
+
+  def statements(%{op: :delete_role_grants} = op) do
+    ["DELETE FROM #{qualified(op.table)}"]
   end
 
   def statements(%{op: :drop_column} = op) do
