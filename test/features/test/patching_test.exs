@@ -10,6 +10,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page13
   alias HologramFeatureTests.Patching.Page14
   alias HologramFeatureTests.Patching.Page15
+  alias HologramFeatureTests.Patching.Page16
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
@@ -1048,6 +1049,40 @@ defmodule HologramFeatureTests.PatchingTest do
       |> click(button("Sort"))
       |> assert_text(css("#result"), "Delta, Charlie, Bravo, Alpha")
       |> assert_script_result(rendered_feed, "* Delta * Charlie * Bravo * Alpha")
+    end
+  end
+
+  describe "adopting the server-rendered page" do
+    feature "the first render keeps the nodes the server sent", %{session: session} do
+      server_nodes = """
+      return ["kept", "hint", "field", "marked", "result"].filter(
+        (id) => document.getElementById(id).__fromServer === true,
+      );
+      """
+
+      ids = ["kept", "hint", "field", "marked", "result"]
+
+      session =
+        session
+        |> visit(Page16)
+        |> assert_text(css("#result"), "0")
+        |> fill_in(css("#field"), with: "typed")
+
+      # Waiting for a click to land proves the client has rendered: the assertions below would
+      # pass on their own against a page that had booted no further than the server's markup.
+      session
+      |> click(button("Increment"))
+      |> assert_text(css("#result"), "1")
+      # A script element runs when it is created, so a second run means the first patch rebuilt
+      # the page rather than adopting it - and it would fire a real page's analytics twice.
+      |> assert_script_result("return window.__scriptRuns;", 1)
+      |> assert_script_result(server_nodes, ids)
+      |> assert_input_value("#field", "typed")
+      |> click(button("Increment"))
+      |> assert_text(css("#result"), "2")
+      |> assert_script_result("return window.__scriptRuns;", 1)
+      |> assert_script_result(server_nodes, ids)
+      |> assert_input_value("#field", "typed")
     end
   end
 end
