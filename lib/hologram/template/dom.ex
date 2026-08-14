@@ -13,6 +13,14 @@ defmodule Hologram.Template.DOM do
   # size can vary: "raw" only marks source to reconstruct, and "else" is a branch within an "if".
   @marked_blocks ["for", "if"]
 
+  # Tags a key would name nothing new. "document" and "window" render no node at all, and "slot"
+  # renders whatever is put in its place. The three page-level elements are each the only one of
+  # their kind, so a key cannot tell them from a sibling - and the patch reaches them by name
+  # rather than through an ordinary children diff, which a key would make it refuse: the root is
+  # rebuilt into a document that allows only one element, and head and body would be thrown away
+  # and rebuilt on every navigation, taking the stylesheets and the scroll position with them.
+  @unkeyable_tags ["body", "document", "head", "html", "slot", "window"]
+
   @type attribute :: {String.t(), t} | {:spread, {any}}
 
   # 'dom_node' name used instead of 'node" because type node/0 is a built-in type and it cannot be redefined.
@@ -222,8 +230,7 @@ defmodule Hologram.Template.DOM do
   defp keyable_tag?({:expression, _templ_expr}), do: true
 
   defp keyable_tag?(tag_name) do
-    Helpers.tag_type(tag_name) == :element and
-      tag_name not in ["document", "slot", "window"]
+    Helpers.tag_type(tag_name) == :element and tag_name not in @unkeyable_tags
   end
 
   # Builds one marker comment, whose text is four bracketed segments, e.g. "[h:a3f2b1c4:0:o]":

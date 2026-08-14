@@ -1309,6 +1309,66 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
+  describe "build_ast/1, page-level tags" do
+    # Each is the only one of its kind, so a key cannot tell it from a sibling, and the patch
+    # reaches all three by name rather than through an ordinary children diff - a key there would
+    # make it rebuild them instead.
+    test "carry no key" do
+      # <html><head></head><body></body></html>
+      tags = [
+        {:start_tag, {"html", []}},
+        {:start_tag, {"head", []}},
+        {:end_tag, "head"},
+        {:start_tag, {"body", []}},
+        {:end_tag, "body"},
+        {:end_tag, "html"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "html",
+                  [],
+                  [
+                    {:{}, [line: 1], [:element, "head", [], []]},
+                    {:{}, [line: 1], [:element, "body", [], []]}
+                  ]
+                ]}
+             ]
+    end
+
+    test "don't take a key index from the elements they hold" do
+      # <html><body><div></div></body></html>
+      tags = [
+        {:start_tag, {"html", []}},
+        {:start_tag, {"body", []}},
+        {:start_tag, {"div", []}},
+        {:end_tag, "div"},
+        {:end_tag, "body"},
+        {:end_tag, "html"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "html",
+                  [],
+                  [
+                    {:{}, [line: 1],
+                     [
+                       :element,
+                       "body",
+                       [],
+                       [{:{}, [line: 1], [:element, "div", [key(tags, 0)], []]}]
+                     ]}
+                  ]
+                ]}
+             ]
+    end
+  end
+
   describe "build_ast/1, window tag" do
     test "with an event binding" do
       # <window $key_down.ctrl+k="open_palette" />
