@@ -637,30 +637,6 @@ defmodule Hologram.Migration.RendererTest do
       assert result.tail == []
     end
 
-    test "renders a moved user entity designation as the grant store's retargeted references" do
-      pre = model(%{MyApp.Member => %{}, UserEntity => %{}})
-      ops = [%{op: :designate_user_entity, entity: MyApp.Member, line: 3}]
-
-      result = render(ops, pre)
-
-      # The table and its rows stay - only the two references follow the designation.
-      assert op_kinds(result.transactional) == [
-               :drop_foreign_key,
-               :drop_foreign_key,
-               :add_foreign_key,
-               :add_foreign_key
-             ]
-
-      assert Enum.map(result.transactional, & &1.constraint) == [
-               "hologram_role_grant_granted_by_id_$fk",
-               "hologram_role_grant_user_id_$fk",
-               "hologram_role_grant_granted_by_id_$fk",
-               "hologram_role_grant_user_id_$fk"
-             ]
-
-      assert result.tail == []
-    end
-
     test "empties the grant store before re-pointing its references" do
       pre = model(%{MyApp.Member => %{}, UserEntity => %{}})
 
@@ -701,20 +677,6 @@ defmodule Hologram.Migration.RendererTest do
                :drop_enum_type,
                :drop_enum_type
              ]
-
-      assert result.tail == []
-    end
-
-    test "renders a removed user entity designation as the grant store's drop" do
-      pre = model(%{UserEntity => %{}})
-      ops = [%{op: :designate_user_entity, entity: nil, line: 3}]
-
-      result = render(ops, pre)
-
-      assert op_kinds(result.transactional) == [:drop_table, :drop_enum_type, :drop_enum_type]
-
-      assert Enum.find(result.transactional, &(&1.op == :drop_table)).table ==
-               "hologram_role_grant"
 
       assert result.tail == []
     end

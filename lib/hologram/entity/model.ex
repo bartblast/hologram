@@ -92,6 +92,7 @@ defmodule Hologram.Entity.Model do
 
     validate_deleted_targets!(folded, deleted_types)
     validate_filled_adds!(ops, created_types)
+    validate_grant_deletes!(model, ops)
 
     folded
   end
@@ -744,6 +745,60 @@ defmodule Hologram.Entity.Model do
             "#{Enum.join(Enum.sort(unfilled), ", ")} - add backfill: for a one-time " <>
             "value, default: to give every row one, or optional: to leave them empty"
     end
+  end
+
+  # Grants reference the designated type's rows, so a designation that moves elsewhere or
+  # goes away leaves them describing rows that are not the user's any more. The file has to
+  # say so - the deletion is never inferred from a designation change, because a reviewer
+  # reading the file would not see it.
+  #
+  # Walks the ops rather than comparing the entering and folded terms: a rename inside the
+  # same file moves the designation without moving a row, and is exempt for that reason.
+  defp validate_grant_deletes!(model, ops) do
+    deletes_grants? = Enum.any?(ops, &(&1.op == :delete_role_grants))
+
+    # The fold is for its raise - the designation it threads is scaffolding, not a result.
+    _final_designation =
+      Enum.reduce(ops, model.user_entity, fn
+        %{op: :rename_entity} = op, designation ->
+          if designation == op.from, do: op.to, else: designation
+
+        %{op: :delete_entity} = op, designation ->
+          if designation == op.entity, do: nil, else: designation
+
+        %{op: :designate_user_entity} = op, designation ->
+          validate_grants_deleted!(designation, op.entity, deletes_grants?)
+
+          op.entity
+
+        _op, designation ->
+          designation
+      end)
+
+    :ok
+  end
+
+  defp validate_grants_deleted!(designation, target, _deletes_grants?)
+       when designation in [nil, target],
+       do: :ok
+
+  defp validate_grants_deleted!(_designation, _target, true), do: :ok
+
+  defp validate_grants_deleted!(designation, nil, _deletes_grants?) do
+    raise Hologram.CompileError,
+      message:
+        "the user entity designation is removed, and role grants reference " <>
+          "#{inspect(designation)} rows - add `delete_role_grants()` above it, which " <>
+          "empties the role grant store in the same migration"
+  end
+
+  defp validate_grants_deleted!(designation, target, _deletes_grants?) do
+    raise Hologram.CompileError,
+      message:
+        "the user entity designation moves from #{inspect(designation)} to " <>
+          "#{inspect(target)}, and role grants reference #{inspect(designation)} rows - " <>
+          "add `delete_role_grants()` above it, which empties the role grant store in " <>
+          "the same migration"
   end
 
   defp validate_values_change!(op, old_type, new_type) do

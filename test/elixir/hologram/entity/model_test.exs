@@ -465,7 +465,10 @@ defmodule Hologram.Entity.ModelTest do
         ])
         |> Map.put(:user_entity, MyApp.User)
 
-      ops = [%{op: :designate_user_entity, entity: MyApp.Account, line: 5}]
+      ops = [
+        %{op: :delete_role_grants, line: 5},
+        %{op: :designate_user_entity, entity: MyApp.Account, line: 6}
+      ]
 
       assert fold(model, ops).user_entity == MyApp.Account
     end
@@ -480,8 +483,9 @@ defmodule Hologram.Entity.ModelTest do
         |> Map.put(:user_entity, MyApp.User)
 
       ops = [
-        %{op: :designate_user_entity, entity: nil, line: 5},
-        %{op: :designate_user_entity, entity: MyApp.Account, line: 6}
+        %{op: :delete_role_grants, line: 5},
+        %{op: :designate_user_entity, entity: nil, line: 6},
+        %{op: :designate_user_entity, entity: MyApp.Account, line: 7}
       ]
 
       assert fold(model, ops).user_entity == MyApp.Account
@@ -504,9 +508,47 @@ defmodule Hologram.Entity.ModelTest do
         |> fold([%{op: :create_entity, entity: MyApp.User, line: 3}])
         |> Map.put(:user_entity, MyApp.User)
 
-      ops = [%{op: :designate_user_entity, entity: nil, line: 4}]
+      ops = [
+        %{op: :delete_role_grants, line: 4},
+        %{op: :designate_user_entity, entity: nil, line: 5}
+      ]
 
       assert fold(model, ops).user_entity == nil
+    end
+
+    test "needs no grant deletion when the designation follows a rename" do
+      model =
+        empty()
+        |> fold([%{op: :create_entity, entity: MyApp.User, line: 3}])
+        |> Map.put(:user_entity, MyApp.User)
+
+      # The rename carries the designation, so the later op re-sets what it already holds -
+      # no rows moved, so no grant is left describing the wrong ones.
+      ops = [
+        %{op: :rename_entity, from: MyApp.User, to: MyApp.Account, line: 4},
+        %{op: :designate_user_entity, entity: MyApp.Account, line: 5}
+      ]
+
+      assert fold(model, ops).user_entity == MyApp.Account
+    end
+
+    test "accepts the grant deletion anywhere in the file" do
+      model =
+        empty()
+        |> fold([
+          %{op: :create_entity, entity: MyApp.Account, line: 3},
+          %{op: :create_entity, entity: MyApp.User, line: 4}
+        ])
+        |> Map.put(:user_entity, MyApp.User)
+
+      # Position is the renderer's job - it always empties the store before the ops that
+      # re-point it, whatever order the file lists them in.
+      ops = [
+        %{op: :designate_user_entity, entity: MyApp.Account, line: 5},
+        %{op: :delete_role_grants, line: 6}
+      ]
+
+      assert fold(model, ops).user_entity == MyApp.Account
     end
 
     test "points the relationships targeting a renamed entity type at its new name" do
@@ -1039,6 +1081,41 @@ defmodule Hologram.Entity.ModelTest do
       expected_msg = "no such entity MyApp.Ghost at this point in migration history"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(empty(), ops) end
+    end
+
+    test "raises when the designation moves without deleting the grants" do
+      model =
+        empty()
+        |> fold([
+          %{op: :create_entity, entity: MyApp.Account, line: 3},
+          %{op: :create_entity, entity: MyApp.User, line: 4}
+        ])
+        |> Map.put(:user_entity, MyApp.User)
+
+      ops = [%{op: :designate_user_entity, entity: MyApp.Account, line: 5}]
+
+      expected_msg =
+        "the user entity designation moves from MyApp.User to MyApp.Account, and role " <>
+          "grants reference MyApp.User rows - add `delete_role_grants()` above it, which " <>
+          "empties the role grant store in the same migration"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when the designation is removed without deleting the grants" do
+      model =
+        empty()
+        |> fold([%{op: :create_entity, entity: MyApp.User, line: 3}])
+        |> Map.put(:user_entity, MyApp.User)
+
+      ops = [%{op: :designate_user_entity, entity: nil, line: 4}]
+
+      expected_msg =
+        "the user entity designation is removed, and role grants reference MyApp.User " <>
+          "rows - add `delete_role_grants()` above it, which empties the role grant " <>
+          "store in the same migration"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
     end
   end
 
