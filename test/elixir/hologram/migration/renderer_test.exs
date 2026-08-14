@@ -371,7 +371,7 @@ defmodule Hologram.Migration.RendererTest do
              }
     end
 
-    test "renders a role rename as the grant store's value rename" do
+    test "renders a role rename no other entity type shares as a value rename" do
       pre = model(%{MyApp.Task => %{roles: [{:moderator, []}]}, UserEntity => %{}})
 
       ops = [
@@ -386,6 +386,38 @@ defmodule Hologram.Migration.RendererTest do
                  enum_type: "hologram_role_grant_role_$enum",
                  from: "moderator",
                  to: "maintainer"
+               }
+             ]
+    end
+
+    test "renders a role rename another entity type shares as a scoped rebuild" do
+      pre =
+        model(%{
+          MyApp.Other => %{roles: [{:editor, []}]},
+          MyApp.Task => %{roles: [{:editor, []}]},
+          UserEntity => %{}
+        })
+
+      ops = [%{op: :rename_role, entity: MyApp.Task, from: :editor, to: :reviewer, line: 3}]
+
+      result = render(ops, pre)
+
+      # A value rename would relabel MyApp.Other's grants too, and drop a value the model
+      # still requires. The rebuild keeps "editor" for MyApp.Other and moves only the rows
+      # whose resource_type is MyApp.Task's table.
+      assert result.transactional == [
+               %{
+                 op: :rebuild_enum_type,
+                 enum_type: "hologram_role_grant_role_$enum",
+                 values: ["editor", "reviewer"],
+                 columns: [{"hologram_role_grant", "role"}],
+                 remap: [
+                   %{
+                     from: "editor",
+                     to: "reviewer",
+                     scope: {"resource_type", "my_app_task"}
+                   }
+                 ]
                }
              ]
     end

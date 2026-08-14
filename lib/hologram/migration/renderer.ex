@@ -133,6 +133,23 @@ defmodule Hologram.Migration.Renderer do
     ]
   end
 
+  # An entity role name is shared: the store tells :editor on one type from :editor on
+  # another by resource_type, not by the enum value, which is deduplicated across the
+  # model. So renaming one entity's role relabels every type's grants unless the rows are
+  # remapped within that resource_type - and the value has to survive for the others.
+  defp enum_value_ops(%{op: :rename_role, entity: entity_type} = op, _pre_mapping, post_mapping) do
+    from = Codec.encode(op.from, :enum)
+    to = Codec.encode(op.to, :enum)
+
+    if from in role_values(post_mapping) do
+      scoped_role_rebuild_ops(post_mapping, entity_type, from, to)
+    else
+      rename_enum_value_ops(post_mapping, :role, from, to)
+    end
+  end
+
+  # A global role's value is its module name, which no entity role can collide with, so
+  # renaming one always moves a value nothing else holds.
   defp enum_value_ops(%{op: :rename_role} = op, _pre_mapping, post_mapping) do
     rename_enum_value_ops(
       post_mapping,
@@ -235,6 +252,43 @@ defmodule Hologram.Migration.Renderer do
   end
 
   defp put_backfill(op, _backfills), do: op
+
+  defp role_values(mapping) do
+    case Map.fetch(mapping, RoleGrant) do
+      {:ok, entry} -> role_grant_column(entry, :role).enum_values
+      :error -> []
+    end
+  end
+
+  defp role_grant_column(entry, attribute) do
+    Enum.find(entry.columns, &(&1.source == {:attribute, attribute}))
+  end
+
+  # The rebuild rather than a value rename: the old value stays for the entity types that
+  # still declare it, the new one arrives beside it, and only the rows of this type's
+  # resource follow. A fresh type also sidesteps PostgreSQL refusing to use a value added
+  # by ALTER TYPE in the transaction that added it.
+  defp scoped_role_rebuild_ops(mapping, entity_type, from, to) do
+    grant_entry = Map.fetch!(mapping, RoleGrant)
+    role_column = role_grant_column(grant_entry, :role)
+    resource_type_column = role_grant_column(grant_entry, :resource_type)
+
+    [
+      %{
+        op: :rebuild_enum_type,
+        enum_type: role_column.sql_type,
+        values: role_column.enum_values,
+        columns: [{grant_entry.table, role_column.name}],
+        remap: [
+          %{
+            from: from,
+            to: to,
+            scope: {resource_type_column.name, Map.fetch!(mapping, entity_type).table}
+          }
+        ]
+      }
+    ]
+  end
 
   defp rename_enum_value_ops(mapping, attribute, from, to) do
     if Map.has_key?(mapping, RoleGrant) do

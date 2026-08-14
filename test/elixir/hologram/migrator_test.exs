@@ -13,6 +13,7 @@ defmodule Hologram.MigratorTest do
   alias Hologram.DB.Preflight
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Entity.Model
+  alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
 
   @context %{
     otp_app: "hologram",
@@ -210,6 +211,65 @@ defmodule Hologram.MigratorTest do
         Connection.query(~s(SELECT "state" FROM "hologram_data"."my_app_task"))
 
       assert rows == [["new"]]
+    end
+
+    test "keeps another entity type's grants when a shared role name is renamed" do
+      # The store tells :editor on one type from :editor on another by resource_type - the
+      # enum value is shared - so renaming one type's role must move only its own grants.
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: UserEntity, line: 3},
+          %{op: :create_entity, entity: MyApp.Task, line: 4},
+          %{op: :add_role, entity: MyApp.Task, name: :editor, opts: [], line: 5},
+          %{op: :create_entity, entity: MyApp.Other, line: 6},
+          %{op: :add_role, entity: MyApp.Other, name: :editor, opts: [], line: 7},
+          %{op: :designate_user_entity, entity: UserEntity, line: 8}
+        ])
+
+      model = apply_pending([create], Model.empty(), @context)
+
+      user_id = "00000000-0000-0000-0000-0000000000a1"
+
+      insert_user = """
+      INSERT INTO "hologram_data"."test_fixtures_entity_module14"
+        ("id", "created_at", "updated_at")
+      VALUES ($1, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+      """
+
+      {:ok, _result} = Connection.query(insert_user, [Ecto.UUID.dump!(user_id)])
+
+      insert_grants = """
+      INSERT INTO "hologram_data"."hologram_role_grant"
+        ("id", "user_id", "role", "resource_type", "resource_id", "created_at", "updated_at")
+      VALUES
+        ($1, $3, 'editor', 'my_app_task', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00'),
+        ($2, $3, 'editor', 'my_app_other', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+      """
+
+      {:ok, _result} =
+        Connection.query(insert_grants, [
+          Ecto.UUID.dump!("00000000-0000-0000-0000-0000000000b1"),
+          Ecto.UUID.dump!("00000000-0000-0000-0000-0000000000b2"),
+          Ecto.UUID.dump!(user_id),
+          Ecto.UUID.dump!("00000000-0000-0000-0000-0000000000c1")
+        ])
+
+      rename =
+        migration("20260813142237", [
+          %{op: :rename_role, entity: MyApp.Task, from: :editor, to: :reviewer, line: 3}
+        ])
+
+      apply_pending([rename], model, @context)
+
+      select = """
+      SELECT "resource_type"::text, "role"::text
+      FROM "hologram_data"."hologram_role_grant"
+      ORDER BY "resource_type"::text
+      """
+
+      {:ok, %{rows: rows}} = Connection.query(select)
+
+      assert rows == [["my_app_other", "editor"], ["my_app_task", "reviewer"]]
     end
 
     test "skips the migrations another applier already recorded" do
