@@ -1,16 +1,17 @@
-# Boot the cluster test databases before the app starts: the app declares entities, which
-# activates the Hologram database - the databases themselves must exist before any pool
-# connects, on this node or on a peer. The second database is the one the migration
-# scenarios claim for the production mechanism.
-Hologram.Test.DatabaseBootstrap.run!(["hologram_cluster_tests_migrations"])
-
-Hologram.Test.setup()
-
 if System.get_env("GITHUB_ACTIONS") == "true" do
   ExUnit.configure(max_cases: 1)
 end
 
 ExUnit.start()
+
+# Boot the cluster test databases before the app starts: the app declares entities, which
+# activates the Hologram database - the databases themselves must exist before any pool
+# connects, on this node or on a peer. The second database is the one the migration
+# scenarios claim for the production mechanism. Positioned after ExUnit.start - the drop
+# guard recognizes the test env by the running ExUnit server.
+Hologram.Test.DatabaseBootstrap.run!(["hologram_cluster_tests_migrations"])
+
+Hologram.Test.setup()
 
 # Kill leftover headless test-browser processes before the suite starts.
 # chromedriver launches Chrome with the `--test-type=webdriver` flag, so this

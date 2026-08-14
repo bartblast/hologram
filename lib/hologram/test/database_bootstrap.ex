@@ -25,9 +25,16 @@ defmodule Hologram.Test.DatabaseBootstrap do
   Runs before anything connects a pool, so it holds no assumption about the app being
   up. An unreachable Postgres server prints how to start one and halts: the server is a
   hard requirement of any suite calling this, and every later failure would be noise.
+
+  Refuses to run outside the test environment - the schema drop is what makes this
+  function test-only. When neither HOLOGRAM_ENV nor MIX_ENV is set, environment
+  detection recognizes the test env by the running ExUnit server, so the call belongs
+  after ExUnit.start().
   """
   @spec run!(list(String.t())) :: :ok
   def run!(extra_databases \\ []) do
+    refuse_outside_test!()
+
     database_opts =
       :hologram
       |> Application.get_env(:database, [])
@@ -102,5 +109,20 @@ defmodule Hologram.Test.DatabaseBootstrap do
 
     Override the connection settings with config :hologram, :database in config/test.exs.
     """)
+  end
+
+  # The prod path this closes is one line in a release console: the :test atom passed to
+  # Config.resolve!/2 supplies defaults only, so the app's real config wins and the drop
+  # statements would land in whatever database it names. A release with no HOLOGRAM_ENV
+  # reports :dev, so it refuses.
+  defp refuse_outside_test! do
+    env = Hologram.env()
+
+    if env != :test do
+      raise "Hologram.Test.DatabaseBootstrap.run!/1 drops Hologram's schemas and runs " <>
+              "in the test env only - the current env is #{inspect(env)}. When neither " <>
+              "HOLOGRAM_ENV nor MIX_ENV is set, the test env is recognized by the " <>
+              "running ExUnit server, so call run!/1 after ExUnit.start()."
+    end
   end
 end
