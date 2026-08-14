@@ -443,15 +443,16 @@ defmodule Hologram.Migration.Generator do
   end
 
   defp verify_finalized({:ok, path, 0} = outcome, dir, current_model) do
-    migrations = Loader.load_dir!(dir)
-
     try do
+      migrations = Loader.load_dir!(dir)
+
       ShadowVerifier.verify!(migrations, current_model)
     rescue
       error ->
-        # A file that cannot build the model is not history - left on disk it becomes the
-        # history of the next run, which then replays the rejected ops and reports the same
-        # failure forever, with nothing to say the file is the cause.
+        # A file that cannot be read back, or cannot build the model, is not history - left
+        # on disk it becomes the history of the next run, which then replays the rejected
+        # ops and reports the same failure forever, with nothing to say the file is the
+        # cause. The load reads the file just written, so it fails the same way.
         File.rm(path)
 
         reraise error, __STACKTRACE__
