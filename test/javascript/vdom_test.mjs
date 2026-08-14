@@ -191,9 +191,9 @@ describe("Vdom", () => {
   });
 
   describe("mirror()", () => {
-    const patch = init([attributesModule, eventListenersModule], undefined, {
-      experimental: {fragments: true},
-    });
+    // The same patch production builds, so these stand for the boot patch rather than a
+    // differently configured one.
+    const patch = init([attributesModule, eventListenersModule]);
 
     const mount = (html) => {
       const container = document.createElement("div");
