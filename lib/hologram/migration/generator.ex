@@ -10,8 +10,10 @@ defmodule Hologram.Migration.Generator do
   @indent "  "
 
   # Entity-level ops are flat statements even though they name an entity - blocks scope
-  # member ops, and these two scope nothing.
-  @flat_entity_ops [:delete_entity, :rename_entity]
+  # member ops, and these scope nothing. The designation names an entity type without
+  # belonging to it, so a block would file it under the type it points at, or under nil
+  # when the designation is being removed.
+  @flat_entity_ops [:delete_entity, :designate_user_entity, :rename_entity]
 
   @doc """
   Writes the migration file taking the given directory's history to the given model,
@@ -305,6 +307,10 @@ defmodule Hologram.Migration.Generator do
 
   defp render_op(%{op: :delete_role, role: role}) do
     render_call("delete_role", [role], [])
+  end
+
+  defp render_op(%{op: :designate_user_entity} = op) do
+    render_call("designate_user_entity", [op.entity], [])
   end
 
   defp render_op(%{op: :rename_attribute} = op) do

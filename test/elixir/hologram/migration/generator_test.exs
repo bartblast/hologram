@@ -229,6 +229,41 @@ defmodule Hologram.Migration.GeneratorTest do
       assert render(plan) == normalize_newlines(expected)
     end
 
+    test "renders the user entity designation after the entity blocks" do
+      plan = %{
+        ops: [
+          %{op: :create_entity, entity: MyApp.Account},
+          %{op: :add_attribute, entity: MyApp.Account, name: :email, type: :string, opts: []},
+          %{op: :designate_user_entity, entity: MyApp.Account}
+        ],
+        questions: []
+      }
+
+      expected = """
+      use Hologram.Migration
+
+      create_entity MyApp.Account do
+        add_attribute :email, :string
+      end
+
+      designate_user_entity MyApp.Account
+      """
+
+      assert render(plan) == normalize_newlines(expected)
+    end
+
+    test "renders a removed user entity designation as nil" do
+      plan = %{ops: [%{op: :designate_user_entity, entity: nil}], questions: []}
+
+      expected = """
+      use Hologram.Migration
+
+      designate_user_entity nil
+      """
+
+      assert render(plan) == normalize_newlines(expected)
+    end
+
     test "renders a fill question with the op spelled out three ways" do
       plan = %{
         ops: [],
@@ -509,7 +544,8 @@ defmodule Hologram.Migration.GeneratorTest do
           opts: [after: :todo]
         },
         %{op: :add_role, role: MyApp.Roles.Support, opts: []},
-        %{op: :change_role, role: MyApp.Roles.Support, changes: [extends: [MyApp.Roles.Staff]]}
+        %{op: :change_role, role: MyApp.Roles.Support, changes: [extends: [MyApp.Roles.Staff]]},
+        %{op: :designate_user_entity, entity: MyApp.Comment}
       ]
 
       loaded =
