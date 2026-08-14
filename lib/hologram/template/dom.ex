@@ -64,6 +64,27 @@ defmodule Hologram.Template.DOM do
     |> substitute_module_attributes()
   end
 
+  @doc """
+  Names the template a marker or a key belongs to.
+
+  Distinguishes them from another template's, since slot content is spliced into the surrounding
+  template's children and bare indexes would collide there. Derived from the tags rather than the
+  module name so that it stays stable across renames and needs no caller context. Two byte-identical
+  templates share a hash, which leaves their keys to be told apart by their position among siblings,
+  the same way a loop's repeats are.
+
+  `:erlang.phash2/2` is documented to return the same value for a given term regardless of machine
+  architecture and ERTS version, which is what lets tests assert marker text verbatim.
+  """
+  @spec template_hash(list(Parser.parsed_tag())) :: String.t()
+  def template_hash(tags) do
+    tags
+    |> normalize_newlines()
+    |> :erlang.phash2(4_294_967_296)
+    |> Integer.to_string(36)
+    |> String.downcase()
+  end
+
   # Brackets each block in a pair of marker comments, so that changing how many nodes the block
   # renders can't change the identity of the block's siblings. The client diffs children by tag and
   # position, so without the markers a block that starts rendering an extra node lets the following
@@ -79,6 +100,11 @@ defmodule Hologram.Template.DOM do
 
     marked_tags
   end
+
+  # The key trails the attributes the template author wrote, so that reading a tag reads what was
+  # written first, and appending is the point rather than an oversight.
+  # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
+  defp add_slot_key(attributes, hash, index), do: attributes ++ [slot_key_attribute(hash, index)]
 
   # Gives every element the key of the place it holds in this template, counted in source order.
   #
@@ -97,58 +123,6 @@ defmodule Hologram.Template.DOM do
     {keyed_tags, _index} = Enum.map_reduce(tags, 0, &inject_slot_key(&1, &2, hash))
 
     keyed_tags
-  end
-
-  defp inject_slot_key({tag_type, {tag_name, attributes}}, index, hash)
-       when tag_type in [:start_tag, :self_closing_tag] do
-    if keyable_tag?(tag_name) do
-      {{tag_type, {tag_name, add_slot_key(attributes, hash, index)}}, index + 1}
-    else
-      {{tag_type, {tag_name, attributes}}, index}
-    end
-  end
-
-  defp inject_slot_key(tag, index, _hash), do: {tag, index}
-
-  # The key trails the attributes the template author wrote, so that reading a tag reads what was
-  # written first, and appending is the point rather than an oversight.
-  # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
-  defp add_slot_key(attributes, hash, index), do: attributes ++ [slot_key_attribute(hash, index)]
-
-  # A dynamic tag is keyed too: it renders an element whenever its expression names one, and a key
-  # reaching a component instead is dropped with the rest of the props it does not declare.
-  defp keyable_tag?({:expression, _templ_expr}), do: true
-
-  defp keyable_tag?(tag_name) do
-    Helpers.tag_type(tag_name) == :element and
-      tag_name not in ["document", "slot", "window"]
-  end
-
-  defp slot_key_attribute(hash, index) do
-    {"$key", [{:text, "#{hash}:#{index}"}]}
-  end
-
-  # Builds one marker comment, whose text is four bracketed segments, e.g. "[h:a3f2b1c4:0:o]":
-  #
-  #   h         namespace, distinguishing a marker from a comment written in the template
-  #   a3f2b1c4  template hash, see template_hash/1
-  #   0         index of the block within its template, counted in source order
-  #   o         side of the pair, "o" opening or "c" closing
-  #
-  # The marker text doubles as the client-side vnode key, which is why it has to be part of the
-  # markup: the client diffs against a virtual DOM derived from server-rendered HTML, and a
-  # comment's own text is the only carrier that survives serialization. The client recognizes the
-  # same format in Vdom.markerKey/1.
-  #
-  # Takes the tags that follow the marker, so an opening marker can be built in front of its block
-  # without appending to the list it just built.
-  defp marker_tags(hash, index, side, tail \\ []) do
-    [
-      :public_comment_start,
-      {:text, "[h:#{hash}:#{index}:#{side}]"},
-      :public_comment_end
-      | tail
-    ]
   end
 
   defp append_code(code_acc, code, last_tag_type)
@@ -231,6 +205,49 @@ defmodule Hologram.Template.DOM do
   end
 
   defp inject_block_markers(tag, state, _hash), do: {[tag], state}
+
+  defp inject_slot_key({tag_type, {tag_name, attributes}}, index, hash)
+       when tag_type in [:start_tag, :self_closing_tag] do
+    if keyable_tag?(tag_name) do
+      {{tag_type, {tag_name, add_slot_key(attributes, hash, index)}}, index + 1}
+    else
+      {{tag_type, {tag_name, attributes}}, index}
+    end
+  end
+
+  defp inject_slot_key(tag, index, _hash), do: {tag, index}
+
+  # A dynamic tag is keyed too: it renders an element whenever its expression names one, and a key
+  # reaching a component instead is dropped with the rest of the props it does not declare.
+  defp keyable_tag?({:expression, _templ_expr}), do: true
+
+  defp keyable_tag?(tag_name) do
+    Helpers.tag_type(tag_name) == :element and
+      tag_name not in ["document", "slot", "window"]
+  end
+
+  # Builds one marker comment, whose text is four bracketed segments, e.g. "[h:a3f2b1c4:0:o]":
+  #
+  #   h         namespace, distinguishing a marker from a comment written in the template
+  #   a3f2b1c4  template hash, see template_hash/1
+  #   0         index of the block within its template, counted in source order
+  #   o         side of the pair, "o" opening or "c" closing
+  #
+  # The marker text doubles as the client-side vnode key, which is why it has to be part of the
+  # markup: the client diffs against a virtual DOM derived from server-rendered HTML, and a
+  # comment's own text is the only carrier that survives serialization. The client recognizes the
+  # same format in Vdom.markerKey/1.
+  #
+  # Takes the tags that follow the marker, so an opening marker can be built in front of its block
+  # without appending to the list it just built.
+  defp marker_tags(hash, index, side, tail \\ []) do
+    [
+      :public_comment_start,
+      {:text, "[h:#{hash}:#{index}:#{side}]"},
+      :public_comment_end
+      | tail
+    ]
+  end
 
   # Wraps implicit keyword list.
   # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
@@ -383,25 +400,8 @@ defmodule Hologram.Template.DOM do
     inspect(EventModifiers.parse(base_name, modifiers))
   end
 
-  @doc """
-  Names the template a marker or a key belongs to.
-
-  Distinguishes them from another template's, since slot content is spliced into the surrounding
-  template's children and bare indexes would collide there. Derived from the tags rather than the
-  module name so that it stays stable across renames and needs no caller context. Two byte-identical
-  templates share a hash, which leaves their keys to be told apart by their position among siblings,
-  the same way a loop's repeats are.
-
-  `:erlang.phash2/2` is documented to return the same value for a given term regardless of machine
-  architecture and ERTS version, which is what lets tests assert marker text verbatim.
-  """
-  @spec template_hash(list(Parser.parsed_tag())) :: String.t()
-  def template_hash(tags) do
-    tags
-    |> normalize_newlines()
-    |> :erlang.phash2(4_294_967_296)
-    |> Integer.to_string(36)
-    |> String.downcase()
+  defp slot_key_attribute(hash, index) do
+    {"$key", [{:text, "#{hash}:#{index}"}]}
   end
 
   defp substitute_module_attributes({:@, meta_1, [{name, _meta_2, _args}]}) do
