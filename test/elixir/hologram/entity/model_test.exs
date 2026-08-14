@@ -402,12 +402,12 @@ defmodule Hologram.Entity.ModelTest do
     test "points the designation at the new name when the designated entity type is renamed" do
       model =
         empty()
-        |> fold([%{op: :create_entity, entity: MyApp.Draft, line: 3}])
-        |> Map.put(:user_entity, MyApp.Draft)
+        |> fold([%{op: :create_entity, entity: MyApp.User, line: 3}])
+        |> Map.put(:user_entity, MyApp.User)
 
-      ops = [%{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 4}]
+      ops = [%{op: :rename_entity, from: MyApp.User, to: MyApp.Account, line: 4}]
 
-      assert fold(model, ops).user_entity == MyApp.Sketch
+      assert fold(model, ops).user_entity == MyApp.Account
     end
 
     test "leaves the designation alone when another entity type is renamed" do
@@ -415,22 +415,22 @@ defmodule Hologram.Entity.ModelTest do
         empty()
         |> fold([
           %{op: :create_entity, entity: MyApp.Draft, line: 3},
-          %{op: :create_entity, entity: MyApp.Task, line: 4}
+          %{op: :create_entity, entity: MyApp.User, line: 4}
         ])
-        |> Map.put(:user_entity, MyApp.Task)
+        |> Map.put(:user_entity, MyApp.User)
 
       ops = [%{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 5}]
 
-      assert fold(model, ops).user_entity == MyApp.Task
+      assert fold(model, ops).user_entity == MyApp.User
     end
 
     test "clears the designation when the designated entity type is deleted" do
       model =
         empty()
-        |> fold([%{op: :create_entity, entity: MyApp.Task, line: 3}])
-        |> Map.put(:user_entity, MyApp.Task)
+        |> fold([%{op: :create_entity, entity: MyApp.User, line: 3}])
+        |> Map.put(:user_entity, MyApp.User)
 
-      ops = [%{op: :delete_entity, entity: MyApp.Task, line: 4}]
+      ops = [%{op: :delete_entity, entity: MyApp.User, line: 4}]
 
       assert fold(model, ops).user_entity == nil
     end
@@ -440,20 +440,20 @@ defmodule Hologram.Entity.ModelTest do
         empty()
         |> fold([
           %{op: :create_entity, entity: MyApp.Draft, line: 3},
-          %{op: :create_entity, entity: MyApp.Task, line: 4}
+          %{op: :create_entity, entity: MyApp.User, line: 4}
         ])
-        |> Map.put(:user_entity, MyApp.Task)
+        |> Map.put(:user_entity, MyApp.User)
 
       ops = [%{op: :delete_entity, entity: MyApp.Draft, line: 5}]
 
-      assert fold(model, ops).user_entity == MyApp.Task
+      assert fold(model, ops).user_entity == MyApp.User
     end
 
     test "designates an entity type as the user entity type" do
-      model = fold(empty(), [%{op: :create_entity, entity: MyApp.Task, line: 3}])
-      ops = [%{op: :designate_user_entity, entity: MyApp.Task, line: 4}]
+      model = fold(empty(), [%{op: :create_entity, entity: MyApp.User, line: 3}])
+      ops = [%{op: :designate_user_entity, entity: MyApp.User, line: 4}]
 
-      assert fold(model, ops).user_entity == MyApp.Task
+      assert fold(model, ops).user_entity == MyApp.User
     end
 
     test "designates an entity type once the previous designation was removed" do
@@ -461,9 +461,9 @@ defmodule Hologram.Entity.ModelTest do
         empty()
         |> fold([
           %{op: :create_entity, entity: MyApp.Account, line: 3},
-          %{op: :create_entity, entity: MyApp.Task, line: 4}
+          %{op: :create_entity, entity: MyApp.User, line: 4}
         ])
-        |> Map.put(:user_entity, MyApp.Task)
+        |> Map.put(:user_entity, MyApp.User)
 
       ops = [
         %{op: :designate_user_entity, entity: nil, line: 5},
@@ -476,10 +476,10 @@ defmodule Hologram.Entity.ModelTest do
     test "keeps the model unchanged when designating the entity type already designated" do
       model =
         empty()
-        |> fold([%{op: :create_entity, entity: MyApp.Task, line: 3}])
-        |> Map.put(:user_entity, MyApp.Task)
+        |> fold([%{op: :create_entity, entity: MyApp.User, line: 3}])
+        |> Map.put(:user_entity, MyApp.User)
 
-      ops = [%{op: :designate_user_entity, entity: MyApp.Task, line: 4}]
+      ops = [%{op: :designate_user_entity, entity: MyApp.User, line: 4}]
 
       assert fold(model, ops) == model
     end
@@ -487,8 +487,8 @@ defmodule Hologram.Entity.ModelTest do
     test "removes the designation with nil" do
       model =
         empty()
-        |> fold([%{op: :create_entity, entity: MyApp.Task, line: 3}])
-        |> Map.put(:user_entity, MyApp.Task)
+        |> fold([%{op: :create_entity, entity: MyApp.User, line: 3}])
+        |> Map.put(:user_entity, MyApp.User)
 
       ops = [%{op: :designate_user_entity, entity: nil, line: 4}]
 
@@ -1032,14 +1032,14 @@ defmodule Hologram.Entity.ModelTest do
         empty()
         |> fold([
           %{op: :create_entity, entity: MyApp.Account, line: 3},
-          %{op: :create_entity, entity: MyApp.Task, line: 4}
+          %{op: :create_entity, entity: MyApp.User, line: 4}
         ])
-        |> Map.put(:user_entity, MyApp.Task)
+        |> Map.put(:user_entity, MyApp.User)
 
       ops = [%{op: :designate_user_entity, entity: MyApp.Account, line: 5}]
 
       expected_msg =
-        "the designated user entity type is MyApp.Task - designating MyApp.Account " <>
+        "the designated user entity type is MyApp.User - designating MyApp.Account " <>
           "directly implies the existing grants survive the move, and they cannot - " <>
           "remove the user: true designation and generate (that migration drops the " <>
           "role grant store), then designate MyApp.Account and generate again"
