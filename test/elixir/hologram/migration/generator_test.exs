@@ -20,7 +20,7 @@ defmodule Hologram.Migration.GeneratorTest do
         {entity_type, entry}
       end)
 
-    %{entities: entries, roles: %{}}
+    %{entities: entries, roles: %{}, user_entity: nil}
   end
 
   defp migrations_dir!(test_dir, files \\ []) do

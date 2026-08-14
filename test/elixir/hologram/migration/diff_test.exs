@@ -17,7 +17,7 @@ defmodule Hologram.Migration.DiffTest do
         {entity_type, entry}
       end)
 
-    %{entities: entries, roles: roles}
+    %{entities: entries, roles: roles, user_entity: nil}
   end
 
   describe "diff/2" do
@@ -66,6 +66,60 @@ defmodule Hologram.Migration.DiffTest do
 
       assert diff(replayed, Model.empty()) == %{
                ops: [%{op: :delete_entity, entity: MyApp.Archive}],
+               questions: []
+             }
+    end
+
+    test "emits the designation when an existing entity type becomes the user entity type" do
+      replayed = model(%{MyApp.Account => %{}})
+      current = Map.put(replayed, :user_entity, MyApp.Account)
+
+      assert diff(replayed, current) == %{
+               ops: [%{op: :designate_user_entity, entity: MyApp.Account}],
+               questions: []
+             }
+    end
+
+    test "emits the designation after the ops creating the entity type it names" do
+      current =
+        %{MyApp.Account => %{attributes: [{:email, :string, []}]}}
+        |> model()
+        |> Map.put(:user_entity, MyApp.Account)
+
+      ops = diff(Model.empty(), current).ops
+
+      assert List.last(ops) == %{op: :designate_user_entity, entity: MyApp.Account}
+    end
+
+    test "emits nil when the designation was removed" do
+      current = model(%{MyApp.Account => %{}})
+      replayed = Map.put(current, :user_entity, MyApp.Account)
+
+      assert diff(replayed, current) == %{
+               ops: [%{op: :designate_user_entity, entity: nil}],
+               questions: []
+             }
+    end
+
+    test "emits the designation when it moves to another entity type" do
+      built = model(%{MyApp.Account => %{}, MyApp.Member => %{}})
+      replayed = Map.put(built, :user_entity, MyApp.Account)
+      current = Map.put(built, :user_entity, MyApp.Member)
+
+      assert diff(replayed, current) == %{
+               ops: [%{op: :designate_user_entity, entity: MyApp.Member}],
+               questions: []
+             }
+    end
+
+    test "emits no designation op when the designated entity type was deleted" do
+      replayed =
+        %{MyApp.Account => %{}}
+        |> model()
+        |> Map.put(:user_entity, MyApp.Account)
+
+      assert diff(replayed, Model.empty()) == %{
+               ops: [%{op: :delete_entity, entity: MyApp.Account}],
                questions: []
              }
     end

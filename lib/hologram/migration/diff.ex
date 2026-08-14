@@ -20,7 +20,7 @@ defmodule Hologram.Migration.Diff do
     {role_ops, role_questions} = diff_global_roles(replayed, current)
 
     %{
-      ops: entity_ops ++ member_ops ++ role_ops,
+      ops: entity_ops ++ member_ops ++ role_ops ++ designation_ops(replayed, current),
       questions: entity_questions ++ member_questions ++ role_questions
     }
   end
@@ -69,6 +69,24 @@ defmodule Hologram.Migration.Diff do
       end)
 
     [%{op: :create_entity, entity: entity_type} | attribute_ops ++ relationship_ops ++ role_ops]
+  end
+
+  # Emitted last, so the designation lands after the ops creating the entity type it names.
+  #
+  # Only what the fold does not already do: deleting the designated type clears the
+  # designation while folding, so a deleted designation needs no op. A rename retargets it
+  # the same way, and renames never reach the diff's output anyway - they arrive as answers
+  # to questions, which is also why a redundant designation must fold as a no-op rather
+  # than an error.
+  defp designation_ops(replayed, current) do
+    deleted = Map.keys(replayed.entities) -- Map.keys(current.entities)
+    expected = if replayed.user_entity in deleted, do: nil, else: replayed.user_entity
+
+    if expected == current.user_entity do
+      []
+    else
+      [%{op: :designate_user_entity, entity: current.user_entity}]
+    end
   end
 
   defp attribute_change_op(entity_type, old_by_name, {name, new_type, new_opts}) do
