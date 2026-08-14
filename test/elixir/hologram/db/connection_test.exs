@@ -84,6 +84,26 @@ defmodule Hologram.DB.ConnectionTest do
     end
   end
 
+  describe "with_timeout/2" do
+    test "applies the timeout to queries that name none" do
+      # A short one rather than the infinite one the migration paths use: the effect is
+      # observable in a moment instead of after the driver's default fifteen seconds.
+      assert {:error, %Postgrex.Error{postgres: %{code: :query_canceled}}} =
+               with_timeout(50, fn -> query("SELECT pg_sleep(1)") end)
+    end
+
+    test "leaves a query carrying its own timeout alone" do
+      assert {:ok, %Postgrex.Result{}} =
+               with_timeout(50, fn -> query("SELECT pg_sleep(1)", [], timeout: 5_000) end)
+    end
+
+    test "restores the enclosing default afterwards" do
+      with_timeout(50, fn -> :ok end)
+
+      assert {:ok, %Postgrex.Result{}} = query("SELECT pg_sleep(1)")
+    end
+  end
+
   describe "with_connection/2" do
     test "restores the enclosing connection when nested" do
       maintenance_opts = Config.connection_opts(database: "postgres")

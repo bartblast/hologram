@@ -311,31 +311,9 @@ defmodule Hologram.Migrator do
   """
   @spec run(list(%{atom => any}), %{atom => map}, %{atom => any}) :: :ok
   def run(migrations, current_model, context) do
-    check_covered!(migrations, current_model)
-
-    {:ok, _status} = Connection.transaction(fn -> ensure_managed!(context) end)
-
-    applied = applied_versions()
-
-    pre_model =
-      migrations
-      |> Enum.filter(&(&1.version in applied))
-      |> Enum.reduce(Model.empty(), &Model.fold(&2, &1.ops))
-
-    migrations
-    |> pending(applied)
-    |> apply_pending(pre_model, context)
-
-    mapping = Mapper.derive_from_model!(current_model)
-
-    repair_indexes(mapping)
-
-    # The query-derived companions are not converged here - they follow the registered
-    # queries, which are not known until the query cache boots, and the drift check
-    # skips their ops rather than reporting them.
-    check_drift!(mapping)
-
-    :ok
+    Connection.with_timeout(:infinity, fn ->
+      run_migrations(migrations, current_model, context)
+    end)
   end
 
   defp apply_migration(migration, model, context) do
@@ -623,6 +601,34 @@ defmodule Hologram.Migrator do
   # Opened against the database currently connected rather than the configured one:
   # they are the same at boot, and following the caller keeps the repair honest wherever
   # else the applier is pointed.
+  defp run_migrations(migrations, current_model, context) do
+    check_covered!(migrations, current_model)
+
+    {:ok, _status} = Connection.transaction(fn -> ensure_managed!(context) end)
+
+    applied = applied_versions()
+
+    pre_model =
+      migrations
+      |> Enum.filter(&(&1.version in applied))
+      |> Enum.reduce(Model.empty(), &Model.fold(&2, &1.ops))
+
+    migrations
+    |> pending(applied)
+    |> apply_pending(pre_model, context)
+
+    mapping = Mapper.derive_from_model!(current_model)
+
+    repair_indexes(mapping)
+
+    # The query-derived companions are not converged here - they follow the registered
+    # queries, which are not known until the query cache boots, and the drift check
+    # skips their ops rather than reporting them.
+    check_drift!(mapping)
+
+    :ok
+  end
+
   defp with_repair_connection(fun) do
     {:ok, %{rows: [[database]]}} = Connection.query("SELECT current_database()")
     connection_opts = Config.connection_opts(database: database)

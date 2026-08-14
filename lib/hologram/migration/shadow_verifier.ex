@@ -115,7 +115,11 @@ defmodule Hologram.Migration.ShadowVerifier do
 
     try do
       Connection.with_connection(shadow_pid, fn ->
-        replay_and_check!(migrations, current_model)
+        # The replay applies the whole chain, so its statements are as long-running as the
+        # ones a deploy runs - the driver's default would cut the slow ones short.
+        Connection.with_timeout(:infinity, fn ->
+          replay_and_check!(migrations, current_model)
+        end)
       end)
     after
       GenServer.stop(shadow_pid)
