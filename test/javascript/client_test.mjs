@@ -618,7 +618,7 @@ describe("Client", () => {
     });
 
     it("hands over a marked payload", async () => {
-      const payload = {pageBundlePath: "/hologram/page-abc.js", type: "page"};
+      const payload = {pageDigest: "abc", type: "page"};
 
       fetchStub = sinon
         .stub(globalThis, "fetch")

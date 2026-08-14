@@ -1205,7 +1205,8 @@ export default class Hologram {
     globalThis.Hologram.pageScriptLoaded = false;
 
     const script = document.createElement("script");
-    script.src = payload.pageBundlePath;
+    // Mirrors Hologram.Router.Helpers.page_bundle_path/1
+    script.src = `/hologram/page-${payload.pageDigest}.js`;
     script.fetchpriority = "high";
     document.head.appendChild(script);
   }
