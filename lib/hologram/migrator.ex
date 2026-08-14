@@ -617,9 +617,6 @@ defmodule Hologram.Migrator do
     }
   end
 
-  # Opened against the database currently connected rather than the configured one:
-  # they are the same at boot, and following the caller keeps the repair honest wherever
-  # else the applier is pointed.
   defp run_migrations(migrations, current_model, context) do
     check_covered!(migrations, current_model)
 
@@ -648,6 +645,9 @@ defmodule Hologram.Migrator do
     :ok
   end
 
+  # Opened against the database currently connected rather than the configured one:
+  # they are the same at boot, and following the caller keeps the repair honest wherever
+  # else the applier is pointed.
   defp with_repair_connection(fun) do
     {:ok, %{rows: [[database]]}} = Connection.query("SELECT current_database()")
     connection_opts = Config.connection_opts(database: database)
