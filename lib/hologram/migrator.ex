@@ -257,24 +257,31 @@ defmodule Hologram.Migrator do
   end
 
   @doc """
-  Rebuilds the indexes PostgreSQL left invalid, and returns :ok.
+  Converges the indexes the given mapping derives - rebuilding the ones PostgreSQL left
+  invalid and creating the ones that are absent - and returns :ok.
 
-  A concurrent build spans several internal transactions, so a node that dies partway
-  through one leaves its index in the catalog flagged invalid - holding the derived
-  name, serving no query, and maintained by every write. Nothing else notices it: the
-  file that ordered the build committed before the build began, so it is no longer
-  pending, and an invalid index still reads as present to the drift check.
+  Index builds are the one part of a migration that cannot ride its transaction, so they
+  run after the file commits. A node dying in that window leaves the file recorded as
+  applied and its index unfinished: invalid when the build had started, absent when it
+  had not. Neither heals on its own - the file is no longer pending, so no later boot
+  revisits it, and an invalid index still reads as present to the drift check.
 
-  The rebuild runs on a connection of its own, holding a session-scoped advisory lock:
-  a concurrent rebuild cannot run inside a transaction, and nodes rebuilding the same
-  index at the same moment deadlock each other. Nodes that wait re-read the catalog and
-  find nothing left to do.
+  Indexes are the one object this repairs rather than reports. They carry no data, the
+  model is their only author, and refusing instead would wedge every node of a fleet
+  behind a state nothing can reach on its own. Everything else the drift check still
+  refuses.
+
+  The work runs on a connection of its own, holding a session-scoped advisory lock: a
+  concurrent build cannot run inside a transaction, and nodes building the same index at
+  the same moment deadlock each other. Nodes that wait re-read the catalog and find
+  nothing left to do.
   """
-  @spec repair_invalid_indexes() :: :ok
-  def repair_invalid_indexes do
-    case invalid_indexes() do
-      [] -> :ok
-      _indexes -> with_repair_connection(&rebuild_invalid_indexes/0)
+  @spec repair_indexes(%{module => %{atom => any}}) :: :ok
+  def repair_indexes(mapping) do
+    if invalid_indexes() == [] and missing_indexes(mapping) == [] do
+      :ok
+    else
+      with_repair_connection(fn -> rebuild_and_create_indexes(mapping) end)
     end
   end
 
@@ -319,12 +326,14 @@ defmodule Hologram.Migrator do
     |> pending(applied)
     |> apply_pending(pre_model, context)
 
-    repair_invalid_indexes()
+    mapping = Mapper.derive_from_model!(current_model)
+
+    repair_indexes(mapping)
 
     # The query-derived companions are not converged here - they follow the registered
     # queries, which are not known until the query cache boots, and the drift check
     # skips their ops rather than reporting them.
-    check_drift!(Mapper.derive_from_model!(current_model))
+    check_drift!(mapping)
 
     :ok
   end
@@ -373,6 +382,13 @@ defmodule Hologram.Migrator do
   end
 
   defp apply_op(op), do: execute_statements(DDL.statements(op))
+
+  defp actual_indexes(actual, table) do
+    case actual.tables[table] do
+      %{indexes: indexes} -> indexes
+      nil -> %{}
+    end
+  end
 
   defp apply_transactional(render, version, context) do
     actual = Introspection.schema()
@@ -465,6 +481,12 @@ defmodule Hologram.Migrator do
     count
   end
 
+  defp create_index_concurrently(op) do
+    concurrent_op = Map.put(op, :concurrently, true)
+
+    execute_statements(DDL.statements(concurrent_op))
+  end
+
   defp differing_names(replayed, current) do
     entity_names =
       replayed.entities
@@ -546,18 +568,47 @@ defmodule Hologram.Migrator do
             "at another database"
   end
 
-  # Re-read inside the lock: the node that held it before may have rebuilt everything
+  # Re-read inside the lock: the node that held it before may have finished everything
   # already, which is the common case for every node of a deploy but the first.
-  defp rebuild_invalid_indexes do
+  # Only what the model derives: an index the mapping does not name is drift for the
+  # check to report, never something to create.
+  defp missing_indexes(mapping) do
+    actual = Introspection.schema()
+    expected = Schema.from_mapping(mapping)
+
+    for {table, %{indexes: indexes}} <- expected.tables,
+        standing = actual_indexes(actual, table),
+        {index, definition} <- indexes,
+        not Map.has_key?(standing, index) do
+      %{
+        op: :create_index,
+        table: table,
+        index: index,
+        columns: definition.columns,
+        nulls_distinct: definition.nulls_distinct,
+        unique: definition.unique
+      }
+    end
+  end
+
+  defp rebuild_and_create_indexes(mapping) do
     {:ok, _result} = Connection.query("SELECT pg_advisory_lock($1)", [@advisory_lock_key])
 
     try do
-      Enum.each(invalid_indexes(), &execute_statements([DDL.reindex_statement(&1)]))
+      Enum.each(invalid_indexes(), &rebuild_index/1)
+
+      missing = missing_indexes(mapping)
+
+      Enum.each(missing, &create_index_concurrently/1)
     after
       {:ok, _result} = Connection.query("SELECT pg_advisory_unlock($1)", [@advisory_lock_key])
     end
 
     :ok
+  end
+
+  defp rebuild_index(index) do
+    execute_statements([DDL.reindex_statement(index)])
   end
 
   defp run_context do
