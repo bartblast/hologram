@@ -160,10 +160,15 @@ defmodule Hologram.Controller do
   """
   @spec resolve_redirect_target(String.t()) :: {:redirect, String.t(), module | nil, map | nil}
   def resolve_redirect_target(to) do
-    %URI{path: path, query: query} = URI.parse(to)
+    %URI{host: host, path: path, query: query, scheme: scheme} = URI.parse(to)
 
+    # Only a target that names no host of its own can be one of this app's pages. The same path
+    # can exist here and elsewhere, so resolving by path alone would answer a redirect to another
+    # origin with a local page, keeping the client where it was told to leave.
+    #
     # The resolver answers false, not nil, when no page owns the path.
-    page_module = path && PageModuleResolver.resolve(path)
+    page_module =
+      is_nil(host) && is_nil(scheme) && path && PageModuleResolver.resolve(path)
 
     if page_module do
       query_params = if query, do: URI.decode_query(query), else: %{}

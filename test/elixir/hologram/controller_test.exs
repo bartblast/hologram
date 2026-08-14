@@ -583,6 +583,27 @@ defmodule Hologram.ControllerTest do
                {:redirect, "https://example.com/x", nil, nil}
     end
 
+    # The same path can exist here and elsewhere, so a target naming another origin has to stay
+    # the browser's business even when this app happens to own a route spelled the same way.
+    test "resolves a target on another origin to no module, path collision or not" do
+      to = "https://example.com" <> Module4.__route__()
+
+      assert resolve_redirect_target(to) == {:redirect, to, nil, nil}
+    end
+
+    test "resolves a protocol-relative target to no module" do
+      to = "//example.com" <> Module4.__route__()
+
+      assert resolve_redirect_target(to) == {:redirect, to, nil, nil}
+    end
+
+    # A scheme with no authority still names something other than a path within this app.
+    test "resolves a target carrying a scheme to no module" do
+      to = "https://" <> Module4.__route__()
+
+      assert resolve_redirect_target(to) == {:redirect, to, nil, nil}
+    end
+
     test "resolves a path the framework itself serves to no module" do
       assert resolve_redirect_target("/hologram/ping") ==
                {:redirect, "/hologram/ping", nil, nil}
