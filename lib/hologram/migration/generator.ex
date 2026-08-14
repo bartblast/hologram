@@ -9,6 +9,10 @@ defmodule Hologram.Migration.Generator do
 
   @indent "  "
 
+  # The menu's calls are padded to one column so the outcomes line up, and the entity
+  # module name makes the longest call variable.
+  @menu_call_width 38
+
   # Entity-level ops are flat statements even though they name an entity - blocks scope
   # member ops, and these scope nothing. The designation names an entity type without
   # belonging to it, so a block would file it under the type it points at, or under nil
@@ -114,6 +118,32 @@ defmodule Hologram.Migration.Generator do
       "delete_role :name                       - the grants of that role die with it",
       "add_role :name, opts                    - a new grantable role"
     ]
+  end
+
+  # The store's fate differs by direction: a move rebuilds its references against the new
+  # type, a removal takes the store with it. Both delete every grant first, which is what
+  # the question exists to have a human confirm.
+  defp designation_entries(question) do
+    outcome =
+      if question.to == nil,
+        do: "the role grant store is dropped",
+        else: "the store's references follow it"
+
+    entries = [
+      {"delete_role_grants()", "every grant in the store is deleted"},
+      {"designate_user_entity #{inspect(question.to)}", outcome}
+    ]
+
+    Enum.map(entries, fn {call, description} ->
+      "#{String.pad_trailing(call, @menu_call_width)} - #{description}"
+    end)
+  end
+
+  defp designation_summary(%{to: nil}), do: "the user entity designation is being removed"
+
+  defp designation_summary(question) do
+    "the user entity designation is moving from #{inspect(question.from)} to " <>
+      "#{inspect(question.to)}"
   end
 
   defp block_op?(op) do
@@ -365,6 +395,21 @@ defmodule Hologram.Migration.Generator do
     render_comment_block(fact_lines ++ api_lines, question)
   end
 
+  defp render_question(%{kind: :user_entity} = question) do
+    fact_lines = [
+      "RESOLVE: #{designation_summary(question)} - role grants reference " <>
+        "#{inspect(question.from)} rows, so they cannot follow it.",
+      "Write both ops, then delete the resolve! line. API:"
+    ]
+
+    api_lines =
+      question
+      |> designation_entries()
+      |> Enum.map(&"  #{&1}")
+
+    render_comment_block(fact_lines ++ api_lines, question)
+  end
+
   defp render_question(question) do
     fact_lines = [
       "RESOLVE: #{name_list(question.deleted)} disappeared from #{subject(question)} - " <>
@@ -391,6 +436,10 @@ defmodule Hologram.Migration.Generator do
 
   defp render_resolve_op(%{kind: :fill} = question) do
     render_call("resolve!", [question.kind], attributes: question.attributes)
+  end
+
+  defp render_resolve_op(%{kind: :user_entity} = question) do
+    render_call("resolve!", [question.kind], from: question.from, to: question.to)
   end
 
   defp render_resolve_op(question) do

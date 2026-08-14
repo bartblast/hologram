@@ -276,6 +276,46 @@ defmodule Hologram.Migration.GeneratorTest do
       assert render(plan) == normalize_newlines(expected)
     end
 
+    test "renders a moved designation question with both ops the answer needs" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :user_entity,
+            from: MyApp.User,
+            to: MyApp.Account,
+            withheld_ops: []
+          }
+        ]
+      }
+
+      expected = """
+      use Hologram.Migration
+
+      # RESOLVE: the user entity designation is moving from MyApp.User to MyApp.Account - role grants reference MyApp.User rows, so they cannot follow it.
+      # Write both ops, then delete the resolve! line. API:
+      #   delete_role_grants()                   - every grant in the store is deleted
+      #   designate_user_entity MyApp.Account    - the store's references follow it
+      resolve! :user_entity, from: MyApp.User, to: MyApp.Account
+      """
+
+      assert render(plan) == normalize_newlines(expected)
+    end
+
+    test "renders a removed designation question as the store's drop" do
+      plan = %{
+        ops: [],
+        questions: [%{kind: :user_entity, from: MyApp.User, to: nil, withheld_ops: []}]
+      }
+
+      rendered = render(plan)
+
+      assert rendered =~
+               "designate_user_entity nil              - the role grant store is dropped"
+
+      assert rendered =~ "resolve! :user_entity, from: MyApp.User, to: nil"
+    end
+
     test "renders a fill question with the op spelled out three ways" do
       plan = %{
         ops: [],

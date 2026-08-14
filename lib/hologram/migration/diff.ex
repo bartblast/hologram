@@ -19,9 +19,11 @@ defmodule Hologram.Migration.Diff do
     {member_ops, member_questions} = diff_members(replayed, current)
     {role_ops, role_questions} = diff_global_roles(replayed, current)
 
+    {designation_ops, designation_questions} = designation_plan(replayed, current)
+
     %{
-      ops: entity_ops ++ member_ops ++ role_ops ++ designation_ops(replayed, current),
-      questions: entity_questions ++ member_questions ++ role_questions
+      ops: entity_ops ++ member_ops ++ role_ops ++ designation_ops,
+      questions: entity_questions ++ member_questions ++ role_questions ++ designation_questions
     }
   end
 
@@ -78,15 +80,36 @@ defmodule Hologram.Migration.Diff do
   # the same way, and renames never reach the diff's output anyway - they arrive as answers
   # to questions, which is also why a redundant designation must fold as a no-op rather
   # than an error.
-  defp designation_ops(replayed, current) do
+  #
+  # A designation ARRIVING is emitted: there is no store yet, so nothing is destroyed. One
+  # that moves or goes away is withheld into a question, because resolving it means writing
+  # the line that empties the role grant store - the generator never writes that itself.
+  defp designation_plan(replayed, current) do
     deleted = Map.keys(replayed.entities) -- Map.keys(current.entities)
     expected = if replayed.user_entity in deleted, do: nil, else: replayed.user_entity
 
-    if expected == current.user_entity do
-      []
-    else
-      [%{op: :designate_user_entity, entity: current.user_entity}]
+    cond do
+      expected == current.user_entity ->
+        {[], []}
+
+      expected == nil ->
+        {[%{op: :designate_user_entity, entity: current.user_entity}], []}
+
+      true ->
+        {[], [designation_question(expected, current.user_entity)]}
     end
+  end
+
+  defp designation_question(from, to) do
+    %{
+      kind: :user_entity,
+      from: from,
+      to: to,
+      withheld_ops: [
+        %{op: :delete_role_grants},
+        %{op: :designate_user_entity, entity: to}
+      ]
+    }
   end
 
   defp attribute_change_op(entity_type, old_by_name, {name, new_type, new_opts}) do

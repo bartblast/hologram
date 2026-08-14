@@ -91,24 +91,46 @@ defmodule Hologram.Migration.DiffTest do
       assert List.last(ops) == %{op: :designate_user_entity, entity: MyApp.Account}
     end
 
-    test "emits nil when the designation was removed" do
+    test "withholds a removed designation into a question" do
       current = model(%{MyApp.Account => %{}})
       replayed = Map.put(current, :user_entity, MyApp.Account)
 
       assert diff(replayed, current) == %{
-               ops: [%{op: :designate_user_entity, entity: nil}],
-               questions: []
+               ops: [],
+               questions: [
+                 %{
+                   kind: :user_entity,
+                   from: MyApp.Account,
+                   to: nil,
+                   withheld_ops: [
+                     %{op: :delete_role_grants},
+                     %{op: :designate_user_entity, entity: nil}
+                   ]
+                 }
+               ]
              }
     end
 
-    test "emits the designation when it moves to another entity type" do
+    test "withholds a moved designation into a question" do
       built = model(%{MyApp.Account => %{}, MyApp.Member => %{}})
       replayed = Map.put(built, :user_entity, MyApp.Account)
       current = Map.put(built, :user_entity, MyApp.Member)
 
+      # Resolving it means writing the line that empties the grant store - the generator
+      # never writes grant destruction on its own.
       assert diff(replayed, current) == %{
-               ops: [%{op: :designate_user_entity, entity: MyApp.Member}],
-               questions: []
+               ops: [],
+               questions: [
+                 %{
+                   kind: :user_entity,
+                   from: MyApp.Account,
+                   to: MyApp.Member,
+                   withheld_ops: [
+                     %{op: :delete_role_grants},
+                     %{op: :designate_user_entity, entity: MyApp.Member}
+                   ]
+                 }
+               ]
              }
     end
 
