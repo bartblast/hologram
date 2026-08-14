@@ -151,7 +151,9 @@ defmodule Hologram.Controller do
 
   Uses the same resolution the router uses for an incoming request, which is what keeps a redirect
   landing on the page a browser would have landed on. Params come from both places a page can carry
-  them, the path and the query string, cast the way the page declares them.
+  them, the path and the query string, cast the way the page declares them. A query param the page
+  does not declare is left out rather than refused, since a redirect URL can carry params meant for
+  something other than the page.
 
   A target no page owns - an external URL, or a path the framework itself serves - resolves to no
   module, leaving the client to hand it to the browser.
@@ -166,10 +168,19 @@ defmodule Hologram.Controller do
     if page_module do
       query_params = if query, do: URI.decode_query(query), else: %{}
 
+      # Only the params the page declares are cast. A redirect target is a URL someone wrote, and
+      # it can carry query params that belong to something else entirely - a tracking tag, a
+      # campaign id - which the page never declared and Page.cast_params/2 refuses. Casting those
+      # would turn a redirect into a 500. They stay in the URL either way, since that is what the
+      # browser is given.
+      declared_names =
+        Enum.map(page_module.__params__(), fn {name, _type, _opts} -> Atom.to_string(name) end)
+
       params =
         path
         |> extract_params(page_module)
         |> Map.merge(query_params)
+        |> Map.take(declared_names)
         |> Page.cast_params(page_module)
 
       {:redirect, to, page_module, params}

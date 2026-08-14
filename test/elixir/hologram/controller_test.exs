@@ -551,6 +551,22 @@ defmodule Hologram.ControllerTest do
                )
     end
 
+    # A redirect target is a URL someone wrote, and it can carry params meant for something other
+    # than the page. Casting those raises, which would turn the redirect into a 500.
+    test "leaves out a query param the page does not declare" do
+      to = Module4.__route__() <> "?utm_source=x"
+
+      assert resolve_redirect_target(to) == {:redirect, to, Module4, %{}}
+    end
+
+    test "keeps the params the page declares when undeclared ones travel with them" do
+      to =
+        "/hologram-test-fixtures-controller-module11/hello%20world/x?utm_source=y"
+
+      assert {:redirect, ^to, Module11, %{param_a: "hello world", param_b: "x"}} =
+               resolve_redirect_target(to)
+    end
+
     test "resolves a target no page owns to no module" do
       assert resolve_redirect_target("https://example.com/x") ==
                {:redirect, "https://example.com/x", nil, nil}
