@@ -489,6 +489,58 @@ defmodule Hologram.Entity.ModelTest do
       end
     end
 
+    test "raises when a deleted entity type is still targeted by a relationship" do
+      model =
+        fold(empty(), [
+          %{op: :create_entity, entity: MyApp.User, line: 3},
+          %{op: :create_entity, entity: MyApp.Task, line: 4},
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :author,
+            type: MyApp.User,
+            opts: [],
+            line: 5
+          }
+        ])
+
+      ops = [%{op: :delete_entity, entity: MyApp.User, line: 3}]
+
+      expected_msg =
+        "relationship targets deleted at this point in migration history - " <>
+          ":author on MyApp.Task targets MyApp.User - delete the relationship in the " <>
+          "migration that deletes its target, or an earlier one"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "allows a migration deleting an entity type before the relationship targeting it" do
+      model =
+        fold(empty(), [
+          %{op: :create_entity, entity: MyApp.User, line: 3},
+          %{op: :create_entity, entity: MyApp.Task, line: 4},
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :author,
+            type: MyApp.User,
+            opts: [],
+            line: 5
+          }
+        ])
+
+      # The order the generator emits - what a file leaves behind is what counts, not the
+      # order its ops take to get there.
+      ops = [
+        %{op: :delete_entity, entity: MyApp.User, line: 3},
+        %{op: :delete_relationship, entity: MyApp.Task, name: :author, line: 4}
+      ]
+
+      assert %{entities: entities} = fold(model, ops)
+      assert Map.keys(entities) == [MyApp.Task]
+      assert entities[MyApp.Task].relationships == []
+    end
+
     test "raises when adding an :enum attribute without values" do
       ops = [
         %{

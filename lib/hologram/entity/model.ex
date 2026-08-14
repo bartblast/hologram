@@ -78,7 +78,12 @@ defmodule Hologram.Entity.Model do
   """
   @spec fold(%{atom => map}, list(%{atom => any})) :: %{atom => map}
   def fold(model, ops) do
-    Enum.reduce(ops, model, &apply_op/2)
+    folded = Enum.reduce(ops, model, &apply_op/2)
+    deleted_types = for %{op: :delete_entity, entity: entity_type} <- ops, do: entity_type
+
+    validate_deleted_targets!(folded, deleted_types)
+
+    folded
   end
 
   defp apply_op(%{op: :add_attribute} = op, model) do
@@ -553,6 +558,10 @@ defmodule Hologram.Entity.Model do
     put_members(model, entity_type, list_key, updated)
   end
 
+  defp target_type([target]), do: target
+
+  defp target_type(target), do: target
+
   defp validate_absent!(model, entity_type) do
     if Map.has_key?(model.entities, entity_type) do
       raise Hologram.CompileError,
@@ -585,6 +594,35 @@ defmodule Hologram.Entity.Model do
   end
 
   defp validate_enum_values!(_op, _type, _opts), do: :ok
+
+  # Checked on what the ops leave behind rather than op by op, because their order inside
+  # one file is free: deleting the entity before its inbound relationship is fine, and the
+  # generator emits exactly that.
+  #
+  # A reference outliving its target is not merely an odd model. Every model a file leaves
+  # behind is applied on its own, and the table cannot be dropped while a foreign key still
+  # points at it - PostgreSQL refuses the file mid-deploy, in wording of its own. Refusing
+  # while folding moves that to where the history is read: before the boot touches
+  # anything, and in a message naming the relationship to delete.
+  #
+  # Scoped to the types this fold deletes, so a model built around one entity type may
+  # still name targets it does not carry.
+  defp validate_deleted_targets!(model, deleted_types) do
+    dangling =
+      for {entity_type, entry} <- model.entities,
+          {name, target, _opts} <- entry.relationships,
+          target_type(target) in deleted_types do
+        "#{inspect(name)} on #{inspect(entity_type)} targets #{inspect(target_type(target))}"
+      end
+
+    if dangling != [] do
+      raise Hologram.CompileError,
+        message:
+          "relationship targets deleted at this point in migration history - " <>
+            "#{Enum.join(Enum.sort(dangling), ", ")} - delete the relationship in the " <>
+            "migration that deletes its target, or an earlier one"
+    end
+  end
 
   # The rename-vs-replace footgun guard: writing a new value list is never a legal
   # move - the only exception is a type change TO :enum, which must bring the initial
