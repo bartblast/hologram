@@ -287,6 +287,13 @@ export default class Renderer {
 
     const originalEventName = attributeName.substring(1);
 
+    // $key names the place an element holds in its template rather than something that happens to
+    // it, so it binds nothing. Without this it would register a listener for an event called "key",
+    // which no browser fires.
+    if (originalEventName === "key") {
+      return null;
+    }
+
     // click_outside is not a per-element listener: the dismissing click lands on another element,
     // so it is collected as a document-level "click" binding in #renderElement. Returning null here
     // keeps it out of the element's "on" map.
@@ -1510,6 +1517,14 @@ export default class Renderer {
     } else if (currentTagName === "script" && childrenVdom[0]) {
       // Make sure the script is executed if the code changes.
       data.key = `__hologramScript__:${childrenVdom[0]}`;
+    } else {
+      // What the element loads names it better than where it sits, so a slot key only applies to
+      // elements that load nothing.
+      const slotKey = $.#renderSlotKey(attrsDom);
+
+      if (slotKey !== null) {
+        data.key = slotKey;
+      }
     }
 
     const elementVnode = vnode(currentTagName, data, childrenVdom);
@@ -1661,6 +1676,20 @@ export default class Renderer {
     return key
       ? vnode("!", {key: key}, commentContent)
       : vnode("!", commentContent);
+  }
+
+  // The key an element carries for the place it holds in its template, or null when it has none.
+  //
+  // The key is written as an attribute because that is how a value reaches an element through
+  // every path a template has - spreads, dynamic tags, a component passing attributes on - but it
+  // is never one: the server leaves it out of the markup and the client turns it into the vnode's
+  // key here, so it exists only between the two renderers.
+  static #renderSlotKey(attrsDom) {
+    const attrDom = $.#expandAttributeSpreads(attrsDom).find(
+      ([name]) => name === "$key",
+    );
+
+    return attrDom ? $.#valueDomToText(attrDom[1]) : null;
   }
 
   // Based on render_dom/3 (slot case)

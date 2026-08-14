@@ -2970,6 +2970,80 @@ describe("Renderer", () => {
         });
       });
 
+      describe("slot key", () => {
+        const keyAttr = (value) =>
+          Type.tuple([
+            Type.bitstring("$key"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring(value)]]),
+          ]);
+
+        const elementWithKey = (tagName, attrs) =>
+          Type.tuple([
+            Type.atom("element"),
+            Type.bitstring(tagName),
+            Type.list(attrs),
+            Type.list(),
+          ]);
+
+        const render = (node) =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+        it("becomes the vnode key and never an attribute", () => {
+          const result = render(elementWithKey("div", [keyAttr("t7:4")]));
+
+          assert.deepStrictEqual(
+            result,
+            vnode("div", {key: "t7:4", attrs: {}, on: {}}, []),
+          );
+        });
+
+        it("binds no event listener", () => {
+          const result = render(elementWithKey("div", [keyAttr("t7:4")]));
+
+          assert.deepStrictEqual(result.data.on, {});
+        });
+
+        it("element without a key carries none", () => {
+          const result = render(elementWithKey("div", []));
+
+          assert.isUndefined(result.key);
+        });
+
+        // What an element loads names it better than where it sits, so a stylesheet keeps its
+        // href key and does not get re-fetched for having moved in the template.
+        it("does not displace a link element's resource key", () => {
+          const node = elementWithKey("link", [
+            Type.tuple([
+              Type.bitstring("href"),
+              Type.keywordList([
+                [Type.atom("text"), Type.bitstring("my_href")],
+              ]),
+            ]),
+            keyAttr("t7:4"),
+          ]);
+
+          assert.equal(render(node).key, "__hologramLink__:my_href");
+        });
+
+        it("does not displace a script element's resource key", () => {
+          const node = elementWithKey("script", [
+            Type.tuple([
+              Type.bitstring("src"),
+              Type.keywordList([[Type.atom("text"), Type.bitstring("my_src")]]),
+            ]),
+            keyAttr("t7:4"),
+          ]);
+
+          assert.equal(render(node).key, "__hologramScript__:my_src");
+        });
+      });
+
       describe("input element value handling", () => {
         it("text input element with value attribute sets up hooks", () => {
           const node = Type.tuple([
