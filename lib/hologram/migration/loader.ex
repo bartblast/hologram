@@ -30,19 +30,30 @@ defmodule Hologram.Migration.Loader do
   Returns the migrations of the given directory, ordered by version.
 
   Each migration is a map with :version (the file name without the extension), :path,
-  and :ops. A directory that does not exist holds no migrations. Every entry raises
-  unless its name is a 14-digit timestamp with the .exs extension.
+  and :ops. A directory that does not exist holds no migrations, and a directory that
+  cannot be read raises naming it.
+
+  Every `.exs` entry raises unless its name is a 14-digit timestamp - a misnamed
+  migration is never skipped quietly, because skipping one silently is how a database
+  ends up a file behind. Dotfiles and other extensions are left alone: `.gitkeep` keeps
+  the directory in version control before the first migration exists, and editors and
+  operating systems leave their own droppings.
   """
   @spec load_dir!(String.t()) :: list(%{atom => any})
   def load_dir!(dir) do
     case File.ls(dir) do
-      {:error, :enoent} ->
-        []
-
       {:ok, file_names} ->
         file_names
         |> Enum.sort()
+        |> Enum.filter(&migration_file?/1)
         |> Enum.map(&load_file!(&1, dir))
+
+      {:error, :enoent} ->
+        []
+
+      {:error, reason} ->
+        raise "cannot read the migrations directory #{dir} - " <>
+                "#{:file.format_error(reason)}"
     end
   end
 
@@ -122,6 +133,10 @@ defmodule Hologram.Migration.Loader do
     verify_rename_order!(ops, path)
 
     %{version: Path.rootname(file_name), path: path, ops: ops}
+  end
+
+  defp migration_file?(file_name) do
+    not String.starts_with?(file_name, ".") and String.ends_with?(file_name, ".exs")
   end
 
   defp references_entity?(op, module) do

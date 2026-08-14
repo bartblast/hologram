@@ -53,6 +53,24 @@ defmodule Hologram.Migration.LoaderTest do
       assert load_dir!(Path.join(@tmp_dir, "nonexistent")) == []
     end
 
+    test "ignores dotfiles and other extensions" do
+      contents = """
+      use Hologram.Migration
+
+      create_entity MyApp.Task
+      """
+
+      dir =
+        write_migrations!("ignored_entries", [
+          {"20260813091522.exs", contents},
+          {".gitkeep", ""},
+          {".DS_Store", "junk"},
+          {"README.md", "notes"}
+        ])
+
+      assert [%{version: "20260813091522"}] = load_dir!(dir)
+    end
+
     test "rejects a file referencing an entity by its pre-rename name" do
       contents = """
       use Hologram.Migration
@@ -73,6 +91,18 @@ defmodule Hologram.Migration.LoaderTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         load_dir!(dir)
       end
+    end
+
+    # chmod does not restrict the owner on Windows, so the directory stays readable there.
+    @tag :skip_on_windows
+    test "raises naming a directory it cannot read" do
+      dir = write_migrations!("unreadable", [])
+      File.chmod!(dir, 0o000)
+      on_exit(fn -> File.chmod(dir, 0o755) end)
+
+      expected_msg = "cannot read the migrations directory #{dir} - permission denied"
+
+      assert_error RuntimeError, expected_msg, fn -> load_dir!(dir) end
     end
 
     test "rejects a file whose name is not a version" do
