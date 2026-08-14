@@ -99,7 +99,9 @@ export default class Hologram {
 
   // The page description a navigation fetched, waiting for the mount to read it. An initial load
   // has none: there the server put the same data in the page itself.
-  static #pendingMountPayload = null;
+  //
+  // Made public to make tests easier
+  static pendingMountPayload = null;
 
   static #registeredPageModules = new Set();
   static #scrollPosition = null;
@@ -933,12 +935,7 @@ export default class Hologram {
 
     await Client.fetchPageBundlePath(
       Hologram.#pageModule,
-      (resp) => {
-        const script = document.createElement("script");
-        script.src = resp;
-        script.fetchpriority = "high";
-        document.head.appendChild(script);
-      },
+      (resp) => $.#loadPageBundle(resp),
       (_resp) => {
         throw new HologramRuntimeError(
           "Failed to fetch page bundle path for: " +
@@ -1062,8 +1059,8 @@ export default class Hologram {
   // What the page was mounted with, from whichever side supplied it: a navigation fetched it as
   // data, while an initial load reads it from the page the server sent.
   static #loadMountData() {
-    const payload = $.#pendingMountPayload;
-    $.#pendingMountPayload = null;
+    const payload = $.pendingMountPayload;
+    $.pendingMountPayload = null;
 
     const mountData = payload
       ? $.#mountDataFromPayload(payload)
@@ -1075,6 +1072,38 @@ export default class Hologram {
     ComponentRegistry.populate(mountData.componentRegistry);
 
     return mountData;
+  }
+
+  // Fetches a page's own code. Running it is what announces the page is ready to mount, by
+  // dispatching hologram:pageScriptLoaded, which the runtime listens for.
+  //
+  // Without the failure path a bundle that never loads ends the navigation in silence: nothing
+  // dispatches the event, so the mount never runs, the URL is never pushed, and the page already
+  // on screen stays with no sign that anything went wrong.
+  //
+  // Throwing from the handler does not reach whoever started the navigation, since the handler
+  // runs off the event loop. It goes to the "error" listener #init registers, which is what puts
+  // it in front of the user.
+  //
+  // The pending payload is dropped only while it is still the one this bundle was fetched for. A
+  // navigation started while this one was in flight has already replaced it and still needs it,
+  // and #loadMountData reads a missing payload as the initial page's, which would mount the page
+  // the server first sent instead of the one being navigated to.
+  static #loadPageBundle(src, payload = null) {
+    const script = document.createElement("script");
+
+    script.src = src;
+    script.fetchpriority = "high";
+
+    script.onerror = () => {
+      if (payload !== null && $.pendingMountPayload === payload) {
+        $.pendingMountPayload = null;
+      }
+
+      throw new HologramRuntimeError(`Failed to load page bundle: ${src}`);
+    };
+
+    document.head.appendChild(script);
   }
 
   // The payload's terms arrive as JavaScript the runtime evaluates, the same form a command's
@@ -1215,7 +1244,7 @@ export default class Hologram {
   // announces the page is ready to mount. A page already registered has nothing to fetch, so it
   // mounts straight away.
   static #mountNewPage(payload) {
-    $.#pendingMountPayload = payload;
+    $.pendingMountPayload = payload;
 
     if (
       $.#isPageModuleRegistered(
@@ -1228,11 +1257,8 @@ export default class Hologram {
 
     globalThis.Hologram.pageScriptLoaded = false;
 
-    const script = document.createElement("script");
     // Mirrors Hologram.Router.Helpers.page_bundle_path/1
-    script.src = `/hologram/page-${payload.pageDigest}.js`;
-    script.fetchpriority = "high";
-    document.head.appendChild(script);
+    $.#loadPageBundle(`/hologram/page-${payload.pageDigest}.js`, payload);
   }
 
   // Deps: [:maps.get/2, :maps.put/3]

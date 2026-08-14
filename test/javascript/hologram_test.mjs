@@ -17,6 +17,7 @@ import EventListeners from "../../assets/js/event_listeners.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
+import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
@@ -1123,6 +1124,84 @@ describe("Hologram", () => {
 
       assert.match(thrownError?.message ?? "", /Too many redirects/);
       assert.isAtMost(fetchPageStub.callCount, 10);
+    });
+
+    // A bundle that never loads would otherwise end the navigation in silence: nothing dispatches
+    // hologram:pageScriptLoaded, so the mount never runs and the page on screen stays put.
+    describe("page bundle that fails to load", () => {
+      const payloadFor = (pageDigest) => ({
+        componentRegistry: "Type.map([])",
+        pageDigest: pageDigest,
+        pageModule: encodedModule7,
+        pageParams: encodedNoParams,
+        selfEchoes: "Type.list([])",
+        subReceiptAdds: "Type.list([])",
+        subReceiptDrops: "Type.list([])",
+        type: "page",
+      });
+
+      const bundleScript = (pageDigest) =>
+        document.head.querySelector(
+          `script[src="/hologram/page-${pageDigest}.js"]`,
+        );
+
+      const navigate = async (pageDigest) => {
+        await Hologram.loadNewPage(
+          `/target-${pageDigest}`,
+          payloadFor(pageDigest),
+        );
+
+        return bundleScript(pageDigest);
+      };
+
+      beforeEach(() => {
+        // jsdom has no rAF, and the mount runs inside one. Running it now keeps the test reading
+        // top to bottom.
+        window.requestAnimationFrame = (callback) => callback();
+      });
+
+      afterEach(() => {
+        delete window.requestAnimationFrame;
+        Hologram.pendingMountPayload = null;
+
+        document.head
+          .querySelectorAll("script[src^='/hologram/page-']")
+          .forEach((script) => script.remove());
+      });
+
+      it("raises rather than leaving the navigation unfinished", async () => {
+        const script = await navigate("aaa");
+
+        assert.isNotNull(script);
+
+        assert.throws(
+          () => script.onerror(),
+          HologramRuntimeError,
+          "Failed to load page bundle: /hologram/page-aaa.js",
+        );
+      });
+
+      it("drops the payload the failed navigation was waiting to mount", async () => {
+        const script = await navigate("bbb");
+
+        assert.isNotNull(Hologram.pendingMountPayload);
+        assert.throws(() => script.onerror());
+        assert.isNull(Hologram.pendingMountPayload);
+      });
+
+      // A newer navigation has already replaced the payload and still needs it. #loadMountData
+      // reads a missing one as the initial page's, so clearing it here would mount the page the
+      // server first sent instead of the one being navigated to.
+      it("leaves a newer navigation's payload alone", async () => {
+        const first = await navigate("ccc");
+        await navigate("ddd");
+
+        const newer = Hologram.pendingMountPayload;
+
+        assert.equal(newer.pageDigest, "ddd");
+        assert.throws(() => first.onerror());
+        assert.equal(Hologram.pendingMountPayload, newer);
+      });
     });
   });
 
