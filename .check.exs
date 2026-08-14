@@ -10,7 +10,7 @@ opts = [enabled: true, env: %{"MIX_ENV" => "test"}]
     {:eslint, "mix eslint", opts},
     {:ex_doc, enabled: false},
     {:ex_formatter, "mix format", opts},
-    {:ex_test_file_names, "mix holo.test.check_file_names test/elixir/hologram", opts},
+    {:ex_test_file_names, "mix holo.check.test_file_names test/elixir/hologram", opts},
     {:ex_tests, "mix test", opts},
     # custom :ex_tests used instead of :ex_unit
     {:ex_unit, enabled: false},
