@@ -687,8 +687,30 @@ defmodule Hologram.Entity.ModelTest do
 
       expected_msg =
         "required attributes added without a value for existing rows - " <>
-          ":title on MyApp.Task - add backfill: for a one-time value, default: to give " <>
-          "every row one, or optional: to leave them empty"
+          ":title on MyApp.Task - add a non-nil backfill: for a one-time value, a " <>
+          "non-nil default: to give every row one, or optional: to leave them empty"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
+    end
+
+    test "raises when a required attribute is added with a default carrying no value" do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :title,
+          type: :string,
+          opts: [default: nil],
+          line: 3
+        }
+      ]
+
+      # nil is what the option's own absence means, and normalization drops it - so this
+      # leaves the rows exactly as empty-handed as writing no default at all.
+      expected_msg =
+        "required attributes added without a value for existing rows - " <>
+          ":title on MyApp.Task - add a non-nil backfill: for a one-time value, a " <>
+          "non-nil default: to give every row one, or optional: to leave them empty"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
     end
@@ -726,6 +748,24 @@ defmodule Hologram.Entity.ModelTest do
       # The backfill is a transition value, so it never reaches the model it unblocks.
       assert %{entities: entities} = fold(task_model(%{}), ops)
       assert entities[MyApp.Task].attributes == [{:title, :string, []}]
+    end
+
+    test "allows a required attribute carrying a false default" do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :archived,
+          type: :boolean,
+          opts: [default: false],
+          line: 3
+        }
+      ]
+
+      # false is a value the rows can receive - only :default's own neutral, nil, leaves
+      # them without one.
+      assert %{entities: entities} = fold(task_model(%{}), ops)
+      assert entities[MyApp.Task].attributes == [{:archived, :boolean, [default: false]}]
     end
 
     test "raises when a backfill carries no value" do

@@ -742,13 +742,17 @@ defmodule Hologram.Entity.Model do
   # nothing about the one that runs it next.
   #
   # Entities created by the same ops are exempt - their table is born here, holding nothing.
+  #
+  # A value is what fills the rows, so the options are read for one rather than for their
+  # presence: nil is what every option means by its own absence, and normalization drops it,
+  # so default: nil leaves exactly the attribute that was written without a default at all.
   defp validate_filled_adds!(ops, created_types) do
     unfilled =
       for %{op: :add_attribute} = op <- ops,
           op.entity not in created_types,
           op.opts[:optional] != true,
-          not Keyword.has_key?(op.opts, :default),
-          not Keyword.has_key?(op.opts, :backfill) do
+          is_nil(op.opts[:default]),
+          is_nil(op.opts[:backfill]) do
         "#{inspect(op.name)} on #{inspect(op.entity)}"
       end
 
@@ -756,8 +760,9 @@ defmodule Hologram.Entity.Model do
       raise Hologram.CompileError,
         message:
           "required attributes added without a value for existing rows - " <>
-            "#{Enum.join(Enum.sort(unfilled), ", ")} - add backfill: for a one-time " <>
-            "value, default: to give every row one, or optional: to leave them empty"
+            "#{Enum.join(Enum.sort(unfilled), ", ")} - add a non-nil backfill: for a " <>
+            "one-time value, a non-nil default: to give every row one, or optional: to " <>
+            "leave them empty"
     end
   end
 
