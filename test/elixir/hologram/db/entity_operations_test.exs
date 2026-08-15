@@ -101,6 +101,55 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert count_edges(source_entity, target_entity) == 1
     end
 
+    test "records the edge it added" do
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      add_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      assert effect = List.last(outbox_effects())
+      assert effect.op == "add_relationship"
+      assert effect.type == "Hologram.Test.Fixtures.Entity.Module3"
+      assert effect.entity_id == source_entity.id
+      assert effect.data == %{"relationship" => "a", "target_id" => target_entity.id}
+    end
+
+    test "records nothing when the edge is already there" do
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
+      effects_after_first = outbox_effects()
+
+      :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      assert outbox_effects() == effects_after_first
+    end
+
     test "raises when the relationship is not a declared to-many relationship" do
       expected_msg =
         "invalid relationship for Hologram.Test.Fixtures.Entity.Module3 - :b is not a declared to-many relationship"
@@ -446,6 +495,47 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert count_edges(source_entity, target_entity) == 0
     end
 
+    test "records the deletion" do
+      created_entity =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      delete(Module1, created_entity.id)
+
+      assert effect = List.last(outbox_effects())
+      assert effect.op == "del_entity"
+      assert effect.type == "Hologram.Test.Fixtures.Entity.Module1"
+      assert effect.entity_id == created_entity.id
+      assert effect.data == nil
+    end
+
+    test "records nothing when no entity has the given id" do
+      effects_before = outbox_effects()
+
+      assert delete(Module1, Entity.generate_id()) == :ok
+
+      assert outbox_effects() == effects_before
+    end
+
+    # The write and the record of it share a transaction, so a refusal takes both back.
+    test "records nothing when the delete is restricted" do
+      target_entity =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      Module3
+      |> Entity.new(c_id: target_entity.id)
+      |> create()
+
+      effects_before = outbox_effects()
+
+      assert {:error, {:restricted, _details}} = delete(Module1, target_entity.id)
+
+      assert outbox_effects() == effects_before
+    end
+
     test "restricts when another entity references the entity" do
       target_entity =
         Module1
@@ -534,6 +624,55 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> create()
 
       assert delete_relationship(Module3, source_entity.id, :a, target_entity.id) == :ok
+    end
+
+    test "records the edge it removed" do
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      delete_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      assert effect = List.last(outbox_effects())
+      assert effect.op == "del_relationship"
+      assert effect.entity_id == source_entity.id
+      assert effect.data == %{"relationship" => "a", "target_id" => target_entity.id}
+    end
+
+    test "records nothing when the edge was not there" do
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      effects_before = outbox_effects()
+
+      :ok = delete_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      assert outbox_effects() == effects_before
     end
 
     test "raises when the relationship is not a declared to-many relationship" do

@@ -33,10 +33,20 @@ defmodule Hologram.DB.EntityOperations do
     encoded_id = Codec.encode(id, :uuid)
     encoded_target_id = Codec.encode(target_id, :uuid)
 
-    case Connection.query(statement, [encoded_id, encoded_target_id]) do
-      {:ok, _result} -> :ok
-      {:error, error} -> raise error
-    end
+    effect = %{
+      op: :add_relationship,
+      entity_type: entity_type,
+      entity_id: id,
+      relationship: relationship_name,
+      target_id: target_id
+    }
+
+    {:ok, :ok} =
+      Connection.transaction(fn ->
+        run_edge_change!(statement, [encoded_id, encoded_target_id], effect)
+      end)
+
+    :ok
   end
 
   @doc false
@@ -87,7 +97,14 @@ defmodule Hologram.DB.EntityOperations do
     transaction_result =
       Connection.transaction(fn ->
         delete_outgoing_edges(join_tables, encoded_id)
-        delete_entity_row(entity_type, table, id, encoded_id)
+
+        # The edges the delete took with it are not recorded one by one: a row that is gone
+        # takes whatever hung off it, and a reader learning the entity is gone knows that.
+        if delete_entity_row(entity_type, table, id, encoded_id) == 1 do
+          Outbox.append([%{op: :del_entity, entity_type: entity_type, entity_id: id}])
+        end
+
+        :ok
       end)
 
     case transaction_result do
@@ -108,10 +125,20 @@ defmodule Hologram.DB.EntityOperations do
     encoded_id = Codec.encode(id, :uuid)
     encoded_target_id = Codec.encode(target_id, :uuid)
 
-    case Connection.query(statement, [encoded_id, encoded_target_id]) do
-      {:ok, _result} -> :ok
-      {:error, error} -> raise error
-    end
+    effect = %{
+      op: :del_relationship,
+      entity_type: entity_type,
+      entity_id: id,
+      relationship: relationship_name,
+      target_id: target_id
+    }
+
+    {:ok, :ok} =
+      Connection.transaction(fn ->
+        run_edge_change!(statement, [encoded_id, encoded_target_id], effect)
+      end)
+
+    :ok
   end
 
   @doc false
@@ -236,13 +263,15 @@ defmodule Hologram.DB.EntityOperations do
 
   defp compute_sort_key(value), do: SortKey.compute(value)
 
+  # Returns how many rows the delete removed - deleting an id nothing holds removes none, and
+  # is not something that happened to tell anyone about.
   # sobelow_skip ["SQL.Query"]
   defp delete_entity_row(entity_type, table, id, encoded_id) do
     statement = ~s|DELETE FROM #{qualified_table(table)} WHERE "id" = $1|
 
     case Connection.query(statement, [encoded_id]) do
-      {:ok, _result} ->
-        :ok
+      {:ok, %Postgrex.Result{num_rows: num_rows}} ->
+        num_rows
 
       {:error, %Postgrex.Error{postgres: %{code: :foreign_key_violation}}} ->
         Connection.rollback({:restricted, %{entity_type: entity_type, id: id}})
@@ -365,6 +394,21 @@ defmodule Hologram.DB.EntityOperations do
       end)
 
     %{op: :put_entity, entity_type: entity_type, entity_id: entity.id, data: data}
+  end
+
+  # An edge the database already had, or already lacked, is not a change: the statement wrote
+  # nothing, and an effect for it would name a moment that never happened.
+  defp run_edge_change!(statement, params, effect) do
+    case Connection.query(statement, params) do
+      {:ok, %Postgrex.Result{num_rows: 1}} ->
+        Outbox.append([effect])
+
+      {:ok, %Postgrex.Result{}} ->
+        :ok
+
+      {:error, error} ->
+        raise error
+    end
   end
 
   defp run_update!(statement, params, entity_type, id, data) do
