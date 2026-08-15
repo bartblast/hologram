@@ -546,7 +546,8 @@ defmodule Hologram.MigratorTest do
           MyApp.Comment => %{attributes: [], relationships: [], roles: []},
           MyApp.Task => %{attributes: [], relationships: [], roles: []}
         },
-        roles: %{MyApp.Roles.Admin => %{extends: []}}
+        roles: %{MyApp.Roles.Admin => %{extends: []}},
+        user_entity: nil
       }
 
       expected_msg =
