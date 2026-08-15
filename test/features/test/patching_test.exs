@@ -11,6 +11,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page14
   alias HologramFeatureTests.Patching.Page15
   alias HologramFeatureTests.Patching.Page16
+  alias HologramFeatureTests.Patching.Page17
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
@@ -1181,6 +1182,35 @@ defmodule HologramFeatureTests.PatchingTest do
       session
       |> assert_text(css("#result"), "1")
       |> assert_script_result(state, ["field", 2, 5, 30])
+    end
+  end
+
+  describe "element state across a patch" do
+    feature "a scrolled container holds its place when a sibling appears", %{
+      session: session
+    } do
+      scroll = ~s|document.getElementById("feed").scrollTop = 30;|
+
+      # Toggled from a script rather than by the driver, the way the sibling identity tests do it,
+      # so nothing the driver does can be mistaken for what the patch did.
+      toggle = ~s|document.querySelector("button").click();|
+
+      scroll_top = ~s|return document.getElementById("feed").scrollTop;|
+
+      session = visit(session, Page17)
+
+      script_result(session, scroll)
+
+      session
+      |> assert_text(css("#result"), "false")
+      |> assert_script_result(scroll_top, 30)
+
+      script_result(session, toggle)
+
+      session
+      |> assert_text(css("#result"), "true")
+      |> assert_has(css(".banner"))
+      |> assert_script_result(scroll_top, 30)
     end
   end
 end
