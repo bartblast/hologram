@@ -1360,7 +1360,12 @@ defmodule Hologram.Entity.ModelTest do
     end
 
     test "hashes the project's compiled data model" do
-      assert hash() == hash(from_modules(Reflection.list_entities(), Reflection.list_roles()))
+      derived =
+        Reflection.list_entities()
+        |> from_modules(Reflection.list_roles())
+        |> hash()
+
+      assert hash() == derived
     end
 
     test "answers from the cache once it has been derived" do
@@ -1395,17 +1400,40 @@ defmodule Hologram.Entity.ModelTest do
 
   describe "hash/1" do
     test "returns a lowercase hex string of the truncated SHA-256" do
-      assert hash(task_model(%{attributes: [{:title, :string, []}]})) ==
-               "b92542b48351dc50db3c1b9f2e0066e3"
+      model_hash =
+        %{attributes: [{:title, :string, []}]}
+        |> task_model()
+        |> hash()
+
+      assert model_hash == "b92542b48351dc50db3c1b9f2e0066e3"
     end
 
     test "terms describing the same model share a hash" do
-      assert hash(task_model(%{attributes: [{:title, :string, []}]})) ==
-               hash(task_model(%{attributes: [{:title, :string, []}]}))
+      one_term =
+        %{attributes: [{:title, :string, []}]}
+        |> task_model()
+        |> hash()
+
+      other_term =
+        %{attributes: [{:title, :string, []}]}
+        |> task_model()
+        |> hash()
+
+      assert one_term == other_term
     end
 
     test "a model read twice hashes the same when an option holds a regex" do
-      assert hash(from_modules([Module10])) == hash(from_modules([Module10]))
+      one_read =
+        [Module10]
+        |> from_modules()
+        |> hash()
+
+      other_read =
+        [Module10]
+        |> from_modules()
+        |> hash()
+
+      assert one_read == other_read
     end
 
     test "adding an entity type changes the hash" do
@@ -1418,29 +1446,66 @@ defmodule Hologram.Entity.ModelTest do
     end
 
     test "changing an attribute's type changes the hash" do
-      refute hash(task_model(%{attributes: [{:title, :integer, []}]})) ==
-               hash(task_model(%{attributes: [{:title, :string, []}]}))
+      integer_title =
+        %{attributes: [{:title, :integer, []}]}
+        |> task_model()
+        |> hash()
+
+      string_title =
+        %{attributes: [{:title, :string, []}]}
+        |> task_model()
+        |> hash()
+
+      refute integer_title == string_title
     end
 
     test "changing an attribute's options changes the hash" do
-      refute hash(task_model(%{attributes: [{:title, :string, [server_only: true]}]})) ==
-               hash(task_model(%{attributes: [{:title, :string, []}]}))
+      server_only_title =
+        %{attributes: [{:title, :string, [server_only: true]}]}
+        |> task_model()
+        |> hash()
+
+      plain_title =
+        %{attributes: [{:title, :string, []}]}
+        |> task_model()
+        |> hash()
+
+      refute server_only_title == plain_title
     end
 
     test "adding a relationship changes the hash" do
-      refute hash(task_model(%{relationships: [{:author, Module1, []}]})) ==
-               hash(task_model(%{relationships: []}))
+      with_author =
+        %{relationships: [{:author, Module1, []}]}
+        |> task_model()
+        |> hash()
+
+      without_author =
+        %{relationships: []}
+        |> task_model()
+        |> hash()
+
+      refute with_author == without_author
     end
 
     test "changing a role declaration changes the hash" do
-      refute hash(task_model(%{roles: [{:owner, [creator: true]}]})) ==
-               hash(task_model(%{roles: [{:owner, []}]}))
+      creator_owner =
+        %{roles: [{:owner, [creator: true]}]}
+        |> task_model()
+        |> hash()
+
+      plain_owner =
+        %{roles: [{:owner, []}]}
+        |> task_model()
+        |> hash()
+
+      refute creator_owner == plain_owner
     end
 
     test "moving the user entity designation changes the hash" do
-      model = task_model(%{attributes: []})
+      undesignated = task_model(%{attributes: []})
+      designated = %{undesignated | user_entity: Module14}
 
-      refute hash(%{model | user_entity: Module14}) == hash(model)
+      refute hash(designated) == hash(undesignated)
     end
   end
 
