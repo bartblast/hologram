@@ -1209,7 +1209,7 @@ defmodule HologramFeatureTests.PatchingTest do
 
       session
       |> assert_text(css("#result"), "true")
-      |> assert_count(".banner", 2)
+      |> assert_count(".banner", 3)
       |> assert_script_result(scroll_top, 30)
     end
 
@@ -1243,8 +1243,39 @@ defmodule HologramFeatureTests.PatchingTest do
 
       session
       |> assert_text(css("#result"), "true")
-      |> assert_count(".banner", 2)
+      |> assert_count(".banner", 3)
       |> assert_script_result(selection, ["server text", 2, 5])
+    end
+
+    feature "an image is not loaded again when a sibling appears", %{session: session} do
+      mark = ~s|document.getElementById("photo").__probe = "photo";|
+
+      toggle = ~s|document.querySelector("button").click();|
+
+      # The marker says whether it is still the same node, the counter what that cost if it is not.
+      # Both are asked, because identity is the mechanism and the load is the consequence the issue
+      # was reported for.
+      photo = """
+      return [
+        document.getElementById("photo").__probe ?? null,
+        window.__imageLoads,
+      ];
+      """
+
+      session = visit(session, Page17)
+
+      script_result(session, mark)
+
+      session
+      |> assert_text(css("#result"), "false")
+      |> assert_script_result(photo, ["photo", 1])
+
+      script_result(session, toggle)
+
+      session
+      |> assert_text(css("#result"), "true")
+      |> assert_count(".banner", 3)
+      |> assert_script_result(photo, ["photo", 1])
     end
   end
 end

@@ -29,6 +29,10 @@ defmodule HologramFeatureTests.Patching.Page17 do
   # list and survives whatever happens, so a second holder sharing a panel would be testing
   # snabbdom's right-hand walk rather than anything about keys. The field is wrapped for the same
   # reason: the pairing needs a div to mistake for the banner, and an input is not one.
+  #
+  # The image is the one holder whose state is not its own: what it holds is a loaded resource, and
+  # a rebuilt one loads again, from the cache if not from the network. The counter in the head is
+  # what reports that, and it is registered there so that the image's first load is counted too.
   def template do
     ~HOLO"""
     <!DOCTYPE html>
@@ -36,6 +40,21 @@ defmodule HologramFeatureTests.Patching.Page17 do
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script>
+          {%raw}
+            window.__imageLoads = 0;
+
+            document.addEventListener(
+              "load",
+              (event) => {
+                if (event.target.tagName === "IMG") {
+                  window.__imageLoads += 1;
+                }
+              },
+              true,
+            );
+          {/raw}
+        </script>
         <Runtime />
         <CommonLayoutStyles />
       </head>
@@ -59,6 +78,15 @@ defmodule HologramFeatureTests.Patching.Page17 do
           {/if}
           <div class="keeper">
             <input type="text" id="field" />
+          </div>
+        </div>
+
+        <div id="panel_image">
+          {%if @banner?}
+            <div class="banner">banner</div>
+          {/if}
+          <div class="keeper">
+            <img id="photo" src="/images/sample.png" width="40" height="30" alt="sample" />
           </div>
         </div>
 
