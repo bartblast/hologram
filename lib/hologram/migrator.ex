@@ -68,8 +68,8 @@ defmodule Hologram.Migrator do
     replayed = Enum.reduce(migrations, Model.empty(), &Model.fold(&2, &1.ops))
 
     if replayed != current_model do
-      differing = differing_names(replayed, current_model)
-      names = Enum.map_join(differing, ", ", &inspect/1)
+      differing = differing_changes(replayed, current_model)
+      names = Enum.join(differing, ", ")
 
       raise "migration history does not produce this model - " <>
               "#{length(differing)} model #{changes_phrase(differing)} no migration " <>
@@ -477,7 +477,10 @@ defmodule Hologram.Migrator do
     execute_statements(DDL.statements(concurrent_op))
   end
 
-  defp differing_names(replayed, current) do
+  # Everything the term carries, so the count can never come out empty while the terms
+  # differ. The designation names no module of its own - it is a fact about one - so it
+  # reads as itself rather than as the type it points at, which is covered on its own.
+  defp differing_changes(replayed, current) do
     entity_names =
       replayed.entities
       |> Map.keys()
@@ -492,7 +495,16 @@ defmodule Hologram.Migrator do
       |> Enum.uniq()
       |> Enum.filter(&(replayed.roles[&1] != current.roles[&1]))
 
-    Enum.sort(entity_names ++ role_names)
+    designation =
+      if replayed.user_entity == current.user_entity,
+        do: [],
+        else: ["the user entity designation"]
+
+    entity_names
+    |> Enum.concat(role_names)
+    |> Enum.map(&inspect/1)
+    |> Enum.sort()
+    |> Enum.concat(designation)
   end
 
   # A concurrent build that failed partway leaves the index in the catalog flagged

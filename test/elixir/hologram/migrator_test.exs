@@ -557,6 +557,49 @@ defmodule Hologram.MigratorTest do
 
       assert_error RuntimeError, expected_msg, fn -> check_covered!(migrations, model) end
     end
+
+    test "raises naming the designation when it is the only change without a migration" do
+      migrations = [
+        migration("20260813091522", [%{op: :create_entity, entity: MyApp.Task, line: 3}])
+      ]
+
+      # Adding user: true to an entity and not generating the migration leaves every
+      # entity and role covered, so the designation is the whole of what is missing.
+      model = %{
+        entities: %{MyApp.Task => %{attributes: [], relationships: [], roles: []}},
+        roles: %{},
+        user_entity: MyApp.Task
+      }
+
+      expected_msg =
+        "migration history does not produce this model - " <>
+          "1 model change has no migration (the user entity designation) - " <>
+          "run mix holo.gen.migration"
+
+      assert_error RuntimeError, expected_msg, fn -> check_covered!(migrations, model) end
+    end
+
+    test "raises naming the designation alongside the entities and roles it accompanies" do
+      migrations = [
+        migration("20260813091522", [%{op: :create_entity, entity: MyApp.Task, line: 3}])
+      ]
+
+      model = %{
+        entities: %{
+          MyApp.Comment => %{attributes: [], relationships: [], roles: []},
+          MyApp.Task => %{attributes: [], relationships: [], roles: []}
+        },
+        roles: %{},
+        user_entity: MyApp.Task
+      }
+
+      expected_msg =
+        "migration history does not produce this model - " <>
+          "2 model changes have no migration (MyApp.Comment, the user entity " <>
+          "designation) - run mix holo.gen.migration"
+
+      assert_error RuntimeError, expected_msg, fn -> check_covered!(migrations, model) end
+    end
   end
 
   describe "check_drift!/1" do
