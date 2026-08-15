@@ -75,7 +75,7 @@ defmodule HologramClusterTests.MigrationHelpers do
   @doc """
   Returns the model the project's entity declarations produce.
   """
-  @spec model() :: %{atom => map}
+  @spec model() :: %{atom => any}
   def model do
     Model.from_modules(Reflection.list_entities(), Reflection.list_roles())
   end
@@ -88,7 +88,7 @@ defmodule HologramClusterTests.MigrationHelpers do
   transactions make "the applier stopped after file N" and "only N files were applied"
   the same database state, so planting it needs no timing.
   """
-  @spec plant_applied_prefix!(non_neg_integer) :: %{atom => map}
+  @spec plant_applied_prefix!(non_neg_integer) :: %{atom => any}
   def plant_applied_prefix!(count) do
     context = prod_context()
     prefix = Enum.take(migrations(), count)
