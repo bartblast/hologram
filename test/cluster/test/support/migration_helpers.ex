@@ -145,9 +145,11 @@ defmodule HologramClusterTests.MigrationHelpers do
   def reset_migrations_database! do
     connection_pid = start_migrations_db_connection()
 
-    Enum.each(@drop_statements, &Postgrex.query!(connection_pid, &1, []))
-
-    GenServer.stop(connection_pid)
+    try do
+      Enum.each(@drop_statements, &Postgrex.query!(connection_pid, &1, []))
+    after
+      GenServer.stop(connection_pid)
+    end
   end
 
   @doc """
