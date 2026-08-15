@@ -460,7 +460,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       expected_msg =
         ~s(cannot make column "b" on table "test_fixtures_entity_module2" required - ) <>
           "found 1 row with NULL - " <>
-          "declare a default:, keep the attribute optional:, or fix the data"
+          "declare default: <value>, keep the attribute optional: true, or fix the data"
 
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)
@@ -493,7 +493,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       expected_msg =
         ~s(cannot add required column "z" to table "test_fixtures_entity_module2" - ) <>
           "1 existing row would have no value - " <>
-          "declare a default:, make the attribute optional:, or clear the rows"
+          "declare default: <value>, make the attribute optional: true, or clear the rows"
 
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)
@@ -516,7 +516,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       expected_msg =
         ~s(cannot make column "b" on table "test_fixtures_entity_module2" required - ) <>
           "found 1 row with NULL - " <>
-          "declare a default:, keep the attribute optional:, or fix the data"
+          "declare default: <value>, keep the attribute optional: true, or fix the data"
 
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)

@@ -259,8 +259,8 @@ defmodule HologramClusterTests.MigrationTest do
 
       assert message ==
                ~s(cannot make column "slug" on table "entities_item" required - ) <>
-                 "found 2 rows with NULL - declare a default:, keep the attribute " <>
-                 "optional:, or fix the data"
+                 "found 2 rows with NULL - declare default: <value>, keep the attribute " <>
+                 "optional: true, or fix the data"
 
       # The way out the message names: give the rows a value, then deploy again.
       fill_slugs = ~s(UPDATE "hologram_data"."entities_item" SET "slug" = "title")

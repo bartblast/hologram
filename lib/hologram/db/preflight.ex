@@ -59,7 +59,7 @@ defmodule Hologram.DB.Preflight do
     if count > 0 do
       raise ~s(cannot add required column "#{op.column}" to table "#{op.table}" - ) <>
               "#{count} existing #{pluralize_rows(count)} would have no value - " <>
-              "declare a default:, make the attribute optional:, or clear the rows"
+              "declare default: <value>, make the attribute optional: true, or clear the rows"
     end
   end
 
@@ -121,7 +121,7 @@ defmodule Hologram.DB.Preflight do
     if count > 0 do
       raise ~s(cannot make column "#{op.column}" on table "#{op.table}" required - ) <>
               "found #{count} #{pluralize_rows(count)} with NULL - " <>
-              "declare a default:, keep the attribute optional:, or fix the data"
+              "declare default: <value>, keep the attribute optional: true, or fix the data"
     end
   end
 
