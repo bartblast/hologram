@@ -99,6 +99,7 @@ defmodule Hologram.ControllerCommandActorTest do
       ["amodule", "a#{Module29}"],
       ["aname", "a#{name}"],
       ["aparams", %{"t" => "m", "d" => serialized_params}],
+      ["asub_receipts", %{"t" => "l", "d" => []}],
       ["atarget", "b0#{binary_to_hex("my_target_1")}"]
     ]
 

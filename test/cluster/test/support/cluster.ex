@@ -57,17 +57,32 @@ defmodule HologramClusterTests.Cluster do
   end
 
   @doc """
-  Stops the given peer and starts a fresh one under the same name and port.
-  Returns the new peer map.
+  Starts the app on the given peer and returns the raw
+  `Application.ensure_all_started/1` result.
+
+  A failed boot comes back as `{:error, reason}` rather than raising: a node
+  that refuses to start is the observation some scenarios are written to make -
+  a database it must not touch, a schema it cannot converge - and the reason
+  carries the message being asserted on.
+  """
+  @spec boot_app(map) :: {:ok, [atom]} | {:error, term}
+  def boot_app(peer) do
+    rpc(peer, Application, :ensure_all_started, [@app])
+  end
+
+  @doc """
+  Stops the given peer and starts a fresh one under the same name, port and
+  options. Returns the new peer map.
 
   The replacement is a brand new BEAM instance: empty ETS, empty registries,
   re-run boot syncs - the same shape as an app instance replaced during a
-  deploy.
+  deploy. Everything else about it is what it was, so a peer running as a
+  production instance against another database comes back as one.
   """
   @spec restart_peer(map) :: map
   def restart_peer(peer) do
     stop_peer(peer)
-    start_peer(peer.index)
+    start_peer(peer.index, peer.opts)
   end
 
   @doc """
@@ -91,7 +106,20 @@ defmodule HologramClusterTests.Cluster do
 
   @doc """
   Starts a single peer node named `peer<index>` on loopback, boots the app on
-  it, and returns a peer map (`:index`, `:node`, `:pid`, `:port`).
+  it, and returns a peer map (`:index`, `:node`, `:opts`, `:pid`, `:port`).
+
+  Options:
+
+    * `:hologram_env` - the framework environment the peer runs as, default
+      `"test"`. It selects the peer's schema mechanism, so a `"prod"` peer
+      applies migrations at boot where a `"test"` one does not.
+    * `:app_env` - `{app, key, value}` triples applied after this node's
+      application env is copied over, so one peer can be pointed at a different
+      database than the orchestrator without touching the orchestrator's own
+      config.
+    * `:boot_app` - whether to start the app, default `true`. With `false` the
+      peer is ready but idle, and `boot_app/1` starts it later - which is what
+      lets a test boot several peers at the same instant, or watch a boot fail.
 
   The framework's environment is passed to the peer explicitly
   (`HOLOGRAM_ENV=test`, `HOLOGRAM_START=1`) - without it the peer's env
@@ -106,8 +134,10 @@ defmodule HologramClusterTests.Cluster do
   The peer is linked to the calling process, so peers a test starts die with
   it.
   """
-  @spec start_peer(pos_integer) :: map
-  def start_peer(index) do
+  @spec start_peer(pos_integer, keyword) :: map
+  def start_peer(index, opts \\ []) do
+    hologram_env = Keyword.get(opts, :hologram_env, "test")
+
     # Peer names form a bounded set (one per index a suite ever uses), so runtime atom
     # creation is safe here.
     # credo:disable-for-lines:3 Credo.Check.Warning.UnsafeToAtom
@@ -117,7 +147,7 @@ defmodule HologramClusterTests.Cluster do
         host: ~c"127.0.0.1",
         args: [~c"-setcookie", Atom.to_charlist(@cookie)],
         env: [
-          {~c"HOLOGRAM_ENV", ~c"test"},
+          {~c"HOLOGRAM_ENV", String.to_charlist(hologram_env)},
           {~c"HOLOGRAM_START", ~c"1"}
         ]
       })
@@ -126,11 +156,20 @@ defmodule HologramClusterTests.Cluster do
 
     rpc(node, :code, :add_paths, [code_paths_without_mix()])
     copy_app_env(node, port)
+
+    for {app, key, value} <- Keyword.get(opts, :app_env, []) do
+      rpc(node, Application, :put_env, [app, key, value])
+    end
+
     rpc(node, Application, :load, [@app])
-    {:ok, _apps} = rpc(node, Application, :ensure_all_started, [@app])
 
-    peer = %{index: index, node: node, pid: pid, port: port}
+    # The options ride along so a restart can reproduce the peer rather than a default one -
+    # they are what makes it a production instance, or one pointed at another database.
+    peer = %{index: index, node: node, opts: opts, pid: pid, port: port}
 
+    # Registered before the app starts, so a peer whose boot fails is still stopped -
+    # its node name and port have to be free for the next test either way.
+    #
     # Peers die with the test process through the link, but asynchronously - and the next
     # test claims the same node names and ports. Waiting here is what keeps that handover
     # from racing. Outside a test there is nothing to register the wait with, and nothing
@@ -139,6 +178,10 @@ defmodule HologramClusterTests.Cluster do
       ExUnit.Callbacks.on_exit(fn -> stop_peer(peer) end)
     rescue
       ArgumentError -> :ok
+    end
+
+    if Keyword.get(opts, :boot_app, true) do
+      {:ok, _apps} = boot_app(peer)
     end
 
     peer

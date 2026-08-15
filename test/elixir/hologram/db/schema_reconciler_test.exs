@@ -34,6 +34,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     env: "test",
     managed_by: "reconciliation",
     hologram_version: "0.5.0",
+    system_schema_version: 1,
     last_reconciled_at: ~U[2026-07-20 12:30:00.000000Z]
   }
 
@@ -58,7 +59,20 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     {:ok, _result} = Connection.query(statement)
   end
 
+  # The grant store is derived into every mapping - dropped here so a run converges
+  # exactly the entity types the test names (its user references would otherwise point
+  # at a table outside the mapping). Tests converging the store itself use
+  # reconcile_context_with_grant_store/1.
   defp reconcile_context(entity_types) do
+    mapping =
+      entity_types
+      |> Mapper.derive!()
+      |> Map.drop([RoleGrant])
+
+    Map.put(@context, :mapping, mapping)
+  end
+
+  defp reconcile_context_with_grant_store(entity_types) do
     Map.put(@context, :mapping, Mapper.derive!(entity_types))
   end
 
@@ -72,7 +86,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   end
 
   describe "create_system_tables/0" do
-    test "creates the marker and registry tables" do
+    test "creates the marker, registry, and migration tables" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
 
@@ -80,6 +94,18 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       assert read_marker() == nil
       assert registry() == MapSet.new()
+
+      statement = """
+      SELECT c.relname
+      FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'hologram_system' AND c.relkind = 'r'
+      ORDER BY c.relname
+      """
+
+      {:ok, %{rows: rows}} = Connection.query(statement)
+
+      assert rows == [["database"], ["migration"], ["schema_object"]]
     end
   end
 
@@ -94,6 +120,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                env: "test",
                managed_by: "reconciliation",
                hologram_version: "0.5.0",
+               system_schema_version: 1,
                last_reconciled_at: ~U[2026-07-20 12:30:00.000000Z]
              }
 
@@ -433,7 +460,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       expected_msg =
         ~s(cannot make column "b" on table "test_fixtures_entity_module2" required - ) <>
           "found 1 row with NULL - " <>
-          "declare a default:, keep the attribute optional:, or fix the data"
+          "declare default: <value>, keep the attribute optional: true, or fix the data"
 
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)
@@ -466,7 +493,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       expected_msg =
         ~s(cannot add required column "z" to table "test_fixtures_entity_module2" - ) <>
           "1 existing row would have no value - " <>
-          "declare a default:, make the attribute optional:, or clear the rows"
+          "declare default: <value>, make the attribute optional: true, or clear the rows"
 
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)
@@ -489,7 +516,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       expected_msg =
         ~s(cannot make column "b" on table "test_fixtures_entity_module2" required - ) <>
           "found 1 row with NULL - " <>
-          "declare a default:, keep the attribute optional:, or fix the data"
+          "declare default: <value>, keep the attribute optional: true, or fix the data"
 
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)
@@ -534,7 +561,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       context =
         Reflection.list_entities()
-        |> reconcile_context()
+        |> reconcile_context_with_grant_store()
         |> update_mapping_column(RoleGrant, "role", fn column ->
           %{column | enum_values: column.enum_values -- ["Hologram.Test.Fixtures.Role.Module1"]}
         end)
@@ -734,6 +761,12 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   end
 
   describe "write_marker/1" do
+    test "stamps the writer's system schema layout version over the given one" do
+      write_marker(%{@marker | system_schema_version: 99})
+
+      assert read_marker().system_schema_version == 1
+    end
+
     test "replaces the previous marker row" do
       write_marker(@marker)
       write_marker(%{@marker | env: "dev", last_reconciled_at: ~U[2026-07-20 13:00:00.000000Z]})

@@ -6,6 +6,7 @@ defmodule Hologram.DB.QueryCacheTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
   alias Hologram.Query
@@ -78,6 +79,15 @@ defmodule Hologram.DB.QueryCacheTest do
   end
 
   test "init/1" do
+    assert init(nil) == {:ok, nil}
+
+    assert :persistent_term.get(QueryCacheStub.persistent_term_key()) == expected_data()
+  end
+
+  test "init/1 populates against a virgin database" do
+    {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_system" CASCADE))
+    {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
+
     assert init(nil) == {:ok, nil}
 
     assert :persistent_term.get(QueryCacheStub.persistent_term_key()) == expected_data()

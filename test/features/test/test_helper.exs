@@ -1,15 +1,17 @@
-# Boot the feature test database before the app starts: the feature app declares
-# entities, which activates the Hologram database - the database itself must exist
-# before the pool connects, and the schema drop makes every run converge from scratch.
-HologramFeatureTests.DatabaseBootstrap.run!()
-
-Hologram.Test.setup()
-
 if System.get_env("GITHUB_ACTIONS") == "true" do
   ExUnit.configure(max_cases: 1)
 end
 
 ExUnit.start()
+
+# Boot the feature test database before the app starts: the feature app declares
+# entities, which activates the Hologram database - the database itself must exist
+# before the pool connects, and the schema drop makes every run converge from scratch.
+# Positioned after ExUnit.start - the drop guard recognizes the test env by the running
+# ExUnit server.
+Hologram.Test.DatabaseBootstrap.run!()
+
+Hologram.Test.setup()
 
 # Kill leftover headless test-browser processes before the suite starts.
 # chromedriver launches Chrome with the `--test-type=webdriver` flag, so this

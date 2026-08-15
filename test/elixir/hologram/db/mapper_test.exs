@@ -3,7 +3,11 @@ defmodule Hologram.DB.MapperTest do
 
   import Hologram.DB.Mapper
 
+  alias Hologram.Auth.RoleGrant
+  alias Hologram.Entity.Model
+  alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -314,8 +318,25 @@ defmodule Hologram.DB.MapperTest do
       assert List.last(mapping[Module2].columns).source == {:sort_key, :c}
     end
 
+    test "derives the role grant store alongside the app's user entity type" do
+      mapping = derive!([Module1, Module14])
+
+      assert mapping[RoleGrant].table == "hologram_role_grant"
+    end
+
+    test "derives no role grant store for a model without the user entity type" do
+      mapping = derive!([Module1])
+
+      assert Map.has_key?(mapping, RoleGrant) == false
+    end
+
     test "returns the mapping keyed by entity type" do
-      assert derive!([Module1, Module3]) == %{
+      mapping =
+        [Module1, Module3]
+        |> derive!()
+        |> Map.drop([RoleGrant])
+
+      assert mapping == %{
                Module1 => %{
                  table: table_name(Module1),
                  pk_constraint: "test_fixtures_entity_module1_$pk",
@@ -438,6 +459,81 @@ defmodule Hologram.DB.MapperTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         derive!([InlineEntityFixture16, InlineEntityFixture16B])
       end
+    end
+  end
+
+  describe "derive_from_model!/2" do
+    test "derives the same mapping as derive!/2" do
+      entity_types = Reflection.list_entities()
+      ordered_pairs = MapSet.new([{Module2, :c}])
+      model = Model.from_modules(entity_types, Reflection.list_roles())
+
+      assert derive_from_model!(model, ordered_pairs) == derive!(entity_types, ordered_pairs)
+    end
+
+    test "derives without consulting any module" do
+      model = %{
+        entities: %{
+          Nonexistent.Ghost => %{
+            attributes: [{:name, :string, []}],
+            relationships: [],
+            roles: []
+          }
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      mapping = derive_from_model!(model)
+
+      assert mapping[Nonexistent.Ghost].table == "nonexistent_ghost"
+    end
+
+    # The designation is a term fact rather than a module reflection, so a history whose
+    # user entity type was renamed later still derives the store at every point - before
+    # this, the rename made the store vanish from every model preceding it.
+    test "derives the grant store for the entity type the term designates" do
+      model = %{
+        entities: %{Module1 => %{attributes: [], relationships: [], roles: []}},
+        roles: %{},
+        user_entity: Module1
+      }
+
+      mapping = derive_from_model!(model)
+
+      assert mapping[RoleGrant].table == "hologram_role_grant"
+    end
+
+    test "derives no grant store for a term designating no user entity type" do
+      model = %{
+        entities: %{Module14 => %{attributes: [], relationships: [], roles: []}},
+        roles: %{},
+        user_entity: nil
+      }
+
+      mapping = derive_from_model!(model)
+
+      assert Map.has_key?(mapping, RoleGrant) == false
+    end
+
+    test "derives the grant store's enum values from the term" do
+      model = %{
+        entities: %{
+          Module14 => %{attributes: [], relationships: [], roles: [{:editor, []}]}
+        },
+        roles: %{Nonexistent.Roles.Admin => %{extends: []}},
+        user_entity: Module14
+      }
+
+      mapping = derive_from_model!(model)
+
+      resource_type_column =
+        Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :resource_type}))
+
+      role_column = Enum.find(mapping[RoleGrant].columns, &(&1.source == {:attribute, :role}))
+
+      assert resource_type_column.enum_values == ["test_fixtures_entity_module14"]
+      assert role_column.enum_values == ["Nonexistent.Roles.Admin", "editor"]
     end
   end
 

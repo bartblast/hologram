@@ -14,10 +14,6 @@ System.put_env(
   "test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"
 )
 
-# Boot the test database: server connectivity check (fail fast with instructions), database
-# creation when absent, Hologram schema drop (the suite starts virgin).
-Hologram.Test.DatabaseBootstrap.run!()
-
 # Skip tests that don't work reliably on either OS type
 exclude_opts =
   case :os.type() do
@@ -30,6 +26,12 @@ exclude_opts =
 Mix.ensure_application!(:tools)
 
 ExUnit.start(exclude: exclude_opts)
+
+# Boot the test database: server connectivity check (fail fast with instructions), database
+# creation when absent, Hologram schema drop (the suite starts virgin). Positioned after
+# ExUnit.start and before the pool boots - the drop guard recognizes the test env by the
+# running ExUnit server.
+Hologram.Test.DatabaseBootstrap.run!()
 
 # Boot the database gateway for the whole suite with a per-process ownership pool, so that
 # every test process transparently gets its own connection. Positioned after ExUnit.start,

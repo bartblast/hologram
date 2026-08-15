@@ -1,7 +1,9 @@
 defmodule Hologram.DB.Mapper do
   @moduledoc false
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
+  alias Hologram.Entity.Model
   alias Hologram.Reflection
 
   @hash_bytes 8
@@ -36,52 +38,12 @@ defmodule Hologram.DB.Mapper do
   """
   @spec columns(module, MapSet.t()) :: list(%{atom => any})
   def columns(entity_type, ordered_pairs \\ MapSet.new()) do
-    table_name = table_name(entity_type)
+    entry = %{
+      attributes: entity_type.__attributes__(),
+      relationships: entity_type.__relationships__()
+    }
 
-    attribute_columns =
-      Enum.map(entity_type.__attributes__(), fn {name, type, opts} ->
-        %{
-          name: Atom.to_string(name),
-          type: type,
-          sql_type: sql_type(type, table_name, name),
-          collation: collation(type),
-          enum_values: enum_values(type, opts),
-          default: Keyword.get(opts, :default),
-          null: Keyword.get(opts, :optional) == true,
-          references: nil,
-          fk_constraint: nil,
-          fk_index: nil,
-          source: {:attribute, name}
-        }
-      end)
-
-    to_one_columns =
-      entity_type.__relationships__()
-      |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
-      |> Enum.map(fn {name, target, opts} ->
-        %{
-          name: fit_identifier("#{name}_id"),
-          type: :uuid,
-          sql_type: "uuid",
-          collation: nil,
-          enum_values: nil,
-          default: nil,
-          null: Keyword.get(opts, :optional) == true,
-          references: table_name(target),
-          fk_constraint: fit_identifier("#{table_name}_#{name}_id_$fk"),
-          fk_index: fit_identifier("#{table_name}_#{name}_id_$idx"),
-          source: {:relationship, name}
-        }
-      end)
-
-    sort_columns = sort_key_columns(entity_type, table_name, ordered_pairs)
-
-    columns =
-      [id_column() | attribute_columns] ++ to_one_columns ++ timestamp_columns() ++ sort_columns
-
-    validate_column_names!(entity_type, columns)
-
-    columns
+    columns_from_entry(entity_type, entry, ordered_pairs)
   end
 
   @doc """
@@ -97,20 +59,44 @@ defmodule Hologram.DB.Mapper do
   """
   @spec derive!(list(module), MapSet.t()) :: %{module => %{atom => any}}
   def derive!(entity_types, ordered_pairs \\ MapSet.new()) do
+    # The collision check is a pure function of the module atoms - running it before
+    # reflection keeps its readable error ahead of any missing-module crash.
     validate_table_names!(entity_types)
-    validate_required_to_one_cycles!(entity_types)
+
+    entity_types
+    |> Model.from_modules(Reflection.list_roles())
+    |> derive_from_model!(ordered_pairs)
+  end
+
+  @doc """
+  Derives the complete physical name mapping for the given model term.
+
+  Same checks and result shape as derive!/2, plus the role grant store, whose entry is
+  derived from the term rather than declared. The term form derives without consulting
+  any module, so a mapping is obtainable for entity types that no longer exist as code
+  (a replayed migration history names them as plain module atoms).
+  """
+  @spec derive_from_model!(%{atom => any}, MapSet.t()) :: %{module => %{atom => any}}
+  def derive_from_model!(model, ordered_pairs \\ MapSet.new()) do
+    entities = put_role_grant(model)
+
+    entities
+    |> Map.keys()
+    |> validate_table_names!()
+
+    validate_model_cycles!(entities)
 
     mapping =
-      Map.new(entity_types, fn entity_type ->
+      Map.new(entities, fn {entity_type, entry} ->
         table_name = table_name(entity_type)
 
         {entity_type,
          %{
            table: table_name,
            pk_constraint: fit_identifier("#{table_name}_$pk"),
-           columns: columns(entity_type, ordered_pairs),
+           columns: columns_from_entry(entity_type, entry, ordered_pairs),
            indexes: entity_indexes(entity_type),
-           join_tables: join_tables(entity_type)
+           join_tables: join_tables_from_entry(entity_type, entry)
          }}
       end)
 
@@ -155,24 +141,7 @@ defmodule Hologram.DB.Mapper do
   """
   @spec join_tables(module) :: list(%{atom => any})
   def join_tables(entity_type) do
-    source_table = table_name(entity_type)
-
-    entity_type.__relationships__()
-    |> Enum.filter(fn {_name, type, _opts} -> is_list(type) end)
-    |> Enum.map(fn {name, [target], _opts} ->
-      join_table_name = fit_identifier("#{source_table}_#{name}_$join")
-
-      %{
-        name: join_table_name,
-        relationship: name,
-        source_table: source_table,
-        target_table: table_name(target),
-        reverse_index: fit_identifier("#{join_table_name}_target_id_$idx"),
-        pk_constraint: fit_identifier("#{join_table_name}_$pk"),
-        source_fk_constraint: fit_identifier("#{join_table_name}_source_id_$fk"),
-        target_fk_constraint: fit_identifier("#{join_table_name}_target_id_$fk")
-      }
-    end)
+    join_tables_from_entry(entity_type, %{relationships: entity_type.__relationships__()})
   end
 
   @doc """
@@ -225,24 +194,10 @@ defmodule Hologram.DB.Mapper do
   """
   @spec validate_required_to_one_cycles!(list(module)) :: :ok
   def validate_required_to_one_cycles!(entity_types) do
-    {cycles, _visited} =
-      Enum.reduce(entity_types, {[], MapSet.new()}, fn entity_type, {cycles, visited} ->
-        find_cycles(entity_type, [], cycles, visited)
-      end)
-
-    if cycles != [] do
-      descriptions =
-        cycles
-        |> Enum.map(&canonicalize_cycle/1)
-        |> Enum.sort()
-        |> Enum.map_join("\n", &describe_cycle/1)
-
-      raise Hologram.CompileError,
-        message:
-          "cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:\n#{descriptions}"
-    end
-
-    :ok
+    entity_types
+    |> Model.from_modules()
+    |> Map.fetch!(:entities)
+    |> validate_model_cycles!()
   end
 
   @doc """
@@ -296,6 +251,55 @@ defmodule Hologram.DB.Mapper do
 
   defp collation(_type), do: nil
 
+  defp columns_from_entry(entity_type, entry, ordered_pairs) do
+    table_name = table_name(entity_type)
+
+    attribute_columns =
+      Enum.map(entry.attributes, fn {name, type, opts} ->
+        %{
+          name: Atom.to_string(name),
+          type: type,
+          sql_type: sql_type(type, table_name, name),
+          collation: collation(type),
+          enum_values: enum_values(type, opts),
+          default: Keyword.get(opts, :default),
+          null: Keyword.get(opts, :optional) == true,
+          references: nil,
+          fk_constraint: nil,
+          fk_index: nil,
+          source: {:attribute, name}
+        }
+      end)
+
+    to_one_columns =
+      entry.relationships
+      |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
+      |> Enum.map(fn {name, target, opts} ->
+        %{
+          name: fit_identifier("#{name}_id"),
+          type: :uuid,
+          sql_type: "uuid",
+          collation: nil,
+          enum_values: nil,
+          default: nil,
+          null: Keyword.get(opts, :optional) == true,
+          references: table_name(target),
+          fk_constraint: fit_identifier("#{table_name}_#{name}_id_$fk"),
+          fk_index: fit_identifier("#{table_name}_#{name}_id_$idx"),
+          source: {:relationship, name}
+        }
+      end)
+
+    sort_columns = sort_key_columns(entity_type, table_name, ordered_pairs)
+
+    columns =
+      [id_column() | attribute_columns] ++ to_one_columns ++ timestamp_columns() ++ sort_columns
+
+    validate_column_names!(entity_type, columns)
+
+    columns
+  end
+
   defp describe_column_collision({name, group}) do
     sources =
       Enum.map_join(group, ", ", fn column ->
@@ -342,15 +346,15 @@ defmodule Hologram.DB.Mapper do
   # the current entity type (most recent first) - reaching an entity type already on the path
   # closes a cycle. Fully explored entity types are marked visited and never re-entered, so
   # each cycle is reported once.
-  defp find_cycles(entity_type, path, cycles, visited) do
+  defp find_cycles(model, entity_type, path, cycles, visited) do
     if MapSet.member?(visited, entity_type) do
       {cycles, visited}
     else
       {cycles, visited} =
-        entity_type
-        |> required_to_one_targets()
+        model
+        |> required_to_one_targets(entity_type)
         |> Enum.reduce({cycles, visited}, fn {name, target}, acc ->
-          follow_edge({entity_type, name}, target, path, acc)
+          follow_edge(model, {entity_type, name}, target, path, acc)
         end)
 
       {cycles, MapSet.put(visited, entity_type)}
@@ -358,7 +362,7 @@ defmodule Hologram.DB.Mapper do
   end
 
   # Closes a cycle when the target is already on the path, descends into the target otherwise.
-  defp follow_edge(hop, target, path, {cycles, visited}) do
+  defp follow_edge(model, hop, target, path, {cycles, visited}) do
     new_path = [hop | path]
 
     if Enum.any?(new_path, fn {module, _name} -> module == target end) do
@@ -369,7 +373,7 @@ defmodule Hologram.DB.Mapper do
 
       {[cycle | cycles], visited}
     else
-      find_cycles(target, new_path, cycles, visited)
+      find_cycles(model, target, new_path, cycles, visited)
     end
   end
 
@@ -389,8 +393,84 @@ defmodule Hologram.DB.Mapper do
     }
   end
 
-  defp required_to_one_targets(entity_type) do
-    entity_type.__relationships__()
+  defp join_tables_from_entry(entity_type, entry) do
+    source_table = table_name(entity_type)
+
+    entry.relationships
+    |> Enum.filter(fn {_name, type, _opts} -> is_list(type) end)
+    |> Enum.map(fn {name, [target], _opts} ->
+      join_table_name = fit_identifier("#{source_table}_#{name}_$join")
+
+      %{
+        name: join_table_name,
+        relationship: name,
+        source_table: source_table,
+        target_table: table_name(target),
+        reverse_index: fit_identifier("#{join_table_name}_target_id_$idx"),
+        pk_constraint: fit_identifier("#{join_table_name}_$pk"),
+        source_fk_constraint: fit_identifier("#{join_table_name}_source_id_$fk"),
+        target_fk_constraint: fit_identifier("#{join_table_name}_target_id_$fk")
+      }
+    end)
+  end
+
+  # The grant store exists only where its references can point: a model declaring no
+  # entity types has nothing to grant roles on, and one whose user entity type is absent
+  # cannot carry grants at all - which is the state early in a migration history, before
+  # the user entity type arrives. Deriving no store there keeps "the empty model has the
+  # empty schema" true, the premise a history replayed from empty rests on.
+  #
+  # Which entity type is the user one comes from the term, not from reflection: a replayed
+  # history states the designation as it stood at that point, so a history spanning a
+  # rename of the user entity type derives the store at every point rather than losing it
+  # until the rename lands.
+  defp put_role_grant(%{entities: entities} = model) do
+    user_entity = model.user_entity
+
+    if entities == %{} or is_nil(user_entity) or not Map.has_key?(entities, user_entity) do
+      entities
+    else
+      Map.put(entities, RoleGrant, role_grant_entry(model, user_entity))
+    end
+  end
+
+  # The grant store is derived, never declared: its enum values are the model's table names
+  # and role names, and its relationships point at the designated user entity type - so a
+  # replayed history derives the store as it stood at that point, with no op declaring it.
+  defp role_grant_entry(model, user_entity) do
+    resource_type_values =
+      model.entities
+      |> Map.keys()
+      |> Enum.map(&RoleGrant.resource_type/1)
+      |> Enum.sort()
+
+    entity_role_names =
+      Enum.flat_map(model.entities, fn {_entity_type, entry} ->
+        Enum.map(entry.roles, fn {name, _opts} -> name end)
+      end)
+
+    role_values =
+      entity_role_names
+      |> Enum.concat(Map.keys(model.roles))
+      |> Enum.uniq()
+      |> Enum.sort_by(&Codec.encode(&1, :enum))
+
+    %{
+      attributes: [
+        {:resource_id, :uuid, [optional: true]},
+        {:resource_type, :enum, [optional: true, values: resource_type_values]},
+        {:role, :enum, [values: role_values]}
+      ],
+      relationships: [{:granted_by, user_entity, [optional: true]}, {:user, user_entity, []}],
+      roles: []
+    }
+  end
+
+  # A target absent from the model has no outgoing edges - the model is the traversal universe.
+  defp required_to_one_targets(model, entity_type) do
+    model
+    |> Map.get(entity_type, %{relationships: []})
+    |> Map.fetch!(:relationships)
     |> Enum.reject(fn {_name, type, opts} ->
       is_list(type) or Keyword.get(opts, :optional) == true
     end)
@@ -524,6 +604,30 @@ defmodule Hologram.DB.Mapper do
       raise Hologram.CompileError,
         message:
           "colliding derived names - rename the declarations so that every derived name is unique:\n#{descriptions}"
+    end
+
+    :ok
+  end
+
+  defp validate_model_cycles!(model) do
+    {cycles, _visited} =
+      model
+      |> Map.keys()
+      |> Enum.sort()
+      |> Enum.reduce({[], MapSet.new()}, fn entity_type, {cycles, visited} ->
+        find_cycles(model, entity_type, [], cycles, visited)
+      end)
+
+    if cycles != [] do
+      descriptions =
+        cycles
+        |> Enum.map(&canonicalize_cycle/1)
+        |> Enum.sort()
+        |> Enum.map_join("\n", &describe_cycle/1)
+
+      raise Hologram.CompileError,
+        message:
+          "cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:\n#{descriptions}"
     end
 
     :ok

@@ -103,8 +103,39 @@ defmodule HologramTest do
     end
   end
 
-  test "env/0" do
-    assert env() == :test
+  describe "env/0" do
+    setup do
+      original = System.get_env("HOLOGRAM_ENV")
+
+      # An override the runner happens to carry would answer for the environment the tests
+      # are asserting about, so they start from none.
+      System.delete_env("HOLOGRAM_ENV")
+
+      on_exit(fn ->
+        if original do
+          System.put_env("HOLOGRAM_ENV", original)
+        else
+          System.delete_env("HOLOGRAM_ENV")
+        end
+      end)
+
+      :ok
+    end
+
+    test "returns the current environment" do
+      assert env() == :test
+    end
+
+    test "returns an environment whose atom does not exist yet" do
+      # Built at runtime and compared as a string: writing the name as an atom literal
+      # anywhere in this file would create it at compile time, and the test would pass
+      # against an implementation that only ever resolves existing atoms.
+      env_name = "holo_env_#{System.unique_integer([:positive])}"
+
+      System.put_env("HOLOGRAM_ENV", env_name)
+
+      assert Atom.to_string(env()) == env_name
+    end
   end
 
   describe "secret_key_base/0" do

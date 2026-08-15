@@ -26,6 +26,14 @@ defmodule Hologram.DB.SchemaTest do
     indexes: %{}
   }
 
+  # The grant store is derived into every mapping - dropped here so a projection test
+  # sees exactly the entity types it names.
+  defp app_mapping(entity_types) do
+    entity_types
+    |> Mapper.derive!()
+    |> Map.drop([Hologram.Auth.RoleGrant])
+  end
+
   defp table(entity_type, table_name) do
     [entity_type]
     |> Mapper.derive!()
@@ -410,7 +418,7 @@ defmodule Hologram.DB.SchemaTest do
       assert op_kinds == [:create_table, :add_foreign_key, :create_index]
     end
 
-    test "emits no constraint or index drops for dropped tables" do
+    test "emits the foreign key drops but no index drops for dropped tables" do
       dropped_table =
         @task_table
         |> with_foreign_key("project_id", @task_fk)
@@ -419,7 +427,30 @@ defmodule Hologram.DB.SchemaTest do
       actual = %{tables: %{"task" => dropped_table}, enum_types: %{}}
       target = %{tables: %{}, enum_types: %{}}
 
-      assert diff(actual, target) == [%{op: :drop_table, table: "task"}]
+      assert diff(actual, target) == [
+               %{op: :drop_foreign_key, table: "task", constraint: "task_project_id_$fk"},
+               %{op: :drop_table, table: "task"}
+             ]
+    end
+
+    test "drops the foreign keys of both tables before dropping either one" do
+      # The referenced table sorts first, so it is dropped first - which PostgreSQL refuses
+      # while the other table's constraint still references it. Every constraint has to be
+      # gone before the first table drop, whatever the names are.
+      referencing_table = with_foreign_key(@task_table, "project_id", @task_fk)
+
+      actual = %{
+        tables: %{"project" => @project_table, "task" => referencing_table},
+        enum_types: %{}
+      }
+
+      target = %{tables: %{}, enum_types: %{}}
+
+      assert diff(actual, target) == [
+               %{op: :drop_foreign_key, table: "task", constraint: "task_project_id_$fk"},
+               %{op: :drop_table, table: "project"},
+               %{op: :drop_table, table: "task"}
+             ]
     end
   end
 
@@ -634,7 +665,7 @@ defmodule Hologram.DB.SchemaTest do
 
   describe "from_mapping/1" do
     test "derives a table with columns and primary key per entity type" do
-      assert from_mapping(Mapper.derive!([Module1])) == %{
+      assert from_mapping(app_mapping([Module1])) == %{
                tables: %{
                  "test_fixtures_entity_module1" => %{
                    columns: %{
@@ -776,7 +807,7 @@ defmodule Hologram.DB.SchemaTest do
     test "collects enum types with values in declaration order" do
       enum_types =
         [Module4]
-        |> Mapper.derive!()
+        |> app_mapping()
         |> from_mapping()
         |> Map.fetch!(:enum_types)
 
@@ -786,7 +817,7 @@ defmodule Hologram.DB.SchemaTest do
     test "collects tables across all entity types in the mapping" do
       table_names =
         [Module1, Module3]
-        |> Mapper.derive!()
+        |> app_mapping()
         |> from_mapping()
         |> Map.fetch!(:tables)
         |> Map.keys()

@@ -3,6 +3,8 @@ defmodule Hologram.DB.ConnectionTest do
 
   import Hologram.DB.Connection
 
+  alias Hologram.DB.Config
+
   @insert_returning_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "updated_at") VALUES (gen_random_uuid(), now(), now()) RETURNING "id"|
 
   defp count_by_id(id) do
@@ -79,6 +81,101 @@ defmodule Hologram.DB.ConnectionTest do
       end
 
       assert count_by_id(Process.get(:inserted_id)) == 0
+    end
+  end
+
+  describe "with_timeout/2" do
+    test "applies the timeout to queries that name none" do
+      # A short timeout rather than the infinite one the migration paths use, so the effect
+      # shows in a moment instead of after the driver's fifteen second default - and on a
+      # connection of its own, because the pool answers a client that outstays its timeout
+      # by dropping the connection, which on the shared pool would disturb every other test.
+      {:ok, connection_pid} = Postgrex.start_link(Config.connection_opts())
+
+      # The drop is logged as an error, which is expected here and alarming in a CI log
+      # that cannot tell an intended timeout from a real outage.
+      {result, _log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          with_connection(connection_pid, fn ->
+            with_timeout(50, fn -> query("SELECT pg_sleep(1)") end)
+          end)
+        end)
+
+      GenServer.stop(connection_pid)
+
+      assert {:error, error} = result
+
+      # Which error arrives is the driver racing itself: it asks the server to cancel the
+      # statement and drops the connection, so the answer is the cancellation when the
+      # server replies first and a closed socket when it does not. Either way the timeout
+      # fired - without it the query returns {:ok, _}, which is what makes this an assertion
+      # about the timeout rather than about the driver's internals.
+      assert error.__struct__ in [DBConnection.ConnectionError, Postgrex.Error]
+    end
+
+    test "leaves a query carrying its own timeout alone" do
+      assert {:ok, %Postgrex.Result{}} =
+               with_timeout(50, fn -> query("SELECT pg_sleep(1)", [], timeout: 5_000) end)
+    end
+
+    test "restores the enclosing default afterwards" do
+      with_timeout(50, fn -> :ok end)
+
+      assert {:ok, %Postgrex.Result{}} = query("SELECT pg_sleep(1)")
+    end
+  end
+
+  describe "with_connection/2" do
+    test "restores the enclosing connection when nested" do
+      maintenance_opts = Config.connection_opts(database: "postgres")
+
+      {:ok, outer_pid} = Postgrex.start_link(maintenance_opts)
+      {:ok, inner_pid} = Postgrex.start_link(Config.connection_opts())
+
+      after_nesting =
+        with_connection(outer_pid, fn ->
+          with_connection(inner_pid, fn -> :inner end)
+
+          {:ok, %Postgrex.Result{rows: [[database]]}} = query("SELECT current_database()")
+
+          database
+        end)
+
+      GenServer.stop(outer_pid)
+      GenServer.stop(inner_pid)
+
+      assert after_nesting == "postgres"
+    end
+
+    test "routes queries to the given connection and restores the pool afterwards" do
+      database_opts =
+        :hologram
+        |> Application.get_env(:database, [])
+        |> Config.resolve!(:test)
+
+      {:ok, maintenance_pid} =
+        Postgrex.start_link(
+          database: "postgres",
+          hostname: database_opts[:host],
+          password: database_opts[:password],
+          port: database_opts[:port],
+          username: database_opts[:user]
+        )
+
+      current_database_sql = "SELECT current_database()"
+
+      inside_result =
+        with_connection(maintenance_pid, fn ->
+          {:ok, %Postgrex.Result{rows: [[database]]}} = query(current_database_sql)
+          database
+        end)
+
+      GenServer.stop(maintenance_pid)
+
+      {:ok, %Postgrex.Result{rows: [[outside_database]]}} = query(current_database_sql)
+
+      assert inside_result == "postgres"
+      assert outside_database == database_opts[:database]
     end
   end
 end

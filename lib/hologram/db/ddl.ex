@@ -92,7 +92,7 @@ defmodule Hologram.DB.DDL do
   """
   @spec enum_values_check_statement(String.t(), String.t(), list(String.t())) :: String.t()
   def enum_values_check_statement(table, column, values) do
-    literals = Enum.map_join(values, ", ", &enum_literal/1)
+    literals = Enum.map_join(values, ", ", &literal/1)
 
     count_statement(table, "#{Mapper.quote_identifier(column)}::text IN (#{literals})")
   end
@@ -115,6 +115,81 @@ defmodule Hologram.DB.DDL do
   @spec null_check_statement(String.t(), String.t()) :: String.t()
   def null_check_statement(table, column) do
     count_statement(table, "#{Mapper.quote_identifier(column)} IS NULL")
+  end
+
+  @doc """
+  Returns the pre-flight check statement counting the key groups of the given table's
+  columns that hold more than one row - the duplicates that block a unique index build.
+
+  Nulls compare as values when nulls_distinct is false, matching the index being built.
+  """
+  @spec duplicate_check_statement(String.t(), list(String.t()), boolean) :: String.t()
+  def duplicate_check_statement(table, columns, nulls_distinct) do
+    quoted_columns = Enum.map(columns, &Mapper.quote_identifier/1)
+    grouped = Enum.join(quoted_columns, ", ")
+
+    not_null_part =
+      if nulls_distinct do
+        " WHERE " <> Enum.map_join(quoted_columns, " AND ", &"#{&1} IS NOT NULL")
+      else
+        ""
+      end
+
+    "SELECT COUNT(*) FROM (SELECT 1 FROM #{qualified(table)}#{not_null_part} " <>
+      "GROUP BY #{grouped} HAVING COUNT(*) > 1) AS duplicates"
+  end
+
+  @doc """
+  Returns the check statement counting the invalid indexes carrying the given name - the
+  leftovers of a concurrent build that failed partway.
+
+  A concurrent build spans several internal transactions, so PostgreSQL cannot roll one
+  back: the failed index stays in the catalog flagged invalid, unused by queries and
+  maintained by every write, holding its derived name.
+  """
+  @spec invalid_index_check_statement(String.t()) :: String.t()
+  def invalid_index_check_statement(index) do
+    """
+    SELECT COUNT(*)
+    FROM pg_catalog.pg_index i
+    JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = '#{@data_schema}' AND c.relname = #{literal(index)} AND i.indisvalid = FALSE\
+    """
+  end
+
+  @doc """
+  Returns the statement listing the names of the invalid indexes of the data schema.
+
+  A concurrent build that failed partway leaves its index in the catalog flagged
+  invalid: it holds the derived name, serves no query, and every write maintains it.
+  """
+  @spec invalid_indexes_statement() :: String.t()
+  def invalid_indexes_statement do
+    """
+    SELECT ic.relname
+    FROM pg_catalog.pg_index i
+    JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+    JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = '#{@data_schema}' AND NOT i.indisvalid\
+    """
+  end
+
+  @doc """
+  Returns the statement rebuilding the given index in place, concurrently.
+
+  Rebuilding is what clears an invalid index: it replaces the failed build without
+  taking the table's writes offline, and without the index ever being absent - which a
+  drop-and-recreate pair could not promise if the node died between the two.
+
+  Runs on a connection with no open transaction, as every concurrent operation must -
+  PostgreSQL rejects one inside a transaction with 25001. The repair holds a
+  session-scoped lock rather than a transactional one for exactly this reason.
+  """
+  @spec reindex_statement(String.t()) :: String.t()
+  def reindex_statement(index) do
+    ~s(REINDEX INDEX CONCURRENTLY "#{@data_schema}".#{Mapper.quote_identifier(index)})
   end
 
   @doc """
@@ -141,11 +216,26 @@ defmodule Hologram.DB.DDL do
   their ALTER TABLE forms. :create_index renders a named index over its columns -
   :drop_index renders the schema-qualified drop (indexes are schema-level objects).
 
+  The rename ops - :rename_table, :rename_column, :rename_index, :rename_enum_type -
+  render their one-statement forms, and :widen_to_many moves the reference values of a
+  relationship that became to-many into its new join table. They come from the migration
+  applier only: a name-keyed diff cannot detect a rename or a cardinality change, so
+  schema reconciliation never emits them, while a migration log carries the confirmed
+  intent.
+
+  :delete_role_grants empties the role grant store, the second op that touches rows
+  rather than the schema. It too comes from the applier only, and for a stronger reason:
+  the migration file has to SAY it deletes the grants, so the destruction is reviewed
+  rather than inferred from a designation change.
+
   :create_enum_type, :drop_enum_type, :add_enum_value (with its BEFORE anchor when
   positioned), and :rename_enum_value render one statement each. :rebuild_enum_type
   renders the rebuild sequence: rename the old type aside, create the replacement
   under the canonical name, cast every column using the type (through text, applying
-  the optional old-to-new value remap as a CASE expression), then drop the old type.
+  the optional value remap as a searched CASE expression), then drop the old type. A
+  remap entry carries :from, :to, and :scope - nil to remap the value wherever it
+  stands, or {column, value} to remap it only in the rows where that other column holds
+  that value.
   """
   @spec statements(%{atom => any}) :: list(String.t())
   def statements(%{op: :add_column} = op) do
@@ -158,13 +248,13 @@ defmodule Hologram.DB.DDL do
   def statements(%{op: :add_enum_value} = op) do
     position_part =
       case op.position do
-        {:before, anchor} -> " BEFORE #{enum_literal(anchor)}"
+        {:before, anchor} -> " BEFORE #{literal(anchor)}"
         nil -> ""
       end
 
     [
       "ALTER TYPE #{qualified(op.enum_type)} " <>
-        "ADD VALUE #{enum_literal(op.value)}#{position_part}"
+        "ADD VALUE #{literal(op.value)}#{position_part}"
     ]
   end
 
@@ -202,18 +292,23 @@ defmodule Hologram.DB.DDL do
   end
 
   def statements(%{op: :create_enum_type} = op) do
-    values = Enum.map_join(op.values, ", ", &enum_literal/1)
+    values = Enum.map_join(op.values, ", ", &literal/1)
 
     ["CREATE TYPE #{qualified(op.enum_type)} AS ENUM (#{values})"]
   end
 
+  # A `concurrently: true` op must reach the database on a connection with no open
+  # transaction - PostgreSQL rejects a concurrent build inside one with 25001. That is why
+  # such ops are split into the applier's tail and run after their file commits, rather
+  # than being a property of the statement itself.
   def statements(%{op: :create_index} = op) do
     columns = Enum.map_join(op.columns, ", ", &Mapper.quote_identifier/1)
     unique_sql = if op.unique, do: "UNIQUE ", else: ""
     nulls_sql = if op.nulls_distinct, do: "", else: " NULLS NOT DISTINCT"
+    concurrently_sql = if op[:concurrently], do: "CONCURRENTLY ", else: ""
 
     [
-      "CREATE #{unique_sql}INDEX #{Mapper.quote_identifier(op.index)} " <>
+      "CREATE #{unique_sql}INDEX #{concurrently_sql}#{Mapper.quote_identifier(op.index)} " <>
         "ON #{qualified(op.table)} (#{columns})#{nulls_sql}"
     ]
   end
@@ -234,6 +329,10 @@ defmodule Hologram.DB.DDL do
     lines = Enum.join(column_lines, ",\n") <> ",\n" <> pk_line
 
     ["CREATE TABLE #{qualified(op.table)} (\n#{lines}\n)"]
+  end
+
+  def statements(%{op: :delete_role_grants} = op) do
+    ["DELETE FROM #{qualified(op.table)}"]
   end
 
   def statements(%{op: :drop_column} = op) do
@@ -261,14 +360,14 @@ defmodule Hologram.DB.DDL do
 
   def statements(%{op: :rebuild_enum_type} = op) do
     old_type = Mapper.fit_identifier("#{op.enum_type}_$old")
-    remap = Map.get(op, :remap, %{})
+    remap = Map.get(op, :remap, [])
 
     rename_statement =
       "ALTER TYPE #{qualified(op.enum_type)} RENAME TO #{Mapper.quote_identifier(old_type)}"
 
     create_statement =
       "CREATE TYPE #{qualified(op.enum_type)} AS ENUM " <>
-        "(#{Enum.map_join(op.values, ", ", &enum_literal/1)})"
+        "(#{Enum.map_join(op.values, ", ", &literal/1)})"
 
     cast_statements =
       Enum.map(op.columns, fn {table, column} ->
@@ -293,10 +392,40 @@ defmodule Hologram.DB.DDL do
     ]
   end
 
+  def statements(%{op: :rename_column} = op) do
+    [
+      "ALTER TABLE #{qualified(op.table)} " <>
+        "RENAME COLUMN #{Mapper.quote_identifier(op.from)} " <>
+        "TO #{Mapper.quote_identifier(op.to)}"
+    ]
+  end
+
+  def statements(%{op: :rename_enum_type} = op) do
+    ["ALTER TYPE #{qualified(op.from)} RENAME TO #{Mapper.quote_identifier(op.to)}"]
+  end
+
   def statements(%{op: :rename_enum_value} = op) do
     [
       "ALTER TYPE #{qualified(op.enum_type)} " <>
-        "RENAME VALUE #{enum_literal(op.from)} TO #{enum_literal(op.to)}"
+        "RENAME VALUE #{literal(op.from)} TO #{literal(op.to)}"
+    ]
+  end
+
+  def statements(%{op: :rename_index} = op) do
+    ["ALTER INDEX #{qualified(op.from)} RENAME TO #{Mapper.quote_identifier(op.to)}"]
+  end
+
+  def statements(%{op: :rename_table} = op) do
+    ["ALTER TABLE #{qualified(op.from)} RENAME TO #{Mapper.quote_identifier(op.to)}"]
+  end
+
+  def statements(%{op: :widen_to_many} = op) do
+    [
+      "INSERT INTO #{qualified(op.join_table)} " <>
+        ~s{("source_id", "target_id") } <>
+        "SELECT #{Mapper.quote_identifier("id")}, #{Mapper.quote_identifier(op.column)} " <>
+        "FROM #{qualified(op.table)} " <>
+        "WHERE #{Mapper.quote_identifier(op.column)} IS NOT NULL"
     ]
   end
 
@@ -333,7 +462,7 @@ defmodule Hologram.DB.DDL do
 
   defp delete_action(:restrict), do: "RESTRICT"
 
-  defp enum_literal(value) do
+  defp literal(value) do
     "'#{String.replace(value, "'", "''")}'"
   end
 
@@ -341,19 +470,31 @@ defmodule Hologram.DB.DDL do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(name)}"
   end
 
-  defp rebuild_cast(quoted_column, remap) when remap == %{} do
+  defp rebuild_cast(quoted_column, []) do
     "#{quoted_column}::text"
   end
 
+  # The searched form rather than the simple one, because a scoped entry conditions on a
+  # SECOND column and CASE <expr> WHEN <value> can only compare the one. First match wins,
+  # so the sort puts scoped branches before the unscoped branch for the same value - the
+  # unscoped one would otherwise swallow every row the scoped one meant to single out.
   defp rebuild_cast(quoted_column, remap) do
     branches =
       remap
-      |> Enum.sort()
-      |> Enum.map_join(" ", fn {old_value, new_value} ->
-        "WHEN #{enum_literal(old_value)} THEN #{enum_literal(new_value)}"
-      end)
+      |> Enum.sort_by(&{&1.from, &1.scope == nil, &1.to})
+      |> Enum.map_join(" ", &remap_branch(&1, quoted_column))
 
-    "(CASE #{quoted_column}::text #{branches} ELSE #{quoted_column}::text END)"
+    "(CASE #{branches} ELSE #{quoted_column}::text END)"
+  end
+
+  defp remap_branch(%{scope: nil} = entry, quoted_column) do
+    "WHEN #{quoted_column}::text = #{literal(entry.from)} THEN #{literal(entry.to)}"
+  end
+
+  defp remap_branch(%{scope: {column, value}} = entry, quoted_column) do
+    "WHEN #{quoted_column}::text = #{literal(entry.from)} " <>
+      "AND #{Mapper.quote_identifier(column)} = #{literal(value)} " <>
+      "THEN #{literal(entry.to)}"
   end
 
   defp type_sql(type) when type in @builtin_types, do: type

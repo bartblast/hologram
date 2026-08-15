@@ -43,9 +43,12 @@ defmodule Hologram.DB.Schema do
   same op a primary key constraint name mismatch emits. Indexes are identified by name:
   target-only emit :create_index, actual-only emit :drop_index, and a definition change
   emits drop plus create. New tables emit adds for their foreign keys and indexes
-  (:create_table carries neither) - dropped tables emit no constraint or index drops
-  (they die with the table). Raises ArgumentError when primary key columns mismatch -
-  no derivable schema can produce that, so it means a hand-edited database.
+  (:create_table carries neither) - dropped tables emit their :drop_foreign_key ops, and
+  nothing else (their columns and indexes die with them, and block nothing meanwhile,
+  but a foreign key outlives its table long enough to refuse the drop of the table it
+  references, which another drop in the same diff may be). Raises ArgumentError when
+  primary key columns mismatch - no derivable schema can produce that, so it means a
+  hand-edited database.
 
   Enum types are identified by name: target-only emit :create_enum_type (with values),
   actual-only emit :drop_enum_type. When a shared type's values changed and the actual
@@ -176,17 +179,34 @@ defmodule Hologram.DB.Schema do
       |> Map.keys()
       |> Enum.sort()
 
+    # A dropped table joins the foreign key drop pass and no other. Its columns and indexes
+    # die with it and block nothing meanwhile, but its foreign keys outlive it long enough
+    # to refuse the drop of a table they reference - which, when both tables go in one diff,
+    # is another drop in this very list. Emitting them puts every constraint in phase 0,
+    # ahead of every phase 3 table drop, so the alphabetical order tables are dropped in
+    # stops deciding whether the diff applies.
+    fk_drop_names =
+      actual_tables
+      |> Map.keys()
+      |> Enum.concat(target_names)
+      |> Enum.uniq()
+      |> Enum.sort()
+
     kinds = [
-      &fk_drop_ops/3,
-      &index_drop_ops/3,
-      &constraint_rename_ops/3,
-      &fk_add_ops/3,
-      &index_create_ops/3
+      {&fk_drop_ops/3, fk_drop_names},
+      {&index_drop_ops/3, target_names},
+      {&constraint_rename_ops/3, target_names},
+      {&fk_add_ops/3, target_names},
+      {&index_create_ops/3, target_names}
     ]
 
-    Enum.flat_map(kinds, fn kind_ops ->
-      Enum.flat_map(target_names, fn table ->
-        kind_ops.(table, Map.get(actual_tables, table, @absent_table), target_tables[table])
+    Enum.flat_map(kinds, fn {kind_ops, names} ->
+      Enum.flat_map(names, fn table ->
+        kind_ops.(
+          table,
+          Map.get(actual_tables, table, @absent_table),
+          Map.get(target_tables, table, @absent_table)
+        )
       end)
     end)
   end

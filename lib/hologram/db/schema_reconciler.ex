@@ -3,10 +3,10 @@ defmodule Hologram.DB.SchemaReconciler do
 
   require Logger
 
-  alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
   alias Hologram.DB.Introspection
+  alias Hologram.DB.Preflight
   alias Hologram.DB.Schema
 
   # Fixed application-defined key for pg_advisory_xact_lock - serializes concurrent
@@ -18,9 +18,24 @@ defmodule Hologram.DB.SchemaReconciler do
   # signed int64.
   @advisory_lock_key 4_787_000_136_577_093_832
 
+  # The layout version of the hologram_system tables themselves - bumped when the
+  # bookkeeping DDL below or the marker's columns change. Stamped into every marker so a
+  # database states which layout it was built with: the alternative is introspecting the
+  # tables to find out, which only works while the differences are visible in the catalog.
+  # An integer rather than the package version, so the check is a monotonic comparison
+  # rather than version-string parsing, and a release that changes nothing here leaves it
+  # alone.
+  @system_schema_version 1
+
   # Control-plane bookkeeping DDL - static and framework-owned, never model-derived.
   # The database table is the managed-database marker (single row, maintained by
-  # write_marker/1) - the schema_object table is the managed-object registry.
+  # write_marker/1) - the schema_object table is the managed-object registry - the
+  # migration table records the applied migration versions.
+  #
+  # Every environment gets the same tables, and which of them a database uses follows
+  # from how it is managed: reconciliation writes the registry and never the migration
+  # table, the migration applier the other way around. One schema everywhere keeps
+  # existence checks and the framework's own system-table evolution uniform.
   @system_statements [
     """
     CREATE TABLE "hologram_system"."database" (
@@ -28,7 +43,15 @@ defmodule Hologram.DB.SchemaReconciler do
       "env" text NOT NULL,
       "managed_by" text NOT NULL,
       "hologram_version" text NOT NULL,
+      "system_schema_version" integer NOT NULL,
       "last_reconciled_at" timestamptz NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE "hologram_system"."migration" (
+      "version" text NOT NULL,
+      "applied_at" timestamptz NOT NULL,
+      PRIMARY KEY ("version")
     )
     """,
     """
@@ -78,12 +101,14 @@ defmodule Hologram.DB.SchemaReconciler do
   Returns the managed-database marker, or nil when none has been written.
 
   The marker is a map with :otp_app, :env, and :managed_by (the guard facts, as
-  strings) plus :hologram_version and :last_reconciled_at (diagnostics).
+  strings) plus :hologram_version, :system_schema_version (the layout version of the
+  hologram_system tables) and :last_reconciled_at (diagnostics).
   """
   @spec read_marker() :: %{atom => any} | nil
   def read_marker do
     statement = """
-    SELECT "otp_app", "env", "managed_by", "hologram_version", "last_reconciled_at"
+    SELECT "otp_app", "env", "managed_by", "hologram_version", "system_schema_version",
+           "last_reconciled_at"
     FROM "hologram_system"."database"
     """
 
@@ -93,12 +118,13 @@ defmodule Hologram.DB.SchemaReconciler do
       [] ->
         nil
 
-      [[otp_app, env, managed_by, hologram_version, last_reconciled_at]] ->
+      [[otp_app, env, managed_by, hologram_version, system_schema_version, last_reconciled_at]] ->
         %{
           otp_app: otp_app,
           env: env,
           managed_by: managed_by,
           hologram_version: hologram_version,
+          system_schema_version: system_schema_version,
           last_reconciled_at: last_reconciled_at
         }
     end
@@ -134,7 +160,7 @@ defmodule Hologram.DB.SchemaReconciler do
         ops = Schema.diff(actual, target)
 
         check_aliens!(ops, registry())
-        preflight!(ops, actual, context.mapping)
+        Preflight.run!(ops, actual, context.mapping)
 
         apply_ops(ops, context.mapping)
         update_registry(ops)
@@ -183,6 +209,10 @@ defmodule Hologram.DB.SchemaReconciler do
   @doc """
   Writes the given marker as the single row of the managed-database marker table,
   replacing any previous row.
+
+  The system schema layout version is the writer's own, not the caller's - the caller
+  states what it knows about the app, and the layout is a fact about the code doing the
+  writing.
   """
   @spec write_marker(%{atom => any}) :: :ok
   def write_marker(marker) do
@@ -190,8 +220,9 @@ defmodule Hologram.DB.SchemaReconciler do
 
     insert_statement = """
     INSERT INTO "hologram_system"."database"
-      ("otp_app", "env", "managed_by", "hologram_version", "last_reconciled_at")
-    VALUES ($1, $2, $3, $4, $5)
+      ("otp_app", "env", "managed_by", "hologram_version", "system_schema_version",
+       "last_reconciled_at")
+    VALUES ($1, $2, $3, $4, $5, $6)
     """
 
     params = [
@@ -199,6 +230,7 @@ defmodule Hologram.DB.SchemaReconciler do
       marker.env,
       marker.managed_by,
       marker.hologram_version,
+      @system_schema_version,
       marker.last_reconciled_at
     ]
 
@@ -210,7 +242,8 @@ defmodule Hologram.DB.SchemaReconciler do
   # A required add with a declared default applies as add-nullable, parameterized fill,
   # then tighten - so existing rows receive the default and the DDL never carries values.
   defp apply_op(%{op: :add_column} = op, mapping) do
-    fill = if op.definition.null, do: :none, else: fill_value(mapping, op.table, op.column)
+    fill =
+      if op.definition.null, do: :none, else: Preflight.fill_value(mapping, op.table, op.column)
 
     case fill do
       :none ->
@@ -239,7 +272,7 @@ defmodule Hologram.DB.SchemaReconciler do
   defp apply_op(%{op: :alter_column} = op, mapping) do
     fill =
       if op.before.null and not op.after.null and op.before.type == op.after.type do
-        fill_value(mapping, op.table, op.column)
+        Preflight.fill_value(mapping, op.table, op.column)
       else
         :none
       end
@@ -343,12 +376,6 @@ defmodule Hologram.DB.SchemaReconciler do
     :claimed
   end
 
-  defp count_result(statement) do
-    {:ok, %{rows: [[count]]}} = Connection.query(statement)
-
-    count
-  end
-
   defp deregister(kind, parent, name) do
     statement = """
     DELETE FROM "hologram_system"."schema_object"
@@ -370,21 +397,6 @@ defmodule Hologram.DB.SchemaReconciler do
     fill_statement = DDL.fill_statement(table, column)
 
     {:ok, _result} = Connection.query(fill_statement, [encoded_value])
-  end
-
-  defp fill_value(mapping, table, column_name) do
-    entity_mapping =
-      mapping
-      |> Map.values()
-      |> Enum.find(&(&1.table == table))
-
-    column = entity_mapping && Enum.find(entity_mapping.columns, &(&1.name == column_name))
-
-    case column do
-      %{default: nil} -> :none
-      %{default: default, type: type} -> {:ok, Codec.encode(default, type)}
-      nil -> :none
-    end
   end
 
   defp hologram_schemas do
@@ -445,104 +457,6 @@ defmodule Hologram.DB.SchemaReconciler do
     {:ok, %{rows: rows}} = Connection.query(statement)
 
     rows != []
-  end
-
-  defp pluralize_rows(1), do: "row"
-
-  defp pluralize_rows(_count), do: "rows"
-
-  defp pluralize_values([_value]), do: "value"
-
-  defp pluralize_values(_values), do: "values"
-
-  defp preflight!(ops, actual, mapping) do
-    Enum.each(ops, &preflight_op!(&1, actual, mapping))
-  end
-
-  defp preflight_cast_rows!(op) do
-    count =
-      count_result(DDL.cast_check_statement(op.table, op.column, op.before.type, op.after.type))
-
-    if count > 0 do
-      raise ~s(#{count} #{pluralize_rows(count)} in "#{op.table}"."#{op.column}" ) <>
-              "cannot convert from #{op.before.type} to #{op.after.type} - " <>
-              "fix the data or remove the attribute and re-add it with the new type"
-    end
-  end
-
-  defp preflight_null_tightening!(op, mapping) do
-    fillable? =
-      op.before.type == op.after.type and
-        match?({:ok, _value}, fill_value(mapping, op.table, op.column))
-
-    checked? = op.before.null and not op.after.null and not fillable?
-    count = if checked?, do: count_result(DDL.null_check_statement(op.table, op.column)), else: 0
-
-    if count > 0 do
-      raise ~s(cannot make column "#{op.column}" on table "#{op.table}" required - ) <>
-              "found #{count} #{pluralize_rows(count)} with NULL - " <>
-              "declare a default:, keep the attribute optional:, or fix the data"
-    end
-  end
-
-  defp preflight_op!(%{op: :add_column} = op, _actual, mapping) do
-    checked? =
-      not op.definition.null and
-        not match?({:ok, _value}, fill_value(mapping, op.table, op.column))
-
-    count = if checked?, do: count_result(DDL.rows_check_statement(op.table)), else: 0
-
-    if count > 0 do
-      raise ~s(cannot add required column "#{op.column}" to table "#{op.table}" - ) <>
-              "#{count} existing #{pluralize_rows(count)} would have no value - " <>
-              "declare a default:, make the attribute optional:, or clear the rows"
-    end
-  end
-
-  defp preflight_op!(%{op: :alter_column} = op, _actual, mapping) do
-    preflight_type_change!(op)
-    preflight_null_tightening!(op, mapping)
-  end
-
-  defp preflight_op!(%{op: :rebuild_enum_type} = op, actual, _mapping) do
-    removed_values = actual.enum_types[op.enum_type] -- op.values
-
-    if removed_values != [] do
-      Enum.each(op.columns, fn {table, column} ->
-        preflight_removed_enum_values!(table, column, removed_values)
-      end)
-    end
-  end
-
-  defp preflight_op!(_op, _actual, _mapping), do: :ok
-
-  defp preflight_removed_enum_values!(table, column, removed_values) do
-    count = count_result(DDL.enum_values_check_statement(table, column, removed_values))
-
-    if count > 0 do
-      values = Enum.map_join(removed_values, ", ", &"'#{&1}'")
-
-      raise ~s(found #{count} #{pluralize_rows(count)} in "#{table}"."#{column}" ) <>
-              "holding removed enum #{pluralize_values(removed_values)} #{values} - " <>
-              "update the rows or re-add the #{pluralize_values(removed_values)}"
-    end
-  end
-
-  defp preflight_type_change!(op) do
-    if op.before.type != op.after.type do
-      case DDL.cast_class(op.before.type, op.after.type) do
-        :safe ->
-          :ok
-
-        :data_dependent ->
-          preflight_cast_rows!(op)
-
-        :unsupported ->
-          raise ~s(changing column "#{op.column}" on table "#{op.table}" ) <>
-                  "from #{op.before.type} to #{op.after.type} is not supported - " <>
-                  "remove the attribute and re-add it with the new type"
-      end
-    end
   end
 
   defp raise_alien!(description) do

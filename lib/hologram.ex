@@ -72,13 +72,25 @@ defmodule Hologram do
 
   @doc """
   Returns the current environment.
+
+  Named by `HOLOGRAM_ENV`, or `MIX_ENV` when it is unset - any name the deployment
+  uses, not only `:dev`, `:test` and `:prod`. With neither var set, the environment
+  is detected.
   """
   @spec env() :: atom
+  # The name comes from the deployment's own configuration - an env var whoever runs the
+  # release sets - so the atoms this can create are bounded by the environments they run,
+  # never by anything a request carries. Requiring an existing atom instead would tie the
+  # framework to Mix: a release carries no Mix, so an environment name that no loaded
+  # module happens to mention has no atom yet, and the boot dies on it (found 2026-08-13
+  # booting a bare node as "prod").
+  # sobelow_skip ["DOS.StringToAtom"]
   def env do
     env_str = System.get_env("HOLOGRAM_ENV") || System.get_env("MIX_ENV")
 
     if env_str do
-      String.to_existing_atom(env_str)
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      String.to_atom(env_str)
     else
       detect_env()
     end

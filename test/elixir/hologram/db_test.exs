@@ -1,5 +1,5 @@
 defmodule Hologram.DBTest do
-  # async: false - the dev-boot test flips the HOLOGRAM_ENV env var, which is global.
+  # async: false - the boot-mechanism tests flip the HOLOGRAM_ENV env var, which is global.
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.DB
@@ -14,7 +14,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Test.Fixtures.Entity.Module1
 
   describe "init/1" do
-    test "starts only the connection pool outside dev" do
+    test "starts only the connection pool in test" do
       {:ok, {_flags, children}} = init([])
 
       assert Enum.map(children, & &1.id) == [DBConnection.ConnectionPool]
@@ -27,6 +27,28 @@ defmodule Hologram.DBTest do
       {:ok, {_flags, children}} = init([])
 
       assert Enum.map(children, & &1.id) == [DBConnection.ConnectionPool, :schema_reconciliation]
+    end
+
+    test "adds the migration apply boot step outside dev and test" do
+      System.put_env("HOLOGRAM_ENV", "prod")
+      on_exit(fn -> System.delete_env("HOLOGRAM_ENV") end)
+
+      # Only dev and test carry default connection options - a prod resolve needs them
+      # configured, though nothing connects here (init/1 only builds the child specs).
+      database_config = Application.get_env(:hologram, :database, [])
+
+      Application.put_env(:hologram, :database,
+        database: "my_app_prod",
+        host: "db.internal",
+        password: "secret",
+        user: "my_app"
+      )
+
+      on_exit(fn -> Application.put_env(:hologram, :database, database_config) end)
+
+      {:ok, {_flags, children}} = init([])
+
+      assert Enum.map(children, & &1.id) == [DBConnection.ConnectionPool, :migrations]
     end
   end
 

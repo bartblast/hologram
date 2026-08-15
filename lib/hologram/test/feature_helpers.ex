@@ -8,10 +8,12 @@ defmodule Hologram.Test.FeatureHelpers do
 
   # Wallaby is not a Hologram dependency - client apps that use these helpers
   # bring their own. This lets the module compile without Wallaby present.
-  @compile {:no_warn_undefined, [Wallaby.Browser, Wallaby.ExpectationNotMetError]}
+  @compile {:no_warn_undefined,
+            [Wallaby.Browser, Wallaby.ExpectationNotMetError, Wallaby.Feature.Utils]}
 
   alias Hologram.Router
   alias Wallaby.Browser
+  alias Wallaby.Feature.Utils
 
   @doc """
   Asserts that the session has navigated to the given page: blocks until the
@@ -32,6 +34,31 @@ defmodule Hologram.Test.FeatureHelpers do
     |> wait_for_page_mounting(page_module, opts)
     |> wait_for_ws_connection()
     |> wait_for_sse_connection()
+  end
+
+  @doc """
+  Starts the Wallaby sessions the test registered through the `@sessions`
+  attribute and returns them as the test's setup context.
+
+  The registered value is either a count or per-session options. Sessions carry
+  the test's ownership metadata, so a session's requests reach the same
+  checked-out state the test holds.
+  """
+  @spec start_sessions(map) :: keyword
+  def start_sessions(context) do
+    metadata = Utils.maybe_checkout_repos(context[:async])
+
+    start_session_opts =
+      Utils.put_create_session_fn([metadata: metadata], context[:create_session_fn])
+
+    context
+    |> get_in([:registered, :sessions])
+    |> Utils.sessions_iterable()
+    |> Enum.map(fn
+      opts when is_list(opts) -> Utils.start_session(opts, start_session_opts)
+      count when is_number(count) -> Utils.start_session([], start_session_opts)
+    end)
+    |> Utils.build_setup_return()
   end
 
   @doc """

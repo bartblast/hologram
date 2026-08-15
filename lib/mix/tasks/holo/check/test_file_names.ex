@@ -1,4 +1,4 @@
-defmodule Mix.Tasks.Holo.Test.CheckFileNames do
+defmodule Mix.Tasks.Holo.Check.TestFileNames do
   @moduledoc """
   Checks if any test scripts have invalid file names.
   File name is valid if it ends with "_test" suffix and has ".exs" extension.
@@ -9,7 +9,7 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
 
   ## Examples
 
-      $ mix holo.test.check_file_names test/elixir
+      $ mix holo.check.test_file_names test/elixir
   """
 
   use Mix.Task

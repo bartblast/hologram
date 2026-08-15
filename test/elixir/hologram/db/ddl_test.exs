@@ -72,6 +72,24 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "duplicate_check_statement/3" do
+    test "counts the duplicate key groups, nulls compared as values" do
+      statement = duplicate_check_statement("task", ["project_id", "slug"], false)
+
+      assert statement ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
+                 ~s{GROUP BY "project_id", "slug" HAVING COUNT(*) > 1) AS duplicates}
+    end
+
+    test "skips the rows holding nulls when nulls are distinct" do
+      statement = duplicate_check_statement("task", ["slug"], true)
+
+      assert statement ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
+                 ~s{WHERE "slug" IS NOT NULL GROUP BY "slug" HAVING COUNT(*) > 1) AS duplicates}
+    end
+  end
+
   describe "enum_values_check_statement/3" do
     test "counts rows holding any of the given values" do
       assert enum_values_check_statement("task", "status", ["wip", "blocked"]) ==
@@ -80,10 +98,48 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "invalid_index_check_statement/1" do
+    test "counts the invalid indexes carrying the name" do
+      expected =
+        normalize_newlines("""
+        SELECT COUNT(*)
+        FROM pg_catalog.pg_index i
+        JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'hologram_data' AND c.relname = 'task_project_id_$idx' AND i.indisvalid = FALSE\
+        """)
+
+      assert normalize_newlines(invalid_index_check_statement("task_project_id_$idx")) ==
+               expected
+    end
+
+    test "escapes a quote in the index name" do
+      statement = normalize_newlines(invalid_index_check_statement("od'd_$idx"))
+
+      assert statement =~ ~s(c.relname = 'od''d_$idx')
+    end
+  end
+
+  describe "invalid_indexes_statement/0" do
+    test "lists the invalid indexes of the data schema" do
+      statement = normalize_newlines(invalid_indexes_statement())
+
+      assert statement =~ "SELECT ic.relname"
+      assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid"
+    end
+  end
+
   describe "null_check_statement/2" do
     test "counts rows with a NULL in the column" do
       assert null_check_statement("task", "subtitle") ==
                ~s{SELECT COUNT(*) FROM "hologram_data"."task" WHERE "subtitle" IS NULL}
+    end
+  end
+
+  describe "reindex_statement/1" do
+    test "rebuilds the index in place, concurrently" do
+      assert reindex_statement("task_project_id_$idx") ==
+               ~s{REINDEX INDEX CONCURRENTLY "hologram_data"."task_project_id_$idx"}
     end
   end
 
@@ -301,6 +357,23 @@ defmodule Hologram.DB.DDLTest do
              ]
     end
 
+    test "renders a concurrent build when the op asks for one" do
+      op = %{
+        op: :create_index,
+        table: "task",
+        index: "task_project_id_$idx",
+        columns: ["project_id"],
+        nulls_distinct: true,
+        unique: false,
+        concurrently: true
+      }
+
+      assert statements(op) == [
+               ~s{CREATE INDEX CONCURRENTLY "task_project_id_$idx" } <>
+                 ~s{ON "hologram_data"."task" ("project_id")}
+             ]
+    end
+
     test "renders multi-column indexes in column order" do
       op = %{
         op: :create_index,
@@ -412,6 +485,14 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "statements/1 for delete_role_grants" do
+    test "renders the schema-qualified delete" do
+      op = %{op: :delete_role_grants, table: "hologram_role_grant"}
+
+      assert statements(op) == [~s(DELETE FROM "hologram_data"."hologram_role_grant")]
+    end
+  end
+
   describe "statements/1 for drop_column" do
     test "renders the column drop" do
       op = %{op: :drop_column, table: "task", column: "name"}
@@ -492,13 +573,13 @@ defmodule Hologram.DB.DDLTest do
       assert Enum.at(cast_statements, 1) =~ ~s(ALTER TABLE "hologram_data"."task")
     end
 
-    test "renders the remap as a CASE expression in the cast" do
+    test "renders an unscoped remap entry as a CASE expression in the cast" do
       op = %{
         op: :rebuild_enum_type,
         enum_type: "task_status_$enum",
         values: ["todo", "done"],
         columns: [{"task", "status"}],
-        remap: %{"wip" => "todo"}
+        remap: [%{from: "wip", to: "todo", scope: nil}]
       }
 
       cast_statement =
@@ -509,8 +590,53 @@ defmodule Hologram.DB.DDLTest do
       assert cast_statement ==
                ~s(ALTER TABLE "hologram_data"."task" ) <>
                  ~s(ALTER COLUMN "status" TYPE "hologram_data"."task_status_$enum" ) <>
-                 ~s{USING (CASE "status"::text WHEN 'wip' THEN 'todo' } <>
+                 ~s{USING (CASE WHEN "status"::text = 'wip' THEN 'todo' } <>
                  ~s{ELSE "status"::text END)::"hologram_data"."task_status_$enum"}
+    end
+
+    test "renders a scoped remap entry with its second column in the condition" do
+      op = %{
+        op: :rebuild_enum_type,
+        enum_type: "hologram_role_grant_role_$enum",
+        values: ["editor", "reviewer"],
+        columns: [{"hologram_role_grant", "role"}],
+        remap: [%{from: "editor", to: "reviewer", scope: {"resource_type", "my_app_task"}}]
+      }
+
+      cast_statement =
+        op
+        |> statements()
+        |> Enum.at(2)
+
+      assert cast_statement =~
+               ~s{USING (CASE WHEN "role"::text = 'editor' } <>
+                 ~s{AND "resource_type" = 'my_app_task' THEN 'reviewer' } <>
+                 ~s{ELSE "role"::text END)}
+    end
+
+    test "renders a scoped remap entry before an unscoped one for the same value" do
+      op = %{
+        op: :rebuild_enum_type,
+        enum_type: "hologram_role_grant_role_$enum",
+        values: ["editor", "reviewer", "viewer"],
+        columns: [{"hologram_role_grant", "role"}],
+        remap: [
+          %{from: "editor", to: "viewer", scope: nil},
+          %{from: "editor", to: "reviewer", scope: {"resource_type", "my_app_task"}}
+        ]
+      }
+
+      cast_statement =
+        op
+        |> statements()
+        |> Enum.at(2)
+
+      # First match wins in a searched CASE, so an unscoped branch rendered first would
+      # swallow every row the scoped one singles out.
+      {scoped_at, _length} = :binary.match(cast_statement, "'my_app_task'")
+      {unscoped_at, _length} = :binary.match(cast_statement, "THEN 'viewer'")
+
+      assert scoped_at < unscoped_at
     end
 
     test "shortens the temporary type name over the PostgreSQL identifier limit" do
@@ -540,6 +666,44 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "statements/1 for widen_to_many" do
+    test "renders the move of the reference values into the join table" do
+      op = %{
+        op: :widen_to_many,
+        table: "task",
+        join_table: "task_tags_$join",
+        column: "tag_id"
+      }
+
+      assert statements(op) == [
+               ~s{INSERT INTO "hologram_data"."task_tags_$join" ("source_id", "target_id") } <>
+                 ~s{SELECT "id", "tag_id" FROM "hologram_data"."task" } <>
+                 ~s{WHERE "tag_id" IS NOT NULL}
+             ]
+    end
+  end
+
+  describe "statements/1 for rename_column" do
+    test "renders the column rename" do
+      op = %{op: :rename_column, table: "task", from: "name", to: "title"}
+
+      assert statements(op) == [
+               ~s(ALTER TABLE "hologram_data"."task" RENAME COLUMN "name" TO "title")
+             ]
+    end
+  end
+
+  describe "statements/1 for rename_enum_type" do
+    test "renders the type rename" do
+      op = %{op: :rename_enum_type, from: "draft_status_$enum", to: "sketch_status_$enum"}
+
+      assert statements(op) == [
+               ~s(ALTER TYPE "hologram_data"."draft_status_$enum" ) <>
+                 ~s(RENAME TO "sketch_status_$enum")
+             ]
+    end
+  end
+
   describe "statements/1 for rename_enum_value" do
     test "renders the value rename" do
       op = %{
@@ -552,6 +716,27 @@ defmodule Hologram.DB.DDLTest do
       assert statements(op) == [
                ~s(ALTER TYPE "hologram_data"."task_status_$enum" ) <>
                  "RENAME VALUE 'done' TO 'completed'"
+             ]
+    end
+  end
+
+  describe "statements/1 for rename_index" do
+    test "renders the index rename" do
+      op = %{op: :rename_index, from: "draft_author_id_$idx", to: "sketch_author_id_$idx"}
+
+      assert statements(op) == [
+               ~s(ALTER INDEX "hologram_data"."draft_author_id_$idx" ) <>
+                 ~s(RENAME TO "sketch_author_id_$idx")
+             ]
+    end
+  end
+
+  describe "statements/1 for rename_table" do
+    test "renders the table rename" do
+      op = %{op: :rename_table, from: "draft", to: "sketch"}
+
+      assert statements(op) == [
+               ~s(ALTER TABLE "hologram_data"."draft" RENAME TO "sketch")
              ]
     end
   end
