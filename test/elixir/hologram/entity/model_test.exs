@@ -1310,6 +1310,37 @@ defmodule Hologram.Entity.ModelTest do
              }
     end
 
+    test "keeps an option's regex as its pattern and flags" do
+      defmodule InlineRegexOptsFixture do
+        use Hologram.Entity
+
+        attribute :email, :string, format: ~r/@/i
+      end
+
+      assert from_modules([InlineRegexOptsFixture]) == %{
+               entities: %{
+                 InlineRegexOptsFixture => %{
+                   attributes: [{:email, :string, [format: {:regex, "@", [:caseless]}]}],
+                   relationships: [],
+                   roles: []
+                 }
+               },
+               roles: %{},
+               user_entity: nil
+             }
+    end
+
+    test "returns equal terms for two reads of a declaration holding a regex" do
+      defmodule InlineRegexEqualityFixture do
+        use Hologram.Entity
+
+        attribute :email, :string, format: ~r/@/
+      end
+
+      assert from_modules([InlineRegexEqualityFixture]) ==
+               from_modules([InlineRegexEqualityFixture])
+    end
+
     test "returns equal terms regardless of the given module order" do
       assert from_modules([Module13, Module2]) == from_modules([Module2, Module13])
     end

@@ -374,7 +374,21 @@ defmodule Hologram.Migration.Generator do
   defp render_opts([]), do: ""
 
   defp render_opts(opts) do
-    Enum.map_join(opts, ", ", fn {key, value} -> "#{key}: #{inspect(value)}" end)
+    Enum.map_join(opts, ", ", fn {key, value} -> "#{key}: #{render_opt_value(value)}" end)
+  end
+
+  # The model keeps a regex as its pattern and flags rather than as a compiled struct, so that
+  # two reads of one declaration compare equal - the migration file spells it the way the entity
+  # type does. Building the regex back is what turns the flags into the modifiers they were
+  # written as.
+  defp render_opt_value({:regex, source, regex_opts}) do
+    source
+    |> Regex.compile!(regex_opts)
+    |> inspect()
+  end
+
+  defp render_opt_value(value) do
+    inspect(value)
   end
 
   # The draft form: the detected facts, the op API that expresses them, what looks

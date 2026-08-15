@@ -460,7 +460,19 @@ defmodule Hologram.Entity.Model do
     |> Enum.reject(fn {key, value} ->
       key in @transition_opts or is_nil(value) or (value == false and key in @flag_opts)
     end)
+    |> Enum.map(fn {key, value} -> {key, normalize_value(value)} end)
     |> Enum.sort()
+  end
+
+  # A regex carries a compiled pattern that differs from one read of a declaration to the next,
+  # so two terms holding one never compare equal - the model keeps what the declaration says
+  # instead, which is the pattern and the flags it was written with.
+  defp normalize_value(%Regex{} = regex) do
+    {:regex, Regex.source(regex), Regex.opts(regex)}
+  end
+
+  defp normalize_value(value) do
+    value
   end
 
   defp normalize_roles(roles) do
