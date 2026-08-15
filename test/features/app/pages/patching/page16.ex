@@ -42,6 +42,13 @@ defmodule HologramFeatureTests.Patching.Page16 do
   # them and the boot render does not name them. Adoption has to hold across that gap - the metas,
   # this script and the style stay the server's, while the scripts the render no longer names are
   # removed rather than rebuilt.
+  #
+  # The script also puts the page into the state the issue says gets lost - a focused field, a
+  # selection within it, a scrolled container - and does it from here rather than from the test,
+  # since only a script in the markup runs before the first patch. None of it is stamped: state is
+  # a stronger claim than identity, because a node can survive and still lose it. Moving a live
+  # element blurs it and can reset a scroll container, and a node that merely holds still says
+  # nothing about whether it was moved.
   def template do
     ~HOLO"""
     <!DOCTYPE html>
@@ -82,6 +89,10 @@ defmodule HologramFeatureTests.Patching.Page16 do
 
         <img id="photo" src="/images/sample.png" width="40" height="30" alt="sample" />
 
+        <div id="feed" style="height: 40px; overflow: auto">
+          <p style="height: 400px">tall enough to scroll</p>
+        </div>
+
         <div id="result">{@count}</div>
 
         <script>
@@ -97,6 +108,18 @@ defmodule HologramFeatureTests.Patching.Page16 do
             Array.from(document.head.children).forEach((node) => {
               node.__fromServer = true;
             });
+
+            // Block-scoped, so that a re-run redeclares nothing. A second top-level const is an
+            // early error, which would throw before the counter above could report the re-run.
+            {
+              const field = document.getElementById("field");
+
+              field.value = "server text";
+              field.focus();
+              field.setSelectionRange(2, 5);
+            }
+
+            document.getElementById("feed").scrollTop = 30;
           {/raw}
         </script>
       </body>

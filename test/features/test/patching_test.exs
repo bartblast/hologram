@@ -1157,5 +1157,30 @@ defmodule HologramFeatureTests.PatchingTest do
       # end, where every render so far has had its chance to add to it.
       |> assert_script_result("return window.__imageLoads;", 1)
     end
+
+    feature "the first render keeps the state those nodes hold", %{session: session} do
+      # Incremented from a script rather than by the driver so the button never takes focus: the
+      # focus below is then the one the page set before booting, which is the thing under test.
+      increment = ~s|document.querySelector("button").click();|
+
+      state = """
+      const field = document.getElementById("field");
+
+      return [
+        document.activeElement.id,
+        field.selectionStart,
+        field.selectionEnd,
+        document.getElementById("feed").scrollTop,
+      ];
+      """
+
+      session = visit(session, Page16)
+
+      script_result(session, increment)
+
+      session
+      |> assert_text(css("#result"), "1")
+      |> assert_script_result(state, ["field", 2, 5, 30])
+    end
   end
 end
