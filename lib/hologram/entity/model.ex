@@ -707,6 +707,20 @@ defmodule Hologram.Entity.Model do
     end
   end
 
+  defp validate_designation_delete!(designation, entity, _deletes_grants?)
+       when designation != entity,
+       do: :ok
+
+  defp validate_designation_delete!(_designation, _entity, true), do: :ok
+
+  defp validate_designation_delete!(designation, _entity, _deletes_grants?) do
+    raise Hologram.CompileError,
+      message:
+        "the designated user entity type #{inspect(designation)} is deleted, and role " <>
+          "grants reference #{inspect(designation)} rows - add `delete_role_grants()` " <>
+          "above it, which empties the role grant store in the same migration"
+  end
+
   defp validate_enum_values!(op, :enum, opts) do
     if opts[:values] in [nil, []] do
       raise Hologram.CompileError,
@@ -747,9 +761,10 @@ defmodule Hologram.Entity.Model do
     end
   end
 
-  # Grants reference the designated type's rows, so a designation that moves elsewhere or
-  # goes away leaves them describing rows that are not the user's any more. The file has to
-  # say so - the deletion is never inferred from a designation change, because a reviewer
+  # Grants reference the designated type's rows, so anything that takes those rows out of
+  # the designation leaves them describing rows that are not the user's any more - a
+  # designation that moves elsewhere, one that goes away, and the deletion of the designated
+  # type itself. The file has to say so - the deletion is never inferred, because a reviewer
   # reading the file would not see it.
   #
   # Walks the ops rather than comparing the entering and folded terms: a rename inside the
@@ -764,6 +779,8 @@ defmodule Hologram.Entity.Model do
           if designation == op.from, do: op.to, else: designation
 
         %{op: :delete_entity} = op, designation ->
+          validate_designation_delete!(designation, op.entity, deletes_grants?)
+
           if designation == op.entity, do: nil, else: designation
 
         %{op: :designate_user_entity} = op, designation ->

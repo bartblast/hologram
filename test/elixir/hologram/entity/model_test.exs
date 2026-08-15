@@ -430,7 +430,10 @@ defmodule Hologram.Entity.ModelTest do
         |> fold([%{op: :create_entity, entity: MyApp.User, line: 3}])
         |> Map.put(:user_entity, MyApp.User)
 
-      ops = [%{op: :delete_entity, entity: MyApp.User, line: 4}]
+      ops = [
+        %{op: :delete_role_grants, line: 4},
+        %{op: :delete_entity, entity: MyApp.User, line: 5}
+      ]
 
       assert fold(model, ops).user_entity == nil
     end
@@ -1114,6 +1117,65 @@ defmodule Hologram.Entity.ModelTest do
         "the user entity designation is removed, and role grants reference MyApp.User " <>
           "rows - add `delete_role_grants()` above it, which empties the role grant " <>
           "store in the same migration"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when the designated entity type is deleted without deleting the grants" do
+      model =
+        empty()
+        |> fold([%{op: :create_entity, entity: MyApp.User, line: 3}])
+        |> Map.put(:user_entity, MyApp.User)
+
+      ops = [%{op: :delete_entity, entity: MyApp.User, line: 4}]
+
+      expected_msg =
+        "the designated user entity type MyApp.User is deleted, and role grants " <>
+          "reference MyApp.User rows - add `delete_role_grants()` above it, which " <>
+          "empties the role grant store in the same migration"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when the designated entity type is deleted and another one designated" do
+      model =
+        empty()
+        |> fold([
+          %{op: :create_entity, entity: MyApp.Account, line: 3},
+          %{op: :create_entity, entity: MyApp.User, line: 4}
+        ])
+        |> Map.put(:user_entity, MyApp.User)
+
+      # The designation the later op names is beside the point - the grants describe rows
+      # the deletion takes away, so the delete is where this stops.
+      ops = [
+        %{op: :delete_entity, entity: MyApp.User, line: 5},
+        %{op: :designate_user_entity, entity: MyApp.Account, line: 6}
+      ]
+
+      expected_msg =
+        "the designated user entity type MyApp.User is deleted, and role grants " <>
+          "reference MyApp.User rows - add `delete_role_grants()` above it, which " <>
+          "empties the role grant store in the same migration"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when the designated entity type is renamed and then deleted" do
+      model =
+        empty()
+        |> fold([%{op: :create_entity, entity: MyApp.User, line: 3}])
+        |> Map.put(:user_entity, MyApp.User)
+
+      ops = [
+        %{op: :rename_entity, from: MyApp.User, to: MyApp.Account, line: 4},
+        %{op: :delete_entity, entity: MyApp.Account, line: 5}
+      ]
+
+      expected_msg =
+        "the designated user entity type MyApp.Account is deleted, and role grants " <>
+          "reference MyApp.Account rows - add `delete_role_grants()` above it, which " <>
+          "empties the role grant store in the same migration"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
     end
