@@ -9,6 +9,13 @@ defmodule Hologram.Sync.Dispatcher do
 
   alias Hologram.DB.Outbox
 
+  # How long the log can go unread when the announcements stop arriving - a listener whose
+  # connection died, or a pooler that drops them. It bounds nothing while they do arrive, since
+  # each one is read immediately, and a round over an unchanged log is two cheap reads. Policy,
+  # not a derived figure: it trades those reads against how stale a client can get while the
+  # announcements are missing.
+  @default_poll_interval_ms :timer.seconds(5)
+
   @doc """
   Starts the dispatcher.
 
@@ -20,6 +27,10 @@ defmodule Hologram.Sync.Dispatcher do
   window is read: a node begins with what happens from then on, because what came before is what
   a client's first sync reads from the rows themselves. Starting touches no database, so the
   dispatcher can be supervised alongside the pool rather than after it.
+
+  `:notifications` names a `Postgrex.Notifications` process to hear appends on. It is optional
+  because the announcements are an optimization over the poll rather than the mechanism: without
+  one the dispatcher still reads, just no sooner than `:poll_interval_ms` after a write.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -40,20 +51,40 @@ defmodule Hologram.Sync.Dispatcher do
 
   @impl GenServer
   def init(opts) do
-    handler = Keyword.fetch!(opts, :handler)
+    state = %{
+      cursor: Keyword.get(opts, :cursor),
+      handler: Keyword.fetch!(opts, :handler),
+      notifications: Keyword.get(opts, :notifications),
+      poll_interval_ms: Keyword.get(opts, :poll_interval_ms, default_poll_interval_ms())
+    }
 
-    {:ok, %{cursor: Keyword.get(opts, :cursor), handler: handler}}
+    {:ok, state, {:continue, :start_listening}}
+  end
+
+  @impl GenServer
+  def handle_continue(:start_listening, state) do
+    if state.notifications do
+      Postgrex.Notifications.listen!(state.notifications, Outbox.channel())
+    end
+
+    schedule_poll(state.poll_interval_ms)
+
+    {:noreply, state}
   end
 
   @impl GenServer
   def handle_info(:wake, state) do
-    # Draining first is what makes the drain safe: the window read after it covers everything
-    # committed by then, so the wakes dropped here asked for nothing this round will not do. A
-    # wake arriving after the read stays in the mailbox and gets its own round, which is the
-    # transaction that committed while this one was working.
-    drain_wakes()
+    {:noreply, wake_up(state)}
+  end
 
-    {:noreply, dispatch(state)}
+  def handle_info({:notification, _connection, _ref, _channel, _payload}, state) do
+    {:noreply, wake_up(state)}
+  end
+
+  def handle_info(:poll, state) do
+    schedule_poll(state.poll_interval_ms)
+
+    {:noreply, wake_up(state)}
   end
 
   defp dispatch(state) do
@@ -75,11 +106,35 @@ defmodule Hologram.Sync.Dispatcher do
     end
   end
 
+  defp default_poll_interval_ms do
+    :hologram
+    |> Application.get_env(:sync, [])
+    |> Keyword.get(:poll_interval_ms, @default_poll_interval_ms)
+  end
+
+  # Every announcement and every nudge asks the same question, so the ones already waiting are
+  # answered by the round about to run. The poll is left where it is: dropping it would stop the
+  # timer that keeps asking.
   defp drain_wakes do
     receive do
       :wake -> drain_wakes()
+      {:notification, _connection, _ref, _channel, _payload} -> drain_wakes()
     after
       0 -> :ok
     end
+  end
+
+  defp schedule_poll(interval_ms) do
+    Process.send_after(self(), :poll, interval_ms)
+  end
+
+  defp wake_up(state) do
+    # Draining first is what makes the drain safe: the window read after it covers everything
+    # committed by then, so the wakes dropped here asked for nothing this round will not do. A
+    # wake arriving after the read stays in the mailbox and gets its own round, which is the
+    # transaction that committed while this one was working.
+    drain_wakes()
+
+    dispatch(state)
   end
 end

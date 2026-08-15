@@ -56,6 +56,13 @@ defmodule Hologram.DB.Outbox do
   end
 
   @doc """
+  Returns the channel an append announces itself on, which is the one a listener waits on - the
+  two cannot drift apart while they read it from here.
+  """
+  @spec channel() :: String.t()
+  def channel, do: @channel
+
+  @doc """
   Returns the transaction id below which every transaction has finished - the upper edge of the
   next window to read.
 
