@@ -594,6 +594,58 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert DateTime.compare(reloaded_entity.updated_at, created_entity.updated_at) == :gt
     end
 
+    test "records the changed attributes and the stamp they moved" do
+      created_entity =
+        Module2
+        |> Entity.new(a: true, b: 1, c: "before")
+        |> create()
+
+      update(Module2, created_entity.id, %{c: "after"})
+
+      reloaded_entity = get(Module2, created_entity.id)
+
+      assert %{op: "patch_entity", type: "Hologram.Test.Fixtures.Entity.Module2"} =
+               effect = List.last(outbox_effects())
+
+      assert effect.entity_id == created_entity.id
+
+      assert effect.data == %{
+               "c" => "after",
+               "updated_at" => DateTime.to_iso8601(reloaded_entity.updated_at)
+             }
+    end
+
+    test "never records the value of a server-only attribute it changed" do
+      created_entity =
+        Module14
+        |> Entity.new(email: "before@example.com")
+        |> create()
+
+      update(Module14, created_entity.id, %{password_hash: "hashed_secret_v2"})
+
+      assert effect = List.last(outbox_effects())
+      assert Map.keys(effect.data) == ["updated_at"]
+
+      {:ok, %Postgrex.Result{rows: [[log]]}} =
+        Connection.query(~s|SELECT string_agg("data"::text, ' ') FROM "hologram_system"."outbox"|)
+
+      refute log =~ "hashed_secret_v2"
+    end
+
+    test "records nothing when no entity has the given id" do
+      effects_before = outbox_effects()
+      missing_id = Entity.generate_id()
+
+      expected_msg =
+        "cannot update Hologram.Test.Fixtures.Entity.Module2 - no entity with id #{inspect(missing_id)}"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        update(Module2, missing_id, %{c: "after"})
+      end
+
+      assert outbox_effects() == effects_before
+    end
+
     test "sets, reassigns and clears to-one references" do
       first_target =
         Module1

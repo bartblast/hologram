@@ -195,17 +195,22 @@ defmodule Hologram.DB.EntityOperations do
     encoded_updated_at = Codec.encode(updated_at, :datetime)
     encoded_id = Codec.encode(id, :uuid)
 
-    case Connection.query(statement, changed_values ++ [encoded_updated_at, encoded_id]) do
-      {:ok, %Postgrex.Result{num_rows: 1}} ->
-        :ok
+    params = changed_values ++ [encoded_updated_at, encoded_id]
 
-      {:ok, %Postgrex.Result{num_rows: 0}} ->
-        raise ArgumentError,
-              "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
+    # The stamp travels with the changes: every update moves updated_at, and a client holding
+    # the row holds that too. The sort-key companions do not - they are derived from the values
+    # beside them, and a reader recomputes them rather than being told.
+    data =
+      sorted_changes
+      |> Map.new()
+      |> Map.put(:updated_at, updated_at)
 
-      {:error, error} ->
-        raise error
-    end
+    {:ok, :ok} =
+      Connection.transaction(fn ->
+        run_update!(statement, params, entity_type, id, data)
+      end)
+
+    :ok
   end
 
   defp companion_entries(columns, sorted_changes) do
@@ -360,6 +365,22 @@ defmodule Hologram.DB.EntityOperations do
       end)
 
     %{op: :put_entity, entity_type: entity_type, entity_id: entity.id, data: data}
+  end
+
+  defp run_update!(statement, params, entity_type, id, data) do
+    case Connection.query(statement, params) do
+      {:ok, %Postgrex.Result{num_rows: 1}} ->
+        Outbox.append([
+          %{op: :patch_entity, entity_type: entity_type, entity_id: id, data: data}
+        ])
+
+      {:ok, %Postgrex.Result{num_rows: 0}} ->
+        raise ArgumentError,
+              "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
+
+      {:error, error} ->
+        raise error
+    end
   end
 
   defp qualified_table(table) do
