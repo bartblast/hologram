@@ -121,6 +121,86 @@ defmodule Hologram.DB.CodecTest do
     end
   end
 
+  describe "encode_json/2" do
+    test "passes nil through for any type" do
+      assert encode_json(nil, :datetime) == nil
+    end
+
+    test "passes :boolean values through" do
+      assert encode_json(false, :boolean) == false
+    end
+
+    test "encodes :date values as ISO 8601 strings" do
+      assert encode_json(~D[2026-07-19], :date) == "2026-07-19"
+    end
+
+    test "encodes :datetime values as ISO 8601 strings" do
+      assert encode_json(~U[2026-07-18 08:30:00.123456Z], :datetime) ==
+               "2026-07-18T08:30:00.123456Z"
+    end
+
+    test "normalizes non-UTC :datetime values to their UTC representation" do
+      warsaw_datetime = %DateTime{
+        year: 2026,
+        month: 7,
+        day: 18,
+        hour: 10,
+        minute: 30,
+        second: 0,
+        microsecond: {123_456, 6},
+        calendar: Calendar.ISO,
+        time_zone: "Europe/Warsaw",
+        zone_abbr: "CEST",
+        utc_offset: 3_600,
+        std_offset: 3_600
+      }
+
+      assert encode_json(warsaw_datetime, :datetime) == "2026-07-18T08:30:00.123456Z"
+    end
+
+    test "encodes :enum values to their labels" do
+      assert encode_json(:low, :enum) == "low"
+    end
+
+    test "encodes :enum values that are modules without their Elixir prefix" do
+      assert encode_json(Module1, :enum) == "Hologram.Test.Fixtures.Role.Module1"
+    end
+
+    test "passes :float values through" do
+      assert encode_json(2.5, :float) == 2.5
+    end
+
+    test "passes :integer values through" do
+      assert encode_json(11, :integer) == 11
+    end
+
+    test "passes :string values through" do
+      assert encode_json("xyz", :string) == "xyz"
+    end
+
+    test "keeps :uuid values as canonical strings" do
+      assert encode_json(@uuid_string, :uuid) == @uuid_string
+    end
+
+    test "encodes every admitted type into a term Jason accepts" do
+      values = [
+        {false, :boolean},
+        {~D[2026-07-19], :date},
+        {~U[2026-07-18 08:30:00.123456Z], :datetime},
+        {Module1, :enum},
+        {2.5, :float},
+        {11, :integer},
+        {"xyz", :string},
+        {@uuid_string, :uuid}
+      ]
+
+      encoded = Enum.map(values, fn {value, type} -> encode_json(value, type) end)
+
+      assert Jason.encode!(encoded) ==
+               ~s([false,"2026-07-19","2026-07-18T08:30:00.123456Z","Hologram.Test.Fixtures.Role.Module1",2.5,11,"xyz","#{@uuid_string}"])
+    end
+  end
+
   describe "encode_enum_value/1" do
     test "strips the Elixir prefix of a module" do
       assert encode_enum_value(Module1) == "Hologram.Test.Fixtures.Role.Module1"
