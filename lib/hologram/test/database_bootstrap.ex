@@ -23,8 +23,9 @@ defmodule Hologram.Test.DatabaseBootstrap do
   (a second mechanism, a second app instance).
 
   Runs before anything connects a pool, so it holds no assumption about the app being
-  up. An unreachable Postgres server prints how to start one and halts: the server is a
-  hard requirement of any suite calling this, and every later failure would be noise.
+  up. A connection that cannot be established prints what to check and halts: a usable
+  server is a hard requirement of any suite calling this, and every later failure would
+  be noise.
 
   Refuses to run outside the test environment - the schema drop is what makes this
   function test-only. When neither HOLOGRAM_ENV nor MIX_ENV is set, environment
@@ -87,25 +88,33 @@ defmodule Hologram.Test.DatabaseBootstrap do
       {:ok, _result} ->
         :ok
 
+      # The reason carried here is always the pool's :queue_timeout, whatever went wrong -
+      # the driver retries in the background and this is the wait giving up. What actually
+      # failed is in the connection error the driver logged just above, so the message
+      # names the candidates and sends the reader there rather than asserting one.
       {:error, _reason} ->
-        print_unreachable_server_message(database_opts)
+        print_unusable_server_message(database_opts)
         System.halt(1)
     end
 
     GenServer.stop(connection_pid)
   end
 
-  defp print_unreachable_server_message(database_opts) do
+  defp print_unusable_server_message(database_opts) do
     # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
     IO.puts(:stderr, """
 
-    Postgres is required to run this test suite, but no server is reachable at \
-    #{database_opts[:host]}:#{database_opts[:port]} (user "#{database_opts[:user]}").
+    Postgres is required to run this test suite, but no connection could be established \
+    to #{database_opts[:host]}:#{database_opts[:port]} as user \
+    "#{database_opts[:user]}". The connection error logged above says which of these it is:
 
-    Start a local Postgres server, e.g.:
-      * macOS (Homebrew): brew services start postgresql
-      * Linux (systemd): sudo systemctl start postgresql
-      * Docker: docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres
+      * no server is running there - start one, e.g.
+          macOS (Homebrew): brew services start postgresql
+          Linux (systemd): sudo systemctl start postgresql
+          Docker: docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres
+      * the credentials are refused - check the user and password
+      * the "postgres" maintenance database is missing - this bootstrap connects to it \
+    to create the test databases
 
     Override the connection settings with config :hologram, :database in config/test.exs.
     """)
