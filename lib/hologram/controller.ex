@@ -3,6 +3,7 @@ defmodule Hologram.Controller do
 
   require Logger
 
+  alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Page
@@ -11,6 +12,7 @@ defmodule Hologram.Controller do
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
+  alias Hologram.Router.PageModuleResolver
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Deserializer
@@ -87,6 +89,109 @@ defmodule Hologram.Controller do
           Plug.Conn.delete_session(acc_conn, key)
       end
     end)
+  end
+
+  @doc """
+  Builds the payload describing a page for a client that renders it itself, rather than being sent
+  the markup.
+
+  Carries what a mount needs and nothing about how the page looks: the component registry the
+  render produced, the page module and its params, the realtime bookkeeping, and the digest naming
+  the page's bundle, so the client can load the code without asking again.
+
+  Terms are encoded the way a command's response encodes them, as JavaScript the client evaluates,
+  since that is the form its runtime already reads.
+
+  A redirect is a payload of its own, since a client-side navigation cannot be answered with a real
+  one: a `fetch` following redirects consumes the 302 invisibly, and one set to leave it alone gets
+  a response whose Location it is not allowed to read. Carrying the target as data is what lets the
+  client go there without reloading the document, which is the whole point of navigating in the
+  first place. The target's own page module and params ride along, resolved server-side, so the
+  client can ask for that page's data without a round trip to find out what it is. A target no page
+  owns carries no module, and the client hands it to the browser.
+  """
+  @spec build_page_data_payload(map | {:redirect, String.t(), module | nil, map | nil}) :: map
+  def build_page_data_payload({:redirect, to, nil, _params}) do
+    %{to: to, type: "redirect"}
+  end
+
+  def build_page_data_payload({:redirect, to, page_module, params}) do
+    %{
+      pageModule: Encoder.encode_term!(page_module),
+      pageParams: Encoder.encode_term!(params),
+      to: to,
+      type: "redirect"
+    }
+  end
+
+  def build_page_data_payload(%{
+        component_registry: component_registry,
+        page_digest: page_digest,
+        page_module: page_module,
+        page_params: page_params,
+        self_echoes: self_echoes,
+        sub_receipt_adds: sub_receipt_adds,
+        sub_receipt_drops: sub_receipt_drops
+      }) do
+    %{
+      componentRegistry: Encoder.encode_term!(component_registry),
+      pageDigest: page_digest,
+      pageModule: Encoder.encode_term!(page_module),
+      pageParams: Encoder.encode_term!(page_params),
+      selfEchoes: Encoder.encode_term!(self_echoes),
+      subReceiptAdds: Encoder.encode_term!(sub_receipt_adds),
+      subReceiptDrops: Encoder.encode_term!(sub_receipt_drops),
+      type: "page"
+    }
+  end
+
+  @doc """
+  Resolves a redirect target into the page it names, so a client that navigates by page module can
+  ask for that page's data directly.
+
+  Uses the same resolution the router uses for an incoming request, which is what keeps a redirect
+  landing on the page a browser would have landed on. Params come from both places a page can carry
+  them, the path and the query string, cast the way the page declares them. A query param the page
+  does not declare is left out rather than refused, since a redirect URL can carry params meant for
+  something other than the page.
+
+  A target no page owns - an external URL, or a path the framework itself serves - resolves to no
+  module, leaving the client to hand it to the browser.
+  """
+  @spec resolve_redirect_target(String.t()) :: {:redirect, String.t(), module | nil, map | nil}
+  def resolve_redirect_target(to) do
+    %URI{host: host, path: path, query: query, scheme: scheme} = URI.parse(to)
+
+    # Only a target that names no host of its own can be one of this app's pages. The same path
+    # can exist here and elsewhere, so resolving by path alone would answer a redirect to another
+    # origin with a local page, keeping the client where it was told to leave.
+    #
+    # The resolver answers false, not nil, when no page owns the path.
+    page_module =
+      is_nil(host) && is_nil(scheme) && path && PageModuleResolver.resolve(path)
+
+    if page_module do
+      query_params = if query, do: URI.decode_query(query), else: %{}
+
+      # Only the params the page declares are cast. A redirect target is a URL someone wrote, and
+      # it can carry query params that belong to something else entirely - a tracking tag, a
+      # campaign id - which the page never declared and Page.cast_params/2 refuses. Casting those
+      # would turn a redirect into a 500. They stay in the URL either way, since that is what the
+      # browser is given.
+      declared_names =
+        Enum.map(page_module.__params__(), fn {name, _type, _opts} -> Atom.to_string(name) end)
+
+      params =
+        path
+        |> extract_params(page_module)
+        |> Map.merge(query_params)
+        |> Map.take(declared_names)
+        |> Page.cast_params(page_module)
+
+      {:redirect, to, page_module, params}
+    else
+      {:redirect, to, nil, nil}
+    end
   end
 
   @doc """
@@ -329,61 +434,28 @@ defmodule Hologram.Controller do
         client_claimed_sub_keys,
         renderer_opts
       ) do
-    conn = Session.init(initial_conn)
+    case run_page_lifecycle(
+           initial_conn,
+           page_module,
+           params,
+           client_claimed_sub_keys,
+           renderer_opts
+         ) do
+      {:terminal, conn, server_struct} ->
+        conn
+        |> send_response(server_struct)
+        |> Plug.Conn.halt()
 
-    server_struct = %{
-      Server.from(conn)
-      | cid: "page",
-        instance_id: renderer_opts[:instance_id]
-    }
+      {:rendered, conn, result} ->
+        final_html =
+          result.html
+          |> Renderer.interpolate_self_echoes_js(result.self_echoes)
+          |> Renderer.interpolate_sub_receipt_adds_js(result.sub_receipt_adds)
+          |> Renderer.interpolate_sub_receipt_drops_js(result.sub_receipt_drops)
 
-    middleware_server_struct =
-      Middleware.run(server_struct, page_module.__middleware__())
-
-    if middleware_server_struct.status do
-      # Middleware produced a terminal response - skip the render and send it,
-      # still applying the decorations accumulated by the steps that ran.
-      Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
-
-      conn
-      |> apply_session_ops(middleware_server_struct.__meta__.session_ops)
-      |> apply_cookie_ops(middleware_server_struct.__meta__.cookie_ops)
-      |> maybe_persist_user_id(server_struct, middleware_server_struct)
-      |> send_response(middleware_server_struct)
-      |> Plug.Conn.halt()
-    else
-      {rendered_html, _component_registry, rendered_server_struct} =
-        Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
-
-      # Transition subscriptions before flushing broadcasts so a registry failure
-      # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
-      # effectively infallible, so once transition succeeds both side effects land.
-      {sub_receipt_adds, sub_receipt_drops} =
-        transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
-
-      Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
-
-      # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The
-      # renderer leaves `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so
-      # this Realtime-domain computation lives in the controller; substituting
-      # back into HTML here keeps the renderer Realtime-agnostic.
-      self_echoes =
-        Realtime.get_self_echoes(rendered_server_struct, rendered_server_struct.subscriptions)
-
-      flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
-
-      final_html =
-        rendered_html
-        |> Renderer.interpolate_self_echoes_js(self_echoes)
-        |> Renderer.interpolate_sub_receipt_adds_js(sub_receipt_adds)
-        |> Renderer.interpolate_sub_receipt_drops_js(sub_receipt_drops)
-
-      conn
-      |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
-      |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-      |> maybe_persist_user_id(server_struct, flushed_server_struct)
-      |> Controller.html(final_html)
-      |> Plug.Conn.halt()
+        conn
+        |> Controller.html(final_html)
+        |> Plug.Conn.halt()
     end
   end
 
@@ -446,17 +518,12 @@ defmodule Hologram.Controller do
   end
 
   @doc """
-  Handles a subsequent page HTTP GET request by building HTTP response.
-  Exracts page parameters from the query string.
+  Handles a request for a page the client navigated to, answering with the page described as data
+  for a client that renders it itself.
 
-  ## Parameters
-
-    * `conn` - The Plug.Conn struct representing the HTTP request
-    * `page_module` - The page module to render
-
-  ## Returns
-
-  The updated and halted Plug.Conn struct with the rendered HTML and applied cookies.
+  Runs the same lifecycle the initial request runs - session, middleware, render, subscription
+  transition, broadcasts - and differs only in what it sends back, so a page behaves the same way
+  however it is reached.
   """
   @spec handle_subsequent_page_request(Plug.Conn.t(), module) :: Plug.Conn.t()
   def handle_subsequent_page_request(initial_conn, page_module) do
@@ -470,14 +537,36 @@ defmodule Hologram.Controller do
       |> Map.get(:query_params)
       |> Page.cast_params(page_module)
 
-    handle_page_request(
-      conn,
-      page_module,
-      params,
-      client_claimed_sub_keys,
-      initial_page?: false,
-      instance_id: instance_id
-    )
+    renderer_opts = [initial_page?: false, instance_id: instance_id]
+
+    case run_page_lifecycle(
+           conn,
+           page_module,
+           params,
+           client_claimed_sub_keys,
+           renderer_opts
+         ) do
+      {:terminal, lifecycle_conn, server_struct} ->
+        lifecycle_conn
+        |> send_terminal_page_data(server_struct)
+        |> Plug.Conn.halt()
+
+      {:rendered, lifecycle_conn, result} ->
+        payload =
+          build_page_data_payload(%{
+            component_registry: result.component_registry,
+            page_digest: PageDigestRegistry.lookup(page_module),
+            page_module: page_module,
+            page_params: params,
+            self_echoes: result.self_echoes,
+            sub_receipt_adds: result.sub_receipt_adds,
+            sub_receipt_drops: result.sub_receipt_drops
+          })
+
+        lifecycle_conn
+        |> send_page_data(payload)
+        |> Plug.Conn.halt()
+    end
   end
 
   @doc """
@@ -620,6 +709,118 @@ defmodule Hologram.Controller do
       _fallback ->
         {server_struct, nil}
     end
+  end
+
+  # Everything a page response does before it is a response: session, middleware, render,
+  # subscription transition, broadcasts. Returns the connection with the session and cookie
+  # operations the run accumulated already applied, so the caller only chooses what to send.
+  #
+  # A page must behave the same whichever form it is asked for, markup or data, which it only does
+  # while there is one of these to run.
+  defp run_page_lifecycle(
+         initial_conn,
+         page_module,
+         params,
+         client_claimed_sub_keys,
+         renderer_opts
+       ) do
+    conn = Session.init(initial_conn)
+
+    server_struct = %{
+      Server.from(conn)
+      | cid: "page",
+        instance_id: renderer_opts[:instance_id]
+    }
+
+    middleware_server_struct =
+      Middleware.run(server_struct, page_module.__middleware__())
+
+    if middleware_server_struct.status do
+      # Middleware answered before anything was rendered - skip the render, still applying the
+      # decorations accumulated by the steps that ran.
+      Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
+
+      {:terminal, decorate_conn(conn, server_struct, middleware_server_struct),
+       middleware_server_struct}
+    else
+      {rendered_html, component_registry, rendered_server_struct} =
+        Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
+
+      # Transition subscriptions before flushing broadcasts so a registry failure
+      # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
+      # effectively infallible, so once transition succeeds both side effects land.
+      {sub_receipt_adds, sub_receipt_drops} =
+        transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
+
+      Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
+
+      # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The renderer leaves
+      # `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so this Realtime-domain computation
+      # lives in the controller, which is also why it is returned rather than interpolated here.
+      self_echoes =
+        Realtime.get_self_echoes(rendered_server_struct, rendered_server_struct.subscriptions)
+
+      flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
+
+      result = %{
+        component_registry: component_registry,
+        html: rendered_html,
+        self_echoes: self_echoes,
+        sub_receipt_adds: sub_receipt_adds,
+        sub_receipt_drops: sub_receipt_drops
+      }
+
+      {:rendered, decorate_conn(conn, server_struct, flushed_server_struct), result}
+    end
+  end
+
+  defp decorate_conn(conn, server_struct, final_server_struct) do
+    conn
+    |> apply_session_ops(final_server_struct.__meta__.session_ops)
+    |> apply_cookie_ops(final_server_struct.__meta__.cookie_ops)
+    |> maybe_persist_user_id(server_struct, final_server_struct)
+  end
+
+  # Marks a response as carrying page data, so the client can tell one from a response a page's
+  # middleware wrote itself. Status alone cannot: middleware is free to answer 200 with a body of
+  # its own, which is a page's answer rather than a page.
+  defp send_page_data(conn, payload) do
+    conn
+    |> Plug.Conn.put_resp_header("hologram-page-data", "true")
+    |> Controller.json(payload)
+  end
+
+  # What a page's middleware answered, in the form the client can act on.
+  #
+  # A redirect is data, because a redirect cannot survive the trip: the fetch this answers either
+  # follows it out of sight or is refused its Location. Everything else is sent as it stands, status
+  # and all, since those are dead ends rather than navigations - the client hands the path to the
+  # browser, which shows exactly what a typed-in URL would have shown. Keeping the real status is
+  # also what keeps a denial legible to logs and proxies rather than reading as success.
+  defp send_terminal_page_data(conn, %Server{status: status} = server)
+       when status >= 300 and status < 400 do
+    case server.response_headers["location"] do
+      nil ->
+        send_response(conn, server)
+
+      to ->
+        # The headers travel even though the redirect itself does not. Middleware that sets one
+        # alongside a redirect means it for the response, and the HTML path keeps it, so dropping
+        # it here would make the same middleware behave differently for a navigation. Location is
+        # left behind: the payload carries the target, and a location on the 200 this sends names
+        # somewhere the client is not going.
+        conn
+        |> Plug.Conn.merge_resp_headers(
+          server.response_headers
+          |> Map.delete("location")
+          |> Map.to_list()
+        )
+        |> send_page_data(build_page_data_payload(resolve_redirect_target(to)))
+    end
+  end
+
+  defp send_terminal_page_data(conn, %Server{} = server) do
+    send_response(conn, server)
   end
 
   defp refresh_unless_tombstoned(receipt, instance_id, session_id, authorizing_user_id) do

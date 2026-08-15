@@ -102,7 +102,14 @@ export default class Client {
     HttpTransport.restartPing(sendImmediatePing);
   }
 
-  static async fetchPage(toParam, onSuccess) {
+  // Asks the server to describe a page rather than render it, for a client that renders it itself.
+  //
+  // The answer is a page only when it says so: a page's middleware can answer the request instead,
+  // with any status it likes including a plain 200, so the marker header rather than the status is
+  // what tells the two apart. Anything that is not a page goes to onNotPage, for the caller to hand
+  // to the browser - which is also where an opaque redirect lands, redirects being left to the
+  // browser rather than followed here.
+  static async fetchPage(toParam, onSuccess, onNotPage) {
     let pageModule, queryString;
 
     if (Type.isAlias(toParam)) {
@@ -121,14 +128,17 @@ export default class Client {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: Serializer.serialize($.buildPageRequestPayload(), "server"),
+        redirect: "manual",
       });
 
-      if (!response.ok) {
-        $.#handleFetchPageError(response.status);
+      // Awaited so that whatever the callback goes on to do is part of this promise. A redirect
+      // answers by fetching the next page, and without the await a failure there - the hop limit
+      // being one - would reject a promise nobody holds instead of reaching the caller.
+      if (response.headers.get("hologram-page-data") === "true") {
+        await onSuccess(await response.json());
+      } else {
+        await onNotPage();
       }
-
-      const html = await response.text();
-      onSuccess(html);
     } catch (error) {
       if (error instanceof HologramRuntimeError) {
         throw error;

@@ -164,6 +164,30 @@ describe("Renderer", () => {
   const parentTagName = "div";
   const slots = Type.keywordList();
 
+  const element = (tagName, childrenDom = []) =>
+    Type.tuple([
+      Type.atom("element"),
+      Type.bitstring(tagName),
+      Type.list(),
+      Type.list(childrenDom),
+    ]);
+
+  // An element carrying the key of its place in the template, as the compiler writes it.
+  const keyedElement = (tagName, index, childrenDom = []) =>
+    Type.tuple([
+      Type.atom("element"),
+      Type.bitstring(tagName),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("$key"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring(`1a2b3c:${index}`)],
+          ]),
+        ]),
+      ]),
+      Type.list(childrenDom),
+    ]);
+
   it("text node", () => {
     const node = Type.tuple([Type.atom("text"), Type.bitstring("abc")]);
 
@@ -251,13 +275,11 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("with block marker", () => {
-      // <!--[h:1a2b3c:0:o]-->
-      const node = Type.tuple([
-        Type.atom("public_comment"),
-        Type.list([
-          Type.tuple([Type.atom("text"), Type.bitstring("[h:1a2b3c:0:o]")]),
-        ]),
+    it("numbers a repeated key in one children list", () => {
+      // <span><div></div><div></div></span>, both divs written in one place of one template
+      const node = element("span", [
+        keyedElement("div", 0),
+        keyedElement("div", 0),
       ]);
 
       const result = Renderer.renderDom(
@@ -268,67 +290,22 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      const expected = vnode("!", {key: "[h:1a2b3c:0:o]"}, "[h:1a2b3c:0:o]");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("numbers repeated block markers in one list", () => {
-      // <!--[h:1a2b3c:0:o]--><!--[h:1a2b3c:0:o]-->
-      const marker = Type.tuple([
-        Type.atom("public_comment"),
-        Type.list([
-          Type.tuple([Type.atom("text"), Type.bitstring("[h:1a2b3c:0:o]")]),
-        ]),
-      ]);
-
-      const node = Type.list([marker, marker]);
-
-      const result = Renderer.renderDom(
-        node,
-        context,
-        slots,
-        defaultTarget,
-        parentTagName,
-      );
-
       assert.deepStrictEqual(
-        result.map((child) => child.key),
-        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]:1"],
-      );
-
-      assert.deepStrictEqual(
-        result.map((child) => child.text),
-        ["[h:1a2b3c:0:o]", "[h:1a2b3c:0:o]"],
+        result.children.map((child) => child.key),
+        ["1a2b3c:0", "1a2b3c:0:1"],
       );
     });
 
-    it("gathers a marked span into one fragment", () => {
-      // <!--[h:1a2b3c:0:o]--><div></div><!--[h:1a2b3c:0:c]--><input />
-      const marker = (side) =>
-        Type.tuple([
-          Type.atom("public_comment"),
-          Type.list([
-            Type.tuple([
-              Type.atom("text"),
-              Type.bitstring(`[h:1a2b3c:0:${side}]`),
-            ]),
-          ]),
-        ]);
+    // A loop's iterations are lists of their own, so each place of the body occurs once in each
+    // of them - the repeat only exists in the children list they are spliced into, which is where
+    // the numbering has to happen for the keys to come out unique.
+    it("numbers the keys a loop repeats", () => {
+      // <span>{%for ...}<em></em><div></div>{/for}</span>
+      const iteration = () =>
+        Type.list([keyedElement("em", 0), keyedElement("div", 1)]);
 
-      const element = (tagName) =>
-        Type.tuple([
-          Type.atom("element"),
-          Type.bitstring(tagName),
-          Type.list(),
-          Type.list(),
-        ]);
-
-      const node = Type.list([
-        marker("o"),
-        element("div"),
-        marker("c"),
-        element("input"),
+      const node = element("span", [
+        Type.list([iteration(), iteration(), iteration()]),
       ]);
 
       const result = Renderer.renderDom(
@@ -339,15 +316,16 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      // The block holds one position whatever it renders, so the input never shifts.
-      assert.equal(result.length, 2);
-      assert.isUndefined(result[0].sel);
-      assert.equal(result[0].key, "[h:1a2b3c:0:o]");
-      assert.equal(result[1].sel, "input");
-
       assert.deepStrictEqual(
-        result[0].children.map((child) => child.key ?? child.sel),
-        ["[h:1a2b3c:0:o]", "div", "[h:1a2b3c:0:c]"],
+        result.children.map((child) => child.key),
+        [
+          "1a2b3c:0",
+          "1a2b3c:1",
+          "1a2b3c:0:1",
+          "1a2b3c:1:1",
+          "1a2b3c:0:2",
+          "1a2b3c:1:2",
+        ],
       );
     });
 
@@ -2910,6 +2888,140 @@ describe("Renderer", () => {
           const expected = vnode("script", {attrs: {}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
+        });
+      });
+
+      describe("slot key", () => {
+        const keyAttr = (value) =>
+          Type.tuple([
+            Type.bitstring("$key"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring(value)]]),
+          ]);
+
+        const elementWithKey = (tagName, attrs) =>
+          Type.tuple([
+            Type.atom("element"),
+            Type.bitstring(tagName),
+            Type.list(attrs),
+            Type.list(),
+          ]);
+
+        const render = (node) =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+        it("becomes the vnode key and never an attribute", () => {
+          const result = render(elementWithKey("div", [keyAttr("t7:4")]));
+
+          assert.deepStrictEqual(
+            result,
+            vnode("div", {key: "t7:4", attrs: {}, on: {}}, []),
+          );
+        });
+
+        it("binds no event listener", () => {
+          const result = render(elementWithKey("div", [keyAttr("t7:4")]));
+
+          assert.deepStrictEqual(result.data.on, {});
+        });
+
+        it("element without a key carries none", () => {
+          const result = render(elementWithKey("div", []));
+
+          assert.isUndefined(result.key);
+        });
+
+        // What an element loads names it better than where it sits, so a stylesheet keeps its
+        // href key and does not get re-fetched for having moved in the template.
+        it("does not displace a link element's resource key", () => {
+          const node = elementWithKey("link", [
+            Type.tuple([
+              Type.bitstring("href"),
+              Type.keywordList([
+                [Type.atom("text"), Type.bitstring("my_href")],
+              ]),
+            ]),
+            keyAttr("t7:4"),
+          ]);
+
+          assert.equal(render(node).key, "__hologramLink__:my_href");
+        });
+
+        it("does not displace a script element's resource key", () => {
+          const node = elementWithKey("script", [
+            Type.tuple([
+              Type.bitstring("src"),
+              Type.keywordList([[Type.atom("text"), Type.bitstring("my_src")]]),
+            ]),
+            keyAttr("t7:4"),
+          ]);
+
+          assert.equal(render(node).key, "__hologramScript__:my_src");
+        });
+
+        // An inline script is keyed by its own code, and the live node is keyed by its
+        // textContent, so the two agree only while the whole body renders as one child. Everything
+        // a script can hold renders to text and adjacent text is merged, which is what makes that
+        // true - if it stopped being true, the boot patch would rebuild every inline script and
+        // the page would re-run its own code.
+        it("keys an inline script by the whole of its body", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("script"),
+            Type.list(),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("let x = ")]),
+              Type.tuple([
+                Type.atom("expression"),
+                Type.tuple([Type.integer(123)]),
+              ]),
+              Type.tuple([Type.atom("text"), Type.bitstring("; go();")]),
+            ]),
+          ]);
+
+          const result = render(node);
+
+          assert.equal(result.children.length, 1);
+          assert.equal(result.children[0].text, "let x = 123; go();");
+          assert.equal(result.key, "__hologramScript__:let x = 123; go();");
+        });
+
+        // The key is found without expanding the spread, so a tag carrying one has to keep
+        // reaching its key.
+        it("is found on a tag that also carries a spread", () => {
+          const node = elementWithKey("div", [
+            Type.tuple([
+              Type.atom("spread"),
+              Type.tuple([
+                Type.map([
+                  [Type.bitstring("class"), Type.bitstring("my_class")],
+                ]),
+              ]),
+            ]),
+            keyAttr("t7:4"),
+          ]);
+
+          assert.equal(render(node).key, "t7:4");
+        });
+
+        it("a spread on its own carries no key", () => {
+          const node = elementWithKey("div", [
+            Type.tuple([
+              Type.atom("spread"),
+              Type.tuple([
+                Type.map([
+                  [Type.bitstring("class"), Type.bitstring("my_class")],
+                ]),
+              ]),
+            ]),
+          ]);
+
+          assert.isUndefined(render(node).key);
         });
       });
 
