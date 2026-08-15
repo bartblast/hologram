@@ -9,6 +9,9 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page12
   alias HologramFeatureTests.Patching.Page13
   alias HologramFeatureTests.Patching.Page14
+  alias HologramFeatureTests.Patching.Page15
+  alias HologramFeatureTests.Patching.Page16
+  alias HologramFeatureTests.Patching.Page17
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
@@ -955,9 +958,9 @@ defmodule HologramFeatureTests.PatchingTest do
 
       script_result(session, mark_nodes)
 
-      # Switching the conditional inside the loop body renders the same marker once per item, so
-      # this is the patch that throws when repeated keys reach the diff unnumbered. It takes three
-      # of them: with two the diff realigns on its own and the failure does not surface.
+      # Switching the conditional inside the loop body renders the same key once per item, so this
+      # is the patch that throws when repeated keys reach the diff unnumbered. It takes three of
+      # them: with two the diff realigns on its own and the failure does not surface.
       session
       |> click(button("Toggle badges"))
       |> assert_count(".badge", 0)
@@ -1028,6 +1031,251 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_count(".hint", 3)
       |> assert_script_result(typed_values, ["typed 1", "typed 2", "typed 3"])
       |> assert_script_result(kept_nodes, fields)
+    end
+
+    feature "reordering a list whose body holds a block", %{session: session} do
+      # Read as one line of text so an entry rendered twice, or one that lost its star, shows up
+      # here - the failure leaves the list half-updated rather than empty.
+      rendered_feed = """
+      return document.getElementById("feed").innerText.replace(/\\s+/g, " ").trim();
+      """
+
+      session
+      |> visit(Page15)
+      |> assert_text(css("#result"), "Alpha, Bravo, Charlie, Delta")
+      |> assert_script_result(rendered_feed, "* Alpha * Bravo * Charlie * Delta")
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Charlie, Alpha, Delta, Bravo")
+      |> assert_script_result(rendered_feed, "* Charlie * Alpha * Delta * Bravo")
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Delta, Charlie, Bravo, Alpha")
+      |> assert_script_result(rendered_feed, "* Delta * Charlie * Bravo * Alpha")
+    end
+
+    feature "the key an element is diffed by never reaches the markup", %{session: session} do
+      # The key is written as an attribute because that is how a value reaches an element through
+      # every path a template has, but it is never one: the server leaves it out of the markup and
+      # the client turns it into the vnode's key. Checked on both renderers' output, since either
+      # could leak it on its own.
+      framework_attributes = """
+      return [...document.querySelectorAll("*")]
+        .flatMap((element) => [...element.attributes])
+        .map((attribute) => attribute.name)
+        .filter((name) => name.startsWith("$"));
+      """
+
+      session
+      |> visit(Page15)
+      |> assert_script_result(framework_attributes, [])
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Charlie, Alpha, Delta, Bravo")
+      |> assert_script_result(framework_attributes, [])
+    end
+
+    feature "no node of the framework's own is left in the page", %{session: session} do
+      # Blocks used to be bracketed in comment markers so that a block changing how many nodes it
+      # renders could not shift the identity of its siblings. Keys do that job now, and the page
+      # holds only the nodes the template asks for.
+      #
+      # Every comment in the document is collected rather than only the ones near the block, since
+      # a marker anywhere would be one too many, and the list is asserted whole: the author's own
+      # comment has to be there, which is what shows the walk would have found a marker too.
+      comments = """
+      const walker = document.createTreeWalker(
+        document.documentElement,
+        NodeFilter.SHOW_COMMENT,
+      );
+
+      const found = [];
+
+      while (walker.nextNode()) {
+        found.push(walker.currentNode.textContent.trim());
+      }
+
+      return found;
+      """
+
+      authored = ["a comment the template author wrote"]
+
+      session
+      |> visit(Page15)
+      |> assert_script_result(comments, authored)
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Charlie, Alpha, Delta, Bravo")
+      |> assert_script_result(comments, authored)
+      |> click(button("Sort"))
+      |> assert_text(css("#result"), "Delta, Charlie, Bravo, Alpha")
+      |> assert_script_result(comments, authored)
+    end
+  end
+
+  describe "adopting the server-rendered page" do
+    feature "the first render keeps the nodes the server sent", %{session: session} do
+      server_nodes = """
+      return ["kept", "hint", "field", "marked", "result", "photo"].filter(
+        (id) => document.getElementById(id).__fromServer === true,
+      );
+      """
+
+      ids = ["kept", "hint", "field", "marked", "result", "photo"]
+
+      head_nodes = """
+      return Array.from(document.head.children).map((node) => [
+        node.tagName.toLowerCase(),
+        node.__fromServer === true,
+      ]);
+      """
+
+      # Everything the render still names is the node the server sent, and the runtime's scripts,
+      # which it no longer names, are gone rather than rebuilt.
+      adopted_head = [["meta", true], ["meta", true], ["script", true], ["style", true]]
+
+      session =
+        session
+        |> visit(Page16)
+        |> assert_text(css("#result"), "0")
+        |> fill_in(css("#field"), with: "typed")
+
+      # Waiting for a click to land proves the client has rendered: the assertions below would
+      # pass on their own against a page that had booted no further than the server's markup.
+      session
+      |> click(button("Increment"))
+      |> assert_text(css("#result"), "1")
+      # A script element runs when it is created, so a second run means the first patch rebuilt
+      # the page rather than adopting it - and it would fire a real page's analytics twice.
+      |> assert_script_result("return window.__scriptRuns;", 1)
+      |> assert_script_result(server_nodes, ids)
+      |> assert_script_result(head_nodes, adopted_head)
+      |> assert_input_value("#field", "typed")
+      |> click(button("Increment"))
+      |> assert_text(css("#result"), "2")
+      |> assert_script_result("return window.__scriptRuns;", 1)
+      |> assert_script_result(server_nodes, ids)
+      |> assert_script_result(head_nodes, adopted_head)
+      |> assert_input_value("#field", "typed")
+      # An image the patch rebuilt loads a second time, from the cache if not from the network, so
+      # a single load is what says the server's own is the one still on the page. Counted at the
+      # end, where every render so far has had its chance to add to it.
+      |> assert_script_result("return window.__imageLoads;", 1)
+    end
+
+    feature "the first render keeps the state those nodes hold", %{session: session} do
+      # Incremented from a script rather than by the driver so the button never takes focus: the
+      # focus below is then the one the page set before booting, which is the thing under test.
+      increment = ~s|document.querySelector("button").click();|
+
+      state = """
+      const field = document.getElementById("field");
+
+      return [
+        document.activeElement.id,
+        field.selectionStart,
+        field.selectionEnd,
+        document.getElementById("feed").scrollTop,
+      ];
+      """
+
+      session = visit(session, Page16)
+
+      script_result(session, increment)
+
+      session
+      |> assert_text(css("#result"), "1")
+      |> assert_script_result(state, ["field", 2, 5, 30])
+    end
+  end
+
+  describe "element state across a patch" do
+    feature "a scrolled container holds its place when a sibling appears", %{
+      session: session
+    } do
+      scroll = ~s|document.getElementById("feed").scrollTop = 30;|
+
+      # Toggled from a script rather than by the driver, the way the sibling identity tests do it,
+      # so nothing the driver does can be mistaken for what the patch did.
+      toggle = ~s|document.querySelector("button").click();|
+
+      scroll_top = ~s|return document.getElementById("feed").scrollTop;|
+
+      session = visit(session, Page17)
+
+      script_result(session, scroll)
+
+      session
+      |> assert_text(css("#result"), "false")
+      |> assert_script_result(scroll_top, 30)
+
+      script_result(session, toggle)
+
+      session
+      |> assert_text(css("#result"), "true")
+      |> assert_count(".banner", 3)
+      |> assert_script_result(scroll_top, 30)
+    end
+
+    feature "a selection survives a sibling appearing", %{session: session} do
+      select = """
+      const field = document.getElementById("field");
+
+      field.value = "server text";
+      field.setSelectionRange(2, 5);
+      """
+
+      toggle = ~s|document.querySelector("button").click();|
+
+      # The field is left unfocused on purpose: focus across a patch is already covered by the
+      # sibling identity tests, so what is measured here is the range alone.
+      selection = """
+      const field = document.getElementById("field");
+
+      return [field.value, field.selectionStart, field.selectionEnd];
+      """
+
+      session = visit(session, Page17)
+
+      script_result(session, select)
+
+      session
+      |> assert_text(css("#result"), "false")
+      |> assert_script_result(selection, ["server text", 2, 5])
+
+      script_result(session, toggle)
+
+      session
+      |> assert_text(css("#result"), "true")
+      |> assert_count(".banner", 3)
+      |> assert_script_result(selection, ["server text", 2, 5])
+    end
+
+    feature "an image is not loaded again when a sibling appears", %{session: session} do
+      mark = ~s|document.getElementById("photo").__probe = "photo";|
+
+      toggle = ~s|document.querySelector("button").click();|
+
+      # The marker says whether it is still the same node, the counter what that cost if it is not.
+      # Both are asked, because identity is the mechanism and the load is the consequence the issue
+      # was reported for.
+      photo = """
+      return [
+        document.getElementById("photo").__probe ?? null,
+        window.__imageLoads,
+      ];
+      """
+
+      session = visit(session, Page17)
+
+      script_result(session, mark)
+
+      session
+      |> assert_text(css("#result"), "false")
+      |> assert_script_result(photo, ["photo", 1])
+
+      script_result(session, toggle)
+
+      session
+      |> assert_text(css("#result"), "true")
+      |> assert_count(".banner", 3)
+      |> assert_script_result(photo, ["photo", 1])
     end
   end
 end

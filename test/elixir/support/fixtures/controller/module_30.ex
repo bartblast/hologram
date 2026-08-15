@@ -1,22 +1,25 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Controller.Module30 do
-  use Hologram.Component
+  use Hologram.Page
 
-  alias Hologram.Auth
+  alias Hologram.Test.Fixtures.LayoutFixture
 
-  middleware :capture_actor
+  route "/hologram-test-fixtures-controller-module30"
 
-  def capture_actor(server, _opts) do
-    put_stash(server, :actor, Auth.user_id())
+  layout LayoutFixture
+
+  middleware :answer_with_a_body
+
+  # A terminal response that succeeded, which is what makes status alone useless for telling a page
+  # payload from a page's own answer.
+  def answer_with_a_body(server, _opts) do
+    server
+    |> put_status(200)
+    |> put_response_body("answered by middleware")
   end
 
-  @impl Component
-  def command(:my_command_reporting_middleware_actor, _params, server) do
-    put_action(server, :my_action, actor: get_stash(server, :actor))
-  end
-
-  @impl Component
+  @impl Page
   def template do
-    ~HOLO""
+    ~HOLO"Module30"
   end
 end

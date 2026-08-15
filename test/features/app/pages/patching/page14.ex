@@ -13,11 +13,10 @@ defmodule HologramFeatureTests.Patching.Page14 do
   end
 
   # Three conditionals on one flag, each ahead of a field, so a single click changes three separate
-  # regions of the same children list at once. This is the shape markers alone cannot rescue: the
-  # diff loses its alignment at the first changed region, and the fields between the regions are
-  # keyless, so it rebuilds them - the typed text goes with them, and can even reappear in the
-  # wrong field. It takes a block occupying one position however much it renders for the fields to
-  # hold still.
+  # regions of the same children list at once. This is the shape position alone cannot rescue: the
+  # diff loses its alignment at the first changed region, and without keys the fields between the
+  # regions are rebuilt - the typed text goes with them, and can even reappear in the wrong field.
+  # It takes each field carrying the key of its own place for them to hold still.
   #
   # Hiding is the direction that fails. Showing the hints again works either way, which is why the
   # test switches them off before checking anything. The fields are uncontrolled, so what gets

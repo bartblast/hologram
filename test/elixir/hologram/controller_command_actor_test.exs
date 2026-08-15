@@ -11,7 +11,7 @@ defmodule Hologram.ControllerCommandActorTest do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
   alias Hologram.Runtime.CSRFProtection
-  alias Hologram.Test.Fixtures.Controller.Module29
+  alias Hologram.Test.Fixtures.Controller.Module33
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
 
@@ -96,7 +96,7 @@ defmodule Hologram.ControllerCommandActorTest do
 
     serialized_map_data = [
       ["ainstance_id", "b0#{binary_to_hex("test-instance-id")}"],
-      ["amodule", "a#{Module29}"],
+      ["amodule", "a#{Module33}"],
       ["aname", "a#{name}"],
       ["aparams", %{"t" => "m", "d" => serialized_params}],
       ["asub_receipts", %{"t" => "l", "d" => []}],
