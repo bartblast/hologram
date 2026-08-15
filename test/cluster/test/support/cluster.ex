@@ -71,17 +71,18 @@ defmodule HologramClusterTests.Cluster do
   end
 
   @doc """
-  Stops the given peer and starts a fresh one under the same name and port.
-  Returns the new peer map.
+  Stops the given peer and starts a fresh one under the same name, port and
+  options. Returns the new peer map.
 
   The replacement is a brand new BEAM instance: empty ETS, empty registries,
   re-run boot syncs - the same shape as an app instance replaced during a
-  deploy.
+  deploy. Everything else about it is what it was, so a peer running as a
+  production instance against another database comes back as one.
   """
   @spec restart_peer(map) :: map
   def restart_peer(peer) do
     stop_peer(peer)
-    start_peer(peer.index)
+    start_peer(peer.index, peer.opts)
   end
 
   @doc """
@@ -105,7 +106,7 @@ defmodule HologramClusterTests.Cluster do
 
   @doc """
   Starts a single peer node named `peer<index>` on loopback, boots the app on
-  it, and returns a peer map (`:index`, `:node`, `:pid`, `:port`).
+  it, and returns a peer map (`:index`, `:node`, `:opts`, `:pid`, `:port`).
 
   Options:
 
@@ -162,7 +163,9 @@ defmodule HologramClusterTests.Cluster do
 
     rpc(node, Application, :load, [@app])
 
-    peer = %{index: index, node: node, pid: pid, port: port}
+    # The options ride along so a restart can reproduce the peer rather than a default one -
+    # they are what makes it a production instance, or one pointed at another database.
+    peer = %{index: index, node: node, opts: opts, pid: pid, port: port}
 
     # Registered before the app starts, so a peer whose boot fails is still stopped -
     # its node name and port have to be free for the next test either way.

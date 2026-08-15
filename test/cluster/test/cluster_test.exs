@@ -29,6 +29,22 @@ defmodule HologramClusterTests.ClusterTest do
       assert is_pid(new_registry_pid)
       refute new_registry_pid == registry_pid
     end
+
+    test "starts the replacement with the peer's own options" do
+      # The options are what make a peer a production instance against another database -
+      # a replacement started without them is a different peer under the same name.
+      peer =
+        start_peer(1,
+          app_env: [{:hologram, :restart_marker, :carried_over}],
+          boot_app: false,
+          hologram_env: "prod"
+        )
+
+      new_peer = restart_peer(peer)
+
+      assert rpc(new_peer, System, :get_env, ["HOLOGRAM_ENV"]) == "prod"
+      assert rpc(new_peer, Application, :get_env, [:hologram, :restart_marker]) == :carried_over
+    end
   end
 
   describe "rpc/4" do
