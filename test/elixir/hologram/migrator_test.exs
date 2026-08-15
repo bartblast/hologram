@@ -272,6 +272,88 @@ defmodule Hologram.MigratorTest do
       assert rows == [["my_app_other", "editor"], ["my_app_task", "reviewer"]]
     end
 
+    test "drops two related entity types whatever their table names sort like" do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Author, line: 3},
+          %{op: :create_entity, entity: MyApp.Task, line: 4},
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :author,
+            type: MyApp.Author,
+            opts: [],
+            line: 5
+          }
+        ])
+
+      model = apply_pending([create], Model.empty(), @context)
+
+      # "my_app_author" sorts first, so it is dropped first - which PostgreSQL refuses while
+      # my_app_task's foreign key still references it. The names decide the drop order, so
+      # they must not decide whether the file applies.
+      drop =
+        migration("20260813142237", [
+          %{op: :delete_entity, entity: MyApp.Author, line: 3},
+          %{op: :delete_entity, entity: MyApp.Task, line: 4}
+        ])
+
+      apply_pending([drop], model, @context)
+
+      assert table_columns("my_app_author") == []
+      assert table_columns("my_app_task") == []
+    end
+
+    test "drops the designated user entity type together with its grant store" do
+      # "acme_user" sorts before "hologram_role_grant", so the user entity table is dropped
+      # while the store's two references to it still stand - the same collision the entity
+      # pair above hits, reached through the store nothing declares.
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: Acme.User, line: 3},
+          %{op: :create_entity, entity: MyApp.Other, line: 4},
+          %{op: :add_role, entity: MyApp.Other, name: :editor, opts: [], line: 5},
+          %{op: :designate_user_entity, entity: Acme.User, line: 6}
+        ])
+
+      model = apply_pending([create], Model.empty(), @context)
+
+      user_id = "00000000-0000-0000-0000-0000000000a1"
+
+      insert_user = """
+      INSERT INTO "hologram_data"."acme_user" ("id", "created_at", "updated_at")
+      VALUES ($1, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+      """
+
+      {:ok, _result} = Connection.query(insert_user, [Ecto.UUID.dump!(user_id)])
+
+      insert_grant = """
+      INSERT INTO "hologram_data"."hologram_role_grant"
+        ("id", "user_id", "role", "resource_type", "resource_id", "created_at", "updated_at")
+      VALUES ($1, $2, 'editor', 'my_app_other', $3,
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+      """
+
+      {:ok, _result} =
+        Connection.query(insert_grant, [
+          Ecto.UUID.dump!("00000000-0000-0000-0000-0000000000b1"),
+          Ecto.UUID.dump!(user_id),
+          Ecto.UUID.dump!("00000000-0000-0000-0000-0000000000c1")
+        ])
+
+      drop =
+        migration("20260813142237", [
+          %{op: :delete_role_grants, line: 3},
+          %{op: :delete_entity, entity: Acme.User, line: 4}
+        ])
+
+      apply_pending([drop], model, @context)
+
+      assert table_columns("acme_user") == []
+      assert table_columns("hologram_role_grant") == []
+      assert table_columns("my_app_other") == ["created_at", "id", "updated_at"]
+    end
+
     test "skips the migrations another applier already recorded" do
       migrations = [
         migration("20260813091522", [%{op: :create_entity, entity: MyApp.Task, line: 3}])
