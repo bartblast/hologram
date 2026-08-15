@@ -26,6 +26,10 @@ defmodule HologramFeatureTests.Patching.Page16 do
   #
   # The conditional is here so that a block, whose node count the client cannot know from the
   # markup alone, is part of what has to be adopted.
+  #
+  # The image is here because it is the symptom the issue was reported for: a recreated <img> loads
+  # and decodes again, which is what flashes on a page carrying many of them. Its node is the one
+  # that says whether that happens, since an element that is never rebuilt has nothing to re-fetch.
   def template do
     ~HOLO"""
     <!DOCTYPE html>
@@ -49,6 +53,8 @@ defmodule HologramFeatureTests.Patching.Page16 do
           <span id="marked">server text</span>
         </div>
 
+        <img id="photo" src="/images/sample.png" width="40" height="30" alt="sample" />
+
         <div id="result">{@count}</div>
 
         <script>
@@ -56,7 +62,7 @@ defmodule HologramFeatureTests.Patching.Page16 do
             window.__scriptRuns = (window.__scriptRuns || 0) + 1;
 
             document
-              .querySelectorAll("#kept, #hint, #field, #marked, #result")
+              .querySelectorAll("#kept, #hint, #field, #marked, #result, #photo")
               .forEach((node) => {
                 node.__fromServer = true;
               });

@@ -1111,12 +1111,12 @@ defmodule HologramFeatureTests.PatchingTest do
   describe "adopting the server-rendered page" do
     feature "the first render keeps the nodes the server sent", %{session: session} do
       server_nodes = """
-      return ["kept", "hint", "field", "marked", "result"].filter(
+      return ["kept", "hint", "field", "marked", "result", "photo"].filter(
         (id) => document.getElementById(id).__fromServer === true,
       );
       """
 
-      ids = ["kept", "hint", "field", "marked", "result"]
+      ids = ["kept", "hint", "field", "marked", "result", "photo"]
 
       session =
         session
