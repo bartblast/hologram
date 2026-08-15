@@ -36,6 +36,12 @@ defmodule HologramFeatureTests.Patching.Page16 do
   # reads the same either way. A load event does fire again, cache or not. The listener sits in the
   # head so that it is registered before the image below is parsed, which is the only placement
   # where the server's own load is guaranteed to be counted.
+  #
+  # The head's own nodes are stamped as well, because it is the one place where the render and the
+  # markup genuinely differ: the runtime's scripts are gated on page_mounted?, so the server emits
+  # them and the boot render does not name them. Adoption has to hold across that gap - the metas,
+  # this script and the style stay the server's, while the scripts the render no longer names are
+  # removed rather than rebuilt.
   def template do
     ~HOLO"""
     <!DOCTYPE html>
@@ -87,6 +93,10 @@ defmodule HologramFeatureTests.Patching.Page16 do
               .forEach((node) => {
                 node.__fromServer = true;
               });
+
+            Array.from(document.head.children).forEach((node) => {
+              node.__fromServer = true;
+            });
           {/raw}
         </script>
       </body>

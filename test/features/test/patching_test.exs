@@ -1118,6 +1118,17 @@ defmodule HologramFeatureTests.PatchingTest do
 
       ids = ["kept", "hint", "field", "marked", "result", "photo"]
 
+      head_nodes = """
+      return Array.from(document.head.children).map((node) => [
+        node.tagName.toLowerCase(),
+        node.__fromServer === true,
+      ]);
+      """
+
+      # Everything the render still names is the node the server sent, and the runtime's scripts,
+      # which it no longer names, are gone rather than rebuilt.
+      adopted_head = [["meta", true], ["meta", true], ["script", true], ["style", true]]
+
       session =
         session
         |> visit(Page16)
@@ -1133,11 +1144,13 @@ defmodule HologramFeatureTests.PatchingTest do
       # the page rather than adopting it - and it would fire a real page's analytics twice.
       |> assert_script_result("return window.__scriptRuns;", 1)
       |> assert_script_result(server_nodes, ids)
+      |> assert_script_result(head_nodes, adopted_head)
       |> assert_input_value("#field", "typed")
       |> click(button("Increment"))
       |> assert_text(css("#result"), "2")
       |> assert_script_result("return window.__scriptRuns;", 1)
       |> assert_script_result(server_nodes, ids)
+      |> assert_script_result(head_nodes, adopted_head)
       |> assert_input_value("#field", "typed")
       # An image the patch rebuilt loads a second time, from the cache if not from the network, so
       # a single load is what says the server's own is the one still on the page. Counted at the
