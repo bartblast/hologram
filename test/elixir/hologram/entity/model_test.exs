@@ -687,8 +687,8 @@ defmodule Hologram.Entity.ModelTest do
 
       expected_msg =
         "required attributes added without a value for existing rows - " <>
-          ":title on MyApp.Task - add a non-nil backfill: for a one-time value, a " <>
-          "non-nil default: to give every row one, or optional: to leave them empty"
+          ":title on MyApp.Task - declare backfill: <value> for a one-time value, " <>
+          "default: <value> to give every row one, or optional: true to leave them empty"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
     end
@@ -709,8 +709,8 @@ defmodule Hologram.Entity.ModelTest do
       # leaves the rows exactly as empty-handed as writing no default at all.
       expected_msg =
         "required attributes added without a value for existing rows - " <>
-          ":title on MyApp.Task - add a non-nil backfill: for a one-time value, a " <>
-          "non-nil default: to give every row one, or optional: to leave them empty"
+          ":title on MyApp.Task - declare backfill: <value> for a one-time value, " <>
+          "default: <value> to give every row one, or optional: true to leave them empty"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
     end
@@ -782,8 +782,8 @@ defmodule Hologram.Entity.ModelTest do
 
       expected_msg =
         "backfill: nil on attribute :status of MyApp.Task - a backfill is the value " <>
-          "existing rows receive, so it needs one - make the attribute optional: " <>
-          "instead, or give the backfill a value"
+          "existing rows receive, so it needs one - make the attribute optional: true " <>
+          "instead, or declare backfill: <value>"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
     end

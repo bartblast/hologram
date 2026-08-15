@@ -672,7 +672,7 @@ defmodule Hologram.Entity.Model do
         message:
           "backfill: nil on attribute #{inspect(op.name)} of #{inspect(op.entity)} - " <>
             "a backfill is the value existing rows receive, so it needs one - make the " <>
-            "attribute optional: instead, or give the backfill a value"
+            "attribute optional: true instead, or declare backfill: <value>"
     end
   end
 
@@ -760,9 +760,9 @@ defmodule Hologram.Entity.Model do
       raise Hologram.CompileError,
         message:
           "required attributes added without a value for existing rows - " <>
-            "#{Enum.join(Enum.sort(unfilled), ", ")} - add a non-nil backfill: for a " <>
-            "one-time value, a non-nil default: to give every row one, or optional: to " <>
-            "leave them empty"
+            "#{Enum.join(Enum.sort(unfilled), ", ")} - declare backfill: <value> for a " <>
+            "one-time value, default: <value> to give every row one, or optional: true " <>
+            "to leave them empty"
     end
   end
 
