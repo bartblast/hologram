@@ -1209,8 +1209,42 @@ defmodule HologramFeatureTests.PatchingTest do
 
       session
       |> assert_text(css("#result"), "true")
-      |> assert_has(css(".banner"))
+      |> assert_count(".banner", 2)
       |> assert_script_result(scroll_top, 30)
+    end
+
+    feature "a selection survives a sibling appearing", %{session: session} do
+      select = """
+      const field = document.getElementById("field");
+
+      field.value = "server text";
+      field.setSelectionRange(2, 5);
+      """
+
+      toggle = ~s|document.querySelector("button").click();|
+
+      # The field is left unfocused on purpose: focus across a patch is already covered by the
+      # sibling identity tests, so what is measured here is the range alone.
+      selection = """
+      const field = document.getElementById("field");
+
+      return [field.value, field.selectionStart, field.selectionEnd];
+      """
+
+      session = visit(session, Page17)
+
+      script_result(session, select)
+
+      session
+      |> assert_text(css("#result"), "false")
+      |> assert_script_result(selection, ["server text", 2, 5])
+
+      script_result(session, toggle)
+
+      session
+      |> assert_text(css("#result"), "true")
+      |> assert_count(".banner", 2)
+      |> assert_script_result(selection, ["server text", 2, 5])
     end
   end
 end

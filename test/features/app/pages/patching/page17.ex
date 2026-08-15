@@ -20,6 +20,15 @@ defmodule HologramFeatureTests.Patching.Page17 do
   # The banner and the container are both divs, which is the shape that pairs wrongly when siblings
   # are matched by tag and position. Keys are what stop it, so this is the shape where their
   # absence would show.
+  #
+  # The field is uncontrolled and its selection is set from the test, so neither the value nor the
+  # range it covers is anything a re-render could put back: both live only in the node.
+  #
+  # Each holder gets a panel of its own, because only the element right after the conditional is
+  # the one a positional pairing gets wrong. The next sibling is matched from the other end of the
+  # list and survives whatever happens, so a second holder sharing a panel would be testing
+  # snabbdom's right-hand walk rather than anything about keys. The field is wrapped for the same
+  # reason: the pairing needs a div to mistake for the banner, and an input is not one.
   def template do
     ~HOLO"""
     <!DOCTYPE html>
@@ -35,12 +44,21 @@ defmodule HologramFeatureTests.Patching.Page17 do
           <button $click="toggle_banner">Toggle banner</button>
         </p>
 
-        <div id="panel">
+        <div id="panel_scroll">
           {%if @banner?}
             <div class="banner">banner</div>
           {/if}
           <div id="feed" style="height: 40px; overflow: auto">
             <p style="height: 400px">tall enough to scroll</p>
+          </div>
+        </div>
+
+        <div id="panel_select">
+          {%if @banner?}
+            <div class="banner">banner</div>
+          {/if}
+          <div class="keeper">
+            <input type="text" id="field" />
           </div>
         </div>
 
