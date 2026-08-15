@@ -4,7 +4,9 @@ defmodule Hologram.Entity.ModelTest do
   import Hologram.Entity.Model
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -1343,6 +1345,63 @@ defmodule Hologram.Entity.ModelTest do
 
     test "returns equal terms regardless of the given module order" do
       assert from_modules([Module13, Module2]) == from_modules([Module2, Module13])
+    end
+  end
+
+  describe "hash/0" do
+    test "hashes the project's compiled data model" do
+      assert hash() == hash(from_modules(Reflection.list_entities(), Reflection.list_roles()))
+    end
+  end
+
+  describe "hash/1" do
+    test "returns a lowercase hex string of the truncated SHA-256" do
+      assert hash(task_model(%{attributes: [{:title, :string, []}]})) ==
+               "b92542b48351dc50db3c1b9f2e0066e3"
+    end
+
+    test "terms describing the same model share a hash" do
+      assert hash(task_model(%{attributes: [{:title, :string, []}]})) ==
+               hash(task_model(%{attributes: [{:title, :string, []}]}))
+    end
+
+    test "a model read twice hashes the same when an option holds a regex" do
+      assert hash(from_modules([Module10])) == hash(from_modules([Module10]))
+    end
+
+    test "adding an entity type changes the hash" do
+      one_entity = task_model(%{attributes: [{:title, :string, []}]})
+
+      two_entities =
+        put_in(one_entity, [:entities, Module1], %{attributes: [], relationships: [], roles: []})
+
+      refute hash(two_entities) == hash(one_entity)
+    end
+
+    test "changing an attribute's type changes the hash" do
+      refute hash(task_model(%{attributes: [{:title, :integer, []}]})) ==
+               hash(task_model(%{attributes: [{:title, :string, []}]}))
+    end
+
+    test "changing an attribute's options changes the hash" do
+      refute hash(task_model(%{attributes: [{:title, :string, [server_only: true]}]})) ==
+               hash(task_model(%{attributes: [{:title, :string, []}]}))
+    end
+
+    test "adding a relationship changes the hash" do
+      refute hash(task_model(%{relationships: [{:author, Module1, []}]})) ==
+               hash(task_model(%{relationships: []}))
+    end
+
+    test "changing a role declaration changes the hash" do
+      refute hash(task_model(%{roles: [{:owner, [creator: true]}]})) ==
+               hash(task_model(%{roles: [{:owner, []}]}))
+    end
+
+    test "moving the user entity designation changes the hash" do
+      model = task_model(%{attributes: []})
+
+      refute hash(%{model | user_entity: Module14}) == hash(model)
     end
   end
 

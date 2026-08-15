@@ -16,6 +16,8 @@ defmodule Hologram.Entity.Model do
   # what existing rows receive as the column arrives, not something the entity declares.
   @transition_opts [:backfill]
 
+  @hash_bytes 16
+
   @doc """
   Returns the empty model term - a model with no entity types, no global roles, and no
   designated user entity type.
@@ -61,6 +63,35 @@ defmodule Hologram.Entity.Model do
     user_entity = Enum.find(entity_types, &Reflection.user_entity?/1)
 
     %{entities: entities, roles: roles, user_entity: user_entity}
+  end
+
+  @doc """
+  Returns the hash identifying the project's compiled data model.
+  """
+  @spec hash() :: String.t()
+  def hash do
+    Reflection.list_entities()
+    |> from_modules(Reflection.list_roles())
+    |> hash()
+  end
+
+  @doc """
+  Returns the hash identifying the given model term - a lowercase hex string of the truncated
+  SHA-256 of the term's deterministic external representation.
+
+  Terms describing the same model share a hash, across builds and machines - the term is
+  normalized, so a model spelled two ways hashes once, and any declared change to it hashes
+  differently. What the term leaves out is left out here too: policies never reach the hash, so
+  changing who may read a row is not a change to the data itself, while the grant store's shape
+  is derived from the term rather than carried in it.
+  """
+  @spec hash(%{atom => any}) :: String.t()
+  def hash(model) do
+    model
+    |> :erlang.term_to_binary([:deterministic])
+    |> then(&:crypto.hash(:sha256, &1))
+    |> binary_part(0, @hash_bytes)
+    |> Base.encode16(case: :lower)
   end
 
   @doc """
