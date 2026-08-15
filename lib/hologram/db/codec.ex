@@ -84,6 +84,7 @@ defmodule Hologram.DB.Codec do
   @doc """
   Translates an Elixir term held by entity structs into its JSON form, per attribute type.
   nil stays nil, :date and :datetime values become ISO 8601 strings, :enum atoms become their labels - booleans, numbers, strings and uuids pass through as they are spelled.
+  This is how a value is stored in a jsonb column, where being queryable and legible is the point - it is not how a value is sent to a client, which the client-bound term encoder does.
   Which type a JSON value carries is not recoverable from the value itself, since a :date, an :enum and a :uuid all arrive as strings - reading one back means knowing the attribute it belongs to, whose type the model states.
   """
   @spec encode_json(any, atom) :: boolean | number | String.t() | nil

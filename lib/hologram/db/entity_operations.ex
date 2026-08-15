@@ -14,6 +14,7 @@ defmodule Hologram.DB.EntityOperations do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias Hologram.DB.Outbox
   alias Hologram.DB.SortKey
   alias Hologram.Entity
   alias Hologram.Entity.Validator
@@ -41,30 +42,37 @@ defmodule Hologram.DB.EntityOperations do
   @doc false
   @spec create(struct) :: struct
   def create(entity) do
-    case creator_grants(entity) do
-      [] ->
+    {:ok, stamped_entity} =
+      Connection.transaction(fn ->
         {stamped_entity, _result} = insert(entity, "")
 
-        stamped_entity
+        Outbox.append([put_effect(stamped_entity)])
 
-      grants ->
-        {:ok, stamped_entity} =
-          Connection.transaction(fn ->
-            {stamped_entity, _result} = insert(entity, "")
-
-            Enum.each(grants, &create_if_absent/1)
-
-            stamped_entity
-          end)
+        entity
+        |> creator_grants()
+        |> Enum.each(&create_if_absent/1)
 
         stamped_entity
-    end
+      end)
+
+    stamped_entity
   end
 
   @doc false
   @spec create_if_absent(struct) :: :ok
   def create_if_absent(entity) do
-    insert(entity, " ON CONFLICT DO NOTHING")
+    {:ok, :ok} =
+      Connection.transaction(fn ->
+        {stamped_entity, result} = insert(entity, " ON CONFLICT DO NOTHING")
+
+        # A row that was already there is not a change, and the conflicting insert wrote
+        # nothing - an effect recorded for it would be a change clients never saw happen.
+        if result.num_rows == 1 do
+          Outbox.append([put_effect(stamped_entity)])
+        end
+
+        :ok
+      end)
 
     :ok
   end
@@ -334,6 +342,24 @@ defmodule Hologram.DB.EntityOperations do
       {:ok, result} -> {stamped_entity, result}
       {:error, error} -> raise error
     end
+  end
+
+  # What the entity is, as the effect log records it: every column the row carries except the
+  # sort-key companions, which are derived from the values beside them rather than written.
+  defp put_effect(entity) do
+    entity_type = entity.__struct__
+    %{columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
+    data =
+      columns
+      |> Enum.reject(&match?({:sort_key, _name}, &1.source))
+      |> Map.new(fn column ->
+        name = field_name(column)
+
+        {name, Map.fetch!(entity, name)}
+      end)
+
+    %{op: :put_entity, entity_type: entity_type, entity_id: entity.id, data: data}
   end
 
   defp qualified_table(table) do

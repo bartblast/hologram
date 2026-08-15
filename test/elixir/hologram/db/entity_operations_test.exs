@@ -29,6 +29,20 @@ defmodule Hologram.DB.EntityOperationsTest do
     count
   end
 
+  defp outbox_effects do
+    statement = """
+    SELECT "op", "type", "entity_id", "data"
+    FROM "hologram_system"."outbox"
+    ORDER BY "seq"
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
+
+    Enum.map(rows, fn [op, type, entity_id, data] ->
+      %{data: data, entity_id: Codec.decode(entity_id, :uuid), op: op, type: type}
+    end)
+  end
+
   # The system clock can be coarser than a microsecond (Windows timer granularity reaches
   # ~16ms), making consecutive utc_now readings equal - wait until the clock has visibly
   # advanced, so that a subsequent write provably stamps a later timestamp.
@@ -170,6 +184,47 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert {:ok, %Postgrex.Result{rows: [[nil, ^encoded_target_id]]}} =
                Connection.query(select_sql, [encoded_id])
+    end
+
+    test "records the insert as an effect carrying the whole entity" do
+      entity = Entity.new(Module2, a: true, c: "some text")
+
+      created_entity = create(entity)
+
+      assert [effect] = outbox_effects()
+      assert effect.op == "put_entity"
+      assert effect.type == "Hologram.Test.Fixtures.Entity.Module2"
+      assert effect.entity_id == created_entity.id
+
+      assert effect.data == %{
+               "a" => true,
+               "b" => nil,
+               "c" => "some text",
+               "created_at" => DateTime.to_iso8601(created_entity.created_at),
+               "id" => created_entity.id,
+               "updated_at" => DateTime.to_iso8601(created_entity.updated_at)
+             }
+    end
+
+    test "records the creator's grants after the entity they are granted on" do
+      user = create(Entity.new(Module14, email: "creator@example.com"))
+
+      created_entity =
+        Context.with_actor(user.id, fn ->
+          create(Entity.new(PolicyModule1))
+        end)
+
+      effects = outbox_effects()
+
+      assert [_user, entity_effect | grant_effects] = effects
+      assert entity_effect.entity_id == created_entity.id
+
+      assert Enum.map(grant_effects, & &1.type) == [
+               "Hologram.Auth.RoleGrant",
+               "Hologram.Auth.RoleGrant"
+             ]
+
+      assert Enum.map(grant_effects, &Map.fetch!(&1.data, "role")) == ["maintainer", "owner"]
     end
 
     test "raises on constraint violations" do
@@ -329,6 +384,29 @@ defmodule Hologram.DB.EntityOperationsTest do
       {:ok, %{rows: [[id]]}} = Connection.query(select_sql, [Codec.encode(user.id, :uuid)])
 
       assert Codec.decode(id, :uuid) == first_grant.id
+    end
+
+    test "records the insert as an effect" do
+      user = create(Entity.new(Module14, email: "user_3@example.com"))
+      grant = role_grant(user, :owner)
+
+      create_if_absent(grant)
+
+      assert %{op: "put_entity", type: "Hologram.Auth.RoleGrant", entity_id: entity_id} =
+               List.last(outbox_effects())
+
+      assert entity_id == grant.id
+    end
+
+    test "records nothing when a conflicting row keeps the insert from happening" do
+      user = create(Entity.new(Module14, email: "user_4@example.com"))
+
+      create_if_absent(role_grant(user, :owner))
+      effects_after_first = outbox_effects()
+
+      create_if_absent(role_grant(user, :owner))
+
+      assert outbox_effects() == effects_after_first
     end
   end
 
