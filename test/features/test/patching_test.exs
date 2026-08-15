@@ -1139,6 +1139,10 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_script_result("return window.__scriptRuns;", 1)
       |> assert_script_result(server_nodes, ids)
       |> assert_input_value("#field", "typed")
+      # An image the patch rebuilt loads a second time, from the cache if not from the network, so
+      # a single load is what says the server's own is the one still on the page. Counted at the
+      # end, where every render so far has had its chance to add to it.
+      |> assert_script_result("return window.__imageLoads;", 1)
     end
   end
 end
