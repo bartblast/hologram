@@ -703,8 +703,12 @@ defmodule Hologram.Migration.RendererTest do
 
       result = render(ops, pre)
 
+      # The store's two references to the user entity type drop ahead of the table itself,
+      # so the user entity table is droppable whatever the two names sort like.
       assert op_kinds(result.transactional) == [
                :delete_role_grants,
+               :drop_foreign_key,
+               :drop_foreign_key,
                :drop_table,
                :drop_enum_type,
                :drop_enum_type
