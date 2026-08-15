@@ -7,7 +7,12 @@ defmodule Hologram.Migration.ShadowVerifierTest do
 
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
+  alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
+
+  # A configured name filling the PostgreSQL identifier limit exactly - concatenating the
+  # scratch suffix onto it produces 70 bytes, whose first 63 are the name itself.
+  @limit_database String.pad_trailing("hologram_database_named_at_the_identifier_limit_", 63, "x")
 
   @ops [
     %{op: :create_entity, entity: MyApp.Task, line: 3},
@@ -38,18 +43,34 @@ defmodule Hologram.Migration.ShadowVerifierTest do
     |> Model.fold([done_op])
   end
 
+  defp database_exists?(name) do
+    statement = "SELECT 1 FROM pg_database WHERE datname = $1"
+
+    {:ok, %{rows: rows}} = Connection.query(statement, [name])
+
+    rows != []
+  end
+
   defp shadow_database_exists? do
     database_opts =
       :hologram
       |> Application.get_env(:database, [])
       |> Config.resolve!(:test)
 
-    statement = "SELECT 1 FROM pg_database WHERE datname = $1"
+    database_exists?(Mapper.fit_identifier(database_opts[:database] <> "_shadow"))
+  end
 
-    {:ok, %{rows: rows}} =
-      Connection.query(statement, [database_opts[:database] <> "_shadow"])
+  # Opened outside the pool and outside the sandbox: CREATE and DROP DATABASE cannot run
+  # inside a transaction, which is what every pooled connection here is holding.
+  defp with_maintenance(fun) do
+    maintenance_opts = Config.connection_opts(database: "postgres")
+    {:ok, pid} = Postgrex.start_link(maintenance_opts)
 
-    rows != []
+    try do
+      fun.(pid)
+    after
+      GenServer.stop(pid)
+    end
   end
 
   describe "verify!/2" do
@@ -77,6 +98,35 @@ defmodule Hologram.Migration.ShadowVerifierTest do
       # Without the lock they race to create and drop one scratch database named after
       # the configured one, and every run fails rather than one winning.
       assert results == [:ok, :ok, :ok]
+    end
+
+    test "leaves a configured database named at the identifier limit alone" do
+      with_maintenance(fn pid ->
+        Postgrex.query!(pid, ~s|DROP DATABASE IF EXISTS "#{@limit_database}" WITH (FORCE)|, [])
+        Postgrex.query!(pid, ~s|CREATE DATABASE "#{@limit_database}"|, [])
+      end)
+
+      on_exit(fn ->
+        with_maintenance(fn pid ->
+          Postgrex.query!(pid, ~s|DROP DATABASE IF EXISTS "#{@limit_database}" WITH (FORCE)|, [])
+        end)
+      end)
+
+      original_config = Application.get_env(:hologram, :database, [])
+      on_exit(fn -> Application.put_env(:hologram, :database, original_config) end)
+
+      Application.put_env(
+        :hologram,
+        :database,
+        Keyword.put(original_config, :database, @limit_database)
+      )
+
+      # The scratch name is fitted, so it stays distinct - concatenated, PostgreSQL would
+      # truncate it back onto the configured name and the run would drop the real database
+      # before creating anything.
+      verify!(@migrations, Model.fold(Model.empty(), @ops))
+
+      assert database_exists?(@limit_database)
     end
 
     test "raises when the replay does not produce the model's schema" do

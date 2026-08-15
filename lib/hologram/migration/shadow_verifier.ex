@@ -22,11 +22,11 @@ defmodule Hologram.Migration.ShadowVerifier do
   Validates that applying the given migrations from the empty model onto a scratch
   database produces exactly the given model's schema.
 
-  A scratch database named after the configured one (`<database>_shadow`) is created,
-  claimed for migrations, and the full chain applied from empty - the physical proof
-  that the reviewed files build the declared schema, catching what the pure fold
-  cannot: rendering and apply-order defects. The scratch database is dropped
-  afterwards, pass or fail. Raises with one line per difference when the replayed
+  A scratch database named after the configured one (`<database>_shadow`, fitted to the
+  identifier limit) is created, claimed for migrations, and the full chain applied from
+  empty - the physical proof that the reviewed files build the declared schema, catching
+  what the pure fold cannot: rendering and apply-order defects. The scratch database is
+  dropped afterwards, pass or fail. Raises with one line per difference when the replayed
   schema does not match.
 
   Verification opens its own connections, so it starts the driver rather than assuming
@@ -40,7 +40,13 @@ defmodule Hologram.Migration.ShadowVerifier do
   def verify!(migrations, current_model) do
     {:ok, _apps} = Application.ensure_all_started(:postgrex)
 
-    shadow_database = Config.connection_opts()[:database] <> "_shadow"
+    # Fitted rather than concatenated: PostgreSQL truncates an over-long identifier to 63
+    # bytes without saying so, and a configured name already at the limit truncates its own
+    # suffix away - so the drop that clears a stale scratch database would name the
+    # configured one and take it. Fitting also keeps two long configured names apart, which
+    # bare truncation does not.
+    shadow_database = Mapper.fit_identifier(Config.connection_opts()[:database] <> "_shadow")
+
     maintenance_pid = start_connection("postgres")
 
     # Stopping the connection is what releases the lock, so it is the outermost step - a
