@@ -75,28 +75,27 @@ defmodule Hologram.Migration.Diff do
 
   # Emitted last, so the designation lands after the ops creating the entity type it names.
   #
-  # Only what the fold does not already do: deleting the designated type clears the
-  # designation while folding, so a deleted designation needs no op. A rename retargets it
-  # the same way, and renames never reach the diff's output anyway - they arrive as answers
-  # to questions, which is also why a redundant designation must fold as a no-op rather
-  # than an error.
+  # A designation ARRIVING is emitted: there is no store yet, so nothing is destroyed.
+  # Every departure from a designation already in place is withheld into a question -
+  # grants reference its rows whether the type survives the migration or is deleted by it,
+  # so resolving one means writing the line that empties the role grant store, which the
+  # generator never writes itself. Whether the type was deleted is therefore not asked.
   #
-  # A designation ARRIVING is emitted: there is no store yet, so nothing is destroyed. One
-  # that moves or goes away is withheld into a question, because resolving it means writing
-  # the line that empties the role grant store - the generator never writes that itself.
+  # A rename is the one departure moving no row, and it never reaches here anyway - renames
+  # arrive as answers to questions. When the entity's disappearance is itself an entities
+  # question, the designation question rides alongside it, and answering that one with
+  # rename_entity retargets the designation while folding - which is why a designation op
+  # naming what the model already holds must fold as a no-op rather than an error.
   defp designation_plan(replayed, current) do
-    deleted = Map.keys(replayed.entities) -- Map.keys(current.entities)
-    expected = if replayed.user_entity in deleted, do: nil, else: replayed.user_entity
-
     cond do
-      expected == current.user_entity ->
+      replayed.user_entity == current.user_entity ->
         {[], []}
 
-      expected == nil ->
+      replayed.user_entity == nil ->
         {[%{op: :designate_user_entity, entity: current.user_entity}], []}
 
       true ->
-        {[], [designation_question(expected, current.user_entity)]}
+        {[], [designation_question(replayed.user_entity, current.user_entity)]}
     end
   end
 

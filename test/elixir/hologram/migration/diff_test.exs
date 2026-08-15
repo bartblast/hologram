@@ -134,7 +134,7 @@ defmodule Hologram.Migration.DiffTest do
              }
     end
 
-    test "emits no designation op when the designated entity type was deleted" do
+    test "withholds a designation whose entity type was deleted into a question" do
       replayed =
         %{MyApp.Account => %{}}
         |> model()
@@ -142,7 +142,46 @@ defmodule Hologram.Migration.DiffTest do
 
       assert diff(replayed, Model.empty()) == %{
                ops: [%{op: :delete_entity, entity: MyApp.Account}],
-               questions: []
+               questions: [
+                 %{
+                   kind: :user_entity,
+                   from: MyApp.Account,
+                   to: nil,
+                   withheld_ops: [
+                     %{op: :delete_role_grants},
+                     %{op: :designate_user_entity, entity: nil}
+                   ]
+                 }
+               ]
+             }
+    end
+
+    test "withholds a designation moving off a deleted entity type into a question" do
+      replayed =
+        %{MyApp.Account => %{}, MyApp.Member => %{}}
+        |> model()
+        |> Map.put(:user_entity, MyApp.Account)
+
+      current =
+        %{MyApp.Member => %{}}
+        |> model()
+        |> Map.put(:user_entity, MyApp.Member)
+
+      # The grants describe rows the deletion takes away, so the arriving designation is
+      # no more emittable on its own than one moving between surviving types.
+      assert diff(replayed, current) == %{
+               ops: [%{op: :delete_entity, entity: MyApp.Account}],
+               questions: [
+                 %{
+                   kind: :user_entity,
+                   from: MyApp.Account,
+                   to: MyApp.Member,
+                   withheld_ops: [
+                     %{op: :delete_role_grants},
+                     %{op: :designate_user_entity, entity: MyApp.Member}
+                   ]
+                 }
+               ]
              }
     end
 
