@@ -55,6 +55,54 @@ defmodule Hologram.DB.Outbox do
     notify()
   end
 
+  @doc """
+  Returns the transaction id below which every transaction has finished - the upper edge of the
+  next window to read.
+
+  A transaction takes its id when it first writes, and holds it until it commits or aborts, so
+  this value cannot pass one that is still open. That is what makes the windows gap-free: a row
+  written by a transaction still in flight sits above this edge and waits for a later window,
+  rather than being passed over because a later-numbered row committed first.
+  """
+  @spec current_xmin() :: non_neg_integer
+  def current_xmin do
+    {:ok, %Postgrex.Result{rows: [[xmin]]}} =
+      Connection.query("SELECT pg_snapshot_xmin(pg_current_snapshot())")
+
+    xmin
+  end
+
+  @doc """
+  Returns the effects written by transactions from `last_xmin` up to but excluding `current_xmin`,
+  grouped into `{transaction id, effects}` pairs and ordered by transaction and then by insert
+  order, so a transaction's effects arrive together and in the order they happened.
+
+  The order across transactions is stable but is NOT commit order - a transaction that committed
+  later can carry a smaller id. Nothing may materialize state by folding these in order: they say
+  which entity types and attributes a transaction touched, and a reader wanting values reads the
+  rows themselves.
+
+  An entity type this node has never compiled stays a label rather than becoming a module, and
+  data keys stay strings, because a peer running a newer model can write names this node has
+  never heard of - names that match nothing here, which is exactly what they should do.
+  """
+  @spec read_window(non_neg_integer, non_neg_integer) :: list({non_neg_integer, list(map)})
+  def read_window(last_xmin, current_xmin) do
+    statement = """
+    SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id"
+    FROM "hologram_system"."outbox"
+    WHERE "tx" >= $1 AND "tx" < $2
+    ORDER BY "tx", "seq"
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [last_xmin, current_xmin])
+
+    rows
+    |> Enum.map(&event/1)
+    |> Enum.chunk_by(& &1.tx)
+    |> Enum.map(fn [%{tx: tx} | _rest] = events -> {tx, events} end)
+  end
+
   defp attribute_type(entity_type, name) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 
@@ -82,6 +130,25 @@ defmodule Hologram.DB.Outbox do
   end
 
   defp data(%{op: :del_entity}), do: nil
+
+  defp entity_type(label) do
+    String.to_existing_atom("Elixir." <> label)
+  rescue
+    ArgumentError -> label
+  end
+
+  defp event([seq, op, type, entity_id, data, tx, model_hash, actor_id]) do
+    %{
+      actor_id: Codec.decode(actor_id, :uuid),
+      data: data,
+      entity_id: Codec.decode(entity_id, :uuid),
+      model_hash: model_hash,
+      op: String.to_existing_atom(op),
+      seq: seq,
+      tx: tx,
+      type: entity_type(type)
+    }
+  end
 
   defp notify do
     {:ok, _result} = Connection.query("SELECT pg_notify($1, '')", [@channel])

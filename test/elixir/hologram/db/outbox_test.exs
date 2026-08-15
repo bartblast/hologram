@@ -36,6 +36,83 @@ defmodule Hologram.DB.OutboxTest do
     end)
   end
 
+  defp seed(tx, op, type_label, entity_id, data \\ nil) do
+    statement = """
+    INSERT INTO "hologram_system"."outbox" ("op", "type", "entity_id", "data", "tx", "model_hash")
+    VALUES ($1, $2, $3, $4, $5, 'seeded')
+    """
+
+    params = [op, type_label, Codec.encode(entity_id, :uuid), data, tx]
+
+    {:ok, _result} = Connection.query(statement, params)
+
+    :ok
+  end
+
+  describe "current_xmin/0" do
+    test "returns the transaction id below which every transaction has finished" do
+      {:ok, %Postgrex.Result{rows: [[writing_tx]]}} =
+        Connection.query("SELECT pg_current_xact_id()")
+
+      # The window's own transaction is in flight, so the edge cannot have passed it.
+      assert current_xmin() <= writing_tx
+    end
+  end
+
+  describe "read_window/2" do
+    test "returns nothing when the window holds no effects" do
+      assert read_window(1, 2) == []
+    end
+
+    test "returns the effects of transactions inside the window" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      assert [{200, [event]}] = read_window(200, 201)
+      assert event.op == :del_entity
+      assert event.type == Module2
+      assert event.entity_id == @entity_id
+      assert event.model_hash == "seeded"
+    end
+
+    test "leaves out transactions below the window" do
+      seed(199, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      assert read_window(200, 300) == []
+    end
+
+    test "leaves out transactions at and above the window's upper edge" do
+      seed(300, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      assert read_window(200, 300) == []
+    end
+
+    test "groups a transaction's effects together, in the order they happened" do
+      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{"c" => "x"})
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+      seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
+
+      assert [{200, first_transaction}, {201, second_transaction}] = read_window(200, 202)
+      assert Enum.map(first_transaction, & &1.op) == [:put_entity, :del_entity]
+      assert Enum.map(second_transaction, & &1.op) == [:del_entity]
+    end
+
+    test "keeps an entity type this node has never compiled as the label it was written with" do
+      seed(200, "del_entity", "MyApp.NeverCompiled", @entity_id)
+
+      assert [{200, [event]}] = read_window(200, 201)
+      assert event.type == "MyApp.NeverCompiled"
+    end
+
+    test "keeps data keys as they were written" do
+      seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{
+        "never_compiled" => 1
+      })
+
+      assert [{200, [event]}] = read_window(200, 201)
+      assert event.data == %{"never_compiled" => 1}
+    end
+  end
+
   describe "append/1" do
     test "appends nothing for no effects" do
       assert append([]) == :ok
