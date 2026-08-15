@@ -38,7 +38,12 @@ defmodule Mix.Tasks.Holo.Gen.Migration do
     |> Generator.generate(model, DateTime.utc_now())
     |> report()
   rescue
-    error in [Hologram.CompileError, RuntimeError] -> Mix.raise(error.message)
+    # Exception.message/1 rather than the :message field - Postgrex.Error keeps its detail
+    # in :postgres and leaves :message nil, which Mix.raise/1 will not take.
+    error in [Hologram.CompileError, Postgrex.Error, RuntimeError] ->
+      error
+      |> Exception.message()
+      |> Mix.raise()
   end
 
   defp pluralize(1, word), do: "1 #{word}"

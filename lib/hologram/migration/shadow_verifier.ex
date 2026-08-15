@@ -35,6 +35,10 @@ defmodule Hologram.Migration.ShadowVerifier do
   advisory lock admits one verification at a time per server: the scratch database is
   named after the configured one, so concurrent runs would otherwise race to create and
   drop the same name.
+
+  A server that cannot be reached raises naming the target rather than the driver's
+  connection error, whose text describes a pool that could not serve a request in time -
+  true of the wait, and misleading about what failed.
   """
   @spec verify!(list(%{atom => any}), %{atom => any}) :: :ok
   def verify!(migrations, current_model) do
@@ -72,6 +76,8 @@ defmodule Hologram.Migration.ShadowVerifier do
     after
       GenServer.stop(maintenance_pid)
     end
+  rescue
+    DBConnection.ConnectionError -> raise_unreachable_server!()
   end
 
   # WITH (FORCE) disconnects a backend still tearing down after the applier's
@@ -84,6 +90,21 @@ defmodule Hologram.Migration.ShadowVerifier do
       "DROP DATABASE IF EXISTS #{quoted_database} WITH (FORCE)",
       []
     )
+  end
+
+  # The driver's own text is discarded rather than relayed: whatever went wrong, the pool
+  # reports the wait it gave up on, and its remedies are about pool sizing. What actually
+  # failed is in the connection error the driver logged, so the raise names the target and
+  # the candidates and sends the reader there.
+  defp raise_unreachable_server! do
+    connection_opts = Config.connection_opts()
+
+    raise "shadow verification could not reach the Postgres server at " <>
+            "#{connection_opts[:hostname]}:#{connection_opts[:port]} as user " <>
+            ~s("#{connection_opts[:username]}") <>
+            " - it opens its own connection there to build the scratch database. The " <>
+            "connection error logged above says which of these it is: no server running, " <>
+            ~s(refused credentials, or a missing "postgres" maintenance database.)
   end
 
   # A crashed earlier run may have left the scratch database behind - it holds nothing

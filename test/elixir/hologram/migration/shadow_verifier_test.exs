@@ -129,6 +129,24 @@ defmodule Hologram.Migration.ShadowVerifierTest do
       assert database_exists?(@limit_database)
     end
 
+    test "raises naming the target when the server cannot be reached" do
+      original_config = Application.get_env(:hologram, :database, [])
+      on_exit(fn -> Application.put_env(:hologram, :database, original_config) end)
+
+      Application.put_env(:hologram, :database, Keyword.put(original_config, :port, 59_999))
+
+      expected_msg =
+        "shadow verification could not reach the Postgres server at localhost:59999 as " <>
+          ~s(user "postgres" - it opens its own connection there to build the scratch ) <>
+          "database. The connection error logged above says which of these it is: no " <>
+          ~s(server running, refused credentials, or a missing "postgres" maintenance ) <>
+          "database."
+
+      assert_error RuntimeError, expected_msg, fn ->
+        verify!(@migrations, Model.fold(Model.empty(), @ops))
+      end
+    end
+
     test "raises when the replay does not produce the model's schema" do
       assert_error RuntimeError, mismatch_message(), fn ->
         verify!(@migrations, mismatched_model())
