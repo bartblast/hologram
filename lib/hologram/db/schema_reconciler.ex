@@ -51,6 +51,7 @@ defmodule Hologram.DB.SchemaReconciler do
     CREATE TABLE "hologram_system"."migration" (
       "version" text NOT NULL,
       "applied_at" timestamptz NOT NULL,
+      "model_hash" text NOT NULL,
       PRIMARY KEY ("version")
     )
     """,

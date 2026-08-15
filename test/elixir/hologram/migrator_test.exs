@@ -122,6 +122,45 @@ defmodule Hologram.MigratorTest do
              ]
     end
 
+    test "records each file under the hash of the model that file produces" do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            type: :string,
+            opts: [],
+            line: 4
+          }
+        ])
+
+      add =
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :priority,
+            type: :integer,
+            opts: [optional: true],
+            line: 3
+          }
+        ])
+
+      mid_model = Model.fold(Model.empty(), create.ops)
+      post_model = Model.fold(mid_model, add.ops)
+
+      apply_pending([create, add], Model.empty(), @context)
+
+      statement =
+        ~s(SELECT "model_hash" FROM "hologram_system"."migration" ORDER BY "version")
+
+      {:ok, %{rows: rows}} = Connection.query(statement)
+
+      assert rows == [[Model.hash(mid_model)], [Model.hash(post_model)]]
+    end
+
     test "fills the rows that predate a required column with its backfill" do
       create =
         migration("20260813091522", [
@@ -496,8 +535,8 @@ defmodule Hologram.MigratorTest do
     test "returns the recorded versions" do
       ensure_managed!(@context)
 
-      record_applied("20260813091522", @context.timestamp)
-      record_applied("20260813142237", @context.timestamp)
+      record_applied("20260813091522", @context.timestamp, "abc123")
+      record_applied("20260813142237", @context.timestamp, "def456")
 
       assert applied_versions() == MapSet.new(["20260813091522", "20260813142237"])
     end
@@ -944,16 +983,18 @@ defmodule Hologram.MigratorTest do
     end
   end
 
-  describe "record_applied/2" do
-    test "records the version with its time" do
+  describe "record_applied/3" do
+    test "records the version with its time and model hash" do
       ensure_managed!(@context)
 
-      assert record_applied("20260813091522", @context.timestamp) == :ok
+      assert record_applied("20260813091522", @context.timestamp, "abc123") == :ok
 
-      statement = ~s(SELECT "version", "applied_at" FROM "hologram_system"."migration")
+      statement =
+        ~s(SELECT "version", "applied_at", "model_hash" FROM "hologram_system"."migration")
+
       {:ok, %{rows: rows}} = Connection.query(statement)
 
-      assert rows == [["20260813091522", @context.timestamp]]
+      assert rows == [["20260813091522", @context.timestamp, "abc123"]]
     end
   end
 end

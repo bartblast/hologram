@@ -241,17 +241,22 @@ defmodule Hologram.Migrator do
   end
 
   @doc """
-  Records the given migration version as applied at the given time, in the caller's
-  transaction.
+  Records the given migration version as applied at the given time, under the hash of the
+  model it produces, in the caller's transaction.
+
+  The hash is of the model as it stands at that point in the history rather than of the
+  current one, so each row pairs a position in the chain with the model shape reached there -
+  which is what lets a row written under an older model be traced back to the migration that
+  produced it.
   """
-  @spec record_applied(String.t(), DateTime.t()) :: :ok
-  def record_applied(version, timestamp) do
+  @spec record_applied(String.t(), DateTime.t(), String.t()) :: :ok
+  def record_applied(version, timestamp, model_hash) do
     statement = """
-    INSERT INTO "hologram_system"."migration" ("version", "applied_at")
-    VALUES ($1, $2)
+    INSERT INTO "hologram_system"."migration" ("version", "applied_at", "model_hash")
+    VALUES ($1, $2, $3)
     """
 
-    {:ok, _result} = Connection.query(statement, [version, timestamp])
+    {:ok, _result} = Connection.query(statement, [version, timestamp, model_hash])
 
     :ok
   end
@@ -392,7 +397,7 @@ defmodule Hologram.Migrator do
     # all, rather than committing and failing afterwards.
     Preflight.run!(render.tail, actual, mapping)
 
-    record_applied(version, context.timestamp)
+    record_applied(version, context.timestamp, Model.hash(render.post_model))
 
     :applied
   end
