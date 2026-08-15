@@ -18,6 +18,8 @@ defmodule Hologram.Entity.Model do
 
   @hash_bytes 16
 
+  @hash_key {__MODULE__, :hash}
+
   @doc """
   Returns the empty model term - a model with no entity types, no global roles, and no
   designated user entity type.
@@ -67,12 +69,28 @@ defmodule Hologram.Entity.Model do
 
   @doc """
   Returns the hash identifying the project's compiled data model.
+
+  Deriving it sweeps every module the project holds, which costs far more than the writes that
+  stamp it, so the answer is cached for the lifetime of the runtime - like the grant store's
+  resolution. The compiler and the application boot reset the cache, so a recompiled data model
+  is picked up.
   """
   @spec hash() :: String.t()
   def hash do
-    Reflection.list_entities()
-    |> from_modules(Reflection.list_roles())
-    |> hash()
+    case :persistent_term.get(@hash_key, nil) do
+      nil ->
+        model_hash =
+          Reflection.list_entities()
+          |> from_modules(Reflection.list_roles())
+          |> hash()
+
+        :persistent_term.put(@hash_key, model_hash)
+
+        model_hash
+
+      model_hash ->
+        model_hash
+    end
   end
 
   @doc """
@@ -105,6 +123,14 @@ defmodule Hologram.Entity.Model do
   def neutral_value(key) when key in @flag_opts, do: false
 
   def neutral_value(_key), do: nil
+
+  @doc false
+  @spec reset_hash_cache() :: :ok
+  def reset_hash_cache do
+    :persistent_term.erase(@hash_key)
+
+    :ok
+  end
 
   @doc """
   Returns the given model term with the given migration ops applied, in order.

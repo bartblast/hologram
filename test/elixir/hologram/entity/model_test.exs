@@ -13,6 +13,8 @@ defmodule Hologram.Entity.ModelTest do
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
+  @hash_key {Hologram.Entity.Model, :hash}
+
   defp task_model(entry_overrides) do
     entry =
       Map.merge(
@@ -1348,9 +1350,46 @@ defmodule Hologram.Entity.ModelTest do
     end
   end
 
+  # The cache is process-global, so these leave it holding the project's real hash rather than
+  # anything a concurrently running test could be surprised by.
   describe "hash/0" do
+    setup do
+      on_exit(&reset_hash_cache/0)
+
+      reset_hash_cache()
+    end
+
     test "hashes the project's compiled data model" do
       assert hash() == hash(from_modules(Reflection.list_entities(), Reflection.list_roles()))
+    end
+
+    test "answers from the cache once it has been derived" do
+      derived = hash()
+
+      :persistent_term.put(@hash_key, "cached")
+
+      assert hash() == "cached"
+
+      reset_hash_cache()
+
+      refute derived == "cached"
+    end
+
+    test "keeps the derived hash for the calls after it" do
+      assert :persistent_term.get(@hash_key, nil) == nil
+
+      derived = hash()
+
+      assert :persistent_term.get(@hash_key, nil) == derived
+    end
+  end
+
+  describe "reset_hash_cache/0" do
+    test "drops the derived hash" do
+      hash()
+
+      assert reset_hash_cache() == :ok
+      assert :persistent_term.get(@hash_key, nil) == nil
     end
   end
 

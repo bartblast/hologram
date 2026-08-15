@@ -8,6 +8,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Entity.Model
   alias Hologram.Policy
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
@@ -81,6 +82,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     on_exit(fn ->
       :application.unload(app)
       RoleGrant.reset_resolution_cache()
+      Model.reset_hash_cache()
       Policy.reset_model_facts_cache()
     end)
   end
