@@ -1647,6 +1647,7 @@ describe("Hologram", () => {
 
   describe("render()", () => {
     afterEach(() => {
+      Hologram.virtualDocument = null;
       Renderer.listenerBindings = [];
       sinon.restore();
     });
@@ -1686,6 +1687,57 @@ describe("Hologram", () => {
       // Reach listeners persist, so each is rechecked after reconcile to re-sync and auto-fill.
       sinon.assert.calledOnce(recheckStub);
       sinon.assert.callOrder(reconcileStub, recheckStub);
+    });
+
+    // A full document load has no previous render to diff against, only the page the server sent,
+    // so the old side is this render mirrored onto it. Reading the page into a vdom of its own
+    // instead would describe it in terms the render never uses, and every node would be rebuilt.
+    it("seeds the first render by mirroring it onto the page the server sent", () => {
+      const renderedVirtualDocument = {sel: "html", data: {}, children: []};
+      const mirroredVirtualDocument = {sel: "html", data: {}, children: []};
+
+      sinon.stub(Renderer, "renderPage").returns(renderedVirtualDocument);
+      const mirrorStub = sinon
+        .stub(Vdom, "mirror")
+        .returns(mirroredVirtualDocument);
+      const patchStub = sinon.stub(Vdom, "patchVirtualDocument");
+
+      Hologram.virtualDocument = null;
+
+      Hologram.render();
+
+      sinon.assert.calledOnceWithExactly(
+        mirrorStub,
+        renderedVirtualDocument,
+        document.documentElement,
+      );
+
+      sinon.assert.calledOnceWithExactly(
+        patchStub,
+        mirroredVirtualDocument,
+        renderedVirtualDocument,
+      );
+    });
+
+    it("leaves a render that has a previous one to diff against alone", () => {
+      const previousVirtualDocument = {sel: "html", data: {}, children: []};
+      const renderedVirtualDocument = {sel: "html", data: {}, children: []};
+
+      sinon.stub(Renderer, "renderPage").returns(renderedVirtualDocument);
+      const mirrorStub = sinon.stub(Vdom, "mirror");
+      const patchStub = sinon.stub(Vdom, "patchVirtualDocument");
+
+      Hologram.virtualDocument = previousVirtualDocument;
+
+      Hologram.render();
+
+      sinon.assert.notCalled(mirrorStub);
+
+      sinon.assert.calledOnceWithExactly(
+        patchStub,
+        previousVirtualDocument,
+        renderedVirtualDocument,
+      );
     });
   });
 
