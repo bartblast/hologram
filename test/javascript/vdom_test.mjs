@@ -358,6 +358,24 @@ describe("Vdom", () => {
       assert.equal(serverStyle.textContent, "body { color: red; }");
     });
 
+    // The shape the root has on every page: the parser puts the whitespace between </head> and
+    // <body> inside <html>, so the rendered text that comes before an element finds a text node
+    // only after it. A text node stands for any other, so a text vnode allowed to look ahead would
+    // take that one and pass over the element in between - the whole head, in the real document.
+    it("does not let a text node take one further along", () => {
+      // The element carries the key of its place, the way every rendered element does. A node
+      // mirrored as itself carries none, so the two no longer match and the patch rebuilds it.
+      const {container, patched} = adopt(
+        [" ", vnode("p", {attrs: {}, key: "my_key"}, ["hello"])],
+        "<p>hello</p> ",
+      );
+
+      const serverP = container.querySelector("p");
+      patched();
+
+      assert.equal(container.querySelector("p"), serverP);
+    });
+
     it("does not adopt a script element for a different source", () => {
       const {container, patched} = adopt(
         [

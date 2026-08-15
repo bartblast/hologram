@@ -150,9 +150,9 @@ export default class Vdom {
 
     for (const renderedChild of renderedChildren) {
       // The render is not always a prefix-by-prefix match for the page: a boot render omits the
-      // runtime's own scripts, which the server did emit. So the rendered child takes the first
-      // DOM node it can correspond to rather than only the one at the cursor, and the nodes
-      // passed over are mirrored as they are, for the patch to match or remove.
+      // runtime's own scripts, which the server did emit. So an element takes the first DOM node
+      // it can correspond to rather than only the one at the cursor, and the nodes passed over are
+      // mirrored as they are, for the patch to match or remove.
       const domIndex = $.#correspondingIndex(renderedChild, domNodes, cursor);
 
       if (domIndex === -1) {
@@ -259,7 +259,23 @@ export default class Vdom {
 
   // The index of the first DOM node from the cursor on that the rendered vnode can stand for, or
   // -1 when there is none left.
+  //
+  // Only an element looks past the cursor. An element names what it is, so the nodes it steps over
+  // are ones the render genuinely does not have. Text and comments name nothing - any text node
+  // stands for any other - so one that looked ahead would claim a node further along and orphan
+  // every element in between, which the patch would then rebuild.
+  //
+  // The root is where that is guaranteed rather than incidental: the parser puts the whitespace
+  // between </head> and <body> inside <html>, so the rendered text that precedes <head> finds its
+  // counterpart only after it, and a scanning text vnode would pass over the entire head.
   static #correspondingIndex(renderedVnode, domNodes, cursor) {
+    if (renderedVnode.sel === undefined || renderedVnode.sel === "!") {
+      return cursor.index < domNodes.length &&
+        $.#correspondsTo(renderedVnode, domNodes[cursor.index])
+        ? cursor.index
+        : -1;
+    }
+
     for (let index = cursor.index; index < domNodes.length; index += 1) {
       if ($.#correspondsTo(renderedVnode, domNodes[index])) {
         return index;
