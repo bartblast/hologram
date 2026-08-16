@@ -114,7 +114,7 @@ defmodule Hologram.Sync.PrunerTest do
     end
 
     test "keeps waking after a round, rather than pruning once" do
-      pruner = start_pruner!(interval_ms: @waking_interval_ms, retention_seconds: 60)
+      start_pruner!(interval_ms: @waking_interval_ms, retention_seconds: 60)
 
       seed_aged(3_600)
       wait_until(fn -> remaining() == 0 end, @prune_timeout_ms)
