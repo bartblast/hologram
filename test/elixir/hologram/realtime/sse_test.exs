@@ -308,12 +308,15 @@ defmodule Hologram.Realtime.SSETest do
       # the wire carries it, and JSON refuses to guess at a struct rather than encoding one badly.
       deltas = [Frame.put_entity(row)]
 
-      send(self(), {:sync_deltas, deltas})
+      send(self(), {:sync_deltas, "g8uxAAAAZQ", deltas})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
       assert updated_conn.resp_body =~ "event: sync_deltas\nid: "
       assert updated_conn.resp_body =~ ~s["c":"first"]
+
+      # The place the client hands back on reconnect.
+      assert updated_conn.resp_body =~ ~s["cursor":"g8uxAAAAZQ"]
     end
   end
 

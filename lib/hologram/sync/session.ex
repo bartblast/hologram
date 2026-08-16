@@ -16,6 +16,7 @@ defmodule Hologram.Sync.Session do
 
   alias Hologram.DB.QueryCache
   alias Hologram.Sync.Catchup
+  alias Hologram.Sync.Cursor
   alias Hologram.Sync.Diff
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
@@ -29,6 +30,11 @@ defmodule Hologram.Sync.Session do
   `:actor_user_id` is who the client is, or nil for an anonymous one - every row is checked
   against it before being sent, so what the client named as its page decides only the order the
   windows fill in, never what it may see of them.
+
+  `:fill_place` is where the log stood when this session's windows were taken up - what every
+  window's place starts at, so a window that has had no round of its own still holds the frames
+  back to a place its rows are known to cover. Without it a batch already routed but not yet
+  delivered would fall outside every claim a frame makes.
 
   `:gap` is what a returning client missed - absent for one arriving with nothing, in which case
   every row it may see is sent. Given a gap, the client keeps what it already holds and is told
@@ -53,6 +59,7 @@ defmodule Hologram.Sync.Session do
       client: Keyword.fetch!(opts, :client),
       gap: Keyword.get(opts, :gap),
       held: %{},
+      fill_place: Keyword.get(opts, :fill_place),
       page: Keyword.fetch!(opts, :page),
       page_windows: MapSet.new(),
       pending: MapSet.new(),
@@ -75,7 +82,8 @@ defmodule Hologram.Sync.Session do
     seeded = %{
       state
       | page_windows: MapSet.new(page_window_ids),
-        pending: MapSet.new(window_ids)
+        pending: MapSet.new(window_ids),
+        places: Map.new(window_ids, &{&1, state.fill_place})
     }
 
     # A client with nothing to wait for is told so at once: one left waiting for a marker that
@@ -182,7 +190,7 @@ defmodule Hologram.Sync.Session do
     deltas = Catchup.deltas(state.gap, state.touched)
 
     if deltas != [] do
-      send(state.client, {:sync_deltas, deltas})
+      send(state.client, {:sync_deltas, cursor(state), deltas})
     end
 
     %{state | gap: nil, touched: %{}}
@@ -198,6 +206,24 @@ defmodule Hologram.Sync.Session do
 
   defp outstanding(state, :page) do
     MapSet.intersection(state.pending, state.page_windows)
+  end
+
+  # What a frame may claim the client has reached: the SLOWEST window's place. A window's missed
+  # changes can only live in batches after its last applied round, and those start at or above
+  # that round's place - so replaying from the minimum covers every window's possible gap, whatever
+  # order the rounds arrived in. Claiming the newest place instead would lose a slow window's
+  # changes outright, which no amount of idempotent replay puts back.
+  defp cursor(state) do
+    place =
+      state.places
+      |> Map.values()
+      |> Enum.reject(&is_nil/1)
+      |> Enum.min(fn -> nil end)
+
+    case place do
+      nil -> nil
+      {tx, seq} -> Cursor.encode(tx, seq)
+    end
   end
 
   # The last place each window has applied, taken forward only - a slow round arriving late must
@@ -261,7 +287,10 @@ defmodule Hologram.Sync.Session do
     }
 
     if news != %{appeared: [], edges: [], patched: [], unsynced: []} do
-      send(state.client, {:sync_deltas, Frame.deltas(news, state.types[window_id])})
+      send(
+        state.client,
+        {:sync_deltas, cursor(state), Frame.deltas(news, state.types[window_id])}
+      )
     end
 
     state

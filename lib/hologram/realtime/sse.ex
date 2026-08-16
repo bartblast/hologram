@@ -3,6 +3,7 @@ defmodule Hologram.Realtime.SSE do
 
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.DB.Outbox
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
@@ -148,9 +149,9 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
-      {:sync_deltas, deltas} ->
+      {:sync_deltas, cursor, deltas} ->
         id = System.unique_integer([:positive, :monotonic])
-        chunk_data = Frame.encode_deltas_envelope(id, nil, deltas)
+        chunk_data = Frame.encode_deltas_envelope(id, cursor, deltas)
 
         case Plug.Conn.chunk(conn, chunk_data) do
           {:ok, conn} -> {:cont, conn}
@@ -729,6 +730,7 @@ defmodule Hologram.Realtime.SSE do
           SyncSession.start_link(
             actor_user_id: user_id,
             client: self(),
+            fill_place: {Outbox.current_xmin(), 0},
             gap: gap(cursor),
             page: page
           )
