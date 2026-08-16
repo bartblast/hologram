@@ -77,10 +77,10 @@ defmodule HologramFeatureTests.SyncTest do
 
   defp drain_initial_sync(client) do
     {page_synced, filling_client} = SyncClient.await_frame(client, "synced")
-    assert page_synced["data"] =~ ~s[Type.atom("page")]
+    assert page_synced["data"] =~ ~s["scope":"page"]
 
     {all_synced, filled_client} = SyncClient.await_frame(filling_client, "synced")
-    assert all_synced["data"] =~ ~s[Type.atom("all")]
+    assert all_synced["data"] =~ ~s["scope":"all"]
 
     filled_client
   end
@@ -92,18 +92,18 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas(connect())
 
-    assert data =~ ~s[Type.atom("put_entity")]
-    assert data =~ ~s[Type.bitstring("seeded_before_connect")]
+    assert data =~ ~s["op":"put_entity"]
+    assert data =~ ~s["title":"seeded_before_connect"]
   end
 
   feature "says the store is complete for the page and then for the app", %{session: _session} do
     client = connect()
 
     {page_synced, filling_client} = SyncClient.await_frame(client, "synced")
-    assert page_synced["data"] =~ ~s[Type.atom("page")]
+    assert page_synced["data"] =~ ~s["scope":"page"]
 
     {all_synced, _filled_client} = SyncClient.await_frame(filling_client, "synced")
-    assert all_synced["data"] =~ ~s[Type.atom("all")]
+    assert all_synced["data"] =~ ~s["scope":"all"]
   end
 
   feature "delivers a change as a patch carrying the fresh value", %{session: _session} do
@@ -118,8 +118,8 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas(client)
 
-    assert data =~ ~s[Type.atom("patch_entity")]
-    assert data =~ ~s[Type.bitstring("after_patch")]
+    assert data =~ ~s["op":"patch_entity"]
+    assert data =~ ~s["title":"after_patch"]
   end
 
   feature "delivers a row created while the client watches, whole", %{session: _session} do
@@ -131,8 +131,8 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas(client)
 
-    assert data =~ ~s[Type.atom("put_entity")]
-    assert data =~ ~s[Type.bitstring("created_while_watching")]
+    assert data =~ ~s["op":"put_entity"]
+    assert data =~ ~s["title":"created_while_watching"]
   end
 
   feature "tells the client a deleted row is no longer its to hold", %{session: _session} do
@@ -147,8 +147,8 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas(client)
 
-    assert data =~ ~s[Type.atom("unsync_entity")]
-    assert data =~ ~s[Type.bitstring("#{document.id}")]
+    assert data =~ ~s["op":"unsync_entity"]
+    assert data =~ ~s["id":"#{document.id}"]
   end
 
   feature "keeps a server-only value out of the frame its row travels in", %{session: _session} do
@@ -159,8 +159,10 @@ defmodule HologramFeatureTests.SyncTest do
     {data, _client} = await_deltas(connect())
 
     # The positive artifact beside the negative one: the row IS here, its secret is not.
-    assert data =~ ~s[Type.bitstring("row_with_secret")]
-    refute data =~ "api_token_9xK4"
+    assert data =~ ~s["title":"row_with_secret"]
+
+    # Under JSON the KEY is absent, not only the value - the old wire could not say this.
+    refute data =~ "api_token"
   end
 
   feature "sends an anonymous client the rows anyone may read, and no others", %{
@@ -176,7 +178,7 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas(connect())
 
-    assert data =~ ~s[Type.bitstring("public_row")]
+    assert data =~ ~s["title":"public_row"]
     refute data =~ "private_row"
   end
 end
