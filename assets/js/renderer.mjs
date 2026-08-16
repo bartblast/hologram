@@ -149,6 +149,32 @@ export default class Renderer {
     return Renderer.#pageVnodeFromChildren(pageVdom);
   }
 
+  // Based on the tree Renderer.render_tree/3 evaluates on the server, converted to the vnodes a
+  // patch works on.
+  //
+  // The tree is a render the server already performed, so nothing here evaluates: it holds only
+  // elements, text, comments and the doctype, and the clauses those reach in renderDom read
+  // neither context nor slots. They are passed empty for that reason rather than as a stand-in
+  // for a real render's own.
+  //
+  // WARNING: the vnodes this returns must equal the vnodes renderPage returns for the same page,
+  // or the render that follows rebuilds nodes instead of adopting the ones this put on screen.
+  // Both go through renderDom and both finalize the document's children the same way, which is
+  // what holds the two together.
+  static renderTree(tree) {
+    const children = Vdom.finalizeChildren(
+      Renderer.renderDom(
+        tree,
+        Type.map(),
+        Type.keywordList(),
+        Type.bitstring("page"),
+        null,
+      ),
+    );
+
+    return Renderer.#pageVnodeFromChildren(children);
+  }
+
   // Resolves this render's <window>/<document> listener bindings, dropping any spent once binding so
   // reconcile detaches its real listener through the same path that removes a vanished binding. The
   // fired-state is keyed by the binding's target and slot, both carried on the binding. The drop is
