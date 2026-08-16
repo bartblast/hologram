@@ -45,6 +45,43 @@ defmodule Hologram.Sync.EvaluatorsTest do
     DBConnection.Ownership.ownership_allow(DB.pool_name(), self(), evaluator, [])
   end
 
+  describe "live/0" do
+    test "returns nothing while no window is held" do
+      assert live() == []
+    end
+
+    test "returns a held window with the term it downloads" do
+      subscribe(@window_id, self())
+
+      assert live() == [{@window_id, Query.normalize(Module2)}]
+    end
+
+    # A live reload can drop a window while its evaluator is still running, and a window with no
+    # term left is one no query downloads any more - the scoper has nothing to match it against.
+    test "leaves out a window the current build no longer downloads" do
+      subscribe(@window_id, self())
+
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        prop_params: %{},
+        windows: %{}
+      })
+
+      assert live() == []
+    end
+
+    test "leaves out a window once its last session goes away" do
+      holder = spawn(fn -> Process.sleep(:infinity) end)
+      {:ok, evaluator} = subscribe(@window_id, holder)
+      evaluator_ref = Process.monitor(evaluator)
+
+      Process.exit(holder, :kill)
+      assert_receive {:DOWN, ^evaluator_ref, :process, ^evaluator, :normal}
+
+      assert live() == []
+    end
+  end
+
   describe "subscribe/2" do
     test "starts the evaluator the first session wants" do
       assert {:ok, evaluator} = subscribe(@window_id, self())

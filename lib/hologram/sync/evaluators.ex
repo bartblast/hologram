@@ -12,6 +12,22 @@ defmodule Hologram.Sync.Evaluators do
   alias Hologram.Sync.Evaluator
 
   @doc """
+  Returns every window this node is currently keeping up to date, as the `{window id, term}`
+  pairs the scoper takes.
+
+  A window is live exactly while its evaluator runs, and an evaluator runs exactly while some
+  session holds it - so this needs no bookkeeping of its own to stay true, and a session that
+  crashes takes its windows with it rather than leaving a count nothing reclaims.
+  """
+  @spec live() :: list({String.t(), map})
+  def live do
+    Evaluator.registry()
+    |> Registry.select([{{:"$1", :_, :_}, [], [:"$1"]}])
+    |> Enum.map(&{&1, QueryCache.window(&1)})
+    |> Enum.reject(fn {_window_id, term} -> is_nil(term) end)
+  end
+
+  @doc """
   Subscribes the given process to the evaluator of the given window, starting it if this is the
   first session to want it, and returns the evaluator.
 
