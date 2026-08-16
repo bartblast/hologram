@@ -15,6 +15,7 @@ defmodule Hologram.Realtime.Gossip do
   peer state without blocking `init/1` (and thus the supervision tree) for the
   full timeout.
   """
+  # TODO: Remove once neither store waits for its peers - request_sync/1 replaces it.
   @spec boot_sync(String.t(), non_neg_integer, ([term] -> any)) :: :ok
   def boot_sync(gossip_topic, timeout_ms, merge_fun) do
     Phoenix.PubSub.broadcast_from(
@@ -25,6 +26,27 @@ defmodule Hologram.Realtime.Gossip do
     )
 
     collect_sync_replies(System.monotonic_time(:millisecond) + timeout_ms, merge_fun)
+  end
+
+  @doc """
+  Asks the peers on `gossip_topic` for what they hold, and returns immediately.
+
+  A peer answers by sending a `{:sync_reply, entries}` message, which arrives at the
+  caller like any other message. A store that asks this way stays available while its
+  peers answer, and merges what arrives in its `handle_info/2` - the same way it merges
+  the entries peers gossip to it in steady state. A batch that arrives at boot is only
+  a larger batch, not a different kind of event.
+
+  A node with no peers hears nothing back, which costs it nothing.
+  """
+  @spec request_sync(String.t()) :: :ok
+  def request_sync(gossip_topic) do
+    Phoenix.PubSub.broadcast_from(
+      Hologram.PubSub,
+      self(),
+      gossip_topic,
+      {:sync_request, self()}
+    )
   end
 
   @doc """

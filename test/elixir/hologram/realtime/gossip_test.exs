@@ -49,6 +49,33 @@ defmodule Hologram.Realtime.GossipTest do
     end
   end
 
+  describe "request_sync/1" do
+    test "broadcasts a sync request carrying the caller pid to peers on the topic" do
+      test_pid = self()
+
+      spawn_link(fn ->
+        Phoenix.PubSub.subscribe(Hologram.PubSub, @topic)
+        send(test_pid, :peer_ready)
+
+        receive do
+          {:sync_request, requester_pid} -> send(test_pid, {:got_request, requester_pid})
+        end
+      end)
+
+      assert_receive :peer_ready
+
+      assert request_sync(@topic) == :ok
+
+      assert_receive {:got_request, ^test_pid}
+    end
+
+    test "returns without waiting for a reply" do
+      assert request_sync(@topic) == :ok
+
+      refute_received {:sync_reply, _entries}
+    end
+  end
+
   describe "reply_to_sync_request/2" do
     test "sends the full table contents back to the requester as a sync reply" do
       table = :ets.new(:gossip_test_table, [:set, :public])
