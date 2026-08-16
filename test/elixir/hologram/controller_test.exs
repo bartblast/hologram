@@ -460,7 +460,8 @@ defmodule Hologram.ControllerTest do
         page_params: %{"key" => "value"},
         self_echoes: [:echo_1, :echo_2],
         sub_receipt_adds: [{"topic_1", "key_1"}],
-        sub_receipt_drops: [{"topic_2", "key_2"}]
+        sub_receipt_drops: [{"topic_2", "key_2"}],
+        tree: [{:element, "div", [{"$key", [text: "a1b2c3:0"]}], [{:text, "abc"}]}]
       }
 
       [fields: fields]
@@ -481,6 +482,7 @@ defmodule Hologram.ControllerTest do
       assert payload.selfEchoes == Encoder.encode_term!(fields.self_echoes)
       assert payload.subReceiptAdds == Encoder.encode_term!(fields.sub_receipt_adds)
       assert payload.subReceiptDrops == Encoder.encode_term!(fields.sub_receipt_drops)
+      assert payload.tree == Encoder.encode_term!(fields.tree)
     end
 
     test "survives the JSON encoding it is sent over", %{fields: fields} do
@@ -2451,6 +2453,21 @@ defmodule Hologram.ControllerTest do
 
       assert response["pageParams"] =~ "111"
       assert response["pageParams"] =~ "222"
+    end
+
+    test "carries the render as a tree with the Realtime JS interpolated" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module5"
+        |> subsequent_page_request_conn()
+        |> handle_subsequent_page_request(Module5)
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response["tree"] =~ "Module5 page"
+      assert response["tree"] =~ "selfEchoes: Type.list([])"
+      refute response["tree"] =~ "JS_PLACEHOLDER"
     end
 
     test "marks a page payload as page data" do

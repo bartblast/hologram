@@ -95,9 +95,10 @@ defmodule Hologram.Controller do
   Builds the payload describing a page for a client that renders it itself, rather than being sent
   the markup.
 
-  Carries what a mount needs and nothing about how the page looks: the component registry the
-  render produced, the page module and its params, the realtime bookkeeping, and the digest naming
-  the page's bundle, so the client can load the code without asking again.
+  Carries what a mount needs: the component registry the render produced, the page module and its
+  params, the realtime bookkeeping, and the digest naming the page's bundle, so the client can
+  load the code without asking again. Also carries how the page looks - the render itself as an
+  evaluated tree - so the page can be shown before any of its code has arrived.
 
   Terms are encoded the way a command's response encodes them, as JavaScript the client evaluates,
   since that is the form its runtime already reads.
@@ -131,8 +132,12 @@ defmodule Hologram.Controller do
         page_params: page_params,
         self_echoes: self_echoes,
         sub_receipt_adds: sub_receipt_adds,
-        sub_receipt_drops: sub_receipt_drops
+        sub_receipt_drops: sub_receipt_drops,
+        tree: tree
       }) do
+    # TODO: drop the fields whose values also ride inside the tree's pageMountData script
+    # (componentRegistry, pageParams, selfEchoes, subReceiptAdds, subReceiptDrops) once the
+    # client mounts from the tree.
     %{
       componentRegistry: Encoder.encode_term!(component_registry),
       pageDigest: page_digest,
@@ -141,6 +146,7 @@ defmodule Hologram.Controller do
       selfEchoes: Encoder.encode_term!(self_echoes),
       subReceiptAdds: Encoder.encode_term!(sub_receipt_adds),
       subReceiptDrops: Encoder.encode_term!(sub_receipt_drops),
+      tree: Encoder.encode_term!(tree),
       type: "page"
     }
   end
@@ -552,6 +558,24 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       {:rendered, lifecycle_conn, result} ->
+        # The same three values the HTML path substitutes into the served document, substituted
+        # into the tree's scripts, so the tree describes the page completely.
+        self_echoes_js = Encoder.encode_term!(result.self_echoes)
+        sub_receipt_adds_js = Encoder.encode_term!(result.sub_receipt_adds)
+        sub_receipt_drops_js = Encoder.encode_term!(result.sub_receipt_drops)
+
+        tree =
+          result.tree
+          |> Renderer.interpolate_js_in_tree("$SELF_ECHOES_JS_PLACEHOLDER", self_echoes_js)
+          |> Renderer.interpolate_js_in_tree(
+            "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER",
+            sub_receipt_adds_js
+          )
+          |> Renderer.interpolate_js_in_tree(
+            "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER",
+            sub_receipt_drops_js
+          )
+
         payload =
           build_page_data_payload(%{
             component_registry: result.component_registry,
@@ -560,7 +584,8 @@ defmodule Hologram.Controller do
             page_params: params,
             self_echoes: result.self_echoes,
             sub_receipt_adds: result.sub_receipt_adds,
-            sub_receipt_drops: result.sub_receipt_drops
+            sub_receipt_drops: result.sub_receipt_drops,
+            tree: tree
           })
 
         lifecycle_conn
