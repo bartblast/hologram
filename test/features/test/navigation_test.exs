@@ -6,6 +6,8 @@ defmodule HologramFeatureTests.NavigationTest do
   alias HologramFeatureTests.Navigation.Page3
   alias HologramFeatureTests.Navigation.Page4
   alias HologramFeatureTests.Navigation.Page5
+  alias HologramFeatureTests.Navigation.Page6
+  alias HologramFeatureTests.Navigation.Page7
   alias HologramFeatureTests.Routing.RouteWithPercentEncodedParamsPage
 
   describe "link component" do
@@ -251,6 +253,30 @@ defmodule HologramFeatureTests.NavigationTest do
       |> go_back()
       |> assert_page(Page4)
       |> assert_scroll_position(10, 20)
+    end
+  end
+
+  describe "layout state across navigation" do
+    # The layout's nodes are the same on both pages, so a navigation must leave them alone: the
+    # container's scroll position lives only in its DOM node and would not survive a rebuild.
+    # The click on the new page proves the mount completed on those same adopted nodes.
+    feature "a scrolled layout container holds its place", %{session: session} do
+      scroll = ~s|document.getElementById("shell").scrollTop = 30;|
+      scroll_top = ~s|return document.getElementById("shell").scrollTop;|
+
+      session = visit(session, Page6)
+
+      script_result(session, scroll)
+
+      session
+      |> assert_script_result(scroll_top, 30)
+      |> click(link("Page 7 link"))
+      |> assert_page(Page7)
+      |> assert_text("Page 7 title")
+      |> assert_script_result(scroll_top, 30)
+      |> click(button("Put page 7 result"))
+      |> assert_text("Page 7 result")
+      |> assert_script_result(scroll_top, 30)
     end
   end
 end
