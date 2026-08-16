@@ -12,6 +12,9 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.QueryExtractor
+  alias Hologram.Query.Registry
+  alias Hologram.Query.Window
   alias Hologram.Reflection
 
   @doc """
@@ -92,6 +95,29 @@ defmodule Hologram.Compiler do
     |> Enum.reject(fn {_app, vsn} -> is_nil(vsn) end)
     |> Enum.map(fn {app, vsn} -> {app, to_string(vsn)} end)
     |> Enum.sort()
+  end
+
+  @doc """
+  Returns the ids of the windows each of the given pages downloads, keyed by page module and
+  sorted.
+
+  A page's windows are those of every component it can reach, not only the ones a given render
+  mounts. A panel that opens on a click is reachable without being rendered, and its rows have to
+  be on the client before the click rather than after it - which is the whole point of holding
+  the rows a page may need rather than the ones it is showing.
+
+  A page reaching no query at all has no windows, and answers with an empty list rather than
+  being left out.
+  """
+  @spec build_page_windows(list(module), CallGraph.t()) :: %{module => list(String.t())}
+  def build_page_windows(page_modules, call_graph) do
+    graph = CallGraph.get_graph(call_graph)
+    templatables = page_modules ++ Reflection.list_components()
+    analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+
+    Map.new(page_modules, fn page_module ->
+      {page_module, page_window_ids(page_module, call_graph, analysis)}
+    end)
   end
 
   @doc """
@@ -833,6 +859,18 @@ defmodule Hologram.Compiler do
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
+  defp page_window_ids(page_module, call_graph, analysis) do
+    call_graph
+    |> CallGraph.list_page_mfas(page_module, analysis)
+    |> Enum.map(fn {module, _function, _arity} -> module end)
+    |> Enum.uniq()
+    |> Enum.filter(&Reflection.component?/1)
+    |> Enum.flat_map(&QueryExtractor.extract_module_queries/1)
+    |> Enum.map(&window_id/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
   defp rebuild_ir_plt_entry!(ir_plt, module, umbrella?) do
     # A nil beam source must not reach IR.for_module/2 - it resolves a nil one
     # with :code.which/1, which is exactly the stale path that yielded nil here.
@@ -1003,5 +1041,11 @@ defmodule Hologram.Compiler do
     if beam_path != :non_existing do
       beam_path
     end
+  end
+
+  defp window_id(term) do
+    term
+    |> Window.derive()
+    |> Registry.id()
   end
 end

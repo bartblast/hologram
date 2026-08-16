@@ -1,5 +1,7 @@
 defmodule Hologram.CompilerTest do
   use Hologram.Test.BasicCase, async: false
+  use Hologram.Query
+
   import Hologram.Compiler
 
   alias Hologram.Commons.PLT
@@ -9,7 +11,14 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.Query
+  alias Hologram.Query.Registry
+  alias Hologram.Query.Window
   alias Hologram.Reflection
+
+  alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
+  alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module11
@@ -340,6 +349,36 @@ defmodule Hologram.CompilerTest do
     assert %CallGraph{} = call_graph = build_call_graph()
 
     assert CallGraph.has_vertex?(call_graph, {Compiler, :build_call_graph, 1})
+  end
+
+  describe "build_page_windows/2" do
+    setup %{call_graph: call_graph} do
+      [page_windows: build_page_windows(Reflection.list_pages(), call_graph)]
+    end
+
+    test "gives a page the window of a component it renders", %{page_windows: page_windows} do
+      window_id =
+        Entity2
+        |> filter(a: true)
+        |> Query.normalize()
+        |> Window.derive()
+        |> Registry.id()
+
+      assert page_windows[PageModule8] == [window_id]
+    end
+
+    test "gives a page reaching no query no windows", %{page_windows: page_windows} do
+      assert page_windows[PageModule7] == []
+    end
+
+    test "answers for every page it was given", %{page_windows: page_windows} do
+      answered_pages =
+        page_windows
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert answered_pages == Enum.sort(Reflection.list_pages())
+    end
   end
 
   describe "build_call_graph/1" do
