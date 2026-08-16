@@ -96,13 +96,6 @@ export default class Hologram {
   static #pageModule = null;
   static #pageParams = null;
   static #pendingJsInteropActions = [];
-
-  // The page description a navigation fetched, waiting for the mount to read it. An initial load
-  // has none: there the server put the same data in the page itself.
-  //
-  // Made public to make tests easier
-  static pendingMountPayload = null;
-
   static #registeredPageModules = new Set();
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
@@ -1082,15 +1075,11 @@ export default class Hologram {
     );
   }
 
-  // What the page was mounted with, from whichever side supplied it: a navigation fetched it as
-  // data, while an initial load reads it from the page the server sent.
+  // What the page was mounted with, left behind by the script the server wrote into the page.
+  // A navigation reaches it the same way a document load does, by patching in the page the
+  // server described, that script included.
   static #loadMountData() {
-    const payload = $.pendingMountPayload;
-    $.pendingMountPayload = null;
-
-    const mountData = payload
-      ? $.#mountDataFromPayload(payload)
-      : globalThis.Hologram.pageMountData(Hologram.#deps);
+    const mountData = globalThis.Hologram.pageMountData(Hologram.#deps);
 
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
@@ -1111,42 +1100,17 @@ export default class Hologram {
   // runs off the event loop. It surfaces as an uncaught error instead, which is what the console
   // and the feature tests read. handleUncaughtError/1 passes it over rather than showing the
   // overlay, that being reserved for errors a page raised.
-  //
-  // The pending payload is dropped only while it is still the one this bundle was fetched for. A
-  // navigation started while this one was in flight has already replaced it and still needs it,
-  // and #loadMountData reads a missing payload as the initial page's, which would mount the page
-  // the server first sent instead of the one being navigated to.
-  static #loadPageBundle(src, payload = null) {
+  static #loadPageBundle(src) {
     const script = document.createElement("script");
 
     script.src = src;
     script.fetchpriority = "high";
 
     script.onerror = () => {
-      if (payload !== null && $.pendingMountPayload === payload) {
-        $.pendingMountPayload = null;
-      }
-
       throw new HologramRuntimeError(`Failed to load page bundle: ${src}`);
     };
 
     document.head.appendChild(script);
-  }
-
-  // The payload's terms arrive as JavaScript the runtime evaluates, the same form a command's
-  // response uses.
-  static #mountDataFromPayload(payload) {
-    const evaluate = (encodedTerm) =>
-      Interpreter.evaluateJavaScriptExpression(encodedTerm);
-
-    return {
-      componentRegistry: evaluate(payload.componentRegistry),
-      pageModule: evaluate(payload.pageModule),
-      pageParams: evaluate(payload.pageParams),
-      selfEchoes: evaluate(payload.selfEchoes),
-      subReceiptAdds: evaluate(payload.subReceiptAdds),
-      subReceiptDrops: evaluate(payload.subReceiptDrops),
-    };
   }
 
   static #maybeInitAssetPathRegistry() {
@@ -1315,26 +1279,6 @@ export default class Hologram {
     if (isPageModuleRegistered) {
       $.#mountPage(true);
     }
-  }
-
-  // TODO: Remove together with pendingMountPayload and #mountDataFromPayload - #showNewPage
-  // replaces it.
-  static #mountNewPage(payload) {
-    $.pendingMountPayload = payload;
-
-    if (
-      $.#isPageModuleRegistered(
-        Interpreter.evaluateJavaScriptExpression(payload.pageModule),
-      )
-    ) {
-      $.#mountPage(true);
-      return;
-    }
-
-    globalThis.Hologram.pageScriptLoaded = false;
-
-    // Mirrors Hologram.Router.Helpers.page_bundle_path/1
-    $.#loadPageBundle(`/hologram/page-${payload.pageDigest}.js`, payload);
   }
 
   // Deps: [:maps.get/2, :maps.put/3]
