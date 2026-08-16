@@ -179,14 +179,14 @@ defmodule HologramFeatureTests.SyncTest do
     |> Entity.new(public: true, title: "held_across_the_gap")
     |> create()
 
-    client = connect()
-    {first_data, client} = await_deltas(client)
+    filled_client = connect()
+    {first_data, departing_client} = await_deltas(filled_client)
     assert first_data =~ ~s["title":"held_across_the_gap"]
 
     cursor = cursor_of(first_data)
     assert is_binary(cursor)
 
-    :ok = :httpc.cancel_request(client.request_id)
+    :ok = :httpc.cancel_request(departing_client.request_id)
 
     Document
     |> Entity.new(public: true, title: "landed_while_away")
@@ -204,13 +204,13 @@ defmodule HologramFeatureTests.SyncTest do
     |> Entity.new(public: true, title: "sent_again_after_resync")
     |> create()
 
-    client = connect(cursor: "not a cursor")
+    returning_client = connect(cursor: "not a cursor")
 
-    {resync, client} = SyncClient.await_frame(client, "sync_resync")
+    {resync, resyncing_client} = SyncClient.await_frame(returning_client, "sync_resync")
     assert resync["data"] =~ ~s["reason":"cursor"]
 
     # The marker is an instruction to discard, so what follows has to be everything again.
-    {data, _client} = await_deltas(client)
+    {data, _refilled_client} = await_deltas(resyncing_client)
     assert data =~ ~s["title":"sent_again_after_resync"]
   end
 
