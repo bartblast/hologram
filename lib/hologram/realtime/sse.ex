@@ -8,6 +8,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Session
+  alias Hologram.Sync.Catchup
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Handshake, as: SyncHandshake
   alias Hologram.Sync.Session, as: SyncSession
@@ -165,8 +166,6 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
-      # TODO: nothing sends this yet - the session will, once it takes the place a returning
-      # client names and finds it cannot be told what it missed.
       {:sync_resync, reason} ->
         id = System.unique_integer([:positive, :monotonic])
         chunk_data = Frame.encode_resync_envelope(id, reason)
@@ -659,6 +658,24 @@ defmodule Hologram.Realtime.SSE do
   # through the handshake stash: the page is its claim either way (what it names decides which
   # windows are kept, never what it may see of them), and the stash is a flat tuple gossiped
   # between nodes, which is not a shape to grow for a claim that needs no protecting.
+  # A client arriving for the first time holds nothing and is simply filled. One coming back is
+  # either told what it missed, or told to let go of what it holds - and is then filled the same
+  # way a first arrival is. Deciding it here rather than in the session keeps the session a reader
+  # of rounds and nothing else, and puts the answer beside the reload notice it stands next to.
+  defp gap(nil), do: nil
+
+  defp gap(cursor) do
+    case Catchup.gap(cursor) do
+      {:ok, effects} ->
+        effects
+
+      {:full_resync, reason} ->
+        send(self(), {:sync_resync, reason})
+
+        nil
+    end
+  end
+
   defp own_identities(instance_id, session_id, user_id) do
     base = [{:instance, instance_id}, {:session, session_id}]
 
@@ -707,9 +724,14 @@ defmodule Hologram.Realtime.SSE do
       |> SyncHandshake.check()
 
     case outcome do
-      {:sync, page, _cursor} ->
+      {:sync, page, cursor} ->
         {:ok, _session} =
-          SyncSession.start_link(actor_user_id: user_id, client: self(), page: page)
+          SyncSession.start_link(
+            actor_user_id: user_id,
+            client: self(),
+            gap: gap(cursor),
+            page: page
+          )
 
         conn
 

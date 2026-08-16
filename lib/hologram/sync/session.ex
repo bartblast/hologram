@@ -15,6 +15,7 @@ defmodule Hologram.Sync.Session do
   use GenServer, restart: :temporary
 
   alias Hologram.DB.QueryCache
+  alias Hologram.Sync.Catchup
   alias Hologram.Sync.Diff
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
@@ -28,6 +29,11 @@ defmodule Hologram.Sync.Session do
   `:actor_user_id` is who the client is, or nil for an anonymous one - every row is checked
   against it before being sent, so what the client named as its page decides only the order the
   windows fill in, never what it may see of them.
+
+  `:gap` is what a returning client missed - absent for one arriving with nothing, in which case
+  every row it may see is sent. Given a gap, the client keeps what it already holds and is told
+  only about the rows the gap names. Whether a gap can be had at all is decided before the session
+  starts, since it is a question about the log rather than about this client.
 
   Windows that nothing downloads are skipped rather than refused, which is how a client naming a
   page this build does not have still gets the rest of the build's windows.
@@ -45,10 +51,12 @@ defmodule Hologram.Sync.Session do
       actor_user_id: Keyword.get(opts, :actor_user_id),
       announced: MapSet.new(),
       client: Keyword.fetch!(opts, :client),
+      gap: Keyword.get(opts, :gap),
       held: %{},
       page: Keyword.fetch!(opts, :page),
       page_windows: MapSet.new(),
       pending: MapSet.new(),
+      touched: %{},
       types: %{}
     }
 
@@ -110,10 +118,28 @@ defmodule Hologram.Sync.Session do
     end)
   end
 
+  # A client being caught up is told nothing until it is: what it holds is stale until the gap
+  # lands, and a marker saying otherwise would have it read a store that lies. Once every window
+  # has reported, what the client may see is known, and the gap can be spoken.
+  defp announce(state) do
+    cond do
+      not replaying?(state) ->
+        announce_scopes(state)
+
+      Enum.empty?(state.pending) ->
+        state
+        |> catch_up()
+        |> announce_scopes()
+
+      true ->
+        state
+    end
+  end
+
   # Two scopes rather than one marker per window: what a client needs to know is whether it can
   # answer a page from its own store, and window ids are the server's business - they never cross
   # the wire. `:page` means the page the client is on is answerable, `:all` means every page is.
-  defp announce(state) do
+  defp announce_scopes(state) do
     state
     |> announce_scope(:page)
     |> announce_scope(:all)
@@ -132,6 +158,19 @@ defmodule Hologram.Sync.Session do
     else
       state
     end
+  end
+
+  # What the client missed, told from the rows as they stand now rather than from the log's own
+  # account of them. Everything it holds that the gap never touched is still true, and is left
+  # alone - which is the whole saving over sending it the lot.
+  defp catch_up(state) do
+    deltas = Catchup.deltas(state.gap, state.touched)
+
+    if deltas != [] do
+      send(state.client, {:sync_deltas, deltas})
+    end
+
+    %{state | gap: nil, touched: %{}}
   end
 
   defp mark_filled(state, window_id) do
@@ -157,7 +196,33 @@ defmodule Hologram.Sync.Session do
     %{state | held: Map.put(state.held, window_id, window_held)}
   end
 
+  defp replaying?(state), do: state.gap != nil
+
+  # While a client is being caught up nothing goes out, so the gap cannot be undone by a round
+  # that reaches it first. What the rounds are read for is the rows the gap names - and only
+  # those, so what is held here is bounded by what moved rather than by what the client holds.
+  defp remember_touched(state, deltas) do
+    touched_ids = MapSet.new(state.gap, & &1.entity_id)
+
+    rows =
+      deltas.patched
+      |> Enum.map(fn {row, _patch} -> row end)
+      |> Enum.concat(deltas.appeared)
+      |> Enum.filter(&MapSet.member?(touched_ids, &1.id))
+      |> Map.new(&{&1.id, &1})
+
+    %{state | touched: Map.merge(state.touched, rows)}
+  end
+
   defp send_deltas(state, window_id, deltas) do
+    if replaying?(state) do
+      remember_touched(state, deltas)
+    else
+      tell(state, window_id, deltas)
+    end
+  end
+
+  defp tell(state, window_id, deltas) do
     unsynced = left_the_pot(state, window_id, deltas.vanished)
 
     news = %{

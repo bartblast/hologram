@@ -62,6 +62,11 @@ defmodule Hologram.Sync.SessionTest do
   # anything - otherwise it reaches the pool rather than this test's transaction and finds none of
   # these rows. Holding the windows first is what puts the evaluators there to be let in: the
   # session then finds them running and asks them for its first round.
+  # One entry of what a returning client missed, in the shape the log reports it.
+  defp gap_effect(entity_id) do
+    %{entity_id: entity_id, op: :patch_entity, type: Module2}
+  end
+
   defp hold_windows(window_ids) do
     holder = spawn_link(fn -> Process.sleep(:infinity) end)
 
@@ -162,6 +167,82 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(client: other_client)
 
       assert length(Evaluators.live()) == 1
+    end
+  end
+
+  describe "start_link/1 - coming back" do
+    test "tells a returning client only about the rows the gap names" do
+      moved = create("moved while away")
+      untouched = create("untouched while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(gap: [gap_effect(moved.id)])
+
+      assert_receive {:sync_deltas, deltas}
+      assert [%{data: ^moved, op: :put_entity}] = deltas
+
+      refute_receive {:sync_deltas, _more}, 100
+      refute Enum.any?(deltas, &(&1.id == untouched.id))
+    end
+
+    test "tells a returning client to drop a row it may no longer see" do
+      create("still here")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      gone_id = Entity.generate_id()
+
+      start_session!(gap: [gap_effect(gone_id)])
+
+      assert_receive {:sync_deltas, deltas}
+
+      assert deltas == [
+               %{
+                 id: gone_id,
+                 op: :unsync_entity,
+                 type: "Hologram.Test.Fixtures.Entity.Module2"
+               }
+             ]
+    end
+
+    test "tells a returning client that missed nothing nothing at all" do
+      create("unchanged while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(gap: [])
+
+      assert_receive {:sync_synced, :all}
+      refute_received {:sync_deltas, _deltas}
+    end
+
+    test "says the pages are answerable only once what was missed has been told" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(gap: [gap_effect(moved.id)])
+
+      # Received in this order, so the client never reads its own store while it is still stale.
+      assert_receive {:sync_deltas, _deltas}
+      assert_receive {:sync_synced, :page}
+    end
+
+    test "keeps telling a returning client the news once it has been caught up" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(gap: [gap_effect(moved.id)])
+      assert_receive {:sync_deltas, _caught_up}
+
+      DB.update(Module2, moved.id, %{c: "moved again, this time watched"})
+      Evaluator.round(@board_window, transactions(moved.id, ["c"]))
+
+      assert_receive {:sync_deltas, deltas}
+      assert [%{data: patch, op: :patch_entity}] = deltas
+      assert patch.c == "moved again, this time watched"
     end
   end
 
