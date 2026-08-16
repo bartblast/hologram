@@ -47,6 +47,12 @@ export default class Sse {
   }
 
   static async connect() {
+    // At most one stream is live at a time. Whatever is in the slot is closed before
+    // this attempt starts, so a stream this client has moved on from is never left
+    // open, reconnecting natively, and firing handlers of its own.
+    $.eventSource?.close();
+    $.eventSource = null;
+
     try {
       const preHandshakeReceiptCount =
         App.subscriptionReceiptRegistry.entries.size;
@@ -81,9 +87,10 @@ export default class Sse {
         handshake_id: handshakeId,
       });
 
-      $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
+      const eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
+      $.eventSource = eventSource;
 
-      $.eventSource.addEventListener("action", (event) => {
+      eventSource.addEventListener("action", (event) => {
         const action = Interpreter.evaluateJavaScriptExpression(event.data);
         const target = Erlang_Maps["get/2"](Type.atom("target"), action);
 
@@ -98,12 +105,12 @@ export default class Sse {
         Hologram.scheduleAction(action);
       });
 
-      $.eventSource.addEventListener("add_sub_receipts", (event) => {
+      eventSource.addEventListener("add_sub_receipts", (event) => {
         const receipts = Interpreter.evaluateJavaScriptExpression(event.data);
         App.subscriptionReceiptRegistry.merge(receipts, Type.list());
       });
 
-      $.eventSource.addEventListener("broadcast", (event) => {
+      eventSource.addEventListener("broadcast", (event) => {
         const decoded = Interpreter.evaluateJavaScriptExpression(event.data);
         const [actionName, params, cidsList] = decoded.data;
 
@@ -120,17 +127,21 @@ export default class Sse {
         }
       });
 
-      $.eventSource.addEventListener("drop_sub_receipts", (event) => {
+      eventSource.addEventListener("drop_sub_receipts", (event) => {
         const keys = Interpreter.evaluateJavaScriptExpression(event.data);
         App.subscriptionReceiptRegistry.purge(keys);
       });
 
-      $.eventSource.addEventListener("refresh_sub_receipts", (event) => {
+      eventSource.addEventListener("refresh_sub_receipts", (event) => {
         const refreshed = Interpreter.evaluateJavaScriptExpression(event.data);
         App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
       });
 
-      $.eventSource.onopen = () => {
+      eventSource.onopen = () => {
+        if (!$.isCurrentStream(eventSource)) {
+          return;
+        }
+
         $.reconnectAttempts = 0;
         GlobalRegistry.set("sseConnected?", true);
       };
@@ -141,10 +152,16 @@ export default class Sse {
       // handshake protocol from scratch after an exponential backoff delay.
       // No retry cap: the receipt-expiry path inside `connect()` handles the
       // "give up and reload" case organically once stored receipts age out.
-      $.eventSource.onerror = (event) => {
+      eventSource.onerror = (event) => {
+        if (!$.isCurrentStream(eventSource)) {
+          return;
+        }
+
         Logger.debug(`SSE error: ${event.type}`);
         GlobalRegistry.set("sseConnected?", false);
-        $.eventSource.close();
+
+        eventSource.close();
+        $.eventSource = null;
 
         $.scheduleReconnect();
       };
@@ -152,6 +169,16 @@ export default class Sse {
       Logger.debug(`SSE handshake error: ${error}`);
       $.scheduleReconnect();
     }
+  }
+
+  // Whether the given stream is the one this client is currently running.
+  //
+  // Closing a stream does not unqueue the events it has already dispatched, so a
+  // handler can run for a stream that has since been replaced. Such a handler decides
+  // nothing: acting on it would let a stream the client has moved on from tear down or
+  // vouch for the live one.
+  static isCurrentStream(eventSource) {
+    return eventSource === $.eventSource;
   }
 
   // Bump the failure counter and re-run the handshake protocol from scratch
