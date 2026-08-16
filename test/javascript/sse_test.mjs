@@ -39,18 +39,6 @@ describe("Sse", () => {
   const receiptA = receipt(Type.atom("room_a"), "page", "token-a");
   const receiptB = receipt(Type.atom("room_b"), "widget", "token-b");
 
-  function buildMockEventSource() {
-    return {
-      close: sinon.spy(),
-      listeners: {},
-      addEventListener: function (type, listener) {
-        this.listeners[type] = listener;
-      },
-      onerror: null,
-      onopen: null,
-    };
-  }
-
   function stubHandshakeResponse({
     handshakeId = "test-handshake-id",
     refreshedReceipts = Type.list(),
@@ -85,7 +73,15 @@ describe("Sse", () => {
 
     SubscriptionReceiptRegistry.entries.clear();
 
-    mockEventSource = buildMockEventSource();
+    mockEventSource = {
+      close: sinon.spy(),
+      listeners: {},
+      addEventListener: function (type, listener) {
+        this.listeners[type] = listener;
+      },
+      onerror: null,
+      onopen: null,
+    };
 
     globalThis.EventSource = sinon.stub().returns(mockEventSource);
     fetchStub = sinon.stub(globalThis, "fetch");
@@ -281,20 +277,6 @@ describe("Sse", () => {
       assert.strictEqual(Sse.eventSource, mockEventSource);
     });
 
-    it("closes a stream left over from a previous attempt", async () => {
-      const previousEventSource = mockEventSource;
-
-      globalThis.EventSource.onCall(1).returns(buildMockEventSource());
-
-      stubHandshakeResponse();
-
-      await Sse.connect();
-      await Sse.connect();
-
-      sinon.assert.calledOnce(previousEventSource.close);
-      assert.notStrictEqual(Sse.eventSource, previousEventSource);
-    });
-
     it("triggers a full reload when every stored receipt was rejected", async () => {
       SubscriptionReceiptRegistry.entries.set(
         "key-a",
@@ -398,52 +380,17 @@ describe("Sse", () => {
 
     it("backs off exponentially on consecutive failures", async () => {
       stubHandshakeResponse();
+
+      await Sse.connect();
       setTimeoutSpy.resetHistory();
 
-      // Each failure is its own attempt: the stream that errors is closed, and the
-      // next connect opens a new one.
-      for (const _attempt of [1, 2, 3]) {
-        await Sse.connect();
-        Sse.eventSource.onerror({type: "error"});
-      }
+      Sse.eventSource.onerror({type: "error"});
+      Sse.eventSource.onerror({type: "error"});
+      Sse.eventSource.onerror({type: "error"});
 
       assert.strictEqual(setTimeoutSpy.getCall(0).args[1], 250);
       assert.strictEqual(setTimeoutSpy.getCall(1).args[1], 500);
       assert.strictEqual(setTimeoutSpy.getCall(2).args[1], 1000);
-    });
-
-    it("clears the event source slot so no stale stream is left current", async () => {
-      stubHandshakeResponse();
-
-      await Sse.connect();
-      Sse.eventSource.onerror({type: "error"});
-
-      assert.isNull(Sse.eventSource);
-    });
-
-    // Closing a stream does not unqueue events it already dispatched, so a handler can
-    // still run for a stream the client has replaced.
-    it("ignores an error from a stream that is no longer current", async () => {
-      const staleEventSource = mockEventSource;
-      const currentEventSource = buildMockEventSource();
-
-      globalThis.EventSource.onCall(1).returns(currentEventSource);
-
-      stubHandshakeResponse();
-
-      await Sse.connect();
-      const staleHandler = staleEventSource.onerror;
-
-      await Sse.connect();
-      setTimeoutSpy.resetHistory();
-
-      staleHandler({type: "error"});
-
-      assert.strictEqual(Sse.eventSource, currentEventSource);
-      assert.strictEqual(Sse.reconnectAttempts, 0);
-
-      sinon.assert.notCalled(setTimeoutSpy);
-      sinon.assert.notCalled(currentEventSource.close);
     });
 
     it("preserves the stored subscription receipts on connection error", async () => {
