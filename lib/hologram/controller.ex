@@ -779,8 +779,6 @@ defmodule Hologram.Controller do
         self_echoes: self_echoes,
         sub_receipt_adds: sub_receipt_adds,
         sub_receipt_drops: sub_receipt_drops,
-        # TODO: ship the tree as the navigation payload, so a navigated page paints without
-        # waiting for its bundle.
         tree: rendered_tree
       }
 
