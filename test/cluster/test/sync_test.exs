@@ -2,13 +2,11 @@ defmodule HologramClusterTests.SyncTest do
   # async: false - the peers share one database, and every scenario writes into it.
   use HologramClusterTests.TestCase, async: false
 
-  import Hologram.DB.EntityOperations, only: [create: 1]
-
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
-  alias Hologram.Entity
   alias Hologram.Test.SyncClient
   alias HologramClusterTests.Entities.Item
+  alias HologramClusterTests.SyncHelpers
 
   @page "HologramClusterTests.SyncPage"
 
@@ -41,18 +39,16 @@ defmodule HologramClusterTests.SyncTest do
     client
   end
 
+  # Peer-side work goes through SyncHelpers, which a peer can load - a test module is compiled in
+  # memory on the runner and answers :undef over rpc.
   defp create_item(peer, slug, title) do
-    rpc(peer, __MODULE__, :create_item_locally, [slug, title])
-  end
-
-  @doc false
-  def create_item_locally(slug, title) do
-    item =
-      Item
-      |> Entity.new(slug: slug, title: title)
-      |> create()
+    item = rpc(peer, SyncHelpers, :create_item, [slug, title])
 
     item.id
+  end
+
+  defp hold_item_open(peer, slug, title) do
+    rpc(peer, SyncHelpers, :hold_item_open, [slug, title, self()])
   end
 
   defp drain_initial_sync(client) do
@@ -66,6 +62,46 @@ defmodule HologramClusterTests.SyncTest do
   end
 
   defp url(peer), do: "http://127.0.0.1:#{peer.port}"
+
+  describe "a transaction held open across the window" do
+    # Ruling 2's guarantee, and the one claim the sandbox structurally cannot host: it runs every
+    # test inside a single transaction, so two transactions racing each other never exist there.
+    #
+    # A transaction takes its id when it first writes and holds it until it ends, so a LATER
+    # transaction can commit FIRST. A reader advancing on insert order would deliver the later row
+    # and then never come back for the earlier one - silently, permanently. The windowed read
+    # cannot: its upper edge is the oldest transaction still running, so while one is held open
+    # the window stops below BOTH rows.
+    #
+    # That is the honest price of gap-freeness and this test states it: a long transaction stalls
+    # the stream rather than corrupting it. Nothing arrives while the write is held, and then both
+    # arrive together, the held one included.
+    test "delivers the held write once it commits, rather than passing it by" do
+      [peer_a, peer_b] = start_peers(2)
+
+      client = drain_initial_sync(connect(peer_a))
+
+      holder = hold_item_open(peer_a, "held-open", "Held open")
+      assert_receive {:holding, ^holder}, 5_000
+
+      # Committed after the held write started, and with a HIGHER transaction id.
+      create_item(peer_b, "committed-first", "Committed first")
+
+      # Neither travels yet: the window's upper edge cannot pass the transaction still running,
+      # so the row that committed is waiting on the one that has not.
+      assert {:timeout, still_waiting} =
+               SyncClient.next_frame(client, "sync_deltas", @settle_ms)
+
+      send(holder, :release)
+
+      {:ok, frame, _client} = SyncClient.next_frame(still_waiting, "sync_deltas", 10_000)
+
+      # One window read covers both, so they arrive in one frame - and the held one arriving at
+      # all is the whole proof.
+      assert frame["data"] =~ ~s["title":"Held open"]
+      assert frame["data"] =~ ~s["title":"Committed first"]
+    end
+  end
 
   describe "two dispatchers, one log" do
     # Each peer reads the shared log on its own cursor, with nothing coordinated between them.
