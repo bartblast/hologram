@@ -401,7 +401,7 @@ export default class Hologram {
     $.#historyId = Utils.randomUUID();
 
     window.requestAnimationFrame(() => {
-      Hologram.#mountNewPage(payload);
+      Hologram.#showNewPage(payload);
       window.scrollTo(0, 0);
 
       history.pushState($.#historyId, null, pagePath);
@@ -805,6 +805,32 @@ export default class Hologram {
     });
   }
 
+  // Takes the page's own bundle out of the document the server described, leaving every other
+  // script it carries to be patched in and run.
+  //
+  // The bundle is fetched here rather than through the patch so that a failure to load is
+  // noticed - #loadPageBundle gives it a failure path, which a script the patch creates would
+  // not have. It also settles what a script element cannot express on its own: a script is keyed
+  // by the source it loads, so navigating back to a page whose bundle is already in the document
+  // would adopt that element and never run it, while navigating to a page whose bundle is in
+  // memory but absent from the document would run it a second time.
+  //
+  // The document is the one just built from the tree, so it is edited in place.
+  static #dropPageBundleScript(virtualDocument, pageDigest) {
+    // Mirrors Hologram.Router.Helpers.page_bundle_path/1
+    const key = `__hologramScript__:${$.#pageBundlePath(pageDigest)}`;
+
+    const headVnode = virtualDocument.children.find(
+      (childVnode) => childVnode?.sel === "head",
+    );
+
+    if (headVnode) {
+      headVnode.children = headVnode.children.filter(
+        (childVnode) => childVnode?.key !== key,
+      );
+    }
+  }
+
   static #ensureDomNodeHasHologramId(eventNode) {
     if (typeof eventNode.__hologramId__ === "undefined") {
       eventNode.__hologramId__ = Utils.randomUUID();
@@ -1206,6 +1232,11 @@ export default class Hologram {
     }
   }
 
+  // Mirrors Hologram.Router.Helpers.page_bundle_path/1
+  static #pageBundlePath(pageDigest) {
+    return `/hologram/page-${pageDigest}.js`;
+  }
+
   static #pageSnapshotKey(historyId) {
     return `${$.#PAGE_SNAPSHOT_KEY_PREFIX}${historyId}`;
   }
@@ -1240,10 +1271,54 @@ export default class Hologram {
     );
   }
 
-  // Takes ownership of a page the server described: the payload is left for the mount to read, and
-  // the page's own code is fetched when this client hasn't run that page before, which is what
-  // announces the page is ready to mount. A page already registered has nothing to fetch, so it
-  // mounts straight away.
+  // Puts the page the server described on screen, before any of that page's own code has arrived.
+  //
+  // The payload carries the render the server performed, so patching it into the document shows
+  // the page a round trip after it was asked for, rather than a round trip plus a bundle plus a
+  // render. What the patch puts on screen is inert - the tree carries no event bindings - until
+  // the mount below renders the page for itself and adopts these nodes, which is what the keys
+  // both renders agree on are for.
+  //
+  // The scripts the server would have served with the page ride in the tree and are patched in
+  // with everything else, so the inline script leaving the mount data behind runs here, the same
+  // way it runs when the browser loads a document. The page's own bundle is the exception, taken
+  // out by #dropPageBundleScript.
+  //
+  // A page this client has already run needs no bundle at all, so it mounts as soon as the patch
+  // is done. Otherwise the bundle is fetched, and running it announces the page is ready to
+  // mount.
+  static #showNewPage(payload) {
+    const pageModule = Interpreter.evaluateJavaScriptExpression(
+      payload.pageModule,
+    );
+
+    const isPageModuleRegistered = $.#isPageModuleRegistered(pageModule);
+
+    // The fetch is started before the patch, which is local work, so the network has a head start
+    // on it. Nothing the bundle does can run before the patch is done, since it cannot execute
+    // until this frame's work ends.
+    if (!isPageModuleRegistered) {
+      globalThis.Hologram.pageScriptLoaded = false;
+      $.#loadPageBundle($.#pageBundlePath(payload.pageDigest));
+    }
+
+    const tree = Interpreter.evaluateJavaScriptExpression(payload.tree);
+    const newVirtualDocument = Renderer.renderTree(tree);
+
+    $.#dropPageBundleScript(newVirtualDocument, payload.pageDigest);
+
+    Hologram.virtualDocument = Vdom.patchVirtualDocument(
+      Hologram.virtualDocument,
+      newVirtualDocument,
+    );
+
+    if (isPageModuleRegistered) {
+      $.#mountPage(true);
+    }
+  }
+
+  // TODO: Remove together with pendingMountPayload and #mountDataFromPayload - #showNewPage
+  // replaces it.
   static #mountNewPage(payload) {
     $.pendingMountPayload = payload;
 
