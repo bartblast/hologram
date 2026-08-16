@@ -68,5 +68,14 @@ defmodule Hologram.Sync.HandshakeTest do
     test "leaves a client that said only part of it alone" do
       assert check(%{page: MyApp.BoardPage}) == :no_sync
     end
+
+    # The other side of this - a build with NO entity types answering :no_sync - cannot be shown
+    # here, because this suite's own model has twenty of them and nothing stubs the reflection.
+    # It is asserted in the umbrella app, which declares none, and which is where the crash this
+    # gate exists to prevent actually happened.
+    test "serves a client of a build that has a data model" do
+      refute Hologram.Reflection.list_entities() == []
+      assert {:sync, _page, _cursor} = check(greeting())
+    end
   end
 end

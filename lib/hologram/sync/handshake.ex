@@ -11,14 +11,21 @@ defmodule Hologram.Sync.Handshake do
   # is what lenses will make possible - until they exist, the answer is to reload.
 
   alias Hologram.Entity.Model
+  alias Hologram.Reflection
   alias Hologram.Sync.Frame
 
   @doc """
   Decides what a connection carrying the given greeting gets.
 
   Answers `{:sync, page, cursor}` when the client can be served, `{:reload, reason}` when its
-  bundle disagrees with this build, and `:no_sync` when it said nothing about sync at all - which
-  is what a client built before any of this existed looks like, and it keeps its realtime stream.
+  bundle disagrees with this build, and `:no_sync` when there is nothing to serve - which is
+  either a client that said nothing about sync (what one built before any of this existed looks
+  like) or a build with no data model at all. Both keep the realtime stream they already have.
+
+  An app declaring no entity types has no database - the application tree gates the whole data
+  layer on exactly that - so nothing about it can be synced and no client of it may be answered
+  as though something could. Asked anyway, this says no rather than reaching for a pool that was
+  never started.
 
   The page is the client's own claim and is taken at face value: what it names decides only which
   windows fill first, never what it may see of them, which every row is checked against
@@ -39,8 +46,13 @@ defmodule Hologram.Sync.Handshake do
     end
   end
 
+  # The same condition the application tree gates the database on, read from the same place, so
+  # the two cannot come to disagree about whether this build has a data layer.
+  defp data_layer?, do: Reflection.list_entities() != []
+
   defp check_greeting(page, protocol_version, model_hash, cursor) do
     cond do
+      not data_layer?() -> :no_sync
       protocol_version != Frame.protocol_version() -> {:reload, :protocol_version}
       model_hash != Model.hash() -> {:reload, :model_hash}
       true -> {:sync, page, cursor}
