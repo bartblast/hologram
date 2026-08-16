@@ -85,15 +85,27 @@ defmodule Hologram.Sync.Session do
   end
 
   @impl GenServer
+  def handle_info(:behind_the_ring, state) do
+    {:stop, :behind_the_ring, state}
+  end
+
   def handle_info({:round, window_id, version, transactions}, state) do
     {:noreply, deliver(state, window_id, version, transactions)}
   end
 
   defp deliver(state, window_id, version, transactions) do
     case ResultStore.fetch(window_id, version) do
-      # The round fell out of the ring before this session read it, which means it is further
-      # behind than the store reaches. Catching such a client up is the reconnect path's job.
+      # The round fell out of the ring before this session read it, so this client is further
+      # behind than the store reaches - the same cliff as coming back to a log that no longer
+      # covers you, and answered the same way: the connection is cut and the client comes back
+      # through the doors like any returning one. Cutting is what the session HAS to do rather
+      # than filling again in place, because what it holds is what the client was told, and a
+      # round it cannot read leaves it unable to say what that still is.
+      #
+      # Deferred rather than stopped here, so every caller of this can carry on returning state.
       nil ->
+        send(self(), :behind_the_ring)
+
         state
 
       result ->

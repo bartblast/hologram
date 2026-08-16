@@ -67,6 +67,21 @@ defmodule Hologram.Sync.SessionTest do
     %{entity_id: entity_id, op: :patch_entity, type: Module2}
   end
 
+  # Takes a window's place in the registry with a process that answers a subscription and then says
+  # nothing more, which leaves the window outstanding rather than filled or failed.
+  defp hold_silently(window_id) do
+    silent =
+      spawn_link(fn ->
+        {:ok, _pid} = Registry.register(Evaluator.registry(), window_id, nil)
+
+        silence()
+      end)
+
+    wait_until(fn -> Registry.lookup(Evaluator.registry(), window_id) == [{silent, nil}] end)
+
+    silent
+  end
+
   defp hold_windows(window_ids) do
     holder = spawn_link(fn -> Process.sleep(:infinity) end)
 
@@ -265,13 +280,11 @@ defmodule Hologram.Sync.SessionTest do
 
     test "says the client's page is answerable while the rest is still arriving" do
       windows(%{@page => [@board_window], @other_page => [@other_window]})
-      hold_windows([@board_window, @other_window])
+      hold_windows([@board_window])
 
-      # The other page's window is put beyond the store's reach, so nothing will ever fill it -
-      # which is what leaves the rest of the build outstanding for as long as this test looks.
-      Evaluator.round(@other_window, [])
-      wait_until(fn -> ResultStore.versions(@other_window) == [1] end)
-      ResultStore.forget(@other_window)
+      # The other page's window is held by an evaluator that never answers, so the rest of the
+      # build stays outstanding for as long as this test cares to look.
+      hold_silently(@other_window)
 
       start_session!([])
 
@@ -503,6 +516,49 @@ defmodule Hologram.Sync.SessionTest do
     end
   end
 
+  describe "handle :round - past the ring" do
+    test "ends when told about a round the store no longer reaches" do
+      create("first")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      session = start_session!([])
+      assert_receive {:sync_deltas, _first_deltas}
+
+      ref = Process.monitor(session)
+
+      # A version the ring dropped before this session got to it.
+      send(session, {:round, @board_window, 999, []})
+
+      assert_receive {:DOWN, ^ref, :process, ^session, :behind_the_ring}
+    end
+
+    test "takes the connection with it, so the client comes back through the doors" do
+      create("first")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      test_pid = self()
+
+      connection =
+        spawn(fn ->
+          {:ok, session} = Session.start_link(client: test_pid, page: @page)
+
+          send(test_pid, {:connected, session})
+
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive {:connected, session}
+      assert_receive {:sync_deltas, _first_deltas}
+
+      ref = Process.monitor(connection)
+      send(session, {:round, @board_window, 999, []})
+
+      assert_receive {:DOWN, ^ref, :process, ^connection, :behind_the_ring}
+    end
+  end
+
   describe "handle :round - the pot" do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
@@ -554,6 +610,18 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, board_deltas}
       assert [%{id: unsynced_id, op: :unsync_entity}] = board_deltas
       assert unsynced_id == task.id
+    end
+  end
+
+  defp silence do
+    receive do
+      {:"$gen_call", from, {:subscribe, _subscriber}} ->
+        GenServer.reply(from, {:ok, 0})
+
+        silence()
+
+      _round ->
+        silence()
     end
   end
 
