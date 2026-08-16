@@ -17,7 +17,7 @@ defmodule Hologram.RealtimeTest do
     start_supervised!(SubscriptionRegistry)
 
     wait_for_process_cleanup(Tombstone)
-    start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+    start_supervised!(Tombstone)
 
     :ok
   end

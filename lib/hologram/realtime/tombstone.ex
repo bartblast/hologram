@@ -5,7 +5,6 @@ defmodule Hologram.Realtime.Tombstone do
 
   alias Hologram.Realtime.Gossip
 
-  @boot_sync_timeout_ms 5_000
   @gossip_topic "hologram:gossip:tombstones"
 
   # Decoupled from the TTL on purpose: sweeping only once per TTL would let an
@@ -63,16 +62,19 @@ defmodule Hologram.Realtime.Tombstone do
   def tombstone_ttl_ms, do: @tombstone_ttl_ms
 
   @impl GenServer
-  def init(opts) do
+  def init(_opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
     Phoenix.PubSub.subscribe(Hologram.PubSub, @gossip_topic)
 
-    boot_sync_timeout_ms =
-      Keyword.get(opts, :boot_sync_timeout_ms, @boot_sync_timeout_ms)
+    # Peers are asked for what they hold, and whatever they send back merges as it
+    # arrives. Nothing is waited for, so this process serves inserts from the moment it
+    # starts, and readers hitting the table meanwhile see the same catch-up window they
+    # always have - a tombstone a peer has not sent yet is simply not there yet.
+    Gossip.request_sync(@gossip_topic)
 
     schedule_sweep()
 
-    {:ok, %{}, {:continue, {:boot_sync, boot_sync_timeout_ms}}}
+    {:ok, %{}}
   end
 
   @impl GenServer
@@ -87,18 +89,6 @@ defmodule Hologram.Realtime.Tombstone do
     )
 
     {:reply, :ok, state}
-  end
-
-  # Boot-sync runs here rather than in init/1 so the blocking wait for peer
-  # replies doesn't stall the supervision tree (and thus app/endpoint
-  # readiness) for the full timeout on every boot. The ETS table and gossip
-  # subscription are established in init/1, so direct readers and live gossip
-  # are unaffected during this catch-up window.
-  @impl GenServer
-  def handle_continue({:boot_sync, boot_sync_timeout_ms}, state) do
-    Gossip.boot_sync(@gossip_topic, boot_sync_timeout_ms, &merge_synced_entries/1)
-
-    {:noreply, state}
   end
 
   @impl GenServer
@@ -119,6 +109,13 @@ defmodule Hologram.Realtime.Tombstone do
   def handle_info(:sweep_expired, state) do
     delete_expired()
     schedule_sweep()
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:sync_reply, tombstones}, state) do
+    Enum.each(tombstones, fn {key, created_at} -> merge_insert(key, created_at) end)
 
     {:noreply, state}
   end
@@ -148,10 +145,6 @@ defmodule Hologram.Realtime.Tombstone do
       _other ->
         :ets.insert(@table_name, {key, created_at})
     end
-  end
-
-  defp merge_synced_entries(entries) do
-    Enum.each(entries, fn {key, created_at} -> merge_insert(key, created_at) end)
   end
 
   defp schedule_sweep do

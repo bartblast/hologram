@@ -613,7 +613,7 @@ defmodule Hologram.ControllerTest do
   describe "handle_command_request/1" do
     setup do
       wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+      start_supervised!(Tombstone)
 
       :ok
     end
@@ -2223,7 +2223,7 @@ defmodule Hologram.ControllerTest do
       start_supervised!(Handshake)
 
       wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+      start_supervised!(Tombstone)
 
       :ok
     end
@@ -2678,7 +2678,7 @@ defmodule Hologram.ControllerTest do
   describe "verify_and_refresh_receipts/4" do
     setup do
       wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+      start_supervised!(Tombstone)
 
       :ok
     end

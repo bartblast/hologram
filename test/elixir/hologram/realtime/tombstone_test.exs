@@ -23,7 +23,7 @@ defmodule Hologram.Realtime.TombstoneTest do
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
     wait_for_process_cleanup(Tombstone)
-    start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+    start_supervised!(Tombstone)
 
     :ok
   end
@@ -168,7 +168,7 @@ defmodule Hologram.Realtime.TombstoneTest do
       assert :ets.info(ets_table_name()) != :undefined
     end
 
-    test "merges entries from a peer that replies to the boot-sync request" do
+    test "merges entries from a peer that replies to the sync request" do
       :ok = stop_supervised(Tombstone)
 
       test_pid = self()
@@ -181,23 +181,35 @@ defmodule Hologram.Realtime.TombstoneTest do
 
       assert_receive :peer_ready
 
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 200})
+      start_supervised!(Tombstone)
 
       wait_until(fn -> :ets.lookup(ets_table_name(), key) == [peer_entry] end)
 
       assert :ets.lookup(ets_table_name(), key) == [peer_entry]
     end
 
-    test "returns with an empty table when no peers reply before the timeout" do
+    test "starts with an empty table when no peer replies" do
       :ok = stop_supervised(Tombstone)
 
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 50})
+      start_supervised!(Tombstone)
 
-      # No peers reply, so nothing merges; the synchronous call blocks until the
-      # boot-sync handle_continue has run, then the table is asserted empty.
+      # A synchronous call returns only once init/1 has run.
       :sys.get_state(Tombstone)
 
       assert :ets.tab2list(ets_table_name()) == []
+    end
+
+    # The reason the sync request does not wait: a node that is accepting requests has
+    # to serve them. Against a blocking boot sync this call exits on its own timeout.
+    test "serves an insert straight away, without waiting on peers" do
+      :ok = stop_supervised(Tombstone)
+
+      start_supervised!(Tombstone)
+
+      key = {{:user, 7}, :notifications, "c1"}
+
+      assert insert(key, @timestamp) == :ok
+      assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp}]
     end
 
     test "still receives a steady-state {:insert, ...} a peer publishes after the sync_request" do
@@ -212,7 +224,7 @@ defmodule Hologram.Realtime.TombstoneTest do
 
       assert_receive :peer_ready
 
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 50})
+      start_supervised!(Tombstone)
 
       wait_until(fn -> :ets.lookup(ets_table_name(), key) == [{key, @timestamp}] end)
 
@@ -236,14 +248,14 @@ defmodule Hologram.Realtime.TombstoneTest do
       assert_receive :peer_ready
       assert_receive :peer_ready
 
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 200})
+      start_supervised!(Tombstone)
 
       wait_until(fn -> :ets.lookup(ets_table_name(), key) == [{key, @timestamp + 10}] end)
 
       assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp + 10}]
     end
 
-    test "subsequent gossip lands in ETS after boot-sync completes" do
+    test "subsequent gossip lands in ETS after the synced entries" do
       :ok = stop_supervised(Tombstone)
 
       test_pid = self()
@@ -256,7 +268,7 @@ defmodule Hologram.Realtime.TombstoneTest do
 
       assert_receive :peer_ready
 
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 50})
+      start_supervised!(Tombstone)
 
       Phoenix.PubSub.broadcast(
         Hologram.PubSub,
