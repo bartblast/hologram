@@ -39,6 +39,13 @@ defmodule Hologram.DB.SchemaReconciler do
   # Hence the tx column, defaulted to the writing transaction's own id, and the index the
   # windowed read walks.
   #
+  # The second outbox index is BRIN rather than btree, and pruning is what reads it. The
+  # table is append-only, so inserted_at runs with the physical order of the pages, which
+  # is the one case BRIN is built for: kilobytes of index instead of gigabytes, and no
+  # per-row tree descent on a table every entity write appends to. A btree here would put
+  # its rightmost page in the path of every write in the system to speed up an hourly
+  # chore.
+  #
   # Every environment gets the same tables, and which of them a database uses follows
   # from how it is managed: reconciliation writes the registry and never the migration
   # table, the migration applier the other way around. One schema everywhere keeps
@@ -78,6 +85,10 @@ defmodule Hologram.DB.SchemaReconciler do
     """,
     """
     CREATE INDEX "outbox_tx_seq_$idx" ON "hologram_system"."outbox" ("tx", "seq")
+    """,
+    """
+    CREATE INDEX "outbox_inserted_at_$idx" ON "hologram_system"."outbox"
+    USING brin ("inserted_at")
     """,
     """
     CREATE TABLE "hologram_system"."schema_object" (

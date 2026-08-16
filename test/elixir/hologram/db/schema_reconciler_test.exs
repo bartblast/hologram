@@ -108,6 +108,34 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       assert rows == [["database"], ["migration"], ["outbox"], ["schema_object"]]
     end
 
+    test "gives the outbox the indexes reading it forward and pruning it behind need" do
+      drop_hologram_schemas()
+      {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
+
+      assert create_system_tables() == :ok
+
+      statement = """
+      SELECT c.relname, am.amname, a.attname
+      FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_catalog.pg_am am ON am.oid = c.relam
+      JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+      WHERE n.nspname = 'hologram_system' AND c.relkind = 'i' AND c.relname LIKE 'outbox%'
+      ORDER BY c.relname, a.attnum
+      """
+
+      {:ok, %{rows: rows}} = Connection.query(statement)
+
+      # BRIN rather than btree for the prune scan: the table is append-only, so a btree here
+      # would put its rightmost page in the path of every write to speed up an hourly chore.
+      assert rows == [
+               ["outbox_inserted_at_$idx", "brin", "inserted_at"],
+               ["outbox_pkey", "btree", "seq"],
+               ["outbox_tx_seq_$idx", "btree", "tx"],
+               ["outbox_tx_seq_$idx", "btree", "seq"]
+             ]
+    end
+
     test "gives the outbox the columns the dispatcher and its writers need" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
