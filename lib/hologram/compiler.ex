@@ -13,9 +13,11 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.QueryExtractor
+  alias Hologram.Entity.Model
   alias Hologram.Query.Registry
   alias Hologram.Query.Window
   alias Hologram.Reflection
+  alias Hologram.Sync.Frame
 
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs.
@@ -363,6 +365,8 @@ defmodule Hologram.Compiler do
     const startTime = PerformanceTimer.start();
 
     globalThis.Hologram.config = #{render_client_config()};
+
+    globalThis.Hologram.sync = #{render_sync_constants()};
 
     ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
@@ -933,6 +937,14 @@ defmodule Hologram.Compiler do
 
   defp render_client_config do
     ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
+  end
+
+  # What the bundle was built against, said by the bundle itself. It has to be baked in rather
+  # than handed over at page render: the check these answer is whether a client's JAVASCRIPT is
+  # stale, and a value the current server puts in the page would always agree with the current
+  # server.
+  defp render_sync_constants do
+    ~s/{modelHash: "#{Model.hash()}", protocolVersion: #{Frame.protocol_version()}}/
   end
 
   defp render_elixir_function_defs(mfas, ir_plt, async_mfas) do

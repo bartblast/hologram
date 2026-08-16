@@ -11,10 +11,12 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.Entity.Model
   alias Hologram.Query
   alias Hologram.Query.Registry
   alias Hologram.Query.Window
   alias Hologram.Reflection
+  alias Hologram.Sync.Frame
 
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
@@ -596,6 +598,21 @@ defmodule Hologram.CompilerTest do
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), app_versions, @js_dir)
 
       assert String.contains?(js, ~s/ERTS.appVersions = {"my-app": "9.8.7"};/)
+    end
+
+    test "injects the model the bundle was built against", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
+
+      assert String.contains?(js, ~s/globalThis.Hologram.sync = {modelHash: "#{Model.hash()}", /)
+    end
+
+    test "injects the wire format the bundle speaks" do
+      js = build_runtime_js([], PLT.start(), MapSet.new(), [], @js_dir)
+
+      assert String.contains?(js, ~s/protocolVersion: #{Frame.protocol_version()}};/)
     end
 
     test "injects no application versions when client stacktraces are disabled", %{
