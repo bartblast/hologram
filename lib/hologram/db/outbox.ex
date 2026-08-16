@@ -104,6 +104,27 @@ defmodule Hologram.DB.Outbox do
   end
 
   @doc """
+  Removes the effects written more than `older_than_seconds` ago, and returns how many went.
+
+  What this bounds is REPLAY REACH and nothing else: a client returning to a place the log no
+  longer covers is sent everything instead of the little it missed. It cannot make an answer
+  wrong, only expensive - `oldest_place/0` works out whether a place is still covered from the
+  log as it stands, never from whatever this was last called with.
+  """
+  @spec prune(non_neg_integer) :: non_neg_integer
+  def prune(older_than_seconds) do
+    statement = """
+    DELETE FROM "hologram_system"."outbox"
+    WHERE "inserted_at" < now() - make_interval(secs => $1::double precision)
+    """
+
+    {:ok, %Postgrex.Result{num_rows: num_rows}} =
+      Connection.query(statement, [older_than_seconds])
+
+    num_rows
+  end
+
+  @doc """
   Returns the effects written after the given place, in the order a reader is told about them.
 
   The order is the windowed read's own - by transaction, then by insert order within it - so a

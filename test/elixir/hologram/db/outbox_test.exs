@@ -57,6 +57,23 @@ defmodule Hologram.DB.OutboxTest do
     :ok
   end
 
+  # An effect written the given number of seconds ago. Both this and the prune read `now()`, which
+  # inside a transaction is the transaction's own start - so the ages here are exact, not racing.
+  defp seed_aged(entity_id, seconds_ago) do
+    statement = """
+    INSERT INTO "hologram_system"."outbox"
+      ("op", "type", "entity_id", "tx", "model_hash", "inserted_at")
+    VALUES ('del_entity', 'Hologram.Test.Fixtures.Entity.Module2', $1, $2, 'seeded',
+            now() - make_interval(secs => $3::double precision))
+    """
+
+    params = [Codec.encode(entity_id, :uuid), 200, seconds_ago]
+
+    {:ok, _result} = Connection.query(statement, params)
+
+    :ok
+  end
+
   describe "current_xmin/0" do
     test "returns the transaction id below which every transaction has finished" do
       {:ok, %Postgrex.Result{rows: [[writing_tx]]}} =
@@ -79,6 +96,29 @@ defmodule Hologram.DB.OutboxTest do
       [oldest | _rest] = places()
 
       assert oldest_place() == oldest
+    end
+  end
+
+  describe "prune/1" do
+    test "removes the effects past the given age and keeps the rest" do
+      seed_aged(@entity_id, 3_600)
+      seed_aged(@target_id, 30)
+
+      assert prune(60) == 1
+
+      assert [event] = read_after(0, 0)
+      assert event.entity_id == @target_id
+    end
+
+    test "removes nothing when every effect is inside the window" do
+      seed_aged(@entity_id, 30)
+
+      assert prune(60) == 0
+      assert length(read_after(0, 0)) == 1
+    end
+
+    test "removes nothing from a log holding nothing" do
+      assert prune(60) == 0
     end
   end
 
