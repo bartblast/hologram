@@ -14,6 +14,7 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.DB.QueryCache
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
+  alias Hologram.Sync.PageWindows
 
   def setup_asset_manifest_cache(stub, start_link \\ true) do
     stub_with(AssetManifestCacheMock, stub)
@@ -66,6 +67,24 @@ defmodule Hologram.Test.Stubs do
 
     if start_link do
       PageDigestRegistry.start_link([])
+    end
+
+    :ok
+  end
+
+  def setup_page_windows(stub, start_link \\ true) do
+    stub_with(PageWindowsMock, stub)
+
+    setup_page_windows_dump(stub)
+
+    ets_table_name = stub.ets_table_name()
+
+    if ETS.table_exists?(ets_table_name) do
+      ETS.delete(ets_table_name)
+    end
+
+    if start_link do
+      PageWindows.start_link([])
     end
 
     :ok
@@ -169,6 +188,31 @@ defmodule Hologram.Test.Stubs do
       end
 
       alias alias!(unquote(random_module).PageDigestRegistryStub)
+    end
+  end
+
+  defmacro use_module_stub(:page_windows) do
+    random_module = random_module()
+
+    quote do
+      defmodule alias!(unquote(random_module).PageWindowsStub) do
+        @behaviour PageWindows
+
+        def dump_path do
+          Path.join([
+            Reflection.tmp_dir(),
+            "tests",
+            "stubs",
+            "page_windows",
+            "dump_path_0",
+            "#{unquote(random_string())}.plt"
+          ])
+        end
+
+        def ets_table_name, do: unquote(random_atom())
+      end
+
+      alias alias!(unquote(random_module).PageWindowsStub)
     end
   end
 
@@ -277,6 +321,19 @@ defmodule Hologram.Test.Stubs do
         "hologram/test_file_9.css" => "/hologram/test_file_9-99999999999999999999999999999999.css"
       }
     ]
+  end
+
+  defp setup_page_windows_dump(stub) do
+    dump_path = stub.dump_path()
+
+    File.rm(dump_path)
+
+    PLT.start()
+    |> PLT.put(:page_a, ["window_a1", "window_a2"])
+    |> PLT.put(:page_b, [])
+    |> PLT.dump(dump_path)
+
+    :ok
   end
 
   defp setup_page_digest_registry_dump(stub) do

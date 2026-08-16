@@ -49,7 +49,8 @@ defmodule Hologram.Application do
         Hologram.Assets.PageDigestRegistry,
         Hologram.Realtime.Handshake,
         Hologram.Realtime.SubscriptionRegistry,
-        Hologram.Realtime.Tombstone
+        Hologram.Realtime.Tombstone,
+        Hologram.Sync.PageWindows
       ]
   end
 

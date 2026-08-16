@@ -226,6 +226,19 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Builds the page windows PLT, where the keys are page modules and the values are the ids of the
+  windows each page downloads, and returns it with the path to dump it at.
+  """
+  @spec build_page_windows_plt(%{module => list(String.t())}, T.opts()) ::
+          {PLT.t(), T.file_path()}
+  def build_page_windows_plt(page_windows, opts) do
+    plt = PLT.start(items: Map.to_list(page_windows), supervisor: opts[:supervisor])
+    dump_path = Path.join([opts[:build_dir], Reflection.page_windows_plt_dump_file_name()])
+
+    {plt, dump_path}
+  end
+
+  @doc """
   Builds JavaScript code for the given Hologram page.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_6/README.md
