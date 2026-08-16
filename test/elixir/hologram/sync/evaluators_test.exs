@@ -1,0 +1,106 @@
+defmodule Hologram.Sync.EvaluatorsTest do
+  use Hologram.Test.DatabaseCase, async: false
+
+  import Hologram.Sync.Evaluators
+  import Hologram.Test.Stubs
+  import Mox
+
+  alias Hologram.DB
+  alias Hologram.Query
+  alias Hologram.Sync.Evaluator
+  alias Hologram.Sync.Evaluators
+  alias Hologram.Sync.ResultStore
+  alias Hologram.Test.Fixtures.Entity.Module2
+
+  use_module_stub :query_cache
+
+  setup :set_mox_global
+
+  @window_id "w_7f3a"
+
+  setup do
+    setup_query_cache(QueryCacheStub, false)
+
+    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+      entries: %{},
+      prop_params: %{},
+      windows: %{@window_id => Query.normalize(Module2)}
+    })
+
+    wait_for_process_cleanup(ResultStore)
+    start_supervised!(ResultStore)
+
+    wait_for_process_cleanup(Evaluator.registry())
+    start_supervised!({Registry, keys: :unique, name: Evaluator.registry()})
+
+    wait_for_process_cleanup(Evaluators)
+    start_supervised!(Evaluators)
+
+    :ok
+  end
+
+  # An evaluator reads from its own process, which the sandbox owner must let in - otherwise it
+  # would reach the pool rather than the transaction this test is writing into.
+  defp allow(evaluator) do
+    DBConnection.Ownership.ownership_allow(DB.pool_name(), self(), evaluator, [])
+  end
+
+  describe "subscribe/2" do
+    test "starts the evaluator the first session wants" do
+      assert {:ok, evaluator} = subscribe(@window_id, self())
+
+      assert Process.alive?(evaluator)
+      assert [{^evaluator, _value}] = Registry.lookup(Evaluator.registry(), @window_id)
+    end
+
+    test "joins the evaluator a session already started" do
+      {:ok, first} = subscribe(@window_id, self())
+
+      assert {:ok, second} = subscribe(@window_id, spawn_link(fn -> Process.sleep(:infinity) end))
+
+      assert second == first
+    end
+
+    test "tells a session that joined about the rounds that follow" do
+      {:ok, evaluator} = subscribe(@window_id, self())
+      allow(evaluator)
+
+      Evaluator.round(@window_id, [])
+
+      assert_receive {:round, @window_id, 1, []}
+    end
+
+    test "tells both sessions of one window about the same round" do
+      test_pid = self()
+      other = spawn_link(fn -> forward_rounds(test_pid) end)
+
+      {:ok, evaluator} = subscribe(@window_id, self())
+      {:ok, ^evaluator} = subscribe(@window_id, other)
+      allow(evaluator)
+
+      Evaluator.round(@window_id, [])
+
+      assert_receive {:round, @window_id, 1, []}
+      assert_receive {:forwarded, {:round, @window_id, 1, []}}
+    end
+
+    test "answers that there is no window for an id nothing downloads" do
+      assert subscribe("w_unknown", self()) == :no_window
+    end
+
+    test "starts nothing for an id nothing downloads" do
+      subscribe("w_unknown", self())
+
+      assert DynamicSupervisor.count_children(Evaluators).active == 0
+    end
+  end
+
+  defp forward_rounds(test_pid) do
+    receive do
+      message ->
+        send(test_pid, {:forwarded, message})
+
+        forward_rounds(test_pid)
+    end
+  end
+end

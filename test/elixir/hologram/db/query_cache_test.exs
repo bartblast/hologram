@@ -31,7 +31,17 @@ defmodule Hologram.DB.QueryCacheTest do
   end
 
   defp expected_data do
-    %{entries: expected_entries(), prop_params: %{{Module11, :entities} => [:min_b]}}
+    entries = expected_entries()
+
+    %{
+      entries: entries,
+      prop_params: %{{Module11, :entities} => [:min_b]},
+      windows: expected_windows(entries)
+    }
+  end
+
+  defp expected_windows(entries) do
+    Map.new(entries, fn {_id, entry} -> {entry.window_id, entry.window} end)
   end
 
   defp expected_entries do
@@ -178,6 +188,22 @@ defmodule Hologram.DB.QueryCacheTest do
       init(nil)
 
       assert prop_params(Module11, :unknown) == nil
+    end
+  end
+
+  describe "window/1" do
+    test "returns the term a registered window downloads" do
+      init(nil)
+
+      [{_id, entry} | _other_entries] = Enum.to_list(expected_entries())
+
+      assert window(entry.window_id) == entry.window
+    end
+
+    test "returns nil for an id nothing downloads" do
+      init(nil)
+
+      assert window("unknown") == nil
     end
   end
 

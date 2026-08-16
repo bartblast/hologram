@@ -67,6 +67,17 @@ defmodule Hologram.DB.QueryCache do
   end
 
   @doc """
+  Returns the term the given window downloads, or nil when no registered query downloads it.
+
+  Windows are shared: several queries choosing among the same rows name one window between them,
+  and this is what the sync layer runs for all of them.
+  """
+  @spec window(String.t()) :: %{atom => any} | nil
+  def window(window_id) do
+    :persistent_term.get(impl().persistent_term_key()).windows[window_id]
+  end
+
+  @doc """
   Returns the implementation of the query cache's persistent term key.
   """
   @spec persistent_term_key() :: any
@@ -256,7 +267,9 @@ defmodule Hologram.DB.QueryCache do
       end)
       |> Map.new()
 
-    data = %{entries: entries, prop_params: prop_params}
+    windows = Map.new(entries, fn {_id, entry} -> {entry.window_id, entry.window} end)
+
+    data = %{entries: entries, prop_params: prop_params, windows: windows}
 
     :persistent_term.put(impl().persistent_term_key(), data)
   end

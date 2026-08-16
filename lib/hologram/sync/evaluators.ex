@@ -1,0 +1,59 @@
+defmodule Hologram.Sync.Evaluators do
+  @moduledoc false
+
+  # Where a session gets the evaluator of a window it needs: the first session to want one starts
+  # it, every session after that joins the one already running. Starting on demand rather than up
+  # front is what keeps a node's work proportional to what its clients are actually looking at,
+  # rather than to how many windows the whole app declares.
+
+  use DynamicSupervisor
+
+  alias Hologram.DB.QueryCache
+  alias Hologram.Sync.Evaluator
+
+  @doc """
+  Subscribes the given process to the evaluator of the given window, starting it if this is the
+  first session to want it, and returns the evaluator.
+
+  Answers `:no_window` for an id no registered query downloads - what a client names is its own
+  claim, and one naming something unknown is told about nothing rather than refused.
+  """
+  @spec subscribe(String.t(), pid) :: {:ok, pid} | :no_window
+  def subscribe(window_id, subscriber) do
+    case QueryCache.window(window_id) do
+      nil -> :no_window
+      term -> {:ok, subscribe_to_running(window_id, term, subscriber)}
+    end
+  end
+
+  @doc """
+  Starts the supervisor evaluators run under.
+  """
+  @spec start_link(keyword) :: Supervisor.on_start()
+  def start_link(opts \\ []) do
+    DynamicSupervisor.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
+  @impl DynamicSupervisor
+  def init(_opts) do
+    DynamicSupervisor.init(strategy: :one_for_one)
+  end
+
+  # Two sessions wanting one window at the same moment both try to start it, and the loser is
+  # told who won - so the answer is the running evaluator either way. A subscriber given at start
+  # is watched from the beginning, which leaves no gap in which an evaluator could find itself
+  # with nobody and stop.
+  defp subscribe_to_running(window_id, term, subscriber) do
+    child = {Evaluator, window_id: window_id, term: term, subscribers: [subscriber]}
+
+    case DynamicSupervisor.start_child(__MODULE__, child) do
+      {:ok, pid} ->
+        pid
+
+      {:error, {:already_started, pid}} ->
+        :ok = Evaluator.subscribe(window_id, subscriber)
+
+        pid
+    end
+  end
+end
