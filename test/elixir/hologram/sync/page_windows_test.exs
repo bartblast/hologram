@@ -42,6 +42,33 @@ defmodule Hologram.Sync.PageWindowsTest do
     :ok
   end
 
+  describe "all/0" do
+    test "returns the windows of every page, not only those of one" do
+      init(nil)
+
+      assert Enum.sort(all()) == ["w_7f3a", "w_c412", "w_gone"]
+    end
+
+    test "returns a window two pages both download once" do
+      dump(%{
+        MyApp.BoardPage => ["w_7f3a", "w_c412"],
+        MyApp.SettingsPage => ["w_c412"]
+      })
+
+      init(nil)
+
+      assert Enum.sort(all()) == ["w_7f3a", "w_c412"]
+    end
+
+    test "returns nothing for a build with no pages" do
+      dump(%{})
+
+      init(nil)
+
+      assert all() == []
+    end
+  end
+
   describe "init/1" do
     test "reads the windows the build worked out" do
       assert init(nil) == {:ok, nil}

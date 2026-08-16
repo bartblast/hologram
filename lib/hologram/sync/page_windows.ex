@@ -25,6 +25,24 @@ defmodule Hologram.Sync.PageWindows do
   @callback ets_table_name() :: atom
 
   @doc """
+  Returns the ids of every window this build downloads, each of them once.
+
+  What a client keeps is app-wide rather than page-wide: the page it is on decides which windows
+  fill FIRST, not which ones it gets, so a page it navigates to is answered from what it already
+  has. Pages share windows heavily - a window is param-free, so every route through the same page
+  is one window - which is why the union is far smaller than the sum.
+  """
+  @spec all() :: list(String.t())
+  def all do
+    impl().ets_table_name()
+    |> plt()
+    |> PLT.get_all()
+    |> Map.values()
+    |> Enum.concat()
+    |> Enum.uniq()
+  end
+
+  @doc """
   Returns the implementation of the dump file path.
   """
   @spec dump_path() :: String.t()
