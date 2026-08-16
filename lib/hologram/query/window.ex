@@ -18,8 +18,10 @@ defmodule Hologram.Query.Window do
   A predicate comparing to a LITERAL stays: an app whose only query asks for todo projects is
   saying the others are never needed.
 
-  Order, limit and offset are left out. They shape what a query answers rather than what it
-  downloads, so two queries reading the same rows in different orders share one window.
+  Order, limit and offset are emptied rather than dropped. They shape what a query answers rather
+  than what it downloads, so two queries reading the same rows in different orders share one
+  window - but a window IS a query term and is run as one, so it keeps a term's shape and states
+  that it asks for every row, in no order.
 
   KNOWN CONSEQUENCE, recorded rather than worked around: a query whose only bound is a param
   downloads everything the policy admits. A thirty-day message window written as
@@ -31,9 +33,13 @@ defmodule Hologram.Query.Window do
   @spec derive(%{atom => any}) :: %{atom => any}
   def derive(term) do
     %{
+      cardinality: :set,
       entity: term.entity,
       filter: Enum.reject(term.filter, &param_bound?/1),
-      include: Map.new(term.include, fn {name, sub_term} -> {name, derive(sub_term)} end)
+      include: Map.new(term.include, fn {name, sub_term} -> {name, derive(sub_term)} end),
+      limit: nil,
+      offset: nil,
+      order_by: []
     }
   end
 

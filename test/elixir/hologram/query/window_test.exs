@@ -1,9 +1,11 @@
 defmodule Hologram.Query.WindowTest do
-  use Hologram.Test.BasicCase, async: true
+  use Hologram.Test.DatabaseCase, async: true
   use Hologram.Query
 
   import Hologram.Query.Window
 
+  alias Hologram.DB
+  alias Hologram.DB.QueryRunner
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
@@ -64,7 +66,29 @@ defmodule Hologram.Query.WindowTest do
         |> offset(40)
         |> Query.normalize()
 
-      assert derive(term) == %{entity: Module2, filter: [{:a, :==, true}], include: %{}}
+      assert derive(term) == %{
+               cardinality: :set,
+               entity: Module2,
+               filter: [{:a, :==, true}],
+               include: %{},
+               limit: nil,
+               offset: nil,
+               order_by: []
+             }
+    end
+
+    # A window is not a description of a query, it IS one, and it gets run - so it has to be a
+    # term every reader of terms accepts, saying it asks for every row in no order rather than
+    # leaving the question out.
+    test "is a query term, runnable as one" do
+      window =
+        Module2
+        |> filter(a: true)
+        |> order_by(:c)
+        |> Query.normalize()
+        |> derive()
+
+      assert is_list(QueryRunner.run(window, DB.mapping()))
     end
 
     test "derives the window of an included query too" do
@@ -77,9 +101,13 @@ defmodule Hologram.Query.WindowTest do
       term = %{base_term | include: %{a: sub_term}}
 
       assert derive(term).include.a == %{
+               cardinality: :set,
                entity: Module2,
                filter: [{:a, :==, true}],
-               include: %{}
+               include: %{},
+               limit: nil,
+               offset: nil,
+               order_by: []
              }
     end
 
