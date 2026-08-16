@@ -10,7 +10,6 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler.Encoder
-  alias Hologram.Component
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt

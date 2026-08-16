@@ -122,8 +122,8 @@ defmodule Hologram.RouterTest do
 
       assert Plug.Conn.get_resp_header(conn, "hologram-page-data") == ["true"]
       assert response["type"] == "page"
-      assert response["pageParams"] =~ "123"
-      assert response["pageParams"] =~ "xyz"
+      # The page renders its params, so the tree carrying the render shows them cast.
+      assert response["tree"] =~ "a = 123, b = :xyz"
     end
   end
 
