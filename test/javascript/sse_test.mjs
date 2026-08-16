@@ -409,8 +409,34 @@ describe("Sse", () => {
     });
   });
 
-  describe("onopen", () => {
-    it("resets reconnectAttempts to 0", async () => {
+  // The server sends the 200 before the work that can kill the stream runs, so opening
+  // proves nothing on its own. The failure count is cleared only once a stream has
+  // lasted, which is what keeps an open-then-die cycle from retrying at the floor
+  // forever.
+  describe("stability window", () => {
+    let clock;
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers();
+    });
+
+    it("keeps counting failures when a stream dies inside the window", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+      Sse.eventSource.onerror({type: "error"});
+
+      assert.strictEqual(Sse.reconnectAttempts, 1);
+
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+      Sse.eventSource.onerror({type: "error"});
+
+      assert.strictEqual(Sse.reconnectAttempts, 2);
+    });
+
+    it("clears the failure count once a stream outlives the window", async () => {
       stubHandshakeResponse();
 
       await Sse.connect();
@@ -418,9 +444,57 @@ describe("Sse", () => {
       Sse.reconnectAttempts = 5;
       Sse.eventSource.onopen({});
 
+      clock.tick(Sse.STABLE_CONNECTION_MS);
+
       assert.strictEqual(Sse.reconnectAttempts, 0);
     });
 
+    it("leaves the failure count alone until the window has fully elapsed", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+
+      Sse.reconnectAttempts = 5;
+      Sse.eventSource.onopen({});
+
+      clock.tick(Sse.STABLE_CONNECTION_MS - 1);
+
+      assert.strictEqual(Sse.reconnectAttempts, 5);
+    });
+
+    it("cancels the pending clear when the stream dies first", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+      Sse.eventSource.onerror({type: "error"});
+
+      clock.tick(Sse.STABLE_CONNECTION_MS * 2);
+
+      assert.strictEqual(Sse.reconnectAttempts, 1);
+    });
+
+    // The property the window's value is chosen for: a stream dying sooner than the
+    // longest retry delay can never clear the count, so the delay climbs to the ceiling
+    // and stays there.
+    it("climbs to the reconnect ceiling under a persistent open-then-die cycle", async () => {
+      sinon.stub(Math, "random").returns(0.5);
+      stubHandshakeResponse();
+
+      for (const _cycle of [1, 2, 3, 4, 5, 6, 7]) {
+        await Sse.connect();
+        Sse.eventSource.onopen({});
+        Sse.eventSource.onerror({type: "error"});
+      }
+
+      assert.strictEqual(
+        Sse.computeReconnectDelay(Sse.reconnectAttempts),
+        Sse.MAX_RECONNECT_DELAY,
+      );
+    });
+  });
+
+  describe("onopen", () => {
     it("flips the sseConnected? signal to true on the global registry", async () => {
       const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
 
