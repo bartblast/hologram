@@ -20,16 +20,24 @@ defmodule Hologram.Sync.Catchup do
 
   # The most effects a replay will carry, and past it the client is sent everything instead.
   #
-  # The bound is memory on the connection process, which reads the gap and is killed at a million
-  # words: a typical effect measures 69 of them, so the list ALONE reaches that cap around 14,500
-  # and the decoding on the way there costs more again. Five thousand holds the list to roughly a
-  # third of the cap and leaves the rest for the connection's own work - the headroom is the policy
-  # part, the kill threshold is not.
+  # A COUNT is an honest bound here only because the history read leaves the payload behind: an
+  # effect it returns is 31 words whatever the row was, where one carrying `data` runs from 33 for
+  # a delete to 337 for a wide entity's put - a tenfold spread a count cannot see. The connection
+  # process reads the gap and is killed at a million words, so 5,000 of them is 1.2 MB against a
+  # 7 MB cap, a sixth of it, and that fraction does not move with what the app stores.
   #
-  # The economics point the same way, which is why no larger number is worth arguing for: a replay
-  # re-reads every row it names, so by a few thousand touched rows it costs what a resync costs,
-  # and unlike a resync it is unbounded.
+  # The economics set the ceiling rather than the memory does, which is why the number is thousands
+  # and not tens of thousands: a replay re-reads every row it names, so by a few thousand touched
+  # rows it already costs what a resync costs, and unlike a resync it is unbounded. Where between
+  # those the line falls is the policy part - the per-effect size and the kill threshold are not.
   @default_gap_limit 5_000
+
+  # How many rows one frame carries. A frame holds whole rows rather than the log's fixed-size
+  # entries, so its cost moves with what the app stores - 500 wide rows is megabytes where 500
+  # narrow ones is kilobytes, which is why this is smaller than the gap limit by an order of
+  # magnitude rather than equal to it. Policy: it trades frames-per-fill against bytes-per-frame,
+  # and neither end is dangerous.
+  @default_rows_per_frame 500
 
   @doc """
   Returns the most effects a replay will carry.
@@ -39,6 +47,19 @@ defmodule Hologram.Sync.Catchup do
     :hologram
     |> Application.get_env(:sync, [])
     |> Keyword.get(:gap_limit, @default_gap_limit)
+  end
+
+  @doc """
+  Returns how many rows one frame carries.
+
+  A frame is built, encoded and written whole, so this is what bounds the memory any single one
+  costs - and on a replay it is also the granularity a cut-off client resumes at.
+  """
+  @spec rows_per_frame() :: pos_integer
+  def rows_per_frame do
+    :hologram
+    |> Application.get_env(:sync, [])
+    |> Keyword.get(:rows_per_frame, @default_rows_per_frame)
   end
 
   @doc """

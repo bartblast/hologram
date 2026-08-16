@@ -175,6 +175,19 @@ defmodule Hologram.DB.OutboxTest do
       assert event.entity_id == @target_id
     end
 
+    # The payload is what makes an effect's size vary - a delete carries none, a wide entity's put
+    # carries kilobytes - so leaving it out is what lets the caller bound a gap by counting.
+    test "leaves the payload behind, since a replay reads values from the rows" do
+      seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{"c" => "x"})
+
+      assert [event] = read_after(0, 0, 10)
+      refute Map.has_key?(event, :data)
+
+      # The windowed read, which diffs against values, still carries it.
+      assert [{200, [windowed]}] = read_window(200, 201)
+      assert windowed.data == %{"c" => "x"}
+    end
+
     # Not a page - nothing resumes from where this stopped. It is what keeps a reader from pulling
     # an unbounded tail into memory, and its caller reads one past its own cap to learn there is
     # more rather than to fetch it.

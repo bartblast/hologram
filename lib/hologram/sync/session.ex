@@ -36,6 +36,10 @@ defmodule Hologram.Sync.Session do
   back to a place its rows are known to cover. Without it a batch already routed but not yet
   delivered would fall outside every claim a frame makes.
 
+  A frame carries the place the client may resume from only once it holds a whole pot: mid-fill
+  there is nothing coherent to resume from, and a place handed over early is a claim the client
+  cannot honour.
+
   `:gap` is what a returning client missed - absent for one arriving with nothing, in which case
   every row it may see is sent. Given a gap, the client keeps what it already holds and is told
   only about the rows the gap names. Whether a gap can be had at all is decided before the session
@@ -57,13 +61,14 @@ defmodule Hologram.Sync.Session do
       actor_user_id: Keyword.get(opts, :actor_user_id),
       announced: MapSet.new(),
       client: Keyword.fetch!(opts, :client),
+      fill_place: Keyword.get(opts, :fill_place),
       gap: Keyword.get(opts, :gap),
       held: %{},
-      fill_place: Keyword.get(opts, :fill_place),
       page: Keyword.fetch!(opts, :page),
       page_windows: MapSet.new(),
       pending: MapSet.new(),
       places: %{},
+      resuming: Keyword.get(opts, :gap) != nil,
       touched: %{},
       types: %{}
     }
@@ -187,13 +192,31 @@ defmodule Hologram.Sync.Session do
   # account of them. Everything it holds that the gap never touched is still true, and is left
   # alone - which is the whole saving over sending it the lot.
   defp catch_up(state) do
-    deltas = Catchup.deltas(state.gap, state.touched)
-
-    if deltas != [] do
-      send(state.client, {:sync_deltas, cursor(state), deltas})
-    end
+    state.gap
+    |> Enum.chunk_every(Catchup.rows_per_frame())
+    |> Enum.each(&tell_batch(state, &1))
 
     %{state | gap: nil, touched: %{}}
+  end
+
+  # Each batch claims ITS OWN last place rather than the whole gap's, which is what makes a replay
+  # resumable: a client cut off after three of ten batches comes back dated to the third and is
+  # given the rest, instead of starting the gap again. The batches are read in log order, so the
+  # place of a batch's last effect is a place everything before it has been applied to.
+  defp tell_batch(state, effects) do
+    deltas = Catchup.deltas(effects, state.touched)
+
+    if deltas != [] do
+      send(state.client, {:sync_deltas, batch_cursor(state, effects), deltas})
+    end
+  end
+
+  defp batch_cursor(state, effects) do
+    if holds_a_whole_pot?(state) do
+      %{seq: seq, tx: tx} = List.last(effects)
+
+      Cursor.encode(tx, seq)
+    end
   end
 
   defp mark_filled(state, window_id) do
@@ -214,16 +237,31 @@ defmodule Hologram.Sync.Session do
   # order the rounds arrived in. Claiming the newest place instead would lose a slow window's
   # changes outright, which no amount of idempotent replay puts back.
   defp cursor(state) do
-    place =
-      state.places
-      |> Map.values()
-      |> Enum.reject(&is_nil/1)
-      |> Enum.min(fn -> nil end)
+    if holds_a_whole_pot?(state) do
+      place =
+        state.places
+        |> Map.values()
+        |> Enum.reject(&is_nil/1)
+        |> Enum.min(fn -> nil end)
 
-    case place do
-      nil -> nil
-      {tx, seq} -> Cursor.encode(tx, seq)
+      case place do
+        nil -> nil
+        {tx, seq} -> Cursor.encode(tx, seq)
+      end
     end
+  end
+
+  # A cursor is a CLAIM - "everything up to here is applied" - and the server takes it at face
+  # value on the way back, replaying only what came after. A client part way through its first fill
+  # cannot make that claim: it holds some windows and not others, and handing it a place would have
+  # it come back asking for the little that changed since, never learning about the windows it
+  # never received. Silently, and for as long as it keeps that store.
+  #
+  # So frames carry no place until the client has a whole pot to date it - which is true from the
+  # start for one that arrived WITH a gap, since it kept what it already had, and true for a first
+  # arrival once every window has reported.
+  defp holds_a_whole_pot?(state) do
+    state.resuming or MapSet.member?(state.announced, :all)
   end
 
   # The last place each window has applied, taken forward only - a slow round arriving late must
@@ -286,14 +324,45 @@ defmodule Hologram.Sync.Session do
       unsynced: unsynced
     }
 
-    if news != %{appeared: [], edges: [], patched: [], unsynced: []} do
+    news
+    |> split_news()
+    |> Enum.each(fn part ->
       send(
         state.client,
-        {:sync_deltas, cursor(state), Frame.deltas(news, state.types[window_id])}
+        {:sync_deltas, cursor(state), Frame.deltas(part, state.types[window_id])}
       )
-    end
+    end)
 
     state
+  end
+
+  # A window's first round hands over every row the client may see of it, and a whole window in one
+  # frame is a frame as big as the app's data - the memory it costs is unbounded in exactly the way
+  # a replay's was. Rows that APPEARED are the part that grows, so they are split across frames and
+  # everything else rides with the first.
+  #
+  # Nothing here dates a partial fill: `cursor/1` already answers nil until the client holds a whole
+  # pot, so a client cut off between two of these frames comes back with no place and is filled
+  # again. That is the honest answer while the frames are all a client has - it cannot yet say what
+  # it kept.
+  #
+  # TODO: step 07 owns what a client DOES with a partial fill, and may want more from these frames
+  # than they carry - a marker saying which window a batch belongs to, or how many are still coming,
+  # so a store can commit progress rather than discarding it on a cut connection. Settle that
+  # against the local store's design rather than guessing here: the shape is cheap to add and
+  # expensive to change once a client reads it.
+  #
+  # TODO: a resync's fill is the same code path, so the same question applies to what a client
+  # discards and when. Today it discards on the marker and refills from nothing.
+  defp split_news(news) do
+    case Enum.chunk_every(news.appeared, Catchup.rows_per_frame()) do
+      [] ->
+        if news == %{appeared: [], edges: [], patched: [], unsynced: []}, do: [], else: [news]
+
+      [first | rest] ->
+        [%{news | appeared: first}] ++
+          Enum.map(rest, &%{appeared: &1, edges: [], patched: [], unsynced: []})
+    end
   end
 
   defp subscribe_to_window(window_id, state) do

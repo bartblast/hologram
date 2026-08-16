@@ -60,9 +60,12 @@ defmodule Hologram.Sync.SessionTest do
     |> DB.create()
   end
 
-  # One entry of what a returning client missed, in the shape the log reports it.
-  defp gap_effect(entity_id) do
-    %{entity_id: entity_id, op: :patch_entity, type: Module2}
+  # One entry of what a returning client missed, in the shape the log reports it - the place
+  # included, since a replay dates each batch it sends by the last effect in it.
+  defp gap_effect(entity_id, place \\ {200, 0}) do
+    {tx, seq} = place
+
+    %{entity_id: entity_id, op: :patch_entity, seq: seq, tx: tx, type: Module2}
   end
 
   # Takes a window's place in the registry with a process that answers a subscription and then says
@@ -204,6 +207,37 @@ defmodule Hologram.Sync.SessionTest do
       refute Enum.any?(deltas, &(&1.id == untouched.id))
     end
 
+    # A gap arrives in batches rather than one frame, so the memory a replay costs is bounded by
+    # the batch rather than by how long the client was away - and each batch is dated by its own
+    # last effect, so a client cut off part way comes back to the rest instead of the whole gap.
+    test "replays a gap in batches, each dated by its own last effect" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      Application.put_env(:hologram, :sync, rows_per_frame: 2)
+      on_exit(fn -> Application.delete_env(:hologram, :sync) end)
+
+      # Two per frame rather than one, so the place a batch claims is its LAST effect and not
+      # merely its only one.
+      gap =
+        Enum.map(1..4, fn seq ->
+          entity_id = if seq == 1, do: moved.id, else: Entity.generate_id()
+
+          gap_effect(entity_id, {900, seq})
+        end)
+
+      start_session!(fill_place: {200, 0}, gap: gap)
+
+      assert_receive {:sync_deltas, first_cursor, first_deltas}
+      assert Cursor.decode(first_cursor) == {:ok, 900, 2}
+      assert length(first_deltas) == 2
+
+      assert_receive {:sync_deltas, second_cursor, second_deltas}
+      assert Cursor.decode(second_cursor) == {:ok, 900, 4}
+      assert length(second_deltas) == 2
+    end
+
     test "tells a returning client to drop a row it may no longer see" do
       create("still here")
       windows(%{@page => [@board_window]})
@@ -261,6 +295,58 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, _cursor, deltas}
       assert [%{data: patch, op: :patch_entity}] = deltas
       assert patch.c == "moved again, this time watched"
+    end
+  end
+
+  describe "start_link/1 - a fill too big for one frame" do
+    # A window's first round hands over every row the client may see of it, so one frame per window
+    # is a frame as big as the app's data. Splitting it bounds what a frame costs by the batch
+    # rather than by how much the app stores.
+    test "splits a window's rows across frames" do
+      Enum.each(1..3, &create("row #{&1}"))
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      Application.put_env(:hologram, :sync, rows_per_frame: 2)
+      on_exit(fn -> Application.delete_env(:hologram, :sync) end)
+
+      start_session!([])
+
+      assert_receive {:sync_deltas, nil, first}
+      assert length(first) == 2
+
+      assert_receive {:sync_deltas, nil, second}
+      assert length(second) == 1
+
+      assert_receive {:sync_synced, :all}
+    end
+
+    # Everything that is not an appeared row rides with the first frame rather than being repeated:
+    # a client applying the batches in order sees each of them once.
+    test "sends what is not an appeared row once, with the first frame" do
+      task = create("first")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!([])
+      assert_receive {:sync_deltas, nil, _fill}
+      assert_receive {:sync_synced, :all}
+
+      Application.put_env(:hologram, :sync, rows_per_frame: 2)
+      on_exit(fn -> Application.delete_env(:hologram, :sync) end)
+
+      # Three rows appear while the one the client holds changes, so the round splits across two
+      # frames and the patch has somewhere it could wrongly be repeated.
+      Enum.each(1..3, &create("appeared #{&1}"))
+      DB.update(Module2, task.id, %{c: "moved"})
+      Evaluator.round(@board_window, transactions(task.id, ["c"]), nil)
+
+      assert_receive {:sync_deltas, _first_cursor, first}
+      assert_receive {:sync_deltas, _second_cursor, second}
+
+      patches = Enum.count(first ++ second, &(&1.op == :patch_entity))
+      assert patches == 1
+      assert Enum.any?(first, &(&1.op == :patch_entity))
     end
   end
 
@@ -537,15 +623,50 @@ defmodule Hologram.Sync.SessionTest do
       :ok
     end
 
-    test "claims the place its windows were taken up at before any batch arrives" do
+    # A cursor is a claim the client has to be able to honour. Part way through a first fill it
+    # holds some windows and not others, so a place handed over then would have it come back asking
+    # only for what changed since - never learning about the windows it never received.
+    test "claims no place while a first arrival is still being filled" do
       create("first")
+      windows(%{@page => [@board_window, @other_window]})
+      hold_windows([@board_window, @other_window])
+
+      start_session!(fill_place: {200, 0})
+
+      assert_receive {:sync_deltas, cursor, _deltas}
+      assert cursor == nil
+    end
+
+    test "claims the place its windows were taken up at once the pot is whole" do
+      task = create("first")
       windows(%{@page => [@board_window]})
       hold_windows([@board_window])
 
       start_session!(fill_place: {200, 0})
 
+      # The fill's own frame carries no place and has to be taken out of the way first.
+      assert_receive {:sync_deltas, nil, _fill}
+      assert_receive {:sync_synced, :all}
+
+      DB.update(Module2, task.id, %{c: "moved"})
+      Evaluator.round(@board_window, transactions(task.id, ["c"]), nil)
+
       assert_receive {:sync_deltas, cursor, _deltas}
       assert Cursor.decode(cursor) == {:ok, 200, 0}
+    end
+
+    # A returning client kept what it had, so it can date its store from the first frame - there is
+    # no half-filled state for it to misreport. What it is dated BY is the last effect in the batch
+    # rather than the fill place, which is what lets a replay be picked up where it stopped.
+    test "dates each replayed batch by the last effect in it" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(fill_place: {200, 0}, gap: [gap_effect(moved.id, {900, 7})])
+
+      assert_receive {:sync_deltas, cursor, _deltas}
+      assert Cursor.decode(cursor) == {:ok, 900, 7}
     end
 
     test "claims the place of the window furthest behind, not the one furthest ahead" do
