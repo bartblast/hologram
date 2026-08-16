@@ -72,6 +72,12 @@ defmodule Hologram.Realtime.Tombstone do
     # always have - a tombstone a peer has not sent yet is simply not there yet.
     Gossip.request_sync(@gossip_topic)
 
+    # A request only reaches the peers this node can already see, and group membership
+    # propagates on its own schedule - a node that boots as the cluster is still forming
+    # can ask into the void. Joins are watched so the newcomer and this node can trade
+    # what the other is missing, whenever that turns out to be.
+    :net_kernel.monitor_nodes(true)
+
     schedule_sweep()
 
     {:ok, %{}}
@@ -109,6 +115,18 @@ defmodule Hologram.Realtime.Tombstone do
   def handle_info(:sweep_expired, state) do
     delete_expired()
     schedule_sweep()
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:nodedown, _node}, state) do
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:nodeup, node}, state) do
+    Gossip.request_sync_from(node, @gossip_topic)
 
     {:noreply, state}
   end

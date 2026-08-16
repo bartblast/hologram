@@ -142,6 +142,20 @@ defmodule Hologram.Realtime.TombstoneTest do
     end
   end
 
+  describe "handle {:nodeup, ...}" do
+    # A boot-time request only reaches peers this node can already see. Watching joins is
+    # what lets a store that booted into a still-forming cluster catch up afterwards.
+    test "asks the joining node for what it holds" do
+      Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
+
+      tombstone_pid = Process.whereis(Tombstone)
+
+      send(tombstone_pid, {:nodeup, node()})
+
+      assert_receive {:sync_request, ^tombstone_pid}
+    end
+  end
+
   describe "handle {:sync_request, ...}" do
     test "replies to the requester via direct send/2 with the current ETS dump" do
       key = {{:user, 7}, :notifications, "c1"}

@@ -30,6 +30,24 @@ defmodule Hologram.Realtime.Gossip do
   end
 
   @doc """
+  Asks one node for what it holds, and returns immediately.
+
+  Used when a node joins, where the newcomer and the node that saw it join are the only
+  two that can hold state the other is missing. Asking the whole topic instead would
+  have every node dump its entire table to every other node on every join, which grows
+  quadratically with the cluster for state all but one of them already has.
+  """
+  @spec request_sync_from(node, String.t()) :: :ok
+  def request_sync_from(node, gossip_topic) do
+    Phoenix.PubSub.direct_broadcast(
+      node,
+      Hologram.PubSub,
+      gossip_topic,
+      {:sync_request, self()}
+    )
+  end
+
+  @doc """
   Replies to a peer's `{:sync_request, requester_pid}` by sending the full
   contents of `table_name` back as a `{:sync_reply, entries}` message.
   """

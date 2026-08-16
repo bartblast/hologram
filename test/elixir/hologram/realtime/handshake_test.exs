@@ -314,6 +314,20 @@ defmodule Hologram.Realtime.HandshakeTest do
     end
   end
 
+  describe "handle {:nodeup, ...}" do
+    # A boot-time request only reaches peers this node can already see. Watching joins is
+    # what lets a store that booted into a still-forming cluster catch up afterwards.
+    test "asks the joining node for what it holds" do
+      Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
+
+      handshake_pid = Process.whereis(Handshake)
+
+      send(handshake_pid, {:nodeup, node()})
+
+      assert_receive {:sync_request, ^handshake_pid}
+    end
+  end
+
   describe "handle {:sync_request, ...}" do
     test "replies with the current ETS dump via direct send" do
       future = System.system_time(:millisecond) + 60_000
