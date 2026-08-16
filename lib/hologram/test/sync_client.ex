@@ -25,9 +25,22 @@ defmodule Hologram.Test.SyncClient do
   """
   @spec await_frame(t, String.t(), non_neg_integer) :: {map, t}
   def await_frame(client, event_name, timeout_ms \\ 5_000) do
-    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    case next_frame(client, event_name, timeout_ms) do
+      {:ok, frame, client} -> {frame, client}
+      {:timeout, _client} -> raise "no #{inspect(event_name)} frame arrived within the timeout"
+    end
+  end
 
-    take_frame(client, event_name, deadline)
+  @doc """
+  Closes the client's stream.
+
+  Worth doing rather than leaving to the test's exit: the server holds a session and its
+  evaluators open for as long as the connection is, and the next test would be served what this
+  one left behind.
+  """
+  @spec close(t) :: :ok
+  def close(client) do
+    :httpc.cancel_request(client.request_id)
   end
 
   @doc """
@@ -86,6 +99,20 @@ defmodule Hologram.Test.SyncClient do
       nil -> base
       cursor -> [{:cursor, cursor} | base]
     end
+  end
+
+  @doc """
+  Returns the next frame of the given SSE event kind, or says that none arrived in time.
+
+  What `await_frame/3` is built on, for the tests that want counting rather than waiting: nothing
+  arriving is an answer here rather than a failure, which is how a test says a SECOND frame never
+  came.
+  """
+  @spec next_frame(t, String.t(), non_neg_integer) :: {:ok, map, t} | {:timeout, t}
+  def next_frame(client, event_name, timeout_ms \\ 5_000) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+
+    take_frame(client, event_name, deadline)
   end
 
   @doc """
@@ -165,19 +192,24 @@ defmodule Hologram.Test.SyncClient do
 
   defp take_frame(%{frames: [frame | rest]} = client, event_name, deadline) do
     if frame["event"] == event_name do
-      {frame, %{client | frames: rest}}
+      {:ok, frame, %{client | frames: rest}}
     else
       take_frame(%{client | frames: rest}, event_name, deadline)
     end
   end
 
   defp take_frame(%{frames: []} = client, event_name, deadline) do
-    request_id = client.request_id
     timeout = deadline - System.monotonic_time(:millisecond)
 
     if timeout <= 0 do
-      raise "no #{inspect(event_name)} frame arrived within the timeout"
+      {:timeout, client}
+    else
+      wait_for_frame(client, event_name, deadline, timeout)
     end
+  end
+
+  defp wait_for_frame(client, event_name, deadline, timeout) do
+    request_id = client.request_id
 
     receive do
       {:http, {^request_id, :stream_start, _headers}} ->
@@ -191,7 +223,7 @@ defmodule Hologram.Test.SyncClient do
       {:http, {^request_id, :stream_end, _headers}} ->
         raise "the stream ended before a #{inspect(event_name)} frame arrived"
     after
-      timeout -> raise "no #{inspect(event_name)} frame arrived within the timeout"
+      timeout -> {:timeout, client}
     end
   end
 end

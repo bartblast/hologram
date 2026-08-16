@@ -5,6 +5,31 @@ defmodule Hologram.Test.SyncClientTest do
 
   alias Hologram.Entity.Model
   alias Hologram.Sync.Frame
+  alias Hologram.Test.SyncClient
+
+  defp client_holding(frames) do
+    %SyncClient{frames: frames, request_id: make_ref()}
+  end
+
+  defp frame(event_name) do
+    %{"data" => "{}", "event" => event_name, "id" => "1"}
+  end
+
+  describe "await_frame/3" do
+    test "hands over a frame the client has already read" do
+      client = client_holding([frame("synced"), frame("sync_deltas")])
+
+      assert {%{"event" => "sync_deltas"}, _client} = await_frame(client, "sync_deltas", 0)
+    end
+
+    test "raises rather than letting a test wait on a frame that never comes" do
+      client = client_holding([])
+
+      assert_raise RuntimeError, ~s(no "sync_deltas" frame arrived within the timeout), fn ->
+        await_frame(client, "sync_deltas", 0)
+      end
+    end
+  end
 
   describe "greeting_params/1" do
     test "claims what is true of this build unless told otherwise" do
@@ -37,6 +62,52 @@ defmodule Hologram.Test.SyncClientTest do
       params = greeting_params(page: "MyApp.BoardPage")
 
       refute Keyword.has_key?(params, :cursor)
+    end
+  end
+
+  describe "next_frame/3" do
+    test "hands over the next frame of the kind asked for" do
+      client = client_holding([frame("sync_deltas")])
+
+      assert {:ok, %{"event" => "sync_deltas"}, _client} = next_frame(client, "sync_deltas", 0)
+    end
+
+    test "passes over the frames of other kinds on the way to it" do
+      client = client_holding([frame("synced"), frame("sync_resync"), frame("sync_deltas")])
+
+      assert {:ok, %{"event" => "sync_deltas"}, _client} = next_frame(client, "sync_deltas", 0)
+    end
+
+    # Nothing arriving is an answer here rather than a failure, which is how a test says a SECOND
+    # frame never came.
+    test "says so when nothing of the kind is already read" do
+      client = client_holding([frame("synced")])
+
+      assert {:timeout, _client} = next_frame(client, "sync_deltas", 0)
+    end
+
+    # A real timeout rather than an expired deadline: this waits on the socket and gives up, which
+    # is the path a test counting frames actually takes.
+    test "says so after waiting for one that never arrives" do
+      client = client_holding([])
+
+      assert {:timeout, _client} = next_frame(client, "sync_deltas", 20)
+    end
+
+    test "leaves the frames it did not hand over behind it" do
+      client = client_holding([frame("sync_deltas"), frame("synced")])
+
+      assert {:ok, _frame, remaining} = next_frame(client, "sync_deltas", 0)
+      assert {:ok, %{"event" => "synced"}, _client} = next_frame(remaining, "synced", 0)
+    end
+
+    # Handing one over has to CONSUME it, or a test counting frames would see the same one twice
+    # and call a single delivery a double.
+    test "does not hand the same frame over twice" do
+      client = client_holding([frame("sync_deltas")])
+
+      assert {:ok, _frame, remaining} = next_frame(client, "sync_deltas", 0)
+      assert {:timeout, _client} = next_frame(remaining, "sync_deltas", 0)
     end
   end
 
