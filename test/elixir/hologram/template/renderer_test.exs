@@ -2348,4 +2348,122 @@ defmodule Hologram.Template.RendererTest do
       assert result == ~s'before subReceiptDrops: Type.list([]) after'
     end
   end
+
+  describe "print_dom/1" do
+    test "text node" do
+      dom = {:text, "abc < xyz"}
+
+      assert print_dom(dom) == "abc &lt; xyz"
+    end
+
+    test "text node, inside script element" do
+      # <script>abc < xyz</script>
+      dom = {:element, "script", [], [{:text, "abc < xyz"}]}
+
+      assert print_dom(dom) == "<script>abc < xyz</script>"
+    end
+
+    test "doctype node" do
+      dom = {:doctype, "html"}
+
+      assert print_dom(dom) == "<!DOCTYPE html>"
+    end
+
+    test "element node, without attributes or children" do
+      dom = {:element, "div", [], []}
+
+      assert print_dom(dom) == "<div></div>"
+    end
+
+    test "element node, with children" do
+      # <div>abc<span></span></div>
+      dom = {:element, "div", [], [{:text, "abc"}, {:element, "span", [], []}]}
+
+      assert print_dom(dom) == "<div>abc<span></span></div>"
+    end
+
+    test "element node, nested" do
+      # <div><span><b>abc</b></span></div>
+      dom =
+        {:element, "div", [], [{:element, "span", [], [{:element, "b", [], [{:text, "abc"}]}]}]}
+
+      assert print_dom(dom) == "<div><span><b>abc</b></span></div>"
+    end
+
+    test "element node, void" do
+      # <img src="abc.jpg" />
+      dom = {:element, "img", [{"src", [text: "abc.jpg"]}], []}
+
+      assert print_dom(dom) == ~s(<img src="abc.jpg" />)
+    end
+
+    test "element node, void with children" do
+      # A void element renders no children, whatever it was given.
+      dom = {:element, "br", [], [{:text, "abc"}]}
+
+      assert print_dom(dom) == "<br />"
+    end
+
+    test "public comment node" do
+      # <!--abc < xyz<div></div>-->
+      dom = {:public_comment, [{:text, "abc < xyz"}, {:element, "div", [], []}]}
+
+      assert print_dom(dom) == "<!--abc &lt; xyz<div></div>-->"
+    end
+
+    test "public comment node, inside script element" do
+      # <script><!--abc < xyz--></script>
+      dom = {:element, "script", [], [{:public_comment, [{:text, "abc < xyz"}]}]}
+
+      assert print_dom(dom) == "<script><!--abc < xyz--></script>"
+    end
+
+    test "node list" do
+      dom = [{:text, "abc"}, {:element, "div", [], []}, {:text, "xyz"}]
+
+      assert print_dom(dom) == "abc<div></div>xyz"
+    end
+
+    test "attribute with a value" do
+      dom = {:element, "div", [{"attr_1", [text: "aaa"]}, {"attr_2", [text: "bbb"]}], []}
+
+      assert print_dom(dom) == ~s(<div attr_1="aaa" attr_2="bbb"></div>)
+    end
+
+    test "attribute with an empty value list" do
+      dom = {:element, "input", [{"checked", []}], []}
+
+      assert print_dom(dom) == "<input checked />"
+    end
+
+    test "attribute with an empty text value" do
+      dom = {:element, "div", [{"class", [text: ""]}], []}
+
+      assert print_dom(dom) == "<div class></div>"
+    end
+
+    test "attribute value is escaped" do
+      dom = {:element, "div", [{"class", [text: "abc < xyz"]}], []}
+
+      assert print_dom(dom) == ~s(<div class="abc &lt; xyz"></div>)
+    end
+
+    test "framework attributes are not printed" do
+      dom =
+        {:element, "div",
+         [
+           {"$key", [text: "a1b2c3:4"]},
+           {"class", [text: "aaa"]},
+           {"$click", [text: "my_action"]}
+         ], []}
+
+      assert print_dom(dom) == ~s(<div class="aaa"></div>)
+    end
+
+    test "element node, with only framework attributes" do
+      dom = {:element, "div", [{"$key", [text: "a1b2c3:4"]}], []}
+
+      assert print_dom(dom) == "<div></div>"
+    end
+  end
 end

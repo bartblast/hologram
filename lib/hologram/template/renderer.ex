@@ -58,6 +58,28 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
+  Prints an evaluated DOM as HTML.
+
+  An evaluated DOM holds text verbatim and each attribute value as a single string, both
+  unescaped, so escaping belongs here: text is entity-encoded everywhere except inside a script
+  element, whose body is code rather than markup.
+
+  The `$`-prefixed attributes name what the framework reads rather than what the markup carries -
+  event bindings and element keys among them - so they are left out. An attribute with an empty
+  value prints as a bare name, and a void element prints without children.
+
+  ## Examples
+
+      iex> dom = {:element, "div", [{"class", [text: "big"]}], [{:text, "Hologram"}]}
+      iex> print_dom(dom)
+      ~s(<div class="big">Hologram</div>)
+  """
+  @spec print_dom(DOM.t()) :: String.t()
+  def print_dom(dom) do
+    print_node(dom, nil)
+  end
+
+  @doc """
   Renders the given DOM.
 
   ## Examples
@@ -555,6 +577,50 @@ defmodule Hologram.Template.Renderer do
   defp normalize_prop_name({name, value}) do
     {String.to_existing_atom(name), value}
   end
+
+  defp print_attribute({name, []}), do: name
+
+  defp print_attribute({name, [text: ""]}), do: name
+
+  defp print_attribute({name, [text: value]}) do
+    ~s(#{name}="#{HtmlEntities.encode(value)}")
+  end
+
+  defp print_attributes(attributes) do
+    attributes
+    |> Enum.reject(fn {name, _value} -> String.starts_with?(name, "$") end)
+    |> Enum.map_join(" ", &print_attribute/1)
+    |> StringUtils.prepend_if_not_empty(" ")
+  end
+
+  # The tag the printed node sits in travels down, since it decides whether text is markup or
+  # code. A comment passes it along rather than clearing it: "<!--" inside a script opens no
+  # comment, so escaping the text it wraps would corrupt the code it belongs to.
+  defp print_node(nodes, parent_tag_name) when is_list(nodes) do
+    Enum.map_join(nodes, &print_node(&1, parent_tag_name))
+  end
+
+  defp print_node({:doctype, content}, _parent_tag_name), do: "<!DOCTYPE #{content}>"
+
+  defp print_node({:element, tag_name, attributes, children}, _parent_tag_name) do
+    attributes_html = print_attributes(attributes)
+
+    if tag_name in @void_elems do
+      "<#{tag_name}#{attributes_html} />"
+    else
+      children_html = print_node(children, tag_name)
+
+      "<#{tag_name}#{attributes_html}>#{children_html}</#{tag_name}>"
+    end
+  end
+
+  defp print_node({:public_comment, children}, parent_tag_name) do
+    "<!--#{print_node(children, parent_tag_name)}-->"
+  end
+
+  defp print_node({:text, text}, "script"), do: text
+
+  defp print_node({:text, text}, _parent_tag_name), do: HtmlEntities.encode(text)
 
   defp put_initial_page_flag_context(page_component_struct, initial_page?) do
     Component.put_context(
