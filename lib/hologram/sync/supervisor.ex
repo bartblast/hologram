@@ -53,7 +53,7 @@ defmodule Hologram.Sync.Supervisor do
   # reads goes to evaluators found through the registry started before it. The pruner's place in
   # the order is free - it reads nothing this tree holds, and prunes nothing until an hour in.
   defp dispatcher_child do
-    {Dispatcher, handler: &Fanout.route/1, notifications: @notifications}
+    {Dispatcher, handler: &Fanout.route/2, notifications: @notifications}
   end
 
   # A connection of its own, outside the pool: LISTEN belongs to one connection for as long as it

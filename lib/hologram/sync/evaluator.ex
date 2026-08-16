@@ -26,11 +26,18 @@ defmodule Hologram.Sync.Evaluator do
   @doc """
   Tells the evaluator of the given window that the given transactions may have changed its
   answer. Telling one that is not running does nothing: a window nobody holds has nobody to tell.
+
+  The place is where the batch was read from, or nil for a round asked for by a session rather
+  than by the log - a fill has no batch, and claims no place.
   """
-  @spec round(String.t(), list({non_neg_integer, list(map)})) :: :ok
-  def round(window_id, transactions) do
+  @spec round(
+          String.t(),
+          list({non_neg_integer, list(map)}),
+          {non_neg_integer, non_neg_integer} | nil
+        ) :: :ok
+  def round(window_id, transactions, place \\ nil) do
     case Registry.lookup(@registry, window_id) do
-      [{pid, _value}] -> GenServer.cast(pid, {:round, transactions})
+      [{pid, _value}] -> GenServer.cast(pid, {:round, transactions, place})
       [] -> :ok
     end
   end
@@ -93,11 +100,15 @@ defmodule Hologram.Sync.Evaluator do
   end
 
   @impl GenServer
-  def handle_cast({:round, transactions}, state) do
+  def handle_cast({:round, transactions, place}, state) do
     # Rounds that piled up while one was running are answered by the run about to happen: it
     # reads the database as it stands, which is after all of them, and what they carry is which
-    # attributes moved - so they are merged rather than dropped.
-    {:noreply, run(state, transactions ++ drain_rounds([]))}
+    # attributes moved - so they are merged rather than dropped. The merged round claims the
+    # EARLIEST place among them: batches reach an evaluator in order, so that is the first one
+    # carrying a place at all.
+    {merged, merged_place} = drain_rounds(transactions, place)
+
+    {:noreply, run(state, merged, merged_place)}
   end
 
   @impl GenServer
@@ -113,15 +124,16 @@ defmodule Hologram.Sync.Evaluator do
     end
   end
 
-  defp drain_rounds(transactions) do
+  defp drain_rounds(transactions, place) do
     receive do
-      {:"$gen_cast", {:round, more}} -> drain_rounds(transactions ++ more)
+      {:"$gen_cast", {:round, more, more_place}} ->
+        drain_rounds(transactions ++ more, place || more_place)
     after
-      0 -> transactions
+      0 -> {transactions, place}
     end
   end
 
-  defp run(state, transactions) do
+  defp run(state, transactions, place) do
     version = state.version + 1
     rows = QueryRunner.run(state.term, DB.mapping())
 
@@ -130,7 +142,7 @@ defmodule Hologram.Sync.Evaluator do
     # The rows themselves are never sent: a message is copied into every receiving process, which
     # would undo the point of holding one shared copy of them.
     Enum.each(state.subscribers, fn {subscriber, _ref} ->
-      send(subscriber, {:round, state.window_id, version, transactions})
+      send(subscriber, {:round, state.window_id, version, transactions, place})
     end)
 
     %{state | version: version}

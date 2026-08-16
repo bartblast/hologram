@@ -20,8 +20,10 @@ defmodule Hologram.Sync.Dispatcher do
   Starts the dispatcher.
 
   `:handler` is called with the transactions of each window - a list of `{transaction id,
-  effects}` pairs, never empty - and is required, since a dispatcher with nowhere to send what it
-  reads would advance its place past effects nobody saw.
+  effects}` pairs, never empty - and the place the window was read FROM, which is what a frame
+  built from these transactions may claim a client has reached: a client replaying from there
+  gets this whole batch again, and never less. It is required, since a dispatcher with nowhere to
+  send what it reads would advance its place past effects nobody saw.
 
   `:cursor` is where reading starts, and defaults to wherever the log's edge is when the first
   window is read: a node begins with what happens from then on, because what came before is what
@@ -100,7 +102,7 @@ defmodule Hologram.Sync.Dispatcher do
       transactions ->
         # The place moves only once the handler has taken them: crashing halfway means reading
         # the same window again, which routing must tolerate, rather than passing it silently.
-        state.handler.(transactions)
+        state.handler.(transactions, {cursor, 0})
 
         %{state | cursor: edge}
     end

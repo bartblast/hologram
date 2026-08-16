@@ -56,6 +56,7 @@ defmodule Hologram.Sync.Session do
       page: Keyword.fetch!(opts, :page),
       page_windows: MapSet.new(),
       pending: MapSet.new(),
+      places: %{},
       touched: %{},
       types: %{}
     }
@@ -89,8 +90,10 @@ defmodule Hologram.Sync.Session do
     {:stop, :behind_the_ring, state}
   end
 
-  def handle_info({:round, window_id, version, transactions}, state) do
-    {:noreply, deliver(state, window_id, version, transactions)}
+  def handle_info({:round, window_id, version, transactions, place}, state) do
+    updated = remember_place(state, window_id, place)
+
+    {:noreply, deliver(updated, window_id, version, transactions)}
   end
 
   defp deliver(state, window_id, version, transactions) do
@@ -195,6 +198,19 @@ defmodule Hologram.Sync.Session do
 
   defp outstanding(state, :page) do
     MapSet.intersection(state.pending, state.page_windows)
+  end
+
+  # The last place each window has applied, taken forward only - a slow round arriving late must
+  # not drag a window's place backwards, and both claims it could make are sound, so the further
+  # one is kept. What a frame may claim is the MINIMUM of these: a window's missed changes can
+  # only live in batches after its last applied round, so replaying from the slowest window's
+  # place covers every window's possible gap. A fill round carries no place and changes nothing.
+  defp remember_place(state, _window_id, nil), do: state
+
+  defp remember_place(state, window_id, place) do
+    places = Map.update(state.places, window_id, place, &max(&1, place))
+
+    %{state | places: places}
   end
 
   defp remember(state, window_id, held, deltas) do

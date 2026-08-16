@@ -21,6 +21,7 @@ defmodule Hologram.Sync.FanoutTest do
 
   @board_window "w_board"
   @other_window "w_other"
+  @place {200, 0}
 
   setup do
     setup_query_cache(QueryCacheStub, false)
@@ -62,27 +63,27 @@ defmodule Hologram.Sync.FanoutTest do
     test "hands the batch to the evaluator of a window the writes could have changed" do
       hold(@board_window)
 
-      route(transactions(Module2))
+      route(transactions(Module2), @place)
 
-      assert_receive {:round, @board_window, 1, _transactions}
+      assert_receive {:round, @board_window, 1, _transactions, _place}
     end
 
     test "leaves alone a window the writes could not have changed" do
       hold(@other_window)
 
-      route(transactions(Module3))
+      route(transactions(Module3), @place)
 
-      refute_receive {:round, _window_id, _version, _transactions}, 100
+      refute_receive {:round, _window_id, _version, _transactions, _place}, 100
     end
 
     test "hands the batch to every affected window" do
       hold(@board_window)
       hold(@other_window)
 
-      route(transactions(Module2) ++ transactions(PolicyModule1))
+      route(transactions(Module2) ++ transactions(PolicyModule1), @place)
 
-      assert_receive {:round, @board_window, 1, _board_transactions}
-      assert_receive {:round, @other_window, 1, _other_transactions}
+      assert_receive {:round, @board_window, 1, _board_transactions, _place}
+      assert_receive {:round, @other_window, 1, _other_transactions, _place}
     end
 
     test "hands over the whole batch rather than the part concerning the window" do
@@ -90,22 +91,22 @@ defmodule Hologram.Sync.FanoutTest do
 
       batch = transactions(Module2) ++ transactions(Module3)
 
-      route(batch)
+      route(batch, @place)
 
-      assert_receive {:round, @board_window, 1, handed_over}
+      assert_receive {:round, @board_window, 1, handed_over, _place}
       assert handed_over == batch
     end
 
     test "tells nothing when no window is held" do
-      assert route(transactions(Module2)) == :ok
+      assert route(transactions(Module2), @place) == :ok
     end
 
     test "tells a window whose policy reads the grants that changed" do
       hold(@other_window)
 
-      route(transactions(Hologram.Auth.RoleGrant))
+      route(transactions(Hologram.Auth.RoleGrant), @place)
 
-      assert_receive {:round, @other_window, 1, _transactions}
+      assert_receive {:round, @other_window, 1, _transactions, _place}
     end
   end
 end

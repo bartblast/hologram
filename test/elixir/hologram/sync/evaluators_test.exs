@@ -108,7 +108,7 @@ defmodule Hologram.Sync.EvaluatorsTest do
 
       Evaluator.round(@window_id, [])
 
-      assert_receive {:round, @window_id, 1, []}
+      assert_receive {:round, @window_id, 1, [], nil}
     end
 
     test "tells both sessions of one window about the same round" do
@@ -121,8 +121,8 @@ defmodule Hologram.Sync.EvaluatorsTest do
 
       Evaluator.round(@window_id, [])
 
-      assert_receive {:round, @window_id, 1, []}
-      assert_receive {:forwarded, {:round, @window_id, 1, []}}
+      assert_receive {:round, @window_id, 1, [], nil}
+      assert_receive {:forwarded, {:round, @window_id, 1, [], nil}}
     end
 
     test "answers that there is no window for an id nothing downloads" do

@@ -54,7 +54,7 @@ defmodule Hologram.Sync.EvaluatorTest do
       evaluator = start_evaluator!([])
 
       round(@window_id, transactions())
-      assert_receive {:round, @window_id, 1, _transactions}
+      assert_receive {:round, @window_id, 1, _transactions, _place}
 
       assert %{ids: ids, rows: rows} = ResultStore.fetch(@window_id, 1)
       assert MapSet.member?(ids, entity.id)
@@ -68,10 +68,10 @@ defmodule Hologram.Sync.EvaluatorTest do
       start_evaluator!([])
 
       round(@window_id, transactions())
-      assert_receive {:round, @window_id, 1, _first}
+      assert_receive {:round, @window_id, 1, _first, _place}
 
       round(@window_id, transactions())
-      assert_receive {:round, @window_id, 2, _second}
+      assert_receive {:round, @window_id, 2, _second, _place}
 
       assert ResultStore.versions(@window_id) == [2, 1]
     end
@@ -80,15 +80,55 @@ defmodule Hologram.Sync.EvaluatorTest do
       start_evaluator!([])
 
       round(@window_id, transactions())
-      assert_receive {:round, @window_id, 1, _first}
+      assert_receive {:round, @window_id, 1, _first, _place}
 
       entity = create("written between rounds")
 
       round(@window_id, transactions())
-      assert_receive {:round, @window_id, 2, _second}
+      assert_receive {:round, @window_id, 2, _second, _place}
 
       assert %{rows: rows} = ResultStore.fetch(@window_id, 2)
       assert rows[entity.id].c == "written between rounds"
+    end
+
+    test "hands subscribers the place the batch was read from" do
+      create("first")
+      start_evaluator!([])
+
+      round(@window_id, transactions(), {200, 0})
+
+      assert_receive {:round, @window_id, 1, _transactions, {200, 0}}
+    end
+
+    # Suspending is what makes the pile-up deterministic: both rounds queue while the evaluator
+    # cannot run, and resuming makes the first drain the second into one merged run.
+    test "answers piled-up rounds with one run claiming the earliest place" do
+      create("first")
+      evaluator = start_evaluator!([])
+
+      first_batch = [{200, [%{op: :patch_entity, type: Module2}]}]
+      second_batch = [{300, [%{op: :del_entity, type: Module2}]}]
+
+      :ok = :sys.suspend(evaluator)
+      round(@window_id, first_batch, {200, 0})
+      round(@window_id, second_batch, {300, 0})
+      :ok = :sys.resume(evaluator)
+
+      # Merged rather than dropped: the run reads fresh state, but the transactions name WHICH
+      # attributes moved, and losing the second batch's would lose its patches.
+      assert_receive {:round, @window_id, 1, merged, {200, 0}}
+      assert merged == first_batch ++ second_batch
+
+      refute_receive {:round, @window_id, _version, _more, _place}, 100
+    end
+
+    test "claims no place for a round a session asked for rather than the log" do
+      create("first")
+      start_evaluator!([])
+
+      round(@window_id, [])
+
+      assert_receive {:round, @window_id, 1, [], nil}
     end
 
     test "tells subscribers which round to read, never the rows themselves" do
@@ -97,7 +137,7 @@ defmodule Hologram.Sync.EvaluatorTest do
 
       round(@window_id, transactions())
 
-      assert_receive {:round, window_id, version, handed_transactions}
+      assert_receive {:round, window_id, version, handed_transactions, _place}
       assert window_id == @window_id
       assert version == 1
       assert handed_transactions == transactions()
@@ -113,8 +153,8 @@ defmodule Hologram.Sync.EvaluatorTest do
 
       round(@window_id, transactions())
 
-      assert_receive {:round, @window_id, 1, _mine}
-      assert_receive {:forwarded, {:round, @window_id, 1, _theirs}}
+      assert_receive {:round, @window_id, 1, _mine, _place}
+      assert_receive {:forwarded, {:round, @window_id, 1, _theirs, _place}}
     end
 
     test "does nothing for a window no evaluator holds" do
@@ -135,7 +175,7 @@ defmodule Hologram.Sync.EvaluatorTest do
 
       round(@window_id, transactions())
 
-      assert_receive {:forwarded, {:round, @window_id, 1, _transactions}}
+      assert_receive {:forwarded, {:round, @window_id, 1, _transactions, _place}}
     end
 
     # Storing subscribers by pid already keeps the sends single - what asking twice would
@@ -152,8 +192,8 @@ defmodule Hologram.Sync.EvaluatorTest do
 
       round(@window_id, transactions())
 
-      assert_receive {:round, @window_id, 1, _transactions}
-      refute_receive {:round, @window_id, 1, _duplicate}, 100
+      assert_receive {:round, @window_id, 1, _transactions, _place}
+      refute_receive {:round, @window_id, 1, _duplicate, _place}, 100
     end
 
     test "answers that there is no evaluator for a window nobody holds" do
@@ -188,7 +228,7 @@ defmodule Hologram.Sync.EvaluatorTest do
 
       round(@window_id, transactions())
 
-      assert_receive {:round, @window_id, 1, _transactions}
+      assert_receive {:round, @window_id, 1, _transactions, _place}
       assert Process.alive?(evaluator)
     end
   end

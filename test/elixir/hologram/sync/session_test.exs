@@ -534,7 +534,7 @@ defmodule Hologram.Sync.SessionTest do
       ref = Process.monitor(session)
 
       # A version the ring dropped before this session got to it.
-      send(session, {:round, @board_window, 999, []})
+      send(session, {:round, @board_window, 999, [], nil})
 
       assert_receive {:DOWN, ^ref, :process, ^session, :behind_the_ring}
     end
@@ -559,7 +559,7 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, _first_deltas}
 
       ref = Process.monitor(connection)
-      send(session, {:round, @board_window, 999, []})
+      send(session, {:round, @board_window, 999, [], nil})
 
       assert_receive {:DOWN, ^ref, :process, ^connection, :behind_the_ring}
     end

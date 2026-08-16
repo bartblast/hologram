@@ -37,7 +37,7 @@ defmodule Hologram.Sync.DispatcherTest do
   # say so by what they read - a dispatcher on the wrong connection finds none of these rows.
   defp start_dispatcher!(opts) do
     test_pid = self()
-    handler = fn transactions -> send(test_pid, {:dispatched, transactions}) end
+    handler = fn transactions, place -> send(test_pid, {:dispatched, transactions, place}) end
 
     opts =
       opts
@@ -80,7 +80,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       wake(dispatcher)
 
-      refute_receive {:dispatched, _transactions}, 100
+      refute_receive {:dispatched, _transactions, _place}, 100
     end
 
     test "refuses to start with nowhere to send what it reads" do
@@ -89,6 +89,18 @@ defmodule Hologram.Sync.DispatcherTest do
   end
 
   describe "handle :wake" do
+    # The place is what a frame built from this batch may claim a client has reached: replaying
+    # from it re-reads the whole batch, and never less.
+    test "hands over the place the window was read from" do
+      seed(200, @entity_id)
+
+      dispatcher = start_dispatcher!(cursor: 200)
+
+      wake(dispatcher)
+
+      assert_receive {:dispatched, _transactions, {200, 0}}
+    end
+
     test "hands over the transactions the window holds" do
       seed(200, @entity_id)
 
@@ -96,7 +108,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       wake(dispatcher)
 
-      assert_receive {:dispatched, [{200, [event]}]}
+      assert_receive {:dispatched, [{200, [event]}], _place}
       assert event.op == :del_entity
       assert event.type == Module2
       assert event.entity_id == @entity_id
@@ -107,7 +119,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       wake(dispatcher)
 
-      refute_receive {:dispatched, _transactions}, 100
+      refute_receive {:dispatched, _transactions, _place}, 100
     end
 
     test "moves past what it handed over, so a second wake repeats nothing" do
@@ -116,11 +128,11 @@ defmodule Hologram.Sync.DispatcherTest do
       dispatcher = start_dispatcher!(cursor: 200)
 
       wake(dispatcher)
-      assert_receive {:dispatched, [{200, _events}]}
+      assert_receive {:dispatched, [{200, _events}], _place}
 
       wake(dispatcher)
 
-      refute_receive {:dispatched, _transactions}, 100
+      refute_receive {:dispatched, _transactions, _place}, 100
     end
 
     # Whether draining the mailbox happens before or after the window is read cannot be told
@@ -134,13 +146,13 @@ defmodule Hologram.Sync.DispatcherTest do
       dispatcher = start_dispatcher!(cursor: 200)
 
       wake(dispatcher)
-      assert_receive {:dispatched, [{200, _events}]}
+      assert_receive {:dispatched, [{200, _events}], _place}
 
       wake(dispatcher)
       wake(dispatcher)
 
       assert Process.alive?(dispatcher)
-      refute_receive {:dispatched, _transactions}, 100
+      refute_receive {:dispatched, _transactions, _place}, 100
     end
   end
 
@@ -161,7 +173,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       send(dispatcher, {:notification, self(), make_ref(), Outbox.channel(), ""})
 
-      assert_receive {:dispatched, [{200, _events}]}
+      assert_receive {:dispatched, [{200, _events}], _place}
     end
   end
 
@@ -173,7 +185,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       start_dispatcher!(cursor: 200, poll_interval_ms: @poll_interval_ms)
 
-      assert_receive {:dispatched, [{200, _events}]}, @poll_timeout_ms
+      assert_receive {:dispatched, [{200, _events}], _place}, @poll_timeout_ms
 
       stop_supervised!(Dispatcher)
     end

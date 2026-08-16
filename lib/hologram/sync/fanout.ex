@@ -12,7 +12,8 @@ defmodule Hologram.Sync.Fanout do
   alias Hologram.Sync.Scoper
 
   @doc """
-  Hands the given transactions to the evaluator of every window they could have changed.
+  Hands the given transactions, and the place they were read from, to the evaluator of every
+  window they could have changed.
 
   Only windows this node is keeping up to date are considered, and a window nobody holds has no
   evaluator to tell - a node does the work its own clients are waiting on and no more.
@@ -21,8 +22,8 @@ defmodule Hologram.Sync.Fanout do
   window makes of an effect naming a row it does not hold is nothing, and deciding that here
   would be deciding it twice.
   """
-  @spec route(list({non_neg_integer, list(map)})) :: :ok
-  def route(transactions) do
+  @spec route(list({non_neg_integer, list(map)}), {non_neg_integer, non_neg_integer}) :: :ok
+  def route(transactions, place) do
     # Derived per batch rather than kept: it follows the compiled model, which a live reload can
     # change under a running node, and deriving it costs a fraction of the reads in the round it
     # belongs to.
@@ -30,6 +31,6 @@ defmodule Hologram.Sync.Fanout do
 
     transactions
     |> Scoper.affected(Evaluators.live(), edges)
-    |> Enum.each(&Evaluator.round(&1, transactions))
+    |> Enum.each(&Evaluator.round(&1, transactions, place))
   end
 end
