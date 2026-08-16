@@ -366,7 +366,7 @@ defmodule Hologram.Compiler do
 
     globalThis.Hologram.config = #{render_client_config()};
 
-    globalThis.Hologram.sync = #{render_sync_constants()};
+    #{render_sync_constants()}
 
     ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
@@ -943,8 +943,18 @@ defmodule Hologram.Compiler do
   # than handed over at page render: the check these answer is whether a client's JAVASCRIPT is
   # stale, and a value the current server puts in the page would always agree with the current
   # server.
+  #
+  # A build declaring no entity types says NOTHING here, and a client whose bundle carries no such
+  # constants does not ask to sync. It has no database - the application tree gates the whole data
+  # layer on exactly that - so the question has no useful answer, and the fields would ride on
+  # every connect to earn a refusal. The server refuses one anyway, for the stale bundle that asks
+  # after a deploy.
   defp render_sync_constants do
-    ~s/{modelHash: "#{Model.hash()}", protocolVersion: #{Frame.protocol_version()}}/
+    if Reflection.list_entities() == [] do
+      ""
+    else
+      ~s/globalThis.Hologram.sync = {modelHash: "#{Model.hash()}", protocolVersion: #{Frame.protocol_version()}};/
+    end
   end
 
   defp render_elixir_function_defs(mfas, ir_plt, async_mfas) do

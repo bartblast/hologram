@@ -600,10 +600,15 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(js, ~s/ERTS.appVersions = {"my-app": "9.8.7"};/)
     end
 
+    # A build declaring NO entity types says nothing here, so no client of it asks to sync - which
+    # cannot be shown from this suite, whose own model has entity types and whose reflection
+    # nothing stubs. It is asserted in the umbrella app, which declares none.
     test "injects the model the bundle was built against", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
+      refute Reflection.list_entities() == []
+
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
 
       assert String.contains?(js, ~s/globalThis.Hologram.sync = {modelHash: "#{Model.hash()}", /)

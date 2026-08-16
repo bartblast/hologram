@@ -1,4 +1,4 @@
-defmodule App1.SyncHandshakeTest do
+defmodule App1.SyncTest do
   use ExUnit.Case, async: true
 
   alias Hologram.Entity.Model
@@ -22,6 +22,33 @@ defmodule App1.SyncHandshakeTest do
       },
       overrides
     )
+  end
+
+  describe "the runtime bundle" do
+    # The other half of the same rule, at the other end of the wire: a build with no data layer
+    # does not ADVERTISE sync, so a client of it never greets. The server refuses one anyway, for
+    # the stale bundle that asks after a deploy - these are not alternatives.
+    test "carries no sync constants, so no client of it asks to sync" do
+      pattern =
+        Path.join([Application.app_dir(:app_1, "priv"), "static", "hologram", "runtime-*.js"])
+
+      assert [bundle_path] = Path.wildcard(pattern)
+
+      bundle = File.read!(bundle_path)
+
+      # The positive artifact beside the negative one, so a bundle that failed to build cannot
+      # pass this by holding nothing at all.
+      assert String.contains?(bundle, "Hologram.config")
+
+      # The hash rather than the word: the reader of these constants is in every bundle and names
+      # them whatever the build declares, so only the VALUE says whether this one was told.
+      refute String.contains?(bundle, Model.hash())
+
+      # And nothing is ASSIGNED, not even an empty object - `{}` is truthy, so a client finding one
+      # would greet with undefined fields rather than staying quiet. The reader spells its own use
+      # `Hologram.sync;`, so only an assignment matches this.
+      refute String.contains?(bundle, "Hologram.sync=")
+    end
   end
 
   describe "check/1" do
