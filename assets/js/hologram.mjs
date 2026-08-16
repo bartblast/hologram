@@ -410,14 +410,14 @@ export default class Hologram {
     });
   }
 
-  // Made public to make tests easier
-  // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
   // The page this client is on, for whoever needs to name it to the server. Null before the page
   // has mounted.
   static currentPageModule() {
     return Hologram.#pageModule;
   }
 
+  // Made public to make tests easier
+  // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
   static queueActionsFromServerInits() {
     for (const [cid, entry] of Object.values(ComponentRegistry.entries.data)) {
       const componentStruct = Erlang_Maps["get/2"](Type.atom("struct"), entry);
