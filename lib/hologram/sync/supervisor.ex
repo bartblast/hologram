@@ -16,6 +16,7 @@ defmodule Hologram.Sync.Supervisor do
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Fanout
+  alias Hologram.Sync.Pruner
   alias Hologram.Sync.ResultStore
 
   @notifications Hologram.Sync.Notifications
@@ -41,14 +42,16 @@ defmodule Hologram.Sync.Supervisor do
       ResultStore,
       Evaluators,
       notifications_child(),
-      dispatcher_child()
+      dispatcher_child(),
+      Pruner
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
   end
 
-  # The dispatcher comes last: it starts reading straight away, and what it reads is handed to
-  # evaluators found through the registry started before it.
+  # The dispatcher comes after what it hands work to: it starts reading straight away, and what it
+  # reads goes to evaluators found through the registry started before it. The pruner's place in
+  # the order is free - it reads nothing this tree holds, and prunes nothing until an hour in.
   defp dispatcher_child do
     {Dispatcher, handler: &Fanout.route/1, notifications: @notifications}
   end

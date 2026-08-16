@@ -19,6 +19,11 @@ defmodule Hologram.DB.Outbox do
 
   @data_ops [:patch_entity, :put_entity]
 
+  # Pruning is one job over a log every node shares, so one node does it and the rest find the
+  # lock held. Arbitrary, but it must never move once deployed, or two builds mid-rollout would
+  # prune past each other.
+  @prune_lock_key 0x484F_4C4F
+
   @relationship_ops [:add_relationship, :del_relationship]
 
   @doc """
@@ -110,16 +115,23 @@ defmodule Hologram.DB.Outbox do
   longer covers is sent everything instead of the little it missed. It cannot make an answer
   wrong, only expensive - `oldest_place/0` works out whether a place is still covered from the
   log as it stands, never from whatever this was last called with.
+
+  One node prunes per round and the rest remove nothing, which is what the advisory lock in the
+  statement is for. It is TRANSACTION-scoped and taken inside the delete's own statement, so it
+  is held for exactly as long as the delete and released whatever becomes of it - a session-scoped
+  lock taken and released as two statements would travel over two POOLED connections, and one left
+  behind on a connection nobody closes is a log no node may ever prune again.
   """
   @spec prune(non_neg_integer) :: non_neg_integer
   def prune(older_than_seconds) do
     statement = """
     DELETE FROM "hologram_system"."outbox"
     WHERE "inserted_at" < now() - make_interval(secs => $1::double precision)
+      AND (SELECT pg_try_advisory_xact_lock($2))
     """
 
     {:ok, %Postgrex.Result{num_rows: num_rows}} =
-      Connection.query(statement, [older_than_seconds])
+      Connection.query(statement, [older_than_seconds, @prune_lock_key])
 
     num_rows
   end

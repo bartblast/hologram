@@ -7,6 +7,7 @@ defmodule Hologram.Sync.SupervisorTest do
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Fanout
+  alias Hologram.Sync.Pruner
   alias Hologram.Sync.ResultStore
 
   defp child_ids do
@@ -28,7 +29,8 @@ defmodule Hologram.Sync.SupervisorTest do
                ResultStore,
                Evaluators,
                notifications(),
-               Dispatcher
+               Dispatcher,
+               Pruner
              ]
     end
 

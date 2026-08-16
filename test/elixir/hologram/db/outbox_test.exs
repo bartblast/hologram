@@ -120,6 +120,28 @@ defmodule Hologram.DB.OutboxTest do
     test "removes nothing from a log holding nothing" do
       assert prune(60) == 0
     end
+
+    # That a SECOND node finds the lock held cannot be shown here - the sandbox gives every process
+    # one connection, so a lock this test takes is a lock the prune already holds. What is shown is
+    # that the prune asks for it at all, and that it is transaction-scoped: it is still held after
+    # the statement, inside the transaction that ran it. Two real nodes contending belongs to the
+    # cluster suite.
+    test "asks for the lock that keeps two nodes from pruning at once" do
+      seed_aged(@entity_id, 3_600)
+
+      assert prune(60) == 1
+
+      statement = """
+      SELECT count(*) FROM pg_locks
+      WHERE locktype = 'advisory' AND objid = $1 AND granted
+      """
+
+      # The key is written out again rather than read from the module on purpose: it must never
+      # move once deployed, or two builds mid-rollout would prune past each other.
+      {:ok, %Postgrex.Result{rows: [[held]]}} = Connection.query(statement, [0x484F_4C4F])
+
+      assert held == 1
+    end
   end
 
   describe "read_after/2" do
