@@ -5,11 +5,13 @@ defmodule Hologram.Realtime.SSETest do
 
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.Entity
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Test.Fixtures.Entity.Module15
+  alias Hologram.Test.Fixtures.Entity.Module2, as: EntityModule2
 
   @server_only_token_js ~s'[Type.atom("token"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Entity.ServerOnly")], [Type.atom("attribute"), Type.atom("token")]])]'
 
@@ -264,6 +266,52 @@ defmodule Hologram.Realtime.SSETest do
 
       assert updated_conn.resp_body =~ "event: add_sub_receipts\nid: "
       assert updated_conn.resp_body =~ "\ndata: "
+    end
+  end
+
+  describe "process_message/4 on {:sync_deltas, ...}" do
+    test "pushes a sync_deltas SSE event carrying the deltas" do
+      conn = prepared_test_conn()
+      row = Entity.new(EntityModule2, a: true, c: "first")
+
+      deltas = [
+        %{
+          data: row,
+          id: row.id,
+          op: :put_entity,
+          type: "Hologram.Test.Fixtures.Entity.Module2"
+        }
+      ]
+
+      send(self(), {:sync_deltas, deltas})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: sync_deltas\nid: "
+      assert updated_conn.resp_body =~ ~s[Type.bitstring("first")]
+    end
+  end
+
+  describe "process_message/4 on {:sync_reload, ...}" do
+    test "pushes a sync_reload SSE event naming what disagreed" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_reload, :model_hash})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: sync_reload\nid: "
+      assert updated_conn.resp_body =~ ~s[Type.atom("model_hash")]
+    end
+  end
+
+  describe "process_message/4 on {:sync_synced}" do
+    test "pushes a synced SSE event" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_synced})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: synced\nid: "
     end
   end
 

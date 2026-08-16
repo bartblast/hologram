@@ -72,6 +72,19 @@ defmodule Hologram.Sync.Frame do
   end
 
   @doc """
+  Builds the SSE event-stream chunk telling a client its bundle no longer matches this build.
+
+  It is a notice rather than an order: the client reloads at a moment of its own choosing, since
+  its store and its queued writes survive a reload and nothing is lost by waiting.
+  """
+  @spec encode_reload_envelope(integer, atom) :: String.t()
+  def encode_reload_envelope(id, reason) do
+    payload = %{protocol_version: @protocol_version, reason: reason}
+
+    "event: sync_reload\nid: #{id}\ndata: #{Encoder.encode_client_term!(payload)}\n\n"
+  end
+
+  @doc """
   Returns the protocol version this build speaks.
   """
   @spec protocol_version() :: pos_integer

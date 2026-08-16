@@ -314,10 +314,13 @@ defmodule Hologram.Sync.DiffTest do
       round = result([public_row, private_row])
 
       reader_deltas = deltas(round, MapSet.new(), user.id, [])
-      trusted_deltas = deltas(round, MapSet.new(), nil, [])
+      anonymous_deltas = deltas(round, MapSet.new(), nil, [])
 
       assert reader_deltas.appeared == [public_row]
-      assert Enum.sort_by(trusted_deltas.appeared, & &1.id) == Enum.sort_by([public_row], & &1.id)
+
+      # nil means anonymous on the read side, never trusted: a visitor sees what is public and
+      # nothing that a rule gates on who is asking.
+      assert anonymous_deltas.appeared == [public_row]
     end
   end
 end

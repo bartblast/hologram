@@ -8,6 +8,9 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Session
+  alias Hologram.Sync.Frame
+  alias Hologram.Sync.Handshake, as: SyncHandshake
+  alias Hologram.Sync.Session, as: SyncSession
 
   # Read only when the host app enables the attach-delay seam - see maybe_delay_attach/1.
   @attach_delay_cookie "hologram_sse_attach_delay_ms"
@@ -116,6 +119,33 @@ defmodule Hologram.Realtime.SSE do
       {:add_sub_receipts, receipts} ->
         id = System.unique_integer([:positive, :monotonic])
         chunk_data = encode_add_sub_receipts_envelope(id, receipts)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
+      {:sync_deltas, deltas} ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = Frame.encode_deltas_envelope(id, nil, deltas)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
+      {:sync_reload, reason} ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = Frame.encode_reload_envelope(id, reason)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
+      {:sync_synced} ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = Frame.encode_synced_envelope(id)
 
         case Plug.Conn.chunk(conn, chunk_data) do
           {:ok, conn} -> {:cont, conn}
@@ -304,6 +334,7 @@ defmodule Hologram.Realtime.SSE do
         |> maybe_delay_attach()
         |> attach_validated_subscriptions(validated_bindings)
         |> prepare()
+        |> start_syncing(user_id)
         |> message_pump(session_id, user_id, message_pump_opts)
 
       :error ->
@@ -591,6 +622,26 @@ defmodule Hologram.Realtime.SSE do
     end
   end
 
+  # What the client says about its own sync arrives on the stream's own request rather than
+  # through the handshake stash: the page is its claim either way (what it names decides which
+  # windows are kept, never what it may see of them), and the stash is a flat tuple gossiped
+  # between nodes, which is not a shape to grow for a claim that needs no protecting.
+  defp greeting(conn) do
+    conn = Plug.Conn.fetch_query_params(conn)
+
+    case conn.query_params do
+      %{"model_hash" => model_hash, "page" => page, "protocol_version" => protocol_version} ->
+        %{
+          model_hash: model_hash,
+          page: page_module(page),
+          protocol_version: parse_protocol_version(protocol_version)
+        }
+
+      _no_greeting ->
+        %{}
+    end
+  end
+
   defp own_identities(instance_id, session_id, user_id) do
     base = [{:instance, instance_id}, {:session, session_id}]
 
@@ -607,11 +658,51 @@ defmodule Hologram.Realtime.SSE do
     |> Plug.Conn.halt()
   end
 
+  # A page this build has never compiled stays the string it arrived as, which matches no window
+  # and leaves the client with an empty session rather than an error.
+  defp page_module(page) do
+    String.to_existing_atom("Elixir." <> page)
+  rescue
+    ArgumentError -> page
+  end
+
+  defp parse_protocol_version(protocol_version) do
+    case Integer.parse(protocol_version) do
+      {version, ""} -> version
+      _not_a_version -> protocol_version
+    end
+  end
+
   defp schedule_heartbeat(heartbeat_interval_ms) do
     Process.send_after(self(), :heartbeat, heartbeat_interval_ms)
   end
 
   defp schedule_receipts_refresh(interval_ms) do
     Process.send_after(self(), :refresh_receipts, interval_ms)
+  end
+
+  # The session is linked, so it goes when the connection does - what a client holds is only
+  # worth keeping while there is a client to tell about it.
+  defp start_syncing(conn, user_id) do
+    outcome =
+      conn
+      |> greeting()
+      |> SyncHandshake.check()
+
+    case outcome do
+      {:sync, page} ->
+        {:ok, _session} =
+          SyncSession.start_link(actor_user_id: user_id, client: self(), page: page)
+
+        conn
+
+      {:reload, reason} ->
+        send(self(), {:sync_reload, reason})
+
+        conn
+
+      :no_sync ->
+        conn
+    end
   end
 end
