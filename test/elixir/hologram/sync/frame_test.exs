@@ -154,6 +154,22 @@ defmodule Hologram.Sync.FrameTest do
     end
   end
 
+  describe "encode_resync_envelope/2" do
+    test "wraps the discard marker in a sync_resync SSE event envelope" do
+      payload = %{protocol_version: 1, reason: :retention}
+      encoded = Encoder.encode_client_term!(payload)
+
+      assert encode_resync_envelope(42, :retention) ==
+               "event: sync_resync\nid: 42\ndata: #{encoded}\n\n"
+    end
+
+    test "says which door the client came through" do
+      envelope = encode_resync_envelope(42, :model_hash)
+
+      assert String.contains?(envelope, ~s[Type.atom("model_hash")])
+    end
+  end
+
   describe "encode_synced_envelope/2" do
     test "wraps the completeness marker in a synced SSE event envelope" do
       payload = %{protocol_version: 1, scope: :page}

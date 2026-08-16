@@ -304,6 +304,18 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "process_message/4 on {:sync_resync, reason}" do
+    test "pushes a sync_resync SSE event" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_resync, :retention})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: sync_resync\nid: "
+      assert updated_conn.resp_body =~ ~s[Type.atom("retention")]
+    end
+  end
+
   describe "process_message/4 on {:sync_synced, scope}" do
     test "pushes a synced SSE event" do
       conn = prepared_test_conn()

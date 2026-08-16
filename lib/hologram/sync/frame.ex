@@ -76,6 +76,25 @@ defmodule Hologram.Sync.Frame do
   end
 
   @doc """
+  Builds the SSE event-stream chunk telling a client to drop everything it holds, because what
+  follows is the whole of what it may see rather than what changed.
+
+  Sent when a returning client cannot be told what it missed - its place could not be read, the
+  log was pruned past it, or the gap spans a change of model. The reason says which, for the sake
+  of whoever is looking at why a client paid for a resync, and the client does the same thing
+  whichever it is.
+
+  It is its own chunk rather than a flag on the rows that follow, because there may be none: a
+  client whose rows are all gone still has to be told to let go of them.
+  """
+  @spec encode_resync_envelope(integer, atom) :: String.t()
+  def encode_resync_envelope(id, reason) do
+    payload = %{protocol_version: @protocol_version, reason: reason}
+
+    "event: sync_resync\nid: #{id}\ndata: #{Encoder.encode_client_term!(payload)}\n\n"
+  end
+
+  @doc """
   Builds the SSE event-stream chunk telling a client its bundle no longer matches this build.
 
   It is a notice rather than an order: the client reloads at a moment of its own choosing, since
