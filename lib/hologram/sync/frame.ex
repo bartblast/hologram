@@ -4,10 +4,15 @@ defmodule Hologram.Sync.Frame do
   # What a client is sent, on the stream it already has open. Deltas ride beside the realtime
   # events as their own chunk kinds rather than on a connection of their own, so a tab keeps one
   # stream and sync inherits its handshake, heartbeats and reconnect.
+  #
+  # These four kinds carry JSON where every other chunk on that stream carries JavaScript source.
+  # The others hand over arbitrary terms and need an encoder that can spell any of them - a delta
+  # holds values a database stores, and paying ten times the bytes to say so, on the payload a
+  # whole-app fill is mostly made of, buys nothing.
 
-  alias Hologram.Compiler.Encoder
   alias Hologram.DB.Codec
   alias Hologram.Entity.Model
+  alias Hologram.Sync.WireData
 
   @protocol_version 1
 
@@ -54,7 +59,7 @@ defmodule Hologram.Sync.Frame do
       protocol_version: @protocol_version
     }
 
-    "event: sync_deltas\nid: #{id}\ndata: #{Encoder.encode_client_term!(payload)}\n\n"
+    "event: sync_deltas\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
   end
 
   @doc """
@@ -72,7 +77,7 @@ defmodule Hologram.Sync.Frame do
   def encode_synced_envelope(id, scope) do
     payload = %{protocol_version: @protocol_version, scope: scope}
 
-    "event: synced\nid: #{id}\ndata: #{Encoder.encode_client_term!(payload)}\n\n"
+    "event: synced\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
   end
 
   @doc """
@@ -91,7 +96,7 @@ defmodule Hologram.Sync.Frame do
   def encode_resync_envelope(id, reason) do
     payload = %{protocol_version: @protocol_version, reason: reason}
 
-    "event: sync_resync\nid: #{id}\ndata: #{Encoder.encode_client_term!(payload)}\n\n"
+    "event: sync_resync\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
   end
 
   @doc """
@@ -104,7 +109,7 @@ defmodule Hologram.Sync.Frame do
   def encode_reload_envelope(id, reason) do
     payload = %{protocol_version: @protocol_version, reason: reason}
 
-    "event: sync_reload\nid: #{id}\ndata: #{Encoder.encode_client_term!(payload)}\n\n"
+    "event: sync_reload\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
   end
 
   @doc """
@@ -119,7 +124,7 @@ defmodule Hologram.Sync.Frame do
   """
   @spec put_entity(struct) :: map
   def put_entity(row) do
-    %{data: row, id: row.id, op: :put_entity, type: type_of(row)}
+    %{data: WireData.row(row), id: row.id, op: :put_entity, type: type_of(row)}
   end
 
   @doc """
@@ -133,8 +138,15 @@ defmodule Hologram.Sync.Frame do
     %{id: id, op: :unsync_entity, type: Codec.encode_enum_value(entity_type)}
   end
 
+  # The row comes along for its type as much as its id: a bag of changed attributes cannot say
+  # what it belongs to, and without that the values cannot be written the way the wire wants them.
   defp patch_entity(row, patch) do
-    %{data: patch, id: row.id, op: :patch_entity, type: type_of(row)}
+    %{
+      data: WireData.patch(row.__struct__, patch),
+      id: row.id,
+      op: :patch_entity,
+      type: type_of(row)
+    }
   end
 
   defp relationship(edge, window_type) do

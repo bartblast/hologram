@@ -14,10 +14,15 @@ defmodule Hologram.Sync.WireData do
   # the query did not ask for. The three cases cannot be confused, which is what makes absence
   # safe to read: an attribute is always there (null when it is unset), a server-only attribute
   # never is, and a relationship is there exactly when the window includes it.
+  #
+  # Server-only attributes are dropped by what the MODEL DECLARES, never by finding a sentinel in
+  # the row: a row read through the trusted tier holds the real value, and one written moments ago
+  # holds what was written. Reading the row would hide the value exactly when it was already safe
+  # and hand it over the rest of the time.
 
   alias Hologram.DB.Codec
+  alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
-  alias Hologram.Entity.ServerOnly
 
   @doc """
   Returns the given changed attributes of the given entity type, as a frame carries them.
@@ -53,24 +58,25 @@ defmodule Hologram.Sync.WireData do
     |> Map.new(fn {name, type, _opts} -> {name, type} end)
   end
 
-  defp encode_field({_name, %ServerOnly{}}, _attribute_types, _relationships), do: []
+  defp encode_field({_name, %NotIncluded{}}, _model), do: []
 
-  defp encode_field({_name, %NotIncluded{}}, _attribute_types, _relationships), do: []
-
-  defp encode_field({name, value}, attribute_types, relationships) do
-    if Map.has_key?(relationships, name) do
-      [{name, embed(value)}]
-    else
-      [{name, Codec.encode_json(value, Map.get(attribute_types, name, :uuid))}]
+  defp encode_field({name, value}, model) do
+    cond do
+      MapSet.member?(model.server_only, name) -> []
+      Map.has_key?(model.relationships, name) -> [{name, embed(value)}]
+      true -> [{name, Codec.encode_json(value, Map.get(model.attribute_types, name, :uuid))}]
     end
   end
 
   defp encode_fields(fields, entity_type) do
-    attribute_types = attribute_types(entity_type)
-    relationships = relationships(entity_type)
+    model = %{
+      attribute_types: attribute_types(entity_type),
+      relationships: relationships(entity_type),
+      server_only: server_only(entity_type)
+    }
 
     fields
-    |> Enum.flat_map(&encode_field(&1, attribute_types, relationships))
+    |> Enum.flat_map(&encode_field(&1, model))
     |> Map.new()
   end
 
@@ -79,6 +85,12 @@ defmodule Hologram.Sync.WireData do
   defp embed(rows) when is_list(rows), do: Enum.map(rows, &row/1)
 
   defp embed(row), do: row(row)
+
+  defp server_only(entity_type) do
+    entity_type
+    |> Entity.server_only_attribute_names()
+    |> MapSet.new()
+  end
 
   defp relationships(entity_type) do
     Map.new(entity_type.__relationships__(), fn {name, type, _opts} -> {name, type} end)

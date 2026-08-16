@@ -7,6 +7,7 @@ defmodule Hologram.Sync.CatchupTest do
   alias Hologram.DB.Connection
   alias Hologram.Entity.Model
   alias Hologram.Sync.Cursor
+  alias Hologram.Sync.WireData
   alias Hologram.Test.Fixtures.Entity.Module2
 
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
@@ -42,7 +43,7 @@ defmodule Hologram.Sync.CatchupTest do
 
       assert deltas([effect(Module2, @entity_id)], %{@entity_id => row}) == [
                %{
-                 data: row,
+                 data: WireData.row(row),
                  id: @entity_id,
                  op: :put_entity,
                  type: "Hologram.Test.Fixtures.Entity.Module2"
@@ -64,7 +65,8 @@ defmodule Hologram.Sync.CatchupTest do
       row = %Module2{a: true, c: "moved three times", id: @entity_id}
       effects = [effect(Module2, @entity_id), effect(Module2, @entity_id)]
 
-      assert [%{data: ^row, op: :put_entity}] = deltas(effects, %{@entity_id => row})
+      assert [%{data: data, op: :put_entity}] = deltas(effects, %{@entity_id => row})
+      assert data.c == "moved three times"
     end
 
     test "says nothing about a type this build has never compiled" do

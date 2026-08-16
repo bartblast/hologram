@@ -13,6 +13,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Sync.PageWindows
   alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Session
+  alias Hologram.Sync.WireData
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
@@ -58,10 +59,6 @@ defmodule Hologram.Sync.SessionTest do
     |> DB.create()
   end
 
-  # An evaluator reads from its own process, which the sandbox owner must let in before it runs
-  # anything - otherwise it reaches the pool rather than this test's transaction and finds none of
-  # these rows. Holding the windows first is what puts the evaluators there to be let in: the
-  # session then finds them running and asks them for its first round.
   # One entry of what a returning client missed, in the shape the log reports it.
   defp gap_effect(entity_id) do
     %{entity_id: entity_id, op: :patch_entity, type: Module2}
@@ -82,6 +79,10 @@ defmodule Hologram.Sync.SessionTest do
     silent
   end
 
+  # An evaluator reads from its own process, which the sandbox owner must let in before it runs
+  # anything - otherwise it reaches the pool rather than this test's transaction and finds none of
+  # these rows. Holding the windows first is what puts the evaluators there to be let in: the
+  # session then finds them running and asks them for its first round.
   defp hold_windows(window_ids) do
     holder = spawn_link(fn -> Process.sleep(:infinity) end)
 
@@ -195,7 +196,8 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(gap: [gap_effect(moved.id)])
 
       assert_receive {:sync_deltas, deltas}
-      assert [%{data: ^moved, op: :put_entity}] = deltas
+      assert [%{data: data, op: :put_entity}] = deltas
+      assert data.c == moved.c
 
       refute_receive {:sync_deltas, _more}, 100
       refute Enum.any?(deltas, &(&1.id == untouched.id))
@@ -349,7 +351,7 @@ defmodule Hologram.Sync.SessionTest do
 
       assert deltas == [
                %{
-                 data: task,
+                 data: WireData.row(task),
                  id: task.id,
                  op: :put_entity,
                  type: "Hologram.Test.Fixtures.Entity.Module2"
@@ -388,7 +390,8 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(actor_user_id: user.id)
 
       assert_receive {:sync_deltas, deltas}
-      assert [%{data: ^readable, op: :put_entity}] = deltas
+      assert [%{data: data, op: :put_entity}] = deltas
+      assert data.id == readable.id
     end
 
     test "sends an anonymous visitor the rows anyone may read, and no others" do
@@ -407,7 +410,8 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([])
 
       assert_receive {:sync_deltas, deltas}
-      assert [%{data: ^readable, op: :put_entity}] = deltas
+      assert [%{data: data, op: :put_entity}] = deltas
+      assert data.id == readable.id
     end
 
     test "says it is done once every window has sent its rows" do
@@ -443,7 +447,8 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(client: other_client)
 
       assert_receive {:forwarded, {:sync_deltas, deltas}}
-      assert [%{data: ^task, op: :put_entity}] = deltas
+      assert [%{data: data, op: :put_entity}] = deltas
+      assert data.id == task.id
       assert ResultStore.versions(@board_window) == [1]
     end
   end
@@ -477,7 +482,8 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, [])
 
       assert_receive {:sync_deltas, deltas}
-      assert [%{data: ^task, op: :put_entity}] = deltas
+      assert [%{data: data, op: :put_entity}] = deltas
+      assert data.id == task.id
     end
 
     test "tells the client to drop a row that left the only window holding it" do

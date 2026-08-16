@@ -10,6 +10,7 @@ defmodule Hologram.Realtime.SSETest do
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Sync.Frame
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2, as: EntityModule2
 
@@ -303,21 +304,16 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn()
       row = Entity.new(EntityModule2, a: true, c: "first")
 
-      deltas = [
-        %{
-          data: row,
-          id: row.id,
-          op: :put_entity,
-          type: "Hologram.Test.Fixtures.Entity.Module2"
-        }
-      ]
+      # Built through the frame rather than by hand: a delta holds a row already written the way
+      # the wire carries it, and JSON refuses to guess at a struct rather than encoding one badly.
+      deltas = [Frame.put_entity(row)]
 
       send(self(), {:sync_deltas, deltas})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
       assert updated_conn.resp_body =~ "event: sync_deltas\nid: "
-      assert updated_conn.resp_body =~ ~s[Type.bitstring("first")]
+      assert updated_conn.resp_body =~ ~s["c":"first"]
     end
   end
 
@@ -329,7 +325,7 @@ defmodule Hologram.Realtime.SSETest do
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
       assert updated_conn.resp_body =~ "event: sync_reload\nid: "
-      assert updated_conn.resp_body =~ ~s[Type.atom("model_hash")]
+      assert updated_conn.resp_body =~ ~s["reason":"model_hash"]
     end
   end
 
@@ -341,7 +337,7 @@ defmodule Hologram.Realtime.SSETest do
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
       assert updated_conn.resp_body =~ "event: sync_resync\nid: "
-      assert updated_conn.resp_body =~ ~s[Type.atom("retention")]
+      assert updated_conn.resp_body =~ ~s["reason":"retention"]
     end
   end
 
@@ -361,7 +357,7 @@ defmodule Hologram.Realtime.SSETest do
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
-      assert updated_conn.resp_body =~ ~s[Type.atom("all")]
+      assert updated_conn.resp_body =~ ~s["scope":"all"]
     end
   end
 

@@ -55,6 +55,12 @@ defmodule Hologram.Sync.WireDataTest do
       assert patch(Module14, changes) == %{email: "user@test.com"}
     end
 
+    test "leaves out a server-only attribute whose real value the changes are holding" do
+      changes = %{email: "user@test.com", password_hash: "hashed_secret_v3"}
+
+      assert patch(Module14, changes) == %{email: "user@test.com"}
+    end
+
     test "writes nothing for changes holding nothing" do
       assert patch(Module2, %{}) == %{}
     end
@@ -105,6 +111,24 @@ defmodule Hologram.Sync.WireDataTest do
           email: "user@test.com",
           id: @entity_id,
           password_hash: %ServerOnly{attribute: :password_hash},
+          updated_at: @updated_at
+        })
+
+      wire = row(entity)
+
+      assert wire.email == "user@test.com"
+      refute Map.has_key?(wire, :password_hash)
+    end
+
+    # What the MODEL declares decides this, never what the row happens to hold: a row read through
+    # the trusted tier carries the real value, and one just written carries what was written.
+    test "leaves out a server-only attribute whose real value the row is holding" do
+      entity =
+        struct(Module14, %{
+          created_at: @created_at,
+          email: "user@test.com",
+          id: @entity_id,
+          password_hash: "hashed_secret_v3",
           updated_at: @updated_at
         })
 
