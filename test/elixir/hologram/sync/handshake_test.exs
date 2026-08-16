@@ -9,6 +9,7 @@ defmodule Hologram.Sync.HandshakeTest do
   defp greeting(overrides \\ %{}) do
     Map.merge(
       %{
+        cursor: nil,
         model_hash: Model.hash(),
         page: MyApp.BoardPage,
         protocol_version: Frame.protocol_version()
@@ -19,11 +20,28 @@ defmodule Hologram.Sync.HandshakeTest do
 
   describe "check/1" do
     test "serves a client speaking this build's protocol and model" do
-      assert check(greeting()) == {:sync, MyApp.BoardPage}
+      assert check(greeting()) == {:sync, MyApp.BoardPage, nil}
     end
 
     test "takes the page the client names at face value" do
-      assert check(greeting(%{page: MyApp.SomeOtherPage})) == {:sync, MyApp.SomeOtherPage}
+      assert check(greeting(%{page: MyApp.SomeOtherPage})) == {:sync, MyApp.SomeOtherPage, nil}
+    end
+
+    test "passes a returning client's place through without reading it" do
+      assert check(greeting(%{cursor: "g8uxAAAAZQ"})) == {:sync, MyApp.BoardPage, "g8uxAAAAZQ"}
+    end
+
+    # A place this build cannot read is still the log's business, not the bundle's - answering it
+    # here would put the same decision in two places and let them disagree.
+    test "passes a place it cannot make sense of through just the same" do
+      assert check(greeting(%{cursor: "not a cursor"})) ==
+               {:sync, MyApp.BoardPage, "not a cursor"}
+    end
+
+    test "serves a client arriving for the first time, which names no place" do
+      first_visit = Map.delete(greeting(), :cursor)
+
+      assert check(first_visit) == {:sync, MyApp.BoardPage, nil}
     end
 
     test "reloads a client speaking another protocol version" do

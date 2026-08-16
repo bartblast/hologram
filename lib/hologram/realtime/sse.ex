@@ -88,6 +88,28 @@ defmodule Hologram.Realtime.SSE do
     "event: refresh_sub_receipts\nid: #{id}\ndata: #{data}\n\n"
   end
 
+  # Public so tests can read what a client said without standing up a stream to say it on.
+  @doc false
+  @spec greeting(Plug.Conn.t()) :: map
+  def greeting(conn) do
+    conn = Plug.Conn.fetch_query_params(conn)
+
+    case conn.query_params do
+      %{"model_hash" => model_hash, "page" => page, "protocol_version" => protocol_version} =
+          params ->
+        %{
+          cursor: params["cursor"],
+          model_hash: model_hash,
+          page: page_module(page),
+          protocol_version: parse_protocol_version(protocol_version)
+        }
+
+      # A client built before any of this existed says nothing about sync, and keeps its stream.
+      _no_greeting ->
+        %{}
+    end
+  end
+
   # Public so tests can exercise the prep step without entering the blocking
   # message-pump loop.
   @doc false
@@ -637,22 +659,6 @@ defmodule Hologram.Realtime.SSE do
   # through the handshake stash: the page is its claim either way (what it names decides which
   # windows are kept, never what it may see of them), and the stash is a flat tuple gossiped
   # between nodes, which is not a shape to grow for a claim that needs no protecting.
-  defp greeting(conn) do
-    conn = Plug.Conn.fetch_query_params(conn)
-
-    case conn.query_params do
-      %{"model_hash" => model_hash, "page" => page, "protocol_version" => protocol_version} ->
-        %{
-          model_hash: model_hash,
-          page: page_module(page),
-          protocol_version: parse_protocol_version(protocol_version)
-        }
-
-      _no_greeting ->
-        %{}
-    end
-  end
-
   defp own_identities(instance_id, session_id, user_id) do
     base = [{:instance, instance_id}, {:session, session_id}]
 
@@ -701,7 +707,7 @@ defmodule Hologram.Realtime.SSE do
       |> SyncHandshake.check()
 
     case outcome do
-      {:sync, page} ->
+      {:sync, page, _cursor} ->
         {:ok, _session} =
           SyncSession.start_link(actor_user_id: user_id, client: self(), page: page)
 

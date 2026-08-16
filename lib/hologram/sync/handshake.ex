@@ -16,30 +16,34 @@ defmodule Hologram.Sync.Handshake do
   @doc """
   Decides what a connection carrying the given greeting gets.
 
-  Answers `{:sync, page}` when the client can be served, `{:reload, reason}` when its bundle
-  disagrees with this build, and `:no_sync` when it said nothing about sync at all - which is
-  what a client built before any of this existed looks like, and it keeps its realtime stream.
+  Answers `{:sync, page, cursor}` when the client can be served, `{:reload, reason}` when its
+  bundle disagrees with this build, and `:no_sync` when it said nothing about sync at all - which
+  is what a client built before any of this existed looks like, and it keeps its realtime stream.
 
   The page is the client's own claim and is taken at face value: what it names decides only which
-  windows are kept for it, never what it may see of them, which every row is checked against
+  windows fill first, never what it may see of them, which every row is checked against
   separately.
+
+  The cursor passes through unread, and is nil for a client arriving for the first time. Whether
+  the place it names can still be reached is a question about the log, and this is about the
+  bundle.
   """
-  @spec check(map) :: {:sync, module} | {:reload, atom} | :no_sync
+  @spec check(map) :: {:sync, module, String.t() | nil} | {:reload, atom} | :no_sync
   def check(greeting) do
     case greeting do
       %{model_hash: model_hash, page: page, protocol_version: protocol_version} ->
-        check_greeting(page, protocol_version, model_hash)
+        check_greeting(page, protocol_version, model_hash, greeting[:cursor])
 
       _no_greeting ->
         :no_sync
     end
   end
 
-  defp check_greeting(page, protocol_version, model_hash) do
+  defp check_greeting(page, protocol_version, model_hash, cursor) do
     cond do
       protocol_version != Frame.protocol_version() -> {:reload, :protocol_version}
       model_hash != Model.hash() -> {:reload, :model_hash}
-      true -> {:sync, page}
+      true -> {:sync, page, cursor}
     end
   end
 end

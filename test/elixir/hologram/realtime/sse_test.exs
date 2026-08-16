@@ -235,6 +235,35 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "greeting/1" do
+    defp sync_query_string(extra \\ "") do
+      "/?model_hash=a3f9c2&page=MyApp.BoardPage&protocol_version=1" <> extra
+    end
+
+    test "reads what a client said about sync" do
+      conn = Plug.Test.conn(:get, sync_query_string())
+
+      assert greeting(conn) == %{
+               cursor: nil,
+               model_hash: "a3f9c2",
+               page: MyApp.BoardPage,
+               protocol_version: 1
+             }
+    end
+
+    test "reads the place a returning client names" do
+      conn = Plug.Test.conn(:get, sync_query_string("&cursor=g8uxAAAAZQ"))
+
+      assert greeting(conn).cursor == "g8uxAAAAZQ"
+    end
+
+    test "reads nothing from a client that said nothing about sync" do
+      conn = Plug.Test.conn(:get, "/?instance_id=whatever")
+
+      assert greeting(conn) == %{}
+    end
+  end
+
   describe "prepare/1" do
     test "sets SSE response headers" do
       conn = Plug.Test.conn(:get, "/")
