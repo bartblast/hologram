@@ -154,6 +154,24 @@ defmodule Hologram.Sync.FrameTest do
     end
   end
 
+  describe "encode_reload_envelope/2" do
+    test "wraps the notice in a sync_reload SSE event envelope" do
+      payload = %{protocol_version: 1, reason: :model_hash}
+      encoded = Encoder.encode_client_term!(payload)
+
+      assert encode_reload_envelope(42, :model_hash) ==
+               "event: sync_reload\nid: 42\ndata: #{encoded}\n\n"
+    end
+
+    # A notice that its bundle is stale and an order to drop what it holds are different things,
+    # and a client told the wrong one either reloads for nothing or throws away rows it still has.
+    test "is a kind of its own, not the one that says to start over" do
+      envelope = encode_reload_envelope(42, :model_hash)
+
+      refute String.contains?(envelope, "sync_resync")
+    end
+  end
+
   describe "encode_resync_envelope/2" do
     test "wraps the discard marker in a sync_resync SSE event envelope" do
       payload = %{protocol_version: 1, reason: :retention}
