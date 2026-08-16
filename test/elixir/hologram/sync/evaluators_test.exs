@@ -72,7 +72,7 @@ defmodule Hologram.Sync.EvaluatorsTest do
 
     test "leaves out a window once its last session goes away" do
       holder = spawn(fn -> Process.sleep(:infinity) end)
-      {:ok, evaluator} = subscribe(@window_id, holder)
+      {:ok, evaluator, 0} = subscribe(@window_id, holder)
       evaluator_ref = Process.monitor(evaluator)
 
       Process.exit(holder, :kill)
@@ -84,22 +84,23 @@ defmodule Hologram.Sync.EvaluatorsTest do
 
   describe "subscribe/2" do
     test "starts the evaluator the first session wants" do
-      assert {:ok, evaluator} = subscribe(@window_id, self())
+      assert {:ok, evaluator, 0} = subscribe(@window_id, self())
 
       assert Process.alive?(evaluator)
       assert [{^evaluator, _value}] = Registry.lookup(Evaluator.registry(), @window_id)
     end
 
     test "joins the evaluator a session already started" do
-      {:ok, first} = subscribe(@window_id, self())
+      {:ok, first, 0} = subscribe(@window_id, self())
 
-      assert {:ok, second} = subscribe(@window_id, spawn_link(fn -> Process.sleep(:infinity) end))
+      assert {:ok, second, 0} =
+               subscribe(@window_id, spawn_link(fn -> Process.sleep(:infinity) end))
 
       assert second == first
     end
 
     test "tells a session that joined about the rounds that follow" do
-      {:ok, evaluator} = subscribe(@window_id, self())
+      {:ok, evaluator, 0} = subscribe(@window_id, self())
       allow(evaluator)
 
       Evaluator.round(@window_id, [])
@@ -111,8 +112,8 @@ defmodule Hologram.Sync.EvaluatorsTest do
       test_pid = self()
       other = spawn_link(fn -> forward_rounds(test_pid) end)
 
-      {:ok, evaluator} = subscribe(@window_id, self())
-      {:ok, ^evaluator} = subscribe(@window_id, other)
+      {:ok, evaluator, 0} = subscribe(@window_id, self())
+      {:ok, ^evaluator, 0} = subscribe(@window_id, other)
       allow(evaluator)
 
       Evaluator.round(@window_id, [])

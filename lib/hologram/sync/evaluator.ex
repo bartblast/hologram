@@ -50,10 +50,13 @@ defmodule Hologram.Sync.Evaluator do
   end
 
   @doc """
-  Adds a subscriber to the evaluator of the given window, and returns whether there was one to
-  add it to.
+  Adds a subscriber to the evaluator of the given window and returns the round it is on, or
+  `:no_evaluator` when nothing holds the window.
+
+  A subscriber joining an evaluator that has already run reads that round rather than asking for
+  another - zero means no round has happened yet, and whoever gets it asks for the first.
   """
-  @spec subscribe(String.t(), pid) :: :ok | :no_evaluator
+  @spec subscribe(String.t(), pid) :: {:ok, non_neg_integer} | :no_evaluator
   def subscribe(window_id, subscriber) do
     case Registry.lookup(@registry, window_id) do
       [{pid, _value}] -> GenServer.call(pid, {:subscribe, subscriber})
@@ -81,11 +84,11 @@ defmodule Hologram.Sync.Evaluator do
   @impl GenServer
   def handle_call({:subscribe, subscriber}, _from, state) do
     if Map.has_key?(state.subscribers, subscriber) do
-      {:reply, :ok, state}
+      {:reply, {:ok, state.version}, state}
     else
       subscribers = Map.put(state.subscribers, subscriber, Process.monitor(subscriber))
 
-      {:reply, :ok, %{state | subscribers: subscribers}}
+      {:reply, {:ok, state.version}, %{state | subscribers: subscribers}}
     end
   end
 

@@ -29,16 +29,17 @@ defmodule Hologram.Sync.Evaluators do
 
   @doc """
   Subscribes the given process to the evaluator of the given window, starting it if this is the
-  first session to want it, and returns the evaluator.
+  first session to want it, and returns the evaluator with the round it is on - zero when it has
+  just been started and has not run yet.
 
   Answers `:no_window` for an id no registered query downloads - what a client names is its own
   claim, and one naming something unknown is told about nothing rather than refused.
   """
-  @spec subscribe(String.t(), pid) :: {:ok, pid} | :no_window
+  @spec subscribe(String.t(), pid) :: {:ok, pid, non_neg_integer} | :no_window
   def subscribe(window_id, subscriber) do
     case QueryCache.window(window_id) do
       nil -> :no_window
-      term -> {:ok, subscribe_to_running(window_id, term, subscriber)}
+      term -> subscribe_to_running(window_id, term, subscriber)
     end
   end
 
@@ -64,12 +65,12 @@ defmodule Hologram.Sync.Evaluators do
 
     case DynamicSupervisor.start_child(__MODULE__, child) do
       {:ok, pid} ->
-        pid
+        {:ok, pid, 0}
 
       {:error, {:already_started, pid}} ->
-        :ok = Evaluator.subscribe(window_id, subscriber)
+        {:ok, version} = Evaluator.subscribe(window_id, subscriber)
 
-        pid
+        {:ok, pid, version}
     end
   end
 end

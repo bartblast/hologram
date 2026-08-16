@@ -131,7 +131,7 @@ defmodule Hologram.Sync.EvaluatorTest do
 
       start_evaluator!([])
 
-      assert subscribe(@window_id, other) == :ok
+      assert subscribe(@window_id, other) == {:ok, 0}
 
       round(@window_id, transactions())
 
