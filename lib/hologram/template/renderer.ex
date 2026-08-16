@@ -162,19 +162,23 @@ defmodule Hologram.Template.Renderer do
   # TODO: Refactor once there is something akin to {...@vars} syntax
   # (it would be possible to pass page state as layout props this way).
   @doc """
-  Renders the given page.
+  Renders the given page as its two projections: the HTML a document load is served, and the
+  evaluated tree the same render is described by as data. Both carry the same interpolated
+  runtime JS, and both leave the Realtime placeholders for the caller to substitute.
 
   ## Examples
 
       iex> render_page(MyPage, %{param: "value"}, %Server{}, initial_page?: true)
       {
         "<div>full page content including layout</div>",
+        [{:element, "div", [{"$key", [text: "k2xq91:0"]}], [{:text, "full page content including layout"}]}],
         %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}},
         %Server{session: %{user_id: 123}}
       }
   """
   @spec render_page(module, %{atom => any}, Server.t(), T.opts()) ::
-          {String.t(), %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
+          {String.t(), tree, %{String.t() => %{module: module, struct: Component.t()}},
+           Server.t()}
   def render_page(page_module, params, server_struct, opts) do
     initial_page? = opts[:initial_page?] || false
 
@@ -211,20 +215,34 @@ defmodule Hologram.Template.Renderer do
         %{module: page_module, struct: page_component_struct_with_emitted_context_after_rendering}
       )
 
-    # `$SELF_ECHOES_JS_PLACEHOLDER` is intentionally left in `html_with_interpolated_js`
-    # for the caller to substitute via `interpolate_self_echoes_js/2`. The value
-    # depends on the post-render `server.broadcasts`, which is a `Hologram.Realtime`
-    # concern - keeping the renderer Realtime-agnostic means the controller does
-    # the final substitution after `Realtime.get_self_echoes/1`.
+    # `$SELF_ECHOES_JS_PLACEHOLDER` is intentionally left in both projections
+    # for the caller to substitute via `interpolate_self_echoes_js/2` or
+    # `interpolate_js_in_tree/3`. The value depends on the post-render
+    # `server.broadcasts`, which is a `Hologram.Realtime` concern - keeping the
+    # renderer Realtime-agnostic means the controller does the final
+    # substitution after `Realtime.get_self_echoes/1`.
+    asset_manifest_js = AssetManifestCache.get_manifest_js()
+    component_registry_js = Encoder.encode_term!(component_registry_with_page_struct)
+    page_module_js = Encoder.encode_term!(page_module)
+    page_params_js = Encoder.encode_term!(params)
+
     html_with_interpolated_js =
       initial_tree
       |> print_dom()
-      |> interpolate_asset_manifest_js()
-      |> interpolate_component_registry_js(component_registry_with_page_struct)
-      |> interpolate_page_module_js(page_module)
-      |> interpolate_page_params_js(params)
+      |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
+      |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
+      |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
+      |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
 
-    {html_with_interpolated_js, component_registry_with_page_struct, final_server_struct}
+    tree_with_interpolated_js =
+      initial_tree
+      |> interpolate_js_in_tree("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
+      |> interpolate_js_in_tree("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
+      |> interpolate_js_in_tree("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
+      |> interpolate_js_in_tree("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
+
+    {html_with_interpolated_js, tree_with_interpolated_js, component_registry_with_page_struct,
+     final_server_struct}
   end
 
   @doc """
@@ -620,26 +638,6 @@ defmodule Hologram.Template.Renderer do
       |> Enum.into(%{})
 
     Map.merge(props, props_from_context)
-  end
-
-  defp interpolate_asset_manifest_js(html) do
-    asset_manifest_js = AssetManifestCache.get_manifest_js()
-    String.replace(html, "$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
-  end
-
-  defp interpolate_component_registry_js(html, component_registry) do
-    component_registry_js = Encoder.encode_term!(component_registry)
-    String.replace(html, "$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
-  end
-
-  defp interpolate_page_module_js(html, page_module) do
-    page_module_js = Encoder.encode_term!(page_module)
-    String.replace(html, "$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
-  end
-
-  defp interpolate_page_params_js(html, page_params) do
-    page_params_js = Encoder.encode_term!(page_params)
-    String.replace(html, "$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
   end
 
   defp invalid_dynamic_tag_value_message(value) do

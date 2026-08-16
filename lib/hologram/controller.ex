@@ -743,7 +743,7 @@ defmodule Hologram.Controller do
       {:terminal, decorate_conn(conn, server_struct, middleware_server_struct),
        middleware_server_struct}
     else
-      {rendered_html, component_registry, rendered_server_struct} =
+      {rendered_html, rendered_tree, component_registry, rendered_server_struct} =
         Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
 
       # Transition subscriptions before flushing broadcasts so a registry failure
@@ -767,7 +767,10 @@ defmodule Hologram.Controller do
         html: rendered_html,
         self_echoes: self_echoes,
         sub_receipt_adds: sub_receipt_adds,
-        sub_receipt_drops: sub_receipt_drops
+        sub_receipt_drops: sub_receipt_drops,
+        # TODO: ship the tree as the navigation payload, so a navigated page paints without
+        # waiting for its bundle.
+        tree: rendered_tree
       }
 
       {:rendered, decorate_conn(conn, server_struct, flushed_server_struct), result}
