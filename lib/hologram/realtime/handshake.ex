@@ -5,7 +5,6 @@ defmodule Hologram.Realtime.Handshake do
 
   alias Hologram.Realtime.Gossip
 
-  @boot_sync_timeout_ms 5_000
   @gossip_topic "hologram:gossip:sse_handshakes"
   @server_wait_ms 500
   @stash_ttl_ms 60_000
@@ -96,29 +95,30 @@ defmodule Hologram.Realtime.Handshake do
   end
 
   @impl GenServer
-  def init(opts) do
+  def init(_opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
     Phoenix.PubSub.subscribe(Hologram.PubSub, @gossip_topic)
 
-    boot_sync_timeout_ms =
-      Keyword.get(opts, :boot_sync_timeout_ms, @boot_sync_timeout_ms)
+    # Peers are asked for what they hold, and whatever they send back is merged as it
+    # arrives. Nothing is waited for: this process answers redeems from the moment it
+    # starts, and a redeem for a handshake still in flight from a peer parks as a
+    # waiter until it lands, which is the same thing that happens in steady state.
+    Gossip.request_sync(@gossip_topic)
 
     schedule_sweep()
 
-    {:ok, %{waiters: %{}}, {:continue, {:boot_sync, boot_sync_timeout_ms}}}
+    {:ok, %{waiters: %{}}}
   end
 
   @impl GenServer
   def handle_call(
-        {:insert, handshake_id, validated_bindings, {instance_id, session_id, user_id} = identity,
+        {:insert, handshake_id, validated_bindings, {instance_id, session_id, user_id},
          expires_at},
         _from,
         state
       ) do
-    :ets.insert(
-      @table_name,
+    handshake =
       {handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
-    )
 
     Phoenix.PubSub.broadcast_from(
       Hologram.PubSub,
@@ -127,9 +127,7 @@ defmodule Hologram.Realtime.Handshake do
       {:insert, handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
     )
 
-    new_state = notify_waiters(state, handshake_id, validated_bindings, identity)
-
-    {:reply, :ok, new_state}
+    {:reply, :ok, make_redeemable(state, handshake)}
   end
 
   @impl GenServer
@@ -167,32 +165,15 @@ defmodule Hologram.Realtime.Handshake do
     {:reply, :ok, state}
   end
 
-  # Boot-sync runs here rather than in init/1 so the blocking wait for peer
-  # replies doesn't stall the supervision tree (and thus app/endpoint
-  # readiness) for the full timeout on every boot. The ETS table and gossip
-  # subscription are established in init/1, so direct readers and live gossip
-  # are unaffected during this catch-up window.
-  @impl GenServer
-  def handle_continue({:boot_sync, boot_sync_timeout_ms}, state) do
-    Gossip.boot_sync(@gossip_topic, boot_sync_timeout_ms, &merge_synced_entries/1)
-
-    {:noreply, state}
-  end
-
   @impl GenServer
   def handle_info(
         {:insert, handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at},
         state
       ) do
-    :ets.insert(
-      @table_name,
+    handshake =
       {handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
-    )
 
-    new_state =
-      notify_waiters(state, handshake_id, validated_bindings, {instance_id, session_id, user_id})
-
-    {:noreply, new_state}
+    {:noreply, make_redeemable(state, handshake)}
   end
 
   @impl GenServer
@@ -226,6 +207,11 @@ defmodule Hologram.Realtime.Handshake do
   end
 
   @impl GenServer
+  def handle_info({:sync_reply, handshakes}, state) do
+    {:noreply, Enum.reduce(handshakes, state, &make_redeemable(&2, &1))}
+  end
+
+  @impl GenServer
   def handle_info({:sync_request, requester_pid}, state) do
     Gossip.reply_to_sync_request(@table_name, requester_pid)
 
@@ -242,8 +228,18 @@ defmodule Hologram.Realtime.Handshake do
     :ets.select_delete(@table_name, match_spec)
   end
 
-  defp merge_synced_entries(entries) do
-    :ets.insert(@table_name, entries)
+  # A handshake has arrived on this node, from whichever direction: stashed by a local
+  # request, gossiped by a peer, or carried in a peer's reply to our sync request. It
+  # goes in the table so a later redeem finds it, and any redeem already parked waiting
+  # for it is answered now.
+  defp make_redeemable(
+         state,
+         {handshake_id, validated_bindings, instance_id, session_id, user_id, _expires_at} =
+           handshake
+       ) do
+    :ets.insert(@table_name, handshake)
+
+    notify_waiters(state, handshake_id, validated_bindings, {instance_id, session_id, user_id})
   end
 
   defp notify_waiters(state, handshake_id, validated_bindings, identity) do

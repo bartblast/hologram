@@ -14,7 +14,7 @@ defmodule Hologram.Realtime.HandshakeTest do
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
     wait_for_process_cleanup(Handshake)
-    start_supervised!({Handshake, boot_sync_timeout_ms: 0})
+    start_supervised!(Handshake)
 
     :ok
   end
@@ -120,6 +120,29 @@ defmodule Hologram.Realtime.HandshakeTest do
                 {"test-instance-id", "test-session-id", "test-user-id"}}
     end
 
+    # Without this the async sync would regress the guarantee the blocking one gave by
+    # construction: a redeem parked before a peer's reply lands must be answered by it.
+    test "resolves a pending waiter when a peer's sync reply carries the handshake" do
+      task = Task.async(fn -> redeem("late-handshake-id", 1_000) end)
+
+      wait_for_waiter("late-handshake-id")
+
+      future = System.system_time(:millisecond) + 60_000
+
+      send(
+        Process.whereis(Handshake),
+        {:sync_reply,
+         [
+           {"late-handshake-id", [{{:room_a, "page"}, "test-user-id"}], "peer-instance-id",
+            "peer-session-id", "peer-user-id", future}
+         ]}
+      )
+
+      assert Task.await(task) ==
+               {:ok, [{{:room_a, "page"}, "test-user-id"}],
+                {"peer-instance-id", "peer-session-id", "peer-user-id"}}
+    end
+
     test "resolves a pending waiter when a peer gossip insert arrives" do
       task = Task.async(fn -> redeem("late-handshake-id", 1_000) end)
 
@@ -141,13 +164,13 @@ defmodule Hologram.Realtime.HandshakeTest do
   end
 
   describe "start_link/1" do
-    test "merges entries from a peer that replies to the boot-sync request" do
+    test "merges handshakes from a peer that replies to the sync request" do
       :ok = stop_supervised(Handshake)
 
       test_pid = self()
       future = System.system_time(:millisecond) + 60_000
 
-      peer_entry =
+      peer_handshake =
         {"peer-entry-id", [], "peer-instance-id", "peer-session-id", "peer-user-id", future}
 
       spawn_link(fn ->
@@ -156,26 +179,35 @@ defmodule Hologram.Realtime.HandshakeTest do
 
         receive do
           {:sync_request, requester_pid} ->
-            send(requester_pid, {:sync_reply, [peer_entry]})
+            send(requester_pid, {:sync_reply, [peer_handshake]})
         end
       end)
 
       assert_receive :peer_ready
 
-      start_supervised!({Handshake, boot_sync_timeout_ms: 200})
+      start_supervised!(Handshake)
 
-      wait_until(fn -> :ets.lookup(ets_table_name(), "peer-entry-id") == [peer_entry] end)
+      wait_until(fn -> :ets.lookup(ets_table_name(), "peer-entry-id") == [peer_handshake] end)
 
-      assert :ets.lookup(ets_table_name(), "peer-entry-id") == [peer_entry]
+      assert :ets.lookup(ets_table_name(), "peer-entry-id") == [peer_handshake]
     end
 
-    test "returns with an empty stash when no peers reply before the timeout" do
+    # The reason the sync request does not wait: a node that is accepting requests has
+    # to answer them. Against a blocking boot sync this call exits on its own timeout.
+    test "answers a redeem straight away, without waiting on peers" do
       :ok = stop_supervised(Handshake)
 
-      start_supervised!({Handshake, boot_sync_timeout_ms: 50})
+      start_supervised!(Handshake)
 
-      # No peers reply, so nothing merges; the synchronous call blocks until the
-      # boot-sync handle_continue has run, then the table is asserted empty.
+      assert redeem("never-stashed-id", 100) == :error
+    end
+
+    test "starts with an empty stash when no peer replies" do
+      :ok = stop_supervised(Handshake)
+
+      start_supervised!(Handshake)
+
+      # A synchronous call returns only once init/1 has run.
       :sys.get_state(Handshake)
 
       assert :ets.tab2list(ets_table_name()) == []
@@ -204,7 +236,7 @@ defmodule Hologram.Realtime.HandshakeTest do
 
       assert_receive :peer_ready
 
-      start_supervised!({Handshake, boot_sync_timeout_ms: 50})
+      start_supervised!(Handshake)
 
       wait_until(fn ->
         match?(
