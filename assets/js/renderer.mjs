@@ -41,7 +41,13 @@ export default class Renderer {
   // once `.elm` exists. renderPage() resets this.
   static resizeBindings = [];
 
-  // Based on render_dom/3
+  // Based on render_tree/3
+  //
+  // WARNING: on navigation the server ships this client the same render as an evaluated tree
+  // (Renderer.render_tree/3), and the vnodes built from that tree must equal the vnodes this
+  // renderer builds for the page's own render - otherwise hydration rebuilds nodes instead of
+  // adopting them. Every normalization step here must therefore match render_tree/3, clause by
+  // clause.
   static renderDom(dom, context, slots, defaultTarget, parentTagName) {
     if (Type.isList(dom)) {
       return Renderer.#renderNodes(
@@ -79,7 +85,13 @@ export default class Renderer {
         );
 
       case "expression":
-        // HTML escaping is done by Snabbdom
+        // HTML escaping is done by Snabbdom.
+        //
+        // WARNING: the server's render_tree/3 diverges here on purpose: it entity-encodes an
+        // expression evaluated inside a script element, because in its HTML projection an
+        // interpolated value could otherwise break out of the script with a "</script" of its
+        // own. This renderer sets text through the DOM, where no markup context exists to break
+        // out of. Do not "fix" either side alone.
         return $.toText(dom.data[1].data[0]);
 
       case "page":
@@ -134,15 +146,33 @@ export default class Renderer {
       ),
     );
 
-    const htmlVnode = pageVdom.find((vnode) => vnode.sel === "html");
+    return Renderer.#pageVnodeFromChildren(pageVdom);
+  }
 
-    if (typeof htmlVnode === "undefined") {
-      return vnode("html", {attrs: {}, on: {}}, [
-        vnode("body", {attrs: {}, on: {}}, pageVdom),
-      ]);
-    }
+  // Based on the tree Renderer.render_tree/3 evaluates on the server, converted to the vnodes a
+  // patch works on.
+  //
+  // The tree is a render the server already performed, so nothing here evaluates: it holds only
+  // elements, text, comments and the doctype, and the clauses those reach in renderDom read
+  // neither context nor slots. They are passed empty for that reason rather than as a stand-in
+  // for a real render's own.
+  //
+  // WARNING: the vnodes this returns must equal the vnodes renderPage returns for the same page,
+  // or the render that follows rebuilds nodes instead of adopting the ones this put on screen.
+  // Both go through renderDom and both finalize the document's children the same way, which is
+  // what holds the two together.
+  static renderTree(tree) {
+    const children = Vdom.finalizeChildren(
+      Renderer.renderDom(
+        tree,
+        Type.map(),
+        Type.keywordList(),
+        Type.bitstring("page"),
+        null,
+      ),
+    );
 
-    return htmlVnode;
+    return Renderer.#pageVnodeFromChildren(children);
   }
 
   // Resolves this render's <window>/<document> listener bindings, dropping any spent once binding so
@@ -1149,6 +1179,8 @@ export default class Renderer {
     }
   }
 
+  // WARNING: must match merge_neighbouring_text_nodes/1 on the server: adjacent text nodes join
+  // into one, other nodes pass through.
   static #mergeNeighbouringTextNodes(nodes) {
     return nodes.reduce((acc, node) => {
       // Drop nil render results (e.g. <window>/<document> tags render to nil), otherwise
@@ -1197,6 +1229,23 @@ export default class Renderer {
     );
   }
 
+  // The single vnode a document is patched from, given the children a render produced.
+  //
+  // A render that names no <html> element describes a fragment rather than a document, so it is
+  // wrapped in the elements a document must have. The wrappers carry no key: head and body are
+  // each the only one of their kind, reached by name rather than through a children diff.
+  static #pageVnodeFromChildren(children) {
+    const htmlVnode = children.find((childVnode) => childVnode.sel === "html");
+
+    if (typeof htmlVnode === "undefined") {
+      return vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, children),
+      ]);
+    }
+
+    return htmlVnode;
+  }
+
   // Returns true when the modifiers map carries a prevent_default modifier, which forces the
   // framework's preventDefault even on events that allow the default by design.
   // Deps: [:maps.is_key/2]
@@ -1217,7 +1266,11 @@ export default class Renderer {
     );
   }
 
-  // Based on render_attribute/2
+  // Based on render_tree_attribute/1
+  //
+  // WARNING: must match render_tree_attribute/1: an empty value list is a boolean attribute, a
+  // nil or false expression value removes the attribute, and everything else collapses to one
+  // unescaped string.
   static #renderAttribute(
     name,
     valueDom,
@@ -1265,7 +1318,7 @@ export default class Renderer {
     return [name, valueText === "" ? true : valueText];
   }
 
-  // Based on render_attributes/1
+  // Based on render_tree_attributes/1
   // "props" are Snabbdom props, not Hologram component props
   static #renderAttributesAndProps(attrsDom, tagName) {
     const attrs = {};
@@ -1331,7 +1384,7 @@ export default class Renderer {
     return {attrs, props};
   }
 
-  // Based on render_dom/3 (component case)
+  // Based on render_tree/3 (component case)
   static #renderComponent(dom, context, slots, defaultTarget, parentTagName) {
     const moduleProxy = Interpreter.moduleProxy(dom.data[1]);
     const propsDom = dom.data[2];
@@ -1367,7 +1420,7 @@ export default class Renderer {
     }
   }
 
-  // Based on render_dom/3 (dynamic tag cases)
+  // Based on render_tree/3 (dynamic tag cases)
   static #renderDynamicTag(dom, context, slots, defaultTarget, parentTagName) {
     const value = dom.data[1].data[0];
     const attrsDom = dom.data[2];
@@ -1401,7 +1454,7 @@ export default class Renderer {
     );
   }
 
-  // Based on render_dom/3 (element & slot case)
+  // Based on render_tree/3 (element & slot case)
   static #renderElement(dom, context, slots, defaultTarget, parentTagName) {
     const currentTagName = Bitstring.toText(dom.data[1]);
 
@@ -1584,7 +1637,11 @@ export default class Renderer {
     );
   }
 
-  // Based on render_dom/3 (list case)
+  // Based on render_tree/3 (list case)
+  //
+  // WARNING: must match render_tree/3's list clause step for step: filter out nil input nodes,
+  // render each node, splice one level of node lists (a component renders to a list), then merge
+  // adjacent text nodes.
   //
   // Blocks are left alone here: a block's body and a loop's iterations are lists of their own, and
   // the nodes they render are only ever part of the enclosing element's children. Numbering the
@@ -1652,7 +1709,7 @@ export default class Renderer {
     );
   }
 
-  // Based on render_dom/3 (public comment case)
+  // Based on render_tree/3 (public comment case)
   static #renderPublicComment(
     dom,
     context,
@@ -1708,7 +1765,7 @@ export default class Renderer {
     return null;
   }
 
-  // Based on render_dom/3 (slot case)
+  // Based on render_tree/3 (slot case)
   static #renderSlotElement(slots, context, defaultTarget, parentTagName) {
     const slotDom = Interpreter.accessKeywordListElement(
       slots,
@@ -1876,6 +1933,8 @@ export default class Renderer {
     return key;
   }
 
+  // WARNING: must match evaluate_attribute_value/1 on the server: parts evaluate raw and
+  // concatenate, with no escaping.
   static #valueDomToText(valueDom) {
     return Bitstring.toText(Renderer.valueDomToBitstring(valueDom));
   }
