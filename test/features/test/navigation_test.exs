@@ -8,6 +8,7 @@ defmodule HologramFeatureTests.NavigationTest do
   alias HologramFeatureTests.Navigation.Page5
   alias HologramFeatureTests.Navigation.Page6
   alias HologramFeatureTests.Navigation.Page7
+  alias HologramFeatureTests.Navigation.Page8
   alias HologramFeatureTests.Routing.RouteWithPercentEncodedParamsPage
 
   describe "link component" do
@@ -277,6 +278,25 @@ defmodule HologramFeatureTests.NavigationTest do
       |> click(button("Put page 7 result"))
       |> assert_text("Page 7 result")
       |> assert_script_result(scroll_top, 30)
+    end
+  end
+
+  describe "navigation to a page whose code is already loaded" do
+    # A page's bundle is keyed by the source it loads, so a navigation landing back on it adopts
+    # that script rather than creating it, and an adopted script never runs again to announce
+    # itself. Nothing would mount if the mount waited to be announced.
+    #
+    # The rendered param alone would not catch that: the patch draws it either way. The click is
+    # what needs a mount to have happened, and what it reports is the param the mount ran with.
+    feature "mounts without the page's bundle announcing itself", %{session: session} do
+      session
+      |> visit(Page8, n: 1)
+      |> assert_text(css("#param_n"), "1")
+      |> click(link("Page 8 next link"))
+      |> assert_page(Page8, n: 2)
+      |> assert_text(css("#param_n"), "2")
+      |> click(button("Put page 8 result"))
+      |> assert_text(css("#page_result"), "2")
     end
   end
 end
