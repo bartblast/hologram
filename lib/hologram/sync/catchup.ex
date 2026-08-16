@@ -8,14 +8,38 @@ defmodule Hologram.Sync.Catchup do
   # what it HOLDS. A client away for five minutes holding forty rows is told about the two that
   # moved, which is why the gap is the routine and the resync is the fallback.
   #
-  # Three doors lead to that fallback, and each is a thing that cannot be answered rather than a
-  # thing that went wrong: a place that cannot be read, a log pruned past that place, and a gap
-  # spanning a change of model. All three are decided before a single row is looked at.
+  # Four doors lead to that fallback, and each is a thing that cannot usefully be answered rather
+  # than a thing that went wrong: a place that cannot be read, a log pruned past that place, a gap
+  # too big to be worth replaying, and a gap spanning a change of model. All of them are decided
+  # before a single ROW is looked at - the effects name which rows to read, and none is read here.
 
   alias Hologram.DB.Outbox
   alias Hologram.Entity.Model
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Frame
+
+  # The most effects a replay will carry, and past it the client is sent everything instead.
+  #
+  # The bound is memory on the connection process, which reads the gap and is killed at a million
+  # words: a typical effect measures 69 of them, so the list ALONE reaches that cap around 14,500
+  # and the decoding on the way there costs more again. Five thousand holds the list to roughly a
+  # third of the cap and leaves the rest for the connection's own work - the headroom is the policy
+  # part, the kill threshold is not.
+  #
+  # The economics point the same way, which is why no larger number is worth arguing for: a replay
+  # re-reads every row it names, so by a few thousand touched rows it costs what a resync costs,
+  # and unlike a resync it is unbounded.
+  @default_gap_limit 5_000
+
+  @doc """
+  Returns the most effects a replay will carry.
+  """
+  @spec gap_limit() :: pos_integer
+  def gap_limit do
+    :hologram
+    |> Application.get_env(:sync, [])
+    |> Keyword.get(:gap_limit, @default_gap_limit)
+  end
 
   @doc """
   Returns what to tell a returning client about the rows the given gap touched, given the `pot` it
@@ -51,7 +75,19 @@ defmodule Hologram.Sync.Catchup do
   def gap(cursor) do
     with {:ok, tx, seq} <- decode_place(cursor),
          :ok <- check_retention(tx, seq) do
-      check_model(Outbox.read_after(tx, seq))
+      tx
+      |> Outbox.read_after(seq, gap_limit() + 1)
+      |> check_size()
+    end
+  end
+
+  # Read one past the limit, so "too many" is answered without holding them all: the extra row is
+  # the only evidence needed that the gap does not fit.
+  defp check_size(effects) do
+    if length(effects) > gap_limit() do
+      {:full_resync, :gap_too_large}
+    else
+      check_model(effects)
     end
   end
 

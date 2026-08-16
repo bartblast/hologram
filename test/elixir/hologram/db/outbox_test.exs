@@ -106,7 +106,7 @@ defmodule Hologram.DB.OutboxTest do
 
       assert prune(60) == 1
 
-      assert [event] = read_after(0, 0)
+      assert [event] = read_after(0, 0, 10)
       assert event.entity_id == @target_id
     end
 
@@ -114,7 +114,7 @@ defmodule Hologram.DB.OutboxTest do
       seed_aged(@entity_id, 30)
 
       assert prune(60) == 0
-      assert length(read_after(0, 0)) == 1
+      assert length(read_after(0, 0, 10)) == 1
     end
 
     test "removes nothing from a log holding nothing" do
@@ -144,9 +144,9 @@ defmodule Hologram.DB.OutboxTest do
     end
   end
 
-  describe "read_after/2" do
+  describe "read_after/3" do
     test "returns nothing when the log holds no effects" do
-      assert read_after(0, 0) == []
+      assert read_after(0, 0, 10) == []
     end
 
     test "returns the effects written after the given place" do
@@ -155,7 +155,7 @@ defmodule Hologram.DB.OutboxTest do
 
       [{_tx, first_seq} | _rest] = places()
 
-      assert [event] = read_after(200, first_seq)
+      assert [event] = read_after(200, first_seq, 10)
       assert event.entity_id == @target_id
     end
 
@@ -164,15 +164,26 @@ defmodule Hologram.DB.OutboxTest do
 
       [{tx, seq}] = places()
 
-      assert read_after(tx, seq) == []
+      assert read_after(tx, seq, 10) == []
     end
 
     test "leaves out effects of transactions below the given place" do
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
       seed(202, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
 
-      assert [event] = read_after(201, 0)
+      assert [event] = read_after(201, 0, 10)
       assert event.entity_id == @target_id
+    end
+
+    # Not a page - nothing resumes from where this stopped. It is what keeps a reader from pulling
+    # an unbounded tail into memory, and its caller reads one past its own cap to learn there is
+    # more rather than to fetch it.
+    test "returns no more than the limit asks for" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+      seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
+
+      assert [event] = read_after(0, 0, 1)
+      assert event.tx == 200
     end
 
     test "returns the effects in the order a reader is told about them" do
@@ -181,7 +192,7 @@ defmodule Hologram.DB.OutboxTest do
       seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert [first, second] = read_after(0, 0)
+      assert [first, second] = read_after(0, 0, 10)
       assert first.entity_id == @entity_id
       assert second.entity_id == @target_id
     end

@@ -137,26 +137,32 @@ defmodule Hologram.DB.Outbox do
   end
 
   @doc """
-  Returns the effects written after the given place, in the order a reader is told about them.
+  Returns at most `limit` effects written after the given place, in the order a reader is told
+  about them.
 
   The order is the windowed read's own - by transaction, then by insert order within it - so a
   place names the same point for a returning client as it did for a connected one. Everything here
   is committed, which is why this read needs no upper edge: gap-freeness is the windowed read's
   problem, and history has no gaps left to open.
 
+  The limit is not a page - nothing here resumes from where it stopped. It is what keeps a reader
+  from pulling an unbounded tail into memory, and a caller that gets `limit` rows back should treat
+  the gap as too big to replay rather than as all of it.
+
   Effects arrive flat rather than grouped, because what a reader wants of them is which rows to go
   and look at - the values come from those rows, never from here.
   """
-  @spec read_after(non_neg_integer, non_neg_integer) :: list(map)
-  def read_after(tx, seq) do
+  @spec read_after(non_neg_integer, non_neg_integer, pos_integer) :: list(map)
+  def read_after(tx, seq, limit) do
     statement = """
     SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id"
     FROM "hologram_system"."outbox"
     WHERE "tx" > $1 OR ("tx" = $1 AND "seq" > $2)
     ORDER BY "tx", "seq"
+    LIMIT $3
     """
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [tx, seq])
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [tx, seq, limit])
 
     Enum.map(rows, &event/1)
   end

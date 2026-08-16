@@ -6,6 +6,7 @@ defmodule Hologram.Sync.CatchupTest do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.Entity.Model
+  alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.WireData
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -22,6 +23,22 @@ defmodule Hologram.Sync.CatchupTest do
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
 
     Enum.map(rows, fn [tx, seq] -> {tx, seq} end)
+  end
+
+  # One statement rather than thousands of round trips: the oversized-gap case needs more effects
+  # than the cap allows, and seeding those one at a time would dominate the suite.
+  defp seed_many(count) do
+    statement = """
+    INSERT INTO "hologram_system"."outbox" ("op", "type", "entity_id", "tx", "model_hash")
+    SELECT 'del_entity', 'Hologram.Test.Fixtures.Entity.Module2', $1, (200 + i)::text::xid8, $2
+    FROM generate_series(1, $3) AS i
+    """
+
+    params = [Codec.encode(@entity_id, :uuid), Model.hash(), count]
+
+    {:ok, _result} = Connection.query(statement, params)
+
+    :ok
   end
 
   defp seed(tx, model_hash \\ Model.hash()) do
@@ -119,6 +136,29 @@ defmodule Hologram.Sync.CatchupTest do
 
     test "sends everything again when the log holds nothing to answer with" do
       assert gap(Cursor.encode(200, 1)) == {:full_resync, :retention}
+    end
+
+    # The door that keeps a returning client from killing its own connection: the gap is read on the
+    # connection process, which is killed at a million words, and a typical effect measures 69 of
+    # them. Without a cap a client back from a long absence would breach it, be disconnected, and
+    # reconnect with the same cursor to do it again - a loop it never escapes. The cap is 5,000, and
+    # this seeds past it rather than restating the number.
+    test "sends everything again when the gap is too big to be worth replaying" do
+      # One past the cap AFTER the cursor, which consumes the first row seeded.
+      seed_many(Catchup.gap_limit() + 2)
+
+      [{tx, seq} | _rest] = places()
+
+      assert gap(Cursor.encode(tx, seq)) == {:full_resync, :gap_too_large}
+    end
+
+    test "replays a gap that fits" do
+      seed_many(3)
+
+      [{tx, seq} | _rest] = places()
+
+      assert {:ok, effects} = gap(Cursor.encode(tx, seq))
+      assert length(effects) == 2
     end
 
     test "sends everything again when the gap spans a change of model" do
