@@ -146,15 +146,7 @@ export default class Renderer {
       ),
     );
 
-    const htmlVnode = pageVdom.find((vnode) => vnode.sel === "html");
-
-    if (typeof htmlVnode === "undefined") {
-      return vnode("html", {attrs: {}, on: {}}, [
-        vnode("body", {attrs: {}, on: {}}, pageVdom),
-      ]);
-    }
-
-    return htmlVnode;
+    return Renderer.#pageVnodeFromChildren(pageVdom);
   }
 
   // Resolves this render's <window>/<document> listener bindings, dropping any spent once binding so
@@ -1209,6 +1201,23 @@ export default class Renderer {
     return Type.isTrue(
       Erlang_Maps["is_key/2"](Type.atom("once"), modifiersDom),
     );
+  }
+
+  // The single vnode a document is patched from, given the children a render produced.
+  //
+  // A render that names no <html> element describes a fragment rather than a document, so it is
+  // wrapped in the elements a document must have. The wrappers carry no key: head and body are
+  // each the only one of their kind, reached by name rather than through a children diff.
+  static #pageVnodeFromChildren(children) {
+    const htmlVnode = children.find((childVnode) => childVnode.sel === "html");
+
+    if (typeof htmlVnode === "undefined") {
+      return vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, children),
+      ]);
+    }
+
+    return htmlVnode;
   }
 
   // Returns true when the modifiers map carries a prevent_default modifier, which forces the
