@@ -22,6 +22,11 @@ defmodule Hologram.Sync.Diff do
   hold, or attributes the row does not have, are passed over: the first is what the appeared and
   vanished lists are for, the second is what a peer running a newer model writes.
 
+  Edges of to-many relationships are reported the way values are: the effects name which edge to
+  look at, and whether it is there now is read from the round. An edge is only reported for a row
+  the client can see, and only for a relationship the window embeds - a window that never carried
+  those edges has nothing to say about them.
+
   Vanishing is reported per window. Whether the client is told to drop the row depends on the
   rest of what it holds, which only the session knows.
   """
@@ -31,7 +36,12 @@ defmodule Hologram.Sync.Diff do
           String.t() | nil,
           list({term, list(map)})
         ) ::
-          %{appeared: list(struct), patched: list({struct, map}), vanished: list(String.t())}
+          %{
+            appeared: list(struct),
+            edges: list(map),
+            patched: list({struct, map}),
+            vanished: list(String.t())
+          }
   def deltas(result, held_ids, actor_user_id, transactions) do
     visible = Map.filter(result.rows, fn {_id, row} -> Auth.can?(actor_user_id, :read, row) end)
 
@@ -45,6 +55,7 @@ defmodule Hologram.Sync.Diff do
 
     %{
       appeared: Enum.map(appeared_ids, &Map.fetch!(visible, &1)),
+      edges: edges(visible, transactions),
       patched: patched(visible, held_visible_ids, changed_attributes(transactions)),
       vanished: vanished(held_ids, visible_ids)
     }
@@ -56,6 +67,42 @@ defmodule Hologram.Sync.Diff do
     data
     |> Map.keys()
     |> MapSet.new()
+  end
+
+  defp edge(event, visible) do
+    with %{"relationship" => name, "target_id" => target_id} <- event.data,
+         %{} = row <- Map.get(visible, event.entity_id),
+         targets when is_list(targets) <- embedded(row, name) do
+      op = edge_op(targets, target_id)
+
+      [%{entity_id: event.entity_id, op: op, relationship: name, target_id: target_id}]
+    else
+      _no_edge_to_report -> []
+    end
+  end
+
+  defp edge_op(targets, target_id) do
+    if Enum.any?(targets, &(&1.id == target_id)) do
+      :add_relationship
+    else
+      :del_relationship
+    end
+  end
+
+  defp edges(visible, transactions) do
+    transactions
+    |> Enum.flat_map(fn {_tx, events} -> events end)
+    |> Enum.filter(&(&1.op in [:add_relationship, :del_relationship]))
+    |> Enum.flat_map(&edge(&1, visible))
+    |> Enum.uniq()
+  end
+
+  # What the round says the relationship holds now, or nothing when the window does not embed it -
+  # a relationship it never carried leaves a sentinel here rather than a list of rows.
+  defp embedded(row, name) do
+    row
+    |> Map.from_struct()
+    |> Enum.find_value(fn {field, value} -> Atom.to_string(field) == name && value end)
   end
 
   defp changed_attributes(transactions) do

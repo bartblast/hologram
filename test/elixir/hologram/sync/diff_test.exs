@@ -6,8 +6,10 @@ defmodule Hologram.Sync.DiffTest do
   alias Hologram.Auth
   alias Hologram.DB
   alias Hologram.Entity
+  alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
 
   defp events(entity_id, names) do
@@ -115,6 +117,122 @@ defmodule Hologram.Sync.DiffTest do
       deltas = deltas(result([task]), MapSet.new([task.id]), nil, transactions)
 
       assert deltas.patched == [{task, %{a: true, c: "first"}}]
+    end
+  end
+
+  describe "deltas/4 - edges" do
+    defp edge_events(entity_id, op, relationship, target_id) do
+      data = %{"relationship" => relationship, "target_id" => target_id}
+
+      [{200, [%{op: op, type: Module3, entity_id: entity_id, data: data}]}]
+    end
+
+    defp source_with_targets(target_ids) do
+      required =
+        Module1
+        |> Entity.new()
+        |> DB.create()
+
+      source =
+        Module3
+        |> Entity.new(c_id: required.id)
+        |> DB.create()
+
+      Enum.each(target_ids, &DB.add_relationship(Module3, source.id, :a, &1))
+
+      %{source | a: Enum.map(target_ids, &DB.get(Module2, &1))}
+    end
+
+    test "reports an edge the round says is there" do
+      target = row("target")
+      source = source_with_targets([target.id])
+      events = edge_events(source.id, :add_relationship, "a", target.id)
+
+      deltas = deltas(result([source]), MapSet.new([source.id]), nil, events)
+
+      assert deltas.edges == [
+               %{
+                 entity_id: source.id,
+                 op: :add_relationship,
+                 relationship: "a",
+                 target_id: target.id
+               }
+             ]
+    end
+
+    test "reports an edge the round says is gone" do
+      target = row("target")
+      source = source_with_targets([])
+      events = edge_events(source.id, :del_relationship, "a", target.id)
+
+      deltas = deltas(result([source]), MapSet.new([source.id]), nil, events)
+
+      assert [%{op: :del_relationship, target_id: target_id}] = deltas.edges
+      assert target_id == target.id
+    end
+
+    # Two effects moving one edge arrive in an order that is stable rather than the order they
+    # committed, so what the round holds now is the only trustworthy answer.
+    test "reports what the round holds when effects added and removed one edge" do
+      target = row("target")
+      source = source_with_targets([])
+
+      events = [
+        {200,
+         [
+           %{
+             op: :add_relationship,
+             type: Module3,
+             entity_id: source.id,
+             data: %{"relationship" => "a", "target_id" => target.id}
+           },
+           %{
+             op: :del_relationship,
+             type: Module3,
+             entity_id: source.id,
+             data: %{"relationship" => "a", "target_id" => target.id}
+           }
+         ]}
+      ]
+
+      deltas = deltas(result([source]), MapSet.new([source.id]), nil, events)
+
+      assert [%{op: :del_relationship}] = deltas.edges
+    end
+
+    test "reports nothing for a row this client cannot see" do
+      user =
+        Module14
+        |> Entity.new(email: "edge_reader@example.com")
+        |> DB.create()
+
+      hidden =
+        PolicyModule1
+        |> Entity.new()
+        |> DB.create()
+
+      events = edge_events(hidden.id, :add_relationship, "a", Entity.generate_id())
+
+      deltas = deltas(result([hidden]), MapSet.new([hidden.id]), user.id, events)
+
+      assert deltas.edges == []
+    end
+
+    test "reports nothing for a relationship the window does not embed" do
+      task = row("no embeds here")
+      events = edge_events(task.id, :add_relationship, "a", Entity.generate_id())
+
+      deltas = deltas(result([task]), MapSet.new([task.id]), nil, events)
+
+      assert deltas.edges == []
+    end
+
+    test "reports nothing when no effect touched an edge" do
+      task = row("first")
+
+      deltas = deltas(result([task]), MapSet.new([task.id]), nil, events(task.id, ["c"]))
+
+      assert deltas.edges == []
     end
   end
 

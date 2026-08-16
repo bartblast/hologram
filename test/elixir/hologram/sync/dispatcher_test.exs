@@ -12,6 +12,13 @@ defmodule Hologram.Sync.DispatcherTest do
 
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
 
+  # Wide enough that the sandbox allowance always lands before the first poll: a dispatcher that
+  # reads before being let in checks out its own connection, and a failed read takes the process
+  # down with the timer that would have proven it reschedules.
+  @poll_interval_ms 300
+
+  @poll_timeout_ms 2_000
+
   defp seed(tx, entity_id) do
     statement = """
     INSERT INTO "hologram_system"."outbox" ("op", "type", "entity_id", "tx", "model_hash")
@@ -119,8 +126,8 @@ defmodule Hologram.Sync.DispatcherTest do
     # Whether draining the mailbox happens before or after the window is read cannot be told
     # apart here: the sandbox runs the test inside one transaction, so the dispatcher's edge
     # never reaches the rows this test writes, and every round after the first reads nothing
-    # whichever way it drains. Commit 24's feature test, where transactions really commit while
-    # a dispatcher is working, is where the placement is proven.
+    # whichever way it drains. The cluster scenario where transactions really commit while a
+    # dispatcher is working is where the placement is proven.
     test "keeps reading after a wake that arrives with nothing behind it" do
       seed(200, @entity_id)
 
@@ -164,9 +171,9 @@ defmodule Hologram.Sync.DispatcherTest do
     test "reads the log again after the poll interval, without being told to" do
       seed(200, @entity_id)
 
-      start_dispatcher!(cursor: 200, poll_interval_ms: 10)
+      start_dispatcher!(cursor: 200, poll_interval_ms: @poll_interval_ms)
 
-      assert_receive {:dispatched, [{200, _events}]}
+      assert_receive {:dispatched, [{200, _events}]}, @poll_timeout_ms
 
       stop_supervised!(Dispatcher)
     end
@@ -175,14 +182,14 @@ defmodule Hologram.Sync.DispatcherTest do
     # invisible from the outside - tracing what the dispatcher receives is what tells a timer
     # that rescheduled itself apart from one that fired once and stopped.
     test "keeps polling" do
-      dispatcher = start_dispatcher!(cursor: 200, poll_interval_ms: 50)
+      dispatcher = start_dispatcher!(cursor: 200, poll_interval_ms: @poll_interval_ms)
 
       :erlang.trace(dispatcher, true, [:receive])
 
       # The first poll is the one start_link armed - a second can only come from the first having
       # armed another.
-      assert_receive {:trace, ^dispatcher, :receive, :poll}, 500
-      assert_receive {:trace, ^dispatcher, :receive, :poll}, 500
+      assert_receive {:trace, ^dispatcher, :receive, :poll}, @poll_timeout_ms
+      assert_receive {:trace, ^dispatcher, :receive, :poll}, @poll_timeout_ms
 
       stop_supervised!(Dispatcher)
     end

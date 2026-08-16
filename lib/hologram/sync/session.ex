@@ -119,9 +119,14 @@ defmodule Hologram.Sync.Session do
   defp send_deltas(state, window_id, deltas) do
     unsynced = left_the_pot(state, window_id, deltas.vanished)
 
-    news = %{appeared: deltas.appeared, patched: deltas.patched, unsynced: unsynced}
+    news = %{
+      appeared: deltas.appeared,
+      edges: deltas.edges,
+      patched: deltas.patched,
+      unsynced: unsynced
+    }
 
-    if news != %{appeared: [], patched: [], unsynced: []} do
+    if news != %{appeared: [], edges: [], patched: [], unsynced: []} do
       send(state.client, {:deltas, window_id, news})
     end
 

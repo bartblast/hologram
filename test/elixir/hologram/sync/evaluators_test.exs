@@ -70,15 +70,18 @@ defmodule Hologram.Sync.EvaluatorsTest do
       assert live() == []
     end
 
+    # The evaluator stops itself once its last subscriber goes, and the registry drops the entry
+    # on its own monitor - which fires independently of the evaluator's exit, so the answer is
+    # waited for rather than read the instant the process dies.
     test "leaves out a window once its last session goes away" do
       holder = spawn(fn -> Process.sleep(:infinity) end)
-      {:ok, evaluator, 0} = subscribe(@window_id, holder)
-      evaluator_ref = Process.monitor(evaluator)
+      {:ok, _evaluator, 0} = subscribe(@window_id, holder)
+
+      assert live() != []
 
       Process.exit(holder, :kill)
-      assert_receive {:DOWN, ^evaluator_ref, :process, ^evaluator, :normal}
 
-      assert live() == []
+      wait_until(fn -> live() == [] end)
     end
   end
 
