@@ -126,6 +126,18 @@ defmodule Hologram.Sync.CatchupTest do
       assert gap(nil) == {:full_resync, :cursor}
     end
 
+    # A place beyond what the log's columns hold used to reach the driver and raise there, on a
+    # connection that had already answered 200 - so the client got an opened-then-dead stream and
+    # came back with the same forged place. Seeded, because an empty log answers at the retention
+    # door before the read is ever reached.
+    test "sends everything again to a client whose place no row could carry" do
+      seed(200)
+
+      forged = Base.url_encode64("99999999999999999999999.0", padding: false)
+
+      assert gap(forged) == {:full_resync, :cursor}
+    end
+
     test "sends everything again when the log was pruned past the client" do
       seed(200)
 
