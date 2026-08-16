@@ -11,10 +11,6 @@ defmodule Hologram.Sync.FrameTest do
 
   @cursor "g8uxAAAAZQ"
 
-  defp put_entity(row) do
-    %{data: row, id: row.id, op: :put_entity, type: "Hologram.Test.Fixtures.Entity.Module2"}
-  end
-
   describe "deltas/2" do
     defp news(overrides) do
       Map.merge(%{appeared: [], edges: [], patched: [], unsynced: []}, overrides)
@@ -177,6 +173,31 @@ defmodule Hologram.Sync.FrameTest do
   describe "protocol_version/0" do
     test "returns the version this build speaks" do
       assert protocol_version() == 1
+    end
+  end
+
+  describe "put_entity/1" do
+    test "hands over the whole row, under the type the row itself names" do
+      row = Entity.new(Module2, a: true, c: "first")
+
+      assert put_entity(row) == %{
+               data: row,
+               id: row.id,
+               op: :put_entity,
+               type: "Hologram.Test.Fixtures.Entity.Module2"
+             }
+    end
+  end
+
+  describe "unsync_entity/2" do
+    test "names a row that left by its id, under the type given for it" do
+      id = Entity.generate_id()
+
+      assert unsync_entity(id, Module2) == %{
+               id: id,
+               op: :unsync_entity,
+               type: "Hologram.Test.Fixtures.Entity.Module2"
+             }
     end
   end
 end

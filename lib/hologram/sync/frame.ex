@@ -28,7 +28,7 @@ defmodule Hologram.Sync.Frame do
     Enum.concat([
       Enum.map(news.appeared, &put_entity/1),
       Enum.map(news.patched, fn {row, patch} -> patch_entity(row, patch) end),
-      Enum.map(news.unsynced, &unsync_entity(&1, window_type)),
+      Enum.map(news.unsynced, &unsync_entity(&1, entity_type)),
       Enum.map(news.edges, &relationship(&1, window_type))
     ])
   end
@@ -94,12 +94,28 @@ defmodule Hologram.Sync.Frame do
   @spec protocol_version() :: pos_integer
   def protocol_version, do: @protocol_version
 
-  defp patch_entity(row, patch) do
-    %{data: patch, id: row.id, op: :patch_entity, type: type_of(row)}
+  @doc """
+  Returns the delta handing a client a whole row, which is what a client that does not have it
+  needs.
+  """
+  @spec put_entity(struct) :: map
+  def put_entity(row) do
+    %{data: row, id: row.id, op: :put_entity, type: type_of(row)}
   end
 
-  defp put_entity(row) do
-    %{data: row, id: row.id, op: :put_entity, type: type_of(row)}
+  @doc """
+  Returns the delta telling a client a row is no longer its to hold.
+
+  Not the same as the row being gone: this says the client may no longer see it, which is why the
+  type comes from the caller - a row that left is no longer there to name its own.
+  """
+  @spec unsync_entity(String.t(), module) :: map
+  def unsync_entity(id, entity_type) do
+    %{id: id, op: :unsync_entity, type: Codec.encode_enum_value(entity_type)}
+  end
+
+  defp patch_entity(row, patch) do
+    %{data: patch, id: row.id, op: :patch_entity, type: type_of(row)}
   end
 
   defp relationship(edge, window_type) do
@@ -110,9 +126,5 @@ defmodule Hologram.Sync.Frame do
 
   defp type_of(row) do
     Codec.encode_enum_value(row.__struct__)
-  end
-
-  defp unsync_entity(id, window_type) do
-    %{id: id, op: :unsync_entity, type: window_type}
   end
 end
