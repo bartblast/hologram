@@ -6,6 +6,11 @@ defmodule Hologram.Sync.Session do
   #
   # What it keeps is membership, never rows: the rows live once per node in the result store,
   # and a hundred sessions reading one window read that one copy.
+  #
+  # A client is given every window this build downloads, not only the ones its page reads: a page
+  # it navigates to is then answered from what it already has, with no server in the way. The page
+  # decides ORDER - its own windows fill first, the rest follow - so what the client is looking at
+  # is ready first and the rest arrives while it reads.
 
   use GenServer, restart: :temporary
 
@@ -21,11 +26,11 @@ defmodule Hologram.Sync.Session do
   Starts a session for a client on the given `:page`, telling `:client` what changes for it.
 
   `:actor_user_id` is who the client is, or nil for an anonymous one - every row is checked
-  against it before being sent, so what the client named as its page decides only which windows
-  are kept, never what it may see of them.
+  against it before being sent, so what the client named as its page decides only the order the
+  windows fill in, never what it may see of them.
 
-  Windows a page reaches that nothing downloads are skipped rather than refused, which is how a
-  client naming a page this build does not have gets a session with nothing in it.
+  Windows that nothing downloads are skipped rather than refused, which is how a client naming a
+  page this build does not have still gets the rest of the build's windows.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -38,9 +43,11 @@ defmodule Hologram.Sync.Session do
   def init(opts) do
     state = %{
       actor_user_id: Keyword.get(opts, :actor_user_id),
+      announced: MapSet.new(),
       client: Keyword.fetch!(opts, :client),
       held: %{},
       page: Keyword.fetch!(opts, :page),
+      page_windows: MapSet.new(),
       pending: MapSet.new(),
       types: %{}
     }
@@ -50,16 +57,21 @@ defmodule Hologram.Sync.Session do
 
   @impl GenServer
   def handle_continue(:subscribe, state) do
-    subscribed =
-      state.page
-      |> PageWindows.lookup()
-      |> Enum.reduce(state, &subscribe_to_window/2)
+    page_window_ids = PageWindows.lookup(state.page)
+    background_window_ids = PageWindows.all() -- page_window_ids
+    window_ids = page_window_ids ++ background_window_ids
 
-    # A page reaching no window is complete the moment it starts: there is nothing to wait for,
-    # and a client left waiting for a marker that never comes would never read its own store.
-    if MapSet.size(subscribed.pending) == 0 do
-      send(subscribed.client, {:sync_synced})
-    end
+    # Every window counts as outstanding before any of them is taken up, so one that fills while
+    # the others are still being taken up cannot empty the set and say the client has everything.
+    seeded = %{
+      state
+      | page_windows: MapSet.new(page_window_ids),
+        pending: MapSet.new(window_ids)
+    }
+
+    # A client with nothing to wait for is told so at once: one left waiting for a marker that
+    # never comes would never read its own store.
+    subscribed = Enum.reduce(window_ids, announce(seeded), &subscribe_to_window/2)
 
     {:noreply, subscribed}
   end
@@ -98,14 +110,40 @@ defmodule Hologram.Sync.Session do
     end)
   end
 
-  defp mark_filled(state, window_id) do
-    pending = MapSet.delete(state.pending, window_id)
+  # Two scopes rather than one marker per window: what a client needs to know is whether it can
+  # answer a page from its own store, and window ids are the server's business - they never cross
+  # the wire. `:page` means the page the client is on is answerable, `:all` means every page is.
+  defp announce(state) do
+    state
+    |> announce_scope(:page)
+    |> announce_scope(:all)
+  end
 
-    if MapSet.size(pending) == 0 and MapSet.size(state.pending) > 0 do
-      send(state.client, {:sync_synced})
+  defp announce_scope(state, scope) do
+    filled? =
+      state
+      |> outstanding(scope)
+      |> Enum.empty?()
+
+    if filled? and not MapSet.member?(state.announced, scope) do
+      send(state.client, {:sync_synced, scope})
+
+      %{state | announced: MapSet.put(state.announced, scope)}
+    else
+      state
     end
+  end
 
-    %{state | pending: pending}
+  defp mark_filled(state, window_id) do
+    filled = %{state | pending: MapSet.delete(state.pending, window_id)}
+
+    announce(filled)
+  end
+
+  defp outstanding(state, :all), do: state.pending
+
+  defp outstanding(state, :page) do
+    MapSet.intersection(state.pending, state.page_windows)
   end
 
   defp remember(state, window_id, held, deltas) do
@@ -138,13 +176,14 @@ defmodule Hologram.Sync.Session do
 
   defp subscribe_to_window(window_id, state) do
     case Evaluators.subscribe(window_id, self()) do
+      # Nothing downloads it, so nothing will ever arrive for it - which is as filled as it will
+      # ever be, and waiting on it would leave the client waiting forever.
       :no_window ->
-        state
+        mark_filled(state, window_id)
 
       {:ok, _pid, version} ->
         state
         |> remember_type(window_id)
-        |> Map.update!(:pending, &MapSet.put(&1, window_id))
         |> first_round(window_id, version)
     end
   end

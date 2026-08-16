@@ -58,15 +58,19 @@ defmodule Hologram.Sync.Frame do
   end
 
   @doc """
-  Builds the SSE event-stream chunk saying the client now holds everything its page reads.
+  Builds the SSE event-stream chunk saying how much of what the client will hold has arrived.
 
-  Until it arrives the client answers from what the server rendered, because a store filled only
-  part way would answer a query with part of the truth. What follows it is news rather than
-  filling, so from here on the client can read its own store.
+  The scope says which queries it may now answer from its own store: `:page` covers the page it
+  is on, `:all` covers every page, so navigating needs no server. Until a scope arrives the client
+  answers from what the server rendered, because a store filled only part way would answer a query
+  with part of the truth.
+
+  Two scopes rather than one per window, because window ids are the server's business and never
+  cross the wire - and "can I answer this page myself?" is the whole of what a client asks.
   """
-  @spec encode_synced_envelope(integer) :: String.t()
-  def encode_synced_envelope(id) do
-    payload = %{protocol_version: @protocol_version}
+  @spec encode_synced_envelope(integer, :all | :page) :: String.t()
+  def encode_synced_envelope(id, scope) do
+    payload = %{protocol_version: @protocol_version, scope: scope}
 
     "event: synced\nid: #{id}\ndata: #{Encoder.encode_client_term!(payload)}\n\n"
   end

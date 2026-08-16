@@ -23,6 +23,7 @@ defmodule Hologram.Sync.SessionTest do
   setup :set_mox_global
 
   @board_window "w_board"
+  @other_page MyApp.SettingsPage
   @other_window "w_other"
   @page MyApp.BoardPage
 
@@ -109,7 +110,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced}
+      assert_receive {:sync_synced, :page}
       assert Evaluators.live() == [{@board_window, Query.normalize(Module2)}]
     end
 
@@ -119,7 +120,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced}
+      assert_receive {:sync_synced, :page}
 
       live_window_ids =
         Evaluators.live()
@@ -134,7 +135,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced}
+      assert_receive {:sync_synced, :page}
       assert Evaluators.live() == []
     end
 
@@ -144,7 +145,7 @@ defmodule Hologram.Sync.SessionTest do
 
       session = start_session!([])
 
-      assert_receive {:sync_synced}
+      assert_receive {:sync_synced, :page}
       assert Process.alive?(session)
       assert Evaluators.live() == [{@board_window, Query.normalize(Module2)}]
     end
@@ -154,13 +155,91 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@board_window])
 
       start_session!([])
-      assert_receive {:sync_synced}
+      assert_receive {:sync_synced, :page}
 
       other_client = spawn_link(fn -> Process.sleep(:infinity) end)
 
       start_session!(client: other_client)
 
       assert length(Evaluators.live()) == 1
+    end
+  end
+
+  describe "start_link/1 - completeness" do
+    test "takes up the windows of pages the client is not on" do
+      windows(%{@page => [@board_window], @other_page => [@other_window]})
+      hold_windows([@board_window, @other_window])
+
+      start_session!([])
+
+      assert_receive {:sync_synced, :all}
+
+      live_window_ids =
+        Evaluators.live()
+        |> Enum.map(&elem(&1, 0))
+        |> Enum.sort()
+
+      assert live_window_ids == [@board_window, @other_window]
+    end
+
+    test "says the client's page is answerable while the rest is still arriving" do
+      windows(%{@page => [@board_window], @other_page => [@other_window]})
+      hold_windows([@board_window, @other_window])
+
+      # The other page's window is put beyond the store's reach, so nothing will ever fill it -
+      # which is what leaves the rest of the build outstanding for as long as this test looks.
+      Evaluator.round(@other_window, [])
+      wait_until(fn -> ResultStore.versions(@other_window) == [1] end)
+      ResultStore.forget(@other_window)
+
+      start_session!([])
+
+      assert_receive {:sync_synced, :page}
+      refute_receive {:sync_synced, :all}, 100
+    end
+
+    test "says every page is answerable once the last window has filled" do
+      windows(%{@page => [@board_window], @other_page => [@other_window]})
+      hold_windows([@board_window, @other_window])
+
+      start_session!([])
+
+      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :all}
+    end
+
+    test "says a page reading nothing is answerable at once, and waits for the rest" do
+      windows(%{@other_page => [@other_window]})
+      hold_windows([@other_window])
+
+      start_session!([])
+
+      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :all}
+    end
+
+    test "says both at once for a build downloading nothing" do
+      windows(%{})
+
+      start_session!([])
+
+      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :all}
+    end
+
+    test "says each scope once, however many windows fill after it" do
+      windows(%{@page => [@board_window], @other_page => [@other_window]})
+      hold_windows([@board_window, @other_window])
+
+      start_session!([])
+
+      assert_receive {:sync_synced, :page}
+      assert_receive {:sync_synced, :all}
+
+      Evaluator.round(@board_window, [])
+      Evaluator.round(@other_window, [])
+
+      refute_receive {:sync_synced, _scope}, 100
     end
   end
 
@@ -190,7 +269,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced}
+      assert_receive {:sync_synced, :page}
       refute_receive {:sync_deltas, _deltas}, 100
     end
 
@@ -245,7 +324,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([])
 
       assert_receive {:sync_deltas, _board_deltas}
-      assert_receive {:sync_synced}
+      assert_receive {:sync_synced, :page}
     end
 
     test "says it is done immediately for a page reaching no window" do
@@ -253,7 +332,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced}
+      assert_receive {:sync_synced, :page}
     end
 
     test "reads the round a running evaluator already has rather than asking for another" do
@@ -298,7 +377,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@board_window])
 
       start_session!([])
-      assert_receive {:sync_synced}
+      assert_receive {:sync_synced, :page}
 
       task = create("appeared later")
       Evaluator.round(@board_window, [])

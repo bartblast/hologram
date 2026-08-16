@@ -158,12 +158,19 @@ defmodule Hologram.Sync.FrameTest do
     end
   end
 
-  describe "encode_synced_envelope/1" do
+  describe "encode_synced_envelope/2" do
     test "wraps the completeness marker in a synced SSE event envelope" do
-      payload = %{protocol_version: 1}
+      payload = %{protocol_version: 1, scope: :page}
       encoded = Encoder.encode_client_term!(payload)
 
-      assert encode_synced_envelope(42) == "event: synced\nid: 42\ndata: #{encoded}\n\n"
+      assert encode_synced_envelope(42, :page) == "event: synced\nid: 42\ndata: #{encoded}\n\n"
+    end
+
+    test "says which queries the client may now answer itself" do
+      payload = %{protocol_version: 1, scope: :all}
+      encoded = Encoder.encode_client_term!(payload)
+
+      assert encode_synced_envelope(42, :all) == "event: synced\nid: 42\ndata: #{encoded}\n\n"
     end
   end
 

@@ -304,14 +304,23 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
-  describe "process_message/4 on {:sync_synced}" do
+  describe "process_message/4 on {:sync_synced, scope}" do
     test "pushes a synced SSE event" do
       conn = prepared_test_conn()
-      send(self(), {:sync_synced})
+      send(self(), {:sync_synced, :page})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
       assert updated_conn.resp_body =~ "event: synced\nid: "
+    end
+
+    test "carries the scope the client may now answer from its own store" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_synced, :all})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ ~s[Type.atom("all")]
     end
   end
 
