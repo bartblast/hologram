@@ -10,12 +10,12 @@ defmodule Hologram.Sync.PageWindowsTest do
   alias Hologram.Reflection
   alias Hologram.Sync.PageWindows
 
-  use_module_stub :page_windows
+  use_module_stub :sync_page_windows
 
   setup :set_mox_global
 
   defp dump(items) do
-    dump_path = PageWindowsStub.dump_path()
+    dump_path = SyncPageWindowsStub.dump_path()
 
     File.rm(dump_path)
 
@@ -31,7 +31,7 @@ defmodule Hologram.Sync.PageWindowsTest do
   end
 
   setup do
-    setup_page_windows(PageWindowsStub, false)
+    setup_sync_page_windows(SyncPageWindowsStub, false)
 
     dump(%{
       MyApp.BoardPage => ["w_7f3a", "w_c412"],
@@ -46,7 +46,7 @@ defmodule Hologram.Sync.PageWindowsTest do
     test "reads the windows the build worked out" do
       assert init(nil) == {:ok, nil}
 
-      assert ETS.get_all(PageWindowsStub.ets_table_name()) == %{
+      assert ETS.get_all(SyncPageWindowsStub.ets_table_name()) == %{
                MyApp.BoardPage => ["w_7f3a", "w_c412"],
                MyApp.QuietPage => [],
                MyApp.RemovedPage => ["w_gone"]

@@ -9,7 +9,7 @@ defmodule Hologram.ApplicationTest do
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
-  use_module_stub :page_windows
+  use_module_stub :sync_page_windows
   use_module_stub :query_cache
 
   setup :set_mox_global
@@ -24,7 +24,7 @@ defmodule Hologram.ApplicationTest do
 
     setup_page_module_resolver(PageModuleResolverStub, false)
 
-    setup_page_windows(PageWindowsStub, false)
+    setup_sync_page_windows(SyncPageWindowsStub, false)
 
     setup_query_cache(QueryCacheStub, false)
 

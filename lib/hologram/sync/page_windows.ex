@@ -89,7 +89,7 @@ defmodule Hologram.Sync.PageWindows do
   end
 
   defp impl do
-    Application.get_env(:hologram, :page_windows_impl, __MODULE__)
+    Application.get_env(:hologram, :sync_page_windows_impl, __MODULE__)
   end
 
   defp plt(table_name) do
