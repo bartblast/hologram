@@ -171,8 +171,8 @@ defmodule Hologram.DB.Outbox do
   which entity types and attributes a transaction touched, and a reader wanting values reads the
   rows themselves.
 
-  An entity type this node has never compiled stays a label rather than becoming a module, and
-  data keys stay strings, because a peer running a newer model can write names this node has
+  An op or entity type this node does not know stays the label it was written with, and data keys
+  stay strings, because a peer running a newer build can write names this node has
   never heard of - names that match nothing here, which is exactly what they should do.
   """
   @spec read_window(non_neg_integer, non_neg_integer) :: list({non_neg_integer, list(map)})
@@ -226,13 +226,23 @@ defmodule Hologram.DB.Outbox do
     ArgumentError -> label
   end
 
+  # An op this build does not know stays the label it was written with, the same as an entity type
+  # it has never compiled. A newer peer writing a seventh op is a thing a rolling deploy produces,
+  # and raising here would take the dispatcher down mid-window - it restarts with no cursor and
+  # resumes at the log's edge, so everything between would be skipped rather than retried.
+  defp operation(label) do
+    String.to_existing_atom(label)
+  rescue
+    ArgumentError -> label
+  end
+
   defp event([seq, op, type, entity_id, data, tx, model_hash, actor_id]) do
     %{
       actor_id: Codec.decode(actor_id, :uuid),
       data: data,
       entity_id: Codec.decode(entity_id, :uuid),
       model_hash: model_hash,
-      op: String.to_existing_atom(op),
+      op: operation(op),
       seq: seq,
       tx: tx,
       type: entity_type(type)
