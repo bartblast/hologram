@@ -70,6 +70,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module84
   alias Hologram.Test.Fixtures.Template.Renderer.Module86
   alias Hologram.Test.Fixtures.Template.Renderer.Module87
+  alias Hologram.Test.Fixtures.Template.Renderer.Module88
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
   @csrf_token "test-csrf-token"
@@ -2464,6 +2465,180 @@ defmodule Hologram.Template.RendererTest do
       dom = {:element, "div", [{"$key", [text: "a1b2c3:4"]}], []}
 
       assert print_dom(dom) == "<div></div>"
+    end
+  end
+
+  describe "render_tree/3" do
+    test "text node is held unescaped" do
+      node = {:text, "abc < xyz"}
+
+      assert render_tree(node, @env, @server) == {{:text, "abc < xyz"}, %{}, @server}
+    end
+
+    test "expression node evaluates to unescaped text" do
+      # {"abc < xyz"}
+      node = {:expression, {"abc < xyz"}}
+
+      assert render_tree(node, @env, @server) == {{:text, "abc < xyz"}, %{}, @server}
+    end
+
+    test "expression node inside a script element evaluates to entity-encoded text" do
+      # <script>{"abc < xyz"}</script>
+      node = {:element, "script", [], [expression: {"abc < xyz"}]}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "script", [], [{:text, "abc &lt; xyz"}]}, %{}, @server}
+    end
+
+    test "doctype node" do
+      node = {:doctype, "html"}
+
+      assert render_tree(node, @env, @server) == {{:doctype, "html"}, %{}, @server}
+    end
+
+    test "public comment node" do
+      # <!--abc<div></div>-->
+      node = {:public_comment, [{:text, "abc"}, {:element, "div", [], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {{:public_comment, [{:text, "abc"}, {:element, "div", [], []}]}, %{}, @server}
+    end
+
+    test "element node, attribute value parts collapse to a single unescaped string" do
+      # <div attr="ccc{987} < eee"></div>
+      node =
+        {:element, "div", [{"attr", [text: "ccc", expression: {987}, text: " < eee"]}], []}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "div", [{"attr", [text: "ccc987 < eee"]}], []}, %{}, @server}
+    end
+
+    test "element node, attribute with an empty value list stays a boolean attribute" do
+      # <input checked />
+      node = {:element, "input", [{"checked", []}], []}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "input", [{"checked", []}], []}, %{}, @server}
+    end
+
+    test "element node, attribute with a nil expression value is omitted" do
+      # <div class={nil}></div>
+      node = {:element, "div", [{"class", [expression: {nil}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "element node, attribute with a false expression value is omitted" do
+      # <div hidden={false}></div>
+      node = {:element, "div", [{"hidden", [expression: {false}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "element node, $key attribute is kept" do
+      node = {:element, "div", [{"$key", [text: "a1b2c3:4"]}], []}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "div", [{"$key", [text: "a1b2c3:4"]}], []}, %{}, @server}
+    end
+
+    test "element node, event attribute is dropped" do
+      # <button $click="my_action">abc</button>
+      node = {:element, "button", [{"$click", [text: "my_action"]}], [{:text, "abc"}]}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "button", [], [{:text, "abc"}]}, %{}, @server}
+    end
+
+    test "element node, void element keeps its children in the tree" do
+      node = {:element, "br", [], [{:text, "abc"}]}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "br", [], [{:text, "abc"}]}, %{}, @server}
+    end
+
+    test "window node renders to nil" do
+      node = {:element, "window", [], []}
+
+      assert render_tree(node, @env, @server) == {nil, %{}, @server}
+    end
+
+    test "document node renders to nil" do
+      node = {:element, "document", [], []}
+
+      assert render_tree(node, @env, @server) == {nil, %{}, @server}
+    end
+
+    test "node list, nil nodes are filtered out" do
+      # {%if false}abc{/if}xyz
+      nodes = [nil, {:text, "xyz"}]
+
+      assert render_tree(nodes, @env, @server) == {[{:text, "xyz"}], %{}, @server}
+    end
+
+    test "node list, adjacent text and expression nodes merge into one text node" do
+      # aaa{123}zzz
+      nodes = [{:text, "aaa"}, {:expression, {123}}, {:text, "zzz"}]
+
+      assert render_tree(nodes, @env, @server) == {[{:text, "aaa123zzz"}], %{}, @server}
+    end
+
+    test "node list, text nodes separated by an element do not merge" do
+      # aaa<br />zzz
+      nodes = [{:text, "aaa"}, {:element, "br", [], []}, {:text, "zzz"}]
+
+      assert render_tree(nodes, @env, @server) ==
+               {[{:text, "aaa"}, {:element, "br", [], []}, {:text, "zzz"}], %{}, @server}
+    end
+
+    test "node list, text merges across a component boundary" do
+      # aaa<Module88 />
+      nodes = [{:text, "aaa"}, {:component, Module88, [], []}]
+
+      assert render_tree(nodes, @env, @server) == {[{:text, "aaabbb"}], %{}, @server}
+    end
+
+    test "component node, rendered nodes are spliced into the enclosing list" do
+      # aaa<Module1 />zzz
+      nodes = [{:text, "aaa"}, {:component, Module1, [], []}, {:text, "zzz"}]
+
+      assert render_tree(nodes, @env, @server) ==
+               {[
+                  {:text, "aaa"},
+                  {:element, "div", [{"$key", [text: "kqd760:0"]}], [{:text, "abc"}]},
+                  {:text, "zzz"}
+                ], %{}, @server}
+    end
+
+    test "stateful component node, tree plus component registry plus mutated server struct" do
+      # <Module3 cid="component_3" />
+      node = {:component, Module3, [{"cid", [text: "component_3"]}], []}
+
+      assert render_tree(node, @env, @server) ==
+               {[
+                  {:element, "div", [{"$key", [text: "w53jft:0"]}],
+                   [{:text, "state_a = 1, state_b = 2"}]}
+                ],
+                %{
+                  "component_3" => %{
+                    module: Module3,
+                    struct: %Component{
+                      state: %{a: 1, b: 2}
+                    }
+                  }
+                },
+                %Server{
+                  cookies: %{
+                    "initial_cookie_key" => :initial_cookie_value,
+                    "cookie_key_3" => :cookie_value_3
+                  },
+                  __meta__: %Metadata{
+                    cookie_ops: %{
+                      "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                      "cookie_key_3" => %Cookie{value: :cookie_value_3}
+                    }
+                  }
+                }}
     end
   end
 end

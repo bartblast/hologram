@@ -14,6 +14,23 @@ defmodule Hologram.Template.Renderer do
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
 
+  @typedoc """
+  A node of an evaluated tree: only what a document can hold - elements, text, comments, and the
+  doctype. Text and attribute values are unescaped, and each attribute value is a single string
+  (an empty value list is a boolean attribute).
+  """
+  @type tree_node ::
+          {:doctype, String.t()}
+          | {:element, String.t(), [{String.t(), [] | [text: String.t()]}], [tree_node]}
+          | {:public_comment, [tree_node]}
+          | {:text, String.t()}
+
+  @typedoc """
+  A rendered template as data: expressions evaluated, components flattened into the nodes their
+  templates render, and slots expanded. `nil` is the tree of a tag that renders no node at all.
+  """
+  @type tree :: tree_node | [tree_node] | nil
+
   defmodule Env do
     @moduledoc false
 
@@ -74,9 +91,9 @@ defmodule Hologram.Template.Renderer do
       iex> print_dom(dom)
       ~s(<div class="big">Hologram</div>)
   """
-  @spec print_dom(DOM.t()) :: String.t()
-  def print_dom(dom) do
-    print_node(dom, nil)
+  @spec print_dom(tree) :: String.t()
+  def print_dom(tree) do
+    print_node(tree, nil)
   end
 
   @doc """
@@ -177,6 +194,148 @@ defmodule Hologram.Template.Renderer do
       |> interpolate_page_params_js(params)
 
     {html_with_interpolated_js, component_registry_with_page_struct, final_server_struct}
+  end
+
+  @doc """
+  Renders the given DOM into an evaluated tree: expressions evaluated, components flattened into
+  the nodes their templates render, slots expanded, attribute values collapsed to single strings.
+  Text and attribute values are held unescaped - escaping is a projection concern, and belongs to
+  whatever prints the tree.
+
+  WARNING: the evaluated tree is shipped to the client on navigation and converted to vnodes by
+  the client renderer, which then must produce exactly what the client's own render of the same
+  page produces - otherwise hydration rebuilds nodes instead of adopting them. Every
+  normalization step here must therefore match the client renderer (renderer.mjs), clause by
+  clause.
+
+  ## Examples
+
+      iex> dom = {:element, "div", [{"class", [text: "big"]}], [{:text, "Hologram"}]}
+      iex> render_tree(dom, %Env{}, %Server{})
+      {{:element, "div", [{"class", [text: "big"]}], [{:text, "Hologram"}]}, %{}, %Server{}}
+  """
+  @spec render_tree(DOM.t(), Env.t(), Server.t()) ::
+          {tree, %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
+  def render_tree(dom, env, server_struct)
+
+  def render_tree({:component, module, props_dom, children_dom}, env, server_struct) do
+    expanded_children_dom = expand_slots(children_dom, env.slots)
+
+    props =
+      props_dom
+      |> cast_props(module)
+      |> inject_props_from_context(module, env.context)
+      |> inject_default_prop_values(module)
+
+    if has_cid_prop?(props) do
+      render_stateful_component(module, props, expanded_children_dom, env.context, server_struct)
+    else
+      render_template(module, props, expanded_children_dom, env.context, server_struct)
+    end
+  end
+
+  # A dynamic tag decides between the element and the component branch at render time, then behaves
+  # exactly like the equivalent static tag would.
+  def render_tree({:dynamic_tag, {tag_name}, attrs_dom, children_dom}, env, server_struct)
+      when is_binary(tag_name) do
+    render_tree({:element, tag_name, attrs_dom, children_dom}, env, server_struct)
+  end
+
+  def render_tree({:dynamic_tag, {module}, props_dom, children_dom}, env, server_struct)
+      when is_atom(module) do
+    if Reflection.component?(module) do
+      render_tree({:component, module, props_dom, children_dom}, env, server_struct)
+    else
+      raise ArgumentError,
+        message: invalid_dynamic_tag_value_message(module) <> ", which is not a component module"
+    end
+  end
+
+  def render_tree({:dynamic_tag, {value}, _attrs_dom, _children_dom}, _env, _server_struct) do
+    raise ArgumentError, message: invalid_dynamic_tag_value_message(value)
+  end
+
+  # Kept in the tree for the HTML projection. The client renderer renders a doctype to nothing,
+  # since the document it patches already has one.
+  def render_tree({:doctype, content}, _env, server_struct) do
+    {{:doctype, content}, %{}, server_struct}
+  end
+
+  def render_tree({:element, "slot", _attrs_dom, []}, %Env{} = env, server_struct) do
+    render_tree(env.slots[:default], %Env{env | slots: []}, server_struct)
+  end
+
+  # The <window> and <document> tags bind events to the window or document on the client. They have
+  # no server rendering - they produce no markup and no hydration node.
+  def render_tree({:element, tag_name, _attrs_dom, []}, _env, server_struct)
+      when tag_name in ["window", "document"] do
+    {nil, %{}, server_struct}
+  end
+
+  # Children of a void element are rendered even though no projection shows them, so that whatever
+  # side effects the render has (component inits, server struct mutations) do not depend on the
+  # tag they happen to sit in.
+  def render_tree({:element, tag_name, attrs_dom, children_dom}, %Env{} = env, server_struct) do
+    attributes = render_tree_attributes(attrs_dom)
+
+    children_env = %Env{env | node_type: :element, tag_name: tag_name}
+
+    {children, component_registry, mutated_server_struct} =
+      render_tree(children_dom, children_env, server_struct)
+
+    {{:element, tag_name, attributes, children}, component_registry, mutated_server_struct}
+  end
+
+  # An expression evaluated inside a script element is entity-encoded at evaluation, unlike every
+  # other text in the tree. This is deliberate: in the HTML projection an interpolated value could
+  # otherwise break out of the script with a "</script" of its own, so encoding is the projection's
+  # safety and it must happen before the value merges with the script's literal code, which is the
+  # last moment the two are distinguishable.
+  #
+  # WARNING: the client renderer diverges here on purpose (renderer.mjs expression case): it
+  # renders expressions unencoded, because it sets text through the DOM where no markup context
+  # exists to break out of. Do not "fix" either side alone.
+  def render_tree({:expression, {value}}, %Env{tag_name: "script"}, server_struct) do
+    {{:text, stringify_for_interpolation(value)}, %{}, server_struct}
+  end
+
+  def render_tree({:expression, {value}}, _env, server_struct) do
+    {{:text, to_string(value)}, %{}, server_struct}
+  end
+
+  def render_tree({:public_comment, children_dom}, %Env{} = env, server_struct) do
+    children_env = %Env{env | node_type: :public_comment}
+
+    {children, component_registry, mutated_server_struct} =
+      render_tree(children_dom, children_env, server_struct)
+
+    {{:public_comment, children}, component_registry, mutated_server_struct}
+  end
+
+  def render_tree({:text, text}, _env, server_struct) do
+    {{:text, text}, %{}, server_struct}
+  end
+
+  # WARNING: must match the client renderer's #renderNodes step for step: filter out nil input
+  # nodes, render each node, splice one level of node lists (a component renders to a list), then
+  # merge adjacent text nodes. List.wrap/1 also drops nil render results (<window>, <document>),
+  # which the client's merge step does.
+  def render_tree(nodes, env, server_struct) when is_list(nodes) do
+    # There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
+    {rendered_nodes, component_registry, mutated_server_struct} =
+      nodes
+      |> Enum.filter(& &1)
+      |> Enum.reduce({[], %{}, server_struct}, fn node,
+                                                  {acc_nodes, acc_component_registry,
+                                                   acc_server_struct} ->
+        {tree, component_registry, mutated_server_struct} =
+          render_tree(node, env, acc_server_struct)
+
+        {acc_nodes ++ List.wrap(tree), Map.merge(acc_component_registry, component_registry),
+         mutated_server_struct}
+      end)
+
+    {merge_neighbouring_text_nodes(rendered_nodes), component_registry, mutated_server_struct}
   end
 
   @doc """
@@ -627,138 +786,6 @@ defmodule Hologram.Template.Renderer do
     vars
     |> module.template().()
     |> render_tree(%Env{context: context, slots: [default: children_dom]}, server_struct)
-  end
-
-  # Renders the given DOM into an evaluated tree: expressions evaluated, components flattened into
-  # the nodes their templates render, slots expanded, attribute values collapsed to single strings.
-  # Text and attribute values are held unescaped - escaping is a projection concern, done by
-  # print_node/2 for HTML.
-  #
-  # WARNING: the evaluated tree is shipped to the client on navigation and converted to vnodes by
-  # the client renderer, which then must produce exactly what the client's own render of the same
-  # page produces - otherwise hydration rebuilds nodes instead of adopting them. Every
-  # normalization step here must therefore match the client renderer (renderer.mjs), clause by
-  # clause.
-  defp render_tree(dom, env, server_struct)
-
-  defp render_tree({:component, module, props_dom, children_dom}, env, server_struct) do
-    expanded_children_dom = expand_slots(children_dom, env.slots)
-
-    props =
-      props_dom
-      |> cast_props(module)
-      |> inject_props_from_context(module, env.context)
-      |> inject_default_prop_values(module)
-
-    if has_cid_prop?(props) do
-      render_stateful_component(module, props, expanded_children_dom, env.context, server_struct)
-    else
-      render_template(module, props, expanded_children_dom, env.context, server_struct)
-    end
-  end
-
-  # A dynamic tag decides between the element and the component branch at render time, then behaves
-  # exactly like the equivalent static tag would.
-  defp render_tree({:dynamic_tag, {tag_name}, attrs_dom, children_dom}, env, server_struct)
-       when is_binary(tag_name) do
-    render_tree({:element, tag_name, attrs_dom, children_dom}, env, server_struct)
-  end
-
-  defp render_tree({:dynamic_tag, {module}, props_dom, children_dom}, env, server_struct)
-       when is_atom(module) do
-    if Reflection.component?(module) do
-      render_tree({:component, module, props_dom, children_dom}, env, server_struct)
-    else
-      raise ArgumentError,
-        message: invalid_dynamic_tag_value_message(module) <> ", which is not a component module"
-    end
-  end
-
-  defp render_tree({:dynamic_tag, {value}, _attrs_dom, _children_dom}, _env, _server_struct) do
-    raise ArgumentError, message: invalid_dynamic_tag_value_message(value)
-  end
-
-  # Kept in the tree for the HTML projection. The client renderer renders a doctype to nothing,
-  # since the document it patches already has one.
-  defp render_tree({:doctype, content}, _env, server_struct) do
-    {{:doctype, content}, %{}, server_struct}
-  end
-
-  defp render_tree({:element, "slot", _attrs_dom, []}, %Env{} = env, server_struct) do
-    render_tree(env.slots[:default], %Env{env | slots: []}, server_struct)
-  end
-
-  # The <window> and <document> tags bind events to the window or document on the client. They have
-  # no server rendering - they produce no markup and no hydration node.
-  defp render_tree({:element, tag_name, _attrs_dom, []}, _env, server_struct)
-       when tag_name in ["window", "document"] do
-    {nil, %{}, server_struct}
-  end
-
-  # Children of a void element are rendered even though no projection shows them, so that whatever
-  # side effects the render has (component inits, server struct mutations) do not depend on the
-  # tag they happen to sit in.
-  defp render_tree({:element, tag_name, attrs_dom, children_dom}, %Env{} = env, server_struct) do
-    attributes = render_tree_attributes(attrs_dom)
-
-    children_env = %Env{env | node_type: :element, tag_name: tag_name}
-
-    {children, component_registry, mutated_server_struct} =
-      render_tree(children_dom, children_env, server_struct)
-
-    {{:element, tag_name, attributes, children}, component_registry, mutated_server_struct}
-  end
-
-  # An expression evaluated inside a script element is entity-encoded at evaluation, unlike every
-  # other text in the tree. This is deliberate: in the HTML projection an interpolated value could
-  # otherwise break out of the script with a "</script" of its own, so encoding is the projection's
-  # safety and it must happen before the value merges with the script's literal code, which is the
-  # last moment the two are distinguishable.
-  #
-  # WARNING: the client renderer diverges here on purpose (renderer.mjs expression case): it
-  # renders expressions unencoded, because it sets text through the DOM where no markup context
-  # exists to break out of. Do not "fix" either side alone.
-  defp render_tree({:expression, {value}}, %Env{tag_name: "script"}, server_struct) do
-    {{:text, stringify_for_interpolation(value)}, %{}, server_struct}
-  end
-
-  defp render_tree({:expression, {value}}, _env, server_struct) do
-    {{:text, to_string(value)}, %{}, server_struct}
-  end
-
-  defp render_tree({:public_comment, children_dom}, %Env{} = env, server_struct) do
-    children_env = %Env{env | node_type: :public_comment}
-
-    {children, component_registry, mutated_server_struct} =
-      render_tree(children_dom, children_env, server_struct)
-
-    {{:public_comment, children}, component_registry, mutated_server_struct}
-  end
-
-  defp render_tree({:text, text}, _env, server_struct) do
-    {{:text, text}, %{}, server_struct}
-  end
-
-  # WARNING: must match the client renderer's #renderNodes step for step: filter out nil input
-  # nodes, render each node, splice one level of node lists (a component renders to a list), then
-  # merge adjacent text nodes. List.wrap/1 also drops nil render results (<window>, <document>),
-  # which the client's merge step does.
-  defp render_tree(nodes, env, server_struct) when is_list(nodes) do
-    # There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
-    {rendered_nodes, component_registry, mutated_server_struct} =
-      nodes
-      |> Enum.filter(& &1)
-      |> Enum.reduce({[], %{}, server_struct}, fn node,
-                                                  {acc_nodes, acc_component_registry,
-                                                   acc_server_struct} ->
-        {tree, component_registry, mutated_server_struct} =
-          render_tree(node, env, acc_server_struct)
-
-        {acc_nodes ++ List.wrap(tree), Map.merge(acc_component_registry, component_registry),
-         mutated_server_struct}
-      end)
-
-    {merge_neighbouring_text_nodes(rendered_nodes), component_registry, mutated_server_struct}
   end
 
   # WARNING: must match the client renderer's #renderAttribute normalization: an empty value list
