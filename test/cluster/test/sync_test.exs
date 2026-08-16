@@ -12,6 +12,10 @@ defmodule HologramClusterTests.SyncTest do
 
   @page "HologramClusterTests.SyncPage"
 
+  # Long enough for a second round to have arrived if the peers were duplicating work: a dispatcher
+  # polls on a 5s fallback but wakes on NOTIFY, so a repeat would land in milliseconds.
+  @settle_ms 500
+
   setup do
     table = Mapper.table_name(Item)
 
@@ -32,7 +36,7 @@ defmodule HologramClusterTests.SyncTest do
     base_url = url(peer)
     client = SyncClient.connect(base_url, cookie_path: "/sync", page: @page)
 
-    on_exit(fn -> :httpc.cancel_request(client.request_id) end)
+    on_exit(fn -> SyncClient.close(client) end)
 
     client
   end
@@ -62,6 +66,31 @@ defmodule HologramClusterTests.SyncTest do
   end
 
   defp url(peer), do: "http://127.0.0.1:#{peer.port}"
+
+  describe "two dispatchers, one log" do
+    # Each peer reads the shared log on its own cursor, with nothing coordinated between them.
+    # That is what makes both halves of this worth asserting: nothing is lost because the other
+    # node "already read it", and nothing is doubled because both read the same rows.
+    test "tells each client about the write exactly once" do
+      [peer_a, peer_b] = start_peers(2)
+
+      client_a = drain_initial_sync(connect(peer_a))
+      client_b = drain_initial_sync(connect(peer_b))
+
+      item_id = create_item(peer_a, "counted-once", "Counted once")
+
+      assert {:ok, frame_a, once_told_a} = SyncClient.next_frame(client_a, "sync_deltas")
+      assert frame_a["data"] =~ ~s["id":"#{item_id}"]
+
+      assert {:ok, frame_b, once_told_b} = SyncClient.next_frame(client_b, "sync_deltas")
+      assert frame_b["data"] =~ ~s["id":"#{item_id}"]
+
+      # A settle window rather than an instant check: a duplicate would arrive late, not with the
+      # first, so asking again after the round has had time to repeat is the only way to see it.
+      assert {:timeout, _a} = SyncClient.next_frame(once_told_a, "sync_deltas", @settle_ms)
+      assert {:timeout, _b} = SyncClient.next_frame(once_told_b, "sync_deltas", @settle_ms)
+    end
+  end
 
   describe "a write on one peer reaches a client on another" do
     # The claim only a cluster can make (rulings 2 and 3): nothing about sync is coordinated

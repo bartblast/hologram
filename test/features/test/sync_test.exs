@@ -57,7 +57,7 @@ defmodule HologramFeatureTests.SyncTest do
 
     client = SyncClient.connect(@base_url, opts)
 
-    on_exit(fn -> :httpc.cancel_request(client.request_id) end)
+    on_exit(fn -> SyncClient.close(client) end)
 
     client
   end
@@ -186,7 +186,7 @@ defmodule HologramFeatureTests.SyncTest do
     cursor = cursor_of(first_data)
     assert is_binary(cursor)
 
-    :ok = :httpc.cancel_request(departing_client.request_id)
+    :ok = SyncClient.close(departing_client)
 
     Document
     |> Entity.new(public: true, title: "landed_while_away")
