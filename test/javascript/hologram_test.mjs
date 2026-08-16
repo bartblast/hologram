@@ -1189,6 +1189,7 @@ describe("Hologram", () => {
 
       afterEach(() => {
         delete window.requestAnimationFrame;
+        delete globalThis.Hologram.pageScriptLoaded;
         Hologram.virtualDocument = null;
 
         patchStub?.restore();
@@ -1242,6 +1243,7 @@ describe("Hologram", () => {
 
       afterEach(() => {
         delete window.requestAnimationFrame;
+        delete globalThis.Hologram.pageScriptLoaded;
         Hologram.virtualDocument = null;
         removeBundleScripts();
       });
