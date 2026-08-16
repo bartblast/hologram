@@ -252,12 +252,21 @@ defmodule Hologram.Realtime.Handshake do
   # for it is answered now.
   defp make_redeemable(
          state,
-         {handshake_id, validated_bindings, instance_id, session_id, user_id, _expires_at} =
+         {handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at} =
            handshake
        ) do
-    :ets.insert(@table_name, handshake)
+    # An arriving handshake can already be expired: a peer answers a sync request out of
+    # its own table, which still holds whatever its last sweep has not reached. Expiry is
+    # what redeeming is gated on, and a waiter is a redeem that arrived early, so an
+    # expired handshake is made redeemable by neither route. Waking a waiter for one
+    # would hand back an :ok that redeem/2 itself would have refused.
+    if expires_at > System.system_time(:millisecond) do
+      :ets.insert(@table_name, handshake)
 
-    notify_waiters(state, handshake_id, validated_bindings, {instance_id, session_id, user_id})
+      notify_waiters(state, handshake_id, validated_bindings, {instance_id, session_id, user_id})
+    else
+      state
+    end
   end
 
   defp notify_waiters(state, handshake_id, validated_bindings, identity) do

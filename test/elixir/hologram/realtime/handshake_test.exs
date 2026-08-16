@@ -21,11 +21,13 @@ defmodule Hologram.Realtime.HandshakeTest do
 
   describe "insert/4" do
     test "stashes the handshake entry in ETS with the identity tuple flattened" do
+      future = System.system_time(:millisecond) + 60_000
+
       insert(
         "test-handshake-id",
         [{{:room_a, "page"}, "test-user-id"}],
         {"test-instance-id", "test-session-id", "test-user-id"},
-        1_700_000_000_000
+        future
       )
 
       assert :ets.lookup(ets_table_name(), "test-handshake-id") == [
@@ -35,7 +37,7 @@ defmodule Hologram.Realtime.HandshakeTest do
                  "test-instance-id",
                  "test-session-id",
                  "test-user-id",
-                 1_700_000_000_000
+                 future
                }
              ]
     end
@@ -43,11 +45,13 @@ defmodule Hologram.Realtime.HandshakeTest do
     test "broadcasts the insert on the gossip topic with the flattened wire shape" do
       :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
 
+      future = System.system_time(:millisecond) + 60_000
+
       insert(
         "test-handshake-id",
         [{{:room_a, "page"}, "test-user-id"}],
         {"test-instance-id", "test-session-id", "test-user-id"},
-        1_700_000_000_000
+        future
       )
 
       assert_receive {
@@ -57,7 +61,7 @@ defmodule Hologram.Realtime.HandshakeTest do
         "test-instance-id",
         "test-session-id",
         "test-user-id",
-        1_700_000_000_000
+        ^future
       }
     end
   end
@@ -311,6 +315,68 @@ defmodule Hologram.Realtime.HandshakeTest do
                {"peer-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
                 ^future}
              ] = :ets.lookup(ets_table_name(), "peer-handshake-id")
+    end
+  end
+
+  describe "handle {:sync_reply, ...}" do
+    test "merges a peer's handshakes into ETS" do
+      future = System.system_time(:millisecond) + 60_000
+
+      send(
+        Process.whereis(Handshake),
+        {:sync_reply,
+         [
+           {"synced-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
+            future}
+         ]}
+      )
+
+      :ok = sweep_expired()
+
+      assert [
+               {"synced-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
+                ^future}
+             ] = :ets.lookup(ets_table_name(), "synced-handshake-id")
+    end
+
+    # A peer answers out of its own table, which still holds whatever its last sweep has
+    # not reached, so what arrives can already be past its expiry.
+    test "ignores a handshake that has already expired" do
+      past = System.system_time(:millisecond) - 1
+
+      send(
+        Process.whereis(Handshake),
+        {:sync_reply,
+         [
+           {"expired-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
+            past}
+         ]}
+      )
+
+      :ok = sweep_expired()
+
+      assert :ets.lookup(ets_table_name(), "expired-handshake-id") == []
+    end
+
+    # Waking a waiter is how a redeem gets its answer, so an expired handshake must not
+    # wake one - that reply would be an :ok redeem/2 itself would have refused.
+    test "leaves a waiter parked when the handshake it waits for has expired" do
+      task = Task.async(fn -> redeem("expired-handshake-id", 200) end)
+
+      wait_for_waiter("expired-handshake-id")
+
+      past = System.system_time(:millisecond) - 1
+
+      send(
+        Process.whereis(Handshake),
+        {:sync_reply,
+         [
+           {"expired-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
+            past}
+         ]}
+      )
+
+      assert Task.await(task) == :error
     end
   end
 
