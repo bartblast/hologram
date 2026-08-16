@@ -14,6 +14,14 @@ defmodule Hologram.DB.OutboxTest do
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
 
+  defp places do
+    statement = ~s|SELECT "tx", "seq" FROM "hologram_system"."outbox" ORDER BY "tx", "seq"|
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
+
+    Enum.map(rows, fn [tx, seq] -> {tx, seq} end)
+  end
+
   defp rows do
     statement = """
     SELECT "op", "type", "entity_id", "data", "model_hash", "mutation_ref", "actor_id"
@@ -56,6 +64,64 @@ defmodule Hologram.DB.OutboxTest do
 
       # The window's own transaction is in flight, so the edge cannot have passed it.
       assert current_xmin() <= writing_tx
+    end
+  end
+
+  describe "oldest_place/0" do
+    test "returns nothing when the log holds no effects" do
+      assert oldest_place() == nil
+    end
+
+    test "returns the place of the effect nothing precedes" do
+      seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
+
+      [oldest | _rest] = places()
+
+      assert oldest_place() == oldest
+    end
+  end
+
+  describe "read_after/2" do
+    test "returns nothing when the log holds no effects" do
+      assert read_after(0, 0) == []
+    end
+
+    test "returns the effects written after the given place" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
+
+      [{_tx, first_seq} | _rest] = places()
+
+      assert [event] = read_after(200, first_seq)
+      assert event.entity_id == @target_id
+    end
+
+    test "leaves out the effect at the given place, which the reader already has" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      [{tx, seq}] = places()
+
+      assert read_after(tx, seq) == []
+    end
+
+    test "leaves out effects of transactions below the given place" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+      seed(202, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
+
+      assert [event] = read_after(201, 0)
+      assert event.entity_id == @target_id
+    end
+
+    test "returns the effects in the order a reader is told about them" do
+      # Written in the reverse of the order they are read in, so insert order alone cannot produce
+      # the answer - the earlier transaction comes first however late its rows were written.
+      seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      assert [first, second] = read_after(0, 0)
+      assert first.entity_id == @entity_id
+      assert second.entity_id == @target_id
     end
   end
 

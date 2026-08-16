@@ -80,6 +80,55 @@ defmodule Hologram.DB.Outbox do
   end
 
   @doc """
+  Returns the place of the oldest effect the log still holds, or nil when it holds none.
+
+  What it answers is whether a returning client's place is still covered: the log is pruned from
+  the front, so a place older than this one has had effects taken from under it and what the
+  client missed can no longer be told - the only honest answer left is to send it everything.
+  """
+  @spec oldest_place() :: {non_neg_integer, non_neg_integer} | nil
+  def oldest_place do
+    statement = """
+    SELECT "tx", "seq"
+    FROM "hologram_system"."outbox"
+    ORDER BY "tx", "seq"
+    LIMIT 1
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
+
+    case rows do
+      [[tx, seq]] -> {tx, seq}
+      [] -> nil
+    end
+  end
+
+  @doc """
+  Returns the effects written after the given place, in the order a reader is told about them.
+
+  The order is the windowed read's own - by transaction, then by insert order within it - so a
+  place names the same point for a returning client as it did for a connected one. Everything here
+  is committed, which is why this read needs no upper edge: gap-freeness is the windowed read's
+  problem, and history has no gaps left to open.
+
+  Effects arrive flat rather than grouped, because what a reader wants of them is which rows to go
+  and look at - the values come from those rows, never from here.
+  """
+  @spec read_after(non_neg_integer, non_neg_integer) :: list(map)
+  def read_after(tx, seq) do
+    statement = """
+    SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id"
+    FROM "hologram_system"."outbox"
+    WHERE "tx" > $1 OR ("tx" = $1 AND "seq" > $2)
+    ORDER BY "tx", "seq"
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [tx, seq])
+
+    Enum.map(rows, &event/1)
+  end
+
+  @doc """
   Returns the effects written by transactions from `last_xmin` up to but excluding `current_xmin`,
   grouped into `{transaction id, effects}` pairs and ordered by transaction and then by insert
   order, so a transaction's effects arrive together and in the order they happened.
