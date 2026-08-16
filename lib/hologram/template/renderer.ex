@@ -96,111 +96,19 @@ defmodule Hologram.Template.Renderer do
           {String.t(), %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
   def render_dom(dom, env, server_struct)
 
-  def render_dom({:component, module, props_dom, children_dom}, env, server_struct) do
-    expanded_children_dom = expand_slots(children_dom, env.slots)
-
-    props =
-      props_dom
-      |> cast_props(module)
-      |> inject_props_from_context(module, env.context)
-      |> inject_default_prop_values(module)
-
-    if has_cid_prop?(props) do
-      render_stateful_component(module, props, expanded_children_dom, env.context, server_struct)
-    else
-      render_template(module, props, expanded_children_dom, env.context, server_struct)
-    end
-  end
-
-  # A dynamic tag decides between the element and the component branch at render time, then behaves
-  # exactly like the equivalent static tag would.
-  def render_dom({:dynamic_tag, {tag_name}, attrs_dom, children_dom}, env, server_struct)
-      when is_binary(tag_name) do
-    render_dom({:element, tag_name, attrs_dom, children_dom}, env, server_struct)
-  end
-
-  def render_dom({:dynamic_tag, {module}, props_dom, children_dom}, env, server_struct)
-      when is_atom(module) do
-    if Reflection.component?(module) do
-      render_dom({:component, module, props_dom, children_dom}, env, server_struct)
-    else
-      raise ArgumentError,
-        message: invalid_dynamic_tag_value_message(module) <> ", which is not a component module"
-    end
-  end
-
-  def render_dom({:dynamic_tag, {value}, _attrs_dom, _children_dom}, _env, _server_struct) do
+  # Also refused inside the traversal, which is where a template-nested dynamic tag lands. This
+  # boundary clause exists because a raise-only traversal clause contributes nothing to the
+  # function's inferred input domain, so without it the type checker refuses callers handing in
+  # the very values the raise is for.
+  def render_dom({:dynamic_tag, {value}, _attrs_dom, _children_dom}, _env, _server_struct)
+      when not is_atom(value) and not is_binary(value) do
     raise ArgumentError, message: invalid_dynamic_tag_value_message(value)
   end
 
-  def render_dom({:doctype, content}, _env, server_struct) do
-    {"<!DOCTYPE #{content}>", %{}, server_struct}
-  end
+  def render_dom(dom, env, server_struct) do
+    {tree, component_registry, mutated_server_struct} = render_tree(dom, env, server_struct)
 
-  def render_dom({:element, "slot", _attrs_dom, []}, %Env{} = env, server_struct) do
-    render_dom(env.slots[:default], %Env{env | slots: []}, server_struct)
-  end
-
-  # The <window> and <document> tags bind events to the window or document on the client. They have
-  # no server rendering - they produce no markup and no hydration node.
-  def render_dom({:element, tag_name, _attrs_dom, []}, _env, server_struct)
-      when tag_name in ["window", "document"] do
-    {"", %{}, server_struct}
-  end
-
-  def render_dom({:element, tag_name, attrs_dom, children_dom}, %Env{} = env, server_struct) do
-    attrs_html = render_attributes(attrs_dom)
-
-    children_env = %Env{env | node_type: :element, tag_name: tag_name}
-
-    {children_html, component_registry, mutated_server_struct} =
-      render_dom(children_dom, children_env, server_struct)
-
-    html =
-      if tag_name in @void_elems do
-        "<#{tag_name}#{attrs_html} />"
-      else
-        "<#{tag_name}#{attrs_html}>#{children_html}</#{tag_name}>"
-      end
-
-    {html, component_registry, mutated_server_struct}
-  end
-
-  def render_dom({:expression, {value}}, _env, server_struct) do
-    {stringify_for_interpolation(value), %{}, server_struct}
-  end
-
-  def render_dom({:public_comment, children_dom}, %Env{} = env, server_struct) do
-    children_env = %Env{env | node_type: :public_comment}
-
-    {children_html, component_registry, mutated_server_struct} =
-      render_dom(children_dom, children_env, server_struct)
-
-    html = "<!--#{children_html}-->"
-
-    {html, component_registry, mutated_server_struct}
-  end
-
-  def render_dom({:text, text}, %Env{tag_name: "script"}, server_struct) do
-    {text, %{}, server_struct}
-  end
-
-  def render_dom({:text, text}, _env, server_struct) do
-    {HtmlEntities.encode(text), %{}, server_struct}
-  end
-
-  def render_dom(nodes, env, server_struct) when is_list(nodes) do
-    nodes
-    # There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
-    |> Enum.filter(& &1)
-    |> Enum.reduce({"", %{}, server_struct}, fn node,
-                                                {acc_html, acc_component_registry,
-                                                 acc_server_struct} ->
-      {html, component_registry, mutated_server_struct} = render_dom(node, env, acc_server_struct)
-
-      {acc_html <> html, Map.merge(acc_component_registry, component_registry),
-       mutated_server_struct}
-    end)
+    {print_node(tree, env.tag_name), component_registry, mutated_server_struct}
   end
 
   # TODO: Refactor once there is something akin to {...@vars} syntax
@@ -235,7 +143,7 @@ defmodule Hologram.Template.Renderer do
       |> maybe_put_csrf_token_context(opts, initial_page?)
       |> maybe_put_instance_id_context(opts, initial_page?)
 
-    {initial_html, initial_component_registry, final_server_struct} =
+    {initial_tree, initial_component_registry, final_server_struct} =
       render_page_inside_layout(
         page_module,
         params,
@@ -261,7 +169,8 @@ defmodule Hologram.Template.Renderer do
     # concern - keeping the renderer Realtime-agnostic means the controller does
     # the final substitution after `Realtime.get_self_echoes/1`.
     html_with_interpolated_js =
-      initial_html
+      initial_tree
+      |> print_dom()
       |> interpolate_asset_manifest_js()
       |> interpolate_component_registry_js(component_registry_with_page_struct)
       |> interpolate_page_module_js(page_module)
@@ -331,6 +240,16 @@ defmodule Hologram.Template.Renderer do
     end)
     |> Enum.reverse()
     |> Enum.map(fn {attr_dom, _index} -> attr_dom end)
+  end
+
+  # WARNING: must match the client renderer's #valueDomToText: parts evaluate raw and concatenate,
+  # with no escaping - the value lands in the DOM through setAttribute on the client, and the HTML
+  # projection escapes at print time.
+  defp evaluate_attribute_value(value_dom) do
+    Enum.map_join(value_dom, fn
+      {:text, text} -> text
+      {:expression, {value}} -> to_string(value)
+    end)
   end
 
   defp evaluate_prop_value({name, [expression: {value}]}) do
@@ -568,6 +487,21 @@ defmodule Hologram.Template.Renderer do
     page_component_struct
   end
 
+  # WARNING: must match the client renderer's #mergeNeighbouringTextNodes: adjacent text nodes
+  # join into one, other nodes pass through. Merged text is also what an HTML parser produces, so
+  # the tree stays in the one form the live DOM can hold.
+  defp merge_neighbouring_text_nodes(nodes) do
+    nodes
+    |> Enum.reduce([], fn
+      {:text, text}, [{:text, preceding_text} | rest] ->
+        [{:text, preceding_text <> text} | rest]
+
+      node, acc ->
+        [node | acc]
+    end)
+    |> Enum.reverse()
+  end
+
   # Maps and keyword lists compose nested attribute names, everything else is a leaf value. Structs
   # are excluded, since they are ordinary values which stringify through String.Chars, e.g. Date.
   defp nested_spread_value?(value) do
@@ -599,6 +533,9 @@ defmodule Hologram.Template.Renderer do
   defp print_node(nodes, parent_tag_name) when is_list(nodes) do
     Enum.map_join(nodes, &print_node(&1, parent_tag_name))
   end
+
+  # A <window> or <document> tag renders to no node at all.
+  defp print_node(nil, _parent_tag_name), do: ""
 
   defp print_node({:doctype, content}, _parent_tag_name), do: "<!DOCTYPE #{content}>"
 
@@ -651,43 +588,6 @@ defmodule Hologram.Template.Renderer do
       message: "spread value must be a map or a keyword list, got: #{inspect(value)}"
   end
 
-  defp render_attribute(name, value_dom)
-
-  defp render_attribute(name, []), do: name
-
-  defp render_attribute(_name, expression: {nil}), do: ""
-
-  defp render_attribute(_name, expression: {false}), do: ""
-
-  defp render_attribute(name, value_dom) do
-    {value_str, %{}, _server_struct} =
-      render_dom(value_dom, %Env{node_type: :attribute}, %Server{})
-
-    if value_str == "" do
-      name
-    else
-      ~s(#{name}="#{value_str}")
-    end
-  end
-
-  defp render_attributes(attrs_dom)
-
-  defp render_attributes([]), do: ""
-
-  defp render_attributes(attrs_dom) do
-    attrs_dom
-    |> expand_attribute_spreads()
-    |> Enum.reject(fn attr ->
-      attr
-      |> elem(0)
-      |> String.starts_with?("$")
-    end)
-    |> Enum.map(fn {name, value_dom} -> render_attribute(name, value_dom) end)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.join(" ")
-    |> StringUtils.prepend_if_not_empty(" ")
-  end
-
   defp render_page_inside_layout(
          page_module,
          params,
@@ -704,7 +604,7 @@ defmodule Hologram.Template.Renderer do
     layout_props_dom = build_layout_props_dom(page_module, page_state)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
 
-    render_dom(layout_node, %Env{context: page_emitted_context}, server_struct)
+    render_tree(layout_node, %Env{context: page_emitted_context}, server_struct)
   end
 
   defp render_stateful_component(module, props, children_dom, context, server_struct) do
@@ -714,19 +614,185 @@ defmodule Hologram.Template.Renderer do
     vars = Map.merge(props, component_struct.state)
     merged_context = Map.merge(context, component_struct.emitted_context)
 
-    {html, children_component_registry, final_server_struct} =
+    {tree, children_component_registry, final_server_struct} =
       render_template(module, vars, children_dom, merged_context, mutated_server_struct)
 
     component_registry =
       Map.put(children_component_registry, vars.cid, %{module: module, struct: component_struct})
 
-    {html, component_registry, final_server_struct}
+    {tree, component_registry, final_server_struct}
   end
 
   defp render_template(module, vars, children_dom, context, server_struct) do
     vars
     |> module.template().()
-    |> render_dom(%Env{context: context, slots: [default: children_dom]}, server_struct)
+    |> render_tree(%Env{context: context, slots: [default: children_dom]}, server_struct)
+  end
+
+  # Renders the given DOM into an evaluated tree: expressions evaluated, components flattened into
+  # the nodes their templates render, slots expanded, attribute values collapsed to single strings.
+  # Text and attribute values are held unescaped - escaping is a projection concern, done by
+  # print_node/2 for HTML.
+  #
+  # WARNING: the evaluated tree is shipped to the client on navigation and converted to vnodes by
+  # the client renderer, which then must produce exactly what the client's own render of the same
+  # page produces - otherwise hydration rebuilds nodes instead of adopting them. Every
+  # normalization step here must therefore match the client renderer (renderer.mjs), clause by
+  # clause.
+  defp render_tree(dom, env, server_struct)
+
+  defp render_tree({:component, module, props_dom, children_dom}, env, server_struct) do
+    expanded_children_dom = expand_slots(children_dom, env.slots)
+
+    props =
+      props_dom
+      |> cast_props(module)
+      |> inject_props_from_context(module, env.context)
+      |> inject_default_prop_values(module)
+
+    if has_cid_prop?(props) do
+      render_stateful_component(module, props, expanded_children_dom, env.context, server_struct)
+    else
+      render_template(module, props, expanded_children_dom, env.context, server_struct)
+    end
+  end
+
+  # A dynamic tag decides between the element and the component branch at render time, then behaves
+  # exactly like the equivalent static tag would.
+  defp render_tree({:dynamic_tag, {tag_name}, attrs_dom, children_dom}, env, server_struct)
+       when is_binary(tag_name) do
+    render_tree({:element, tag_name, attrs_dom, children_dom}, env, server_struct)
+  end
+
+  defp render_tree({:dynamic_tag, {module}, props_dom, children_dom}, env, server_struct)
+       when is_atom(module) do
+    if Reflection.component?(module) do
+      render_tree({:component, module, props_dom, children_dom}, env, server_struct)
+    else
+      raise ArgumentError,
+        message: invalid_dynamic_tag_value_message(module) <> ", which is not a component module"
+    end
+  end
+
+  defp render_tree({:dynamic_tag, {value}, _attrs_dom, _children_dom}, _env, _server_struct) do
+    raise ArgumentError, message: invalid_dynamic_tag_value_message(value)
+  end
+
+  # Kept in the tree for the HTML projection. The client renderer renders a doctype to nothing,
+  # since the document it patches already has one.
+  defp render_tree({:doctype, content}, _env, server_struct) do
+    {{:doctype, content}, %{}, server_struct}
+  end
+
+  defp render_tree({:element, "slot", _attrs_dom, []}, %Env{} = env, server_struct) do
+    render_tree(env.slots[:default], %Env{env | slots: []}, server_struct)
+  end
+
+  # The <window> and <document> tags bind events to the window or document on the client. They have
+  # no server rendering - they produce no markup and no hydration node.
+  defp render_tree({:element, tag_name, _attrs_dom, []}, _env, server_struct)
+       when tag_name in ["window", "document"] do
+    {nil, %{}, server_struct}
+  end
+
+  # Children of a void element are rendered even though no projection shows them, so that whatever
+  # side effects the render has (component inits, server struct mutations) do not depend on the
+  # tag they happen to sit in.
+  defp render_tree({:element, tag_name, attrs_dom, children_dom}, %Env{} = env, server_struct) do
+    attributes = render_tree_attributes(attrs_dom)
+
+    children_env = %Env{env | node_type: :element, tag_name: tag_name}
+
+    {children, component_registry, mutated_server_struct} =
+      render_tree(children_dom, children_env, server_struct)
+
+    {{:element, tag_name, attributes, children}, component_registry, mutated_server_struct}
+  end
+
+  # An expression evaluated inside a script element is entity-encoded at evaluation, unlike every
+  # other text in the tree. This is deliberate: in the HTML projection an interpolated value could
+  # otherwise break out of the script with a "</script" of its own, so encoding is the projection's
+  # safety and it must happen before the value merges with the script's literal code, which is the
+  # last moment the two are distinguishable.
+  #
+  # WARNING: the client renderer diverges here on purpose (renderer.mjs expression case): it
+  # renders expressions unencoded, because it sets text through the DOM where no markup context
+  # exists to break out of. Do not "fix" either side alone.
+  defp render_tree({:expression, {value}}, %Env{tag_name: "script"}, server_struct) do
+    {{:text, stringify_for_interpolation(value)}, %{}, server_struct}
+  end
+
+  defp render_tree({:expression, {value}}, _env, server_struct) do
+    {{:text, to_string(value)}, %{}, server_struct}
+  end
+
+  defp render_tree({:public_comment, children_dom}, %Env{} = env, server_struct) do
+    children_env = %Env{env | node_type: :public_comment}
+
+    {children, component_registry, mutated_server_struct} =
+      render_tree(children_dom, children_env, server_struct)
+
+    {{:public_comment, children}, component_registry, mutated_server_struct}
+  end
+
+  defp render_tree({:text, text}, _env, server_struct) do
+    {{:text, text}, %{}, server_struct}
+  end
+
+  # WARNING: must match the client renderer's #renderNodes step for step: filter out nil input
+  # nodes, render each node, splice one level of node lists (a component renders to a list), then
+  # merge adjacent text nodes. List.wrap/1 also drops nil render results (<window>, <document>),
+  # which the client's merge step does.
+  defp render_tree(nodes, env, server_struct) when is_list(nodes) do
+    # There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
+    {rendered_nodes, component_registry, mutated_server_struct} =
+      nodes
+      |> Enum.filter(& &1)
+      |> Enum.reduce({[], %{}, server_struct}, fn node,
+                                                  {acc_nodes, acc_component_registry,
+                                                   acc_server_struct} ->
+        {tree, component_registry, mutated_server_struct} =
+          render_tree(node, env, acc_server_struct)
+
+        {acc_nodes ++ List.wrap(tree), Map.merge(acc_component_registry, component_registry),
+         mutated_server_struct}
+      end)
+
+    {merge_neighbouring_text_nodes(rendered_nodes), component_registry, mutated_server_struct}
+  end
+
+  # WARNING: must match the client renderer's #renderAttribute normalization: an empty value list
+  # is a boolean attribute, a nil or false expression value removes the attribute, and everything
+  # else collapses to one unescaped string.
+  defp render_tree_attribute(attr_dom)
+
+  defp render_tree_attribute({name, []}), do: {name, []}
+
+  defp render_tree_attribute({_name, [expression: {nil}]}), do: nil
+
+  defp render_tree_attribute({_name, [expression: {false}]}), do: nil
+
+  defp render_tree_attribute({name, value_dom}) do
+    {name, [text: evaluate_attribute_value(value_dom)]}
+  end
+
+  # Event bindings stay behind: they are built from compile-time listener information the tree
+  # cannot carry, and the interim page a navigation patches in is display-only until hydration
+  # attaches real listeners. The `$key` attribute travels, since it is what carries element
+  # identity into the client's diff.
+  defp render_tree_attributes(attrs_dom)
+
+  defp render_tree_attributes([]), do: []
+
+  defp render_tree_attributes(attrs_dom) do
+    attrs_dom
+    |> expand_attribute_spreads()
+    |> Enum.reject(fn attr_dom ->
+      name = elem(attr_dom, 0)
+      String.starts_with?(name, "$") and name != "$key"
+    end)
+    |> Enum.map(&render_tree_attribute/1)
+    |> Enum.reject(&is_nil/1)
   end
 
   defp spread_entries(value)
