@@ -95,10 +95,14 @@ defmodule Hologram.Controller do
   Builds the payload describing a page for a client that renders it itself, rather than being sent
   the markup.
 
-  Carries what a mount needs: the component registry the render produced, the page module and its
-  params, the realtime bookkeeping, and the digest naming the page's bundle, so the client can
-  load the code without asking again. Also carries how the page looks - the render itself as an
-  evaluated tree - so the page can be shown before any of its code has arrived.
+  Carries the render itself, as an evaluated tree, so the page can be shown before any of its own
+  code has arrived. Everything a mount reads - the component registry, the page params, the
+  realtime bookkeeping - rides inside that tree, in the script the server writes into every page
+  it serves, so a navigated page and a loaded document leave a mount the same thing to read.
+
+  What travels beside the tree is what has to be known before it can be used: the page module,
+  which decides whether this client has the page's code already, and the digest naming the bundle
+  to fetch when it does not.
 
   Terms are encoded the way a command's response encodes them, as JavaScript the client evaluates,
   since that is the form its runtime already reads.
@@ -126,26 +130,13 @@ defmodule Hologram.Controller do
   end
 
   def build_page_data_payload(%{
-        component_registry: component_registry,
         page_digest: page_digest,
         page_module: page_module,
-        page_params: page_params,
-        self_echoes: self_echoes,
-        sub_receipt_adds: sub_receipt_adds,
-        sub_receipt_drops: sub_receipt_drops,
         tree: tree
       }) do
-    # TODO: drop the fields whose values also ride inside the tree's pageMountData script
-    # (componentRegistry, pageParams, selfEchoes, subReceiptAdds, subReceiptDrops) once the
-    # client mounts from the tree.
     %{
-      componentRegistry: Encoder.encode_term!(component_registry),
       pageDigest: page_digest,
       pageModule: Encoder.encode_term!(page_module),
-      pageParams: Encoder.encode_term!(page_params),
-      selfEchoes: Encoder.encode_term!(self_echoes),
-      subReceiptAdds: Encoder.encode_term!(sub_receipt_adds),
-      subReceiptDrops: Encoder.encode_term!(sub_receipt_drops),
       tree: Encoder.encode_term!(tree),
       type: "page"
     }
@@ -578,13 +569,8 @@ defmodule Hologram.Controller do
 
         payload =
           build_page_data_payload(%{
-            component_registry: result.component_registry,
             page_digest: PageDigestRegistry.lookup(page_module),
             page_module: page_module,
-            page_params: params,
-            self_echoes: result.self_echoes,
-            sub_receipt_adds: result.sub_receipt_adds,
-            sub_receipt_drops: result.sub_receipt_drops,
             tree: tree
           })
 
