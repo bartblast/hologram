@@ -6,9 +6,32 @@ defmodule Hologram.Sync.Frame do
   # stream and sync inherits its handshake, heartbeats and reconnect.
 
   alias Hologram.Compiler.Encoder
+  alias Hologram.DB.Codec
   alias Hologram.Entity.Model
 
   @protocol_version 1
+
+  @doc """
+  Turns what a session worked out for one client into the deltas a frame carries.
+
+  A row that appeared travels whole, because a client that did not have it needs all of it. A row
+  that changed travels as the attributes that moved. A row that left travels as its id, and an
+  edge as the pair it joined or parted.
+
+  The entity type is the window's own, which is what names the type of a row that is no longer
+  there to be asked - a row that arrived carries its type with it.
+  """
+  @spec deltas(map, module) :: list(map)
+  def deltas(news, entity_type) do
+    window_type = Codec.encode_enum_value(entity_type)
+
+    Enum.concat([
+      Enum.map(news.appeared, &put_entity/1),
+      Enum.map(news.patched, fn {row, patch} -> patch_entity(row, patch) end),
+      Enum.map(news.unsynced, &unsync_entity(&1, window_type)),
+      Enum.map(news.edges, &relationship(&1, window_type))
+    ])
+  end
 
   @doc """
   Builds the SSE event-stream chunk carrying a batch of deltas, with the place in the log they
@@ -53,4 +76,26 @@ defmodule Hologram.Sync.Frame do
   """
   @spec protocol_version() :: pos_integer
   def protocol_version, do: @protocol_version
+
+  defp patch_entity(row, patch) do
+    %{data: patch, id: row.id, op: :patch_entity, type: type_of(row)}
+  end
+
+  defp put_entity(row) do
+    %{data: row, id: row.id, op: :put_entity, type: type_of(row)}
+  end
+
+  defp relationship(edge, window_type) do
+    data = %{relationship: edge.relationship, target_id: edge.target_id}
+
+    %{data: data, id: edge.entity_id, op: edge.op, type: window_type}
+  end
+
+  defp type_of(row) do
+    Codec.encode_enum_value(row.__struct__)
+  end
+
+  defp unsync_entity(id, window_type) do
+    %{id: id, op: :unsync_entity, type: window_type}
+  end
 end

@@ -15,6 +15,89 @@ defmodule Hologram.Sync.FrameTest do
     %{data: row, id: row.id, op: :put_entity, type: "Hologram.Test.Fixtures.Entity.Module2"}
   end
 
+  describe "deltas/2" do
+    defp news(overrides) do
+      Map.merge(%{appeared: [], edges: [], patched: [], unsynced: []}, overrides)
+    end
+
+    test "sends a row that appeared whole" do
+      row = Entity.new(Module2, a: true, c: "first")
+
+      assert deltas(news(%{appeared: [row]}), Module2) == [
+               %{
+                 data: row,
+                 id: row.id,
+                 op: :put_entity,
+                 type: "Hologram.Test.Fixtures.Entity.Module2"
+               }
+             ]
+    end
+
+    test "sends a row that changed as the attributes that moved" do
+      row = Entity.new(Module2, a: true, c: "after")
+
+      assert deltas(news(%{patched: [{row, %{c: "after"}}]}), Module2) == [
+               %{
+                 data: %{c: "after"},
+                 id: row.id,
+                 op: :patch_entity,
+                 type: "Hologram.Test.Fixtures.Entity.Module2"
+               }
+             ]
+    end
+
+    test "sends a row that left as its id, under the window's type" do
+      id = Entity.generate_id()
+
+      assert deltas(news(%{unsynced: [id]}), Module2) == [
+               %{id: id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Entity.Module2"}
+             ]
+    end
+
+    test "sends an edge as the pair it joined" do
+      source_id = Entity.generate_id()
+      target_id = Entity.generate_id()
+
+      edge = %{
+        entity_id: source_id,
+        op: :add_relationship,
+        relationship: "a",
+        target_id: target_id
+      }
+
+      assert deltas(news(%{edges: [edge]}), Module2) == [
+               %{
+                 data: %{relationship: "a", target_id: target_id},
+                 id: source_id,
+                 op: :add_relationship,
+                 type: "Hologram.Test.Fixtures.Entity.Module2"
+               }
+             ]
+    end
+
+    test "sends an edge as the pair it parted" do
+      edge = %{
+        entity_id: Entity.generate_id(),
+        op: :del_relationship,
+        relationship: "a",
+        target_id: Entity.generate_id()
+      }
+
+      assert [%{op: :del_relationship}] = deltas(news(%{edges: [edge]}), Module2)
+    end
+
+    test "takes the type of an arrived row from the row rather than from the window" do
+      row = Entity.new(Module14, email: "user@test.com")
+
+      assert [%{type: "Hologram.Test.Fixtures.Entity.Module14"}] =
+               deltas(news(%{appeared: [row]}), Module2)
+    end
+
+    test "sends nothing for news holding nothing" do
+      assert deltas(news(%{}), Module2) == []
+    end
+  end
+
   describe "encode_deltas_envelope/3" do
     test "wraps the deltas in a sync_deltas SSE event envelope" do
       row = Entity.new(Module2, a: true, c: "first")
