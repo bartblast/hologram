@@ -26,7 +26,7 @@ defmodule Hologram.Sync.ResultStore do
   Returns the rows and ids a window held at the given version, or nil once that version has been
   pruned or was never written.
   """
-  @spec fetch({String.t(), map}, pos_integer) :: %{ids: MapSet.t(), rows: map} | nil
+  @spec fetch(String.t(), pos_integer) :: %{ids: MapSet.t(), rows: map} | nil
   def fetch(key, version) do
     case :ets.lookup(@table_name, {key, version}) do
       [{_key_version, result}] -> result
@@ -37,7 +37,7 @@ defmodule Hologram.Sync.ResultStore do
   @doc """
   Forgets every version of the given window, for when nothing holds it any more.
   """
-  @spec forget({String.t(), map}) :: :ok
+  @spec forget(String.t()) :: :ok
   def forget(key) do
     key
     |> versions()
@@ -51,7 +51,7 @@ defmodule Hologram.Sync.ResultStore do
   Ids are kept beside the rows because membership is what a round is diffed by, and rebuilding
   the set per session would undo the sharing this store exists for.
   """
-  @spec put({String.t(), map}, pos_integer, list(struct)) :: :ok
+  @spec put(String.t(), pos_integer, list(struct)) :: :ok
   def put(key, version, rows) do
     by_id = Map.new(rows, &{&1.id, &1})
 
@@ -88,7 +88,7 @@ defmodule Hologram.Sync.ResultStore do
   @doc """
   Returns the versions of the given window that are still kept, newest first.
   """
-  @spec versions({String.t(), map}) :: list(pos_integer)
+  @spec versions(String.t()) :: list(pos_integer)
   def versions(key) do
     @table_name
     |> :ets.match({{key, :"$1"}, :_})

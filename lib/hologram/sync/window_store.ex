@@ -20,10 +20,9 @@ defmodule Hologram.Sync.WindowStore do
   def ets_table_name, do: @table_name
 
   @doc """
-  Returns every registered window as a `{key, term}` pair, where a key is the `{window id,
-  params}` the window is kept for.
+  Returns every registered window as a `{window id, term}` pair.
   """
-  @spec all() :: list({{String.t(), map}, map})
+  @spec all() :: list({String.t(), map})
   def all do
     @table_name
     |> :ets.tab2list()
@@ -31,9 +30,9 @@ defmodule Hologram.Sync.WindowStore do
   end
 
   @doc """
-  Returns the term registered for the given key, or nil when nothing holds it.
+  Returns the term registered for the given window id, or nil when nothing holds it.
   """
-  @spec fetch({String.t(), map}) :: map | nil
+  @spec fetch(String.t()) :: map | nil
   def fetch(key) do
     case :ets.lookup(@table_name, key) do
       [{^key, term, _subscribers}] -> term
@@ -48,7 +47,7 @@ defmodule Hologram.Sync.WindowStore do
   Registering the same key again counts one more holder rather than replacing what is there: the
   term is a property of the key, so two holders of one key are asking for the same thing.
   """
-  @spec register({String.t(), map}, map) :: pos_integer
+  @spec register(String.t(), map) :: pos_integer
   def register(key, term) do
     # Only the first holder writes the term, and only if it is not already there - so two
     # sessions registering at once cannot both count themselves as the first.
@@ -66,7 +65,7 @@ defmodule Hologram.Sync.WindowStore do
   already been forgotten, answers zero rather than raising - a session cleaning up after a crash
   cannot know which of its registrations survived.
   """
-  @spec unregister({String.t(), map}) :: non_neg_integer
+  @spec unregister(String.t()) :: non_neg_integer
   def unregister(key) do
     case :ets.lookup(@table_name, key) do
       [] ->

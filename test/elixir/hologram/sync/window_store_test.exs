@@ -7,8 +7,8 @@ defmodule Hologram.Sync.WindowStoreTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
 
-  @key {"q_7f3a", %{project_id: "pA"}}
-  @other_key {"q_7f3a", %{project_id: "pB"}}
+  @window_id "w_7f3a"
+  @other_window_id "w_c412"
 
   setup do
     wait_for_process_cleanup(WindowStore)
@@ -27,84 +27,85 @@ defmodule Hologram.Sync.WindowStoreTest do
     end
 
     test "returns every held window with the term it was registered under" do
-      register(@key, term(Module2))
-      register(@other_key, term(Module3))
+      register(@window_id, term(Module2))
+      register(@other_window_id, term(Module3))
 
-      assert Enum.sort(all()) == Enum.sort([{@key, term(Module2)}, {@other_key, term(Module3)}])
+      assert Enum.sort(all()) ==
+               Enum.sort([{@window_id, term(Module2)}, {@other_window_id, term(Module3)}])
     end
 
     test "leaves out a window nobody holds any more" do
-      register(@key, term(Module2))
-      register(@other_key, term(Module3))
-      unregister(@key)
+      register(@window_id, term(Module2))
+      register(@other_window_id, term(Module3))
+      unregister(@window_id)
 
-      assert all() == [{@other_key, term(Module3)}]
+      assert all() == [{@other_window_id, term(Module3)}]
     end
   end
 
   describe "fetch/1" do
     test "returns the term registered under the given key" do
-      register(@key, term(Module2))
+      register(@window_id, term(Module2))
 
-      assert fetch(@key) == term(Module2)
+      assert fetch(@window_id) == term(Module2)
     end
 
     test "returns nil when nothing holds the given key" do
-      assert fetch(@key) == nil
+      assert fetch(@window_id) == nil
     end
   end
 
   describe "register/2" do
     test "counts the first holder" do
-      assert register(@key, term(Module2)) == 1
+      assert register(@window_id, term(Module2)) == 1
     end
 
     test "counts each holder after the first" do
-      register(@key, term(Module2))
+      register(@window_id, term(Module2))
 
-      assert register(@key, term(Module2)) == 2
-      assert register(@key, term(Module2)) == 3
+      assert register(@window_id, term(Module2)) == 2
+      assert register(@window_id, term(Module2)) == 3
     end
 
     test "keeps the term the first holder registered" do
-      register(@key, term(Module2))
-      register(@key, term(Module3))
+      register(@window_id, term(Module2))
+      register(@window_id, term(Module3))
 
-      assert fetch(@key) == term(Module2)
+      assert fetch(@window_id) == term(Module2)
     end
 
     test "counts holders of one key without counting them for another" do
-      register(@key, term(Module2))
-      register(@key, term(Module2))
+      register(@window_id, term(Module2))
+      register(@window_id, term(Module2))
 
-      assert register(@other_key, term(Module2)) == 1
+      assert register(@other_window_id, term(Module2)) == 1
     end
   end
 
   describe "unregister/1" do
     test "returns how many holders are left" do
-      register(@key, term(Module2))
-      register(@key, term(Module2))
+      register(@window_id, term(Module2))
+      register(@window_id, term(Module2))
 
-      assert unregister(@key) == 1
+      assert unregister(@window_id) == 1
     end
 
     test "forgets the window once the last holder lets go" do
-      register(@key, term(Module2))
+      register(@window_id, term(Module2))
 
-      assert unregister(@key) == 0
-      assert fetch(@key) == nil
+      assert unregister(@window_id) == 0
+      assert fetch(@window_id) == nil
     end
 
     test "answers zero for a key nobody holds" do
-      assert unregister(@key) == 0
+      assert unregister(@window_id) == 0
     end
 
     test "answers zero for a key that was already forgotten" do
-      register(@key, term(Module2))
-      unregister(@key)
+      register(@window_id, term(Module2))
+      unregister(@window_id)
 
-      assert unregister(@key) == 0
+      assert unregister(@window_id) == 0
     end
   end
 end
