@@ -83,7 +83,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     on_exit(fn ->
       :application.unload(app)
       RoleGrant.reset_resolution_cache()
-      Model.reset_hash_cache()
+      Model.reset_caches()
       Policy.reset_model_facts_cache()
     end)
   end

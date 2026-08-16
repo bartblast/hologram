@@ -309,7 +309,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp validate_data_model! do
     RoleGrant.reset_resolution_cache()
-    Model.reset_hash_cache()
+    Model.reset_caches()
     Policy.reset_model_facts_cache()
 
     entity_types = Reflection.list_entities()

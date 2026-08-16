@@ -13,6 +13,7 @@ defmodule Hologram.Entity.ModelTest do
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
+  @exists_key {Hologram.Entity.Model, :exists?}
   @hash_key {Hologram.Entity.Model, :hash}
 
   defp task_model(entry_overrides) do
@@ -1354,9 +1355,9 @@ defmodule Hologram.Entity.ModelTest do
   # anything a concurrently running test could be surprised by.
   describe "hash/0" do
     setup do
-      on_exit(&reset_hash_cache/0)
+      on_exit(&reset_caches/0)
 
-      reset_hash_cache()
+      reset_caches()
     end
 
     test "hashes the project's compiled data model" do
@@ -1375,7 +1376,7 @@ defmodule Hologram.Entity.ModelTest do
 
       assert hash() == "cached"
 
-      reset_hash_cache()
+      reset_caches()
 
       refute derived == "cached"
     end
@@ -1389,12 +1390,40 @@ defmodule Hologram.Entity.ModelTest do
     end
   end
 
-  describe "reset_hash_cache/0" do
+  describe "reset_caches/0" do
     test "drops the derived hash" do
       hash()
 
-      assert reset_hash_cache() == :ok
+      assert reset_caches() == :ok
       assert :persistent_term.get(@hash_key, nil) == nil
+    end
+
+    # Both, or a recompiled model would be picked up by one answer and not the other.
+    test "drops the remembered answer about whether a model exists" do
+      exists?()
+
+      assert reset_caches() == :ok
+      assert :persistent_term.get(@exists_key, nil) == nil
+    end
+  end
+
+  describe "exists?/0" do
+    test "says a build declaring entity types has a data model" do
+      refute Hologram.Reflection.list_entities() == []
+
+      assert exists?() == true
+    end
+
+    # The sweep behind this takes tens of milliseconds and runs on every client handshake, so the
+    # cache is the point rather than a nicety. Asserted through the store rather than by timing.
+    test "remembers the answer rather than sweeping the modules again" do
+      reset_caches()
+
+      assert :persistent_term.get(@exists_key, nil) == nil
+
+      exists?()
+
+      assert :persistent_term.get(@exists_key, nil) == true
     end
   end
 

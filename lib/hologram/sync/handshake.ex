@@ -11,7 +11,6 @@ defmodule Hologram.Sync.Handshake do
   # is what lenses will make possible - until they exist, the answer is to reload.
 
   alias Hologram.Entity.Model
-  alias Hologram.Reflection
   alias Hologram.Sync.Frame
 
   @doc """
@@ -46,13 +45,9 @@ defmodule Hologram.Sync.Handshake do
     end
   end
 
-  # The same condition the application tree gates the database on, read from the same place, so
-  # the two cannot come to disagree about whether this build has a data layer.
-  defp data_layer?, do: Reflection.list_entities() != []
-
   defp check_greeting(page, protocol_version, model_hash, cursor) do
     cond do
-      not data_layer?() -> :no_sync
+      not Model.exists?() -> :no_sync
       protocol_version != Frame.protocol_version() -> {:reload, :protocol_version}
       model_hash != Model.hash() -> {:reload, :model_hash}
       true -> {:sync, page, cursor}

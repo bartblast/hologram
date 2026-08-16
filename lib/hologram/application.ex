@@ -11,7 +11,7 @@ defmodule Hologram.Application do
   @impl Application
   def start(_type, _args) do
     RoleGrant.reset_resolution_cache()
-    Model.reset_hash_cache()
+    Model.reset_caches()
     Policy.reset_model_facts_cache()
 
     opts = [strategy: :one_for_one, name: Hologram.Supervisor]

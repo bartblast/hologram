@@ -18,6 +18,7 @@ defmodule Hologram.Entity.Model do
 
   @hash_bytes 16
 
+  @exists_key {__MODULE__, :exists?}
   @hash_key {__MODULE__, :hash}
 
   @doc """
@@ -65,6 +66,31 @@ defmodule Hologram.Entity.Model do
     user_entity = Enum.find(entity_types, &Reflection.user_entity?/1)
 
     %{entities: entities, roles: roles, user_entity: user_entity}
+  end
+
+  @doc """
+  Returns whether the project declares a data model at all.
+
+  An app with no entity types has no database - the application tree gates the whole data layer on
+  exactly that - so this is what tells a caller whether anything downstream of it can be reached.
+
+  Cached for the same reason `hash/0` is, and it matters more here: this is read on every client
+  handshake, and the sweep behind it takes tens of milliseconds where the cached answer takes a
+  fraction of a microsecond.
+  """
+  @spec exists?() :: boolean
+  def exists? do
+    case :persistent_term.get(@exists_key, nil) do
+      nil ->
+        exists? = Reflection.list_entities() != []
+
+        :persistent_term.put(@exists_key, exists?)
+
+        exists?
+
+      exists? ->
+        exists?
+    end
   end
 
   @doc """
@@ -125,8 +151,9 @@ defmodule Hologram.Entity.Model do
   def neutral_value(_key), do: nil
 
   @doc false
-  @spec reset_hash_cache() :: :ok
-  def reset_hash_cache do
+  @spec reset_caches() :: :ok
+  def reset_caches do
+    :persistent_term.erase(@exists_key)
     :persistent_term.erase(@hash_key)
 
     :ok
