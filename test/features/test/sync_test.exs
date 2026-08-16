@@ -49,12 +49,13 @@ defmodule HologramFeatureTests.SyncTest do
 
   # The stream is cut when the test ends, taking the server-side session and its evaluators with
   # it - a connection left open would keep them alive into the next test, serving stale rounds.
-  defp connect do
-    client =
-      SyncClient.connect(@base_url,
-        cookie_path: "/policies",
-        page: "HologramFeatureTests.PoliciesPage"
-      )
+  defp connect(opts \\ []) do
+    opts =
+      opts
+      |> Keyword.put_new(:cookie_path, "/policies")
+      |> Keyword.put_new(:page, "HologramFeatureTests.PoliciesPage")
+
+    client = SyncClient.connect(@base_url, opts)
 
     on_exit(fn -> :httpc.cancel_request(client.request_id) end)
 
@@ -73,6 +74,14 @@ defmodule HologramFeatureTests.SyncTest do
         Process.sleep(1)
         wait_for_evaluators_to_drain(attempts_left - 1)
     end
+  end
+
+  # The place the frame says the client has reached, which it hands back on reconnect. Read out of
+  # the frame rather than built here: what it is made of is the server's business.
+  defp cursor_of(data) do
+    data
+    |> Jason.decode!()
+    |> Map.fetch!("cursor")
   end
 
   defp drain_initial_sync(client) do
@@ -163,6 +172,46 @@ defmodule HologramFeatureTests.SyncTest do
 
     # Under JSON the KEY is absent, not only the value - the old wire could not say this.
     refute data =~ "api_token"
+  end
+
+  feature "tells a returning client only what moved while it was away", %{session: _session} do
+    Document
+    |> Entity.new(public: true, title: "held_across_the_gap")
+    |> create()
+
+    client = connect()
+    {first_data, client} = await_deltas(client)
+    assert first_data =~ ~s["title":"held_across_the_gap"]
+
+    cursor = cursor_of(first_data)
+    assert is_binary(cursor)
+
+    :ok = :httpc.cancel_request(client.request_id)
+
+    Document
+    |> Entity.new(public: true, title: "landed_while_away")
+    |> create()
+
+    {gap_data, _returned} = await_deltas(connect(cursor: cursor))
+
+    # The whole point of the replay: what moved arrives, what the client already held does not.
+    assert gap_data =~ ~s["title":"landed_while_away"]
+    refute gap_data =~ "held_across_the_gap"
+  end
+
+  feature "tells a client whose place cannot be read to start over", %{session: _session} do
+    Document
+    |> Entity.new(public: true, title: "sent_again_after_resync")
+    |> create()
+
+    client = connect(cursor: "not a cursor")
+
+    {resync, client} = SyncClient.await_frame(client, "sync_resync")
+    assert resync["data"] =~ ~s["reason":"cursor"]
+
+    # The marker is an instruction to discard, so what follows has to be everything again.
+    {data, _client} = await_deltas(client)
+    assert data =~ ~s["title":"sent_again_after_resync"]
   end
 
   feature "sends an anonymous client the rows anyone may read, and no others", %{
