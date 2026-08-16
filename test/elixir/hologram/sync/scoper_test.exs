@@ -108,7 +108,7 @@ defmodule Hologram.Sync.ScoperTest do
     test "ignores an entity type this node has never compiled" do
       windows = [{:board, term(Module2)}]
 
-      assert affected(events(["MyApp.NeverCompiled"]), windows, %{}) == []
+      assert affected(events(["MyApp.TypeOnlyThisTestNames"]), windows, %{}) == []
     end
   end
 end

@@ -97,10 +97,12 @@ defmodule Hologram.DB.OutboxTest do
     end
 
     test "keeps an entity type this node has never compiled as the label it was written with" do
-      seed(200, "del_entity", "MyApp.NeverCompiled", @entity_id)
+      # A name no test anywhere in the suite writes as an atom LITERAL: one that does makes the
+      # atom exist for every test, and this one is about a type whose atom does not exist.
+      seed(200, "del_entity", "MyApp.TypeOnlyThisTestNames", @entity_id)
 
       assert [{200, [event]}] = read_window(200, 201)
-      assert event.type == "MyApp.NeverCompiled"
+      assert event.type == "MyApp.TypeOnlyThisTestNames"
     end
 
     test "keeps data keys as they were written" do
