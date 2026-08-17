@@ -179,6 +179,33 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Sets the given `:hologram` options for the length of the test and puts back what was there.
+
+  Merged into whatever is already configured rather than replacing it, since one key holds the
+  options of a whole area and a test means to change one of them. Restored on the way out to
+  exactly what it was, which includes deleting it when nothing was configured to begin with -
+  `Application.delete_env/2` alone would take a configured value with it.
+  """
+  @spec put_app_env(atom, keyword) :: :ok
+  def put_app_env(key, options) do
+    previous = Application.fetch_env(:hologram, key)
+
+    merged =
+      :hologram
+      |> Application.get_env(key, [])
+      |> Keyword.merge(options)
+
+    Application.put_env(:hologram, key, merged)
+
+    ExUnit.Callbacks.on_exit(fn ->
+      case previous do
+        {:ok, value} -> Application.put_env(:hologram, key, value)
+        :error -> Application.delete_env(:hologram, key)
+      end
+    end)
+  end
+
+  @doc """
   Generates a unique random atom.
   """
   @spec random_atom() :: atom

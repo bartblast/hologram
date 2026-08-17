@@ -215,8 +215,7 @@ defmodule Hologram.Sync.SessionTest do
       windows(%{@page => [@board_window]})
       hold_windows([@board_window])
 
-      Application.put_env(:hologram, :sync, rows_per_frame: 2)
-      on_exit(fn -> Application.delete_env(:hologram, :sync) end)
+      put_app_env(:sync, rows_per_frame: 2)
 
       # Two per frame rather than one, so the place a batch claims is its LAST effect and not
       # merely its only one.
@@ -307,8 +306,7 @@ defmodule Hologram.Sync.SessionTest do
       windows(%{@page => [@board_window]})
       hold_windows([@board_window])
 
-      Application.put_env(:hologram, :sync, rows_per_frame: 2)
-      on_exit(fn -> Application.delete_env(:hologram, :sync) end)
+      put_app_env(:sync, rows_per_frame: 2)
 
       start_session!([])
 
@@ -332,8 +330,7 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, nil, _fill}
       assert_receive {:sync_synced, :all}
 
-      Application.put_env(:hologram, :sync, rows_per_frame: 2)
-      on_exit(fn -> Application.delete_env(:hologram, :sync) end)
+      put_app_env(:sync, rows_per_frame: 2)
 
       # Three rows appear while the one the client holds changes, so the round splits across two
       # frames and the patch has somewhere it could wrongly be repeated.

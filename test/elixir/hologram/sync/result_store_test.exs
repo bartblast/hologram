@@ -118,8 +118,7 @@ defmodule Hologram.Sync.ResultStoreTest do
     end
 
     test "takes the configured length" do
-      Application.put_env(:hologram, :sync, result_ring_length: 2)
-      on_exit(fn -> Application.delete_env(:hologram, :sync) end)
+      put_app_env(:sync, result_ring_length: 2)
 
       assert ring_length() == 2
 
