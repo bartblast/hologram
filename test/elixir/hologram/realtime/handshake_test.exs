@@ -14,18 +14,20 @@ defmodule Hologram.Realtime.HandshakeTest do
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
     wait_for_process_cleanup(Handshake)
-    start_supervised!({Handshake, boot_sync_timeout_ms: 0})
+    start_supervised!(Handshake)
 
     :ok
   end
 
   describe "insert/4" do
     test "stashes the handshake entry in ETS with the identity tuple flattened" do
+      future = System.system_time(:millisecond) + 60_000
+
       insert(
         "test-handshake-id",
         [{{:room_a, "page"}, "test-user-id"}],
         {"test-instance-id", "test-session-id", "test-user-id"},
-        1_700_000_000_000
+        future
       )
 
       assert :ets.lookup(ets_table_name(), "test-handshake-id") == [
@@ -35,7 +37,7 @@ defmodule Hologram.Realtime.HandshakeTest do
                  "test-instance-id",
                  "test-session-id",
                  "test-user-id",
-                 1_700_000_000_000
+                 future
                }
              ]
     end
@@ -43,11 +45,13 @@ defmodule Hologram.Realtime.HandshakeTest do
     test "broadcasts the insert on the gossip topic with the flattened wire shape" do
       :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
 
+      future = System.system_time(:millisecond) + 60_000
+
       insert(
         "test-handshake-id",
         [{{:room_a, "page"}, "test-user-id"}],
         {"test-instance-id", "test-session-id", "test-user-id"},
-        1_700_000_000_000
+        future
       )
 
       assert_receive {
@@ -57,7 +61,7 @@ defmodule Hologram.Realtime.HandshakeTest do
         "test-instance-id",
         "test-session-id",
         "test-user-id",
-        1_700_000_000_000
+        ^future
       }
     end
   end
@@ -120,6 +124,29 @@ defmodule Hologram.Realtime.HandshakeTest do
                 {"test-instance-id", "test-session-id", "test-user-id"}}
     end
 
+    # Without this the async sync would regress the guarantee the blocking one gave by
+    # construction: a redeem parked before a peer's reply lands must be answered by it.
+    test "resolves a pending waiter when a peer's sync reply carries the handshake" do
+      task = Task.async(fn -> redeem("late-handshake-id", 1_000) end)
+
+      wait_for_waiter("late-handshake-id")
+
+      future = System.system_time(:millisecond) + 60_000
+
+      send(
+        Process.whereis(Handshake),
+        {:sync_reply,
+         [
+           {"late-handshake-id", [{{:room_a, "page"}, "test-user-id"}], "peer-instance-id",
+            "peer-session-id", "peer-user-id", future}
+         ]}
+      )
+
+      assert Task.await(task) ==
+               {:ok, [{{:room_a, "page"}, "test-user-id"}],
+                {"peer-instance-id", "peer-session-id", "peer-user-id"}}
+    end
+
     test "resolves a pending waiter when a peer gossip insert arrives" do
       task = Task.async(fn -> redeem("late-handshake-id", 1_000) end)
 
@@ -141,85 +168,58 @@ defmodule Hologram.Realtime.HandshakeTest do
   end
 
   describe "start_link/1" do
-    test "merges entries from a peer that replies to the boot-sync request" do
+    # The reason the sync request does not wait: a node that is accepting requests has
+    # to answer them. Against a blocking boot sync this call exits on its own timeout.
+    test "answers a redeem straight away, without waiting on peers" do
       :ok = stop_supervised(Handshake)
 
-      test_pid = self()
-      future = System.system_time(:millisecond) + 60_000
+      start_supervised!(Handshake)
 
-      peer_entry =
-        {"peer-entry-id", [], "peer-instance-id", "peer-session-id", "peer-user-id", future}
-
-      spawn_link(fn ->
-        Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
-        send(test_pid, :peer_ready)
-
-        receive do
-          {:sync_request, requester_pid} ->
-            send(requester_pid, {:sync_reply, [peer_entry]})
-        end
-      end)
-
-      assert_receive :peer_ready
-
-      start_supervised!({Handshake, boot_sync_timeout_ms: 200})
-
-      wait_until(fn -> :ets.lookup(ets_table_name(), "peer-entry-id") == [peer_entry] end)
-
-      assert :ets.lookup(ets_table_name(), "peer-entry-id") == [peer_entry]
+      assert redeem("never-stashed-id", 100) == :error
     end
 
-    test "returns with an empty stash when no peers reply before the timeout" do
+    test "starts with an empty stash when no peer replies" do
       :ok = stop_supervised(Handshake)
 
-      start_supervised!({Handshake, boot_sync_timeout_ms: 50})
+      start_supervised!(Handshake)
 
-      # No peers reply, so nothing merges; the synchronous call blocks until the
-      # boot-sync handle_continue has run, then the table is asserted empty.
+      # A synchronous call returns only once init/1 has run.
       :sys.get_state(Handshake)
 
       assert :ets.tab2list(ets_table_name()) == []
     end
 
-    test "still receives a steady-state {:insert, ...} a peer publishes after the sync_request" do
+    # Asking is per connected node, so there is nobody to ask here. That a peer receives
+    # the request and answers it is cluster-suite territory - what this pins is that
+    # starting up asks without waiting, and stays open to gossip afterwards.
+    test "still merges a steady-state {:insert, ...} a peer publishes after starting" do
       :ok = stop_supervised(Handshake)
 
-      test_pid = self()
+      start_supervised!(Handshake)
+
       future = System.system_time(:millisecond) + 60_000
 
-      spawn_link(fn ->
-        Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
-        send(test_pid, :peer_ready)
-
-        receive do
-          {:sync_request, _requester_pid} ->
-            Phoenix.PubSub.broadcast(
-              Hologram.PubSub,
-              gossip_topic(),
-              {:insert, "post-sync-handshake-id", [], "peer-instance-id", "peer-session-id",
-               "peer-user-id", future}
-            )
-        end
-      end)
-
-      assert_receive :peer_ready
-
-      start_supervised!({Handshake, boot_sync_timeout_ms: 50})
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        gossip_topic(),
+        {:insert, "post-start-handshake-id", [], "peer-instance-id", "peer-session-id",
+         "peer-user-id", future}
+      )
 
       wait_until(fn ->
         match?(
           [
-            {"post-sync-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
+            {"post-start-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
              ^future}
           ],
-          :ets.lookup(ets_table_name(), "post-sync-handshake-id")
+          :ets.lookup(ets_table_name(), "post-start-handshake-id")
         )
       end)
 
       assert [
-               {"post-sync-handshake-id", [], "peer-instance-id", "peer-session-id",
+               {"post-start-handshake-id", [], "peer-instance-id", "peer-session-id",
                 "peer-user-id", ^future}
-             ] = :ets.lookup(ets_table_name(), "post-sync-handshake-id")
+             ] = :ets.lookup(ets_table_name(), "post-start-handshake-id")
     end
   end
 
@@ -279,6 +279,82 @@ defmodule Hologram.Realtime.HandshakeTest do
                {"peer-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
                 ^future}
              ] = :ets.lookup(ets_table_name(), "peer-handshake-id")
+    end
+  end
+
+  describe "handle {:sync_reply, ...}" do
+    test "merges a peer's handshakes into ETS" do
+      future = System.system_time(:millisecond) + 60_000
+
+      send(
+        Process.whereis(Handshake),
+        {:sync_reply,
+         [
+           {"synced-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
+            future}
+         ]}
+      )
+
+      :ok = sweep_expired()
+
+      assert [
+               {"synced-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
+                ^future}
+             ] = :ets.lookup(ets_table_name(), "synced-handshake-id")
+    end
+
+    # A peer answers out of its own table, which still holds whatever its last sweep has
+    # not reached, so what arrives can already be past its expiry.
+    test "ignores a handshake that has already expired" do
+      past = System.system_time(:millisecond) - 1
+
+      send(
+        Process.whereis(Handshake),
+        {:sync_reply,
+         [
+           {"expired-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
+            past}
+         ]}
+      )
+
+      :ok = sweep_expired()
+
+      assert :ets.lookup(ets_table_name(), "expired-handshake-id") == []
+    end
+
+    # Waking a waiter is how a redeem gets its answer, so an expired handshake must not
+    # wake one - that reply would be an :ok redeem/2 itself would have refused.
+    test "leaves a waiter parked when the handshake it waits for has expired" do
+      task = Task.async(fn -> redeem("expired-handshake-id", 200) end)
+
+      wait_for_waiter("expired-handshake-id")
+
+      past = System.system_time(:millisecond) - 1
+
+      send(
+        Process.whereis(Handshake),
+        {:sync_reply,
+         [
+           {"expired-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
+            past}
+         ]}
+      )
+
+      assert Task.await(task) == :error
+    end
+  end
+
+  describe "handle {:nodeup, ...}" do
+    # A boot-time request only reaches peers this node can already see. Watching joins is
+    # what lets a store that booted into a still-forming cluster catch up afterwards.
+    test "asks the joining node for what it holds" do
+      Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
+
+      handshake_pid = Process.whereis(Handshake)
+
+      send(handshake_pid, {:nodeup, node()})
+
+      assert_receive {:sync_request, ^handshake_pid}
     end
   end
 

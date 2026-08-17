@@ -5,7 +5,6 @@ defmodule Hologram.Realtime.Handshake do
 
   alias Hologram.Realtime.Gossip
 
-  @boot_sync_timeout_ms 5_000
   @gossip_topic "hologram:gossip:sse_handshakes"
   @server_wait_ms 500
   @stash_ttl_ms 60_000
@@ -96,29 +95,36 @@ defmodule Hologram.Realtime.Handshake do
   end
 
   @impl GenServer
-  def init(opts) do
+  def init(_opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
     Phoenix.PubSub.subscribe(Hologram.PubSub, @gossip_topic)
 
-    boot_sync_timeout_ms =
-      Keyword.get(opts, :boot_sync_timeout_ms, @boot_sync_timeout_ms)
+    # Peers are asked for what they hold, and whatever they send back is merged as it
+    # arrives. Nothing is waited for: this process answers redeems from the moment it
+    # starts, and a redeem for a handshake still in flight from a peer parks as a
+    # waiter until it lands, which is the same thing that happens in steady state.
+    Gossip.request_sync(@gossip_topic)
+
+    # The ask above reaches the nodes connected right now. A node that connects later -
+    # one still joining as this one boots, or a peer coming back - was never asked, and
+    # monitoring reports only joins that happen from here on, so this is the only signal
+    # that such a node exists.
+    :net_kernel.monitor_nodes(true)
 
     schedule_sweep()
 
-    {:ok, %{waiters: %{}}, {:continue, {:boot_sync, boot_sync_timeout_ms}}}
+    {:ok, %{waiters: %{}}}
   end
 
   @impl GenServer
   def handle_call(
-        {:insert, handshake_id, validated_bindings, {instance_id, session_id, user_id} = identity,
+        {:insert, handshake_id, validated_bindings, {instance_id, session_id, user_id},
          expires_at},
         _from,
         state
       ) do
-    :ets.insert(
-      @table_name,
+    handshake =
       {handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
-    )
 
     Phoenix.PubSub.broadcast_from(
       Hologram.PubSub,
@@ -127,9 +133,7 @@ defmodule Hologram.Realtime.Handshake do
       {:insert, handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
     )
 
-    new_state = notify_waiters(state, handshake_id, validated_bindings, identity)
-
-    {:reply, :ok, new_state}
+    {:reply, :ok, make_redeemable(state, handshake)}
   end
 
   @impl GenServer
@@ -167,32 +171,15 @@ defmodule Hologram.Realtime.Handshake do
     {:reply, :ok, state}
   end
 
-  # Boot-sync runs here rather than in init/1 so the blocking wait for peer
-  # replies doesn't stall the supervision tree (and thus app/endpoint
-  # readiness) for the full timeout on every boot. The ETS table and gossip
-  # subscription are established in init/1, so direct readers and live gossip
-  # are unaffected during this catch-up window.
-  @impl GenServer
-  def handle_continue({:boot_sync, boot_sync_timeout_ms}, state) do
-    Gossip.boot_sync(@gossip_topic, boot_sync_timeout_ms, &merge_synced_entries/1)
-
-    {:noreply, state}
-  end
-
   @impl GenServer
   def handle_info(
         {:insert, handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at},
         state
       ) do
-    :ets.insert(
-      @table_name,
+    handshake =
       {handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
-    )
 
-    new_state =
-      notify_waiters(state, handshake_id, validated_bindings, {instance_id, session_id, user_id})
-
-    {:noreply, new_state}
+    {:noreply, make_redeemable(state, handshake)}
   end
 
   @impl GenServer
@@ -226,6 +213,26 @@ defmodule Hologram.Realtime.Handshake do
   end
 
   @impl GenServer
+  def handle_info({:nodedown, _node}, state) do
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:nodeup, node}, state) do
+    # Asked in both directions on purpose. This node asks the newcomer because a peer
+    # that went away and came back can hold what this one is missing, and the newcomer
+    # asks this node through the same handler on its own side.
+    Gossip.request_sync_from(node, @gossip_topic)
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:sync_reply, handshakes}, state) do
+    {:noreply, Enum.reduce(handshakes, state, &make_redeemable(&2, &1))}
+  end
+
+  @impl GenServer
   def handle_info({:sync_request, requester_pid}, state) do
     Gossip.reply_to_sync_request(@table_name, requester_pid)
 
@@ -242,8 +249,27 @@ defmodule Hologram.Realtime.Handshake do
     :ets.select_delete(@table_name, match_spec)
   end
 
-  defp merge_synced_entries(entries) do
-    :ets.insert(@table_name, entries)
+  # A handshake has arrived on this node, from whichever direction: stashed by a local
+  # request, gossiped by a peer, or carried in a peer's reply to our sync request. It
+  # goes in the table so a later redeem finds it, and any redeem already parked waiting
+  # for it is answered now.
+  defp make_redeemable(
+         state,
+         {handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at} =
+           handshake
+       ) do
+    # An arriving handshake can already be expired: a peer answers a sync request out of
+    # its own table, which still holds whatever its last sweep has not reached. Expiry is
+    # what redeeming is gated on, and a waiter is a redeem that arrived early, so an
+    # expired handshake is made redeemable by neither route. Waking a waiter for one
+    # would hand back an :ok that redeem/2 itself would have refused.
+    if expires_at > System.system_time(:millisecond) do
+      :ets.insert(@table_name, handshake)
+
+      notify_waiters(state, handshake_id, validated_bindings, {instance_id, session_id, user_id})
+    else
+      state
+    end
   end
 
   defp notify_waiters(state, handshake_id, validated_bindings, identity) do

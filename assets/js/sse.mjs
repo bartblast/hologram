@@ -17,8 +17,23 @@ export default class Sse {
   static RECONNECT_JITTER = 0.25;
   static SSE_PATH = "/hologram/sse";
 
+  // How long a stream has to last before the client forgets the failures that preceded
+  // it. Opening is not enough: the server sends the 200 before the work that can kill
+  // the stream runs, so a doomed connection still opens.
+  //
+  // The only hard requirement is that it exceed the time a doomed stream takes to die,
+  // which is milliseconds - the death follows the 200 in the same request. Everything
+  // above that is policy, and this is set to MAX_RECONNECT_DELAY's 5 s for one
+  // property: a stream that dies sooner than the longest retry delay can never clear
+  // the count, so a connection that keeps dying right after opening climbs to the
+  // ceiling and stays there rather than retrying at the floor forever. The two are
+  // kept as separate numbers because they answer separate questions - how hard may we
+  // retry, and how long until we trust - and should be free to move apart.
+  static STABLE_CONNECTION_MS = 5_000;
+
   static eventSource = null;
   static reconnectAttempts = 0;
+  static stabilityTimer = null;
 
   // What the client tells the server so it can be kept up to date: the wire format this bundle
   // speaks, the model it was built against, and the page it is on. The first two are baked into
@@ -153,8 +168,14 @@ export default class Sse {
       });
 
       $.eventSource.onopen = () => {
-        $.reconnectAttempts = 0;
         GlobalRegistry.set("sseConnected?", true);
+
+        // Opening reports liveness. Clearing the failure count is a separate judgement
+        // the stream has to earn by lasting, so one that opens and dies still counts as
+        // a failed attempt and the delay after it grows.
+        $.stabilityTimer = setTimeout(() => {
+          $.reconnectAttempts = 0;
+        }, $.STABLE_CONNECTION_MS);
       };
 
       // JS-driven reconnect: native EventSource auto-reconnect would re-use
@@ -164,6 +185,8 @@ export default class Sse {
       // No retry cap: the receipt-expiry path inside `connect()` handles the
       // "give up and reload" case organically once stored receipts age out.
       $.eventSource.onerror = (event) => {
+        clearTimeout($.stabilityTimer);
+
         Logger.debug(`SSE error: ${event.type}`);
         GlobalRegistry.set("sseConnected?", false);
         $.eventSource.close();

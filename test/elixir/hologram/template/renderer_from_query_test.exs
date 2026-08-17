@@ -19,13 +19,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
-  alias Hologram.Test.Fixtures.Template.Renderer.Module88
   alias Hologram.Test.Fixtures.Template.Renderer.Module89
   alias Hologram.Test.Fixtures.Template.Renderer.Module90
   alias Hologram.Test.Fixtures.Template.Renderer.Module91
   alias Hologram.Test.Fixtures.Template.Renderer.Module92
   alias Hologram.Test.Fixtures.Template.Renderer.Module93
   alias Hologram.Test.Fixtures.Template.Renderer.Module95
+  alias Hologram.Test.Fixtures.Template.Renderer.Module97
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -38,7 +38,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     setup_query_cache(QueryCacheStub, false)
 
     stub(QueryCacheMock, :component_modules, fn ->
-      [Module88, Module89, Module90, Module92, Module95]
+      [Module97, Module89, Module90, Module92, Module95]
     end)
 
     QueryCache.init(nil)
@@ -76,7 +76,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   test "injects a zero-arity from_query prop" do
     create_entities()
 
-    node = {:component, Module88, [], []}
+    node = {:component, Module97, [], []}
 
     assert {"entities = banana,cherry", %{}, @server} = render_dom(node, @env, @server)
   end
@@ -84,7 +84,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   test "rejects template values for from_query props" do
     create_entities()
 
-    node = {:component, Module88, [{"entities", [expression: {[:template_value]}]}], []}
+    node = {:component, Module97, [{"entities", [expression: {[:template_value]}]}], []}
 
     assert {"entities = banana,cherry", %{}, @server} = render_dom(node, @env, @server)
   end
@@ -156,14 +156,14 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       Auth.grant_role(user, private_entity, :viewer)
 
-      {html, _component_registry, _server_struct} =
+      {html, _tree, _component_registry, _server_struct} =
         render_page(Module91, %{}, %Server{user_id: user.id}, @page_opts)
 
       assert String.contains?(html, "entities = 1,2")
     end
 
     test "renders only unconditionally visible rows for an anonymous session" do
-      {html, _component_registry, _server_struct} =
+      {html, _tree, _component_registry, _server_struct} =
         render_page(Module91, %{}, %Server{}, @page_opts)
 
       assert String.contains?(html, "entities = 1")
@@ -190,7 +190,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
         |> Entity.new(email: "renderer_2@example.com")
         |> DB.create()
 
-      {html, _component_registry, _server_struct} =
+      {html, _tree, _component_registry, _server_struct} =
         render_page(Module93, %{}, %Server{user_id: user.id}, @page_opts)
 
       assert String.contains?(html, "current user = renderer_2@example.com")
@@ -202,7 +202,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
         |> Entity.new(email: "renderer_5@example.com", password_hash: "hash_9dTf")
         |> DB.create()
 
-      {_html, component_registry, _server_struct} =
+      {_html, _tree, component_registry, _server_struct} =
         render_page(Module93, %{}, %Server{user_id: user.id}, @page_opts)
 
       context_user = component_registry["page"].struct.emitted_context[{Hologram, :user}]
@@ -212,7 +212,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     end
 
     test "exposes nil for an anonymous session" do
-      {html, _component_registry, _server_struct} =
+      {html, _tree, _component_registry, _server_struct} =
         render_page(Module93, %{}, %Server{}, @page_opts)
 
       assert String.contains?(html, "current user = none")
@@ -221,14 +221,14 @@ defmodule Hologram.Template.RendererFromQueryTest do
     test "exposes nil when no row carries the session user id" do
       dangling_user_id = Entity.generate_id()
 
-      {html, _component_registry, _server_struct} =
+      {html, _tree, _component_registry, _server_struct} =
         render_page(Module93, %{}, %Server{user_id: dangling_user_id}, @page_opts)
 
       assert String.contains?(html, "current user = none")
     end
 
     test "exposes nil for a session user id that is not a canonical entity id" do
-      {html, _component_registry, _server_struct} =
+      {html, _tree, _component_registry, _server_struct} =
         render_page(Module93, %{}, %Server{user_id: 7}, @page_opts)
 
       assert String.contains?(html, "current user = none")
