@@ -531,9 +531,11 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp build_try_catch_clause(kind, value, guards, body, context) do
+    pattern_context = %{context | pattern?: true}
+
     kind_ir =
       if kind do
-        transform(kind, context)
+        transform(kind, pattern_context)
       else
         %IR.AtomType{value: :throw}
       end
@@ -547,7 +549,7 @@ defmodule Hologram.Compiler.Transformer do
 
     %IR.TryCatchClause{
       kind: kind_ir,
-      value: transform(value, context),
+      value: transform(value, pattern_context),
       guards: guards_ir,
       body: transform(body, context)
     }

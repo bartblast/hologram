@@ -104,6 +104,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module185
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module186
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module187
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module188
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module19
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module20
@@ -6096,6 +6097,88 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = transform_module_and_fetch_expr(Module132)
+    end
+
+    # Both the kind and the value of a catch clause are patterns,
+    # so a struct in either position transforms to map IR.
+    test "catch clause with struct pattern value (AST from source code)" do
+      ast =
+        ast("""
+        try do
+          x
+        catch
+          :throw, %Hologram.Test.Fixtures.Compiler.Transformer.Module188{a: a} -> a
+        end
+        """)
+
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: %IR.AtomType{value: :throw},
+                   value: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module188}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                     ]
+                   },
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :a}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "catch clause with struct pattern value (AST from BEAM file)" do
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: %IR.AtomType{value: :throw},
+                   value: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module188}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                     ]
+                   },
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :a}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module188)
+    end
+
+    # The kind position is a pattern as well - a struct there is dead code that
+    # can never match, but it must not be evaluated as a struct construction,
+    # since the clause list is built on every entry into the try block.
+    # There is no BEAM file counterpart, because compiling such a clause
+    # makes Elixir warn that the pattern will never match.
+    test "catch clause with struct pattern kind (AST from source code)" do
+      ast =
+        ast("""
+        try do
+          x
+        catch
+          %Hologram.Test.Fixtures.Compiler.Transformer.Module188{a: a}, reason -> {a, reason}
+        end
+        """)
+
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module188}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                     ]
+                   },
+                   value: %IR.Variable{name: :reason},
+                   guards: []
+                 }
+               ]
+             } = transform(ast, %Context{})
     end
 
     test "catch clause with kind, value and single guard (AST from source code)" do
