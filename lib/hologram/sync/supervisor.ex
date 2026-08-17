@@ -48,7 +48,17 @@ defmodule Hologram.Sync.Supervisor do
       Pruner
     ]
 
-    Supervisor.init(children, strategy: :one_for_one)
+    # The order above is a dependency order, and rest_for_one is what makes it one: each child is
+    # restarted with everything after it, so nothing goes on running against something that has
+    # been replaced underneath it. The unit holding this one restarts the same way, for the same
+    # reason.
+    #
+    # What it prevents is quiet rather than loud. A registry replaced on its own leaves every
+    # evaluator alive and unfindable - rounds reach nobody, `Evaluator.round/3` answers `:ok` for
+    # a window it cannot see, and each client sits on the last thing it was told. A notifications
+    # connection replaced on its own leaves the dispatcher listening to a process that is gone,
+    # which nothing reports either: it falls back to its poll and is merely slower forever.
+    Supervisor.init(children, strategy: :rest_for_one)
   end
 
   # The dispatcher comes after what it hands work to: it starts reading straight away, and what it
@@ -57,8 +67,10 @@ defmodule Hologram.Sync.Supervisor do
   # process already up. Only the pruner's position is free: it reads nothing this tree holds, and
   # prunes nothing until an hour in.
   #
-  # One_for_one is what makes keeping the edge worth it: a dispatcher that dies is replaced beside
-  # sessions that did not, and those sessions go on advancing from the rounds it sends.
+  # Being last but one is what makes keeping the edge worth it: nothing before the dispatcher is
+  # restarted when the dispatcher dies, so it comes back beside the same evaluators and the same
+  # sessions - which go on advancing from the rounds it sends, and would be carried past the
+  # window it was reading if it resumed anywhere but where it left off.
   defp dispatcher_child do
     {Dispatcher, handler: &Fanout.route/2, notifications: @notifications, read_edge: ReadEdge}
   end

@@ -36,8 +36,11 @@ defmodule Hologram.Sync.SupervisorTest do
              ]
     end
 
-    test "restarts a child on its own, since one failing says nothing about the others" do
-      assert {:ok, {%{strategy: :one_for_one}, _children}} = init([])
+    # Restarting one of these alone is what nothing here can survive quietly: evaluators left
+    # alive by a replaced registry are unfindable rather than dead, so rounds reach nobody and no
+    # error is raised anywhere.
+    test "restarts a child with everything that depends on it" do
+      assert {:ok, {%{strategy: :rest_for_one}, _children}} = init([])
     end
 
     test "finds evaluators by window id" do
@@ -91,6 +94,26 @@ defmodule Hologram.Sync.SupervisorTest do
       ids = child_ids()
 
       assert Enum.find_index(ids, &(&1 == Dispatcher)) > Enum.find_index(ids, &(&1 == ReadEdge))
+    end
+
+    # The dispatcher listens once, at its own start. A replaced connection would leave it listening
+    # to a process that no longer exists - it would fall back to its poll and be quietly slower for
+    # as long as the node ran. Coming after is what has it restart and listen again.
+    test "starts the dispatcher after the connection it listens on" do
+      ids = child_ids()
+
+      assert Enum.find_index(ids, &(&1 == Dispatcher)) >
+               Enum.find_index(ids, &(&1 == notifications()))
+    end
+
+    # The other side of that: restarting the connection restarts the dispatcher, and a dispatcher
+    # coming back has to find the edge it had reached still kept. Behind the connection it would be
+    # replaced along with it, and every reconnection of a listener would cost a skipped window.
+    test "keeps the read edge ahead of what a restart of the dispatcher follows from" do
+      ids = child_ids()
+
+      assert Enum.find_index(ids, &(&1 == ReadEdge)) <
+               Enum.find_index(ids, &(&1 == notifications()))
     end
   end
 end
