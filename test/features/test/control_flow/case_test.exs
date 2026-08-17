@@ -85,4 +85,54 @@ defmodule HologramFeatureTests.ControlFlow.CaseTest do
                           |> click(button("Error in clause body"))
                         end
   end
+
+  feature "struct pattern with var field", %{session: session} do
+    session
+    |> visit(CasePage)
+    |> click(button("Struct pattern with var field"))
+    |> assert_text(css("#result"), "42")
+  end
+
+  feature "partial struct pattern", %{session: session} do
+    session
+    |> visit(CasePage)
+    |> click(button("Partial struct pattern"))
+    |> assert_text(css("#result"), ":matched")
+  end
+
+  feature "bare struct pattern", %{session: session} do
+    session
+    |> visit(CasePage)
+    |> click(button("Bare struct pattern"))
+    |> assert_text(css("#result"), ":matched")
+  end
+
+  feature "struct pattern with guard", %{session: session} do
+    session
+    |> visit(CasePage)
+    |> click(button("Struct pattern with guard"))
+    |> assert_text(css("#result"), "42")
+  end
+
+  feature "map vs struct pattern", %{session: session} do
+    session
+    |> visit(CasePage)
+    |> click(button("Map vs struct pattern"))
+    |> assert_text(css("#result"), ":fallback")
+  end
+
+  # TODO: expect the BEAM form, %HologramFeatureTests.StructFixture1{name: "other", value: 7},
+  # once client-side struct inspect is implemented (see the "TODO: inspect structs" note on
+  # Interpreter.#inspectMap/2 in assets/js/interpreter.mjs). The client renders structs as
+  # plain maps for now - the same form asserted in call_graph/dynamic_dispatch_test.exs.
+  feature "unmatched struct pattern", %{session: session} do
+    assert_client_error session,
+                        CaseClauseError,
+                        ~s(no case clause matching:\n\n    %{__struct__: HologramFeatureTests.StructFixture1, name: "other", value: 7}\n),
+                        fn ->
+                          session
+                          |> visit(CasePage)
+                          |> click(button("Unmatched struct pattern"))
+                        end
+  end
 end
