@@ -21,6 +21,16 @@ defmodule Hologram.Migrator do
   # md5("hologram_migrations") as a signed int64.
   @advisory_lock_key -335_777_576_117_788_795
 
+  # A key of its own, and the separation is what keeps a deploy from deadlocking itself. A
+  # concurrent index build cannot run inside a transaction, so it holds a SESSION lock - while
+  # every applier waits for its lock INSIDE one. Share one key between them and a node building
+  # an index leaves the others sitting in open transactions waiting for it, which is the one
+  # thing a concurrent build cannot outlast: it waits for every transaction that could see the
+  # table, so it waits for them, and they wait for it. Frozen forever for the same reason as the
+  # key above. Provenance (for uniqueness, not for re-derivation): first 8 bytes of
+  # md5("hologram_index_repair") as a signed int64.
+  @index_advisory_lock_key 6_059_159_047_318_510_073
+
   @managed_by "migrations"
 
   @doc """
@@ -280,6 +290,10 @@ defmodule Hologram.Migrator do
   concurrent build cannot run inside a transaction, and nodes building the same index at
   the same moment deadlock each other. Nodes that wait re-read the catalog and find
   nothing left to do.
+
+  That lock is NOT the one the appliers share. An applier waits for its lock inside a
+  transaction, and a concurrent build waits for every transaction that could see the table -
+  so one key for both makes a deploy wait on itself, each side holding what the other needs.
   """
   @spec repair_indexes(%{module => %{atom => any}}) :: :ok
   def repair_indexes(mapping) do
@@ -601,7 +615,7 @@ defmodule Hologram.Migrator do
   end
 
   defp rebuild_and_create_indexes(mapping) do
-    {:ok, _result} = Connection.query("SELECT pg_advisory_lock($1)", [@advisory_lock_key])
+    {:ok, _result} = Connection.query("SELECT pg_advisory_lock($1)", [@index_advisory_lock_key])
 
     try do
       Enum.each(invalid_indexes(), &rebuild_index/1)
@@ -610,7 +624,8 @@ defmodule Hologram.Migrator do
 
       Enum.each(missing, &create_index_concurrently/1)
     after
-      {:ok, _result} = Connection.query("SELECT pg_advisory_unlock($1)", [@advisory_lock_key])
+      {:ok, _result} =
+        Connection.query("SELECT pg_advisory_unlock($1)", [@index_advisory_lock_key])
     end
 
     :ok
