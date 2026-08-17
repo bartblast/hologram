@@ -100,6 +100,8 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module181
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module182
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module183
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module184
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module185
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module19
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module20
@@ -3691,6 +3693,77 @@ defmodule Hologram.Compiler.TransformerTest do
                }
              } = transform(ast, %Context{})
     end
+
+    # The reducer clause head is a pattern, while the initial value next to it
+    # stays an expression - the same struct AST transforms both ways here.
+    test "reducer clause with struct pattern (AST from source code)" do
+      ast =
+        ast("""
+        for x <- [1, 2], reduce: %Hologram.Test.Fixtures.Compiler.Transformer.Module185{a: 0, b: nil} do
+          %Hologram.Test.Fixtures.Compiler.Transformer.Module185{a: a} -> my_reducer(a, x)
+        end
+        """)
+
+      assert %IR.Comprehension{
+               mapper: nil,
+               reducer: %{
+                 clauses: [
+                   %IR.Clause{
+                     match: %IR.MapType{
+                       data: [
+                         {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module185}},
+                         {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                       ]
+                     },
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :my_reducer,
+                           args: [%IR.Variable{name: :a}, %IR.Variable{name: :x}]
+                         }
+                       ]
+                     }
+                   }
+                 ],
+                 initial_value: %IR.RemoteFunctionCall{
+                   module: %IR.AtomType{value: Module185},
+                   function: :__struct__
+                 }
+               }
+             } = transform(ast, %Context{})
+    end
+
+    test "reducer clause with struct pattern (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               mapper: nil,
+               reducer: %{
+                 clauses: [
+                   %IR.Clause{
+                     match: %IR.MapType{
+                       data: [
+                         {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module185}},
+                         {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                       ]
+                     },
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :my_reducer,
+                           args: [%IR.Variable{name: :a}, %IR.Variable{name: :x}]
+                         }
+                       ]
+                     }
+                   }
+                 ],
+                 initial_value: %IR.RemoteFunctionCall{
+                   module: %IR.AtomType{value: Module185},
+                   function: :__struct__
+                 }
+               }
+             } = transform_module_and_fetch_expr(Module185)
+    end
   end
 
   test "reducer clause with 3 guards (AST from BEAM file)" do
@@ -6439,6 +6512,57 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = transform_module_and_fetch_expr(Module150)
+    end
+
+    # Else clauses reach the same clause transform as case clauses,
+    # so a struct in an else clause head is a pattern as well.
+    test "else clause with struct pattern (AST from source code)" do
+      ast =
+        ast("""
+        try do
+          x
+        catch
+          :error -> :a
+        else
+          %Hologram.Test.Fixtures.Compiler.Transformer.Module184{a: a} -> a
+        end
+        """)
+
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module184}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                     ]
+                   },
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :a}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "else clause with struct pattern (AST from BEAM file)" do
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module184}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                     ]
+                   },
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :a}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module184)
     end
 
     test "after block (AST from source code)" do
