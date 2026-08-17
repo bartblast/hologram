@@ -60,6 +60,12 @@ defmodule Hologram.Sync.Evaluators do
   # told who won - so the answer is the running evaluator either way. A subscriber given at start
   # is watched from the beginning, which leaves no gap in which an evaluator could find itself
   # with nobody and stop.
+  #
+  # Nothing catches an answer other than these two. Starting cannot be refused here: the children
+  # are unlimited, and an evaluator's init/1 takes what this line hands it and returns. An answer
+  # that surprises this clause is this build being wrong about itself, which is worth the crash -
+  # the alternative is calling it :no_window, and a window said not to exist is one the session
+  # marks filled and announces the pot complete without.
   defp subscribe_to_running(window_id, term, subscriber) do
     child = {Evaluator, window_id: window_id, term: term, subscribers: [subscriber]}
 
@@ -68,9 +74,16 @@ defmodule Hologram.Sync.Evaluators do
         {:ok, pid, 0}
 
       {:error, {:already_started, pid}} ->
-        {:ok, version} = Evaluator.subscribe(window_id, subscriber)
+        case Evaluator.subscribe(window_id, subscriber) do
+          {:ok, version} ->
+            {:ok, pid, version}
 
-        {:ok, pid, version}
+          # The one it lost the race to stopped before it could be joined - its last subscriber
+          # went away in between. There is nothing to join now, so the window wants starting
+          # again, which the retry does with this subscriber watched from the first moment.
+          :no_evaluator ->
+            subscribe_to_running(window_id, term, subscriber)
+        end
     end
   end
 end

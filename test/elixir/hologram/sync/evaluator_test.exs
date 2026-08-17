@@ -9,6 +9,7 @@ defmodule Hologram.Sync.EvaluatorTest do
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.ResultStore
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Sync.VanishingEvaluator
 
   @window_id "w_7f3a"
 
@@ -198,6 +199,36 @@ defmodule Hologram.Sync.EvaluatorTest do
 
     test "answers that there is no evaluator for a window nobody holds" do
       assert subscribe("w_unheld", self()) == :no_evaluator
+    end
+
+    # A registry entry outlives the process it names by however long the registry takes to hear it
+    # died, so this window is real: suspending the registry holds it open rather than inventing it.
+    # A lookup there hands back a pid with nothing behind it, and calling that used to take down
+    # whoever asked - a session, whose client then loses its stream.
+    test "answers the same when the registry still lists a process that has stopped" do
+      evaluator = start_evaluator!([])
+
+      partitions =
+        registry()
+        |> Supervisor.which_children()
+        |> Enum.map(fn {_id, pid, _type, _modules} -> pid end)
+
+      Enum.each(partitions, &:sys.suspend/1)
+
+      ref = Process.monitor(evaluator)
+      Process.exit(evaluator, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^evaluator, :killed}
+
+      assert [{^evaluator, _value}] = Registry.lookup(registry(), @window_id)
+      assert subscribe(@window_id, self()) == :no_evaluator
+
+      Enum.each(partitions, &:sys.resume/1)
+    end
+
+    test "answers the same when the evaluator stops while it is being asked" do
+      start_supervised!({VanishingEvaluator, window_id: @window_id})
+
+      assert subscribe(@window_id, self()) == :no_evaluator
     end
   end
 

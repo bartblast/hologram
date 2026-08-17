@@ -11,6 +11,7 @@ defmodule Hologram.Sync.EvaluatorsTest do
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.ResultStore
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Sync.VanishingEvaluator
 
   use_module_stub :query_cache
 
@@ -123,6 +124,18 @@ defmodule Hologram.Sync.EvaluatorsTest do
 
       assert_receive {:round, @window_id, 1, [], nil}
       assert_receive {:forwarded, {:round, @window_id, 1, [], nil}}
+    end
+
+    # The evaluator a session loses the start race to can lose its own last subscriber before the
+    # loser manages to join it. There is then nothing to join, and the window wants starting again
+    # - the session asking must not be taken down for having asked a moment too late.
+    test "starts the window again when the evaluator it lost the race to has gone" do
+      start_supervised!({VanishingEvaluator, window_id: @window_id})
+
+      assert {:ok, evaluator, 0} = subscribe(@window_id, self())
+
+      assert Process.alive?(evaluator)
+      assert [{^evaluator, _value}] = Registry.lookup(Evaluator.registry(), @window_id)
     end
 
     test "answers that there is no window for an id nothing downloads" do

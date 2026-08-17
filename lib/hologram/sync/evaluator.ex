@@ -66,7 +66,7 @@ defmodule Hologram.Sync.Evaluator do
   @spec subscribe(String.t(), pid) :: {:ok, non_neg_integer} | :no_evaluator
   def subscribe(window_id, subscriber) do
     case Registry.lookup(@registry, window_id) do
-      [{pid, _value}] -> GenServer.call(pid, {:subscribe, subscriber})
+      [{pid, _value}] -> ask_to_subscribe(pid, subscriber)
       [] -> :no_evaluator
     end
   end
@@ -122,6 +122,18 @@ defmodule Hologram.Sync.Evaluator do
     else
       {:noreply, %{state | subscribers: subscribers}}
     end
+  end
+
+  # A registry entry outlives the process it names by however long the registry takes to hear it
+  # died, so a lookup can hand back a pid with nothing behind it - and an evaluator can stop while
+  # the question is still travelling. Both are the same answer as finding no entry at all, and are
+  # given as that answer rather than as an exit in whoever asked. A call that times out is left to
+  # raise: an evaluator too busy to answer has not stopped, and saying it had would start a second
+  # one beside it.
+  defp ask_to_subscribe(pid, subscriber) do
+    GenServer.call(pid, {:subscribe, subscriber})
+  catch
+    :exit, {reason, {GenServer, :call, _call}} when reason in [:noproc, :normal] -> :no_evaluator
   end
 
   defp drain_rounds(transactions, place) do
