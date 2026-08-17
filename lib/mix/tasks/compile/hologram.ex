@@ -282,6 +282,26 @@ defmodule Mix.Tasks.Compile.Hologram do
     File.rm(lock_path)
   end
 
+  # Known, unclosed race: the removal is by path, not owner-verified. Deciding that
+  # os_pid is dead takes milliseconds (SystemUtils.os_process_alive?/1 shells out to
+  # ps or tasklist), and by the time File.rm/1 runs, the file at this path may no
+  # longer be the one that was diagnosed. Two invocations reading the same lock left
+  # behind by a killed process both diagnose it dead; the first removes it, acquires
+  # its own lock and starts compiling; the second's removal then deletes that live
+  # lock, and both compile at once.
+  #
+  # Left as is deliberately. Rechecking the file's identity right before the removal
+  # would only shrink the window from milliseconds to microseconds while making the
+  # code look safe, and microsecond windows between two file operations are exactly
+  # what made this lock flaky before (see the empty-content clause of
+  # validate_lock_file_and_proceed_accordingly/2). Closing it properly means making
+  # existence and ownership one atomic object, i.e. a lock directory - File.mkdir/1
+  # is atomic and fails when the directory exists, with the OS-level PID in a file
+  # inside it - which restructures acquisition, release and stale detection alike.
+  # Worth doing only if this is ever actually observed: unlike the empty-lock race it
+  # needs a lock orphaned by a killed process, which the cleanup in with_lock/2
+  # prevents on every normal exit, plus two invocations landing in the liveness check
+  # within the same few milliseconds.
   defp remove_lock_for_dead_process(lock_path, os_pid) do
     Logger.info(
       "Hologram: removing stale lock file (OS-level process #{os_pid} no longer exists)"
