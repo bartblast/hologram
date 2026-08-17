@@ -1,30 +1,52 @@
 defmodule Hologram.Realtime.Gossip do
   @moduledoc false
 
-  # Shared boot-sync mechanics for the per-node, gossiped ETS stores
-  # (`Hologram.Realtime.Tombstone` and `Hologram.Realtime.Handshake`). Each
-  # store owns its own table, gossip topic, TTL, and per-entry merge rule; the
-  # request/collect/reply wiring is identical and lives here.
+  # Shared gossip wiring for the per-node ETS stores (`Hologram.Realtime.Tombstone` and
+  # `Hologram.Realtime.Handshake`): asking peers for what they hold, and answering when
+  # they ask. Each store owns its own table, gossip topic, TTL, and merge rule.
+  #
+  # Nothing here waits. A reply is a message the asking store merges whenever it lands,
+  # so a store is never held up by peers that are slow or absent.
 
   @doc """
-  Broadcasts a sync request to peers on `gossip_topic`, then blocks up to
-  `timeout_ms` collecting `{:sync_reply, entries}` responses, invoking
-  `merge_fun` on each batch. Returns `:ok` once the window elapses.
+  Asks every currently connected node for what it holds, and returns immediately.
 
-  Run this inside a `handle_continue/2` so a freshly booted node catches up on
-  peer state without blocking `init/1` (and thus the supervision tree) for the
-  full timeout.
+  A peer answers by sending a `{:sync_reply, entries}` message, which arrives at the
+  caller like any other message. A store that asks this way stays available while its
+  peers answer, and merges what arrives in its `handle_info/2` - the same way it merges
+  the entries peers gossip to it in steady state. A batch that arrives at boot is only
+  a larger batch, not a different kind of event.
+
+  Each node is asked directly rather than through a topic broadcast. A broadcast reaches
+  whoever the topic's group membership currently names, and that membership propagates on
+  its own schedule - a store asking as its node joins can broadcast into a group that
+  does not list its peers yet, and hear nothing back. `Node.list/0` needs only the
+  distribution connection, so this asks exactly the nodes that can answer.
+
+  A node with no peers connected asks nobody, which costs it nothing. Peers that connect
+  later are picked up by the store's `{:nodeup, node}` handling instead.
   """
-  @spec boot_sync(String.t(), non_neg_integer, ([term] -> any)) :: :ok
-  def boot_sync(gossip_topic, timeout_ms, merge_fun) do
-    Phoenix.PubSub.broadcast_from(
+  @spec request_sync(String.t()) :: :ok
+  def request_sync(gossip_topic) do
+    Enum.each(Node.list(), &request_sync_from(&1, gossip_topic))
+  end
+
+  @doc """
+  Asks one node for what it holds, and returns immediately.
+
+  Used when a node joins, where the newcomer and the node that saw it join are the only
+  two that can hold state the other is missing. Asking the whole topic instead would
+  have every node dump its entire table to every other node on every join, which grows
+  quadratically with the cluster for state all but one of them already has.
+  """
+  @spec request_sync_from(node, String.t()) :: :ok
+  def request_sync_from(node, gossip_topic) do
+    Phoenix.PubSub.direct_broadcast(
+      node,
       Hologram.PubSub,
-      self(),
       gossip_topic,
       {:sync_request, self()}
     )
-
-    collect_sync_replies(System.monotonic_time(:millisecond) + timeout_ms, merge_fun)
   end
 
   @doc """
@@ -36,17 +58,5 @@ defmodule Hologram.Realtime.Gossip do
     send(requester_pid, {:sync_reply, :ets.tab2list(table_name)})
 
     :ok
-  end
-
-  defp collect_sync_replies(deadline, merge_fun) do
-    remaining_ms = max(deadline - System.monotonic_time(:millisecond), 0)
-
-    receive do
-      {:sync_reply, entries} ->
-        merge_fun.(entries)
-        collect_sync_replies(deadline, merge_fun)
-    after
-      remaining_ms -> :ok
-    end
   end
 end

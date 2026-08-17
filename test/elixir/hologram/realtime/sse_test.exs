@@ -15,7 +15,7 @@ defmodule Hologram.Realtime.SSETest do
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
     wait_for_process_cleanup(Handshake)
-    start_supervised!({Handshake, boot_sync_timeout_ms: 0})
+    start_supervised!(Handshake)
 
     wait_for_process_cleanup(SubscriptionRegistry)
     start_supervised!(SubscriptionRegistry)

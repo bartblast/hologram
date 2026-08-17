@@ -48,7 +48,7 @@ defmodule Hologram.RouterTest do
     start_supervised!(Hologram.Realtime.SubscriptionRegistry)
 
     wait_for_process_cleanup(Handshake)
-    start_supervised!({Handshake, boot_sync_timeout_ms: 0})
+    start_supervised!(Handshake)
 
     :ok
   end
