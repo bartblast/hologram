@@ -16,6 +16,16 @@ defmodule Hologram.Assets.PathRegistryTest do
     setup_asset_path_registry(AssetPathRegistryStub, false)
   end
 
+  # Reads the registry as fast as it can until asked what it saw, so a reload that empties the
+  # table even briefly is caught rather than stepped over.
+  defp watch_lookups(report_to, static_path, seen) do
+    receive do
+      {:report, ^report_to} -> send(report_to, {:answers, seen})
+    after
+      0 -> watch_lookups(report_to, static_path, [lookup(static_path) | seen])
+    end
+  end
+
   test "get_mapping/0", %{mapping: mapping} do
     AssetPathRegistry.start_link([])
     assert get_mapping() == mapping
@@ -75,6 +85,25 @@ defmodule Hologram.Assets.PathRegistryTest do
     reload()
 
     assert ETS.get_all(ets_table_name) == mapping
+  end
+
+  # A reload that empties the table first leaves every asset unresolvable for as long as the walk
+  # of the static dir takes, which is the slowest thing here - so a page rendered in that window
+  # would be served links to assets the registry says do not exist.
+  test "reload/0 never answers with nothing for an asset it holds", %{mapping: mapping} do
+    AssetPathRegistry.start_link([])
+
+    [{static_path, asset_path} | _rest] = Map.to_list(mapping)
+
+    test_pid = self()
+    reader = spawn_link(fn -> watch_lookups(test_pid, static_path, []) end)
+
+    Enum.each(1..50, fn _round -> reload() end)
+
+    send(reader, {:report, self()})
+    assert_receive {:answers, answers}
+
+    assert Enum.uniq(answers) == [{:ok, asset_path}]
   end
 
   test "start_link/1" do
