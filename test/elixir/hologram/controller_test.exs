@@ -10,7 +10,6 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler.Encoder
-  alias Hologram.Component
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
@@ -454,13 +453,9 @@ defmodule Hologram.ControllerTest do
   describe "build_page_data_payload/1" do
     setup do
       fields = %{
-        component_registry: %{"page" => %{module: Module1, struct: %Component{state: %{a: 1}}}},
         page_digest: "abcdef1234567890",
         page_module: Module1,
-        page_params: %{"key" => "value"},
-        self_echoes: [:echo_1, :echo_2],
-        sub_receipt_adds: [{"topic_1", "key_1"}],
-        sub_receipt_drops: [{"topic_2", "key_2"}]
+        tree: [{:element, "div", [{"$key", [text: "a1b2c3:0"]}], [{:text, "abc"}]}]
       }
 
       [fields: fields]
@@ -475,12 +470,17 @@ defmodule Hologram.ControllerTest do
     test "encodes each term under its own key", %{fields: fields} do
       payload = build_page_data_payload(fields)
 
-      assert payload.componentRegistry == Encoder.encode_term!(fields.component_registry)
       assert payload.pageModule == Encoder.encode_term!(fields.page_module)
-      assert payload.pageParams == Encoder.encode_term!(fields.page_params)
-      assert payload.selfEchoes == Encoder.encode_term!(fields.self_echoes)
-      assert payload.subReceiptAdds == Encoder.encode_term!(fields.sub_receipt_adds)
-      assert payload.subReceiptDrops == Encoder.encode_term!(fields.sub_receipt_drops)
+      assert payload.tree == Encoder.encode_term!(fields.tree)
+    end
+
+    # Everything a mount reads rides inside the tree, in the script the server writes into every
+    # page it serves, so the payload names only what has to be known before the tree can be used.
+    test "carries nothing beside the tree but what is needed to use it", %{fields: fields} do
+      assert fields
+             |> build_page_data_payload()
+             |> Map.keys()
+             |> Enum.sort() == [:pageDigest, :pageModule, :tree, :type]
     end
 
     test "survives the JSON encoding it is sent over", %{fields: fields} do
@@ -493,7 +493,7 @@ defmodule Hologram.ControllerTest do
 
       assert decoded["type"] == "page"
       assert decoded["pageDigest"] == "abcdef1234567890"
-      assert decoded["componentRegistry"] == payload.componentRegistry
+      assert decoded["tree"] == payload.tree
     end
 
     test "describes a redirect to a page the client can ask for itself" do
@@ -613,7 +613,7 @@ defmodule Hologram.ControllerTest do
   describe "handle_command_request/1" do
     setup do
       wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+      start_supervised!(Tombstone)
 
       :ok
     end
@@ -2220,10 +2220,10 @@ defmodule Hologram.ControllerTest do
   describe "handle_sse_handshake_request/1" do
     setup do
       wait_for_process_cleanup(Handshake)
-      start_supervised!({Handshake, boot_sync_timeout_ms: 0})
+      start_supervised!(Handshake)
 
       wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+      start_supervised!(Tombstone)
 
       :ok
     end
@@ -2436,7 +2436,7 @@ defmodule Hologram.ControllerTest do
 
       assert response["type"] == "page"
       assert response["pageDigest"] == "dummy_module_4_digest"
-      assert response["componentRegistry"] =~ "page"
+      assert response["tree"] =~ ~r/^Type\.list\(/
     end
 
     test "casts page params and carries them in the payload" do
@@ -2449,8 +2449,25 @@ defmodule Hologram.ControllerTest do
 
       response = Jason.decode!(conn.resp_body)
 
-      assert response["pageParams"] =~ "111"
-      assert response["pageParams"] =~ "222"
+      # The page renders its params, so the tree carrying the render shows them cast: an uncast
+      # param would be inspected as a string.
+      assert response["tree"] =~ "param_aaa = 111"
+      assert response["tree"] =~ "param_bbb = 222"
+    end
+
+    test "carries the render as a tree with the Realtime JS interpolated" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module5"
+        |> subsequent_page_request_conn()
+        |> handle_subsequent_page_request(Module5)
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response["tree"] =~ "Module5 page"
+      assert response["tree"] =~ "selfEchoes: Type.list([])"
+      refute response["tree"] =~ "JS_PLACEHOLDER"
     end
 
     test "marks a page payload as page data" do
@@ -2575,8 +2592,8 @@ defmodule Hologram.ControllerTest do
 
       response = Jason.decode!(conn.resp_body)
 
-      assert response["pageParams"] =~ "hello world"
-      assert response["pageParams"] =~ "foo/bar"
+      assert response["tree"] =~ "hello world"
+      assert response["tree"] =~ "foo/bar"
     end
 
     test "updates Plug.Conn session" do
@@ -2661,7 +2678,7 @@ defmodule Hologram.ControllerTest do
   describe "verify_and_refresh_receipts/4" do
     setup do
       wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+      start_supervised!(Tombstone)
 
       :ok
     end

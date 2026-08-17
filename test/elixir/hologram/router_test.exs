@@ -48,7 +48,7 @@ defmodule Hologram.RouterTest do
     start_supervised!(Hologram.Realtime.SubscriptionRegistry)
 
     wait_for_process_cleanup(Handshake)
-    start_supervised!({Handshake, boot_sync_timeout_ms: 0})
+    start_supervised!(Handshake)
 
     :ok
   end
@@ -122,8 +122,8 @@ defmodule Hologram.RouterTest do
 
       assert Plug.Conn.get_resp_header(conn, "hologram-page-data") == ["true"]
       assert response["type"] == "page"
-      assert response["pageParams"] =~ "123"
-      assert response["pageParams"] =~ "xyz"
+      # The page renders its params, so the tree carrying the render shows them cast.
+      assert response["tree"] =~ "a = 123, b = :xyz"
     end
   end
 

@@ -95,9 +95,14 @@ defmodule Hologram.Controller do
   Builds the payload describing a page for a client that renders it itself, rather than being sent
   the markup.
 
-  Carries what a mount needs and nothing about how the page looks: the component registry the
-  render produced, the page module and its params, the realtime bookkeeping, and the digest naming
-  the page's bundle, so the client can load the code without asking again.
+  Carries the render itself, as an evaluated tree, so the page can be shown before any of its own
+  code has arrived. Everything a mount reads - the component registry, the page params, the
+  realtime bookkeeping - rides inside that tree, in the script the server writes into every page
+  it serves, so a navigated page and a loaded document leave a mount the same thing to read.
+
+  What travels beside the tree is what has to be known before it can be used: the page module,
+  which decides whether this client has the page's code already, and the digest naming the bundle
+  to fetch when it does not.
 
   Terms are encoded the way a command's response encodes them, as JavaScript the client evaluates,
   since that is the form its runtime already reads.
@@ -125,22 +130,14 @@ defmodule Hologram.Controller do
   end
 
   def build_page_data_payload(%{
-        component_registry: component_registry,
         page_digest: page_digest,
         page_module: page_module,
-        page_params: page_params,
-        self_echoes: self_echoes,
-        sub_receipt_adds: sub_receipt_adds,
-        sub_receipt_drops: sub_receipt_drops
+        tree: tree
       }) do
     %{
-      componentRegistry: Encoder.encode_term!(component_registry),
       pageDigest: page_digest,
       pageModule: Encoder.encode_term!(page_module),
-      pageParams: Encoder.encode_term!(page_params),
-      selfEchoes: Encoder.encode_term!(self_echoes),
-      subReceiptAdds: Encoder.encode_term!(sub_receipt_adds),
-      subReceiptDrops: Encoder.encode_term!(sub_receipt_drops),
+      tree: Encoder.encode_term!(tree),
       type: "page"
     }
   end
@@ -552,15 +549,29 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       {:rendered, lifecycle_conn, result} ->
+        # The same three values the HTML path substitutes into the served document, substituted
+        # into the tree's scripts, so the tree describes the page completely.
+        self_echoes_js = Encoder.encode_term!(result.self_echoes)
+        sub_receipt_adds_js = Encoder.encode_term!(result.sub_receipt_adds)
+        sub_receipt_drops_js = Encoder.encode_term!(result.sub_receipt_drops)
+
+        tree =
+          result.tree
+          |> Renderer.interpolate_js_in_tree("$SELF_ECHOES_JS_PLACEHOLDER", self_echoes_js)
+          |> Renderer.interpolate_js_in_tree(
+            "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER",
+            sub_receipt_adds_js
+          )
+          |> Renderer.interpolate_js_in_tree(
+            "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER",
+            sub_receipt_drops_js
+          )
+
         payload =
           build_page_data_payload(%{
-            component_registry: result.component_registry,
             page_digest: PageDigestRegistry.lookup(page_module),
             page_module: page_module,
-            page_params: params,
-            self_echoes: result.self_echoes,
-            sub_receipt_adds: result.sub_receipt_adds,
-            sub_receipt_drops: result.sub_receipt_drops
+            tree: tree
           })
 
         lifecycle_conn
@@ -743,7 +754,7 @@ defmodule Hologram.Controller do
       {:terminal, decorate_conn(conn, server_struct, middleware_server_struct),
        middleware_server_struct}
     else
-      {rendered_html, component_registry, rendered_server_struct} =
+      {rendered_html, rendered_tree, component_registry, rendered_server_struct} =
         Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
 
       # Transition subscriptions before flushing broadcasts so a registry failure
@@ -767,7 +778,8 @@ defmodule Hologram.Controller do
         html: rendered_html,
         self_echoes: self_echoes,
         sub_receipt_adds: sub_receipt_adds,
-        sub_receipt_drops: sub_receipt_drops
+        sub_receipt_drops: sub_receipt_drops,
+        tree: rendered_tree
       }
 
       {:rendered, decorate_conn(conn, server_struct, flushed_server_struct), result}
