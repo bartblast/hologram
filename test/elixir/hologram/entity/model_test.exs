@@ -1,5 +1,10 @@
 defmodule Hologram.Entity.ModelTest do
-  use Hologram.Test.BasicCase, async: true
+  # async: false - the hash cache is one persistent term for the whole node, and proving it is READ
+  # means standing a value in it that is not the real hash. Every concurrent caller of hash/0 sees
+  # that value while it stands, and the sync tests compare two reads of it against each other: one
+  # landing either side of the write disagrees with itself. The window is small - small enough that
+  # it has never been caught - but it is the whole suite that would pay for it.
+  use Hologram.Test.BasicCase, async: false
 
   import Hologram.Entity.Model
 
