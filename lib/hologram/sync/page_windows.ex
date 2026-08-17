@@ -12,6 +12,7 @@ defmodule Hologram.Sync.PageWindows do
   use GenServer
 
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.SerializationUtils
   alias Hologram.Reflection
 
   @doc """
@@ -80,13 +81,28 @@ defmodule Hologram.Sync.PageWindows do
 
   @doc """
   Reloads the page windows from the dump file - the live-reload path after a code change.
+
+  The replacement is read before anything published changes, and applied over what is there: a
+  clearing followed by a filling would answer "no windows" for a page that has them, to anyone
+  looking in between. A session starting on that answer holds nothing and is told at once that its
+  store is complete, since a client with no windows outstanding has nothing left to wait for.
   """
   @spec reload() :: PLT.t()
   def reload do
-    impl().ets_table_name()
-    |> plt()
-    |> PLT.reset()
-    |> populate()
+    plt = plt(impl().ets_table_name())
+    fresh = read_dump()
+
+    PLT.put(plt, Map.to_list(fresh))
+
+    # What the build no longer has, removed after the rest is in place rather than before it. A
+    # page removed here is one no client can name any more.
+    plt
+    |> PLT.get_all()
+    |> Map.keys()
+    |> Enum.reject(&Map.has_key?(fresh, &1))
+    |> Enum.each(&PLT.delete(plt, &1))
+
+    plt
   end
 
   @doc """
@@ -116,5 +132,11 @@ defmodule Hologram.Sync.PageWindows do
 
   defp populate(plt) do
     PLT.load(plt, impl().dump_path())
+  end
+
+  defp read_dump do
+    impl().dump_path()
+    |> File.read!()
+    |> SerializationUtils.deserialize(true)
   end
 end

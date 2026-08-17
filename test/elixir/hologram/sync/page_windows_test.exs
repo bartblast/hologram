@@ -30,6 +30,16 @@ defmodule Hologram.Sync.PageWindowsTest do
     :ok
   end
 
+  # Reads the registry as fast as it can until asked what it saw, so a reload that empties the
+  # table even briefly is caught rather than stepped over.
+  defp watch_lookups(report_to, page_module, seen) do
+    receive do
+      {:report, ^report_to} -> send(report_to, {:answers, seen})
+    after
+      0 -> watch_lookups(report_to, page_module, [lookup(page_module) | seen])
+    end
+  end
+
   setup do
     setup_sync_page_windows(SyncPageWindowsStub, false)
 
@@ -110,6 +120,24 @@ defmodule Hologram.Sync.PageWindowsTest do
       reload()
 
       assert lookup(MyApp.BoardPage) == ["w_new"]
+    end
+
+    # The window this guards is the one between clearing and filling. A session that looked in
+    # there would be handed no windows for a page that has them - and a session with nothing
+    # outstanding announces at once that the client's store is complete, so the client would be
+    # told it holds everything while holding nothing.
+    test "never answers with nothing for a page it holds, however often it is reloaded" do
+      init(nil)
+
+      test_pid = self()
+      reader = spawn_link(fn -> watch_lookups(test_pid, MyApp.BoardPage, []) end)
+
+      Enum.each(1..200, fn _round -> reload() end)
+
+      send(reader, {:report, self()})
+      assert_receive {:answers, answers}
+
+      assert Enum.uniq(answers) == [["w_7f3a", "w_c412"]]
     end
 
     test "forgets a page the build no longer has" do
