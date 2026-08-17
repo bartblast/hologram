@@ -88,20 +88,64 @@ defmodule Hologram.Realtime.TombstoneTest do
   end
 
   describe "handle {:purge, ...}" do
-    test "deletes the matching entry from local ETS" do
+    test "deletes the tombstone for the key" do
       key = {{:user, 7}, :notifications, "c1"}
       :ok = insert(key, @timestamp)
 
-      Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic(), {:purge, key})
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        gossip_topic(),
+        {:purge, key, @timestamp + 10}
+      )
+
       :sys.get_state(Tombstone)
 
       assert :ets.lookup(ets_table_name(), key) == []
     end
 
-    test "is a no-op when no entry matches the key" do
+    # A peer answers a sync request out of its own table, which can still hold the
+    # tombstone this purge cancelled. The purge has to outrank it on arrival, or the
+    # re-grant it recorded is undone.
+    test "keeps a purged key out when a later sync reply carries the cancelled tombstone" do
       key = {{:user, 7}, :notifications, "c1"}
 
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        gossip_topic(),
+        {:purge, key, @timestamp + 10}
+      )
+
+      :sys.get_state(Tombstone)
+
+      send(Process.whereis(Tombstone), {:sync_reply, [{key, @timestamp}]})
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == []
+    end
+
+    # The purge cancels the revocation it superseded, not one that came after it.
+    test "admits a revocation newer than the purge that preceded it" do
+      key = {{:user, 7}, :notifications, "c1"}
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic(), {:purge, key, @timestamp})
+
+      :sys.get_state(Tombstone)
+
+      send(Process.whereis(Tombstone), {:sync_reply, [{key, @timestamp + 10}]})
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp + 10}]
+    end
+
+    # A node that has not been upgraded still gossips the timeless shape.
+    test "accepts a purge from a peer that sends no time with it" do
+      key = {{:user, 7}, :notifications, "c1"}
+      :ok = insert(key, @timestamp)
+
       Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic(), {:purge, key})
+
       :sys.get_state(Tombstone)
 
       assert :ets.lookup(ets_table_name(), key) == []

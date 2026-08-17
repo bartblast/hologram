@@ -14,6 +14,12 @@ defmodule Hologram.Realtime.Tombstone do
   # `rate × TTL` even under heavy tombstone-write traffic.
   @sweep_interval_ms 30 * 60 * 1000
 
+  # Purges are kept apart from the tombstones they cancel. Readers of the tombstone
+  # table compare the stored value against a receipt timestamp, and in Erlang term order
+  # any tuple outranks any integer - a marker sharing that table would read as a
+  # tombstone newer than everything and reject every receipt.
+  @purges_table_name :hologram_tombstone_purges
+
   @table_name :hologram_tombstones
   @tombstone_ttl_ms 72 * 60 * 60 * 1000
 
@@ -22,6 +28,12 @@ defmodule Hologram.Realtime.Tombstone do
   """
   @spec ets_table_name() :: atom
   def ets_table_name, do: @table_name
+
+  @doc """
+  Returns the name of the ETS table that records which keys have been purged and when.
+  """
+  @spec purges_table_name() :: atom
+  def purges_table_name, do: @purges_table_name
 
   @doc """
   Returns the PubSub topic used for cluster-wide gossip of tombstone inserts.
@@ -64,6 +76,7 @@ defmodule Hologram.Realtime.Tombstone do
   @impl GenServer
   def init(_opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
+    :ets.new(@purges_table_name, [:set, :public, :named_table, read_concurrency: true])
     Phoenix.PubSub.subscribe(Hologram.PubSub, @gossip_topic)
 
     # Peers are asked for what they hold, and whatever they send back merges as it
@@ -104,11 +117,25 @@ defmodule Hologram.Realtime.Tombstone do
     {:noreply, state}
   end
 
+  # A purge says a revocation has been superseded by a re-grant, so it has to outrank the
+  # tombstone it cancels even when that tombstone arrives afterwards - a peer answering a
+  # sync request replies out of a table this purge has not reached. When it happened is
+  # what settles that, so the time travels with it and is kept until it can no longer be
+  # contradicted.
   @impl GenServer
-  def handle_info({:purge, key}, state) do
+  def handle_info({:purge, key, purged_at}, state) do
+    :ets.insert(@purges_table_name, {key, purged_at})
     :ets.delete(@table_name, key)
 
     {:noreply, state}
+  end
+
+  # A purge from a node that has not been upgraded carries no time. Reading it as "now"
+  # is the only option left, and it is the safe direction: it can hold back a revocation
+  # older than this moment, never one that comes after.
+  @impl GenServer
+  def handle_info({:purge, key}, state) do
+    handle_info({:purge, key, System.system_time(:millisecond)}, state)
   end
 
   @impl GenServer
@@ -148,6 +175,9 @@ defmodule Hologram.Realtime.Tombstone do
     {:noreply, state}
   end
 
+  # Purge markers age out on the tombstone TTL as well: past it, no tombstone old enough
+  # for a marker to contradict can still be held by a peer, so the marker has nothing
+  # left to do.
   defp delete_expired do
     cutoff = System.system_time(:millisecond) - @tombstone_ttl_ms
 
@@ -155,16 +185,28 @@ defmodule Hologram.Realtime.Tombstone do
       {{:_, :"$1"}, [{:<, :"$1", cutoff}], [true]}
     ]
 
+    :ets.select_delete(@purges_table_name, match_spec)
     :ets.select_delete(@table_name, match_spec)
   end
 
   defp merge_insert(key, created_at) do
-    case :ets.lookup(@table_name, key) do
-      [{^key, existing_at}] when existing_at >= created_at ->
-        :ok
+    if superseded_by_purge?(key, created_at) do
+      :ok
+    else
+      case :ets.lookup(@table_name, key) do
+        [{^key, existing_at}] when existing_at >= created_at ->
+          :ok
 
-      _other ->
-        :ets.insert(@table_name, {key, created_at})
+        _other ->
+          :ets.insert(@table_name, {key, created_at})
+      end
+    end
+  end
+
+  defp superseded_by_purge?(key, created_at) do
+    case :ets.lookup(@purges_table_name, key) do
+      [{^key, purged_at}] -> purged_at >= created_at
+      [] -> false
     end
   end
 

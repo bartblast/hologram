@@ -544,8 +544,8 @@ defmodule Hologram.RealtimeTest do
 
       subscribe({:user, 7}, :notifications, "c1")
 
-      assert_receive {:purge, {{:user, 7}, :notifications, "c1"}}
-      assert_receive {:purge, {{:user, 7}, :notifications}}
+      assert_receive {:purge, {{:user, 7}, :notifications, "c1"}, _binding_purged_at}
+      assert_receive {:purge, {{:user, 7}, :notifications}, _channel_purged_at}
     end
 
     test "gossips both binding-level and channel-wide purges on the tombstone topic for offline targets" do
@@ -553,8 +553,8 @@ defmodule Hologram.RealtimeTest do
 
       subscribe({:user, 999}, :notifications, "c1")
 
-      assert_receive {:purge, {{:user, 999}, :notifications, "c1"}}
-      assert_receive {:purge, {{:user, 999}, :notifications}}
+      assert_receive {:purge, {{:user, 999}, :notifications, "c1"}, _binding_purged_at}
+      assert_receive {:purge, {{:user, 999}, :notifications}, _channel_purged_at}
     end
   end
 
