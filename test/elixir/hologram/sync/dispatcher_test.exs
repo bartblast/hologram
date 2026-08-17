@@ -15,12 +15,26 @@ defmodule Hologram.Sync.DispatcherTest do
 
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
 
-  # Wide enough that the sandbox allowance always lands before the first poll: a dispatcher that
-  # reads before being let in checks out its own connection, and a failed read takes the process
-  # down with the timer that would have proven it reschedules.
+  # Wide enough that the sandbox allowance always lands before the first poll. A dispatcher that
+  # reads before being let in reads through a connection of its own, where this test's uncommitted
+  # row does not exist - and having read, it moves past the place that row sits at, so no later
+  # round finds it either. Only the test whose FIRST round has to find something needs this.
   @poll_interval_ms 300
 
+  # For the test that only has to see the timer re-arm itself: nothing has to be found, so the
+  # interval is brought in close and the first poll handed over once everything is set up.
+  @armed_poll_interval_ms 20
+
   @poll_timeout_ms 2_000
+
+  # Brings the poll interval within reach and hands over the first poll, whose handler is what arms
+  # a timer at the new interval. Done after the sandbox has let the dispatcher in, so that no round
+  # runs before it is allowed to read.
+  defp arm_polling(dispatcher) do
+    :sys.replace_state(dispatcher, &%{&1 | poll_interval_ms: @armed_poll_interval_ms})
+
+    send(dispatcher, :poll)
+  end
 
   defp seed(tx, entity_id) do
     statement = """
@@ -38,6 +52,15 @@ defmodule Hologram.Sync.DispatcherTest do
   # asserted: a dispatcher polling on a short interval can read once before the allowance lands,
   # which checks a connection out for itself and answers {:already, :owner}. The tests that care
   # say so by what they read - a dispatcher on the wrong connection finds none of these rows.
+  # Stops the polling and waits for whatever round is running to finish: a dispatcher taken down
+  # mid-read takes the sandbox connection with it, and the owner has a rollback left to do on it.
+  defp settle(dispatcher) do
+    :sys.replace_state(dispatcher, &%{&1 | poll_interval_ms: :timer.minutes(1)})
+    :ok = :sys.suspend(dispatcher)
+
+    stop_supervised!(Dispatcher)
+  end
+
   defp start_dispatcher!(opts) do
     test_pid = self()
     handler = fn transactions, place -> send(test_pid, {:dispatched, transactions, place}) end
@@ -274,33 +297,37 @@ defmodule Hologram.Sync.DispatcherTest do
     end
   end
 
-  # A dispatcher left polling into the teardown queries the sandbox connection while its owner is
-  # rolling back and checking in, which kills the owner - so these stop it before they finish.
+  # These start with the timer an interval away that nothing reaches - a minute - and bring it in
+  # once they are set up, by handing the dispatcher a poll themselves. What that buys is that no
+  # round runs while the sandbox is still letting the dispatcher in, and none is left running
+  # while the owner rolls back: a dispatcher reading the sandbox connection around either edge
+  # takes the connection, and with it the test's ability to end cleanly.
   describe "handle :poll" do
     test "reads the log again after the poll interval, without being told to" do
       seed(200, @entity_id)
 
-      start_dispatcher!(cursor: 200, poll_interval_ms: @poll_interval_ms)
+      dispatcher = start_dispatcher!(cursor: 200, poll_interval_ms: @poll_interval_ms)
 
       assert_receive {:dispatched, [{200, _events}], _place}, @poll_timeout_ms
 
-      stop_supervised!(Dispatcher)
+      settle(dispatcher)
     end
 
     # A round over an unchanged log hands nothing over, so the polls after the first are
     # invisible from the outside - tracing what the dispatcher receives is what tells a timer
     # that rescheduled itself apart from one that fired once and stopped.
     test "keeps polling" do
-      dispatcher = start_dispatcher!(cursor: 200, poll_interval_ms: @poll_interval_ms)
+      dispatcher = start_dispatcher!(cursor: 200)
 
       :erlang.trace(dispatcher, true, [:receive])
 
-      # The first poll is the one start_link armed - a second can only come from the first having
-      # armed another.
+      # The poll handed over by hand is the one that arms a timer - anything after it came from
+      # that timer, and could only have come from the handler arming another.
+      arm_polling(dispatcher)
       assert_receive {:trace, ^dispatcher, :receive, :poll}, @poll_timeout_ms
       assert_receive {:trace, ^dispatcher, :receive, :poll}, @poll_timeout_ms
 
-      stop_supervised!(Dispatcher)
+      settle(dispatcher)
     end
   end
 end
