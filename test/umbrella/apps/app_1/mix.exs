@@ -14,7 +14,7 @@ defmodule App1.MixProject do
       {:app_3, in_umbrella: true},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
-       ref: "f52cdb5eb4e1ac2f2e9b139fa1af142668056787"},
+       ref: "80f1c0477da551c422951cbd2d218d98cec4ae40"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"},
       {:plug_cowboy, "~> 2.0"},
