@@ -64,7 +64,7 @@ defmodule Hologram.Sync.ResultStore do
 
     :ets.insert(@table_name, {{key, version}, result})
 
-    prune(key)
+    prune(key, version)
   end
 
   @doc """
@@ -109,10 +109,19 @@ defmodule Hologram.Sync.ResultStore do
     {:ok, %{}}
   end
 
-  defp prune(key) do
-    key
-    |> versions()
-    |> Enum.drop(ring_length())
-    |> Enum.each(&:ets.delete(@table_name, {key, &1}))
+  # A window's versions are written one after another, and every write drops the one that fell out
+  # of the ring as it lands - so the versions held are always the last few, and which one is
+  # leaving is a subtraction rather than a question for the table. Asking the table means matching
+  # an unbound version inside the key, and a hash table can answer that only by walking every
+  # version of every window: work that grows with how much the node holds, done once per round of
+  # every window that had one.
+  #
+  # Nothing to drop until the ring has filled, which is what the guard says.
+  defp prune(key, version) do
+    dropped = version - ring_length()
+
+    if dropped > 0, do: :ets.delete(@table_name, {key, dropped})
+
+    :ok
   end
 end

@@ -100,6 +100,16 @@ defmodule Hologram.Sync.ResultStoreTest do
       assert versions(@window_id) == [3, 2, 1]
       assert versions(@other_window_id) == [1]
     end
+
+    # Two windows number their rounds from one apiece, so the version leaving one window's ring is
+    # a version another is still holding.
+    test "drops the version of the window written to, not another window's of that number" do
+      Enum.each(1..2, fn version -> put(@other_window_id, version, [row("other #{version}")]) end)
+      Enum.each(1..5, fn version -> put(@window_id, version, [row("round #{version}")]) end)
+
+      assert versions(@window_id) == [5, 4, 3]
+      assert versions(@other_window_id) == [2, 1]
+    end
   end
 
   describe "ring_length/0" do
