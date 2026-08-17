@@ -539,6 +539,56 @@ defmodule Mix.Tasks.Compile.HologramTest do
       refute File.exists?(@lock_path)
     end
 
+    test "empty lock file younger than the grace period is respected", %{opts: opts} do
+      # An empty lock file is a lock in the middle of being acquired: the owner has
+      # created it but hasn't written its OS-level PID yet. It must be waited on, not
+      # removed, otherwise a lock that was just legitimately acquired is deleted and
+      # two compilations run at once.
+      FileUtils.write_p!(@lock_path, "")
+
+      assert File.exists?(@lock_path)
+
+      # Start a task that will try to run compilation
+      task = Task.async(fn -> run(opts) end)
+
+      # Long enough for the task to have run the stale-lock check at least twice
+      # (it runs once on entry and then once per second while waiting).
+      Process.sleep(2_000)
+
+      # The planted lock is still there and still empty, i.e. the task is waiting for
+      # it rather than having removed it and taken the lock for itself - a compilation
+      # holding the lock would have replaced the content with its own OS-level PID.
+      assert File.read!(@lock_path) == ""
+
+      # Remove the lock file to simulate the acquiring process finishing
+      File.rm!(@lock_path)
+
+      # The task should eventually complete after waiting for the lock
+      Task.await(task, :infinity)
+
+      # Lock should be cleaned up after successful compilation
+      refute File.exists?(@lock_path)
+    end
+
+    test "empty lock file older than the grace period is removed as abandoned", %{opts: opts} do
+      # An empty lock file whose owner died between creating it and writing its
+      # OS-level PID would never be filled or removed by anyone, so it is presumed
+      # abandoned once it is older than the grace period. The mtime is backdated
+      # instead of sleeping through the real wait.
+      FileUtils.write_p!(@lock_path, "")
+
+      # 6 seconds is one second past @abandoned_empty_lock_grace_period_s in
+      # Mix.Tasks.Compile.Hologram, which the test file can't read.
+      File.touch!(@lock_path, System.os_time(:second) - 6)
+
+      assert File.exists?(@lock_path)
+
+      run(opts)
+
+      # Lock should be cleaned up after successful compilation
+      refute File.exists?(@lock_path)
+    end
+
     test "lock file with invalid OS-level PID format is removed", %{opts: opts} do
       # Create a lock file with invalid OS-level PID format
       FileUtils.write_p!(@lock_path, "invalid_pid_format")

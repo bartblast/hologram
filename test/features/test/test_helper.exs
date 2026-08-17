@@ -1,3 +1,9 @@
+# One case at a time on CI. Every test drives a real browser, and ExUnit's default
+# of one case per scheduler put more of them on a runner than it could carry, which
+# made the suite flaky rather than merely slow. The suite is kept fast by splitting
+# it across runners instead of within one - see the partition matrix in the
+# feature_tests job of .github/workflows/ci.yml - so each runner is left with the
+# single-browser load it handles reliably. Off CI the default applies.
 if System.get_env("GITHUB_ACTIONS") == "true" do
   ExUnit.configure(max_cases: 1)
 end

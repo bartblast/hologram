@@ -32,6 +32,23 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Policy.Validator, as: PolicyValidator
   alias Hologram.Reflection
 
+  # How long an empty lock file is respected before it is presumed abandoned
+  # (see the empty-content clause of validate_lock_file_and_proceed_accordingly/2).
+  # The floor has two parts: the create-to-write gap the file may legitimately sit
+  # empty for (microseconds normally, milliseconds under a preempting scheduler),
+  # and the mtime granularity of the filesystem the age is measured against (a full
+  # second on some filesystems). Anything above roughly 2 seconds is policy, and the
+  # asymmetry picks the value: waiting a few extra seconds in the vanishingly rare
+  # abandoned case costs nothing, while removing a live lock reintroduces the very
+  # race this handling exists to close.
+  # TODO: Consider lowering this towards the 2-second floor. The only cost of a lower
+  # value is that abandoned empty locks are cleared sooner, and reaching that state
+  # takes a kill signal landing inside the microsecond create-to-write window, so the
+  # margin here mostly buys peace of mind. Once the fix has run in CI long enough to
+  # show no lock file has ever been removed while its owner was still alive, the
+  # margin can shrink.
+  @abandoned_empty_lock_grace_period_s 5
+
   @ls_build_dirs [".elixir_ls", ".elixir-tools", ".expert", ".lexical"]
 
   @impl Mix.Task.Compiler
@@ -225,6 +242,28 @@ defmodule Mix.Tasks.Compile.Hologram do
     Enum.any?(@ls_build_dirs, fn dir -> dir in path_components end)
   end
 
+  # The removal here shares the path-based race documented at
+  # remove_lock_for_dead_process/2, in its narrowest form: only an integer comparison
+  # separates the age check from the removal, where that function spends milliseconds
+  # in a liveness check, and reaching this branch at all needs a lock abandoned inside
+  # the microsecond window between creating it and writing the OS-level PID into it.
+  # Still a reduction of what it replaces, which deleted every empty lock on sight,
+  # with no age gate, on ordinary concurrent compiles.
+  defp maybe_remove_abandoned_empty_lock(lock_path) do
+    case File.stat(lock_path, time: :posix) do
+      {:ok, %File.Stat{mtime: mtime}} ->
+        if System.os_time(:second) - mtime > @abandoned_empty_lock_grace_period_s do
+          Logger.info("Hologram: removing abandoned empty lock file")
+          File.rm(lock_path)
+        end
+
+      # The file is already gone: its owner either completed the acquisition and
+      # then finished, or cleaned up after itself.
+      {:error, _reason} ->
+        :ok
+    end
+  end
+
   defp maybe_remove_file(lock_path) do
     if File.exists?(lock_path) do
       File.rm(lock_path)
@@ -269,6 +308,27 @@ defmodule Mix.Tasks.Compile.Hologram do
     File.rm(lock_path)
   end
 
+  # Known, unclosed race, shared with maybe_remove_abandoned_empty_lock/1 and widest
+  # here: the removal is by path, not owner-verified. Deciding that os_pid is dead
+  # takes milliseconds (SystemUtils.os_process_alive?/1 shells out to ps or tasklist),
+  # and by the time File.rm/1 runs, the file at this path may no longer be the one
+  # that was diagnosed. Two invocations reading the same lock left
+  # behind by a killed process both diagnose it dead; the first removes it, acquires
+  # its own lock and starts compiling; the second's removal then deletes that live
+  # lock, and both compile at once.
+  #
+  # Left as is deliberately. Rechecking the file's identity right before the removal
+  # would only shrink the window from milliseconds to microseconds while making the
+  # code look safe, and microsecond windows between two file operations are exactly
+  # what made this lock flaky before (see the empty-content clause of
+  # validate_lock_file_and_proceed_accordingly/2). Closing it properly means making
+  # existence and ownership one atomic object, i.e. a lock directory - File.mkdir/1
+  # is atomic and fails when the directory exists, with the OS-level PID in a file
+  # inside it - which restructures acquisition, release and stale detection alike.
+  # Worth doing only if this is ever actually observed: unlike the empty-lock race it
+  # needs a lock orphaned by a killed process, which the cleanup in with_lock/2
+  # prevents on every normal exit, plus two invocations landing in the liveness check
+  # within the same few milliseconds.
   defp remove_lock_for_dead_process(lock_path, os_pid) do
     Logger.info(
       "Hologram: removing stale lock file (OS-level process #{os_pid} no longer exists)"
@@ -321,6 +381,26 @@ defmodule Mix.Tasks.Compile.Hologram do
     Mapper.derive!(entity_types)
 
     :ok
+  end
+
+  # An empty lock file is a lock in the middle of being acquired, not an invalid one:
+  # with_lock/2 creates the file with File.open/2 and only then writes the owner's PID
+  # into it, so a concurrent invocation can read it in between and must leave it alone.
+  # Treating it as invalid would delete a lock that was just legitimately acquired and
+  # let both compilations run at once.
+  #
+  # The empty state cannot be removed outright. The textbook fix is to write the PID to
+  # a temp file and hard-link it into place - :file.make_link/2 is atomic and fails with
+  # :eexist when the target exists - but hard links are not dependable on Windows, which
+  # Hologram supports, and a platform fallback would reintroduce the very two-step
+  # acquisition the idiom exists to remove.
+  #
+  # The one state left is an empty lock whose owner died between the two steps: nothing
+  # would ever fill or remove it. Hence the grace period - an empty lock is respected
+  # only while it is young, and the retry loop's stale check clears an abandoned one
+  # shortly after the grace period expires.
+  defp validate_lock_file_and_proceed_accordingly(lock_path, "") do
+    maybe_remove_abandoned_empty_lock(lock_path)
   end
 
   defp validate_lock_file_and_proceed_accordingly(lock_path, os_pid_str) do

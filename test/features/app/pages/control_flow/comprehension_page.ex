@@ -4,6 +4,8 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionPage do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
+  alias HologramFeatureTests.StructFixture1
+
   route "/control-flow/comprehension"
 
   layout HologramFeatureTests.Components.DefaultLayout
@@ -32,6 +34,11 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionPage do
       <button $click="reducer_with_selective_filter"> Reducer with selective filter </button>
       <button $click="reducer_with_single_generator"> Reducer with single generator </button>
       <button $click="reducer_with_unmatched_accumulator"> Reducer with unmatched accumulator </button>
+    </p>
+    <p>
+      <button $click="generator_with_struct_pattern"> Generator with struct pattern </button>
+      <button $click="struct_filtering_in_generator"> Struct filtering in generator </button>
+      <button $click="reducer_with_struct_accumulator"> Reducer with struct accumulator </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -170,5 +177,41 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionPage do
     for x <- [1], reduce: 0 do
       :nomatch -> x
     end
+  end
+
+  def action(:generator_with_struct_pattern, _params, component) do
+    result =
+      for %StructFixture1{value: v} <- [
+            %StructFixture1{name: "a", value: 1},
+            %StructFixture1{name: "b", value: 2}
+          ],
+          do: v * 10
+
+    put_state(component, :result, result)
+  end
+
+  # A generator skips the elements its pattern doesn't match,
+  # rather than failing the whole comprehension.
+  def action(:struct_filtering_in_generator, _params, component) do
+    result =
+      for %StructFixture1{value: v} <- [
+            %StructFixture1{name: "a", value: 1},
+            %{name: "plain", value: 2},
+            %StructFixture1{name: "c", value: 3}
+          ],
+          do: v
+
+    put_state(component, :result, result)
+  end
+
+  # The struct pattern stands alone in the clause head - binding it with
+  # `= acc` would route the pattern through the match operator instead.
+  def action(:reducer_with_struct_accumulator, _params, component) do
+    result =
+      for x <- [1, 2, 3], reduce: %StructFixture1{name: "acc", value: 0} do
+        %StructFixture1{name: n, value: v} -> %StructFixture1{name: n, value: v + x}
+      end
+
+    put_state(component, :result, result)
   end
 end
