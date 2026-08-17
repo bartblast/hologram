@@ -467,6 +467,15 @@ defmodule Hologram.Migrator do
     end
   end
 
+  # The one path that builds the system tables, and so the one that decides which columns a
+  # database has forever: a database already claimed goes through check_marker!/1 above, which
+  # reads the marker and changes nothing. So a column added here later - `model_hash` on the
+  # migration table is one - reaches virgin databases only, and the first write that needs it
+  # fails on one claimed before it existed.
+  #
+  # Deliberate while the data layer is unreleased, and owed at its first release together with the
+  # bump it belongs to - see `@system_schema_version` in Hologram.DB.SchemaReconciler, which
+  # carries the whole reasoning. Until then a stale database is dropped and recreated.
   defp claim(context) do
     {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
     {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_data"))
