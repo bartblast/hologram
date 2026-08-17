@@ -12,6 +12,10 @@ defmodule HologramClusterTests.GossipSyncTest do
   # they land, rather than waiting out a window. Everything else covering that is
   # single-VM, with a spawned process standing in for the peer - this is the only place
   # a real node catches up from a real node over distribution.
+  #
+  # The no-peers case is not here and cannot be: a node started by `:peer` is connected
+  # to the node that started it, and this suite's own node runs the framework too, so
+  # there is always a peer holding state to answer. That case is unit-tested instead.
   describe "a booting node catching up from its peers" do
     test "takes on a handshake a peer stashed before it started" do
       [holder, restarting] = peers = start_peers(2)
@@ -50,16 +54,6 @@ defmodule HologramClusterTests.GossipSyncTest do
       await_pubsub_convergence([holder, booted])
 
       assert wait_for_tombstone(booted, key) == [{key, created_at}]
-    end
-
-    # The peers answer a sync request out of their own tables, so a node that boots
-    # alone has nobody to hear from and simply starts empty.
-    test "starts empty when it has no peers to ask" do
-      [peer] = start_peers(1)
-
-      booted = restart_peer(peer)
-
-      assert rpc(booted, :ets, :tab2list, [Handshake.ets_table_name()]) == []
     end
   end
 
