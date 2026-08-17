@@ -1,5 +1,8 @@
 defmodule Hologram.Sync.PrunerTest do
-  use Hologram.Test.DatabaseCase, async: true
+  # async: false - see Hologram.DB.OutboxTest, which prunes too and is sync for the same reason:
+  # one advisory lock for the whole database, held to the end of whichever test took it. This
+  # module is the greedier of the two, running a pruner that wakes every few milliseconds.
+  use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.Sync.Pruner
 
