@@ -17,7 +17,7 @@ const Erlang_Maps = {
     const encodedKey = Type.encodeMapKey(key);
 
     if (map.data[encodedKey]) {
-      return map.data[encodedKey][1];
+      return Type.tuple([Type.atom("ok"), map.data[encodedKey][1]]);
     }
 
     return Type.atom("error");

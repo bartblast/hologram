@@ -64,33 +64,29 @@ describe("Erlang_Maps", () => {
   describe("find/2", () => {
     const find = Erlang_Maps["find/2"];
 
+    const map = Type.map([
+      [Type.bitstring("one"), Type.integer(1)],
+      [Type.bitstring("two"), Type.integer(2)],
+    ]);
+
     it("key exists in map", () => {
-      const key = Type.atom("two");
-      const value = Type.integer(2);
+      const key = Type.bitstring("two");
 
-      const map = Type.map([
-        [Type.atom("one"), Type.integer(1)],
-        [key, value],
-      ]);
-
-      const result = find(key, map);
-
-      assert.deepStrictEqual(result, value);
+      assert.deepStrictEqual(
+        find(key, map),
+        Type.tuple([Type.atom("ok"), Type.integer(2)]),
+      );
     });
 
     it("key does not exist in map", () => {
-      const key = Type.atom("hello");
-      const map = Type.map([[Type.atom("one"), Type.integer(1)]]);
+      const key = Type.bitstring("hello");
 
-      const result = find(key, map);
-      const expected = Type.atom("error");
-
-      assert.deepStrictEqual(result, expected);
+      assert.deepStrictEqual(find(key, map), Type.atom("error"));
     });
 
     it("raises BadMapError if the second argument is not a map", () => {
       assertBoxedError(
-        () => find(Type.string("a"), Type.integer(1)),
+        () => find(Type.bitstring("a"), Type.integer(1)),
         "BadMapError",
         buildBadMapErrorMsg(Type.integer(1)),
       );
