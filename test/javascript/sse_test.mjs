@@ -211,6 +211,13 @@ describe("Sse", () => {
   describe("connect()", () => {
     let setTimeoutSpy;
 
+    // Removed here rather than at the end of the test that sets it: a failed assertion would skip
+    // that line and leave the greeting in place for every test after it, which reads as a second
+    // failure somewhere unrelated.
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+    });
+
     beforeEach(() => {
       sinon.stub(Math, "random").returns(0.5);
 
@@ -255,8 +262,6 @@ describe("Sse", () => {
         globalThis.EventSource,
         "/hologram/sse?instance_id=test-instance-id&handshake_id=abc-handshake-id&model_hash=a3f9c2&page=MyApp.BoardPage&protocol_version=1",
       );
-
-      delete globalThis.Hologram.sync;
     });
 
     it("merges refreshed receipts into the subscription receipt registry before opening", async () => {
