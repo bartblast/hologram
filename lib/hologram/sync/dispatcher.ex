@@ -26,10 +26,15 @@ defmodule Hologram.Sync.Dispatcher do
   gets this whole batch again, and never less. It is required, since a dispatcher with nowhere to
   send what it reads would advance its place past effects nobody saw.
 
-  `:cursor` is where reading starts, and defaults to wherever the log's edge is when the first
-  window is read: a node begins with what happens from then on, because what came before is what
-  a client's first sync reads from the rows themselves. Starting touches no database, so the
-  dispatcher can be supervised alongside the pool rather than after it.
+  `:cursor` is where reading starts, and defaults to wherever the log's edge stood when this
+  dispatcher STARTED: a node begins with what happens from then on, because what came before is
+  what a client's first sync reads from the rows themselves.
+
+  Read at the start rather than at the first round, and the difference is a hole rather than a
+  nicety. The first round comes when something wakes it, and what wakes it is usually the very
+  append a client is waiting for - reading the edge then opens a window above that append and
+  passes it by, for good. A client that filled from the rows before it and holds a store missing
+  it would go on holding one until some later write to the same window happened to refresh it.
 
   `:notifications` names a `Postgrex.Notifications` process to hear appends on. It is optional
   because the announcements are an optimization over the poll rather than the mechanism: without
@@ -80,8 +85,9 @@ defmodule Hologram.Sync.Dispatcher do
 
     # Here rather than in init/1, so that the supervisor starting this dispatcher waits on nothing
     # but the process being spawned. Nothing can be read before it: a continue runs ahead of every
-    # message, including the poll just scheduled.
-    {:noreply, %{state | cursor: state.cursor || remembered(state.read_edge)}}
+    # message, including the poll just scheduled - so whatever this settles on is where the first
+    # round reads FROM, and no append can slip in above it in the meantime.
+    {:noreply, %{state | cursor: starting_place(state)}}
   end
 
   @impl GenServer
@@ -101,18 +107,15 @@ defmodule Hologram.Sync.Dispatcher do
 
   defp dispatch(state) do
     edge = Outbox.current_xmin()
-    # Reading from the edge on the first round is what "from now on" means: the window it opens
-    # is empty, and everything committed after it belongs to the rounds that follow.
-    cursor = state.cursor || edge
 
-    case Outbox.read_window(cursor, edge) do
+    case Outbox.read_window(state.cursor, edge) do
       [] ->
         move_to(state, edge)
 
       transactions ->
         # The place moves only once the handler has taken them: crashing halfway means reading
         # the same window again, which routing must tolerate, rather than passing it silently.
-        state.handler.(transactions, {cursor, 0})
+        state.handler.(transactions, {state.cursor, 0})
 
         move_to(state, edge)
     end
@@ -151,6 +154,14 @@ defmodule Hologram.Sync.Dispatcher do
 
   defp schedule_poll(interval_ms) do
     Process.send_after(self(), :poll, interval_ms)
+  end
+
+  # Where this dispatcher begins: what it was told, or where a dispatcher it replaces got to, or
+  # the log's edge as it stands right now. The last is what "from now on" means for a node that
+  # has never read - and taking it HERE is what makes "now" the moment the node started rather
+  # than the moment something first woke it, which is always after an append it should have seen.
+  defp starting_place(state) do
+    state.cursor || remembered(state.read_edge) || Outbox.current_xmin()
   end
 
   defp wake_up(state) do

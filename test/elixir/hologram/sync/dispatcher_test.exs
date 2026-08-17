@@ -94,6 +94,15 @@ defmodule Hologram.Sync.DispatcherTest do
       refute_receive {:dispatched, _transactions, _place}, 100
     end
 
+    # The place is taken when the dispatcher starts, not when something first wakes it - and what
+    # usually wakes it is the very append a client is waiting for. Read then, the edge would already
+    # be above that append and the window opened over it would be empty, passing it by for good.
+    test "takes the log's edge as its place at start, rather than at its first round" do
+      dispatcher = start_dispatcher!([])
+
+      assert is_integer(:sys.get_state(dispatcher).cursor)
+    end
+
     # What a dispatcher replacing a crashed one has to do: the state of the one that died is gone,
     # and starting at the edge would skip the window it was reading - which the sessions that
     # outlived it would then be carried past, holding a place covering rows they were never sent.
