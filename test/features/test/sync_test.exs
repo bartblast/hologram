@@ -39,12 +39,37 @@ defmodule HologramFeatureTests.SyncTest do
     :ok
   end
 
+  # Waits for the frame carrying what this test did, passing over the ones it did not ask for.
+  #
   # A frame's data is JavaScript for the browser's interpreter - here it is asserted on as text,
   # which is what makes these tests wire tests rather than client tests.
-  defp await_deltas(client) do
-    {frame, client} = SyncClient.await_frame(client, "sync_deltas")
+  #
+  # A client is told about an effect for a row it already holds, which is how a row written before
+  # it connected reaches it a second time: filled from the rows, then patched with what the log
+  # says moved. Idempotent by design, and never a reason for the frame a test is waiting on to
+  # arrive first - so a test names what it is waiting for rather than taking the next one.
+  defp await_deltas_carrying(client, text) do
+    await_deltas_carrying(client, text, System.monotonic_time(:millisecond) + 5_000)
+  end
 
-    {frame["data"], client}
+  defp await_deltas_carrying(client, text, deadline) do
+    timeout = deadline - System.monotonic_time(:millisecond)
+
+    if timeout <= 0 do
+      flunk("no sync_deltas frame carrying #{inspect(text)} arrived")
+    end
+
+    case SyncClient.next_frame(client, "sync_deltas", timeout) do
+      {:ok, frame, client} ->
+        if String.contains?(frame["data"], text) do
+          {frame["data"], client}
+        else
+          await_deltas_carrying(client, text, deadline)
+        end
+
+      {:timeout, _client} ->
+        flunk("no sync_deltas frame carrying #{inspect(text)} arrived")
+    end
   end
 
   # The stream is cut when the test ends, taking the server-side session and its evaluators with
@@ -99,10 +124,9 @@ defmodule HologramFeatureTests.SyncTest do
     |> Entity.new(public: true, title: "seeded_before_connect")
     |> create()
 
-    {data, _client} = await_deltas(connect())
+    {data, _client} = await_deltas_carrying(connect(), ~s["title":"seeded_before_connect"])
 
     assert data =~ ~s["op":"put_entity"]
-    assert data =~ ~s["title":"seeded_before_connect"]
   end
 
   feature "says the store is complete for the page and then for the app", %{session: _session} do
@@ -125,10 +149,9 @@ defmodule HologramFeatureTests.SyncTest do
 
     update(Document, document.id, %{title: "after_patch"})
 
-    {data, _client} = await_deltas(client)
+    {data, _client} = await_deltas_carrying(client, ~s["title":"after_patch"])
 
     assert data =~ ~s["op":"patch_entity"]
-    assert data =~ ~s["title":"after_patch"]
   end
 
   feature "delivers a row created while the client watches, whole", %{session: _session} do
@@ -138,10 +161,9 @@ defmodule HologramFeatureTests.SyncTest do
     |> Entity.new(public: true, title: "created_while_watching")
     |> create()
 
-    {data, _client} = await_deltas(client)
+    {data, _client} = await_deltas_carrying(client, ~s["title":"created_while_watching"])
 
     assert data =~ ~s["op":"put_entity"]
-    assert data =~ ~s["title":"created_while_watching"]
   end
 
   feature "tells the client a deleted row is no longer its to hold", %{session: _session} do
@@ -154,9 +176,8 @@ defmodule HologramFeatureTests.SyncTest do
 
     delete(Document, document.id)
 
-    {data, _client} = await_deltas(client)
+    {data, _client} = await_deltas_carrying(client, ~s["op":"unsync_entity"])
 
-    assert data =~ ~s["op":"unsync_entity"]
     assert data =~ ~s["id":"#{document.id}"]
   end
 
@@ -165,10 +186,9 @@ defmodule HologramFeatureTests.SyncTest do
     |> Entity.new(api_token: "api_token_9xK4", public: true, title: "row_with_secret")
     |> create()
 
-    {data, _client} = await_deltas(connect())
-
-    # The positive artifact beside the negative one: the row IS here, its secret is not.
-    assert data =~ ~s["title":"row_with_secret"]
+    # Waiting for the row is the positive artifact beside the negative one: this is the frame the
+    # row travelled in, so what it does not carry is what was kept from it.
+    {data, _client} = await_deltas_carrying(connect(), ~s["title":"row_with_secret"])
 
     # Under JSON the KEY is absent, not only the value - the old wire could not say this.
     refute data =~ "api_token"
@@ -189,8 +209,8 @@ defmodule HologramFeatureTests.SyncTest do
     |> Entity.new(public: true, title: "dated_the_store")
     |> create()
 
-    {dating_data, departing_client} = await_deltas(filled_client)
-    assert dating_data =~ ~s["title":"dated_the_store"]
+    {dating_data, departing_client} =
+      await_deltas_carrying(filled_client, ~s["title":"dated_the_store"])
 
     cursor = cursor_of(dating_data)
     assert is_binary(cursor)
@@ -201,7 +221,8 @@ defmodule HologramFeatureTests.SyncTest do
     |> Entity.new(public: true, title: "landed_while_away")
     |> create()
 
-    {gap_data, _returned} = await_deltas(connect(cursor: cursor))
+    {gap_data, _returned} =
+      await_deltas_carrying(connect(cursor: cursor), ~s["title":"landed_while_away"])
 
     # The whole point of the replay: what moved arrives, and what the client was filled with does
     # not. Nothing is asserted about the row it was told of just before leaving - a place names the
@@ -221,8 +242,10 @@ defmodule HologramFeatureTests.SyncTest do
     assert resync["data"] =~ ~s["reason":"cursor"]
 
     # The marker is an instruction to discard, so what follows has to be everything again.
-    {data, _refilled_client} = await_deltas(resyncing_client)
-    assert data =~ ~s["title":"sent_again_after_resync"]
+    {data, _refilled_client} =
+      await_deltas_carrying(resyncing_client, ~s["title":"sent_again_after_resync"])
+
+    assert data =~ ~s["op":"put_entity"]
   end
 
   feature "sends an anonymous client the rows anyone may read, and no others", %{
@@ -236,9 +259,10 @@ defmodule HologramFeatureTests.SyncTest do
     |> Entity.new(title: "private_row")
     |> create()
 
-    {data, _client} = await_deltas(connect())
+    # The frame the readable row travelled in, so what it does not carry is what a visitor was not
+    # shown rather than what happened to arrive later.
+    {data, _client} = await_deltas_carrying(connect(), ~s["title":"public_row"])
 
-    assert data =~ ~s["title":"public_row"]
     refute data =~ "private_row"
   end
 end
