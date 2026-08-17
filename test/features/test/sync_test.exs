@@ -174,16 +174,25 @@ defmodule HologramFeatureTests.SyncTest do
     refute data =~ "api_token"
   end
 
+  # A frame carries a place only once the client holds a whole pot, so the one this client leaves
+  # with cannot come from its fill - mid-fill it holds some windows and not others, and a place
+  # handed over then is a claim it could not honour. Hence the write before it leaves: it is there
+  # to produce a frame after the store is complete, which is the first frame carrying a place.
   feature "tells a returning client only what moved while it was away", %{session: _session} do
     Document
     |> Entity.new(public: true, title: "held_across_the_gap")
     |> create()
 
-    filled_client = connect()
-    {first_data, departing_client} = await_deltas(filled_client)
-    assert first_data =~ ~s["title":"held_across_the_gap"]
+    filled_client = drain_initial_sync(connect())
 
-    cursor = cursor_of(first_data)
+    Document
+    |> Entity.new(public: true, title: "dated_the_store")
+    |> create()
+
+    {dating_data, departing_client} = await_deltas(filled_client)
+    assert dating_data =~ ~s["title":"dated_the_store"]
+
+    cursor = cursor_of(dating_data)
     assert is_binary(cursor)
 
     :ok = SyncClient.close(departing_client)
@@ -194,7 +203,9 @@ defmodule HologramFeatureTests.SyncTest do
 
     {gap_data, _returned} = await_deltas(connect(cursor: cursor))
 
-    # The whole point of the replay: what moved arrives, what the client already held does not.
+    # The whole point of the replay: what moved arrives, and what the client was filled with does
+    # not. Nothing is asserted about the row it was told of just before leaving - a place names the
+    # LOWER edge of the batch it came from, so replaying it again is what the design promises.
     assert gap_data =~ ~s["title":"landed_while_away"]
     refute gap_data =~ "held_across_the_gap"
   end
