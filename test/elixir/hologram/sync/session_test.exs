@@ -91,7 +91,7 @@ defmodule Hologram.Sync.SessionTest do
     holder = spawn_link(fn -> Process.sleep(:infinity) end)
 
     Enum.each(window_ids, fn window_id ->
-      {:ok, evaluator, _version} = Evaluators.subscribe(window_id, holder)
+      {:ok, evaluator, _version, _term} = Evaluators.subscribe(window_id, holder)
 
       DBConnection.Ownership.ownership_allow(DB.pool_name(), self(), evaluator, [])
     end)

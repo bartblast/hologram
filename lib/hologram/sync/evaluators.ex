@@ -30,16 +30,25 @@ defmodule Hologram.Sync.Evaluators do
   @doc """
   Subscribes the given process to the evaluator of the given window, starting it if this is the
   first session to want it, and returns the evaluator with the round it is on - zero when it has
-  just been started and has not run yet.
+  just been started and has not run yet - and the term the window downloads.
+
+  The term is handed back rather than left to be looked up again: it is what decided the window
+  exists, and a live reload can drop a window between two reads of the cache, so a second look
+  can answer nothing where the first answered a term.
 
   Answers `:no_window` for an id no registered query downloads - what a client names is its own
   claim, and one naming something unknown is told about nothing rather than refused.
   """
-  @spec subscribe(String.t(), pid) :: {:ok, pid, non_neg_integer} | :no_window
+  @spec subscribe(String.t(), pid) :: {:ok, pid, non_neg_integer, map} | :no_window
   def subscribe(window_id, subscriber) do
     case QueryCache.window(window_id) do
-      nil -> :no_window
-      term -> subscribe_to_running(window_id, term, subscriber)
+      nil ->
+        :no_window
+
+      term ->
+        {:ok, evaluator, version} = subscribe_to_running(window_id, term, subscriber)
+
+        {:ok, evaluator, version, term}
     end
   end
 

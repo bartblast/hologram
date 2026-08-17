@@ -48,7 +48,7 @@ defmodule Hologram.Sync.FanoutTest do
   end
 
   defp hold(window_id) do
-    {:ok, evaluator, _version} = Evaluators.subscribe(window_id, self())
+    {:ok, evaluator, _version, _term} = Evaluators.subscribe(window_id, self())
 
     DBConnection.Ownership.ownership_allow(DB.pool_name(), self(), evaluator, [])
 

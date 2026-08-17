@@ -14,7 +14,6 @@ defmodule Hologram.Sync.Session do
 
   use GenServer, restart: :temporary
 
-  alias Hologram.DB.QueryCache
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Diff
@@ -390,24 +389,24 @@ defmodule Hologram.Sync.Session do
 
         mark_filled(unconstrained, window_id)
 
-      {:ok, evaluator, version} ->
+      {:ok, evaluator, version, term} ->
         # Watched from here on: an evaluator that stops is the end of a window's rounds, and a
         # session not told would hold that window pending for as long as the client stayed - never
         # announcing a scope, never sending a marker, with nothing the client could do about it.
         Process.monitor(evaluator)
 
         state
-        |> remember_type(window_id)
+        |> remember_type(window_id, term)
         |> first_round(window_id, version)
     end
   end
 
   # A row that left is named by the type of the window it left, since it is no longer among the
-  # rows to be asked - so the type is kept from the term when the window is taken up.
-  defp remember_type(state, window_id) do
-    entity_type = QueryCache.window(window_id).entity
-
-    %{state | types: Map.put(state.types, window_id, entity_type)}
+  # rows to be asked - so the type is kept from the term when the window is taken up. The term is
+  # the one the subscription answered with rather than a fresh look at the cache: a live reload
+  # can drop a window between two reads, and the second would then have no type to keep.
+  defp remember_type(state, window_id, term) do
+    %{state | types: Map.put(state.types, window_id, term.entity)}
   end
 
   defp first_round(state, window_id, 0) do

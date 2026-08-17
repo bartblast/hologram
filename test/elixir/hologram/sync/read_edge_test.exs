@@ -1,5 +1,9 @@
 defmodule Hologram.Sync.ReadEdgeTest do
-  use Hologram.Test.BasicCase, async: true
+  # Grouped with Hologram.Sync.DispatcherTest, which starts a read edge of its own. Both start it
+  # under the module's own registered name, which is one name for the whole node - overlapping,
+  # the second gets {:error, {:already_started, _pid}}. A group keeps them off each other while
+  # both stay async.
+  use Hologram.Test.BasicCase, async: true, group: :sync_read_edge
 
   import Hologram.Sync.ReadEdge
 

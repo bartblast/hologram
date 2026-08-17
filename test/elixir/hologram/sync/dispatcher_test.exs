@@ -1,5 +1,7 @@
 defmodule Hologram.Sync.DispatcherTest do
-  use Hologram.Test.DatabaseCase, async: true
+  # Grouped with Hologram.Sync.ReadEdgeTest - see the reasoning there. Both start a read edge under
+  # the one name it registers under, so they must not run at the same time.
+  use Hologram.Test.DatabaseCase, async: true, group: :sync_read_edge
 
   import Hologram.Sync.Dispatcher
 
