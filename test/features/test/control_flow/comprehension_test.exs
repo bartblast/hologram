@@ -40,6 +40,20 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionTest do
       |> click(button("Dependent generator"))
       |> assert_text(css("#result"), "[{1, 1}, {1, 11}, {2, 2}, {2, 12}]")
     end
+
+    feature "matches a struct pattern", %{session: session} do
+      session
+      |> visit(ComprehensionPage)
+      |> click(button("Generator with struct pattern"))
+      |> assert_text(css("#result"), "[10, 20]")
+    end
+
+    feature "ignores items that don't match a struct pattern", %{session: session} do
+      session
+      |> visit(ComprehensionPage)
+      |> click(button("Struct filtering in generator"))
+      |> assert_text(css("#result"), "[1, 3]")
+    end
   end
 
   describe "bitstring generator" do
@@ -167,6 +181,21 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionTest do
                             |> visit(ComprehensionPage)
                             |> click(button("Reducer with unmatched accumulator"))
                           end
+    end
+
+    # TODO: expect the BEAM form, %HologramFeatureTests.StructFixture1{name: "acc", value: 6},
+    # once struct inspect is implemented (see the "TODO: inspect structs" note on
+    # Interpreter.#inspectMap/2 in assets/js/interpreter.mjs). Both sides render structs as
+    # plain maps for now - the page inspects with Hologram.Commons.KernelUtils.inspect/1,
+    # which mirrors the client, so server and client agree on this text.
+    feature "matches a struct pattern accumulator", %{session: session} do
+      session
+      |> visit(ComprehensionPage)
+      |> click(button("Reducer with struct accumulator"))
+      |> assert_text(
+        css("#result"),
+        ~s(%{__struct__: HologramFeatureTests.StructFixture1, name: "acc", value: 6})
+      )
     end
   end
 end
