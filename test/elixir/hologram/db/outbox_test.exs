@@ -1,10 +1,13 @@
 defmodule Hologram.DB.OutboxTest do
-  # async: false - pruning takes an advisory lock on a fixed key, which is one lock for the whole
-  # database rather than one per connection. It is transaction-scoped, and the sandbox runs each
-  # test inside a transaction, so whoever takes it holds it until their test ends - and any other
-  # module pruning meanwhile finds it taken and deletes nothing. Hologram.Sync.PrunerTest is the
-  # other one, kept sync for the same reason.
-  use Hologram.Test.DatabaseCase, async: false
+  # Grouped rather than merely async - pruning takes an advisory lock on a fixed key, which is one
+  # lock for the whole database rather than one per connection. It is transaction-scoped, and the
+  # sandbox runs each test inside a transaction, so whoever takes it holds it until their test
+  # ends, and any other module pruning meanwhile finds it taken and deletes nothing. A group is
+  # what keeps the two modules that prune off each other while both stay async.
+  #
+  # Sync would serialize them too, and must not be used: the sync phase is where the unsandboxed
+  # tests run, and their COMMITTED rows are visible to anything sandboxed running beside them.
+  use Hologram.Test.DatabaseCase, async: true, group: :outbox_pruning
 
   import Hologram.DB.Outbox
 
