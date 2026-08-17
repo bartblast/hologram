@@ -540,6 +540,33 @@ defmodule Hologram.Sync.SessionTest do
     end
   end
 
+  describe "handle :DOWN" do
+    # An evaluator that stops is the end of its window's rounds. A session not watching would hold
+    # that window pending for as long as the client stayed - no scope announced, no marker sent -
+    # or, once the pot was complete, go on claiming to be current while nothing arrived for the
+    # window again. Cutting sends the client back through the doors, which is a path it has.
+    #
+    # The window killed here is not the first one taken up: every evaluator a session reads is
+    # watched, not whichever it happened to start with.
+    test "cuts the client off when an evaluator it reads stops" do
+      windows(%{@page => [@board_window], @other_page => [@other_window]})
+      hold_windows([@board_window, @other_window])
+
+      session = start_session!([])
+      assert_receive {:sync_synced, :all}
+
+      [{evaluator, _value}] = Registry.lookup(Evaluator.registry(), @other_window)
+
+      ref = Process.monitor(session)
+      Process.exit(evaluator, :kill)
+
+      # The reason is what carries the connection with it: the session is linked to the process
+      # holding the stream, so anything but a normal exit takes the stream down and the client
+      # reconnects.
+      assert_receive {:DOWN, ^ref, :process, ^session, :evaluator_gone}
+    end
+  end
+
   describe "handle :round" do
     test "sends what changed for this client, valued from the round" do
       task = create("before")

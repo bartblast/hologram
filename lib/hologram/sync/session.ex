@@ -103,6 +103,16 @@ defmodule Hologram.Sync.Session do
     {:stop, :behind_the_ring, state}
   end
 
+  # An evaluator this session was reading has stopped, and nothing else will arrive for its window
+  # - the same cliff as a round falling out of the ring, and taken the same way. Cut rather than
+  # repaired in place: what stopped it is not known here, and the reason that matters most - the
+  # whole sync unit going down with the database - takes the registry and the stored rows too, so
+  # there is nothing left to rejoin. The client comes back through the doors instead, where its
+  # model, its place and the size of its gap are all read again rather than assumed.
+  def handle_info({:DOWN, _ref, :process, _evaluator, _reason}, state) do
+    {:stop, :evaluator_gone, state}
+  end
+
   def handle_info({:round, window_id, version, transactions, place}, state) do
     updated = remember_place(state, window_id, place)
 
@@ -372,7 +382,12 @@ defmodule Hologram.Sync.Session do
       :no_window ->
         mark_filled(state, window_id)
 
-      {:ok, _pid, version} ->
+      {:ok, evaluator, version} ->
+        # Watched from here on: an evaluator that stops is the end of a window's rounds, and a
+        # session not told would hold that window pending for as long as the client stayed - never
+        # announcing a scope, never sending a marker, with nothing the client could do about it.
+        Process.monitor(evaluator)
+
         state
         |> remember_type(window_id)
         |> first_round(window_id, version)
