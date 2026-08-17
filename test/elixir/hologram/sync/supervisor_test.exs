@@ -69,8 +69,10 @@ defmodule Hologram.Sync.SupervisorTest do
       assert opts[:notifications] == notifications()
     end
 
-    # One_for_one replaces a crashed dispatcher beside sessions that did not crash, so where it had
-    # read to has to outlive it - kept as a read edge rather than in the state that died with it.
+    # Nothing before the dispatcher is restarted when the dispatcher crashes, and sessions are not
+    # in this tree at all - so it comes back beside the same sessions, still advancing from the
+    # rounds it sends. Where it had read to has to outlive it for that to be safe, which is why it
+    # is kept as a read edge rather than in the state that died with it.
     test "keeps where the log has been read outside the process reading it" do
       spec = child_spec_of(Dispatcher)
 
