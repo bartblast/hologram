@@ -320,20 +320,24 @@ defmodule Hologram.Sync.DiffTest do
     test "tells two clients different things about one round", %{user: user} do
       public_row =
         PolicyModule1
-        |> Entity.new(public: true)
+        |> Entity.new(priority: 1, public: true)
         |> DB.create()
 
-      private_row =
+      granted_row =
         PolicyModule1
-        |> Entity.new()
+        |> Entity.new(priority: 2)
         |> DB.create()
 
-      round = result([public_row, private_row])
+      # What makes the two clients differ: `allow :read, to: [:viewer, ...]` opens the non-public
+      # row to whoever holds the role on it, and nothing opens it to whoever holds none.
+      Auth.grant_role(user, granted_row, :viewer)
+
+      round = result([public_row, granted_row])
 
       reader_deltas = deltas(round, MapSet.new(), user.id, [])
       anonymous_deltas = deltas(round, MapSet.new(), nil, [])
 
-      assert reader_deltas.appeared == [public_row]
+      assert Enum.sort_by(reader_deltas.appeared, & &1.priority) == [public_row, granted_row]
 
       # nil means anonymous on the read side, never trusted: a visitor sees what is public and
       # nothing that a rule gates on who is asking.
