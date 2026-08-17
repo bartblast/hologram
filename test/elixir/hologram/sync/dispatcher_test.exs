@@ -63,7 +63,9 @@ defmodule Hologram.Sync.DispatcherTest do
   end
 
   # Stands in for a Postgrex.Notifications process, which answers listen/2 with a reference and
-  # would otherwise need a connection of its own.
+  # would otherwise need a connection of its own. `:answer` is which of the two it gives -
+  # `:eventually` is what a real one says while its connection is still opening, the state a
+  # connection that starts asynchronously is in for its first moments.
   defmodule NotificationsStub do
     @moduledoc false
 
@@ -73,13 +75,13 @@ defmodule Hologram.Sync.DispatcherTest do
     def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
 
     @impl GenServer
-    def init(opts), do: {:ok, opts[:reply_to]}
+    def init(opts), do: {:ok, {opts[:reply_to], Keyword.get(opts, :answer, :ok)}}
 
     @impl GenServer
-    def handle_call({{:listen, channel}, _caller}, _from, reply_to) do
+    def handle_call({{:listen, channel}, _caller}, _from, {reply_to, answer} = state) do
       send(reply_to, {:listening, channel})
 
-      {:reply, {:ok, make_ref()}, reply_to}
+      {:reply, {answer, make_ref()}, state}
     end
   end
 
@@ -242,6 +244,23 @@ defmodule Hologram.Sync.DispatcherTest do
 
       assert_receive {:listening, channel}
       assert channel == Outbox.channel()
+    end
+
+    # A connection that opens after booting has not opened yet when the dispatcher starts, so this
+    # is the answer it gets on a cold node - and refusing it would fail the dispatcher for the one
+    # reason the connection is allowed to open late.
+    test "takes the channel that will be listened on once the connection opens" do
+      {:ok, notifications} =
+        start_supervised({NotificationsStub, answer: :eventually, reply_to: self()})
+
+      dispatcher = start_dispatcher!(notifications: notifications)
+
+      assert_receive {:listening, _channel}
+
+      # Asked for its state rather than checked for a pulse: the listen happens in the continue,
+      # which runs after start_link returns, so a refusal of that answer kills the process a moment
+      # later. A call queues behind the continue and answers only if it got through.
+      assert is_integer(:sys.get_state(dispatcher).cursor)
     end
 
     test "reads the log when an append announces itself" do

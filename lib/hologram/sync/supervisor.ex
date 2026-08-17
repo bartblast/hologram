@@ -77,8 +77,21 @@ defmodule Hologram.Sync.Supervisor do
 
   # A connection of its own, outside the pool: LISTEN belongs to one connection for as long as it
   # listens, which a pooled one cannot promise.
+  #
+  # It connects AFTER booting rather than while booting, which is the difference between a database
+  # that is away for a moment and a node that is gone. Connecting while booting means a database
+  # that cannot be reached fails this child, and a child that fails fast enough often enough takes
+  # its supervisor with it - then the database unit, then the node. Every other connection here
+  # already waits and retries instead. Listening survives the wait: the channel is registered with
+  # the process and sent to the server once it connects.
+  #
+  # Not reconnecting on its own is deliberate and is what the order above relies on: losing the
+  # connection ends this process, which takes the dispatcher with it, and the dispatcher listens
+  # again as it starts. Reconnecting in place would leave the dispatcher untouched, listening
+  # through a connection it never re-registered on.
   defp notifications_child do
-    opts = Config.connection_opts(name: @notifications)
+    opts =
+      Config.connection_opts(name: @notifications, auto_reconnect: false, sync_connect: false)
 
     %{
       id: @notifications,

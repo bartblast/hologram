@@ -77,9 +77,7 @@ defmodule Hologram.Sync.Dispatcher do
 
   @impl GenServer
   def handle_continue(:start_listening, state) do
-    if state.notifications do
-      Postgrex.Notifications.listen!(state.notifications, Outbox.channel())
-    end
+    if state.notifications, do: listen_for_appends(state.notifications)
 
     schedule_poll(state.poll_interval_ms)
 
@@ -142,6 +140,17 @@ defmodule Hologram.Sync.Dispatcher do
   # Kept where this process dying cannot take it, as well as in the process itself: the state of
   # one that crashed is gone, and its replacement resuming at the edge would leave every session on
   # this node holding a place past a window none of them was sent.
+  # Two answers, both of them yes: the channel is registered either way, and `:eventually` only
+  # means the connection has not opened yet - the server is told as soon as it does. Refusing to
+  # accept that answer would make a database still coming up fail the process that is waiting for
+  # it, which is the whole reason the connection is allowed to open late.
+  defp listen_for_appends(notifications) do
+    case Postgrex.Notifications.listen(notifications, Outbox.channel()) do
+      {:ok, _ref} -> :ok
+      {:eventually, _ref} -> :ok
+    end
+  end
+
   defp move_to(state, edge) do
     if state.read_edge, do: ReadEdge.put(state.read_edge, edge)
 
