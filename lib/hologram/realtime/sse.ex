@@ -129,7 +129,7 @@ defmodule Hologram.Realtime.SSE do
   @doc false
   @spec process_message(Plug.Conn.t(), term | nil, term | nil, keyword) ::
           {:cont, Plug.Conn.t()}
-          | {:cont, Plug.Conn.t(), term | nil, term | nil}
+          | {:cont, Plug.Conn.t(), term | nil, term | nil, pid | nil}
           | {:halt, Plug.Conn.t()}
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   def process_message(conn, session_id, user_id, opts \\ []) do
@@ -278,8 +278,14 @@ defmodule Hologram.Realtime.SSE do
         SubscriptionRegistry.update_identity(instance_id, new_session_id, new_user_id)
 
         case maybe_drop_identity_change_bindings(conn, instance_id, user_id, new_user_id) do
-          {:cont, conn} -> {:cont, conn, new_session_id, new_user_id}
-          {:halt, conn} -> {:halt, conn}
+          {:cont, conn} ->
+            {conn, sync_session} =
+              restart_syncing(conn, Keyword.get(opts, :sync_session), new_user_id)
+
+            {:cont, conn, new_session_id, new_user_id, sync_session}
+
+          {:halt, conn} ->
+            {:halt, conn}
         end
 
       :refresh_receipts ->
@@ -362,13 +368,17 @@ defmodule Hologram.Realtime.SSE do
         # exist. Anything published in the meantime waits in the mailbox and is applied
         # once the pump starts, by which point the attach has folded in the handshake's
         # own bindings.
-        conn
-        |> subscribe_to_announce_topics()
-        |> maybe_delay_attach()
-        |> attach_validated_subscriptions(validated_bindings)
-        |> prepare()
-        |> start_syncing(user_id)
-        |> message_pump(session_id, user_id, message_pump_opts)
+        {conn, sync_session} =
+          conn
+          |> subscribe_to_announce_topics()
+          |> maybe_delay_attach()
+          |> attach_validated_subscriptions(validated_bindings)
+          |> prepare()
+          |> start_syncing(user_id)
+
+        message_pump(conn, session_id, user_id, [
+          {:sync_session, sync_session} | message_pump_opts
+        ])
 
       :error ->
         reject_4xx(conn, "Handshake redemption failed")
@@ -647,7 +657,11 @@ defmodule Hologram.Realtime.SSE do
       {:cont, conn} ->
         message_pump(conn, session_id, user_id, opts)
 
-      {:cont, conn, new_session_id, new_user_id} ->
+      # A change of identity replaces the sync session as well as naming who the client now is,
+      # so what the next turn is handed has to carry the new one.
+      {:cont, conn, new_session_id, new_user_id, new_sync_session} ->
+        opts = Keyword.put(opts, :sync_session, new_sync_session)
+
         message_pump(conn, new_session_id, new_user_id, opts)
 
       {:halt, conn} ->
@@ -717,8 +731,13 @@ defmodule Hologram.Realtime.SSE do
   end
 
   # The session is linked, so it goes when the connection does - what a client holds is only
-  # worth keeping while there is a client to tell about it.
-  defp start_syncing(conn, user_id) do
+  # worth keeping while there is a client to tell about it. Handed back so the connection can
+  # reach it later: who the client IS can change while the stream stays open, and the session
+  # decides what that client may see.
+  #
+  # `resume?` is false for a client being filled again from nothing, which is what a change of
+  # identity leaves it needing - the place it named belongs to a store it has been told to drop.
+  defp start_syncing(conn, user_id, resume? \\ true) do
     outcome =
       conn
       |> greeting()
@@ -726,24 +745,39 @@ defmodule Hologram.Realtime.SSE do
 
     case outcome do
       {:sync, page, cursor} ->
-        {:ok, _session} =
+        {:ok, session} =
           SyncSession.start_link(
             actor_user_id: user_id,
             client: self(),
             fill_place: {Outbox.current_xmin(), 0},
-            gap: gap(cursor),
+            gap: resume? && gap(cursor),
             page: page
           )
 
-        conn
+        {conn, session}
 
       {:reload, reason} ->
         send(self(), {:sync_reload, reason})
 
-        conn
+        {conn, nil}
 
       :no_sync ->
-        conn
+        {conn, nil}
     end
+  end
+
+  # A client whose identity changed holds rows it was given as someone else, and the session
+  # serving it filters by the actor it was started with. Neither can be corrected in place: the
+  # store is dropped through the door the client already has, and a session is started for who it
+  # is now. Told to drop BEFORE the new one begins filling, since a self-send is ahead of anything
+  # the new session will queue behind it.
+  defp restart_syncing(conn, nil, _new_user_id), do: {conn, nil}
+
+  defp restart_syncing(conn, session, new_user_id) do
+    send(self(), {:sync_resync, :identity})
+
+    :ok = GenServer.stop(session, :normal)
+
+    start_syncing(conn, new_user_id, false)
   end
 end

@@ -923,8 +923,47 @@ defmodule Hologram.Realtime.SSETest do
       conn = Plug.Conn.fetch_query_params(prepared_test_conn())
       send(self(), {:identity_changed, "new-session-id", 7})
 
-      assert {:cont, ^conn, "new-session-id", 7} =
+      assert {:cont, ^conn, "new-session-id", 7, _sync_session} =
                process_message(conn, "old-session-id", nil)
+    end
+
+    # Who the client is decides what its session lets through, and that is fixed when the session
+    # starts. A stream that stays open across a login, a logout or a switch would otherwise go on
+    # filtering rows as whoever was there before, and the client would go on holding them.
+    test "sends the client through the resync door when its identity changes" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      old_session = start_supervised!({Agent, fn -> :sync_session end})
+
+      send(self(), {:identity_changed, "session-1", 8})
+
+      {:cont, _conn, _session_id, _user_id, _sync_session} =
+        process_message(conn, "session-1", 7, sync_session: old_session)
+
+      assert_received {:sync_resync, :identity}
+    end
+
+    test "stops the session that was serving the identity it replaced" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      old_session = start_supervised!({Agent, fn -> :sync_session end})
+      ref = Process.monitor(old_session)
+
+      send(self(), {:identity_changed, "session-1", 8})
+
+      process_message(conn, "session-1", 7, sync_session: old_session)
+
+      assert_receive {:DOWN, ^ref, :process, ^old_session, :normal}
+    end
+
+    # A stream carrying no sync at all - a client built before any of it, or one whose build has
+    # no data model - has nothing to rescope, and must not be disturbed for it.
+    test "leaves a connection that is not syncing alone" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      send(self(), {:identity_changed, "session-1", 8})
+
+      assert {:cont, _conn, _session_id, _user_id, nil} =
+               process_message(conn, "session-1", 7)
+
+      refute_received {:sync_resync, _reason}
     end
 
     test "subscribes to the user identity topic on login (nil -> 7)" do
@@ -1016,7 +1055,8 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
       send(self(), {:identity_changed, "session-1", 8})
 
-      {:cont, updated_conn, _session, _user} = process_message(conn, "session-1", 7)
+      {:cont, updated_conn, _session, _user, _sync_session} =
+        process_message(conn, "session-1", 7)
 
       assert updated_conn.resp_body =~ "event: drop_sub_receipts\nid: "
       assert SubscriptionRegistry.bindings_of(instance_id) == %{}
@@ -1036,7 +1076,8 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
       send(self(), {:identity_changed, "session-new", 7})
 
-      {:cont, updated_conn, _session, _user} = process_message(conn, "session-old", 7)
+      {:cont, updated_conn, _session, _user, _sync_session} =
+        process_message(conn, "session-old", 7)
 
       refute updated_conn.resp_body =~ "event: drop_sub_receipts"
       assert SubscriptionRegistry.bindings_of(instance_id) == %{{:notifications, "c1"} => 7}
