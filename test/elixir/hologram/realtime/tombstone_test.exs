@@ -175,6 +175,62 @@ defmodule Hologram.Realtime.TombstoneTest do
     end
   end
 
+  describe "handle {:sync_purges, ...}" do
+    test "records a peer's purge markers" do
+      key = {{:user, 7}, :notifications, "c1"}
+
+      send(Process.whereis(Tombstone), {:sync_purges, [{key, @timestamp}]})
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(purges_table_name(), key) == [{key, @timestamp}]
+    end
+
+    # Replies come from different nodes and land in whatever order they land, so a purge
+    # that arrives after the tombstone it cancels still has to cancel it.
+    test "cancels a tombstone the purge supersedes, even when it arrived first" do
+      key = {{:user, 7}, :notifications, "c1"}
+
+      send(Process.whereis(Tombstone), {:sync_reply, [{key, @timestamp}]})
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp}]
+
+      send(Process.whereis(Tombstone), {:sync_purges, [{key, @timestamp + 10}]})
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == []
+    end
+
+    # The purge cancels what preceded it, not a revocation that came after.
+    test "leaves a tombstone newer than the purge alone" do
+      key = {{:user, 7}, :notifications, "c1"}
+
+      send(Process.whereis(Tombstone), {:sync_reply, [{key, @timestamp + 10}]})
+
+      :sys.get_state(Tombstone)
+
+      send(Process.whereis(Tombstone), {:sync_purges, [{key, @timestamp}]})
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp + 10}]
+    end
+
+    test "keeps the later marker when peers disagree on when a key was purged" do
+      key = {{:user, 7}, :notifications, "c1"}
+
+      send(Process.whereis(Tombstone), {:sync_purges, [{key, @timestamp + 10}]})
+      send(Process.whereis(Tombstone), {:sync_purges, [{key, @timestamp}]})
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(purges_table_name(), key) == [{key, @timestamp + 10}]
+    end
+  end
+
   describe "handle {:sync_reply, ...}" do
     test "merges a peer's tombstones into ETS" do
       key = {{:user, 7}, :notifications, "c1"}
@@ -215,6 +271,28 @@ defmodule Hologram.Realtime.TombstoneTest do
   end
 
   describe "handle {:sync_request, ...}" do
+    # A peer that never heard a purge would otherwise hand back the tombstone it
+    # cancelled, undoing the re-grant on whoever synced from it.
+    test "answers with the purge markers as well as the tombstones" do
+      tombstone_key = {{:user, 7}, :notifications, "c1"}
+      purged_key = {{:user, 7}, :notifications, "c2"}
+
+      :ok = insert(tombstone_key, @timestamp)
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        gossip_topic(),
+        {:purge, purged_key, @timestamp}
+      )
+
+      :sys.get_state(Tombstone)
+
+      send(Process.whereis(Tombstone), {:sync_request, self()})
+
+      assert_receive {:sync_reply, [{^tombstone_key, @timestamp}]}
+      assert_receive {:sync_purges, [{^purged_key, @timestamp}]}
+    end
+
     test "replies to the requester via direct send/2 with the current ETS dump" do
       key = {{:user, 7}, :notifications, "c1"}
       :ok = insert(key, @timestamp)

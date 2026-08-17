@@ -124,8 +124,7 @@ defmodule Hologram.Realtime.Tombstone do
   # contradicted.
   @impl GenServer
   def handle_info({:purge, key, purged_at}, state) do
-    :ets.insert(@purges_table_name, {key, purged_at})
-    :ets.delete(@table_name, key)
+    merge_purge(key, purged_at)
 
     {:noreply, state}
   end
@@ -162,15 +161,26 @@ defmodule Hologram.Realtime.Tombstone do
   end
 
   @impl GenServer
+  def handle_info({:sync_purges, purges}, state) do
+    Enum.each(purges, fn {key, purged_at} -> merge_purge(key, purged_at) end)
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
   def handle_info({:sync_reply, tombstones}, state) do
     Enum.each(tombstones, fn {key, created_at} -> merge_insert(key, created_at) end)
 
     {:noreply, state}
   end
 
+  # The purges travel with the tombstones they cancel. Without them a node that never
+  # heard a purge keeps the tombstone it cancelled and hands it to whoever syncs from it,
+  # so a re-grant would be undone by whichever peer happened to miss it.
   @impl GenServer
   def handle_info({:sync_request, requester_pid}, state) do
     Gossip.reply_to_sync_request(@table_name, requester_pid)
+    send(requester_pid, {:sync_purges, :ets.tab2list(@purges_table_name)})
 
     {:noreply, state}
   end
@@ -187,6 +197,32 @@ defmodule Hologram.Realtime.Tombstone do
 
     :ets.select_delete(@purges_table_name, match_spec)
     :ets.select_delete(@table_name, match_spec)
+  end
+
+  # Records a purge and cancels the tombstone it supersedes, in that order, so the
+  # outcome does not depend on which arrives first. Replies come from different nodes,
+  # and one peer's tombstone can land before another peer's purge of it.
+  defp merge_purge(key, purged_at) do
+    case :ets.lookup(@purges_table_name, key) do
+      [{^key, existing_at}] when existing_at >= purged_at ->
+        :ok
+
+      _older_or_absent ->
+        :ets.insert(@purges_table_name, {key, purged_at})
+    end
+
+    cancel_superseded_tombstone(key, purged_at)
+  end
+
+  defp cancel_superseded_tombstone(key, purged_at) do
+    case :ets.lookup(@table_name, key) do
+      [{^key, created_at}] when purged_at >= created_at ->
+        :ets.delete(@table_name, key)
+        :ok
+
+      _newer_or_absent ->
+        :ok
+    end
   end
 
   defp merge_insert(key, created_at) do
