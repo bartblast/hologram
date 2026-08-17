@@ -98,6 +98,8 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module18
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module180
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module181
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module182
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module183
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module19
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module20
@@ -2593,6 +2595,119 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                line: 4
+             }
+    end
+
+    # A struct in a clause head is a pattern, so it must be transformed to map IR
+    # instead of a __struct__/1 call that would be evaluated at match time.
+    test "clause with struct pattern (AST from source code)" do
+      ast =
+        ast("""
+        case x do
+          %Hologram.Test.Fixtures.Compiler.Transformer.Module182{a: a} -> a
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.Case{
+               condition: %IR.Variable{name: :x},
+               clauses: [
+                 %IR.Clause{
+                   match: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module182}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                     ]
+                   },
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :a}]
+                   }
+                 }
+               ],
+               line: 1
+             }
+    end
+
+    test "clause with struct pattern (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module182) == %IR.Case{
+               condition: %IR.Variable{name: :x, version: 0},
+               clauses: [
+                 %IR.Clause{
+                   match: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module182}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a, version: 1}}
+                     ]
+                   },
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :a, version: 1}]
+                   }
+                 }
+               ],
+               line: 8
+             }
+    end
+
+    test "clause with struct pattern and guard (AST from source code)" do
+      ast =
+        ast("""
+        case x do
+          %Hologram.Test.Fixtures.Compiler.Transformer.Module183{a: a} when is_integer(a) -> a
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.Case{
+               condition: %IR.Variable{name: :x},
+               clauses: [
+                 %IR.Clause{
+                   match: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module183}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                     ]
+                   },
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :a}],
+                       line: 2
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :a}]
+                   }
+                 }
+               ],
+               line: 1
+             }
+    end
+
+    test "clause with struct pattern and guard (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module183) == %IR.Case{
+               condition: %IR.Variable{name: :x, version: 0},
+               clauses: [
+                 %IR.Clause{
+                   match: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module183}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a, version: 1}}
+                     ]
+                   },
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :a, version: 1}],
+                       line: 9
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :a, version: 1}]
+                   }
+                 }
+               ],
+               line: 8
              }
     end
   end
