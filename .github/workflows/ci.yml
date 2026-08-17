@@ -234,7 +234,7 @@ jobs:
 
   feature_tests:
     runs-on: ubuntu-latest
-    name: Feature Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    name: Feature Tests (partition ${{ matrix.partition }}) on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
         working-directory: test/features
@@ -253,8 +253,34 @@ jobs:
           # Run feature tests on latest LTS version only.
           # Must match .tool-versions for dev/prod/CI parity.
           - "24.13.0"
+        # The suite is split across runners rather than run concurrently within one,
+        # because a browser-driven suite is what exhausted a single runner before -
+        # see the max_cases note in test/features/test/test_helper.exs. Each partition
+        # is its own runner running one browser at a time, so per-runner load is
+        # unchanged no matter how many partitions there are.
+        #
+        # Two bounds pin the count. Below, no partition count beats ~2 minutes:
+        # operators_test.exs holds 44 of the suite's ~600 tests and a single file
+        # cannot be split across partitions, and every partition repeats ~50s of
+        # checkout, setup and compile. Above, the account runs at most 20 concurrent
+        # jobs, and the other jobs in this workflow take 7 of them.
+        #
+        # 8 is the policy choice between them: ~4 minutes, 15 concurrent jobs, and
+        # enough headroom that no partition waits for a runner. More partitions keep
+        # helping - 12 would save a further ~40s - but at 19 jobs a queued partition
+        # would cost more than the balance gains.
+        #
+        # Must stay in sync with --partitions in the test step below. A partition
+        # listed here but outside that range fails loudly, but dropping one silently
+        # skips its files.
+        partition: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
-      IS_HIGHEST_MATRIX_COMBINATION: "true"
+      # Everything that inspects the codebase rather than running it is identical on
+      # every partition, so it runs on one. Without this each partition would repeat
+      # the analysis, and on a cold cache all of them would build the Dialyzer PLT and
+      # race to save the same key.
+      IS_FIRST_PARTITION: ${{ matrix.partition == 1 }}
+      MIX_TEST_PARTITION: ${{ matrix.partition }}
     steps:
       # Step: Setup Elixir + Erlang/OTP image as the base.
       - name: Set up Elixir
@@ -326,22 +352,22 @@ jobs:
 
       # Step: Check if feature tests app mix.lock has any unused dependencies.
       - name: Check feature tests app unused Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        if: ${{ env.IS_FIRST_PARTITION == 'true' }}
         run: mix deps.unlock --check-unused
 
       # Step: Check if there are any feature tests app Elixir dependencies which have been marked as retired.
       - name: Check feature tests app retired Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        if: ${{ env.IS_FIRST_PARTITION == 'true' }}
         run: mix hex.audit
 
       # Step: Check that the feature tests app Elixir code has already been formatted.
       - name: Check feature tests app Elixir code formatted
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        if: ${{ env.IS_FIRST_PARTITION == 'true' }}
         run: mix format --check-formatted
 
       # Step: Run feature tests app Elixir static code analysis with Credo.
       - name: Run feature tests app Elixir static code analysis with Credo
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        if: ${{ env.IS_FIRST_PARTITION == 'true' }}
         run: mix credo --strict
 
       # Step: Restore feature tests app Dialyzer PLT cache.
@@ -354,11 +380,11 @@ jobs:
             dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
           path: |
             test/features/priv/plts
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        if: ${{ env.IS_FIRST_PARTITION == 'true' }}
 
       # Step: Create feature tests app Dialyzer PLTs if no cache was found.
       - name: Create feature tests app Dialyzer PLTs
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        if: ${{ env.IS_FIRST_PARTITION == 'true' && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
         run: mix dialyzer --plt
 
       # Step: Save feature tests app Dialyzer PLT cache.
@@ -367,7 +393,7 @@ jobs:
       - name: Save feature tests app Dialyzer PLT cache
         id: save-feature-tests-app-dialyzer-plt-cache
         uses: actions/cache/save@v6
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        if: ${{ env.IS_FIRST_PARTITION == 'true' && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
         with:
           key: |
             dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
@@ -376,17 +402,21 @@ jobs:
 
       # Step: Run feature tests app Elixir static code analysis with Dialyzer.
       - name: Run feature tests app Elixir static code analysis with Dialyzer
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        if: ${{ env.IS_FIRST_PARTITION == 'true' }}
         run: mix dialyzer --format github
 
       # Step: Check that all feature tests app test scripts have valid file names.
       - name: Check feature tests app test file names
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        if: ${{ env.IS_FIRST_PARTITION == 'true' }}
         run: mix holo.test.check_file_names test
 
-      # Step: Execute feature tests app Elixir tests.
+      # Step: Execute this partition's share of the feature tests app Elixir tests.
+      # Mix sorts the test files and deals them round-robin across the partitions,
+      # selecting this runner's share with MIX_TEST_PARTITION, so new test files are
+      # picked up without a list to maintain. Must stay in sync with the partition
+      # matrix above.
       - name: Run feature tests app Elixir tests
-        run: mix test --warnings-as-errors
+        run: mix test --warnings-as-errors --partitions 8
 
       # Step: Archive the browser screenshots of tests that failed.
       - name: Archive fail screenshots
@@ -394,7 +424,7 @@ jobs:
         if: success() || failure()
         uses: actions/upload-artifact@v7
         with:
-          name: fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
+          name: fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}-partition-${{ matrix.partition }}
           path: test/features/tmp/screenshots
 
   cluster_tests:
