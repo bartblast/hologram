@@ -218,8 +218,25 @@ defmodule Hologram.Sync.DiffTest do
       assert deltas.edges == []
     end
 
+    # The row carries no field of that name at all, which is what a window embedding no such
+    # relationship looks like from here - there is nothing to say the edge moved WITHIN.
     test "reports nothing for a relationship the window does not embed" do
       task = row("no embeds here")
+
+      events =
+        edge_events(task.id, :add_relationship, "not_embedded", Entity.generate_id())
+
+      deltas = deltas(result([task]), MapSet.new([task.id]), nil, events)
+
+      assert deltas.edges == []
+    end
+
+    # The other way a round can hold no list for a name: the row carries the field, and it is an
+    # attribute rather than an embedded relationship. Separate from the case above because they
+    # reach the same silence by different routes, and only one of them survives a change to what
+    # an unembedded name answers with.
+    test "reports nothing for a name the row carries as an attribute" do
+      task = row("an attribute, not an edge")
       events = edge_events(task.id, :add_relationship, "a", Entity.generate_id())
 
       deltas = deltas(result([task]), MapSet.new([task.id]), nil, events)
