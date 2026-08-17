@@ -16,8 +16,8 @@ defmodule Hologram.Sync.Supervisor do
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Fanout
-  alias Hologram.Sync.Place
   alias Hologram.Sync.Pruner
+  alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.ResultStore
 
   @notifications Hologram.Sync.Notifications
@@ -42,7 +42,7 @@ defmodule Hologram.Sync.Supervisor do
       {Registry, keys: :unique, name: Evaluator.registry()},
       ResultStore,
       Evaluators,
-      Place,
+      ReadEdge,
       notifications_child(),
       dispatcher_child(),
       Pruner
@@ -52,15 +52,15 @@ defmodule Hologram.Sync.Supervisor do
   end
 
   # The dispatcher comes after what it hands work to: it starts reading straight away, and what it
-  # reads goes to evaluators found through the registry started before it. It comes after the place
-  # holder for the same reason - a restart resumes from what the holder kept, which it can only
-  # read from a process already up. Only the pruner's position is free: it reads nothing this tree
-  # holds, and prunes nothing until an hour in.
+  # reads goes to evaluators found through the registry started before it. It comes after the read
+  # edge for the same reason - a restart resumes from what that kept, which it can only read from a
+  # process already up. Only the pruner's position is free: it reads nothing this tree holds, and
+  # prunes nothing until an hour in.
   #
-  # One_for_one is what makes the holder worth having: a dispatcher that dies is replaced beside
+  # One_for_one is what makes keeping the edge worth it: a dispatcher that dies is replaced beside
   # sessions that did not, and those sessions go on advancing from the rounds it sends.
   defp dispatcher_child do
-    {Dispatcher, handler: &Fanout.route/2, notifications: @notifications, place: Place}
+    {Dispatcher, handler: &Fanout.route/2, notifications: @notifications, read_edge: ReadEdge}
   end
 
   # A connection of its own, outside the pool: LISTEN belongs to one connection for as long as it

@@ -8,7 +8,7 @@ defmodule Hologram.Sync.DispatcherTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Outbox
   alias Hologram.Sync.Dispatcher
-  alias Hologram.Sync.Place
+  alias Hologram.Sync.ReadEdge
   alias Hologram.Test.Fixtures.Entity.Module2
 
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
@@ -52,12 +52,12 @@ defmodule Hologram.Sync.DispatcherTest do
     pid
   end
 
-  defp start_place!(remembering \\ nil) do
-    place = start_supervised!(Place)
+  defp start_read_edge!(remembering \\ nil) do
+    read_edge = start_supervised!(ReadEdge)
 
-    if remembering, do: :ok = Place.put(place, remembering)
+    if remembering, do: :ok = ReadEdge.put(read_edge, remembering)
 
-    place
+    read_edge
   end
 
   # Stands in for a Postgrex.Notifications process, which answers listen/2 with a reference and
@@ -98,17 +98,17 @@ defmodule Hologram.Sync.DispatcherTest do
     test "resumes from where the dispatcher it replaces got to" do
       seed(200, @entity_id)
 
-      dispatcher = start_dispatcher!(place: start_place!(200))
+      dispatcher = start_dispatcher!(read_edge: start_read_edge!(200))
 
       wake(dispatcher)
 
       assert_receive {:dispatched, [{200, _events}], {200, 0}}
     end
 
-    test "starts at the edge when the holder remembers nothing" do
+    test "starts at the edge when nothing was recorded to resume from" do
       seed(200, @entity_id)
 
-      dispatcher = start_dispatcher!(place: start_place!())
+      dispatcher = start_dispatcher!(read_edge: start_read_edge!())
 
       wake(dispatcher)
 
@@ -157,13 +157,13 @@ defmodule Hologram.Sync.DispatcherTest do
     test "records how far it read, for whichever dispatcher replaces it" do
       seed(200, @entity_id)
 
-      place = start_place!()
-      dispatcher = start_dispatcher!(cursor: 200, place: place)
+      read_edge = start_read_edge!()
+      dispatcher = start_dispatcher!(cursor: 200, read_edge: read_edge)
 
       wake(dispatcher)
       assert_receive {:dispatched, [{200, _events}], _place}
 
-      recorded = Place.get(place)
+      recorded = ReadEdge.get(read_edge)
 
       # Asserted as a number before being compared: nothing recorded leaves nil, which every
       # integer sorts below rather than failing against.
@@ -177,13 +177,13 @@ defmodule Hologram.Sync.DispatcherTest do
     # The empty round moves the place too, and has to: a node quiet for an hour would otherwise
     # leave its replacement rereading an hour of log that nothing was waiting for.
     test "records how far it read even when the window held nothing" do
-      place = start_place!()
-      dispatcher = start_dispatcher!(cursor: 200, place: place)
+      read_edge = start_read_edge!()
+      dispatcher = start_dispatcher!(cursor: 200, read_edge: read_edge)
 
       wake(dispatcher)
       refute_receive {:dispatched, _transactions, _place}, 100
 
-      recorded = Place.get(place)
+      recorded = ReadEdge.get(read_edge)
 
       assert is_integer(recorded)
       assert recorded > 200

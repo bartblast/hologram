@@ -1,36 +1,36 @@
-defmodule Hologram.Sync.PlaceTest do
+defmodule Hologram.Sync.ReadEdgeTest do
   use Hologram.Test.BasicCase, async: true
 
-  import Hologram.Sync.Place
+  import Hologram.Sync.ReadEdge
 
-  alias Hologram.Sync.Place
+  alias Hologram.Sync.ReadEdge
 
-  defp start_place! do
-    start_supervised!(Place)
+  defp start_read_edge! do
+    start_supervised!(ReadEdge)
   end
 
   describe "get/1" do
     test "remembers nothing before the first round" do
-      assert get(start_place!()) == nil
+      assert get(start_read_edge!()) == nil
     end
   end
 
   describe "put/2" do
     test "records how far the log has been read" do
-      place = start_place!()
+      read_edge = start_read_edge!()
 
-      :ok = put(place, 4_216)
+      :ok = put(read_edge, 4_216)
 
-      assert get(place) == 4_216
+      assert get(read_edge) == 4_216
     end
 
     test "keeps only where reading got to last" do
-      place = start_place!()
+      read_edge = start_read_edge!()
 
-      :ok = put(place, 4_216)
-      :ok = put(place, 4_217)
+      :ok = put(read_edge, 4_216)
+      :ok = put(read_edge, 4_217)
 
-      assert get(place) == 4_217
+      assert get(read_edge) == 4_217
     end
   end
 
@@ -38,9 +38,9 @@ defmodule Hologram.Sync.PlaceTest do
   # what makes the holder findable rather than a convenience.
   describe "start_link/1" do
     test "answers to the module's own name" do
-      place = start_place!()
+      read_edge = start_read_edge!()
 
-      assert Process.whereis(Place) == place
+      assert Process.whereis(ReadEdge) == read_edge
     end
   end
 end

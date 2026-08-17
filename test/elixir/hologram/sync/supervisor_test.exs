@@ -7,8 +7,8 @@ defmodule Hologram.Sync.SupervisorTest do
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Fanout
-  alias Hologram.Sync.Place
   alias Hologram.Sync.Pruner
+  alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.ResultStore
 
   defp child_ids do
@@ -29,7 +29,7 @@ defmodule Hologram.Sync.SupervisorTest do
                Evaluator.registry(),
                ResultStore,
                Evaluators,
-               Place,
+               ReadEdge,
                notifications(),
                Dispatcher,
                Pruner
@@ -67,12 +67,12 @@ defmodule Hologram.Sync.SupervisorTest do
     end
 
     # One_for_one replaces a crashed dispatcher beside sessions that did not crash, so where it had
-    # read to has to outlive it - kept by a holder rather than in the state that died with it.
+    # read to has to outlive it - kept as a read edge rather than in the state that died with it.
     test "keeps where the log has been read outside the process reading it" do
       spec = child_spec_of(Dispatcher)
 
       assert {Dispatcher, :start_link, [opts]} = spec.start
-      assert opts[:place] == Place
+      assert opts[:read_edge] == ReadEdge
     end
 
     test "starts the dispatcher after what it hands work to" do
@@ -85,12 +85,12 @@ defmodule Hologram.Sync.SupervisorTest do
                Enum.find_index(ids, &(&1 == Evaluator.registry()))
     end
 
-    # A dispatcher restarting reads the holder to resume from, which it can only do if the holder
+    # A dispatcher restarting reads the edge to resume from, which it can only do if what keeps it
     # is already up.
-    test "starts the dispatcher after the holder it resumes from" do
+    test "starts the dispatcher after the read edge it resumes from" do
       ids = child_ids()
 
-      assert Enum.find_index(ids, &(&1 == Dispatcher)) > Enum.find_index(ids, &(&1 == Place))
+      assert Enum.find_index(ids, &(&1 == Dispatcher)) > Enum.find_index(ids, &(&1 == ReadEdge))
     end
   end
 end

@@ -8,7 +8,7 @@ defmodule Hologram.Sync.Dispatcher do
   use GenServer
 
   alias Hologram.DB.Outbox
-  alias Hologram.Sync.Place
+  alias Hologram.Sync.ReadEdge
 
   # How long the log can go unread when the announcements stop arriving - a listener whose
   # connection died, or a pooler that drops them. It bounds nothing while they do arrive, since
@@ -35,10 +35,10 @@ defmodule Hologram.Sync.Dispatcher do
   because the announcements are an optimization over the poll rather than the mechanism: without
   one the dispatcher still reads, just no sooner than `:poll_interval_ms` after a write.
 
-  `:place` names a `Hologram.Sync.Place` process keeping where reading got to, which is what a
-  dispatcher put there before this one started resumes from - a restart that began at the edge
-  instead would skip the window the last one was reading. It is optional: without one the place
-  lives in this process alone, and dies with it.
+  `:read_edge` names a `Hologram.Sync.ReadEdge` process keeping how far the log has been read,
+  which is what a dispatcher put there before this one started resumes from - a restart that began
+  at the edge as it stands would skip the window the last one was reading. It is optional: without
+  one the edge lives in this process alone, and dies with it.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -63,8 +63,8 @@ defmodule Hologram.Sync.Dispatcher do
       cursor: Keyword.get(opts, :cursor),
       handler: Keyword.fetch!(opts, :handler),
       notifications: Keyword.get(opts, :notifications),
-      place: Keyword.get(opts, :place),
-      poll_interval_ms: Keyword.get(opts, :poll_interval_ms, default_poll_interval_ms())
+      poll_interval_ms: Keyword.get(opts, :poll_interval_ms, default_poll_interval_ms()),
+      read_edge: Keyword.get(opts, :read_edge)
     }
 
     {:ok, state, {:continue, :start_listening}}
@@ -81,7 +81,7 @@ defmodule Hologram.Sync.Dispatcher do
     # Here rather than in init/1, so that the supervisor starting this dispatcher waits on nothing
     # but the process being spawned. Nothing can be read before it: a continue runs ahead of every
     # message, including the poll just scheduled.
-    {:noreply, %{state | cursor: state.cursor || remembered(state.place)}}
+    {:noreply, %{state | cursor: state.cursor || remembered(state.read_edge)}}
   end
 
   @impl GenServer
@@ -140,14 +140,14 @@ defmodule Hologram.Sync.Dispatcher do
   # one that crashed is gone, and its replacement resuming at the edge would leave every session on
   # this node holding a place past a window none of them was sent.
   defp move_to(state, edge) do
-    if state.place, do: Place.put(state.place, edge)
+    if state.read_edge, do: ReadEdge.put(state.read_edge, edge)
 
     %{state | cursor: edge}
   end
 
   defp remembered(nil), do: nil
 
-  defp remembered(place), do: Place.get(place)
+  defp remembered(read_edge), do: ReadEdge.get(read_edge)
 
   defp schedule_poll(interval_ms) do
     Process.send_after(self(), :poll, interval_ms)
