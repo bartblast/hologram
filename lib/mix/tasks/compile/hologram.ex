@@ -223,6 +223,13 @@ defmodule Mix.Tasks.Compile.Hologram do
     Enum.any?(@ls_build_dirs, fn dir -> dir in path_components end)
   end
 
+  # The removal here shares the path-based race documented at
+  # remove_lock_for_dead_process/2, in its narrowest form: only an integer comparison
+  # separates the age check from the removal, where that function spends milliseconds
+  # in a liveness check, and reaching this branch at all needs a lock abandoned inside
+  # the microsecond window between creating it and writing the OS-level PID into it.
+  # Still a reduction of what it replaces, which deleted every empty lock on sight,
+  # with no age gate, on ordinary concurrent compiles.
   defp maybe_remove_abandoned_empty_lock(lock_path) do
     case File.stat(lock_path, time: :posix) do
       {:ok, %File.Stat{mtime: mtime}} ->
@@ -282,10 +289,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     File.rm(lock_path)
   end
 
-  # Known, unclosed race: the removal is by path, not owner-verified. Deciding that
-  # os_pid is dead takes milliseconds (SystemUtils.os_process_alive?/1 shells out to
-  # ps or tasklist), and by the time File.rm/1 runs, the file at this path may no
-  # longer be the one that was diagnosed. Two invocations reading the same lock left
+  # Known, unclosed race, shared with maybe_remove_abandoned_empty_lock/1 and widest
+  # here: the removal is by path, not owner-verified. Deciding that os_pid is dead
+  # takes milliseconds (SystemUtils.os_process_alive?/1 shells out to ps or tasklist),
+  # and by the time File.rm/1 runs, the file at this path may no longer be the one
+  # that was diagnosed. Two invocations reading the same lock left
   # behind by a killed process both diagnose it dead; the first removes it, acquires
   # its own lock and starts compiling; the second's removal then deletes that live
   # lock, and both compile at once.
