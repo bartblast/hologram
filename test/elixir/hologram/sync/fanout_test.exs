@@ -59,7 +59,7 @@ defmodule Hologram.Sync.FanoutTest do
     [{200, [%{op: :patch_entity, type: entity_type, entity_id: Entity.generate_id(), data: %{}}]}]
   end
 
-  describe "route/1" do
+  describe "route/2" do
     test "hands the batch to the evaluator of a window the writes could have changed" do
       hold(@board_window)
 
