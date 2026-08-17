@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Kernel, except: [inspect: 1]
 
+  alias HologramFeatureTests.StructFixture1
+
   @dialyzer {:no_match, action: 3}
 
   route "/control-flow/try"
@@ -35,6 +37,7 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
       <button $click="catch_throw"> Catch throw </button>
       <button $click="catch_exit"> Catch exit </button>
       <button $click="catch_error"> Catch error </button>
+      <button $click="catch_struct_throw"> Catch struct throw </button>
       <button $click="catch_unmatched_kind"> Catch unmatched kind </button>
     </p>
     <p>
@@ -46,6 +49,7 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
       <strong>Else clauses</strong>
       <button $click="else_with_match"> Else with a match </button>
       <button $click="else_without_match"> Else without a match </button>
+      <button $click="else_with_struct_pattern"> Else with a struct pattern </button>
     </p>
     <p>
       <strong>After block</strong>
@@ -113,6 +117,17 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
     put_state(component, :result, result)
   end
 
+  def action(:catch_struct_throw, _params, component) do
+    result =
+      try do
+        throw(%StructFixture1{name: "boom", value: 1})
+      catch
+        :throw, %StructFixture1{value: v} -> {:caught, v}
+      end
+
+    put_state(component, :result, result)
+  end
+
   def action(:catch_throw, _params, component) do
     result =
       try do
@@ -170,6 +185,21 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
       else
         1 -> :else_one
         2 -> :else_two
+      after
+        nil
+      end
+
+    put_state(component, :result, result)
+  end
+
+  def action(:else_with_struct_pattern, _params, component) do
+    value = wrap_term(%StructFixture1{name: "ok", value: 2})
+
+    result =
+      try do
+        value
+      else
+        %StructFixture1{value: v} -> {:else_matched, v}
       after
         nil
       end
