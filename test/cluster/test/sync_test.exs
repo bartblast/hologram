@@ -82,6 +82,13 @@ defmodule HologramClusterTests.SyncTest do
       client = drain_initial_sync(connect(peer_a))
 
       holder = hold_item_open(peer_a, "held-open", "Held open")
+
+      # Killed rather than released, and only if an assertion below never gets that far: releasing
+      # COMMITS, which would leave this row and its effect behind for whatever ran next, while the
+      # transaction this is here to end wants ending either way. A no-op once the holder has
+      # committed on its own, and once more when the peer is already gone.
+      on_exit(fn -> Process.exit(holder, :kill) end)
+
       assert_receive {:holding, ^holder}, 5_000
 
       # Committed after the held write started, and with a HIGHER transaction id.
