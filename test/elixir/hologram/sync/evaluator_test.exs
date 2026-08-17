@@ -232,6 +232,32 @@ defmodule Hologram.Sync.EvaluatorTest do
     end
   end
 
+  describe "start_link/1" do
+    # An evaluator that is killed, or whose query raises, never reaches the clause that clears its
+    # rows - and its replacement counts rounds from zero again, so every version left behind is one
+    # nothing can ask for. Left alone they wait for a count that may never climb past them: the
+    # replacement's own pruning only reaches versions inside its own range.
+    test "clears what an evaluator that never got to clean up left behind" do
+      create("first")
+
+      killed = start_evaluator!([])
+      round(@window_id, transactions())
+      wait_for_result_store_write()
+
+      ref = Process.monitor(killed)
+      Process.exit(killed, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^killed, :killed}
+
+      # Still there, which is what makes the next line worth asserting.
+      assert ResultStore.versions(@window_id) == [1]
+
+      # The killed one is temporary, so the supervisor has already dropped it and its id is free.
+      start_evaluator!([])
+
+      assert ResultStore.versions(@window_id) == []
+    end
+  end
+
   describe "handle :DOWN" do
     test "stops once its last subscriber goes away, forgetting what it held" do
       create("first")

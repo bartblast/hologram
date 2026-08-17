@@ -73,6 +73,18 @@ defmodule Hologram.Sync.Evaluator do
 
   @impl GenServer
   def init(opts) do
+    window_id = Keyword.fetch!(opts, :window_id)
+
+    # Rounds are counted from zero again here, so whatever the store still holds for this window
+    # was written by an evaluator that is gone and can never be asked for again. One that stopped
+    # for the ordinary reason cleared its own rows on the way out - one that was killed, or whose
+    # query raised, had no way out to do it in, and its rows would otherwise sit there until a
+    # replacement's count happened to climb past them, which on a quiet window is never.
+    #
+    # Starting is where this belongs rather than stopping, because starting is the one moment
+    # reachable however the last one ended.
+    ResultStore.forget(window_id)
+
     subscribers =
       opts
       |> Keyword.get(:subscribers, [])
@@ -82,7 +94,7 @@ defmodule Hologram.Sync.Evaluator do
       subscribers: subscribers,
       term: Keyword.fetch!(opts, :term),
       version: 0,
-      window_id: Keyword.fetch!(opts, :window_id)
+      window_id: window_id
     }
 
     {:ok, state}
