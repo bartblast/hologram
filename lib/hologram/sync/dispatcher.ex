@@ -8,6 +8,7 @@ defmodule Hologram.Sync.Dispatcher do
   use GenServer
 
   alias Hologram.DB.Outbox
+  alias Hologram.Sync.Place
 
   # How long the log can go unread when the announcements stop arriving - a listener whose
   # connection died, or a pooler that drops them. It bounds nothing while they do arrive, since
@@ -33,6 +34,11 @@ defmodule Hologram.Sync.Dispatcher do
   `:notifications` names a `Postgrex.Notifications` process to hear appends on. It is optional
   because the announcements are an optimization over the poll rather than the mechanism: without
   one the dispatcher still reads, just no sooner than `:poll_interval_ms` after a write.
+
+  `:place` names a `Hologram.Sync.Place` process keeping where reading got to, which is what a
+  dispatcher put there before this one started resumes from - a restart that began at the edge
+  instead would skip the window the last one was reading. It is optional: without one the place
+  lives in this process alone, and dies with it.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -57,6 +63,7 @@ defmodule Hologram.Sync.Dispatcher do
       cursor: Keyword.get(opts, :cursor),
       handler: Keyword.fetch!(opts, :handler),
       notifications: Keyword.get(opts, :notifications),
+      place: Keyword.get(opts, :place),
       poll_interval_ms: Keyword.get(opts, :poll_interval_ms, default_poll_interval_ms())
     }
 
@@ -71,7 +78,10 @@ defmodule Hologram.Sync.Dispatcher do
 
     schedule_poll(state.poll_interval_ms)
 
-    {:noreply, state}
+    # Here rather than in init/1, so that the supervisor starting this dispatcher waits on nothing
+    # but the process being spawned. Nothing can be read before it: a continue runs ahead of every
+    # message, including the poll just scheduled.
+    {:noreply, %{state | cursor: state.cursor || remembered(state.place)}}
   end
 
   @impl GenServer
@@ -97,14 +107,14 @@ defmodule Hologram.Sync.Dispatcher do
 
     case Outbox.read_window(cursor, edge) do
       [] ->
-        %{state | cursor: edge}
+        move_to(state, edge)
 
       transactions ->
         # The place moves only once the handler has taken them: crashing halfway means reading
         # the same window again, which routing must tolerate, rather than passing it silently.
         state.handler.(transactions, {cursor, 0})
 
-        %{state | cursor: edge}
+        move_to(state, edge)
     end
   end
 
@@ -125,6 +135,19 @@ defmodule Hologram.Sync.Dispatcher do
       0 -> :ok
     end
   end
+
+  # Kept where this process dying cannot take it, as well as in the process itself: the state of
+  # one that crashed is gone, and its replacement resuming at the edge would leave every session on
+  # this node holding a place past a window none of them was sent.
+  defp move_to(state, edge) do
+    if state.place, do: Place.put(state.place, edge)
+
+    %{state | cursor: edge}
+  end
+
+  defp remembered(nil), do: nil
+
+  defp remembered(place), do: Place.get(place)
 
   defp schedule_poll(interval_ms) do
     Process.send_after(self(), :poll, interval_ms)

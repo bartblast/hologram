@@ -40,7 +40,8 @@ defmodule Hologram.DB.SchemaReconciler do
   # been seen: a database claimed before the outbox existed makes every dispatcher poll
   # crash with `relation "hologram_system.outbox" does not exist`. Harmless only because no
   # such database exists outside this branch's local dev and test databases and CI's, which
-  # are virgin per run.
+  # are virgin per run - and until that upgrade exists a stale one is dropped and recreated
+  # rather than carried forward.
   @system_schema_version 1
 
   # Control-plane bookkeeping DDL - static and framework-owned, never model-derived.

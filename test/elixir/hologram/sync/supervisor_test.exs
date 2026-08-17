@@ -7,6 +7,7 @@ defmodule Hologram.Sync.SupervisorTest do
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Fanout
+  alias Hologram.Sync.Place
   alias Hologram.Sync.Pruner
   alias Hologram.Sync.ResultStore
 
@@ -28,6 +29,7 @@ defmodule Hologram.Sync.SupervisorTest do
                Evaluator.registry(),
                ResultStore,
                Evaluators,
+               Place,
                notifications(),
                Dispatcher,
                Pruner
@@ -64,6 +66,15 @@ defmodule Hologram.Sync.SupervisorTest do
       assert opts[:notifications] == notifications()
     end
 
+    # One_for_one replaces a crashed dispatcher beside sessions that did not crash, so where it had
+    # read to has to outlive it - kept by a holder rather than in the state that died with it.
+    test "keeps where the log has been read outside the process reading it" do
+      spec = child_spec_of(Dispatcher)
+
+      assert {Dispatcher, :start_link, [opts]} = spec.start
+      assert opts[:place] == Place
+    end
+
     test "starts the dispatcher after what it hands work to" do
       ids = child_ids()
 
@@ -72,6 +83,14 @@ defmodule Hologram.Sync.SupervisorTest do
 
       assert Enum.find_index(ids, &(&1 == Dispatcher)) >
                Enum.find_index(ids, &(&1 == Evaluator.registry()))
+    end
+
+    # A dispatcher restarting reads the holder to resume from, which it can only do if the holder
+    # is already up.
+    test "starts the dispatcher after the holder it resumes from" do
+      ids = child_ids()
+
+      assert Enum.find_index(ids, &(&1 == Dispatcher)) > Enum.find_index(ids, &(&1 == Place))
     end
   end
 end

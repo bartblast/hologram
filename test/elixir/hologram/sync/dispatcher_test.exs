@@ -8,6 +8,7 @@ defmodule Hologram.Sync.DispatcherTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Outbox
   alias Hologram.Sync.Dispatcher
+  alias Hologram.Sync.Place
   alias Hologram.Test.Fixtures.Entity.Module2
 
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
@@ -51,6 +52,14 @@ defmodule Hologram.Sync.DispatcherTest do
     pid
   end
 
+  defp start_place!(remembering \\ nil) do
+    place = start_supervised!(Place)
+
+    if remembering, do: :ok = Place.put(place, remembering)
+
+    place
+  end
+
   # Stands in for a Postgrex.Notifications process, which answers listen/2 with a reference and
   # would otherwise need a connection of its own.
   defmodule NotificationsStub do
@@ -77,6 +86,29 @@ defmodule Hologram.Sync.DispatcherTest do
       seed(200, @entity_id)
 
       dispatcher = start_dispatcher!([])
+
+      wake(dispatcher)
+
+      refute_receive {:dispatched, _transactions, _place}, 100
+    end
+
+    # What a dispatcher replacing a crashed one has to do: the state of the one that died is gone,
+    # and starting at the edge would skip the window it was reading - which the sessions that
+    # outlived it would then be carried past, holding a place covering rows they were never sent.
+    test "resumes from where the dispatcher it replaces got to" do
+      seed(200, @entity_id)
+
+      dispatcher = start_dispatcher!(place: start_place!(200))
+
+      wake(dispatcher)
+
+      assert_receive {:dispatched, [{200, _events}], {200, 0}}
+    end
+
+    test "starts at the edge when the holder remembers nothing" do
+      seed(200, @entity_id)
+
+      dispatcher = start_dispatcher!(place: start_place!())
 
       wake(dispatcher)
 
@@ -120,6 +152,41 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
 
       refute_receive {:dispatched, _transactions, _place}, 100
+    end
+
+    test "records how far it read, for whichever dispatcher replaces it" do
+      seed(200, @entity_id)
+
+      place = start_place!()
+      dispatcher = start_dispatcher!(cursor: 200, place: place)
+
+      wake(dispatcher)
+      assert_receive {:dispatched, [{200, _events}], _place}
+
+      recorded = Place.get(place)
+
+      # Asserted as a number before being compared: nothing recorded leaves nil, which every
+      # integer sorts below rather than failing against.
+      assert is_integer(recorded)
+
+      # Past the window just handed over rather than back at its start, which is the difference
+      # between a replacement carrying on and one repeating what the client already has.
+      assert recorded > 200
+    end
+
+    # The empty round moves the place too, and has to: a node quiet for an hour would otherwise
+    # leave its replacement rereading an hour of log that nothing was waiting for.
+    test "records how far it read even when the window held nothing" do
+      place = start_place!()
+      dispatcher = start_dispatcher!(cursor: 200, place: place)
+
+      wake(dispatcher)
+      refute_receive {:dispatched, _transactions, _place}, 100
+
+      recorded = Place.get(place)
+
+      assert is_integer(recorded)
+      assert recorded > 200
     end
 
     test "moves past what it handed over, so a second wake repeats nothing" do
