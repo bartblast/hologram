@@ -17,12 +17,14 @@ defmodule Hologram.Assets.PathRegistryTest do
   end
 
   # Reads the registry as fast as it can until asked what it saw, so a reload that empties the
-  # table even briefly is caught rather than stepped over.
-  defp watch_lookups(report_to, static_path, seen) do
+  # table even briefly is caught rather than stepped over. What it keeps is the DISTINCT answers:
+  # the loop turns over thousands of times while a reload runs, and every one of them says the same
+  # thing unless something is wrong - which is the only thing the caller asks about.
+  defp watch_lookups(report_to, static_path, answers) do
     receive do
-      {:report, ^report_to} -> send(report_to, {:answers, seen})
+      {:report, ^report_to} -> send(report_to, {:answers, answers})
     after
-      0 -> watch_lookups(report_to, static_path, [lookup(static_path) | seen])
+      0 -> watch_lookups(report_to, static_path, MapSet.put(answers, lookup(static_path)))
     end
   end
 
@@ -96,14 +98,14 @@ defmodule Hologram.Assets.PathRegistryTest do
     [{static_path, asset_path} | _rest] = Map.to_list(mapping)
 
     test_pid = self()
-    reader = spawn_link(fn -> watch_lookups(test_pid, static_path, []) end)
+    reader = spawn_link(fn -> watch_lookups(test_pid, static_path, MapSet.new()) end)
 
     Enum.each(1..50, fn _round -> reload() end)
 
     send(reader, {:report, self()})
     assert_receive {:answers, answers}
 
-    assert Enum.uniq(answers) == [{:ok, asset_path}]
+    assert answers == MapSet.new([{:ok, asset_path}])
   end
 
   test "start_link/1" do

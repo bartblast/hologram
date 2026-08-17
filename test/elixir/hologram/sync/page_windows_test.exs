@@ -31,12 +31,14 @@ defmodule Hologram.Sync.PageWindowsTest do
   end
 
   # Reads the registry as fast as it can until asked what it saw, so a reload that empties the
-  # table even briefly is caught rather than stepped over.
-  defp watch_lookups(report_to, page_module, seen) do
+  # table even briefly is caught rather than stepped over. What it keeps is the DISTINCT answers:
+  # the loop turns over thousands of times while a reload runs, and every one of them says the same
+  # thing unless something is wrong - which is the only thing the caller asks about.
+  defp watch_lookups(report_to, page_module, answers) do
     receive do
-      {:report, ^report_to} -> send(report_to, {:answers, seen})
+      {:report, ^report_to} -> send(report_to, {:answers, answers})
     after
-      0 -> watch_lookups(report_to, page_module, [lookup(page_module) | seen])
+      0 -> watch_lookups(report_to, page_module, MapSet.put(answers, lookup(page_module)))
     end
   end
 
@@ -130,14 +132,14 @@ defmodule Hologram.Sync.PageWindowsTest do
       init(nil)
 
       test_pid = self()
-      reader = spawn_link(fn -> watch_lookups(test_pid, MyApp.BoardPage, []) end)
+      reader = spawn_link(fn -> watch_lookups(test_pid, MyApp.BoardPage, MapSet.new()) end)
 
       Enum.each(1..200, fn _round -> reload() end)
 
       send(reader, {:report, self()})
       assert_receive {:answers, answers}
 
-      assert Enum.uniq(answers) == [["w_7f3a", "w_c412"]]
+      assert answers == MapSet.new([["w_7f3a", "w_c412"]])
     end
 
     test "forgets a page the build no longer has" do
