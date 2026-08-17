@@ -380,7 +380,15 @@ defmodule Hologram.Sync.Session do
       # Nothing downloads it, so nothing will ever arrive for it - which is as filled as it will
       # ever be, and waiting on it would leave the client waiting forever.
       :no_window ->
-        mark_filled(state, window_id)
+        # Its place is dropped along with it. What a frame claims is the place of the window
+        # furthest behind, and a window that will never have a round never moves - so left among
+        # them it would hold every claim at the place this session started from. The client would
+        # replay from there on each reconnect, from further back every time, until the gap outgrew
+        # what the log still covers and it was sent everything again. A window with no rounds has
+        # no missed changes for a claim to cover.
+        unconstrained = %{state | places: Map.delete(state.places, window_id)}
+
+        mark_filled(unconstrained, window_id)
 
       {:ok, evaluator, version} ->
         # Watched from here on: an evaluator that stops is the end of a window's rounds, and a

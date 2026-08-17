@@ -696,6 +696,27 @@ defmodule Hologram.Sync.SessionTest do
       assert Cursor.decode(cursor) == {:ok, 900, 7}
     end
 
+    # A window the page map reaches but the query cache no longer holds - what a live reload leaves
+    # behind when it drops a query. It is skipped rather than refused, so it never has a round, and
+    # its place would otherwise stay where the session started and hold every claim down with it:
+    # the client would replay from further back on each reconnect until the log stopped reaching it.
+    test "leaves a window nothing downloads out of the claim" do
+      task = create("first")
+      windows(%{@page => [@board_window, "w_nothing_downloads"]})
+      hold_windows([@board_window])
+
+      start_session!(fill_place: {200, 0})
+
+      assert_receive {:sync_deltas, nil, _fill}
+      assert_receive {:sync_synced, :all}
+
+      DB.update(Module2, task.id, %{c: "moved"})
+      Evaluator.round(@board_window, transactions(task.id, ["c"]), {900, 7})
+
+      assert_receive {:sync_deltas, cursor, _deltas}
+      assert Cursor.decode(cursor) == {:ok, 900, 7}
+    end
+
     test "claims the place of the window furthest behind, not the one furthest ahead" do
       task = create("in both windows")
       windows(%{@page => [@board_window, @other_window]})
