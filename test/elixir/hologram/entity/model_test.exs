@@ -1,15 +1,25 @@
 defmodule Hologram.Entity.ModelTest do
-  use Hologram.Test.BasicCase, async: true
+  # async: false - the hash cache is one persistent term for the whole node, and proving it is READ
+  # means standing a value in it that is not the real hash. Every concurrent caller of hash/0 sees
+  # that value while it stands, and the sync tests compare two reads of it against each other: one
+  # landing either side of the write disagrees with itself. The window is small - small enough that
+  # it has never been caught - but it is the whole suite that would pay for it.
+  use Hologram.Test.BasicCase, async: false
 
   import Hologram.Entity.Model
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
+
+  @exists_key {Hologram.Entity.Model, :exists?}
+  @hash_key {Hologram.Entity.Model, :hash}
 
   defp task_model(entry_overrides) do
     entry =
@@ -1310,8 +1320,226 @@ defmodule Hologram.Entity.ModelTest do
              }
     end
 
+    test "keeps an option's regex as its pattern and flags" do
+      defmodule InlineRegexOptsFixture do
+        use Hologram.Entity
+
+        attribute :email, :string, format: ~r/@/i
+      end
+
+      assert from_modules([InlineRegexOptsFixture]) == %{
+               entities: %{
+                 InlineRegexOptsFixture => %{
+                   attributes: [{:email, :string, [format: {:regex, "@", [:caseless]}]}],
+                   relationships: [],
+                   roles: []
+                 }
+               },
+               roles: %{},
+               user_entity: nil
+             }
+    end
+
+    test "returns equal terms for two reads of a declaration holding a regex" do
+      defmodule InlineRegexEqualityFixture do
+        use Hologram.Entity
+
+        attribute :email, :string, format: ~r/@/
+      end
+
+      assert from_modules([InlineRegexEqualityFixture]) ==
+               from_modules([InlineRegexEqualityFixture])
+    end
+
     test "returns equal terms regardless of the given module order" do
       assert from_modules([Module13, Module2]) == from_modules([Module2, Module13])
+    end
+  end
+
+  # The cache is process-global, so these leave it holding the project's real hash rather than
+  # anything a concurrently running test could be surprised by.
+  describe "hash/0" do
+    setup do
+      on_exit(&reset_caches/0)
+
+      reset_caches()
+    end
+
+    test "hashes the project's compiled data model" do
+      derived =
+        Reflection.list_entities()
+        |> from_modules(Reflection.list_roles())
+        |> hash()
+
+      assert hash() == derived
+    end
+
+    test "answers from the cache once it has been derived" do
+      derived = hash()
+
+      :persistent_term.put(@hash_key, "cached")
+
+      assert hash() == "cached"
+
+      reset_caches()
+
+      refute derived == "cached"
+    end
+
+    test "keeps the derived hash for the calls after it" do
+      assert :persistent_term.get(@hash_key, nil) == nil
+
+      derived = hash()
+
+      assert :persistent_term.get(@hash_key, nil) == derived
+    end
+  end
+
+  describe "reset_caches/0" do
+    test "drops the derived hash" do
+      hash()
+
+      assert reset_caches() == :ok
+      assert :persistent_term.get(@hash_key, nil) == nil
+    end
+
+    # Both, or a recompiled model would be picked up by one answer and not the other.
+    test "drops the remembered answer about whether a model exists" do
+      exists?()
+
+      assert reset_caches() == :ok
+      assert :persistent_term.get(@exists_key, nil) == nil
+    end
+  end
+
+  describe "exists?/0" do
+    test "says a build declaring entity types has a data model" do
+      refute Hologram.Reflection.list_entities() == []
+
+      assert exists?() == true
+    end
+
+    # The sweep behind this takes tens of milliseconds and runs on every client handshake, so the
+    # cache is the point rather than a nicety. Asserted through the store rather than by timing.
+    test "remembers the answer rather than sweeping the modules again" do
+      reset_caches()
+
+      assert :persistent_term.get(@exists_key, nil) == nil
+
+      exists?()
+
+      assert :persistent_term.get(@exists_key, nil) == true
+    end
+  end
+
+  describe "hash/1" do
+    test "returns a lowercase hex string of the truncated SHA-256" do
+      model_hash =
+        %{attributes: [{:title, :string, []}]}
+        |> task_model()
+        |> hash()
+
+      assert model_hash == "b92542b48351dc50db3c1b9f2e0066e3"
+    end
+
+    test "terms describing the same model share a hash" do
+      one_term =
+        %{attributes: [{:title, :string, []}]}
+        |> task_model()
+        |> hash()
+
+      other_term =
+        %{attributes: [{:title, :string, []}]}
+        |> task_model()
+        |> hash()
+
+      assert one_term == other_term
+    end
+
+    test "a model read twice hashes the same when an option holds a regex" do
+      one_read =
+        [Module10]
+        |> from_modules()
+        |> hash()
+
+      other_read =
+        [Module10]
+        |> from_modules()
+        |> hash()
+
+      assert one_read == other_read
+    end
+
+    test "adding an entity type changes the hash" do
+      one_entity = task_model(%{attributes: [{:title, :string, []}]})
+
+      two_entities =
+        put_in(one_entity, [:entities, Module1], %{attributes: [], relationships: [], roles: []})
+
+      refute hash(two_entities) == hash(one_entity)
+    end
+
+    test "changing an attribute's type changes the hash" do
+      integer_title =
+        %{attributes: [{:title, :integer, []}]}
+        |> task_model()
+        |> hash()
+
+      string_title =
+        %{attributes: [{:title, :string, []}]}
+        |> task_model()
+        |> hash()
+
+      refute integer_title == string_title
+    end
+
+    test "changing an attribute's options changes the hash" do
+      server_only_title =
+        %{attributes: [{:title, :string, [server_only: true]}]}
+        |> task_model()
+        |> hash()
+
+      plain_title =
+        %{attributes: [{:title, :string, []}]}
+        |> task_model()
+        |> hash()
+
+      refute server_only_title == plain_title
+    end
+
+    test "adding a relationship changes the hash" do
+      with_author =
+        %{relationships: [{:author, Module1, []}]}
+        |> task_model()
+        |> hash()
+
+      without_author =
+        %{relationships: []}
+        |> task_model()
+        |> hash()
+
+      refute with_author == without_author
+    end
+
+    test "changing a role declaration changes the hash" do
+      creator_owner =
+        %{roles: [{:owner, [creator: true]}]}
+        |> task_model()
+        |> hash()
+
+      plain_owner =
+        %{roles: [{:owner, []}]}
+        |> task_model()
+        |> hash()
+
+      refute creator_owner == plain_owner
+    end
+
+    test "moving the user entity designation changes the hash" do
+      undesignated = task_model(%{attributes: []})
+      designated = %{undesignated | user_entity: Module14}
+
+      refute hash(designated) == hash(undesignated)
     end
   end
 

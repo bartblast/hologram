@@ -19,18 +19,49 @@ defmodule Hologram.DB.SchemaReconciler do
   @advisory_lock_key 4_787_000_136_577_093_832
 
   # The layout version of the hologram_system tables themselves - bumped when the
-  # bookkeeping DDL below or the marker's columns change. Stamped into every marker so a
-  # database states which layout it was built with: the alternative is introspecting the
-  # tables to find out, which only works while the differences are visible in the catalog.
-  # An integer rather than the package version, so the check is a monotonic comparison
-  # rather than version-string parsing, and a release that changes nothing here leaves it
-  # alone.
+  # bookkeeping DDL below or the marker's columns change, ONCE PER RELEASE rather than once
+  # per change. Stamped into every marker so a database states which layout it was built
+  # with: the alternative is introspecting the tables to find out, which only works while
+  # the differences are visible in the catalog. An integer rather than the package version,
+  # so the check is a monotonic comparison rather than version-string parsing, and a release
+  # that changes nothing here leaves it alone.
+  #
+  # STILL 1 while the data layer is unreleased, deliberately. The outbox table, its two
+  # indexes and the migration table's model_hash column all arrived after this number was
+  # first set, and none of them has shipped: `lib/hologram/db` exists on neither master nor
+  # dev, and the published package has no data layer at all. A version names a layout
+  # someone can be RUNNING, so numbering the intermediate states of an unreleased branch
+  # would invent layouts no database was ever built with.
+  #
+  # Owed at the data layer's first release, and both halves are owed together: bump this
+  # once for the whole arc, and add the upgrade that carries an already-claimed database to
+  # it. `create_system_tables/0` runs only when claiming a virgin database, so a claimed one
+  # never gains a later table or column on its own - the symptom is not subtle, and it has
+  # been seen: a database claimed before the outbox existed makes every dispatcher poll
+  # crash with `relation "hologram_system.outbox" does not exist`. Harmless only because no
+  # such database exists outside this branch's local dev and test databases and CI's, which
+  # are virgin per run - and until that upgrade exists a stale one is dropped and recreated
+  # rather than carried forward.
   @system_schema_version 1
 
   # Control-plane bookkeeping DDL - static and framework-owned, never model-derived.
   # The database table is the managed-database marker (single row, maintained by
   # write_marker/1) - the schema_object table is the managed-object registry - the
-  # migration table records the applied migration versions.
+  # migration table records the applied migration versions - the outbox table records the
+  # effect each write had, written in the writing transaction and read by the dispatcher.
+  #
+  # The outbox is read by transaction id rather than by insert order, because a sequence
+  # hands out its numbers before the transaction holding them commits: a reader trusting
+  # seq order would pass a row whose transaction is still open and never come back for it.
+  # Hence the tx column, defaulted to the writing transaction's own id, and the index the
+  # windowed read walks.
+  #
+  # The second outbox index is BRIN rather than btree, and pruning is what reads it. The
+  # table is append-only, so inserted_at runs with the physical order of the pages, which
+  # is the one case BRIN is built for: kilobytes of index instead of gigabytes, and no
+  # per-row tree descent on a table every entity write appends to. A btree here would put
+  # its rightmost page in the path of every write in the system to speed up an hourly
+  # chore.
   #
   # Every environment gets the same tables, and which of them a database uses follows
   # from how it is managed: reconciliation writes the registry and never the migration
@@ -51,8 +82,30 @@ defmodule Hologram.DB.SchemaReconciler do
     CREATE TABLE "hologram_system"."migration" (
       "version" text NOT NULL,
       "applied_at" timestamptz NOT NULL,
+      "model_hash" text NOT NULL,
       PRIMARY KEY ("version")
     )
+    """,
+    """
+    CREATE TABLE "hologram_system"."outbox" (
+      "seq" bigserial PRIMARY KEY,
+      "op" text NOT NULL,
+      "type" text NOT NULL,
+      "entity_id" uuid NOT NULL,
+      "data" jsonb,
+      "tx" xid8 NOT NULL DEFAULT pg_current_xact_id(),
+      "model_hash" text NOT NULL,
+      "mutation_ref" jsonb,
+      "actor_id" uuid,
+      "inserted_at" timestamptz NOT NULL DEFAULT now()
+    )
+    """,
+    """
+    CREATE INDEX "outbox_tx_seq_$idx" ON "hologram_system"."outbox" ("tx", "seq")
+    """,
+    """
+    CREATE INDEX "outbox_inserted_at_$idx" ON "hologram_system"."outbox"
+    USING brin ("inserted_at")
     """,
     """
     CREATE TABLE "hologram_system"."schema_object" (

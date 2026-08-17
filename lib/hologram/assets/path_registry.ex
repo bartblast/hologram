@@ -93,13 +93,26 @@ defmodule Hologram.Assets.PathRegistry do
 
   @doc """
   Reloads the path registry data.
+
+  The static dir is walked before anything registered changes, and what it finds is put over what
+  is there: emptying the table first would leave every asset path unresolvable for the length of a
+  recursive directory walk, which is the slowest thing this module does. Paths the walk no longer
+  finds are removed once the rest is in place.
   """
   @spec reload :: :ok
   def reload do
     ets_table_name = impl().ets_table_name()
-    ETS.reset(ets_table_name)
+    assets = find_assets()
 
-    populate(ets_table_name)
+    populate(ets_table_name, assets)
+
+    ets_table_name
+    |> ETS.get_all()
+    |> Map.keys()
+    |> Enum.reject(&Map.has_key?(assets, &1))
+    |> Enum.each(&ETS.delete(ets_table_name, &1))
+
+    :ok
   end
 
   @doc """
@@ -108,6 +121,12 @@ defmodule Hologram.Assets.PathRegistry do
   @spec static_dir() :: String.t()
   def static_dir do
     Reflection.otp_app_static_dir()
+  end
+
+  defp find_assets do
+    impl().static_dir()
+    |> find_assets()
+    |> Map.new()
   end
 
   defp find_assets(static_dir) do
@@ -154,9 +173,11 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   defp populate(ets_table_name) do
-    impl().static_dir()
-    |> find_assets()
-    |> Enum.each(fn {key, value} -> ETS.put(ets_table_name, key, value) end)
+    populate(ets_table_name, find_assets())
+  end
+
+  defp populate(ets_table_name, assets) do
+    Enum.each(assets, fn {key, value} -> ETS.put(ets_table_name, key, value) end)
   end
 
   defp static_file_path_with_digest_suffix_regex(static_dir) do

@@ -135,6 +135,34 @@ describe("Sse", () => {
     });
   });
 
+  describe("buildSyncGreeting()", () => {
+    const pageModule = Type.atom("Elixir.MyApp.BoardPage");
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+    });
+
+    it("tells the server what the bundle speaks, what it was built against, and where it is", () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+
+      assert.deepStrictEqual(Sse.buildSyncGreeting(pageModule), {
+        model_hash: "a3f9c2",
+        page: "MyApp.BoardPage",
+        protocol_version: 1,
+      });
+    });
+
+    it("says nothing for a bundle built before any of this existed", () => {
+      assert.deepStrictEqual(Sse.buildSyncGreeting(pageModule), {});
+    });
+
+    it("says nothing before the page has mounted", () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+
+      assert.deepStrictEqual(Sse.buildSyncGreeting(null), {});
+    });
+  });
+
   describe("computeReconnectDelay()", () => {
     beforeEach(() => {
       sinon.stub(Math, "random").returns(0.5);
@@ -183,6 +211,13 @@ describe("Sse", () => {
   describe("connect()", () => {
     let setTimeoutSpy;
 
+    // Removed here rather than at the end of the test that sets it: a failed assertion would skip
+    // that line and leave the greeting in place for every test after it, which reads as a second
+    // failure somewhere unrelated.
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+    });
+
     beforeEach(() => {
       sinon.stub(Math, "random").returns(0.5);
 
@@ -210,6 +245,22 @@ describe("Sse", () => {
       sinon.assert.calledOnceWithExactly(
         globalThis.EventSource,
         "/hologram/sse?instance_id=test-instance-id&handshake_id=abc-handshake-id",
+      );
+    });
+
+    it("opens the EventSource with the sync greeting when the bundle carries one", async () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      sinon
+        .stub(Hologram, "currentPageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+
+      await Sse.connect();
+
+      sinon.assert.calledOnceWithExactly(
+        globalThis.EventSource,
+        "/hologram/sse?instance_id=test-instance-id&handshake_id=abc-handshake-id&model_hash=a3f9c2&page=MyApp.BoardPage&protocol_version=1",
       );
     });
 

@@ -1,5 +1,7 @@
 defmodule Hologram.CompilerTest do
   use Hologram.Test.BasicCase, async: false
+  use Hologram.Query
+
   import Hologram.Compiler
 
   alias Hologram.Commons.PLT
@@ -9,7 +11,16 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.Entity.Model
+  alias Hologram.Query
+  alias Hologram.Query.Registry
+  alias Hologram.Query.Window
   alias Hologram.Reflection
+  alias Hologram.Sync.Frame
+
+  alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
+  alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module11
@@ -342,6 +353,36 @@ defmodule Hologram.CompilerTest do
     assert CallGraph.has_vertex?(call_graph, {Compiler, :build_call_graph, 1})
   end
 
+  describe "build_page_windows/2" do
+    setup %{call_graph: call_graph} do
+      [page_windows: build_page_windows(Reflection.list_pages(), call_graph)]
+    end
+
+    test "gives a page the window of a component it renders", %{page_windows: page_windows} do
+      window_id =
+        Entity2
+        |> filter(a: true)
+        |> Query.normalize()
+        |> Window.derive()
+        |> Registry.id()
+
+      assert page_windows[PageModule8] == [window_id]
+    end
+
+    test "gives a page reaching no query no windows", %{page_windows: page_windows} do
+      assert page_windows[PageModule7] == []
+    end
+
+    test "answers for every page it was given", %{page_windows: page_windows} do
+      answered_pages =
+        page_windows
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert answered_pages == Enum.sort(Reflection.list_pages())
+    end
+  end
+
   describe "build_call_graph/1" do
     test "builds call graph from IR PLT", %{ir_plt: ir_plt} do
       assert %CallGraph{} = call_graph = build_call_graph(ir_plt)
@@ -557,6 +598,26 @@ defmodule Hologram.CompilerTest do
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), app_versions, @js_dir)
 
       assert String.contains?(js, ~s/ERTS.appVersions = {"my-app": "9.8.7"};/)
+    end
+
+    # A build declaring NO entity types says nothing here, so no client of it asks to sync - which
+    # cannot be shown from this suite, whose own model has entity types and whose reflection
+    # nothing stubs. It is asserted in the umbrella app, which declares none.
+    test "injects the model the bundle was built against", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      refute Reflection.list_entities() == []
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
+
+      assert String.contains?(js, ~s/globalThis.Hologram.sync = {modelHash: "#{Model.hash()}", /)
+    end
+
+    test "injects the wire format the bundle speaks" do
+      js = build_runtime_js([], PLT.start(), MapSet.new(), [], @js_dir)
+
+      assert String.contains?(js, ~s/protocolVersion: #{Frame.protocol_version()}};/)
     end
 
     test "injects no application versions when client stacktraces are disabled", %{

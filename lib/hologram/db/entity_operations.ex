@@ -14,6 +14,7 @@ defmodule Hologram.DB.EntityOperations do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias Hologram.DB.Outbox
   alias Hologram.DB.SortKey
   alias Hologram.Entity
   alias Hologram.Entity.Validator
@@ -32,39 +33,56 @@ defmodule Hologram.DB.EntityOperations do
     encoded_id = Codec.encode(id, :uuid)
     encoded_target_id = Codec.encode(target_id, :uuid)
 
-    case Connection.query(statement, [encoded_id, encoded_target_id]) do
-      {:ok, _result} -> :ok
-      {:error, error} -> raise error
-    end
+    effect = %{
+      op: :add_relationship,
+      entity_type: entity_type,
+      entity_id: id,
+      relationship: relationship_name,
+      target_id: target_id
+    }
+
+    {:ok, :ok} =
+      Connection.transaction(fn ->
+        run_edge_change!(statement, [encoded_id, encoded_target_id], effect)
+      end)
+
+    :ok
   end
 
   @doc false
   @spec create(struct) :: struct
   def create(entity) do
-    case creator_grants(entity) do
-      [] ->
+    {:ok, stamped_entity} =
+      Connection.transaction(fn ->
         {stamped_entity, _result} = insert(entity, "")
 
-        stamped_entity
+        Outbox.append([put_effect(stamped_entity)])
 
-      grants ->
-        {:ok, stamped_entity} =
-          Connection.transaction(fn ->
-            {stamped_entity, _result} = insert(entity, "")
-
-            Enum.each(grants, &create_if_absent/1)
-
-            stamped_entity
-          end)
+        entity
+        |> creator_grants()
+        |> Enum.each(&create_if_absent/1)
 
         stamped_entity
-    end
+      end)
+
+    stamped_entity
   end
 
   @doc false
   @spec create_if_absent(struct) :: :ok
   def create_if_absent(entity) do
-    insert(entity, " ON CONFLICT DO NOTHING")
+    {:ok, :ok} =
+      Connection.transaction(fn ->
+        {stamped_entity, result} = insert(entity, " ON CONFLICT DO NOTHING")
+
+        # A row that was already there is not a change, and the conflicting insert wrote
+        # nothing - an effect recorded for it would be a change clients never saw happen.
+        if result.num_rows == 1 do
+          Outbox.append([put_effect(stamped_entity)])
+        end
+
+        :ok
+      end)
 
     :ok
   end
@@ -79,7 +97,14 @@ defmodule Hologram.DB.EntityOperations do
     transaction_result =
       Connection.transaction(fn ->
         delete_outgoing_edges(join_tables, encoded_id)
-        delete_entity_row(entity_type, table, id, encoded_id)
+
+        # The edges the delete took with it are not recorded one by one: a row that is gone
+        # takes whatever hung off it, and a reader learning the entity is gone knows that.
+        if delete_entity_row(entity_type, table, id, encoded_id) == 1 do
+          Outbox.append([%{op: :del_entity, entity_type: entity_type, entity_id: id}])
+        end
+
+        :ok
       end)
 
     case transaction_result do
@@ -100,10 +125,20 @@ defmodule Hologram.DB.EntityOperations do
     encoded_id = Codec.encode(id, :uuid)
     encoded_target_id = Codec.encode(target_id, :uuid)
 
-    case Connection.query(statement, [encoded_id, encoded_target_id]) do
-      {:ok, _result} -> :ok
-      {:error, error} -> raise error
-    end
+    effect = %{
+      op: :del_relationship,
+      entity_type: entity_type,
+      entity_id: id,
+      relationship: relationship_name,
+      target_id: target_id
+    }
+
+    {:ok, :ok} =
+      Connection.transaction(fn ->
+        run_edge_change!(statement, [encoded_id, encoded_target_id], effect)
+      end)
+
+    :ok
   end
 
   @doc false
@@ -187,17 +222,22 @@ defmodule Hologram.DB.EntityOperations do
     encoded_updated_at = Codec.encode(updated_at, :datetime)
     encoded_id = Codec.encode(id, :uuid)
 
-    case Connection.query(statement, changed_values ++ [encoded_updated_at, encoded_id]) do
-      {:ok, %Postgrex.Result{num_rows: 1}} ->
-        :ok
+    params = changed_values ++ [encoded_updated_at, encoded_id]
 
-      {:ok, %Postgrex.Result{num_rows: 0}} ->
-        raise ArgumentError,
-              "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
+    # The stamp travels with the changes: every update moves updated_at, and a client holding
+    # the row holds that too. The sort-key companions do not - they are derived from the values
+    # beside them, and a reader recomputes them rather than being told.
+    data =
+      sorted_changes
+      |> Map.new()
+      |> Map.put(:updated_at, updated_at)
 
-      {:error, error} ->
-        raise error
-    end
+    {:ok, :ok} =
+      Connection.transaction(fn ->
+        run_update!(statement, params, entity_type, id, data)
+      end)
+
+    :ok
   end
 
   defp companion_entries(columns, sorted_changes) do
@@ -223,13 +263,15 @@ defmodule Hologram.DB.EntityOperations do
 
   defp compute_sort_key(value), do: SortKey.compute(value)
 
+  # Returns how many rows the delete removed - deleting an id nothing holds removes none, and
+  # is not something that happened to tell anyone about.
   # sobelow_skip ["SQL.Query"]
   defp delete_entity_row(entity_type, table, id, encoded_id) do
     statement = ~s|DELETE FROM #{qualified_table(table)} WHERE "id" = $1|
 
     case Connection.query(statement, [encoded_id]) do
-      {:ok, _result} ->
-        :ok
+      {:ok, %Postgrex.Result{num_rows: num_rows}} ->
+        num_rows
 
       {:error, %Postgrex.Error{postgres: %{code: :foreign_key_violation}}} ->
         Connection.rollback({:restricted, %{entity_type: entity_type, id: id}})
@@ -333,6 +375,55 @@ defmodule Hologram.DB.EntityOperations do
     case Connection.query(statement, encoded_values) do
       {:ok, result} -> {stamped_entity, result}
       {:error, error} -> raise error
+    end
+  end
+
+  # What the entity is, as the effect log records it: every column the row carries except the
+  # sort-key companions, which are derived from the values beside them rather than written.
+  defp put_effect(entity) do
+    entity_type = entity.__struct__
+    %{columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
+    data =
+      columns
+      |> Enum.reject(&match?({:sort_key, _name}, &1.source))
+      |> Map.new(fn column ->
+        name = field_name(column)
+
+        {name, Map.fetch!(entity, name)}
+      end)
+
+    %{op: :put_entity, entity_type: entity_type, entity_id: entity.id, data: data}
+  end
+
+  # An edge the database already had, or already lacked, is not a change: the statement wrote
+  # nothing, and an effect for it would name a moment that never happened.
+  defp run_edge_change!(statement, params, effect) do
+    case Connection.query(statement, params) do
+      {:ok, %Postgrex.Result{num_rows: 1}} ->
+        Outbox.append([effect])
+
+      {:ok, %Postgrex.Result{}} ->
+        :ok
+
+      {:error, error} ->
+        raise error
+    end
+  end
+
+  defp run_update!(statement, params, entity_type, id, data) do
+    case Connection.query(statement, params) do
+      {:ok, %Postgrex.Result{num_rows: 1}} ->
+        Outbox.append([
+          %{op: :patch_entity, entity_type: entity_type, entity_id: id, data: data}
+        ])
+
+      {:ok, %Postgrex.Result{num_rows: 0}} ->
+        raise ArgumentError,
+              "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
+
+      {:error, error} ->
+        raise error
     end
   end
 

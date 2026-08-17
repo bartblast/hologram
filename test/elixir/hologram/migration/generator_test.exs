@@ -5,6 +5,7 @@ defmodule Hologram.Migration.GeneratorTest do
 
   import Hologram.Migration.Generator
 
+  alias Hologram.Entity.Model
   alias Hologram.Migration.Loader
   alias Hologram.Reflection
 
@@ -91,6 +92,44 @@ defmodule Hologram.Migration.GeneratorTest do
 
       assert generate(dir, current, @timestamp) == :nothing_to_do
       assert File.ls!(dir) == ["20260813091522.exs"]
+    end
+
+    test "writes an option's regex with the modifiers it was declared with" do
+      dir = migrations_dir!("regex_option")
+
+      current =
+        model(%{
+          MyApp.Task => %{attributes: [{:title, :string, [format: {:regex, "^a", [:caseless]}]}]}
+        })
+
+      assert {:ok, path, 0} = generate(dir, current, @timestamp)
+
+      expected =
+        normalize_newlines("""
+        use Hologram.Migration
+
+        create_entity MyApp.Task do
+          add_attribute :title, :string, format: ~r/^a/i
+        end
+        """)
+
+      assert File.read!(path) == expected
+    end
+
+    test "the history it writes for a model holding a regex produces that model" do
+      dir = migrations_dir!("regex_round_trip")
+
+      current =
+        model(%{MyApp.Task => %{attributes: [{:title, :string, [format: {:regex, "^a", []}]}]}})
+
+      assert {:ok, _path, 0} = generate(dir, current, @timestamp)
+
+      replayed =
+        dir
+        |> Loader.load_dir!()
+        |> Enum.reduce(Model.empty(), &Model.fold(&2, &1.ops))
+
+      assert replayed == current
     end
 
     test "bumps the version while the minted name is taken" do

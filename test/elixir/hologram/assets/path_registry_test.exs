@@ -16,6 +16,18 @@ defmodule Hologram.Assets.PathRegistryTest do
     setup_asset_path_registry(AssetPathRegistryStub, false)
   end
 
+  # Reads the registry as fast as it can until asked what it saw, so a reload that empties the
+  # table even briefly is caught rather than stepped over. What it keeps is the DISTINCT answers:
+  # the loop turns over thousands of times while a reload runs, and every one of them says the same
+  # thing unless something is wrong - which is the only thing the caller asks about.
+  defp watch_lookups(report_to, static_path, answers) do
+    receive do
+      {:report, ^report_to} -> send(report_to, {:answers, answers})
+    after
+      0 -> watch_lookups(report_to, static_path, MapSet.put(answers, lookup(static_path)))
+    end
+  end
+
   test "get_mapping/0", %{mapping: mapping} do
     AssetPathRegistry.start_link([])
     assert get_mapping() == mapping
@@ -75,6 +87,25 @@ defmodule Hologram.Assets.PathRegistryTest do
     reload()
 
     assert ETS.get_all(ets_table_name) == mapping
+  end
+
+  # A reload that empties the table first leaves every asset unresolvable for as long as the walk
+  # of the static dir takes, which is the slowest thing here - so a page rendered in that window
+  # would be served links to assets the registry says do not exist.
+  test "reload/0 never answers with nothing for an asset it holds", %{mapping: mapping} do
+    AssetPathRegistry.start_link([])
+
+    [{static_path, asset_path} | _rest] = Map.to_list(mapping)
+
+    test_pid = self()
+    reader = spawn_link(fn -> watch_lookups(test_pid, static_path, MapSet.new()) end)
+
+    Enum.each(1..50, fn _round -> reload() end)
+
+    send(reader, {:report, self()})
+    assert_receive {:answers, answers}
+
+    assert answers == MapSet.new([{:ok, asset_path}])
   end
 
   test "start_link/1" do

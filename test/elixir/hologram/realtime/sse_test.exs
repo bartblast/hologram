@@ -5,11 +5,14 @@ defmodule Hologram.Realtime.SSETest do
 
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.Entity
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Sync.Frame
   alias Hologram.Test.Fixtures.Entity.Module15
+  alias Hologram.Test.Fixtures.Entity.Module2, as: EntityModule2
 
   @server_only_token_js ~s'[Type.atom("token"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Entity.ServerOnly")], [Type.atom("attribute"), Type.atom("token")]])]'
 
@@ -233,6 +236,35 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "greeting/1" do
+    defp sync_query_string(extra \\ "") do
+      "/?model_hash=a3f9c2&page=MyApp.BoardPage&protocol_version=1" <> extra
+    end
+
+    test "reads what a client said about sync" do
+      conn = Plug.Test.conn(:get, sync_query_string())
+
+      assert greeting(conn) == %{
+               cursor: nil,
+               model_hash: "a3f9c2",
+               page: MyApp.BoardPage,
+               protocol_version: 1
+             }
+    end
+
+    test "reads the place a returning client names" do
+      conn = Plug.Test.conn(:get, sync_query_string("&cursor=g8uxAAAAZQ"))
+
+      assert greeting(conn).cursor == "g8uxAAAAZQ"
+    end
+
+    test "reads nothing from a client that said nothing about sync" do
+      conn = Plug.Test.conn(:get, "/?instance_id=whatever")
+
+      assert greeting(conn) == %{}
+    end
+  end
+
   describe "prepare/1" do
     test "sets SSE response headers" do
       conn = Plug.Test.conn(:get, "/")
@@ -264,6 +296,71 @@ defmodule Hologram.Realtime.SSETest do
 
       assert updated_conn.resp_body =~ "event: add_sub_receipts\nid: "
       assert updated_conn.resp_body =~ "\ndata: "
+    end
+  end
+
+  describe "process_message/4 on {:sync_deltas, ...}" do
+    test "pushes a sync_deltas SSE event carrying the deltas" do
+      conn = prepared_test_conn()
+      row = Entity.new(EntityModule2, a: true, c: "first")
+
+      # Built through the frame rather than by hand: a delta holds a row already written the way
+      # the wire carries it, and JSON refuses to guess at a struct rather than encoding one badly.
+      deltas = [Frame.put_entity(row)]
+
+      send(self(), {:sync_deltas, "g8uxAAAAZQ", deltas})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: sync_deltas\nid: "
+      assert updated_conn.resp_body =~ ~s["c":"first"]
+
+      # The place the client hands back on reconnect.
+      assert updated_conn.resp_body =~ ~s["cursor":"g8uxAAAAZQ"]
+    end
+  end
+
+  describe "process_message/4 on {:sync_reload, ...}" do
+    test "pushes a sync_reload SSE event naming what disagreed" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_reload, :model_hash})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: sync_reload\nid: "
+      assert updated_conn.resp_body =~ ~s["reason":"model_hash"]
+    end
+  end
+
+  describe "process_message/4 on {:sync_resync, reason}" do
+    test "pushes a sync_resync SSE event" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_resync, :retention})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: sync_resync\nid: "
+      assert updated_conn.resp_body =~ ~s["reason":"retention"]
+    end
+  end
+
+  describe "process_message/4 on {:sync_synced, scope}" do
+    test "pushes a synced SSE event" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_synced, :page})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: synced\nid: "
+    end
+
+    test "carries the scope the client may now answer from its own store" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_synced, :all})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ ~s["scope":"all"]
     end
   end
 
@@ -826,8 +923,47 @@ defmodule Hologram.Realtime.SSETest do
       conn = Plug.Conn.fetch_query_params(prepared_test_conn())
       send(self(), {:identity_changed, "new-session-id", 7})
 
-      assert {:cont, ^conn, "new-session-id", 7} =
+      assert {:cont, ^conn, "new-session-id", 7, _sync_session} =
                process_message(conn, "old-session-id", nil)
+    end
+
+    # Who the client is decides what its session lets through, and that is fixed when the session
+    # starts. A stream that stays open across a login, a logout or a switch would otherwise go on
+    # filtering rows as whoever was there before, and the client would go on holding them.
+    test "sends the client through the resync door when its identity changes" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      old_session = start_supervised!({Agent, fn -> :sync_session end})
+
+      send(self(), {:identity_changed, "session-1", 8})
+
+      {:cont, _conn, _session_id, _user_id, _sync_session} =
+        process_message(conn, "session-1", 7, sync_session: old_session)
+
+      assert_received {:sync_resync, :identity}
+    end
+
+    test "stops the session that was serving the identity it replaced" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      old_session = start_supervised!({Agent, fn -> :sync_session end})
+      ref = Process.monitor(old_session)
+
+      send(self(), {:identity_changed, "session-1", 8})
+
+      process_message(conn, "session-1", 7, sync_session: old_session)
+
+      assert_receive {:DOWN, ^ref, :process, ^old_session, :normal}
+    end
+
+    # A stream carrying no sync at all - a client built before any of it, or one whose build has
+    # no data model - has nothing to rescope, and must not be disturbed for it.
+    test "leaves a connection that is not syncing alone" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      send(self(), {:identity_changed, "session-1", 8})
+
+      assert {:cont, _conn, _session_id, _user_id, nil} =
+               process_message(conn, "session-1", 7)
+
+      refute_received {:sync_resync, _reason}
     end
 
     test "subscribes to the user identity topic on login (nil -> 7)" do
@@ -919,7 +1055,8 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
       send(self(), {:identity_changed, "session-1", 8})
 
-      {:cont, updated_conn, _session, _user} = process_message(conn, "session-1", 7)
+      {:cont, updated_conn, _session, _user, _sync_session} =
+        process_message(conn, "session-1", 7)
 
       assert updated_conn.resp_body =~ "event: drop_sub_receipts\nid: "
       assert SubscriptionRegistry.bindings_of(instance_id) == %{}
@@ -939,7 +1076,8 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
       send(self(), {:identity_changed, "session-new", 7})
 
-      {:cont, updated_conn, _session, _user} = process_message(conn, "session-old", 7)
+      {:cont, updated_conn, _session, _user, _sync_session} =
+        process_message(conn, "session-old", 7)
 
       refute updated_conn.resp_body =~ "event: drop_sub_receipts"
       assert SubscriptionRegistry.bindings_of(instance_id) == %{{:notifications, "c1"} => 7}

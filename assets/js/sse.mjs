@@ -35,6 +35,27 @@ export default class Sse {
   static reconnectAttempts = 0;
   static stabilityTimer = null;
 
+  // What the client tells the server so it can be kept up to date: the wire format this bundle
+  // speaks, the model it was built against, and the page it is on. The first two are baked into
+  // the bundle rather than read from the page, because what they answer is whether THIS
+  // JavaScript is stale - a value the current server put in the page would always agree with it.
+  //
+  // A bundle built before any of this existed carries no constants and sends no greeting, which
+  // is what leaves it with the realtime stream it already had.
+  static buildSyncGreeting(pageModule) {
+    const sync = globalThis.Hologram.sync;
+
+    if (!sync || pageModule === null) {
+      return {};
+    }
+
+    return {
+      model_hash: sync.modelHash,
+      page: Interpreter.moduleExName(pageModule),
+      protocol_version: sync.protocolVersion,
+    };
+  }
+
   // Exponential backoff with ±RECONNECT_JITTER noise. Mirrors the established
   // pattern in `Hologram.Connection` so consecutive SSE reconnect failures
   // don't hammer the handshake endpoint.
@@ -94,6 +115,7 @@ export default class Sse {
       const params = new URLSearchParams({
         instance_id: App.instanceId,
         handshake_id: handshakeId,
+        ...$.buildSyncGreeting(Hologram.currentPageModule()),
       });
 
       $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);

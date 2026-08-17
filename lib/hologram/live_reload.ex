@@ -13,6 +13,7 @@ defmodule Hologram.LiveReload do
   alias Hologram.LiveReload.Diagnostic
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
+  alias Hologram.Sync.PageWindows
 
   @doc """
   Reloads the given file path using the given endpoint.
@@ -224,6 +225,7 @@ defmodule Hologram.LiveReload do
     PathRegistry.reload()
     ManifestCache.reload()
     PageDigestRegistry.reload()
+    PageWindows.reload()
   end
 
   # Determines whether to process a file event and returns the target file to reload

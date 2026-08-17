@@ -8,10 +8,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Entity.Model
   alias Hologram.Policy
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
+  alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
 
   @lib_assets_dir Path.join(Reflection.root_dir(), "assets")
   @lib_package_json_path Path.join(@lib_assets_dir, "package.json")
@@ -81,6 +83,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     on_exit(fn ->
       :application.unload(app)
       RoleGrant.reset_resolution_cache()
+      Model.reset_caches()
       Policy.reset_model_facts_cache()
     end)
   end
@@ -118,6 +121,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test_module_digest_plt(opts)
     test_page_bundles(opts)
     test_page_digest_plt(opts)
+    test_page_windows_plt(opts)
     test_runtime_bundle(opts)
   end
 
@@ -205,6 +209,23 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert map_size(page_digest_items) == @num_pages
 
     assert page_digest_items[Module1] =~ ~r/^[0-9a-f]{32}$/
+  end
+
+  defp test_page_windows_plt(opts) do
+    page_windows_plt_dump_path =
+      Path.join(opts[:build_dir], Reflection.page_windows_plt_dump_file_name())
+
+    assert File.exists?(page_windows_plt_dump_path)
+
+    page_windows_plt = PLT.start()
+    PLT.load(page_windows_plt, page_windows_plt_dump_path)
+    page_windows_items = PLT.get_all(page_windows_plt)
+
+    assert map_size(page_windows_items) == @num_pages
+
+    # The page renders a component whose prop reads a query, so it downloads that query's window.
+    assert [window_id] = page_windows_items[PageModule8]
+    assert window_id =~ ~r/^[0-9a-f]{32}$/
   end
 
   defp test_runtime_bundle(opts) do

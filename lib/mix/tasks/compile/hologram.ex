@@ -26,6 +26,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.DB.Mapper
+  alias Hologram.Entity.Model
   alias Hologram.Entity.Validator, as: EntityValidator
   alias Hologram.Policy
   alias Hologram.Policy.Validator, as: PolicyValidator
@@ -141,6 +142,13 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       Compiler.validate_page_modules(page_modules)
 
+      # Derived before the graph is split, so that a component reached through a runtime MFA is
+      # still counted as one the page can reach.
+      {page_windows_plt, page_windows_plt_dump_path} =
+        page_modules
+        |> Compiler.build_page_windows(call_graph_for_runtime)
+        |> Compiler.build_page_windows_plt(Keyword.put(opts, :supervisor, sup))
+
       runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime, page_modules)
 
       # Derived before the graph is split into runtime and page parts, so that the
@@ -183,6 +191,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         Compiler.build_page_digest_plt(bundles_info, Keyword.put(opts, :supervisor, sup))
 
       PLT.dump(page_digest_plt, page_digest_plt_dump_path)
+      PLT.dump(page_windows_plt, page_windows_plt_dump_path)
       CallGraph.dump(call_graph, call_graph_dump_path)
       PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
 
@@ -300,6 +309,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp validate_data_model! do
     RoleGrant.reset_resolution_cache()
+    Model.reset_caches()
     Policy.reset_model_facts_cache()
 
     entity_types = Reflection.list_entities()

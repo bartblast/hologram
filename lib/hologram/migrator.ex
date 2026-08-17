@@ -21,6 +21,16 @@ defmodule Hologram.Migrator do
   # md5("hologram_migrations") as a signed int64.
   @advisory_lock_key -335_777_576_117_788_795
 
+  # A key of its own, and the separation is what keeps a deploy from deadlocking itself. A
+  # concurrent index build cannot run inside a transaction, so it holds a SESSION lock - while
+  # every applier waits for its lock INSIDE one. Share one key between them and a node building
+  # an index leaves the others sitting in open transactions waiting for it, which is the one
+  # thing a concurrent build cannot outlast: it waits for every transaction that could see the
+  # table, so it waits for them, and they wait for it. Frozen forever for the same reason as the
+  # key above. Provenance (for uniqueness, not for re-derivation): first 8 bytes of
+  # md5("hologram_index_repair") as a signed int64.
+  @index_advisory_lock_key 6_059_159_047_318_510_073
+
   @managed_by "migrations"
 
   @doc """
@@ -241,17 +251,22 @@ defmodule Hologram.Migrator do
   end
 
   @doc """
-  Records the given migration version as applied at the given time, in the caller's
-  transaction.
+  Records the given migration version as applied at the given time, under the hash of the
+  model it produces, in the caller's transaction.
+
+  The hash is of the model as it stands at that point in the history rather than of the
+  current one, so each row pairs a position in the chain with the model shape reached there -
+  which is what lets a row written under an older model be traced back to the migration that
+  produced it.
   """
-  @spec record_applied(String.t(), DateTime.t()) :: :ok
-  def record_applied(version, timestamp) do
+  @spec record_applied(String.t(), DateTime.t(), String.t()) :: :ok
+  def record_applied(version, timestamp, model_hash) do
     statement = """
-    INSERT INTO "hologram_system"."migration" ("version", "applied_at")
-    VALUES ($1, $2)
+    INSERT INTO "hologram_system"."migration" ("version", "applied_at", "model_hash")
+    VALUES ($1, $2, $3)
     """
 
-    {:ok, _result} = Connection.query(statement, [version, timestamp])
+    {:ok, _result} = Connection.query(statement, [version, timestamp, model_hash])
 
     :ok
   end
@@ -275,6 +290,10 @@ defmodule Hologram.Migrator do
   concurrent build cannot run inside a transaction, and nodes building the same index at
   the same moment deadlock each other. Nodes that wait re-read the catalog and find
   nothing left to do.
+
+  That lock is NOT the one the appliers share. An applier waits for its lock inside a
+  transaction, and a concurrent build waits for every transaction that could see the table -
+  so one key for both makes a deploy wait on itself, each side holding what the other needs.
   """
   @spec repair_indexes(%{module => %{atom => any}}) :: :ok
   def repair_indexes(mapping) do
@@ -392,7 +411,7 @@ defmodule Hologram.Migrator do
     # all, rather than committing and failing afterwards.
     Preflight.run!(render.tail, actual, mapping)
 
-    record_applied(version, context.timestamp)
+    record_applied(version, context.timestamp, Model.hash(render.post_model))
 
     :applied
   end
@@ -448,6 +467,15 @@ defmodule Hologram.Migrator do
     end
   end
 
+  # The one path that builds the system tables, and so the one that decides which columns a
+  # database has forever: a database already claimed goes through check_marker!/1 above, which
+  # reads the marker and changes nothing. So a column added here later - `model_hash` on the
+  # migration table is one - reaches virgin databases only, and the first write that needs it
+  # fails on one claimed before it existed.
+  #
+  # Deliberate while the data layer is unreleased, and owed at its first release together with the
+  # bump it belongs to - see `@system_schema_version` in Hologram.DB.SchemaReconciler, which
+  # carries the whole reasoning. Until then a stale database is dropped and recreated.
   defp claim(context) do
     {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
     {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_data"))
@@ -596,7 +624,7 @@ defmodule Hologram.Migrator do
   end
 
   defp rebuild_and_create_indexes(mapping) do
-    {:ok, _result} = Connection.query("SELECT pg_advisory_lock($1)", [@advisory_lock_key])
+    {:ok, _result} = Connection.query("SELECT pg_advisory_lock($1)", [@index_advisory_lock_key])
 
     try do
       Enum.each(invalid_indexes(), &rebuild_index/1)
@@ -605,7 +633,8 @@ defmodule Hologram.Migrator do
 
       Enum.each(missing, &create_index_concurrently/1)
     after
-      {:ok, _result} = Connection.query("SELECT pg_advisory_unlock($1)", [@advisory_lock_key])
+      {:ok, _result} =
+        Connection.query("SELECT pg_advisory_unlock($1)", [@index_advisory_lock_key])
     end
 
     :ok

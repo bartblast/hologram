@@ -16,6 +16,11 @@ defmodule Hologram.Entity.Model do
   # what existing rows receive as the column arrives, not something the entity declares.
   @transition_opts [:backfill]
 
+  @hash_bytes 16
+
+  @exists_key {__MODULE__, :exists?}
+  @hash_key {__MODULE__, :hash}
+
   @doc """
   Returns the empty model term - a model with no entity types, no global roles, and no
   designated user entity type.
@@ -64,6 +69,76 @@ defmodule Hologram.Entity.Model do
   end
 
   @doc """
+  Returns whether the project declares a data model at all.
+
+  An app with no entity types has no database - the application tree gates the whole data layer on
+  exactly that - so this is what tells a caller whether anything downstream of it can be reached.
+
+  Cached for the same reason `hash/0` is, and it matters more here: this is read on every client
+  handshake, and the sweep behind it takes tens of milliseconds where the cached answer takes a
+  fraction of a microsecond.
+  """
+  @spec exists?() :: boolean
+  def exists? do
+    case :persistent_term.get(@exists_key, nil) do
+      nil ->
+        exists? = Reflection.list_entities() != []
+
+        :persistent_term.put(@exists_key, exists?)
+
+        exists?
+
+      exists? ->
+        exists?
+    end
+  end
+
+  @doc """
+  Returns the hash identifying the project's compiled data model.
+
+  Deriving it sweeps every module the project holds, which costs far more than the writes that
+  stamp it, so the answer is cached for the lifetime of the runtime - like the grant store's
+  resolution. The compiler and the application boot reset the cache, so a recompiled data model
+  is picked up.
+  """
+  @spec hash() :: String.t()
+  def hash do
+    case :persistent_term.get(@hash_key, nil) do
+      nil ->
+        model_hash =
+          Reflection.list_entities()
+          |> from_modules(Reflection.list_roles())
+          |> hash()
+
+        :persistent_term.put(@hash_key, model_hash)
+
+        model_hash
+
+      model_hash ->
+        model_hash
+    end
+  end
+
+  @doc """
+  Returns the hash identifying the given model term - a lowercase hex string of the truncated
+  SHA-256 of the term's deterministic external representation.
+
+  Terms describing the same model share a hash, across builds and machines - the term is
+  normalized, so a model spelled two ways hashes once, and any declared change to it hashes
+  differently. What the term leaves out is left out here too: policies never reach the hash, so
+  changing who may read a row is not a change to the data itself, while the grant store's shape
+  is derived from the term rather than carried in it.
+  """
+  @spec hash(%{atom => any}) :: String.t()
+  def hash(model) do
+    model
+    |> :erlang.term_to_binary([:deterministic])
+    |> then(&:crypto.hash(:sha256, &1))
+    |> binary_part(0, @hash_bytes)
+    |> Base.encode16(case: :lower)
+  end
+
+  @doc """
   Returns the neutral value of the given option - the value whose meaning equals the
   option's absence: false for flag options, nil for value options.
 
@@ -74,6 +149,15 @@ defmodule Hologram.Entity.Model do
   def neutral_value(key) when key in @flag_opts, do: false
 
   def neutral_value(_key), do: nil
+
+  @doc false
+  @spec reset_caches() :: :ok
+  def reset_caches do
+    :persistent_term.erase(@exists_key)
+    :persistent_term.erase(@hash_key)
+
+    :ok
+  end
 
   @doc """
   Returns the given model term with the given migration ops applied, in order.
@@ -460,7 +544,19 @@ defmodule Hologram.Entity.Model do
     |> Enum.reject(fn {key, value} ->
       key in @transition_opts or is_nil(value) or (value == false and key in @flag_opts)
     end)
+    |> Enum.map(fn {key, value} -> {key, normalize_value(value)} end)
     |> Enum.sort()
+  end
+
+  # A regex carries a compiled pattern that differs from one read of a declaration to the next,
+  # so two terms holding one never compare equal - the model keeps what the declaration says
+  # instead, which is the pattern and the flags it was written with.
+  defp normalize_value(%Regex{} = regex) do
+    {:regex, Regex.source(regex), Regex.opts(regex)}
+  end
+
+  defp normalize_value(value) do
+    value
   end
 
   defp normalize_roles(roles) do

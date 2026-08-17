@@ -29,6 +29,20 @@ defmodule Hologram.DB.EntityOperationsTest do
     count
   end
 
+  defp outbox_effects do
+    statement = """
+    SELECT "op", "type", "entity_id", "data"
+    FROM "hologram_system"."outbox"
+    ORDER BY "seq"
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
+
+    Enum.map(rows, fn [op, type, entity_id, data] ->
+      %{data: data, entity_id: Codec.decode(entity_id, :uuid), op: op, type: type}
+    end)
+  end
+
   # The system clock can be coarser than a microsecond (Windows timer granularity reaches
   # ~16ms), making consecutive utc_now readings equal - wait until the clock has visibly
   # advanced, so that a subsequent write provably stamps a later timestamp.
@@ -85,6 +99,55 @@ defmodule Hologram.DB.EntityOperationsTest do
       :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
 
       assert count_edges(source_entity, target_entity) == 1
+    end
+
+    test "records the edge it added" do
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      add_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      assert effect = List.last(outbox_effects())
+      assert effect.op == "add_relationship"
+      assert effect.type == "Hologram.Test.Fixtures.Entity.Module3"
+      assert effect.entity_id == source_entity.id
+      assert effect.data == %{"relationship" => "a", "target_id" => target_entity.id}
+    end
+
+    test "records nothing when the edge is already there" do
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
+      effects_after_first = outbox_effects()
+
+      :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      assert outbox_effects() == effects_after_first
     end
 
     test "raises when the relationship is not a declared to-many relationship" do
@@ -170,6 +233,47 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert {:ok, %Postgrex.Result{rows: [[nil, ^encoded_target_id]]}} =
                Connection.query(select_sql, [encoded_id])
+    end
+
+    test "records the insert as an effect carrying the whole entity" do
+      entity = Entity.new(Module2, a: true, c: "some text")
+
+      created_entity = create(entity)
+
+      assert [effect] = outbox_effects()
+      assert effect.op == "put_entity"
+      assert effect.type == "Hologram.Test.Fixtures.Entity.Module2"
+      assert effect.entity_id == created_entity.id
+
+      assert effect.data == %{
+               "a" => true,
+               "b" => nil,
+               "c" => "some text",
+               "created_at" => DateTime.to_iso8601(created_entity.created_at),
+               "id" => created_entity.id,
+               "updated_at" => DateTime.to_iso8601(created_entity.updated_at)
+             }
+    end
+
+    test "records the creator's grants after the entity they are granted on" do
+      user = create(Entity.new(Module14, email: "creator@example.com"))
+
+      created_entity =
+        Context.with_actor(user.id, fn ->
+          create(Entity.new(PolicyModule1))
+        end)
+
+      effects = outbox_effects()
+
+      assert [_user, entity_effect | grant_effects] = effects
+      assert entity_effect.entity_id == created_entity.id
+
+      assert Enum.map(grant_effects, & &1.type) == [
+               "Hologram.Auth.RoleGrant",
+               "Hologram.Auth.RoleGrant"
+             ]
+
+      assert Enum.map(grant_effects, &Map.fetch!(&1.data, "role")) == ["maintainer", "owner"]
     end
 
     test "raises on constraint violations" do
@@ -330,6 +434,29 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert Codec.decode(id, :uuid) == first_grant.id
     end
+
+    test "records the insert as an effect" do
+      user = create(Entity.new(Module14, email: "user_3@example.com"))
+      grant = role_grant(user, :owner)
+
+      create_if_absent(grant)
+
+      assert %{op: "put_entity", type: "Hologram.Auth.RoleGrant", entity_id: entity_id} =
+               List.last(outbox_effects())
+
+      assert entity_id == grant.id
+    end
+
+    test "records nothing when a conflicting row keeps the insert from happening" do
+      user = create(Entity.new(Module14, email: "user_4@example.com"))
+
+      create_if_absent(role_grant(user, :owner))
+      effects_after_first = outbox_effects()
+
+      create_if_absent(role_grant(user, :owner))
+
+      assert outbox_effects() == effects_after_first
+    end
   end
 
   describe "delete/2" do
@@ -366,6 +493,47 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert get(Module3, source_entity.id) == nil
       assert count_edges(source_entity, target_entity) == 0
+    end
+
+    test "records the deletion" do
+      created_entity =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      delete(Module1, created_entity.id)
+
+      assert effect = List.last(outbox_effects())
+      assert effect.op == "del_entity"
+      assert effect.type == "Hologram.Test.Fixtures.Entity.Module1"
+      assert effect.entity_id == created_entity.id
+      assert effect.data == nil
+    end
+
+    test "records nothing when no entity has the given id" do
+      effects_before = outbox_effects()
+
+      assert delete(Module1, Entity.generate_id()) == :ok
+
+      assert outbox_effects() == effects_before
+    end
+
+    # The write and the record of it share a transaction, so a refusal takes both back.
+    test "records nothing when the delete is restricted" do
+      target_entity =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      Module3
+      |> Entity.new(c_id: target_entity.id)
+      |> create()
+
+      effects_before = outbox_effects()
+
+      assert {:error, {:restricted, _details}} = delete(Module1, target_entity.id)
+
+      assert outbox_effects() == effects_before
     end
 
     test "restricts when another entity references the entity" do
@@ -458,6 +626,55 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert delete_relationship(Module3, source_entity.id, :a, target_entity.id) == :ok
     end
 
+    test "records the edge it removed" do
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      delete_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      assert effect = List.last(outbox_effects())
+      assert effect.op == "del_relationship"
+      assert effect.entity_id == source_entity.id
+      assert effect.data == %{"relationship" => "a", "target_id" => target_entity.id}
+    end
+
+    test "records nothing when the edge was not there" do
+      required_target =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      source_entity =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      target_entity =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      effects_before = outbox_effects()
+
+      :ok = delete_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      assert outbox_effects() == effects_before
+    end
+
     test "raises when the relationship is not a declared to-many relationship" do
       expected_msg =
         "invalid relationship for Hologram.Test.Fixtures.Entity.Module3 - :b is not a declared to-many relationship"
@@ -514,6 +731,58 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert reloaded_entity.b == created_entity.b
       assert reloaded_entity.created_at == created_entity.created_at
       assert DateTime.compare(reloaded_entity.updated_at, created_entity.updated_at) == :gt
+    end
+
+    test "records the changed attributes and the stamp they moved" do
+      created_entity =
+        Module2
+        |> Entity.new(a: true, b: 1, c: "before")
+        |> create()
+
+      update(Module2, created_entity.id, %{c: "after"})
+
+      reloaded_entity = get(Module2, created_entity.id)
+
+      assert %{op: "patch_entity", type: "Hologram.Test.Fixtures.Entity.Module2"} =
+               effect = List.last(outbox_effects())
+
+      assert effect.entity_id == created_entity.id
+
+      assert effect.data == %{
+               "c" => "after",
+               "updated_at" => DateTime.to_iso8601(reloaded_entity.updated_at)
+             }
+    end
+
+    test "never records the value of a server-only attribute it changed" do
+      created_entity =
+        Module14
+        |> Entity.new(email: "before@example.com")
+        |> create()
+
+      update(Module14, created_entity.id, %{password_hash: "hashed_secret_v2"})
+
+      assert effect = List.last(outbox_effects())
+      assert Map.keys(effect.data) == ["updated_at"]
+
+      {:ok, %Postgrex.Result{rows: [[log]]}} =
+        Connection.query(~s|SELECT string_agg("data"::text, ' ') FROM "hologram_system"."outbox"|)
+
+      refute log =~ "hashed_secret_v2"
+    end
+
+    test "records nothing when no entity has the given id" do
+      effects_before = outbox_effects()
+      missing_id = Entity.generate_id()
+
+      expected_msg =
+        "cannot update Hologram.Test.Fixtures.Entity.Module2 - no entity with id #{inspect(missing_id)}"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        update(Module2, missing_id, %{c: "after"})
+      end
+
+      assert outbox_effects() == effects_before
     end
 
     test "sets, reassigns and clears to-one references" do

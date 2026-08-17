@@ -82,6 +82,37 @@ defmodule Hologram.DB.Codec do
   end
 
   @doc """
+  Translates an Elixir term held by entity structs into its JSON form, per attribute type.
+  nil stays nil, :date and :datetime values become ISO 8601 strings, :enum atoms become their labels - booleans, numbers, strings and uuids pass through as they are spelled.
+  This is how a value is stored in a jsonb column, where being queryable and legible is the point - it is not how a value is sent to a client, which the client-bound term encoder does.
+  Which type a JSON value carries is not recoverable from the value itself, since a :date, an :enum and a :uuid all arrive as strings - reading one back means knowing the attribute it belongs to, whose type the model states.
+  """
+  @spec encode_json(any, atom) :: boolean | number | String.t() | nil
+  def encode_json(value, type)
+
+  def encode_json(nil, _type), do: nil
+
+  def encode_json(value, :boolean), do: value
+
+  def encode_json(value, :date), do: Date.to_iso8601(value)
+
+  def encode_json(value, :datetime) do
+    value
+    |> encode(:datetime)
+    |> DateTime.to_iso8601()
+  end
+
+  def encode_json(value, :enum), do: encode_enum_value(value)
+
+  def encode_json(value, :float), do: value
+
+  def encode_json(value, :integer), do: value
+
+  def encode_json(value, :string), do: value
+
+  def encode_json(value, :uuid), do: value
+
+  @doc """
   Translates an atom into its Postgres enum label - a module without its "Elixir." prefix, a plain atom as it is spelled.
   """
   @spec encode_enum_value(atom) :: String.t()

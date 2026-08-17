@@ -13,6 +13,8 @@ defmodule Hologram.Reflection do
 
   @page_digest_plt_dump_file_name "page_digest.plt"
 
+  @page_windows_plt_dump_file_name "page_windows.plt"
+
   @doc """
   Determines whether the given term is an alias.
 
@@ -606,6 +608,14 @@ defmodule Hologram.Reflection do
   @spec page_digest_plt_dump_file_name() :: String.t()
   def page_digest_plt_dump_file_name do
     @page_digest_plt_dump_file_name
+  end
+
+  @doc """
+  Returns the file name of the dump of the page windows PLT.
+  """
+  @spec page_windows_plt_dump_file_name() :: String.t()
+  def page_windows_plt_dump_file_name do
+    @page_windows_plt_dump_file_name
   end
 
   @doc """

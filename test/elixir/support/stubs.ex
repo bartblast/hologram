@@ -14,6 +14,7 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.DB.QueryCache
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
+  alias Hologram.Sync.PageWindows, as: SyncPageWindows
 
   def setup_asset_manifest_cache(stub, start_link \\ true) do
     stub_with(AssetManifestCacheMock, stub)
@@ -103,6 +104,24 @@ defmodule Hologram.Test.Stubs do
 
   def setup_server(stub) do
     stub_with(ServerMock, stub)
+    :ok
+  end
+
+  def setup_sync_page_windows(stub, start_link \\ true) do
+    stub_with(SyncPageWindowsMock, stub)
+
+    setup_sync_page_windows_dump(stub)
+
+    ets_table_name = stub.ets_table_name()
+
+    if ETS.table_exists?(ets_table_name) do
+      ETS.delete(ets_table_name)
+    end
+
+    if start_link do
+      SyncPageWindows.start_link([])
+    end
+
     :ok
   end
 
@@ -207,6 +226,31 @@ defmodule Hologram.Test.Stubs do
     end
   end
 
+  defmacro use_module_stub(:sync_page_windows) do
+    random_module = random_module()
+
+    quote do
+      defmodule alias!(unquote(random_module).SyncPageWindowsStub) do
+        @behaviour SyncPageWindows
+
+        def dump_path do
+          Path.join([
+            Reflection.tmp_dir(),
+            "tests",
+            "stubs",
+            "sync_page_windows",
+            "dump_path_0",
+            "#{unquote(random_string())}.plt"
+          ])
+        end
+
+        def ets_table_name, do: unquote(random_atom())
+      end
+
+      alias alias!(unquote(random_module).SyncPageWindowsStub)
+    end
+  end
+
   defp setup_asset_fixtures(static_dir) do
     FileUtils.recreate_dir(static_dir)
 
@@ -288,6 +332,19 @@ defmodule Hologram.Test.Stubs do
     |> PLT.put(:module_a, :module_a_digest)
     |> PLT.put(:module_b, :module_b_digest)
     |> PLT.put(:module_c, :module_c_digest)
+    |> PLT.dump(dump_path)
+
+    :ok
+  end
+
+  defp setup_sync_page_windows_dump(stub) do
+    dump_path = stub.dump_path()
+
+    File.rm(dump_path)
+
+    PLT.start()
+    |> PLT.put(:page_a, ["window_a1", "window_a2"])
+    |> PLT.put(:page_b, [])
     |> PLT.dump(dump_path)
 
     :ok

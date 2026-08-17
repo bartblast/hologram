@@ -5,17 +5,34 @@ defmodule Hologram.Query.RegistryTest do
   import Hologram.Query.Registry
 
   alias Hologram.Query
+  alias Hologram.Query.Window
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
 
   describe "build/1" do
-    test "builds entries with the term and its param shape" do
+    test "builds entries with the term, its param shape, and the window it downloads" do
       term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
-      term_id = id(term)
+      window = Window.derive(term)
 
       assert build([term]) == %{
-               term_id => %{param_shape: %{search: :string}, term: term, window: nil}
+               id(term) => %{
+                 param_shape: %{search: :string},
+                 term: term,
+                 window: window,
+                 window_id: id(window)
+               }
              }
+    end
+
+    test "gives queries downloading the same rows one window between them" do
+      searched_term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
+      chosen_term = %{Query.normalize(Module2) | filter: [{:a, :==, {:param, :flag}}]}
+
+      registry = build([searched_term, chosen_term])
+
+      assert map_size(registry) == 2
+
+      assert registry[id(searched_term)].window_id == registry[id(chosen_term)].window_id
     end
 
     test "collapses structurally equal terms into one entry" do
