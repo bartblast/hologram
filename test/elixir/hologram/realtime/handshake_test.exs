@@ -168,34 +168,6 @@ defmodule Hologram.Realtime.HandshakeTest do
   end
 
   describe "start_link/1" do
-    test "merges handshakes from a peer that replies to the sync request" do
-      :ok = stop_supervised(Handshake)
-
-      test_pid = self()
-      future = System.system_time(:millisecond) + 60_000
-
-      peer_handshake =
-        {"peer-entry-id", [], "peer-instance-id", "peer-session-id", "peer-user-id", future}
-
-      spawn_link(fn ->
-        Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
-        send(test_pid, :peer_ready)
-
-        receive do
-          {:sync_request, requester_pid} ->
-            send(requester_pid, {:sync_reply, [peer_handshake]})
-        end
-      end)
-
-      assert_receive :peer_ready
-
-      start_supervised!(Handshake)
-
-      wait_until(fn -> :ets.lookup(ets_table_name(), "peer-entry-id") == [peer_handshake] end)
-
-      assert :ets.lookup(ets_table_name(), "peer-entry-id") == [peer_handshake]
-    end
-
     # The reason the sync request does not wait: a node that is accepting requests has
     # to answer them. Against a blocking boot sync this call exits on its own timeout.
     test "answers a redeem straight away, without waiting on peers" do
@@ -217,45 +189,37 @@ defmodule Hologram.Realtime.HandshakeTest do
       assert :ets.tab2list(ets_table_name()) == []
     end
 
-    test "still receives a steady-state {:insert, ...} a peer publishes after the sync_request" do
+    # Asking is per connected node, so there is nobody to ask here. That a peer receives
+    # the request and answers it is cluster-suite territory - what this pins is that
+    # starting up asks without waiting, and stays open to gossip afterwards.
+    test "still merges a steady-state {:insert, ...} a peer publishes after starting" do
       :ok = stop_supervised(Handshake)
 
-      test_pid = self()
+      start_supervised!(Handshake)
+
       future = System.system_time(:millisecond) + 60_000
 
-      spawn_link(fn ->
-        Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
-        send(test_pid, :peer_ready)
-
-        receive do
-          {:sync_request, _requester_pid} ->
-            Phoenix.PubSub.broadcast(
-              Hologram.PubSub,
-              gossip_topic(),
-              {:insert, "post-sync-handshake-id", [], "peer-instance-id", "peer-session-id",
-               "peer-user-id", future}
-            )
-        end
-      end)
-
-      assert_receive :peer_ready
-
-      start_supervised!(Handshake)
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        gossip_topic(),
+        {:insert, "post-start-handshake-id", [], "peer-instance-id", "peer-session-id",
+         "peer-user-id", future}
+      )
 
       wait_until(fn ->
         match?(
           [
-            {"post-sync-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
+            {"post-start-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
              ^future}
           ],
-          :ets.lookup(ets_table_name(), "post-sync-handshake-id")
+          :ets.lookup(ets_table_name(), "post-start-handshake-id")
         )
       end)
 
       assert [
-               {"post-sync-handshake-id", [], "peer-instance-id", "peer-session-id",
+               {"post-start-handshake-id", [], "peer-instance-id", "peer-session-id",
                 "peer-user-id", ^future}
-             ] = :ets.lookup(ets_table_name(), "post-sync-handshake-id")
+             ] = :ets.lookup(ets_table_name(), "post-start-handshake-id")
     end
   end
 

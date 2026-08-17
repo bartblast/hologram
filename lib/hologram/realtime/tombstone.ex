@@ -72,10 +72,10 @@ defmodule Hologram.Realtime.Tombstone do
     # always have - a tombstone a peer has not sent yet is simply not there yet.
     Gossip.request_sync(@gossip_topic)
 
-    # A request only reaches the peers this node can already see, and group membership
-    # propagates on its own schedule - a node that boots as the cluster is still forming
-    # can ask into the void. Joins are watched so the newcomer and this node can trade
-    # what the other is missing, whenever that turns out to be.
+    # The ask above reaches the nodes connected right now. A node that connects later -
+    # one still joining as this one boots, or a peer coming back - was never asked, and
+    # monitoring reports only joins that happen from here on, so this is the only signal
+    # that such a node exists.
     :net_kernel.monitor_nodes(true)
 
     schedule_sweep()
@@ -126,6 +126,9 @@ defmodule Hologram.Realtime.Tombstone do
 
   @impl GenServer
   def handle_info({:nodeup, node}, state) do
+    # Asked in both directions on purpose. This node asks the newcomer because a peer
+    # that went away and came back can hold what this one is missing, and the newcomer
+    # asks this node through the same handler on its own side.
     Gossip.request_sync_from(node, @gossip_topic)
 
     {:noreply, state}

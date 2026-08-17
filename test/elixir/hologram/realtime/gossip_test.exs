@@ -13,29 +13,16 @@ defmodule Hologram.Realtime.GossipTest do
   end
 
   describe "request_sync/1" do
-    test "broadcasts a sync request carrying the caller pid to peers on the topic" do
-      test_pid = self()
+    # Asking is per connected node, so a single node has nobody to ask. What a peer does
+    # with the request, and that it reaches one at all, is covered by the cluster suite -
+    # there is no second node here to send to.
+    test "asks nobody when no other node is connected" do
+      Phoenix.PubSub.subscribe(Hologram.PubSub, @topic)
 
-      spawn_link(fn ->
-        Phoenix.PubSub.subscribe(Hologram.PubSub, @topic)
-        send(test_pid, :peer_ready)
-
-        receive do
-          {:sync_request, requester_pid} -> send(test_pid, {:got_request, requester_pid})
-        end
-      end)
-
-      assert_receive :peer_ready
-
+      assert Node.list() == []
       assert request_sync(@topic) == :ok
 
-      assert_receive {:got_request, ^test_pid}
-    end
-
-    test "returns without waiting for a reply" do
-      assert request_sync(@topic) == :ok
-
-      refute_received {:sync_reply, _entries}
+      refute_received {:sync_request, _requester_pid}
     end
   end
 

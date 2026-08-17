@@ -9,7 +9,7 @@ defmodule Hologram.Realtime.Gossip do
   # so a store is never held up by peers that are slow or absent.
 
   @doc """
-  Asks the peers on `gossip_topic` for what they hold, and returns immediately.
+  Asks every currently connected node for what it holds, and returns immediately.
 
   A peer answers by sending a `{:sync_reply, entries}` message, which arrives at the
   caller like any other message. A store that asks this way stays available while its
@@ -17,16 +17,18 @@ defmodule Hologram.Realtime.Gossip do
   the entries peers gossip to it in steady state. A batch that arrives at boot is only
   a larger batch, not a different kind of event.
 
-  A node with no peers hears nothing back, which costs it nothing.
+  Each node is asked directly rather than through a topic broadcast. A broadcast reaches
+  whoever the topic's group membership currently names, and that membership propagates on
+  its own schedule - a store asking as its node joins can broadcast into a group that
+  does not list its peers yet, and hear nothing back. `Node.list/0` needs only the
+  distribution connection, so this asks exactly the nodes that can answer.
+
+  A node with no peers connected asks nobody, which costs it nothing. Peers that connect
+  later are picked up by the store's `{:nodeup, node}` handling instead.
   """
   @spec request_sync(String.t()) :: :ok
   def request_sync(gossip_topic) do
-    Phoenix.PubSub.broadcast_from(
-      Hologram.PubSub,
-      self(),
-      gossip_topic,
-      {:sync_request, self()}
-    )
+    Enum.each(Node.list(), &request_sync_from(&1, gossip_topic))
   end
 
   @doc """
