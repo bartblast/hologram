@@ -91,15 +91,22 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
                             |> click(button("Catch unmatched kind"))
                           end
     end
+
+    feature "matches a struct pattern value", %{session: session} do
+      session
+      |> visit(TryPage)
+      |> click(button("Catch struct throw"))
+      |> assert_text(css("#result"), "{:caught, 1}")
+    end
   end
 
   describe "__STACKTRACE__" do
     # The line `raise "boom"` sits on in app/pages/control_flow/try_page.ex.
-    @raise_line 274
+    @raise_line 304
 
     # The line `raise "bang"` sits on in app/pages/control_flow/try_page.ex -
     # the raise site reraise has to preserve, not the clause re-raising it.
-    @reraise_line 196
+    @reraise_line 226
 
     feature "holds the frame the error was raised in", %{session: session} do
       expected =
@@ -143,6 +150,13 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
                             |> visit(TryPage)
                             |> click(button("Else without a match"))
                           end
+    end
+
+    feature "matches a struct pattern", %{session: session} do
+      session
+      |> visit(TryPage)
+      |> click(button("Else with a struct pattern"))
+      |> assert_text(css("#result"), "{:else_matched, 2}")
     end
   end
 
