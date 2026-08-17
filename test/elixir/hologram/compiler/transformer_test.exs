@@ -102,6 +102,8 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module183
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module184
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module185
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module186
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module187
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module19
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module20
@@ -2846,6 +2848,91 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = transform_module_and_fetch_expr(Module42)
+    end
+
+    # A generator match is a pattern, so a struct there transforms to map IR
+    # instead of a __struct__/1 call that would be evaluated per iteration.
+    test "struct pattern in generator match (AST from source code)" do
+      ast =
+        ast("for %Hologram.Test.Fixtures.Compiler.Transformer.Module186{a: a} <- x, do: a")
+
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.Clause{
+                   match: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module186}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                     ]
+                   },
+                   guards: []
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "struct pattern in generator match (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.Clause{
+                   match: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module186}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                     ]
+                   },
+                   guards: []
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module186)
+    end
+
+    test "struct pattern in generator match with guard (AST from source code)" do
+      ast =
+        ast(
+          "for %Hologram.Test.Fixtures.Compiler.Transformer.Module187{a: a} when is_integer(a) <- x, do: a"
+        )
+
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.Clause{
+                   match: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module187}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                     ]
+                   },
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :a}]
+                     }
+                   ]
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "struct pattern in generator match with guard (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.Clause{
+                   match: %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module187}},
+                       {%IR.AtomType{value: :a}, %IR.Variable{name: :a}}
+                     ]
+                   },
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :a}]
+                     }
+                   ]
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module187)
     end
 
     test "generator with single guard (AST from source code)" do
