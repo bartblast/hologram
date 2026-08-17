@@ -212,8 +212,14 @@ defmodule Hologram.Realtime do
     binding_key = {identity, channel, cid}
     channel_key = {identity, channel}
 
-    Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic, {:purge, binding_key})
-    Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic, {:purge, channel_key})
+    # The purge carries when it happened rather than letting each node stamp it on
+    # arrival. A revocation raced against this re-grant has its own time, and comparing
+    # the two is what decides which one stands - stamping on arrival would put every
+    # purge after everything, cancelling revocations that came later than it.
+    purged_at = System.system_time(:millisecond)
+
+    Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic, {:purge, binding_key, purged_at})
+    Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic, {:purge, channel_key, purged_at})
 
     :ok
   end

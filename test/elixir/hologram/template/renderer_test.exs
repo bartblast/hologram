@@ -70,6 +70,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module84
   alias Hologram.Test.Fixtures.Template.Renderer.Module86
   alias Hologram.Test.Fixtures.Template.Renderer.Module87
+  alias Hologram.Test.Fixtures.Template.Renderer.Module88
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
   alias Hologram.Test.Fixtures.Template.Renderer.Module96
 
@@ -1479,7 +1480,7 @@ defmodule Hologram.Template.RendererTest do
     test "emitted in page, accessed in component nested in page" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module39, :dummy_module_39_digest)
 
-      assert render_page(Module39, @params, @server, @opts) ==
+      assert render_page_without_tree(Module39, @params, @server, @opts) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %{
@@ -1508,7 +1509,7 @@ defmodule Hologram.Template.RendererTest do
     test "emitted in page, accessed in component nested in layout" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module46, :dummy_module_46_digest)
 
-      assert render_page(Module46, @params, @server, @opts) ==
+      assert render_page_without_tree(Module46, @params, @server, @opts) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %{
@@ -1537,7 +1538,7 @@ defmodule Hologram.Template.RendererTest do
     test "emitted in page, accessed in layout" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module40, :dummy_module_40_digest)
 
-      assert render_page(Module40, @params, @server, @opts) ==
+      assert render_page_without_tree(Module40, @params, @server, @opts) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %{
@@ -1566,7 +1567,7 @@ defmodule Hologram.Template.RendererTest do
     test "emmited in layout, accessed in component nested in page" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module43, :dummy_module_43_digest)
 
-      assert render_page(Module43, @params, @server, @opts) ==
+      assert render_page_without_tree(Module43, @params, @server, @opts) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %{
@@ -1594,7 +1595,7 @@ defmodule Hologram.Template.RendererTest do
     test "emitted in layout, accessed in component nested in layout" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module45, :dummy_module_45_digest)
 
-      assert render_page(Module45, @params, @server, @opts) ==
+      assert render_page_without_tree(Module45, @params, @server, @opts) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %{
@@ -1652,7 +1653,7 @@ defmodule Hologram.Template.RendererTest do
 
       assert {"layout template start, page template, layout template end", _component_registry,
               _server_struct} =
-               render_page(Module14, @params, @server, @opts)
+               render_page_without_tree(Module14, @params, @server, @opts)
     end
 
     test "cast page param values to correct type" do
@@ -1662,7 +1663,7 @@ defmodule Hologram.Template.RendererTest do
 
       assert {~s'page vars = %{param_1: &quot;abc&quot;, param_3: 123}', _component_registry,
               _server_struct} =
-               render_page(Module19, params, @server, @opts)
+               render_page_without_tree(Module19, params, @server, @opts)
     end
 
     test "cast layout explicit static props" do
@@ -1670,7 +1671,7 @@ defmodule Hologram.Template.RendererTest do
 
       assert {~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
               _component_registry, _server_struct} =
-               render_page(Module25, @params, @server, @opts)
+               render_page_without_tree(Module25, @params, @server, @opts)
     end
 
     test "cast layout props passed implicitely from page state" do
@@ -1678,7 +1679,7 @@ defmodule Hologram.Template.RendererTest do
 
       assert {~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
               _component_registry, _server_struct} =
-               render_page(Module27, @params, @server, @opts)
+               render_page_without_tree(Module27, @params, @server, @opts)
     end
 
     test "aggregate page vars, giving state vars priority over param vars when there are name conflicts" do
@@ -1687,7 +1688,8 @@ defmodule Hologram.Template.RendererTest do
       params = %{key_1: "param_value_1", key_2: "param_value_2"}
 
       assert {~s'page vars = %{key_1: &quot;param_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
-              _component_registry, _server_struct} = render_page(Module21, params, @server, @opts)
+              _component_registry, _server_struct} =
+               render_page_without_tree(Module21, params, @server, @opts)
     end
 
     test "aggregate layout vars, giving state vars priority over prop vars when there are name conflicts" do
@@ -1695,13 +1697,13 @@ defmodule Hologram.Template.RendererTest do
 
       assert {~s'layout vars = %{cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
               _component_registry, _server_struct} =
-               render_page(Module24, @params, @server, @opts)
+               render_page_without_tree(Module24, @params, @server, @opts)
     end
 
     test "merge the page component struct into the result" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
 
-      assert render_page(Module28, @params, @server, @opts) ==
+      assert render_page_without_tree(Module28, @params, @server, @opts) ==
                {"",
                 %{
                   "layout" => %{module: LayoutFixture, struct: %Component{}},
@@ -1725,7 +1727,7 @@ defmodule Hologram.Template.RendererTest do
     test "merge the layout component struct into the result" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module29, :dummy_module_29_digest)
 
-      assert render_page(Module29, @params, @server, @opts) ==
+      assert render_page_without_tree(Module29, @params, @server, @opts) ==
                {"",
                 %{
                   "layout" => %{
@@ -1753,7 +1755,8 @@ defmodule Hologram.Template.RendererTest do
     test "passes server struct to layout and nested components and aggregates mutations" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module70, :dummy_module_70_digest)
 
-      {_html, _component_registry, server_struct} = render_page(Module70, @params, @server, @opts)
+      {_html, _component_registry, server_struct} =
+        render_page_without_tree(Module70, @params, @server, @opts)
 
       assert server_struct == %Server{
                cookies: %{
@@ -1784,7 +1787,8 @@ defmodule Hologram.Template.RendererTest do
 
       server = %{@server | cid: "page", instance_id: "test-instance-id"}
 
-      {_html, _registry, returned_server} = render_page(Module84, @params, server, @opts)
+      {_html, _registry, returned_server} =
+        render_page_without_tree(Module84, @params, server, @opts)
 
       # Render order: page init -> layout init -> comp_1 init -> comp_2 init
       # server.broadcasts is LIFO (head = most recent put_broadcast call):
@@ -1818,7 +1822,7 @@ defmodule Hologram.Template.RendererTest do
       opts = [csrf_token: @csrf_token, initial_page?: true, instance_id: @instance_id]
 
       assert {html, _component_registry, _server_struct} =
-               render_page(Module53, @params, @server, opts)
+               render_page_without_tree(Module53, @params, @server, opts)
 
       assert normalize_newlines(html) =~
                ~r'globalThis.Hologram.assetManifest = \{\n"hologram/runtime\.js": "/hologram/runtime\-1234567890abcdef\.js"[^\}]+\n\};'
@@ -1830,7 +1834,7 @@ defmodule Hologram.Template.RendererTest do
       opts = [csrf_token: @csrf_token, initial_page?: false]
 
       assert {html, _component_registry, _server_struct} =
-               render_page(Module53, @params, @server, opts)
+               render_page_without_tree(Module53, @params, @server, opts)
 
       refute String.contains?(html, "globalThis.Hologram.assetManifest")
     end
@@ -1843,7 +1847,7 @@ defmodule Hologram.Template.RendererTest do
       )
 
       assert {html, _component_registry, _server_struct} =
-               render_page(Module48, @params, @server, @opts)
+               render_page_without_tree(Module48, @params, @server, @opts)
 
       expected =
         ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("csrf_token")]), Type.bitstring("#{@csrf_token}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("instance_id")]), Type.bitstring("#{@instance_id}")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("page_mounted?")]), Type.atom("true")], [Type.tuple([Type.atom("Elixir.Hologram"), Type.atom("user")]), Type.atom("nil")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])]])/
@@ -1854,7 +1858,7 @@ defmodule Hologram.Template.RendererTest do
     test "interpolate component structs JS with server-only state values replaced by the sentinel" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module96, :dummy_module_96_digest)
 
-      assert {html, _component_registry, _server_struct} =
+      assert {html, _tree, _component_registry, _server_struct} =
                render_page(Module96, @params, @server, @opts)
 
       expected_sentinel =
@@ -1873,7 +1877,7 @@ defmodule Hologram.Template.RendererTest do
       )
 
       assert {html, _component_registry, _server_struct} =
-               render_page(Module48, @params, @server, @opts)
+               render_page_without_tree(Module48, @params, @server, @opts)
 
       expected =
         ~s/pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")/
@@ -1891,7 +1895,7 @@ defmodule Hologram.Template.RendererTest do
       params = %{key_1: 123, key_2: "value_2"}
 
       assert {html, _component_registry, _server_struct} =
-               render_page(Module50, params, @server, @opts)
+               render_page_without_tree(Module50, params, @server, @opts)
 
       expected =
         ~s/pageParams: Type.map([[Type.atom("key_1"), Type.integer(123n)], [Type.atom("key_2"), Type.bitstring("value_2")]])/
@@ -1907,7 +1911,7 @@ defmodule Hologram.Template.RendererTest do
       )
 
       assert {html, _component_registry, _server_struct} =
-               render_page(Module48, @params, @server, @opts)
+               render_page_without_tree(Module48, @params, @server, @opts)
 
       assert String.contains?(html, "selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER")
     end
@@ -1920,7 +1924,7 @@ defmodule Hologram.Template.RendererTest do
       )
 
       assert {html, _component_registry, _server_struct} =
-               render_page(Module48, @params, @server, @opts)
+               render_page_without_tree(Module48, @params, @server, @opts)
 
       assert String.contains?(html, "subReceiptAdds: $SUB_RECEIPT_ADDS_JS_PLACEHOLDER")
     end
@@ -1933,7 +1937,7 @@ defmodule Hologram.Template.RendererTest do
       )
 
       assert {html, _component_registry, _server_struct} =
-               render_page(Module48, @params, @server, @opts)
+               render_page_without_tree(Module48, @params, @server, @opts)
 
       assert String.contains?(html, "subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER")
     end
@@ -1946,7 +1950,7 @@ defmodule Hologram.Template.RendererTest do
       )
 
       assert {html, _component_registry, _server_struct} =
-               render_page(Module62, @params, @server, @opts)
+               render_page_without_tree(Module62, @params, @server, @opts)
 
       expected_html = """
       <!DOCTYPE html>
@@ -1966,7 +1970,7 @@ defmodule Hologram.Template.RendererTest do
       opts = [csrf_token: @csrf_token, initial_page?: true, instance_id: @instance_id]
 
       assert {_html, component_registry, _server_struct} =
-               render_page(Module28, @params, @server, opts)
+               render_page_without_tree(Module28, @params, @server, opts)
 
       page_emitted_context = component_registry["page"].struct.emitted_context
 
@@ -1979,7 +1983,7 @@ defmodule Hologram.Template.RendererTest do
       opts = [csrf_token: @csrf_token, initial_page?: false]
 
       assert {_html, component_registry, _server_struct} =
-               render_page(Module28, @params, @server, opts)
+               render_page_without_tree(Module28, @params, @server, opts)
 
       page_emitted_context = component_registry["page"].struct.emitted_context
 
@@ -1992,7 +1996,7 @@ defmodule Hologram.Template.RendererTest do
       opts = [initial_page?: true, instance_id: @instance_id]
 
       assert_raise ArgumentError, "CSRF token is required for initial page requests", fn ->
-        render_page(Module28, @params, @server, opts)
+        render_page_without_tree(Module28, @params, @server, opts)
       end
     end
 
@@ -2002,7 +2006,7 @@ defmodule Hologram.Template.RendererTest do
       opts = [csrf_token: nil, initial_page?: true, instance_id: @instance_id]
 
       assert_raise ArgumentError, "CSRF token is required for initial page requests", fn ->
-        render_page(Module28, @params, @server, opts)
+        render_page_without_tree(Module28, @params, @server, opts)
       end
     end
 
@@ -2012,7 +2016,7 @@ defmodule Hologram.Template.RendererTest do
       opts = [initial_page?: false]
 
       assert {_html, component_registry, _server_struct} =
-               render_page(Module28, @params, @server, opts)
+               render_page_without_tree(Module28, @params, @server, opts)
 
       page_emitted_context = component_registry["page"].struct.emitted_context
 
@@ -2025,7 +2029,7 @@ defmodule Hologram.Template.RendererTest do
       opts = [csrf_token: @csrf_token, initial_page?: true, instance_id: @instance_id]
 
       assert {_html, component_registry, _server_struct} =
-               render_page(Module28, @params, @server, opts)
+               render_page_without_tree(Module28, @params, @server, opts)
 
       page_emitted_context = component_registry["page"].struct.emitted_context
 
@@ -2038,7 +2042,7 @@ defmodule Hologram.Template.RendererTest do
       opts = [initial_page?: false, instance_id: @instance_id]
 
       assert {_html, component_registry, _server_struct} =
-               render_page(Module28, @params, @server, opts)
+               render_page_without_tree(Module28, @params, @server, opts)
 
       page_emitted_context = component_registry["page"].struct.emitted_context
 
@@ -2051,7 +2055,7 @@ defmodule Hologram.Template.RendererTest do
       opts = [csrf_token: @csrf_token, initial_page?: true]
 
       assert_raise ArgumentError, "instance_id is required for initial page requests", fn ->
-        render_page(Module28, @params, @server, opts)
+        render_page_without_tree(Module28, @params, @server, opts)
       end
     end
 
@@ -2061,7 +2065,7 @@ defmodule Hologram.Template.RendererTest do
       opts = [csrf_token: @csrf_token, initial_page?: true, instance_id: nil]
 
       assert_raise ArgumentError, "instance_id is required for initial page requests", fn ->
-        render_page(Module28, @params, @server, opts)
+        render_page_without_tree(Module28, @params, @server, opts)
       end
     end
 
@@ -2071,7 +2075,7 @@ defmodule Hologram.Template.RendererTest do
       opts = [initial_page?: false]
 
       assert {_html, component_registry, _server_struct} =
-               render_page(Module28, @params, @server, opts)
+               render_page_without_tree(Module28, @params, @server, opts)
 
       page_emitted_context = component_registry["page"].struct.emitted_context
 
@@ -2081,9 +2085,47 @@ defmodule Hologram.Template.RendererTest do
     test "framework sets server.cid to \"layout\" during layout init/3" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module80, :dummy_module_80_digest)
 
-      {_html, registry, _server} = render_page(Module80, @params, @server, @opts)
+      {_html, registry, _server} = render_page_without_tree(Module80, @params, @server, @opts)
 
       assert registry["layout"].struct.state.observed_cid == "layout"
+    end
+
+    test "returns the tree the HTML is printed from" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      {html, tree, _component_registry, _server_struct} =
+        render_page(Module48, @params, @server, @opts)
+
+      assert print_dom(tree) == html
+    end
+
+    test "interpolates the runtime JS into the tree's scripts, leaving the Realtime placeholders" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      {_html, tree, _component_registry, _server_struct} =
+        render_page(Module48, @params, @server, @opts)
+
+      script_text =
+        tree
+        |> collect_script_texts()
+        |> Enum.join()
+
+      assert String.contains?(
+               script_text,
+               ~s/pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")/
+             )
+
+      refute String.contains?(script_text, "$COMPONENT_REGISTRY_JS_PLACEHOLDER")
+      refute String.contains?(script_text, "$PAGE_PARAMS_JS_PLACEHOLDER")
+      assert String.contains?(script_text, "selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER")
     end
   end
 
@@ -2302,6 +2344,87 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "interpolate_js_in_tree/3" do
+    test "substitutes the placeholder inside a script element's text" do
+      tree =
+        {:element, "script", [],
+         [{:text, "window.registry = $COMPONENT_REGISTRY_JS_PLACEHOLDER;"}]}
+
+      result =
+        Renderer.interpolate_js_in_tree(
+          tree,
+          "$COMPONENT_REGISTRY_JS_PLACEHOLDER",
+          "Type.map([])"
+        )
+
+      assert result == {:element, "script", [], [{:text, "window.registry = Type.map([]);"}]}
+    end
+
+    test "substitutes every occurrence of the placeholder" do
+      tree =
+        {:element, "script", [],
+         [{:text, "$PAGE_PARAMS_JS_PLACEHOLDER, $PAGE_PARAMS_JS_PLACEHOLDER"}]}
+
+      result =
+        Renderer.interpolate_js_in_tree(tree, "$PAGE_PARAMS_JS_PLACEHOLDER", "Type.map([])")
+
+      assert result == {:element, "script", [], [{:text, "Type.map([]), Type.map([])"}]}
+    end
+
+    test "reaches a script element nested inside other elements" do
+      tree =
+        {:element, "html", [],
+         [
+           {:element, "head", [],
+            [{:element, "script", [], [{:text, "$PAGE_MODULE_JS_PLACEHOLDER"}]}]}
+         ]}
+
+      result =
+        Renderer.interpolate_js_in_tree(tree, "$PAGE_MODULE_JS_PLACEHOLDER", ~s/Type.atom("abc")/)
+
+      assert result ==
+               {:element, "html", [],
+                [
+                  {:element, "head", [],
+                   [{:element, "script", [], [{:text, ~s/Type.atom("abc")/}]}]}
+                ]}
+    end
+
+    test "reaches every script element in a node list" do
+      tree = [
+        {:element, "script", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]},
+        {:element, "script", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
+      ]
+
+      result =
+        Renderer.interpolate_js_in_tree(tree, "$SELF_ECHOES_JS_PLACEHOLDER", "Type.list([])")
+
+      assert result == [
+               {:element, "script", [], [{:text, "Type.list([])"}]},
+               {:element, "script", [], [{:text, "Type.list([])"}]}
+             ]
+    end
+
+    test "leaves text outside a script element untouched" do
+      tree = {:element, "div", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
+
+      result =
+        Renderer.interpolate_js_in_tree(tree, "$SELF_ECHOES_JS_PLACEHOLDER", "Type.list([])")
+
+      assert result == {:element, "div", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
+    end
+
+    test "leaves attribute values untouched" do
+      tree = {:element, "script", [{"data-info", [text: "$SELF_ECHOES_JS_PLACEHOLDER"]}], []}
+
+      result =
+        Renderer.interpolate_js_in_tree(tree, "$SELF_ECHOES_JS_PLACEHOLDER", "Type.list([])")
+
+      assert result ==
+               {:element, "script", [{"data-info", [text: "$SELF_ECHOES_JS_PLACEHOLDER"]}], []}
+    end
+  end
+
   describe "interpolate_self_echoes_js/2" do
     test "substitutes the placeholder with the encoded list of actions" do
       html = ~s'before selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER after'
@@ -2369,5 +2492,320 @@ defmodule Hologram.Template.RendererTest do
 
       assert result == ~s'before subReceiptDrops: Type.list([]) after'
     end
+  end
+
+  describe "print_dom/1" do
+    test "text node" do
+      dom = {:text, "abc < xyz"}
+
+      assert print_dom(dom) == "abc &lt; xyz"
+    end
+
+    test "text node, inside script element" do
+      # <script>abc < xyz</script>
+      dom = {:element, "script", [], [{:text, "abc < xyz"}]}
+
+      assert print_dom(dom) == "<script>abc < xyz</script>"
+    end
+
+    test "doctype node" do
+      dom = {:doctype, "html"}
+
+      assert print_dom(dom) == "<!DOCTYPE html>"
+    end
+
+    test "element node, without attributes or children" do
+      dom = {:element, "div", [], []}
+
+      assert print_dom(dom) == "<div></div>"
+    end
+
+    test "element node, with children" do
+      # <div>abc<span></span></div>
+      dom = {:element, "div", [], [{:text, "abc"}, {:element, "span", [], []}]}
+
+      assert print_dom(dom) == "<div>abc<span></span></div>"
+    end
+
+    test "element node, nested" do
+      # <div><span><b>abc</b></span></div>
+      dom =
+        {:element, "div", [], [{:element, "span", [], [{:element, "b", [], [{:text, "abc"}]}]}]}
+
+      assert print_dom(dom) == "<div><span><b>abc</b></span></div>"
+    end
+
+    test "element node, void" do
+      # <img src="abc.jpg" />
+      dom = {:element, "img", [{"src", [text: "abc.jpg"]}], []}
+
+      assert print_dom(dom) == ~s(<img src="abc.jpg" />)
+    end
+
+    test "element node, void with children" do
+      # A void element renders no children, whatever it was given.
+      dom = {:element, "br", [], [{:text, "abc"}]}
+
+      assert print_dom(dom) == "<br />"
+    end
+
+    test "public comment node" do
+      # <!--abc < xyz<div></div>-->
+      dom = {:public_comment, [{:text, "abc < xyz"}, {:element, "div", [], []}]}
+
+      assert print_dom(dom) == "<!--abc &lt; xyz<div></div>-->"
+    end
+
+    test "public comment node, inside script element" do
+      # <script><!--abc < xyz--></script>
+      dom = {:element, "script", [], [{:public_comment, [{:text, "abc < xyz"}]}]}
+
+      assert print_dom(dom) == "<script><!--abc < xyz--></script>"
+    end
+
+    test "node list" do
+      dom = [{:text, "abc"}, {:element, "div", [], []}, {:text, "xyz"}]
+
+      assert print_dom(dom) == "abc<div></div>xyz"
+    end
+
+    test "attribute with a value" do
+      dom = {:element, "div", [{"attr_1", [text: "aaa"]}, {"attr_2", [text: "bbb"]}], []}
+
+      assert print_dom(dom) == ~s(<div attr_1="aaa" attr_2="bbb"></div>)
+    end
+
+    test "attribute with an empty value list" do
+      dom = {:element, "input", [{"checked", []}], []}
+
+      assert print_dom(dom) == "<input checked />"
+    end
+
+    test "attribute with an empty text value" do
+      dom = {:element, "div", [{"class", [text: ""]}], []}
+
+      assert print_dom(dom) == "<div class></div>"
+    end
+
+    test "attribute value is escaped" do
+      dom = {:element, "div", [{"class", [text: "abc < xyz"]}], []}
+
+      assert print_dom(dom) == ~s(<div class="abc &lt; xyz"></div>)
+    end
+
+    test "framework attributes are not printed" do
+      dom =
+        {:element, "div",
+         [
+           {"$key", [text: "a1b2c3:4"]},
+           {"class", [text: "aaa"]},
+           {"$click", [text: "my_action"]}
+         ], []}
+
+      assert print_dom(dom) == ~s(<div class="aaa"></div>)
+    end
+
+    test "element node, with only framework attributes" do
+      dom = {:element, "div", [{"$key", [text: "a1b2c3:4"]}], []}
+
+      assert print_dom(dom) == "<div></div>"
+    end
+  end
+
+  describe "render_tree/3" do
+    test "text node is held unescaped" do
+      node = {:text, "abc < xyz"}
+
+      assert render_tree(node, @env, @server) == {{:text, "abc < xyz"}, %{}, @server}
+    end
+
+    test "expression node evaluates to unescaped text" do
+      # {"abc < xyz"}
+      node = {:expression, {"abc < xyz"}}
+
+      assert render_tree(node, @env, @server) == {{:text, "abc < xyz"}, %{}, @server}
+    end
+
+    test "expression node inside a script element evaluates to entity-encoded text" do
+      # <script>{"abc < xyz"}</script>
+      node = {:element, "script", [], [expression: {"abc < xyz"}]}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "script", [], [{:text, "abc &lt; xyz"}]}, %{}, @server}
+    end
+
+    test "doctype node" do
+      node = {:doctype, "html"}
+
+      assert render_tree(node, @env, @server) == {{:doctype, "html"}, %{}, @server}
+    end
+
+    test "public comment node" do
+      # <!--abc<div></div>-->
+      node = {:public_comment, [{:text, "abc"}, {:element, "div", [], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {{:public_comment, [{:text, "abc"}, {:element, "div", [], []}]}, %{}, @server}
+    end
+
+    test "element node, attribute value parts collapse to a single unescaped string" do
+      # <div attr="ccc{987} < eee"></div>
+      node =
+        {:element, "div", [{"attr", [text: "ccc", expression: {987}, text: " < eee"]}], []}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "div", [{"attr", [text: "ccc987 < eee"]}], []}, %{}, @server}
+    end
+
+    test "element node, attribute with an empty value list stays a boolean attribute" do
+      # <input checked />
+      node = {:element, "input", [{"checked", []}], []}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "input", [{"checked", []}], []}, %{}, @server}
+    end
+
+    test "element node, attribute with a nil expression value is omitted" do
+      # <div class={nil}></div>
+      node = {:element, "div", [{"class", [expression: {nil}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "element node, attribute with a false expression value is omitted" do
+      # <div hidden={false}></div>
+      node = {:element, "div", [{"hidden", [expression: {false}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "element node, $key attribute is kept" do
+      node = {:element, "div", [{"$key", [text: "a1b2c3:4"]}], []}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "div", [{"$key", [text: "a1b2c3:4"]}], []}, %{}, @server}
+    end
+
+    test "element node, event attribute is dropped" do
+      # <button $click="my_action">abc</button>
+      node = {:element, "button", [{"$click", [text: "my_action"]}], [{:text, "abc"}]}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "button", [], [{:text, "abc"}]}, %{}, @server}
+    end
+
+    test "element node, void element keeps its children in the tree" do
+      node = {:element, "br", [], [{:text, "abc"}]}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "br", [], [{:text, "abc"}]}, %{}, @server}
+    end
+
+    test "window node renders to nil" do
+      node = {:element, "window", [], []}
+
+      assert render_tree(node, @env, @server) == {nil, %{}, @server}
+    end
+
+    test "document node renders to nil" do
+      node = {:element, "document", [], []}
+
+      assert render_tree(node, @env, @server) == {nil, %{}, @server}
+    end
+
+    test "node list, nil nodes are filtered out" do
+      # {%if false}abc{/if}xyz
+      nodes = [nil, {:text, "xyz"}]
+
+      assert render_tree(nodes, @env, @server) == {[{:text, "xyz"}], %{}, @server}
+    end
+
+    test "node list, adjacent text and expression nodes merge into one text node" do
+      # aaa{123}zzz
+      nodes = [{:text, "aaa"}, {:expression, {123}}, {:text, "zzz"}]
+
+      assert render_tree(nodes, @env, @server) == {[{:text, "aaa123zzz"}], %{}, @server}
+    end
+
+    test "node list, text nodes separated by an element do not merge" do
+      # aaa<br />zzz
+      nodes = [{:text, "aaa"}, {:element, "br", [], []}, {:text, "zzz"}]
+
+      assert render_tree(nodes, @env, @server) ==
+               {[{:text, "aaa"}, {:element, "br", [], []}, {:text, "zzz"}], %{}, @server}
+    end
+
+    test "node list, text merges across a component boundary" do
+      # aaa<Module88 />
+      nodes = [{:text, "aaa"}, {:component, Module88, [], []}]
+
+      assert render_tree(nodes, @env, @server) == {[{:text, "aaabbb"}], %{}, @server}
+    end
+
+    test "component node, rendered nodes are spliced into the enclosing list" do
+      # aaa<Module1 />zzz
+      nodes = [{:text, "aaa"}, {:component, Module1, [], []}, {:text, "zzz"}]
+
+      assert render_tree(nodes, @env, @server) ==
+               {[
+                  {:text, "aaa"},
+                  {:element, "div", [{"$key", [text: "kqd760:0"]}], [{:text, "abc"}]},
+                  {:text, "zzz"}
+                ], %{}, @server}
+    end
+
+    test "stateful component node, tree plus component registry plus mutated server struct" do
+      # <Module3 cid="component_3" />
+      node = {:component, Module3, [{"cid", [text: "component_3"]}], []}
+
+      assert render_tree(node, @env, @server) ==
+               {[
+                  {:element, "div", [{"$key", [text: "w53jft:0"]}],
+                   [{:text, "state_a = 1, state_b = 2"}]}
+                ],
+                %{
+                  "component_3" => %{
+                    module: Module3,
+                    struct: %Component{
+                      state: %{a: 1, b: 2}
+                    }
+                  }
+                },
+                %Server{
+                  cookies: %{
+                    "initial_cookie_key" => :initial_cookie_value,
+                    "cookie_key_3" => :cookie_value_3
+                  },
+                  __meta__: %Metadata{
+                    cookie_ops: %{
+                      "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                      "cookie_key_3" => %Cookie{value: :cookie_value_3}
+                    }
+                  }
+                }}
+    end
+  end
+
+  defp collect_script_texts({:element, "script", _attrs, children}) do
+    for {:text, text} <- children, do: text
+  end
+
+  defp collect_script_texts({:element, _tag_name, _attrs, children}) do
+    collect_script_texts(children)
+  end
+
+  defp collect_script_texts(nodes) when is_list(nodes) do
+    Enum.flat_map(nodes, &collect_script_texts/1)
+  end
+
+  defp collect_script_texts(_node), do: []
+
+  # The tree projection is covered by its own tests - these tests assert the projections the
+  # pre-tree render returned, unchanged.
+  defp render_page_without_tree(page_module, params, server_struct, opts) do
+    {html, _tree, component_registry, mutated_server_struct} =
+      render_page(page_module, params, server_struct, opts)
+
+    {html, component_registry, mutated_server_struct}
   end
 end

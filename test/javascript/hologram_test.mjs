@@ -1067,6 +1067,55 @@ describe("Hologram", () => {
       type: "redirect",
     });
 
+    const encodedText = (str) =>
+      `Type.tuple([Type.atom("text"), Type.bitstring("${str}")])`;
+
+    const encodedElement = (tagName, children = "") =>
+      `Type.tuple([Type.atom("element"), Type.bitstring("${tagName}"), Type.list([]), Type.list([${children}])])`;
+
+    const encodedBundleScript = (pageDigest) =>
+      `Type.tuple([Type.atom("element"), Type.bitstring("script"), Type.list([Type.tuple([Type.bitstring("src"), Type.keywordList([[Type.atom("text"), Type.bitstring("/hologram/page-${pageDigest}.js")]])])]), Type.list([])])`;
+
+    // What the server sends: the whole document, the page's own bundle script included.
+    const encodedTreeFor = (pageDigest, bodyText) =>
+      `Type.list([${encodedElement(
+        "html",
+        `${encodedElement("head", encodedBundleScript(pageDigest))},${encodedElement(
+          "body",
+          encodedText(bodyText),
+        )}`,
+      )}])`;
+
+    const payloadFor = (pageDigest, bodyText = "page content") => ({
+      pageDigest: pageDigest,
+      pageModule: encodedModule7,
+      tree: encodedTreeFor(pageDigest, bodyText),
+      type: "page",
+    });
+
+    const bundleScript = (pageDigest) =>
+      document.head.querySelector(
+        `script[src="/hologram/page-${pageDigest}.js"]`,
+      );
+
+    // The page a navigation patches against, which on a document load is the render mirrored
+    // onto what the server sent.
+    const seedCurrentPage = () => {
+      Hologram.virtualDocument = Vdom.mirror(
+        Renderer.renderTree(
+          Interpreter.evaluateJavaScriptExpression(
+            encodedTreeFor("current", "current page content"),
+          ),
+        ),
+        document.documentElement,
+      );
+    };
+
+    const removeBundleScripts = () =>
+      document.head
+        .querySelectorAll("script[src^='/hologram/page-']")
+        .forEach((script) => script.remove());
+
     beforeEach(() => {
       assignedUrls = [];
 
@@ -1126,81 +1175,91 @@ describe("Hologram", () => {
       assert.isAtMost(fetchPageStub.callCount, 10);
     });
 
-    // A bundle that never loads would otherwise end the navigation in silence: nothing dispatches
-    // hologram:pageScriptLoaded, so the mount never runs and the page on screen stays put.
-    describe("page bundle that fails to load", () => {
-      const payloadFor = (pageDigest) => ({
-        componentRegistry: "Type.map([])",
-        pageDigest: pageDigest,
-        pageModule: encodedModule7,
-        pageParams: encodedNoParams,
-        selfEchoes: "Type.list([])",
-        subReceiptAdds: "Type.list([])",
-        subReceiptDrops: "Type.list([])",
-        type: "page",
-      });
-
-      const bundleScript = (pageDigest) =>
-        document.head.querySelector(
-          `script[src="/hologram/page-${pageDigest}.js"]`,
-        );
-
-      const navigate = async (pageDigest) => {
-        await Hologram.loadNewPage(
-          `/target-${pageDigest}`,
-          payloadFor(pageDigest),
-        );
-
-        return bundleScript(pageDigest);
-      };
+    // The page the server described is patched in as soon as it arrives, so it is on screen a
+    // round trip after it was asked for rather than a round trip plus a bundle plus a render.
+    describe("showing the page the server described", () => {
+      let patchStub;
 
       beforeEach(() => {
-        // jsdom has no rAF, and the mount runs inside one. Running it now keeps the test reading
+        // jsdom has no rAF, and the patch runs inside one. Running it now keeps the test reading
         // top to bottom.
         window.requestAnimationFrame = (callback) => callback();
+        seedCurrentPage();
       });
 
       afterEach(() => {
         delete window.requestAnimationFrame;
-        Hologram.pendingMountPayload = null;
+        delete globalThis.Hologram.pageScriptLoaded;
+        Hologram.virtualDocument = null;
 
-        document.head
-          .querySelectorAll("script[src^='/hologram/page-']")
-          .forEach((script) => script.remove());
+        patchStub?.restore();
+        patchStub = null;
+
+        removeBundleScripts();
+      });
+
+      // The property the whole feature rests on: what the server described is on screen while the
+      // page's own code is still in flight.
+      it("puts the page on screen before its bundle has run", async () => {
+        globalThis.Hologram.pageScriptLoaded = true;
+
+        await Hologram.loadNewPage("/target", payloadFor("aaa", "new content"));
+
+        assert.include(document.body.textContent, "new content");
+        assert.isFalse(globalThis.Hologram.pageScriptLoaded);
+      });
+
+      it("fetches the bundle of a page this client has not run before", async () => {
+        await Hologram.loadNewPage("/target", payloadFor("bbb"));
+
+        assert.isNotNull(bundleScript("bbb"));
+      });
+
+      // A script is keyed by the source it loads, so a bundle already in the document would be
+      // adopted rather than run, and one only in memory would run a second time. Neither can
+      // announce the mount, so the patch never carries the bundle.
+      it("keeps the page's bundle out of the patch", async () => {
+        patchStub = sinon
+          .stub(Vdom, "patchVirtualDocument")
+          .returns(Hologram.virtualDocument);
+
+        await Hologram.loadNewPage("/target", payloadFor("ccc"));
+
+        const patchedHead = patchStub.firstCall.args[1].children.find(
+          (child) => child?.sel === "head",
+        );
+
+        assert.deepStrictEqual(patchedHead.children, []);
+      });
+    });
+
+    // A bundle that never loads would otherwise end the navigation in silence: nothing dispatches
+    // hologram:pageScriptLoaded, so the mount never runs and the page on screen stays put.
+    describe("page bundle that fails to load", () => {
+      beforeEach(() => {
+        window.requestAnimationFrame = (callback) => callback();
+        seedCurrentPage();
+      });
+
+      afterEach(() => {
+        delete window.requestAnimationFrame;
+        delete globalThis.Hologram.pageScriptLoaded;
+        Hologram.virtualDocument = null;
+        removeBundleScripts();
       });
 
       it("raises rather than leaving the navigation unfinished", async () => {
-        const script = await navigate("aaa");
+        await Hologram.loadNewPage("/target-eee", payloadFor("eee"));
+
+        const script = bundleScript("eee");
 
         assert.isNotNull(script);
 
         assert.throws(
           () => script.onerror(),
           HologramRuntimeError,
-          "Failed to load page bundle: /hologram/page-aaa.js",
+          "Failed to load page bundle: /hologram/page-eee.js",
         );
-      });
-
-      it("drops the payload the failed navigation was waiting to mount", async () => {
-        const script = await navigate("bbb");
-
-        assert.isNotNull(Hologram.pendingMountPayload);
-        assert.throws(() => script.onerror());
-        assert.isNull(Hologram.pendingMountPayload);
-      });
-
-      // A newer navigation has already replaced the payload and still needs it. #loadMountData
-      // reads a missing one as the initial page's, so clearing it here would mount the page the
-      // server first sent instead of the one being navigated to.
-      it("leaves a newer navigation's payload alone", async () => {
-        const first = await navigate("ccc");
-        await navigate("ddd");
-
-        const newer = Hologram.pendingMountPayload;
-
-        assert.equal(newer.pageDigest, "ddd");
-        assert.throws(() => first.onerror());
-        assert.equal(Hologram.pendingMountPayload, newer);
       });
     });
   });

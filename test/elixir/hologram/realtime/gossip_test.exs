@@ -12,40 +12,32 @@ defmodule Hologram.Realtime.GossipTest do
     :ok
   end
 
-  describe "boot_sync/3" do
-    test "broadcasts a sync request carrying the caller pid to peers on the topic" do
+  describe "request_sync/1" do
+    # Asking is per connected node, so a single node has nobody to ask. What a peer does
+    # with the request, and that it reaches one at all, is covered by the cluster suite -
+    # there is no second node here to send to.
+    test "asks nobody when no other node is connected" do
+      Phoenix.PubSub.subscribe(Hologram.PubSub, @topic)
+
+      assert Node.list() == []
+      assert request_sync(@topic) == :ok
+
+      refute_received {:sync_request, _requester_pid}
+    end
+  end
+
+  describe "request_sync_from/2" do
+    test "asks the named node and returns without waiting for a reply" do
+      # A single-node test can only target its own node, which is enough to pin the
+      # contract: the request carries the caller pid and nothing is waited for.
+      Phoenix.PubSub.subscribe(Hologram.PubSub, @topic)
+
       test_pid = self()
 
-      spawn_link(fn ->
-        Phoenix.PubSub.subscribe(Hologram.PubSub, @topic)
-        send(test_pid, :peer_ready)
+      assert request_sync_from(node(), @topic) == :ok
 
-        receive do
-          {:sync_request, requester_pid} -> send(test_pid, {:got_request, requester_pid})
-        end
-      end)
-
-      assert_receive :peer_ready
-
-      boot_sync(@topic, 20, fn _entries -> :ok end)
-
-      assert_received {:got_request, ^test_pid}
-    end
-
-    test "invokes merge_fun for each sync reply received within the window" do
-      test_pid = self()
-
-      send(self(), {:sync_reply, [{:a, 1}]})
-      send(self(), {:sync_reply, [{:b, 2}]})
-
-      boot_sync(@topic, 20, fn entries -> send(test_pid, {:merged, entries}) end)
-
-      assert_received {:merged, [{:a, 1}]}
-      assert_received {:merged, [{:b, 2}]}
-    end
-
-    test "returns :ok after the timeout when no replies arrive" do
-      assert boot_sync(@topic, 10, fn _entries -> flunk("merge_fun should not run") end) == :ok
+      assert_receive {:sync_request, ^test_pid}
+      refute_received {:sync_reply, _entries}
     end
   end
 

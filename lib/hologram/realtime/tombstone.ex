@@ -5,7 +5,6 @@ defmodule Hologram.Realtime.Tombstone do
 
   alias Hologram.Realtime.Gossip
 
-  @boot_sync_timeout_ms 5_000
   @gossip_topic "hologram:gossip:tombstones"
 
   # Decoupled from the TTL on purpose: sweeping only once per TTL would let an
@@ -15,6 +14,12 @@ defmodule Hologram.Realtime.Tombstone do
   # `rate × TTL` even under heavy tombstone-write traffic.
   @sweep_interval_ms 30 * 60 * 1000
 
+  # Purges are kept apart from the tombstones they cancel. Readers of the tombstone
+  # table compare the stored value against a receipt timestamp, and in Erlang term order
+  # any tuple outranks any integer - a marker sharing that table would read as a
+  # tombstone newer than everything and reject every receipt.
+  @purges_table_name :hologram_tombstone_purges
+
   @table_name :hologram_tombstones
   @tombstone_ttl_ms 72 * 60 * 60 * 1000
 
@@ -23,6 +28,12 @@ defmodule Hologram.Realtime.Tombstone do
   """
   @spec ets_table_name() :: atom
   def ets_table_name, do: @table_name
+
+  @doc """
+  Returns the name of the ETS table that records which keys have been purged and when.
+  """
+  @spec purges_table_name() :: atom
+  def purges_table_name, do: @purges_table_name
 
   @doc """
   Returns the PubSub topic used for cluster-wide gossip of tombstone inserts.
@@ -63,16 +74,26 @@ defmodule Hologram.Realtime.Tombstone do
   def tombstone_ttl_ms, do: @tombstone_ttl_ms
 
   @impl GenServer
-  def init(opts) do
+  def init(_opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
+    :ets.new(@purges_table_name, [:set, :public, :named_table, read_concurrency: true])
     Phoenix.PubSub.subscribe(Hologram.PubSub, @gossip_topic)
 
-    boot_sync_timeout_ms =
-      Keyword.get(opts, :boot_sync_timeout_ms, @boot_sync_timeout_ms)
+    # Peers are asked for what they hold, and whatever they send back merges as it
+    # arrives. Nothing is waited for, so this process serves inserts from the moment it
+    # starts, and readers hitting the table meanwhile see the same catch-up window they
+    # always have - a tombstone a peer has not sent yet is simply not there yet.
+    Gossip.request_sync(@gossip_topic)
+
+    # The ask above reaches the nodes connected right now. A node that connects later -
+    # one still joining as this one boots, or a peer coming back - was never asked, and
+    # monitoring reports only joins that happen from here on, so this is the only signal
+    # that such a node exists.
+    :net_kernel.monitor_nodes(true)
 
     schedule_sweep()
 
-    {:ok, %{}, {:continue, {:boot_sync, boot_sync_timeout_ms}}}
+    {:ok, %{}}
   end
 
   @impl GenServer
@@ -89,18 +110,6 @@ defmodule Hologram.Realtime.Tombstone do
     {:reply, :ok, state}
   end
 
-  # Boot-sync runs here rather than in init/1 so the blocking wait for peer
-  # replies doesn't stall the supervision tree (and thus app/endpoint
-  # readiness) for the full timeout on every boot. The ETS table and gossip
-  # subscription are established in init/1, so direct readers and live gossip
-  # are unaffected during this catch-up window.
-  @impl GenServer
-  def handle_continue({:boot_sync, boot_sync_timeout_ms}, state) do
-    Gossip.boot_sync(@gossip_topic, boot_sync_timeout_ms, &merge_synced_entries/1)
-
-    {:noreply, state}
-  end
-
   @impl GenServer
   def handle_info({:insert, key, created_at}, state) do
     merge_insert(key, created_at)
@@ -108,11 +117,24 @@ defmodule Hologram.Realtime.Tombstone do
     {:noreply, state}
   end
 
+  # A purge says a revocation has been superseded by a re-grant, so it has to outrank the
+  # tombstone it cancels even when that tombstone arrives afterwards - a peer answering a
+  # sync request replies out of a table this purge has not reached. When it happened is
+  # what settles that, so the time travels with it and is kept until it can no longer be
+  # contradicted.
   @impl GenServer
-  def handle_info({:purge, key}, state) do
-    :ets.delete(@table_name, key)
+  def handle_info({:purge, key, purged_at}, state) do
+    merge_purge(key, purged_at)
 
     {:noreply, state}
+  end
+
+  # A purge from a node that has not been upgraded carries no time. Reading it as "now"
+  # is the only option left, and it is the safe direction: it can hold back a revocation
+  # older than this moment, never one that comes after.
+  @impl GenServer
+  def handle_info({:purge, key}, state) do
+    handle_info({:purge, key, System.system_time(:millisecond)}, state)
   end
 
   @impl GenServer
@@ -124,12 +146,48 @@ defmodule Hologram.Realtime.Tombstone do
   end
 
   @impl GenServer
-  def handle_info({:sync_request, requester_pid}, state) do
-    Gossip.reply_to_sync_request(@table_name, requester_pid)
+  def handle_info({:nodedown, _node}, state) do
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:nodeup, node}, state) do
+    # Asked in both directions on purpose. This node asks the newcomer because a peer
+    # that went away and came back can hold what this one is missing, and the newcomer
+    # asks this node through the same handler on its own side.
+    Gossip.request_sync_from(node, @gossip_topic)
 
     {:noreply, state}
   end
 
+  @impl GenServer
+  def handle_info({:sync_purges, purges}, state) do
+    Enum.each(purges, fn {key, purged_at} -> merge_purge(key, purged_at) end)
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:sync_reply, tombstones}, state) do
+    Enum.each(tombstones, fn {key, created_at} -> merge_insert(key, created_at) end)
+
+    {:noreply, state}
+  end
+
+  # The purges travel with the tombstones they cancel. Without them a node that never
+  # heard a purge keeps the tombstone it cancelled and hands it to whoever syncs from it,
+  # so a re-grant would be undone by whichever peer happened to miss it.
+  @impl GenServer
+  def handle_info({:sync_request, requester_pid}, state) do
+    Gossip.reply_to_sync_request(@table_name, requester_pid)
+    send(requester_pid, {:sync_purges, :ets.tab2list(@purges_table_name)})
+
+    {:noreply, state}
+  end
+
+  # Purge markers age out on the tombstone TTL as well: past it, no tombstone old enough
+  # for a marker to contradict can still be held by a peer, so the marker has nothing
+  # left to do.
   defp delete_expired do
     cutoff = System.system_time(:millisecond) - @tombstone_ttl_ms
 
@@ -137,21 +195,55 @@ defmodule Hologram.Realtime.Tombstone do
       {{:_, :"$1"}, [{:<, :"$1", cutoff}], [true]}
     ]
 
+    :ets.select_delete(@purges_table_name, match_spec)
     :ets.select_delete(@table_name, match_spec)
   end
 
-  defp merge_insert(key, created_at) do
-    case :ets.lookup(@table_name, key) do
-      [{^key, existing_at}] when existing_at >= created_at ->
+  # Records a purge and cancels the tombstone it supersedes, in that order, so the
+  # outcome does not depend on which arrives first. Replies come from different nodes,
+  # and one peer's tombstone can land before another peer's purge of it.
+  defp merge_purge(key, purged_at) do
+    case :ets.lookup(@purges_table_name, key) do
+      [{^key, existing_at}] when existing_at >= purged_at ->
         :ok
 
-      _other ->
-        :ets.insert(@table_name, {key, created_at})
+      _older_or_absent ->
+        :ets.insert(@purges_table_name, {key, purged_at})
+    end
+
+    cancel_superseded_tombstone(key, purged_at)
+  end
+
+  defp cancel_superseded_tombstone(key, purged_at) do
+    case :ets.lookup(@table_name, key) do
+      [{^key, created_at}] when purged_at >= created_at ->
+        :ets.delete(@table_name, key)
+        :ok
+
+      _newer_or_absent ->
+        :ok
     end
   end
 
-  defp merge_synced_entries(entries) do
-    Enum.each(entries, fn {key, created_at} -> merge_insert(key, created_at) end)
+  defp merge_insert(key, created_at) do
+    if superseded_by_purge?(key, created_at) do
+      :ok
+    else
+      case :ets.lookup(@table_name, key) do
+        [{^key, existing_at}] when existing_at >= created_at ->
+          :ok
+
+        _other ->
+          :ets.insert(@table_name, {key, created_at})
+      end
+    end
+  end
+
+  defp superseded_by_purge?(key, created_at) do
+    case :ets.lookup(@purges_table_name, key) do
+      [{^key, purged_at}] -> purged_at >= created_at
+      [] -> false
+    end
   end
 
   defp schedule_sweep do

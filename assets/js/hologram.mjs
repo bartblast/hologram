@@ -98,13 +98,6 @@ export default class Hologram {
   static #pageModule = null;
   static #pageParams = null;
   static #pendingJsInteropActions = [];
-
-  // The page description a navigation fetched, waiting for the mount to read it. An initial load
-  // has none: there the server put the same data in the page itself.
-  //
-  // Made public to make tests easier
-  static pendingMountPayload = null;
-
   static #registeredPageModules = new Set();
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
@@ -403,7 +396,7 @@ export default class Hologram {
     $.#historyId = Utils.uuidv7();
 
     window.requestAnimationFrame(() => {
-      Hologram.#mountNewPage(payload);
+      Hologram.#showNewPage(payload);
       window.scrollTo(0, 0);
 
       history.pushState($.#historyId, null, pagePath);
@@ -821,6 +814,32 @@ export default class Hologram {
     });
   }
 
+  // Takes the page's own bundle out of the document the server described, leaving every other
+  // script it carries to be patched in and run.
+  //
+  // The bundle is fetched here rather than through the patch so that a failure to load is
+  // noticed - #loadPageBundle gives it a failure path, which a script the patch creates would
+  // not have. It also settles what a script element cannot express on its own: a script is keyed
+  // by the source it loads, so navigating back to a page whose bundle is already in the document
+  // would adopt that element and never run it, while navigating to a page whose bundle is in
+  // memory but absent from the document would run it a second time.
+  //
+  // The document is the one just built from the tree, so it is edited in place.
+  static #dropPageBundleScript(virtualDocument, pageDigest) {
+    // Mirrors Hologram.Router.Helpers.page_bundle_path/1
+    const key = `__hologramScript__:${$.#pageBundlePath(pageDigest)}`;
+
+    const headVnode = virtualDocument.children.find(
+      (childVnode) => childVnode?.sel === "head",
+    );
+
+    if (headVnode) {
+      headVnode.children = headVnode.children.filter(
+        (childVnode) => childVnode?.key !== key,
+      );
+    }
+  }
+
   static #ensureDomNodeHasHologramId(eventNode) {
     if (typeof eventNode.__hologramId__ === "undefined") {
       eventNode.__hologramId__ = Utils.uuidv7();
@@ -1072,15 +1091,11 @@ export default class Hologram {
     );
   }
 
-  // What the page was mounted with, from whichever side supplied it: a navigation fetched it as
-  // data, while an initial load reads it from the page the server sent.
+  // What the page was mounted with, left behind by the script the server wrote into the page.
+  // A navigation reaches it the same way a document load does, by patching in the page the
+  // server described, that script included.
   static #loadMountData() {
-    const payload = $.pendingMountPayload;
-    $.pendingMountPayload = null;
-
-    const mountData = payload
-      ? $.#mountDataFromPayload(payload)
-      : globalThis.Hologram.pageMountData(Hologram.#deps);
+    const mountData = globalThis.Hologram.pageMountData(Hologram.#deps);
 
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
@@ -1101,42 +1116,17 @@ export default class Hologram {
   // runs off the event loop. It surfaces as an uncaught error instead, which is what the console
   // and the feature tests read. handleUncaughtError/1 passes it over rather than showing the
   // overlay, that being reserved for errors a page raised.
-  //
-  // The pending payload is dropped only while it is still the one this bundle was fetched for. A
-  // navigation started while this one was in flight has already replaced it and still needs it,
-  // and #loadMountData reads a missing payload as the initial page's, which would mount the page
-  // the server first sent instead of the one being navigated to.
-  static #loadPageBundle(src, payload = null) {
+  static #loadPageBundle(src) {
     const script = document.createElement("script");
 
     script.src = src;
     script.fetchpriority = "high";
 
     script.onerror = () => {
-      if (payload !== null && $.pendingMountPayload === payload) {
-        $.pendingMountPayload = null;
-      }
-
       throw new HologramRuntimeError(`Failed to load page bundle: ${src}`);
     };
 
     document.head.appendChild(script);
-  }
-
-  // The payload's terms arrive as JavaScript the runtime evaluates, the same form a command's
-  // response uses.
-  static #mountDataFromPayload(payload) {
-    const evaluate = (encodedTerm) =>
-      Interpreter.evaluateJavaScriptExpression(encodedTerm);
-
-    return {
-      componentRegistry: evaluate(payload.componentRegistry),
-      pageModule: evaluate(payload.pageModule),
-      pageParams: evaluate(payload.pageParams),
-      selfEchoes: evaluate(payload.selfEchoes),
-      subReceiptAdds: evaluate(payload.subReceiptAdds),
-      subReceiptDrops: evaluate(payload.subReceiptDrops),
-    };
   }
 
   static #maybeInitAssetPathRegistry() {
@@ -1222,6 +1212,11 @@ export default class Hologram {
     }
   }
 
+  // Mirrors Hologram.Router.Helpers.page_bundle_path/1
+  static #pageBundlePath(pageDigest) {
+    return `/hologram/page-${pageDigest}.js`;
+  }
+
   static #pageSnapshotKey(historyId) {
     return `${$.#PAGE_SNAPSHOT_KEY_PREFIX}${historyId}`;
   }
@@ -1256,26 +1251,50 @@ export default class Hologram {
     );
   }
 
-  // Takes ownership of a page the server described: the payload is left for the mount to read, and
-  // the page's own code is fetched when this client hasn't run that page before, which is what
-  // announces the page is ready to mount. A page already registered has nothing to fetch, so it
-  // mounts straight away.
-  static #mountNewPage(payload) {
-    $.pendingMountPayload = payload;
+  // Puts the page the server described on screen, before any of that page's own code has arrived.
+  //
+  // The payload carries the render the server performed, so patching it into the document shows
+  // the page a round trip after it was asked for, rather than a round trip plus a bundle plus a
+  // render. What the patch puts on screen is inert - the tree carries no event bindings - until
+  // the mount below renders the page for itself and adopts these nodes, which is what the keys
+  // both renders agree on are for.
+  //
+  // The scripts the server would have served with the page ride in the tree and are patched in
+  // with everything else, so the inline script leaving the mount data behind runs here, the same
+  // way it runs when the browser loads a document. The page's own bundle is the exception, taken
+  // out by #dropPageBundleScript.
+  //
+  // A page this client has already run needs no bundle at all, so it mounts as soon as the patch
+  // is done. Otherwise the bundle is fetched, and running it announces the page is ready to
+  // mount.
+  static #showNewPage(payload) {
+    const pageModule = Interpreter.evaluateJavaScriptExpression(
+      payload.pageModule,
+    );
 
-    if (
-      $.#isPageModuleRegistered(
-        Interpreter.evaluateJavaScriptExpression(payload.pageModule),
-      )
-    ) {
-      $.#mountPage(true);
-      return;
+    const isPageModuleRegistered = $.#isPageModuleRegistered(pageModule);
+
+    // The fetch is started before the patch, which is local work, so the network has a head start
+    // on it. Nothing the bundle does can run before the patch is done, since it cannot execute
+    // until this frame's work ends.
+    if (!isPageModuleRegistered) {
+      globalThis.Hologram.pageScriptLoaded = false;
+      $.#loadPageBundle($.#pageBundlePath(payload.pageDigest));
     }
 
-    globalThis.Hologram.pageScriptLoaded = false;
+    const tree = Interpreter.evaluateJavaScriptExpression(payload.tree);
+    const newVirtualDocument = Renderer.renderTree(tree);
 
-    // Mirrors Hologram.Router.Helpers.page_bundle_path/1
-    $.#loadPageBundle(`/hologram/page-${payload.pageDigest}.js`, payload);
+    $.#dropPageBundleScript(newVirtualDocument, payload.pageDigest);
+
+    Hologram.virtualDocument = Vdom.patchVirtualDocument(
+      Hologram.virtualDocument,
+      newVirtualDocument,
+    );
+
+    if (isPageModuleRegistered) {
+      $.#mountPage(true);
+    }
   }
 
   // Deps: [:maps.get/2, :maps.put/3]

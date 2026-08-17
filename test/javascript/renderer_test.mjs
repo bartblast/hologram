@@ -9133,6 +9133,186 @@ describe("Renderer", () => {
     });
   });
 
+  describe("renderTree()", () => {
+    const text = (str) => Type.tuple([Type.atom("text"), Type.bitstring(str)]);
+
+    const attribute = (name, value) =>
+      Type.tuple([
+        Type.bitstring(name),
+        Type.keywordList([[Type.atom("text"), Type.bitstring(value)]]),
+      ]);
+
+    const treeElement = (tagName, attributes = [], childrenTree = []) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attributes),
+        Type.list(childrenTree),
+      ]);
+
+    // A page tree is the document's children, so a single node is wrapped in the list one
+    // always is.
+    const tree = (...nodes) => Type.list(nodes);
+
+    it("wraps a tree naming no html element in the elements a document must have", () => {
+      const result = Renderer.renderTree(tree(treeElement("div")));
+
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, [
+          vnode("div", {attrs: {}, on: {}}, []),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("takes the html element a tree names as the document root", () => {
+      const treeDom = tree(
+        treeElement("html", [], [treeElement("body", [], [text("abc")])]),
+      );
+
+      const result = Renderer.renderTree(treeDom);
+
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, ["abc"]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("renders the doctype a tree carries to nothing", () => {
+      const treeDom = tree(
+        Type.tuple([Type.atom("doctype"), Type.bitstring("html")]),
+        treeElement("html", [], []),
+      );
+
+      const result = Renderer.renderTree(treeDom);
+
+      assert.deepStrictEqual(result, vnode("html", {attrs: {}, on: {}}, []));
+    });
+
+    it("renders an element's attributes and children", () => {
+      const treeDom = tree(
+        treeElement("div", [attribute("class", "big")], [text("abc")]),
+      );
+
+      const result = Renderer.renderTree(treeDom);
+
+      assert.deepStrictEqual(result.children[0].children, [
+        vnode("div", {attrs: {class: "big"}, on: {}}, ["abc"]),
+      ]);
+    });
+
+    it("renders an attribute with an empty value list as a boolean attribute", () => {
+      const hiddenAttribute = Type.tuple([
+        Type.bitstring("hidden"),
+        Type.list(),
+      ]);
+
+      const treeDom = tree(treeElement("div", [hiddenAttribute]));
+
+      const result = Renderer.renderTree(treeDom);
+
+      assert.deepStrictEqual(result.children[0].children[0].data.attrs, {
+        hidden: true,
+      });
+    });
+
+    it("merges adjacent text nodes", () => {
+      const treeDom = tree(
+        treeElement("div", [], [text("aaa"), text("bbb"), text("ccc")]),
+      );
+
+      const result = Renderer.renderTree(treeDom);
+
+      assert.deepStrictEqual(result.children[0].children, [
+        vnode("div", {attrs: {}, on: {}}, ["aaabbbccc"]),
+      ]);
+    });
+
+    it("takes an element's $key attribute as its vnode key", () => {
+      const treeDom = tree(
+        treeElement("div", [attribute("$key", "1a2b3c:4")], []),
+      );
+
+      const result = Renderer.renderTree(treeDom);
+
+      const divVnode = result.children[0].children[0];
+
+      assert.equal(divVnode.key, "1a2b3c:4");
+      assert.isUndefined(divVnode.data.attrs["$key"]);
+    });
+
+    it("numbers repeated keys by occurrence", () => {
+      const item = treeElement("li", [attribute("$key", "1a2b3c:4")], []);
+      const treeDom = tree(treeElement("ul", [], [item, item, item]));
+
+      const result = Renderer.renderTree(treeDom);
+
+      const keys = result.children[0].children[0].children.map(
+        (childVnode) => childVnode.key,
+      );
+
+      assert.deepStrictEqual(keys, ["1a2b3c:4", "1a2b3c:4:1", "1a2b3c:4:2"]);
+    });
+
+    it("keys a script element by the source it loads", () => {
+      const treeDom = tree(
+        treeElement("script", [attribute("src", "/hologram/page-abc.js")]),
+      );
+
+      const result = Renderer.renderTree(treeDom);
+
+      assert.equal(
+        result.children[0].children[0].key,
+        "__hologramScript__:/hologram/page-abc.js",
+      );
+    });
+
+    it("keys an inline script element by the code it holds", () => {
+      const treeDom = tree(treeElement("script", [], [text("var abc = 1;")]));
+
+      const result = Renderer.renderTree(treeDom);
+
+      assert.equal(
+        result.children[0].children[0].key,
+        "__hologramScript__:var abc = 1;",
+      );
+    });
+
+    it("keys a link element by what it loads", () => {
+      const treeDom = tree(
+        treeElement("link", [attribute("href", "/my-stylesheet.css")]),
+      );
+
+      const result = Renderer.renderTree(treeDom);
+
+      assert.equal(
+        result.children[0].children[0].key,
+        "__hologramLink__:/my-stylesheet.css",
+      );
+    });
+
+    it("sets up the value hooks a controlled input needs", () => {
+      const treeDom = tree(
+        treeElement("input", [attribute("value", "my_value")]),
+      );
+
+      const result = Renderer.renderTree(treeDom);
+
+      const inputVnode = result.children[0].children[0];
+
+      assert.isUndefined(inputVnode.data.attrs.value);
+
+      assert.isUndefined(
+        inputVnode.data.attrs["data-hologram-form-input-value"],
+      );
+
+      assert.strictEqual(typeof inputVnode.data.hook.create, "function");
+      assert.strictEqual(typeof inputVnode.data.hook.update, "function");
+    });
+  });
+
   describe("toBitstring()", () => {
     const toBitstring = Renderer.toBitstring;
 
