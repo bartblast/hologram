@@ -251,6 +251,10 @@ defmodule Hologram.Sync.EvaluatorTest do
       # Still there, which is what makes the next line worth asserting.
       assert ResultStore.versions(@window_id) == [1]
 
+      # No wait for the registry to drop the killed one's entry: registering a name whose owner is
+      # dead takes it over rather than being refused, which is the same thing that lets a
+      # supervisor restart any via-named child at all. Only LOOKUP sees the stale entry.
+      #
       # The killed one is temporary, so the supervisor has already dropped it and its id is free.
       start_evaluator!([])
 
