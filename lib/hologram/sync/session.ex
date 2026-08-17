@@ -56,18 +56,22 @@ defmodule Hologram.Sync.Session do
 
   @impl GenServer
   def init(opts) do
+    # Read once and asked about once: whether this client is resuming IS whether it arrived with a
+    # gap, and two reads of the same option are two chances for them to say different things.
+    gap = Keyword.get(opts, :gap)
+
     state = %{
       actor_user_id: Keyword.get(opts, :actor_user_id),
       announced: MapSet.new(),
       client: Keyword.fetch!(opts, :client),
       fill_place: Keyword.get(opts, :fill_place),
-      gap: Keyword.get(opts, :gap),
+      gap: gap,
       held: %{},
       page: Keyword.fetch!(opts, :page),
       page_windows: MapSet.new(),
       pending: MapSet.new(),
       places: %{},
-      resuming: Keyword.get(opts, :gap) != nil,
+      resuming: gap != nil,
       touched: %{},
       types: %{}
     }

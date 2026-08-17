@@ -745,12 +745,17 @@ defmodule Hologram.Realtime.SSE do
 
     case outcome do
       {:sync, page, cursor} ->
+        # Named rather than written inline as `resume? && gap(cursor)`: that answers FALSE when it
+        # does not resume, and a session reads "no gap" from nil alone - anything else and it sets
+        # about replaying something it cannot walk.
+        gap = if resume?, do: gap(cursor)
+
         {:ok, session} =
           SyncSession.start_link(
             actor_user_id: user_id,
             client: self(),
             fill_place: {Outbox.current_xmin(), 0},
-            gap: resume? && gap(cursor),
+            gap: gap,
             page: page
           )
 
