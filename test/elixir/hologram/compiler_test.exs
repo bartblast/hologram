@@ -19,6 +19,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Sync.Frame
 
   alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
+  alias Hologram.Test.Fixtures.Component.Module16, as: ComponentModule16
+  alias Hologram.Test.Fixtures.Component.Module24, as: ComponentModule24
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
@@ -53,7 +55,11 @@ defmodule Hologram.CompilerTest do
   @erlang_js_dir Path.join(@js_dir, "erlang")
 
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
-  @empty_sync_constants %{entity_types: MapSet.new(), ordered_string_pairs: MapSet.new()}
+  @empty_sync_constants %{
+    entity_types: MapSet.new(),
+    ordered_string_pairs: MapSet.new(),
+    prop_params: %{}
+  }
   @tmp_dir Reflection.tmp_dir()
 
   defp setup_js_deps_test(test_subdir) do
@@ -416,6 +422,20 @@ defmodule Hologram.CompilerTest do
       refute MapSet.member?(sync_constants.entity_types, Entity12)
     end
 
+    test "collects the argument names of the parameterized captures those components declare", %{
+      sync_constants: sync_constants
+    } do
+      assert sync_constants.prop_params[ComponentModule24] == [entities: [:min_b]]
+    end
+
+    # A zero-arity capture binds nothing, so there is nothing to name - the client reads its
+    # absence the same way it reads an empty list.
+    test "leaves out a component declaring no parameterized capture", %{
+      sync_constants: sync_constants
+    } do
+      refute Map.has_key?(sync_constants.prop_params, ComponentModule16)
+    end
+
     # The pairs come from a fixture page reaching a query that orders a :string attribute - what
     # is asserted is the wiring from reachable queries to the pair set, not the derivation rules,
     # which the registry's own suite pins.
@@ -753,6 +773,25 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/orderedStringPairs: [["Hologram.Test.Fixtures.Entity.Module15","token"],/ <>
                  ~s/["Hologram.Test.Fixtures.Entity.Module2","c"]]/
+             )
+    end
+
+    # A capture travels in the bundle and is called there, but an encoded function carries no
+    # argument names - and those names are what each argument binds by.
+    test "injects the argument names each query prop binds by", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      prop_params = %{ComponentModule24 => [entities: [:min_b, :max_b]]}
+      sync_constants = %{@empty_sync_constants | prop_params: prop_params}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      # The names are written in argument order, not sorted: they are read positionally, so the
+      # order IS the mapping from a prop to the argument it is passed as.
+      assert String.contains?(
+               js,
+               ~s/propParams: {"Hologram.Test.Fixtures.Component.Module24":{"entities":["min_b","max_b"]}}/
              )
     end
 

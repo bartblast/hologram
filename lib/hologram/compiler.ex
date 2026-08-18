@@ -332,7 +332,11 @@ defmodule Hologram.Compiler do
           PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
-          %{entity_types: MapSet.t(module), ordered_string_pairs: MapSet.t({module, atom})},
+          %{
+            entity_types: MapSet.t(module),
+            ordered_string_pairs: MapSet.t({module, atom}),
+            prop_params: %{module => keyword(list(atom))}
+          },
           T.file_path()
         ) :: String.t()
   def build_runtime_js(
@@ -538,7 +542,11 @@ defmodule Hologram.Compiler do
           PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
-          %{entity_types: MapSet.t(module), ordered_string_pairs: MapSet.t({module, atom})},
+          %{
+            entity_types: MapSet.t(module),
+            ordered_string_pairs: MapSet.t({module, atom}),
+            prop_params: %{module => keyword(list(atom))}
+          },
           T.opts()
         ) :: T.file_path()
   def create_runtime_entry_file(
@@ -722,24 +730,39 @@ defmodule Hologram.Compiler do
   `:ordered_string_pairs` are the {entity type, attribute name} pairs those queries order by on
   :string attributes - the pairs whose sort-key companions the client computes at ingest,
   derived from the same registered queries the server derives its companion columns from.
+
+  `:prop_params` are the ordered argument names of every parameterized from_query capture those
+  components declare, keyed by component and prop. A capture travels in the bundle and is called
+  there, but the names its arguments were written with do not survive encoding - and those names
+  are what each argument binds by.
   """
   @spec build_sync_constants(list(module), CallGraph.t()) :: %{
           entity_types: MapSet.t(module),
-          ordered_string_pairs: MapSet.t({module, atom})
+          ordered_string_pairs: MapSet.t({module, atom}),
+          prop_params: %{module => keyword(list(atom))}
         }
   def build_sync_constants(page_modules, call_graph) do
     graph = CallGraph.get_graph(call_graph)
     templatables = page_modules ++ Reflection.list_components()
     analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
 
-    terms = Enum.flat_map(page_modules, &page_query_terms(&1, call_graph, analysis))
+    component_modules =
+      page_modules
+      |> Enum.flat_map(&page_component_modules(&1, call_graph, analysis))
+      |> Enum.uniq()
+
+    terms = Enum.flat_map(component_modules, &QueryExtractor.extract_module_queries/1)
 
     entity_types =
       Enum.reduce(terms, MapSet.new(), fn term, types ->
         MapSet.union(types, Registry.entity_types(term))
       end)
 
-    %{entity_types: entity_types, ordered_string_pairs: Registry.ordered_string_pairs(terms)}
+    %{
+      entity_types: entity_types,
+      ordered_string_pairs: Registry.ordered_string_pairs(terms),
+      prop_params: prop_params(component_modules)
+    }
   end
 
   @doc """
@@ -962,6 +985,15 @@ defmodule Hologram.Compiler do
     |> Enum.flat_map(&QueryExtractor.extract_module_queries/1)
   end
 
+  # A component declaring no parameterized capture is left out rather than carried as an empty
+  # entry - the client reads a missing entry the same way, as nothing to bind.
+  defp prop_params(component_modules) do
+    component_modules
+    |> Enum.map(&{&1, QueryExtractor.extract_prop_params(&1)})
+    |> Enum.reject(fn {_module, params} -> params == [] end)
+    |> Map.new()
+  end
+
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
   defp page_window_ids(page_module, call_graph, analysis) do
@@ -1106,6 +1138,25 @@ defmodule Hologram.Compiler do
     |> Jason.encode!()
   end
 
+  # What each argument of a parameterized builder binds by: its authored name. The capture itself
+  # travels in the bundle and is called there, but an encoded function carries no argument names -
+  # so the names ride here, in the order the arguments are passed in.
+  defp render_prop_params(prop_params) do
+    prop_params
+    |> Enum.map(fn {module, params} ->
+      {Codec.encode_enum_value(module), render_module_prop_params(params)}
+    end)
+    |> render_json_object()
+  end
+
+  defp render_module_prop_params(params) do
+    params
+    |> Enum.map(fn {prop_name, param_names} ->
+      {Atom.to_string(prop_name), Jason.encode!(param_names)}
+    end)
+    |> render_json_object()
+  end
+
   # What the bundle was built against, said by the bundle itself. It has to be baked in rather
   # than handed over at page render: the check these answer is whether a client's JAVASCRIPT is
   # stale, and a value the current server puts in the page would always agree with the current
@@ -1121,8 +1172,9 @@ defmodule Hologram.Compiler do
     else
       model = render_entity_model(sync_constants.entity_types)
       pairs = render_ordered_string_pairs(sync_constants.ordered_string_pairs)
+      params = render_prop_params(sync_constants.prop_params)
 
-      ~s/globalThis.Hologram.sync = {model: #{model}, modelHash: "#{Model.hash()}", orderedStringPairs: #{pairs}, protocolVersion: #{Frame.protocol_version()}};/
+      ~s/globalThis.Hologram.sync = {model: #{model}, modelHash: "#{Model.hash()}", orderedStringPairs: #{pairs}, propParams: #{params}, protocolVersion: #{Frame.protocol_version()}};/
     end
   end
 
