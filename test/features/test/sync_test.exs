@@ -126,7 +126,7 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas_carrying(connect(), ~s["title":"seeded_before_connect"])
 
-    assert data =~ ~s["op":"put_entity"]
+    assert data =~ ~s["put_entity":]
   end
 
   feature "says the store is complete for the page and then for the app", %{session: _session} do
@@ -151,7 +151,30 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas_carrying(client, ~s["title":"after_patch"])
 
-    assert data =~ ~s["op":"patch_entity"]
+    assert data =~ ~s["patch_entity":]
+  end
+
+  # The defect this spec pins: membership must cover the window's whole REACH, so a row no window
+  # roots - the folder is reachable only through the document window's include - still receives
+  # its own patches. Rooted-everywhere fixtures kept the hole green for a whole step.
+  feature "patches a row reached only through an include", %{session: _session} do
+    folder =
+      Folder
+      |> Entity.new(name: "folder_before_patch", public: true)
+      |> create()
+
+    Document
+    |> Entity.new(folder_id: folder.id, public: true, title: "reaches_the_folder")
+    |> create()
+
+    client = drain_initial_sync(connect())
+
+    update(Folder, folder.id, %{name: "folder_after_patch"})
+
+    {data, _client} = await_deltas_carrying(client, ~s["name":"folder_after_patch"])
+
+    assert data =~ ~s[patch_entity":{"HologramFeatureTests.Entities.Folder":]
+    assert data =~ ~s["id":"#{folder.id}"]
   end
 
   feature "delivers a row created while the client watches, whole", %{session: _session} do
@@ -163,7 +186,7 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas_carrying(client, ~s["title":"created_while_watching"])
 
-    assert data =~ ~s["op":"put_entity"]
+    assert data =~ ~s["put_entity":]
   end
 
   feature "tells the client a deleted row is no longer its to hold", %{session: _session} do
@@ -176,9 +199,10 @@ defmodule HologramFeatureTests.SyncTest do
 
     delete(Document, document.id)
 
-    {data, _client} = await_deltas_carrying(client, ~s["op":"unsync_entity"])
+    {data, _client} = await_deltas_carrying(client, ~s["unsync_entity":])
 
-    assert data =~ ~s["id":"#{document.id}"]
+    # An unsync travels as the bare id in its type's list, so the id alone is the whole delta.
+    assert data =~ document.id
   end
 
   feature "keeps a server-only value out of the frame its row travels in", %{session: _session} do
@@ -245,7 +269,7 @@ defmodule HologramFeatureTests.SyncTest do
     {data, _refilled_client} =
       await_deltas_carrying(resyncing_client, ~s["title":"sent_again_after_resync"])
 
-    assert data =~ ~s["op":"put_entity"]
+    assert data =~ ~s["put_entity":]
   end
 
   feature "sends an anonymous client the rows anyone may read, and no others", %{
