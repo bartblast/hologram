@@ -24,7 +24,7 @@ defmodule HologramFeatureTests.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
-       ref: "008f15eefb5f0494f233d335dc4f4d229fb63376"},
+       ref: "79738eaa660a439a49aa6cfa1e7f81ef6e9b3d12"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"},
       {:plug_cowboy, "~> 2.0"},
@@ -63,9 +63,10 @@ defmodule HologramFeatureTests.MixProject do
       #
       # cowlib reaches the build only through the Wallaby test-server stack
       # (plug_cowboy -> cowboy -> cowlib), and no cowlib version is registered as patched
-      # for these two, so even 2.19.0 with its cow_http_struct_hd hardening is still
-      # flagged. The MEDIUM one is mitigated by cowboy's CR/LF header validation.
-      hex: [ignore_advisories: ["EEF-CVE-2026-43966", "EEF-CVE-2026-43969"]],
+      # for these three, so even 2.19.0 with its cow_http_struct_hd hardening is still
+      # flagged. Response splitting is mitigated by cowboy's CR/LF header validation, and
+      # nothing in the stack calls the affected cow_link:link/1.
+      hex: [ignore_advisories: ["EEF-CVE-2026-43966", "EEF-CVE-2026-43969", "EEF-CVE-2026-43971"]],
       listeners: [Phoenix.CodeReloader],
       start_permanent: Mix.env() == :prod,
       version: "0.1.0"
