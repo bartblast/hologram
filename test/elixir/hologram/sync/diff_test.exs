@@ -202,7 +202,8 @@ defmodule Hologram.Sync.DiffTest do
                  entity_id: source.id,
                  op: :add_relationship,
                  relationship: "a",
-                 target_id: target.id
+                 target_id: target.id,
+                 type: Module3
                }
              ]
     end

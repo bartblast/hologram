@@ -24,17 +24,19 @@ defmodule Hologram.Sync.Frame do
   edge as the pair it joined or parted.
 
   The entity type is the window's own, which is what names the type of a row that is no longer
-  there to be asked - a row that arrived carries its type with it.
+  there to be asked - a row that arrived carries its type with it, and an edge the type of the
+  row the relationship lives on.
   """
   @spec deltas(map, module) :: list(map)
   def deltas(news, entity_type) do
-    window_type = Codec.encode_enum_value(entity_type)
-
+    # TODO: held sets remember bare ids, so a vanished reach member is named by the window's ROOT
+    # type even when it is of another - the held bookkeeping must carry each id's type before
+    # unsync can name every row truly.
     Enum.concat([
       Enum.map(news.appeared, &put_entity/1),
       Enum.map(news.patched, fn {row, patch} -> patch_entity(row, patch) end),
       Enum.map(news.unsynced, &unsync_entity(&1, entity_type)),
-      Enum.map(news.edges, &relationship(&1, window_type))
+      Enum.map(news.edges, &relationship/1)
     ])
   end
 
@@ -49,12 +51,19 @@ defmodule Hologram.Sync.Frame do
   read from the rows as they stand, so a frame's deltas are always of one model - a delta carrying
   values written under an older one is a thing only stored values could produce, and none are
   sent.
+
+  The deltas travel grouped op -> type, with the payload alone as the delta: a whole row for a
+  put (its id is one of its attributes), the changed attributes plus the id for a patch or an
+  edge, and the bare id for an unsync. The op and type are spelled once per group rather than
+  once per delta - constants amortize to nothing on the payload an app-wide fill is mostly made
+  of. Grouping loses no ordering, because a frame's deltas are statements about one snapshot: no
+  row gets two conflicting ones, and they may be applied in any order.
   """
   @spec encode_deltas_envelope(integer, String.t() | nil, list(map)) :: String.t()
   def encode_deltas_envelope(id, cursor, deltas) do
     payload = %{
       cursor: cursor,
-      deltas: deltas,
+      deltas: group(deltas),
       model_hash: Model.hash(),
       protocol_version: @protocol_version
     }
@@ -138,6 +147,18 @@ defmodule Hologram.Sync.Frame do
     %{id: id, op: :unsync_entity, type: Codec.encode_enum_value(entity_type)}
   end
 
+  defp group(deltas) do
+    deltas
+    |> Enum.group_by(& &1.op)
+    |> Map.new(fn {op, grouped} -> {op, group_by_type(op, grouped)} end)
+  end
+
+  defp group_by_type(op, deltas) do
+    deltas
+    |> Enum.group_by(& &1.type)
+    |> Map.new(fn {type, grouped} -> {type, Enum.map(grouped, &payload(op, &1))} end)
+  end
+
   # The row comes along for its type as much as its id: a bag of changed attributes cannot say
   # what it belongs to, and without that the values cannot be written the way the wire wants them.
   defp patch_entity(row, patch) do
@@ -149,10 +170,16 @@ defmodule Hologram.Sync.Frame do
     }
   end
 
-  defp relationship(edge, window_type) do
+  defp payload(:put_entity, delta), do: delta.data
+
+  defp payload(:unsync_entity, delta), do: delta.id
+
+  defp payload(_op_carrying_id_beside_data, delta), do: Map.put(delta.data, :id, delta.id)
+
+  defp relationship(edge) do
     data = %{relationship: edge.relationship, target_id: edge.target_id}
 
-    %{data: data, id: edge.entity_id, op: edge.op, type: window_type}
+    %{data: data, id: edge.entity_id, op: edge.op, type: Codec.encode_enum_value(edge.type)}
   end
 
   defp type_of(row) do

@@ -31,7 +31,8 @@ defmodule Hologram.Sync.Diff do
   Edges of to-many relationships are reported the way values are: the effects name which edge to
   look at, and whether it is there now is read from the round. An edge is only reported for a row
   the client can see, and only for a relationship the window embeds - a window that never carried
-  those edges has nothing to say about them.
+  those edges has nothing to say about them. Each carries the type of the row the relationship
+  lives on, which is what names it on the wire.
 
   Vanishing is reported per window. Whether the client is told to drop the row depends on the
   rest of what it holds, which only the session knows.
@@ -105,7 +106,15 @@ defmodule Hologram.Sync.Diff do
          targets when is_list(targets) <- embedded(row, name) do
       op = edge_op(targets, target_id)
 
-      [%{entity_id: event.entity_id, op: op, relationship: name, target_id: target_id}]
+      [
+        %{
+          entity_id: event.entity_id,
+          op: op,
+          relationship: name,
+          target_id: target_id,
+          type: row.__struct__
+        }
+      ]
     else
       _no_edge_to_report -> []
     end

@@ -8,6 +8,7 @@ defmodule Hologram.Sync.FrameTest do
   alias Hologram.Sync.WireData
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module3
 
   @cursor "g8uxAAAAZQ"
 
@@ -60,7 +61,7 @@ defmodule Hologram.Sync.FrameTest do
              ]
     end
 
-    test "sends an edge as the pair it joined" do
+    test "sends an edge as the pair it joined, under the type the edge itself names" do
       source_id = Entity.generate_id()
       target_id = Entity.generate_id()
 
@@ -68,7 +69,8 @@ defmodule Hologram.Sync.FrameTest do
         entity_id: source_id,
         op: :add_relationship,
         relationship: "a",
-        target_id: target_id
+        target_id: target_id,
+        type: Module3
       }
 
       assert deltas(news(%{edges: [edge]}), Module2) == [
@@ -76,7 +78,7 @@ defmodule Hologram.Sync.FrameTest do
                  data: %{relationship: "a", target_id: target_id},
                  id: source_id,
                  op: :add_relationship,
-                 type: "Hologram.Test.Fixtures.Entity.Module2"
+                 type: "Hologram.Test.Fixtures.Entity.Module3"
                }
              ]
     end
@@ -86,7 +88,8 @@ defmodule Hologram.Sync.FrameTest do
         entity_id: Entity.generate_id(),
         op: :del_relationship,
         relationship: "a",
-        target_id: Entity.generate_id()
+        target_id: Entity.generate_id(),
+        type: Module2
       }
 
       assert [%{op: :del_relationship}] = deltas(news(%{edges: [edge]}), Module2)
@@ -105,21 +108,93 @@ defmodule Hologram.Sync.FrameTest do
   end
 
   describe "encode_deltas_envelope/3" do
+    defp decoded_deltas(envelope) do
+      "event: sync_deltas\nid: 42\ndata: " <> json = String.trim_trailing(envelope, "\n")
+
+      Jason.decode!(json)["deltas"]
+    end
+
     test "wraps the deltas in a sync_deltas SSE event envelope" do
       row = Entity.new(Module2, a: true, c: "first")
-      deltas = [put_entity(row)]
 
       payload = %{
         cursor: @cursor,
-        deltas: deltas,
+        deltas: %{put_entity: %{"Hologram.Test.Fixtures.Entity.Module2" => [WireData.row(row)]}},
         model_hash: Model.hash(),
         protocol_version: 1
       }
 
       encoded = Jason.encode!(payload)
 
-      assert encode_deltas_envelope(42, @cursor, deltas) ==
+      assert encode_deltas_envelope(42, @cursor, [put_entity(row)]) ==
                "event: sync_deltas\nid: 42\ndata: #{encoded}\n\n"
+    end
+
+    # The op and the type are spelled once per group, and the row object alone is the delta - on
+    # a fill, where a parent arrives with its include-reached children, every row travels exactly
+    # once, flat, under its own type, with the to-many fact as the id list on the parent.
+    test "groups an appearing parent and child by op and their own types" do
+      child = Entity.new(Module2, a: true, c: "child")
+
+      parent = Entity.new(Module3, c_id: Entity.generate_id())
+      embedded_parent = %{parent | a: [child]}
+
+      news = news(%{appeared: [embedded_parent, child]})
+      envelope = encode_deltas_envelope(42, @cursor, deltas(news, Module3))
+
+      assert decoded_deltas(envelope) == %{
+               "put_entity" => %{
+                 "Hologram.Test.Fixtures.Entity.Module3" => [
+                   %{
+                     "a" => [child.id],
+                     "b_id" => nil,
+                     "c_id" => parent.c_id,
+                     "created_at" => nil,
+                     "id" => parent.id,
+                     "updated_at" => nil
+                   }
+                 ],
+                 "Hologram.Test.Fixtures.Entity.Module2" => [
+                   %{
+                     "a" => true,
+                     "b" => nil,
+                     "c" => "child",
+                     "created_at" => nil,
+                     "id" => child.id,
+                     "updated_at" => nil
+                   }
+                 ]
+               }
+             }
+    end
+
+    test "groups every op of a mixed round, ids alone for the rows that left" do
+      row = Entity.new(Module2, a: true, c: "after")
+      gone_id = Entity.generate_id()
+      target_id = Entity.generate_id()
+
+      edge = %{
+        entity_id: row.id,
+        op: :add_relationship,
+        relationship: "a",
+        target_id: target_id,
+        type: Module3
+      }
+
+      news = news(%{edges: [edge], patched: [{row, %{c: "after"}}], unsynced: [gone_id]})
+      envelope = encode_deltas_envelope(42, @cursor, deltas(news, Module2))
+
+      assert decoded_deltas(envelope) == %{
+               "patch_entity" => %{
+                 "Hologram.Test.Fixtures.Entity.Module2" => [%{"c" => "after", "id" => row.id}]
+               },
+               "add_relationship" => %{
+                 "Hologram.Test.Fixtures.Entity.Module3" => [
+                   %{"id" => row.id, "relationship" => "a", "target_id" => target_id}
+                 ]
+               },
+               "unsync_entity" => %{"Hologram.Test.Fixtures.Entity.Module2" => [gone_id]}
+             }
     end
 
     test "stamps the model the values were read under" do
