@@ -349,6 +349,11 @@ export default class Hologram {
     const eventParam = eventImpl.buildOperationParam(event);
     const eventTarget = event.target;
 
+    // The dispatch below can run later than the event that caused it - a debounce or a throttle
+    // holds it, and a navigation can start in between - so the page the user acted on is recorded
+    // now, while it is still the page on screen.
+    const epoch = $.domEpoch;
+
     return () => {
       const operation = Operation.fromSpecDom(
         operationSpecDom,
@@ -374,10 +379,12 @@ export default class Hologram {
               Type.integer(0),
             );
 
+            // Settling directly keeps an undelayed dispatch synchronous on a stable page, which
+            // is what lets a raising action reach the "error" event the feature tests read.
             if (delay.value === 0n) {
-              return Hologram.executeAction(operation);
+              return Hologram.#settleAction(operation, epoch);
             } else {
-              return Hologram.scheduleAction(operation);
+              return Hologram.scheduleAction(operation, epoch);
             }
           }
         }

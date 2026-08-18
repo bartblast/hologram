@@ -720,6 +720,94 @@ describe("Hologram", () => {
       sinon.assert.notCalled(scheduleActionStub);
     });
 
+    // The window a forward navigation opens: the destination's markup is on screen and clickable
+    // while the registry still answers for the page being left, so the click waits for the mount
+    // rather than resolving against a page that never carried the button.
+    it("holds a click that lands while the destination is still mounting", () => {
+      const warnStub = sinon.stub(console, "warn");
+
+      try {
+        Hologram.domEpoch = 1;
+
+        const dispatch = Hologram.handleUiEvent(
+          notIgnoredEvent,
+          eventType,
+          actionSpecDom,
+          defaultTarget,
+        );
+
+        dispatch();
+
+        sinon.assert.notCalled(executeActionStub);
+        sinon.assert.notCalled(scheduleActionStub);
+
+        // A held click and a dropped one both leave executeAction uncalled. The absence of the
+        // warning is what says this one is waiting for its page.
+        sinon.assert.notCalled(warnStub);
+      } finally {
+        Hologram.domEpoch = 0;
+        warnStub.restore();
+      }
+    });
+
+    // The mirror window, opened by a history restoration: the registry has moved on to the page
+    // being restored while the page the user clicked is still on screen, so the click is aimed at
+    // a page that has been left and nothing can answer for it.
+    it("drops a click from a page a restore has moved past", () => {
+      const warnStub = sinon.stub(console, "warn");
+
+      try {
+        Hologram.registryEpoch = 1;
+
+        const dispatch = Hologram.handleUiEvent(
+          notIgnoredEvent,
+          eventType,
+          actionSpecDom,
+          defaultTarget,
+        );
+
+        dispatch();
+
+        sinon.assert.notCalled(executeActionStub);
+        sinon.assert.notCalled(scheduleActionStub);
+        sinon.assert.calledOnce(warnStub);
+      } finally {
+        Hologram.registryEpoch = 0;
+        warnStub.restore();
+      }
+    });
+
+    // The whole reason the stamp is read when the event fires rather than when the dispatch runs:
+    // a debounce or a throttle can hold a dispatch across a navigation, and it still belongs to
+    // the page the user was looking at. Reading the epoch late would silently re-home it to
+    // whatever page is on screen by then.
+    it("stamps a deferred dispatch with the page the event happened on", () => {
+      const warnStub = sinon.stub(console, "warn");
+
+      try {
+        const dispatch = Hologram.handleUiEvent(
+          notIgnoredEvent,
+          eventType,
+          actionSpecDom,
+          defaultTarget,
+        );
+
+        // A navigation between the event and the dispatch it was held back from.
+        Hologram.domEpoch = 1;
+
+        dispatch();
+
+        // Dropped, because it belongs to the page that has been left. Read late, the stamp would
+        // have matched the destination and this would have been held for its mount instead.
+        sinon.assert.notCalled(executeActionStub);
+        sinon.assert.notCalled(scheduleActionStub);
+        sinon.assert.calledOnce(warnStub);
+      } finally {
+        Hologram.domEpoch = 0;
+        warnStub.restore();
+      }
+    });
+
     it("regular action with delay", () => {
       const delayedActionSpecDom = Type.keywordList([
         [
@@ -770,7 +858,14 @@ describe("Hologram", () => {
         delay: Type.integer(500),
       });
 
-      sinon.assert.calledOnceWithExactly(scheduleActionStub, expectedAction);
+      // The epoch is the page the user acted on, recorded when the event fired rather than when
+      // the delay elapses.
+      sinon.assert.calledOnceWithExactly(
+        scheduleActionStub,
+        expectedAction,
+        Hologram.domEpoch,
+      );
+
       sinon.assert.notCalled(executeActionStub);
     });
 
