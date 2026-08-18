@@ -427,10 +427,24 @@ defmodule Hologram.Query.InterpreterTest do
       assert titles(agreed(query, actor_user_id: second.id)) == ["second"]
     end
 
+    test "matches everything but who is asking", %{first: first} do
+      query = filter(Module2, id: {:!=, {:actor}})
+
+      assert titles(agreed(query, actor_user_id: first.id)) == ["second"]
+    end
+
     # There is nobody to compare against, so nothing answers - the same silence the database
     # gives a statement asking about an actor that is not there.
     test "matches nothing for a visitor" do
       query = filter(Module2, id: {:actor})
+
+      assert agreed(query, actor_user_id: nil) == []
+    end
+
+    # The negated form is where that silence has to be deliberate: nobody is UNEQUAL to every
+    # row, so a predicate left to compare against nothing would answer with everything.
+    test "matches nothing for a visitor, whichever way the predicate points" do
+      query = filter(Module2, id: {:!=, {:actor}})
 
       assert agreed(query, actor_user_id: nil) == []
     end
