@@ -7,6 +7,7 @@ import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
 import Debouncer from "./debouncer.mjs";
+import Deltas from "./deltas.mjs";
 import Deserializer from "./deserializer.mjs";
 import ERTS from "./erts.mjs";
 import EventListenerRegistry from "./event_listener_registry.mjs";
@@ -18,6 +19,7 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import JsInterop from "./js_interop.mjs";
+import LocalDatabase from "./local_database.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
@@ -1144,6 +1146,18 @@ export default class Hologram {
     Hologram.#pageParams = mountData.pageParams;
 
     ComponentRegistry.populate(mountData.componentRegistry);
+
+    // Before the first render, so that a prop reading a query answers from the database rather
+    // than from nothing - the rows the server read to render this page are the rows those
+    // queries need, and they go in through the same ingest the stream uses. Every page visit
+    // seeds again, which is how navigation needs no server for what it already has.
+    //
+    // A bundle built before any of this existed carries neither field, and a build with no data
+    // model carries an empty seed - both leave the database as it was.
+    if (mountData.syncSeed) {
+      LocalDatabase.actorUserId = mountData.actorUserId;
+      Deltas.apply(mountData.syncSeed, {seed: true});
+    }
 
     return mountData;
   }

@@ -226,13 +226,42 @@ describe("LocalDatabase", () => {
     });
   });
 
+  describe("seededEntries()", () => {
+    it("returns the rows marked as arrived with a page", () => {
+      LocalDatabase.markSeeded("MyApp.Task", "t1");
+      LocalDatabase.markSeeded("MyApp.Project", "p1");
+
+      assert.sameDeepMembers(LocalDatabase.seededEntries(), [
+        ["MyApp.Task", "t1"],
+        ["MyApp.Project", "p1"],
+      ]);
+    });
+
+    it("returns nothing once a row is unmarked", () => {
+      LocalDatabase.markSeeded("MyApp.Task", "t1");
+      LocalDatabase.unmarkSeeded("MyApp.Task", "t1");
+
+      assert.deepEqual(LocalDatabase.seededEntries(), []);
+    });
+
+    it("marks a row of one type without marking the same id of another", () => {
+      LocalDatabase.markSeeded("MyApp.Task", "t1");
+      LocalDatabase.unmarkSeeded("MyApp.Project", "t1");
+
+      assert.deepEqual(LocalDatabase.seededEntries(), [["MyApp.Task", "t1"]]);
+    });
+  });
+
   describe("reset()", () => {
-    it("drops the rows, the facts and the scope marks", () => {
+    it("drops the rows, the facts, the scope marks and what a page seeded", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
       LocalDatabase.addFact("MyApp.Project", "tasks", "p1", "t1");
+      LocalDatabase.markSeeded("MyApp.Task", "t1");
       LocalDatabase.markSynced("page");
 
       LocalDatabase.reset();
+
+      assert.deepEqual(LocalDatabase.seededEntries(), []);
 
       assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
 

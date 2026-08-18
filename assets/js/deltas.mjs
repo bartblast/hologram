@@ -14,17 +14,25 @@ import SortKey from "./sort_key.mjs";
 // one means putting its attributes in its type's table and its target ids in the relationship
 // facts, with nothing left nested.
 export default class Deltas {
-  static apply(deltas) {
+  // `seed` marks what arrived with the page rather than from the stream, which changes two
+  // things and nothing else: a row already held is left alone, and one that is filed is
+  // remembered as unconfirmed until the stream delivers it.
+  //
+  // Left alone because a seed can be OLDER than what the client holds - a page rendered at one
+  // moment lands after the stream delivered a later change to the same row - and overwriting
+  // would put back a value nothing will correct, since the server sees nothing new to send. It
+  // loses nothing: every change to a row the client already has arrives on the stream, in order.
+  static apply(deltas, opts = {}) {
     for (const [op, byType] of Object.entries(deltas)) {
       for (const [type, items] of Object.entries(byType)) {
         for (const item of items) {
-          Deltas.#applyOne(op, type, item);
+          Deltas.#applyOne(op, type, item, opts);
         }
       }
     }
   }
 
-  static #applyOne(op, type, item) {
+  static #applyOne(op, type, item, opts) {
     switch (op) {
       case "add_relationship":
         LocalDatabase.addFact(type, item.relationship, item.id, item.target_id);
@@ -52,7 +60,7 @@ export default class Deltas {
         break;
 
       case "put_entity":
-        Deltas.#putRow(type, item);
+        Deltas.#putRow(type, item, opts);
         break;
 
       default:
@@ -74,8 +82,23 @@ export default class Deltas {
     Deltas.#fileRow(type, Object.assign({}, held, changes));
   }
 
-  static #putRow(type, row) {
+  static #putRow(type, row, opts) {
+    if (opts.seed) {
+      if (LocalDatabase.getRow(type, row.id) !== null) {
+        return;
+      }
+
+      Deltas.#fileRow(type, row);
+      LocalDatabase.markSeeded(type, row.id);
+
+      return;
+    }
+
     Deltas.#fileRow(type, row);
+
+    // The stream has delivered it, so it is no longer a row the client only has because a page
+    // said so - and no longer one the completeness marker should take away.
+    LocalDatabase.unmarkSeeded(type, row.id);
   }
 
   static #fileRow(type, row) {
