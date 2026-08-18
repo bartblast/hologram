@@ -23,19 +23,17 @@ defmodule Hologram.Sync.Frame do
   that changed travels as the attributes that moved. A row that left travels as its id, and an
   edge as the pair it joined or parted.
 
-  The entity type is the window's own, which is what names the type of a row that is no longer
-  there to be asked - a row that arrived carries its type with it, and an edge the type of the
-  row the relationship lives on.
+  Every delta names its own type: an arrived row carries it, an edge carries the type of the row
+  the relationship lives on, and a row that left arrives here as its id paired with the type it
+  was held under - a row no longer there to be asked is named by the bookkeeping that watched it
+  arrive.
   """
-  @spec deltas(map, module) :: list(map)
-  def deltas(news, entity_type) do
-    # TODO: held sets remember bare ids, so a vanished reach member is named by the window's ROOT
-    # type even when it is of another - the held bookkeeping must carry each id's type before
-    # unsync can name every row truly.
+  @spec deltas(map) :: list(map)
+  def deltas(news) do
     Enum.concat([
       Enum.map(news.appeared, &put_entity/1),
       Enum.map(news.patched, fn {row, patch} -> patch_entity(row, patch) end),
-      Enum.map(news.unsynced, &unsync_entity(&1, entity_type)),
+      Enum.map(news.unsynced, fn {id, entity_type} -> unsync_entity(id, entity_type) end),
       Enum.map(news.edges, &relationship/1)
     ])
   end

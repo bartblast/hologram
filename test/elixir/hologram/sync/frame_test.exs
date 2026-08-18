@@ -12,7 +12,7 @@ defmodule Hologram.Sync.FrameTest do
 
   @cursor "g8uxAAAAZQ"
 
-  describe "deltas/2" do
+  describe "deltas/1" do
     defp news(overrides) do
       Map.merge(%{appeared: [], edges: [], patched: [], unsynced: []}, overrides)
     end
@@ -20,7 +20,7 @@ defmodule Hologram.Sync.FrameTest do
     test "sends a row that appeared whole" do
       row = Entity.new(Module2, a: true, c: "first")
 
-      assert deltas(news(%{appeared: [row]}), Module2) == [
+      assert deltas(news(%{appeared: [row]})) == [
                %{
                  data: WireData.row(row),
                  id: row.id,
@@ -33,7 +33,7 @@ defmodule Hologram.Sync.FrameTest do
     test "sends a row that changed as the attributes that moved" do
       row = Entity.new(Module2, a: true, c: "after")
 
-      assert deltas(news(%{patched: [{row, %{c: "after"}}]}), Module2) == [
+      assert deltas(news(%{patched: [{row, %{c: "after"}}]})) == [
                %{
                  data: %{c: "after"},
                  id: row.id,
@@ -49,14 +49,14 @@ defmodule Hologram.Sync.FrameTest do
       row = Entity.new(Module2, a: true, c: "after")
       moved = %{c: "after", updated_at: ~U[2026-08-16 16:20:00.000000Z]}
 
-      assert [%{data: data}] = deltas(news(%{patched: [{row, moved}]}), Module2)
+      assert [%{data: data}] = deltas(news(%{patched: [{row, moved}]}))
       assert data == %{c: "after", updated_at: "2026-08-16T16:20:00.000000Z"}
     end
 
-    test "sends a row that left as its id, under the window's type" do
+    test "sends a row that left as its id, under the type it was held under" do
       id = Entity.generate_id()
 
-      assert deltas(news(%{unsynced: [id]}), Module2) == [
+      assert deltas(news(%{unsynced: [{id, Module2}]})) == [
                %{id: id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Entity.Module2"}
              ]
     end
@@ -73,7 +73,7 @@ defmodule Hologram.Sync.FrameTest do
         type: Module3
       }
 
-      assert deltas(news(%{edges: [edge]}), Module2) == [
+      assert deltas(news(%{edges: [edge]})) == [
                %{
                  data: %{relationship: "a", target_id: target_id},
                  id: source_id,
@@ -92,18 +92,18 @@ defmodule Hologram.Sync.FrameTest do
         type: Module2
       }
 
-      assert [%{op: :del_relationship}] = deltas(news(%{edges: [edge]}), Module2)
+      assert [%{op: :del_relationship}] = deltas(news(%{edges: [edge]}))
     end
 
-    test "takes the type of an arrived row from the row rather than from the window" do
+    test "takes the type of an arrived row from the row itself" do
       row = Entity.new(Module14, email: "user@test.com")
 
       assert [%{type: "Hologram.Test.Fixtures.Entity.Module14"}] =
-               deltas(news(%{appeared: [row]}), Module2)
+               deltas(news(%{appeared: [row]}))
     end
 
     test "sends nothing for news holding nothing" do
-      assert deltas(news(%{}), Module2) == []
+      assert deltas(news(%{})) == []
     end
   end
 
@@ -140,7 +140,7 @@ defmodule Hologram.Sync.FrameTest do
       embedded_parent = %{parent | a: [child]}
 
       news = news(%{appeared: [embedded_parent, child]})
-      envelope = encode_deltas_envelope(42, @cursor, deltas(news, Module3))
+      envelope = encode_deltas_envelope(42, @cursor, deltas(news))
 
       assert decoded_deltas(envelope) == %{
                "put_entity" => %{
@@ -181,8 +181,10 @@ defmodule Hologram.Sync.FrameTest do
         type: Module3
       }
 
-      news = news(%{edges: [edge], patched: [{row, %{c: "after"}}], unsynced: [gone_id]})
-      envelope = encode_deltas_envelope(42, @cursor, deltas(news, Module2))
+      news =
+        news(%{edges: [edge], patched: [{row, %{c: "after"}}], unsynced: [{gone_id, Module2}]})
+
+      envelope = encode_deltas_envelope(42, @cursor, deltas(news))
 
       assert decoded_deltas(envelope) == %{
                "patch_entity" => %{
