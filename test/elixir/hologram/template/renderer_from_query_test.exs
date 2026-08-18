@@ -1,7 +1,7 @@
 defmodule Hologram.Template.RendererFromQueryTest do
   use Hologram.Test.DatabaseCase, async: false
 
-  import Hologram.DB.EntityOperations, only: [create: 1]
+  import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1]
   import Hologram.Template.Renderer
   import Hologram.Test.Stubs
   import Mox
@@ -15,10 +15,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Entity.ServerOnly
   alias Hologram.Server
   alias Hologram.Template.Renderer
+  alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
+  alias Hologram.Test.Fixtures.Template.Renderer.Module100
   alias Hologram.Test.Fixtures.Template.Renderer.Module89
   alias Hologram.Test.Fixtures.Template.Renderer.Module90
   alias Hologram.Test.Fixtures.Template.Renderer.Module91
@@ -26,6 +29,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module93
   alias Hologram.Test.Fixtures.Template.Renderer.Module95
   alias Hologram.Test.Fixtures.Template.Renderer.Module97
+  alias Hologram.Test.Fixtures.Template.Renderer.Module98
+  alias Hologram.Test.Fixtures.Template.Renderer.Module99
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -48,6 +53,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
   @env %Renderer.Env{}
 
+  @entity_2_type "Hologram.Test.Fixtures.Entity.Module2"
   @page_opts [csrf_token: "test-csrf-token", initial_page?: true, instance_id: "instance-1"]
   @server %Server{}
 
@@ -168,6 +174,108 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       assert String.contains?(html, "entities = 1")
       refute String.contains?(html, "entities = 1,2")
+    end
+  end
+
+  describe "the seed a page hands its client" do
+    setup do
+      setup_asset_path_registry(AssetPathRegistryStub)
+      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
+
+      setup_asset_manifest_cache(AssetManifestCacheStub)
+      setup_page_digest_registry(PageDigestRegistryStub)
+
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module99, :dummy_module_99_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module100, :dummy_module_100_digest)
+
+      stub(QueryCacheMock, :component_modules, fn -> [Module98, Module95] end)
+      QueryCache.init(nil)
+
+      :ok
+    end
+
+    # What the seed carries, apart from what the page around it renders - a template that prints
+    # the sentinel names a server-only attribute legitimately, and the question here is what the
+    # data layer was handed.
+    defp seed_json(html) do
+      [_full, json] = Regex.run(~r/syncSeed: (.+)$/m, html)
+
+      json
+    end
+
+    defp render_page_html(page_module, server_struct \\ %Server{}) do
+      {html, _tree, _component_registry, _final_server_struct} =
+        render_page(page_module, %{}, server_struct, @page_opts)
+
+      html
+    end
+
+    # The rows travel flat, each once, with the to-many naming the ids it holds - the shape a
+    # frame carries, read on the client by the same ingest.
+    test "carries the rows its props read, embedded rows among them" do
+      required =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      target =
+        Entity2
+        |> Entity.new(a: true, c: "the embedded row")
+        |> create()
+
+      source =
+        Module3
+        |> Entity.new(c_id: required.id)
+        |> create()
+
+      :ok = add_relationship(Module3, source.id, :a, target.id)
+
+      html = render_page_html(Module99)
+
+      assert String.contains?(html, ~s|syncSeed: {"put_entity":{|)
+      assert String.contains?(html, ~s|"#{@entity_2_type}":[{|)
+      assert String.contains?(html, ~s|"c":"the embedded row"|)
+      assert String.contains?(html, ~s|"a":["#{target.id}"]|)
+    end
+
+    test "carries nothing for a page whose props read no rows" do
+      html = render_page_html(Module99)
+
+      assert String.contains?(html, "syncSeed: {}")
+    end
+
+    # The positive artifact beside the negative one: this is the seed the row travelled in, so
+    # what it does not carry is what the model kept from it rather than what happened to be
+    # missing.
+    test "never carries a value the client may not have" do
+      Module15
+      |> Entity.new(label: "Report", secret_note: "note_secret_v7", token: "tok_R4mQ")
+      |> create()
+
+      seed = seed_json(render_page_html(Module100))
+
+      assert String.contains?(seed, ~s|"label":"Report"|)
+      refute String.contains?(seed, "note_secret_v7")
+      refute String.contains?(seed, "secret_note")
+      refute String.contains?(seed, "tok_R4mQ")
+      refute String.contains?(seed, "token")
+    end
+
+    test "names who the render read the rows as" do
+      user =
+        Module14
+        |> Entity.new(email: "seeded@example.com")
+        |> DB.create()
+
+      html = render_page_html(Module99, %Server{user_id: user.id})
+
+      assert String.contains?(html, ~s|actorUserId: "#{user.id}"|)
+    end
+
+    test "names nobody for a visitor" do
+      html = render_page_html(Module99)
+
+      assert String.contains?(html, "actorUserId: null")
     end
   end
 

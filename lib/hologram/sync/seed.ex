@@ -26,6 +26,20 @@ defmodule Hologram.Sync.Seed do
   @key {__MODULE__, :entities}
 
   @doc """
+  Clears what a previous render gathered and returns :ok.
+
+  A render ends by taking what it gathered, so this is what covers the render that does not end -
+  one that raises leaves its rows behind, and the process serving the next request would seed a
+  page with them.
+  """
+  @spec start() :: :ok
+  def start do
+    Process.delete(@key)
+
+    :ok
+  end
+
+  @doc """
   Records the entities the given query result holds - the rows themselves and everything they
   embed, however deep.
 

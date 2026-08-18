@@ -18,6 +18,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.Server
+  alias Hologram.Sync.Seed
   alias Hologram.Template.DOM
 
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
@@ -200,6 +201,8 @@ defmodule Hologram.Template.Renderer do
   defp render_page_as_actor(page_module, params, server_struct, opts) do
     initial_page? = opts[:initial_page?] || false
 
+    Seed.start()
+
     {page_component_struct, page_server_struct} =
       init_component(page_module, params, server_struct)
 
@@ -245,20 +248,31 @@ defmodule Hologram.Template.Renderer do
     page_module_js = Encoder.encode_client_term!(page_module)
     page_params_js = Encoder.encode_client_term!(params)
 
+    # The rows this render read, and who read them - both spelled as JSON rather than as the
+    # boxed terms the rest of the mount data carries, because both are read by the data layer
+    # rather than by transpiled code: the seed goes through the same ingest a frame does, and
+    # the acting user is what binds the actor predicates of the queries the client re-runs.
+    actor_user_id_js = Jason.encode!(server_struct.user_id)
+    sync_seed_js = Jason.encode!(Seed.take())
+
     html_with_interpolated_js =
       initial_tree
       |> print_dom()
+      |> String.replace("$ACTOR_USER_ID_JS_PLACEHOLDER", actor_user_id_js)
       |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
       |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
       |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
       |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
+      |> String.replace("$SYNC_SEED_JS_PLACEHOLDER", sync_seed_js)
 
     tree_with_interpolated_js =
       initial_tree
+      |> interpolate_js_in_tree("$ACTOR_USER_ID_JS_PLACEHOLDER", actor_user_id_js)
       |> interpolate_js_in_tree("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
       |> interpolate_js_in_tree("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
       |> interpolate_js_in_tree("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
       |> interpolate_js_in_tree("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
+      |> interpolate_js_in_tree("$SYNC_SEED_JS_PLACEHOLDER", sync_seed_js)
 
     {html_with_interpolated_js, tree_with_interpolated_js, component_registry_with_page_struct,
      final_server_struct}
@@ -953,9 +967,17 @@ defmodule Hologram.Template.Renderer do
       |> apply(args)
       |> Query.normalize()
 
-    term
-    |> QueryRunner.run_policied(DB.mapping(), Auth.user_id())
-    |> Entity.strip_server_only_deep()
+    result =
+      term
+      |> QueryRunner.run_policied(DB.mapping(), Auth.user_id())
+      |> Entity.strip_server_only_deep()
+
+    # Gathered as the prop resolves, so the client is handed the rows this render read - which is
+    # what lets its own first render answer the same query from its own database rather than from
+    # a value passed down beside it.
+    Seed.collect(result)
+
+    result
   end
 
   defp spread_entries(value)
