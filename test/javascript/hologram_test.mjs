@@ -118,7 +118,7 @@ describe("Hologram", () => {
       Hologram.scheduleAction(action1);
       clock.tick(0);
 
-      sinon.assert.calledOnceWithExactly(executeActionStub, action1);
+      sinon.assert.calledOnceWithExactly(executeActionStub, action1, 0);
     });
 
     it("keeps no id for an action that already fired", () => {
@@ -138,7 +138,7 @@ describe("Hologram", () => {
       clock.tick(0);
 
       sinon.assert.calledTwice(executeActionStub);
-      sinon.assert.calledWith(executeActionStub.getCall(1), action2);
+      sinon.assert.calledWith(executeActionStub.getCall(1), action2, 0);
     });
   });
 
@@ -254,6 +254,77 @@ describe("Hologram", () => {
         callNamedFunctionStub.firstCall.args[1],
         Type.atom("action"),
       );
+    });
+
+    // A next action is a continuation of the one that produced it, so it belongs to the same page
+    // - which is not necessarily the page current by the time it is scheduled, since the parent
+    // may have been asynchronous.
+    describe("next action", () => {
+      let clock, nextActionStruct, scheduleActionStub;
+
+      beforeEach(() => {
+        clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+
+        nextActionStruct = Type.actionStruct({
+          name: Type.atom("the_next_action"),
+          params: Type.map(),
+          target: cid1,
+        });
+
+        ComponentRegistry.putEntry(
+          cid1,
+          Type.map([
+            [Type.atom("module"), module7],
+            [
+              Type.atom("struct"),
+              Type.componentStruct({nextAction: Type.nil()}),
+            ],
+          ]),
+        );
+
+        callNamedFunctionStub.callsFake((_module, _fun, _args, _context) =>
+          Type.componentStruct({
+            nextAction: nextActionStruct,
+            state: Type.map(),
+          }),
+        );
+
+        scheduleActionStub = sinon
+          .stub(Hologram, "scheduleAction")
+          .callsFake((_action, _epoch) => null);
+      });
+
+      afterEach(() => clock.restore());
+
+      it("inherits the epoch its parent carried", () => {
+        Hologram.executeAction(actionFor(cid1), 7);
+
+        sinon.assert.calledOnceWithExactly(
+          scheduleActionStub,
+          nextActionStruct,
+          7,
+        );
+      });
+
+      // Reading the epoch afresh at this point would stamp the next action with whatever page the
+      // client has reached, which is exactly how a late continuation lands on a stranger.
+      it("does not take the epoch current when it is scheduled", () => {
+        Hologram.domEpoch = 3;
+        Hologram.registryEpoch = 3;
+
+        try {
+          Hologram.executeAction(actionFor(cid1), 1);
+
+          sinon.assert.calledOnceWithExactly(
+            scheduleActionStub,
+            nextActionStruct,
+            1,
+          );
+        } finally {
+          Hologram.domEpoch = 0;
+          Hologram.registryEpoch = 0;
+        }
+      });
     });
   });
 
@@ -716,7 +787,7 @@ describe("Hologram", () => {
         target: defaultTarget,
       });
 
-      sinon.assert.calledOnceWithExactly(executeActionStub, expectedAction);
+      sinon.assert.calledOnceWithExactly(executeActionStub, expectedAction, 0);
       sinon.assert.notCalled(scheduleActionStub);
     });
 
@@ -1367,7 +1438,7 @@ describe("Hologram", () => {
         target: defaultTarget,
       });
 
-      sinon.assert.calledOnceWithExactly(executeActionStub, expectedAction);
+      sinon.assert.calledOnceWithExactly(executeActionStub, expectedAction, 0);
     });
   });
 
@@ -2342,7 +2413,7 @@ describe("Hologram", () => {
       clock.tick(0);
 
       // Now the action should have been executed
-      sinon.assert.calledOnceWithExactly(executeActionStub, action1);
+      sinon.assert.calledOnceWithExactly(executeActionStub, action1, 0);
     });
 
     // The ordinary case: nothing is in flight, so the page on screen is the page the registry
@@ -2351,7 +2422,7 @@ describe("Hologram", () => {
       Hologram.scheduleAction(action1);
       clock.tick(0);
 
-      sinon.assert.calledOnceWithExactly(executeActionStub, action1);
+      sinon.assert.calledOnceWithExactly(executeActionStub, action1, 0);
     });
 
     // The shape a history restoration leaves behind: the registry has moved on while the page the
@@ -2390,8 +2461,8 @@ describe("Hologram", () => {
       clock.tick(0);
 
       sinon.assert.calledTwice(executeActionStub);
-      sinon.assert.calledWith(executeActionStub.getCall(0), action1);
-      sinon.assert.calledWith(executeActionStub.getCall(1), action2);
+      sinon.assert.calledWith(executeActionStub.getCall(0), action1, 0);
+      sinon.assert.calledWith(executeActionStub.getCall(1), action2, 0);
     });
 
     it("schedules action execution with custom delay", () => {
@@ -2415,7 +2486,7 @@ describe("Hologram", () => {
 
       // Action should execute after specified delay
       clock.tick(400);
-      sinon.assert.calledOnceWithExactly(executeActionStub, actionWithDelay);
+      sinon.assert.calledOnceWithExactly(executeActionStub, actionWithDelay, 0);
     });
 
     it("schedules multiple actions with different delays in correct order", () => {
@@ -2441,12 +2512,20 @@ describe("Hologram", () => {
 
       // After 100ms, only the first action should execute
       clock.tick(100);
-      sinon.assert.calledOnceWithExactly(executeActionStub, actionDelayed100);
+      sinon.assert.calledOnceWithExactly(
+        executeActionStub,
+        actionDelayed100,
+        0,
+      );
 
       // After another 200ms (total 300ms), the second action should execute
       clock.tick(200);
       sinon.assert.calledTwice(executeActionStub);
-      sinon.assert.calledWith(executeActionStub.getCall(1), actionDelayed300);
+      sinon.assert.calledWith(
+        executeActionStub.getCall(1),
+        actionDelayed300,
+        0,
+      );
     });
 
     it("handles action with zero delay same as no delay specified", () => {
@@ -2464,7 +2543,7 @@ describe("Hologram", () => {
 
       // Action should execute after 0ms timeout
       clock.tick(0);
-      sinon.assert.calledOnceWithExactly(executeActionStub, actionZeroDelay);
+      sinon.assert.calledOnceWithExactly(executeActionStub, actionZeroDelay, 0);
     });
   });
 });

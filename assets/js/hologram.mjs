@@ -152,7 +152,7 @@ export default class Hologram {
   // "unhandledrejection" event listener in #init().
   // TODO: make private (tested implicitely in feature tests)
   // Deps: [:maps.get/2]
-  static executeAction(action) {
+  static executeAction(action, epoch = $.registryEpoch) {
     const startTime = performance.now();
     globalThis.Hologram.isProfilingEnabled = true;
 
@@ -189,7 +189,7 @@ export default class Hologram {
 
     if (resultComponentStruct instanceof Promise) {
       resultComponentStruct.then((resolved) =>
-        Hologram.#processActionResult(resolved, name, target, startTime),
+        Hologram.#processActionResult(resolved, name, target, startTime, epoch),
       );
     } else {
       Hologram.#processActionResult(
@@ -197,6 +197,7 @@ export default class Hologram {
         name,
         target,
         startTime,
+        epoch,
       );
     }
   }
@@ -1383,7 +1384,13 @@ export default class Hologram {
   }
 
   // Deps: [:maps.get/2, :maps.put/3]
-  static #processActionResult(resultComponentStruct, name, target, startTime) {
+  static #processActionResult(
+    resultComponentStruct,
+    name,
+    target,
+    startTime,
+    epoch,
+  ) {
     let nextAction = Erlang_Maps["get/2"](
       Type.atom("next_action"),
       resultComponentStruct,
@@ -1447,9 +1454,11 @@ export default class Hologram {
         );
       }
 
-      // A next action with no target of its own inherits the one that produced it, so it belongs
-      // to the page being left - a navigation started below cancels it along with the rest.
-      Hologram.scheduleAction(nextAction);
+      // A next action belongs to whatever page its parent belonged to, so it inherits the
+      // parent's stamp rather than reading the epoch afresh. That matters most when the parent
+      // was asynchronous: its promise can resolve after a navigation, and the inherited stamp is
+      // what makes the next action drop instead of landing on a page that never produced it.
+      Hologram.scheduleAction(nextAction, epoch);
     }
 
     if (!Type.isNil(nextPage)) {
@@ -1659,7 +1668,7 @@ export default class Hologram {
       return;
     }
 
-    return Hologram.executeAction(action);
+    return Hologram.executeAction(action, epoch);
   }
 }
 
