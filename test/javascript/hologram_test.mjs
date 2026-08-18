@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertBoxedError,
   defineRuntimeGlobals,
   registerWebApis,
   sinon,
@@ -35,6 +36,183 @@ const cid1 = Type.bitstring("my_component_1");
 const module7 = Type.alias("Hologram.Test.Fixtures.Module7");
 
 describe("Hologram", () => {
+  describe("cancelScheduledActions()", () => {
+    let clock, executeActionStub;
+
+    const action1 = Type.actionStruct({
+      name: Type.atom("test_action"),
+      params: Type.map(),
+      target: cid1,
+    });
+
+    const delayedAction = (name, delay) =>
+      Type.actionStruct({
+        name: Type.atom(name),
+        params: Type.map(),
+        target: cid1,
+        delay: Type.integer(delay),
+      });
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers();
+
+      executeActionStub = sinon
+        .stub(Hologram, "executeAction")
+        .callsFake((_action) => null);
+    });
+
+    afterEach(() => {
+      clock.restore();
+      sinon.restore();
+    });
+
+    it("drops an action still waiting on a zero delay", () => {
+      Hologram.scheduleAction(action1);
+      Hologram.cancelScheduledActions();
+
+      clock.tick(0);
+
+      sinon.assert.notCalled(executeActionStub);
+    });
+
+    // The widest window a dispatch can outlive its context in is the one it was given.
+    it("drops an action part-way through its delay", () => {
+      Hologram.scheduleAction(delayedAction("test_action_delayed", 3000));
+
+      clock.tick(1000);
+      sinon.assert.notCalled(executeActionStub);
+
+      Hologram.cancelScheduledActions();
+
+      clock.tick(5000);
+      sinon.assert.notCalled(executeActionStub);
+    });
+
+    it("drops every pending action at once", () => {
+      Hologram.scheduleAction(action1);
+      Hologram.scheduleAction(delayedAction("test_action_100ms", 100));
+      Hologram.scheduleAction(delayedAction("test_action_300ms", 300));
+
+      Hologram.cancelScheduledActions();
+
+      clock.tick(1000);
+
+      sinon.assert.notCalled(executeActionStub);
+    });
+
+    // The initial mount cancels the same way a navigation does, with nothing yet to cancel.
+    it("does nothing when no action is pending", () => {
+      Hologram.cancelScheduledActions();
+      Hologram.cancelScheduledActions();
+
+      clock.tick(1000);
+
+      sinon.assert.notCalled(executeActionStub);
+    });
+
+    // Cancellation runs when a page is entered, and the page entering it schedules its own
+    // actions straight after - those must not be swept by the call that preceded them.
+    it("leaves an action scheduled after it alone", () => {
+      Hologram.cancelScheduledActions();
+
+      Hologram.scheduleAction(action1);
+      clock.tick(0);
+
+      sinon.assert.calledOnceWithExactly(executeActionStub, action1);
+    });
+
+    it("keeps no id for an action that already fired", () => {
+      Hologram.scheduleAction(action1);
+      clock.tick(0);
+      sinon.assert.calledOnce(executeActionStub);
+
+      Hologram.cancelScheduledActions();
+
+      const action2 = Type.actionStruct({
+        name: Type.atom("test_action_2"),
+        params: Type.map(),
+        target: cid1,
+      });
+
+      Hologram.scheduleAction(action2);
+      clock.tick(0);
+
+      sinon.assert.calledTwice(executeActionStub);
+      sinon.assert.calledWith(executeActionStub.getCall(1), action2);
+    });
+  });
+
+  describe("executeAction()", () => {
+    let callNamedFunctionStub, renderStub;
+
+    const actionFor = (target) =>
+      Type.actionStruct({
+        name: Type.atom("test_action"),
+        params: Type.map(),
+        target: target,
+      });
+
+    beforeEach(() => {
+      ComponentRegistry.clear();
+
+      callNamedFunctionStub = sinon
+        .stub(Interpreter, "callNamedFunction")
+        .callsFake((_module, _fun, _args, _context) =>
+          Type.componentStruct({state: Type.map()}),
+        );
+
+      // The result of a dispatch is rendered, which needs a page these tests don't mount.
+      renderStub = sinon.stub(Hologram, "render").callsFake(() => null);
+    });
+
+    afterEach(() => {
+      ComponentRegistry.clear();
+      sinon.restore();
+    });
+
+    // The registry answers with plain null for a cid it does not hold, and null reaching
+    // callNamedFunction faults on reading a module name off it.
+    it("raises for a target the registry does not hold", () => {
+      assertBoxedError(
+        () => Hologram.executeAction(actionFor(Type.bitstring("nonexistent"))),
+        "ArgumentError",
+        'invalid action target, there is no component with CID: "nonexistent"',
+      );
+    });
+
+    it("doesn't dispatch to a target the registry does not hold", () => {
+      try {
+        Hologram.executeAction(actionFor(Type.bitstring("nonexistent")));
+      } catch {
+        // Asserted on in the case above - what matters here is what didn't run.
+      }
+
+      sinon.assert.notCalled(callNamedFunctionStub);
+    });
+
+    it("dispatches to a registered target", () => {
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module7],
+          [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+        ]),
+      );
+
+      Hologram.executeAction(actionFor(cid1));
+
+      sinon.assert.calledOnce(callNamedFunctionStub);
+      sinon.assert.calledOnce(renderStub);
+
+      assert.deepStrictEqual(callNamedFunctionStub.firstCall.args[0], module7);
+
+      assert.deepStrictEqual(
+        callNamedFunctionStub.firstCall.args[1],
+        Type.atom("action"),
+      );
+    });
+  });
+
   describe("executeLoadPrefetchedPageAction()", () => {
     let eventTargetNode, loadNewPageStub;
 
@@ -1207,6 +1385,64 @@ describe("Hologram", () => {
 
         assert.include(document.body.textContent, "new content");
         assert.isFalse(globalThis.Hologram.pageScriptLoaded);
+      });
+
+      // The destination is on screen from the patch onward, but its mount waits on the bundle -
+      // so a dispatch that fires in between would run against a registry that is still the
+      // previous page's, and render that page over the destination.
+      it("drops a pending action before the destination is patched in", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+
+        const executeActionStub = sinon
+          .stub(Hologram, "executeAction")
+          .callsFake((_action) => null);
+
+        try {
+          Hologram.scheduleAction(
+            Type.actionStruct({
+              name: Type.atom("stale"),
+              params: Type.map(),
+              target: cid1,
+              delay: Type.integer(100),
+            }),
+          );
+
+          await Hologram.loadNewPage("/target", payloadFor("ddd"));
+
+          clock.tick(5000);
+
+          sinon.assert.notCalled(executeActionStub);
+        } finally {
+          clock.restore();
+          executeActionStub.restore();
+        }
+      });
+
+      // Everything the destination arms is armed after this point, so nothing here may sweep it.
+      it("leaves an action the destination arms alone", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+
+        const executeActionStub = sinon
+          .stub(Hologram, "executeAction")
+          .callsFake((_action) => null);
+
+        try {
+          await Hologram.loadNewPage("/target", payloadFor("fff"));
+
+          const action = Type.actionStruct({
+            name: Type.atom("armed_by_destination"),
+            params: Type.map(),
+            target: cid1,
+          });
+
+          Hologram.scheduleAction(action);
+          clock.tick(0);
+
+          sinon.assert.calledOnceWithExactly(executeActionStub, action);
+        } finally {
+          clock.restore();
+          executeActionStub.restore();
+        }
       });
 
       it("fetches the bundle of a page this client has not run before", async () => {
