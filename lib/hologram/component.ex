@@ -258,6 +258,7 @@ defmodule Hologram.Component do
   @doc """
   Puts the given action spec to the component or server struct's next_action field.
   Next action will be executed by the client-side runtime after the specified delay (in milliseconds, defaults to 0).
+  An action still waiting out its delay is dropped when the page it was scheduled on is left, so it never runs against the page navigated to.
   """
   @spec put_action(Component.t() | Server.t(), atom | keyword) :: Component.t() | Server.t()
   def put_action(struct, name_or_spec)

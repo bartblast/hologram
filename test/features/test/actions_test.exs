@@ -13,6 +13,8 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page18
   alias HologramFeatureTests.Actions.Page19
   alias HologramFeatureTests.Actions.Page2
+  alias HologramFeatureTests.Actions.Page20
+  alias HologramFeatureTests.Actions.Page21
   alias HologramFeatureTests.Actions.Page3
   alias HologramFeatureTests.Actions.Page4
   alias HologramFeatureTests.Actions.Page5
@@ -381,6 +383,83 @@ defmodule HologramFeatureTests.ActionsTest do
       |> assert_text(css("#result"), "nil")
       |> sleep(1_000)
       |> assert_text(css("#result"), ":delayed_action_15_executed")
+    end
+  end
+
+  describe "pending actions and navigation" do
+    # Positive control for the cancellation scenarios that follow: the same click schedules a
+    # dispatch that fires when the user stays put.
+    feature "a pending delayed action fires when the user stays on the page", %{session: session} do
+      session
+      |> visit(Page20)
+      |> assert_text(css("#layout_result"), "nil")
+      |> click(button("Run delayed layout action"))
+      |> assert_text(css("#layout_result"), "nil")
+      |> sleep(2_000)
+      |> assert_text(css("#layout_result"), "nil")
+      |> sleep(1_500)
+      |> assert_text(css("#layout_result"), ~s/"layout_action_ran"/)
+    end
+
+    # The layout's cid is the same string on both pages, so the destination's registry answers
+    # for it - a target that still resolves is no evidence the dispatch is still valid. Waiting
+    # out the rest of the delay on the destination proves the dispatch was cancelled rather than
+    # merely deferred: the layout is re-rendered there, so a post-navigation fire would show up
+    # in its result.
+    feature "navigating to another page cancels a pending action targeting the layout",
+            %{session: session} do
+      session
+      |> visit(Page20)
+      |> click(button("Run delayed layout action"))
+      |> click(link("Page 21 link"))
+      |> assert_page(Page21)
+      |> assert_text("Page 21 title")
+      |> sleep(3_500)
+      |> assert_text(css("#layout_result"), "nil")
+    end
+
+    # The component is mounted on one page only, so after the navigation its cid is registered
+    # nowhere and the dispatch resolves to nothing at all. Interacting with the destination
+    # afterwards is what reads the browser log - an uncaught error from the stale dispatch
+    # surfaces as a Wallaby.JSError on the next command, whatever the page shows.
+    feature "navigating to another page cancels a pending action whose component is gone",
+            %{session: session} do
+      session
+      |> visit(Page20)
+      |> click(button("Run delayed component action"))
+      |> click(link("Page 21 link"))
+      |> assert_page(Page21)
+      |> sleep(3_500)
+      |> assert_text("Page 21 title")
+    end
+
+    # Going back restores the registry from a snapshot rather than from mount data, reaching the
+    # cancellation down a different path than a forward navigation does.
+    feature "going back to another page cancels a pending action targeting the layout",
+            %{session: session} do
+      session
+      |> visit(Page21)
+      |> click(link("Page 20 link"))
+      |> assert_page(Page20)
+      |> click(button("Run delayed layout action"))
+      |> go_back()
+      |> assert_page(Page21)
+      |> sleep(3_500)
+      |> assert_text(css("#layout_result"), "nil")
+    end
+
+    # The page cid resolves on the destination too, but to a different module - one with no
+    # clause for the action the previous page scheduled. A dispatch that survives the navigation
+    # raises there rather than merely doing the wrong thing.
+    feature "navigating to another page cancels a pending action targeting the page",
+            %{session: session} do
+      session
+      |> visit(Page20)
+      |> click(button("Run delayed page action"))
+      |> click(link("Page 21 link"))
+      |> assert_page(Page21)
+      |> sleep(3_500)
+      |> assert_text("Page 21 title")
     end
   end
 end
