@@ -1005,10 +1005,18 @@ export default class Hologram {
       return $.#mountPage(true);
     }
 
+    // The epoch of the navigation this restore opened. The fetch below is a round trip, and a
+    // later navigation may supersede this one before it answers - the failure of a superseded
+    // fetch says nothing about the navigation now in flight.
+    const epoch = Math.max($.domEpoch, $.registryEpoch);
+
     await Client.fetchPageBundlePath(
       Hologram.#pageModule,
-      (resp) => $.#loadPageBundle(resp),
+      (resp) => $.#loadPageBundle(resp, epoch),
       (_resp) => {
+        // The mount that would have closed this transition is never going to run.
+        $.#deadEpochs.add(epoch);
+
         throw new HologramRuntimeError(
           "Failed to fetch page bundle path for: " +
             Interpreter.inspect(Hologram.#pageModule),
@@ -1153,12 +1161,12 @@ export default class Hologram {
   // runs off the event loop. It surfaces as an uncaught error instead, which is what the console
   // and the feature tests read. handleUncaughtError/1 passes it over rather than showing the
   // overlay, that being reserved for errors a page raised.
-  static #loadPageBundle(src) {
-    // The epoch of the navigation this fetch serves - whichever pointer the transition advanced.
-    // A later navigation may supersede it before this resolves, and the failure of a superseded
-    // fetch says nothing about the navigation now in flight.
-    const epoch = Math.max($.domEpoch, $.registryEpoch);
-
+  // The epoch defaults to an at-call capture, which is right for the forward path, where the
+  // call follows the transition's epoch advance synchronously. The popstate path reaches here a
+  // round trip after its advance and passes the epoch it captured before that trip - a later
+  // navigation may have started in between, and the failure of a superseded fetch says nothing
+  // about the navigation now in flight.
+  static #loadPageBundle(src, epoch = Math.max($.domEpoch, $.registryEpoch)) {
     const script = document.createElement("script");
 
     script.src = src;
