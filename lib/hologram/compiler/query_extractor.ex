@@ -93,6 +93,8 @@ defmodule Hologram.Compiler.QueryExtractor do
   Raises Hologram.CompileError when a capture argument names no declared slot, or
   when an argument position is named by no clause of the capture's target. Modules
   without parameterized captures pass vacuously.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/query_extractor/validate_slot_bindings!_1/README.md
   """
   @spec validate_slot_bindings!(module) :: :ok
   def validate_slot_bindings!(module) do
