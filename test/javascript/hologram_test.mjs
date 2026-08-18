@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertBoxedError,
   defineRuntimeGlobals,
   registerWebApis,
   sinon,
@@ -138,6 +139,77 @@ describe("Hologram", () => {
 
       sinon.assert.calledTwice(executeActionStub);
       sinon.assert.calledWith(executeActionStub.getCall(1), action2);
+    });
+  });
+
+  describe("executeAction()", () => {
+    let callNamedFunctionStub, renderStub;
+
+    const actionFor = (target) =>
+      Type.actionStruct({
+        name: Type.atom("test_action"),
+        params: Type.map(),
+        target: target,
+      });
+
+    beforeEach(() => {
+      ComponentRegistry.clear();
+
+      callNamedFunctionStub = sinon
+        .stub(Interpreter, "callNamedFunction")
+        .callsFake((_module, _fun, _args, _context) =>
+          Type.componentStruct({state: Type.map()}),
+        );
+
+      // The result of a dispatch is rendered, which needs a page these tests don't mount.
+      renderStub = sinon.stub(Hologram, "render").callsFake(() => null);
+    });
+
+    afterEach(() => {
+      ComponentRegistry.clear();
+      sinon.restore();
+    });
+
+    // The registry answers with plain null for a cid it does not hold, and null reaching
+    // callNamedFunction faults on reading a module name off it.
+    it("raises for a target the registry does not hold", () => {
+      assertBoxedError(
+        () => Hologram.executeAction(actionFor(Type.bitstring("nonexistent"))),
+        "ArgumentError",
+        'invalid action target, there is no component with CID: "nonexistent"',
+      );
+    });
+
+    it("doesn't dispatch to a target the registry does not hold", () => {
+      try {
+        Hologram.executeAction(actionFor(Type.bitstring("nonexistent")));
+      } catch {
+        // Asserted on in the case above - what matters here is what didn't run.
+      }
+
+      sinon.assert.notCalled(callNamedFunctionStub);
+    });
+
+    it("dispatches to a registered target", () => {
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module7],
+          [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+        ]),
+      );
+
+      Hologram.executeAction(actionFor(cid1));
+
+      sinon.assert.calledOnce(callNamedFunctionStub);
+      sinon.assert.calledOnce(renderStub);
+
+      assert.deepStrictEqual(callNamedFunctionStub.firstCall.args[0], module7);
+
+      assert.deepStrictEqual(
+        callNamedFunctionStub.firstCall.args[1],
+        Type.atom("action"),
+      );
     });
   });
 

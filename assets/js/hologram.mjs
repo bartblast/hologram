@@ -142,6 +142,17 @@ export default class Hologram {
     const params = Erlang_Maps["get/2"](Type.atom("params"), action);
     const target = Erlang_Maps["get/2"](Type.atom("target"), action);
 
+    // getComponentModule() answers with plain null for a cid the registry does not hold, and null
+    // reaching callNamedFunction faults on reading a module name off it - a raw TypeError naming
+    // neither the cid nor the action, which handleUncaughtError drops because it isn't boxed.
+    // Pending dispatches are cancelled at both registry swaps, so a target the registry never held
+    // is a mistyped cid and nothing else - raised boxed, the way the error overlay reads it.
+    if (!ComponentRegistry.isCidRegistered(target)) {
+      Interpreter.raiseArgumentError(
+        `invalid action target, there is no component with CID: ${Interpreter.inspect(target)}`,
+      );
+    }
+
     const componentModule = ComponentRegistry.getComponentModule(target);
     const componentStruct = ComponentRegistry.getComponentStruct(target);
     const args = [name, params, componentStruct];
