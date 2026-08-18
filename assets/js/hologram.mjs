@@ -97,8 +97,21 @@ export default class Hologram {
   static #pageParams = null;
   static #pendingJsInteropActions = [];
   static #registeredPageModules = new Set();
+  static #scheduledActionTimerIds = new Set();
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
+
+  // Clears every action still waiting on its timer without executing any of them, mirroring
+  // Debouncer.cancelAll()/Throttler.cancelAll(). Every action is scheduled onto a timer, even at
+  // delay 0, so a dispatch decided in one page's context is always in flight for at least a
+  // macrotask - long enough to outlive the context it was meant for.
+  static cancelScheduledActions() {
+    for (const timerId of $.#scheduledActionTimerIds) {
+      clearTimeout(timerId);
+    }
+
+    $.#scheduledActionTimerIds.clear();
+  }
 
   // Public API for dispatching actions from JavaScript.
   // Converts plain JS values to Hologram types and schedules the action for execution.
@@ -522,7 +535,14 @@ export default class Hologram {
       Type.integer(0),
     );
 
-    setTimeout(() => Hologram.executeAction(action), Number(delay.value));
+    // The id is dropped before the action runs rather than after, so an action that raises
+    // doesn't leave a fired timer's id behind for a later cancellation to clear.
+    const timerId = setTimeout(() => {
+      $.#scheduledActionTimerIds.delete(timerId);
+      Hologram.executeAction(action);
+    }, Number(delay.value));
+
+    $.#scheduledActionTimerIds.add(timerId);
   }
 
   static #buildPagePath(toParam) {

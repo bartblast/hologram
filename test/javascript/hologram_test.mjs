@@ -35,6 +35,112 @@ const cid1 = Type.bitstring("my_component_1");
 const module7 = Type.alias("Hologram.Test.Fixtures.Module7");
 
 describe("Hologram", () => {
+  describe("cancelScheduledActions()", () => {
+    let clock, executeActionStub;
+
+    const action1 = Type.actionStruct({
+      name: Type.atom("test_action"),
+      params: Type.map(),
+      target: cid1,
+    });
+
+    const delayedAction = (name, delay) =>
+      Type.actionStruct({
+        name: Type.atom(name),
+        params: Type.map(),
+        target: cid1,
+        delay: Type.integer(delay),
+      });
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers();
+
+      executeActionStub = sinon
+        .stub(Hologram, "executeAction")
+        .callsFake((_action) => null);
+    });
+
+    afterEach(() => {
+      clock.restore();
+      sinon.restore();
+    });
+
+    it("drops an action still waiting on a zero delay", () => {
+      Hologram.scheduleAction(action1);
+      Hologram.cancelScheduledActions();
+
+      clock.tick(0);
+
+      sinon.assert.notCalled(executeActionStub);
+    });
+
+    // The widest window a dispatch can outlive its context in is the one it was given.
+    it("drops an action part-way through its delay", () => {
+      Hologram.scheduleAction(delayedAction("test_action_delayed", 3000));
+
+      clock.tick(1000);
+      sinon.assert.notCalled(executeActionStub);
+
+      Hologram.cancelScheduledActions();
+
+      clock.tick(5000);
+      sinon.assert.notCalled(executeActionStub);
+    });
+
+    it("drops every pending action at once", () => {
+      Hologram.scheduleAction(action1);
+      Hologram.scheduleAction(delayedAction("test_action_100ms", 100));
+      Hologram.scheduleAction(delayedAction("test_action_300ms", 300));
+
+      Hologram.cancelScheduledActions();
+
+      clock.tick(1000);
+
+      sinon.assert.notCalled(executeActionStub);
+    });
+
+    // The initial mount cancels the same way a navigation does, with nothing yet to cancel.
+    it("does nothing when no action is pending", () => {
+      Hologram.cancelScheduledActions();
+      Hologram.cancelScheduledActions();
+
+      clock.tick(1000);
+
+      sinon.assert.notCalled(executeActionStub);
+    });
+
+    // Cancellation runs when a page is entered, and the page entering it schedules its own
+    // actions straight after - those must not be swept by the call that preceded them.
+    it("leaves an action scheduled after it alone", () => {
+      Hologram.cancelScheduledActions();
+
+      Hologram.scheduleAction(action1);
+      clock.tick(0);
+
+      sinon.assert.calledOnceWithExactly(executeActionStub, action1);
+    });
+
+    it("keeps no id for an action that already fired", () => {
+      Hologram.scheduleAction(action1);
+      clock.tick(0);
+      sinon.assert.calledOnce(executeActionStub);
+
+      Hologram.cancelScheduledActions();
+
+      const action2 = Type.actionStruct({
+        name: Type.atom("test_action_2"),
+        params: Type.map(),
+        target: cid1,
+      });
+
+      Hologram.scheduleAction(action2);
+      clock.tick(0);
+
+      sinon.assert.calledTwice(executeActionStub);
+      sinon.assert.calledWith(executeActionStub.getCall(1), action2);
+    });
+  });
+
   describe("executeLoadPrefetchedPageAction()", () => {
     let eventTargetNode, loadNewPageStub;
 
