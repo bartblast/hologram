@@ -142,6 +142,50 @@ describe("Hologram", () => {
     });
   });
 
+  describe("dispatchAction()", () => {
+    let clock, executeActionStub;
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers();
+
+      executeActionStub = sinon
+        .stub(Hologram, "executeAction")
+        .callsFake((_action) => null);
+    });
+
+    afterEach(() => {
+      clock.restore();
+      executeActionStub.restore();
+    });
+
+    // The counterpart of the hold covered in loadNewPage(): with no page swap in flight the page
+    // on screen is the page the registry answers for, so there is nothing to wait for.
+    it("dispatches an action right away when no page swap is in flight", () => {
+      Hologram.dispatchAction("my_action", "my_component_1", {a: 1});
+
+      clock.tick(0);
+
+      sinon.assert.calledOnce(executeActionStub);
+
+      const action = executeActionStub.firstCall.args[0];
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("name"), action),
+        Type.atom("my_action"),
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("target"), action),
+        Type.bitstring("my_component_1"),
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("params"), action),
+        Type.map([[Type.atom("a"), Type.integer(1)]]),
+      );
+    });
+  });
+
   describe("executeAction()", () => {
     let callNamedFunctionStub, renderStub;
 
@@ -1439,6 +1483,30 @@ describe("Hologram", () => {
           clock.tick(0);
 
           sinon.assert.calledOnceWithExactly(executeActionStub, action);
+        } finally {
+          clock.restore();
+          executeActionStub.restore();
+        }
+      });
+
+      // The destination's script runs during the patch, which for a page whose bundle is still
+      // being fetched is a whole fetch before the mount - so dispatching then would resolve the
+      // target against the page being left rather than against the page that carries the script.
+      it("holds an action the destination's script dispatches before the mount", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+
+        const executeActionStub = sinon
+          .stub(Hologram, "executeAction")
+          .callsFake((_action) => null);
+
+        try {
+          await Hologram.loadNewPage("/target", payloadFor("ggg"));
+
+          Hologram.dispatchAction("dispatched_by_script", "page", {value: 99});
+
+          clock.tick(5000);
+
+          sinon.assert.notCalled(executeActionStub);
         } finally {
           clock.restore();
           executeActionStub.restore();

@@ -93,9 +93,11 @@ export default class Hologram {
 
   static #historyId = null;
   static #isInitiated = false;
+  static #isMountPending = false;
   static #pageModule = null;
   static #pageParams = null;
   static #pendingJsInteropActions = [];
+  static #preMountActions = [];
   static #registeredPageModules = new Set();
   static #scheduledActionTimerIds = new Set();
   static #scrollPosition = null;
@@ -122,6 +124,16 @@ export default class Hologram {
       params: JsInterop.boxActionParam(params),
       target: Type.bitstring(target),
     });
+
+    // Everything arriving here comes from script the page itself carries, so it belongs to the
+    // page on screen. Between a page swap starting and the new page mounting that page is the
+    // destination - its markup is patched in and its scripts have run - while the registry still
+    // answers for the page being left, so dispatching now would resolve against the wrong page.
+    // The action waits instead, until the destination can answer for it.
+    if ($.#isMountPending) {
+      $.#preMountActions.push(action);
+      return;
+    }
 
     Hologram.scheduleAction(action);
   }
@@ -1157,6 +1169,10 @@ export default class Hologram {
   }
 
   static #mountPage(isPageModuleRegistered = false) {
+    // Cleared before the mount's own work, so everything it schedules is armed normally and the
+    // release below does not simply hold the same actions again.
+    $.#isMountPending = false;
+
     // Every page-entry path funnels through here (client-side navigation, back/forward
     // restoration, initial mount), so this is where dispatches still pending from the previous
     // page are dropped - the context they were meant for no longer exists. Cancel, not flush: a
@@ -1205,6 +1221,7 @@ export default class Hologram {
 
       Hologram.#scheduleQueuedInitActions();
       Hologram.#dispatchPendingJsInteropActions();
+      Hologram.#scheduleHeldActions();
     });
   }
 
@@ -1295,6 +1312,14 @@ export default class Hologram {
     // previous page's, and sweeps the ones the destination arms in the same window. Here nothing
     // of the destination exists yet, so every pending dispatch belongs to the page being left.
     Hologram.cancelScheduledActions();
+
+    // The two halves of one rule, split at this instant: what was scheduled before the swap
+    // belongs to the page being left and is dropped above, and what the destination's own script
+    // dispatches after it is held below until the destination can answer for it. A swap starting
+    // while another is still pending drops what the first destination held - that page never
+    // mounted, so nothing will ever be able to answer for it.
+    $.#isMountPending = true;
+    $.#preMountActions = [];
 
     const pageModule = Interpreter.evaluateJavaScriptExpression(
       payload.pageModule,
@@ -1539,6 +1564,16 @@ export default class Hologram {
         );
       }
     }
+  }
+
+  static #scheduleHeldActions() {
+    // The queue is emptied before anything runs, so each held action is released exactly once.
+    const actions = $.#preMountActions;
+    $.#preMountActions = [];
+
+    actions.forEach((action) => {
+      Hologram.scheduleAction(action);
+    });
   }
 
   static #scheduleQueuedInitActions() {
