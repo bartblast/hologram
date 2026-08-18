@@ -375,6 +375,13 @@ defmodule Hologram.Compiler.CallGraph do
     {Hologram.JS, :new, 3},
     {Hologram.JS, :set, 4},
     {Hologram.JS, :typeof, 2},
+    # The query stages build the PLAIN term the client's kernel evaluates, and validate against
+    # the model baked into the bundle rather than against entity reflection, which no client
+    # carries. Keeping the transpiled originals out of the bundle is what makes that possible.
+    {Hologram.Query, :count, 1},
+    {Hologram.Query, :limit, 2},
+    {Hologram.Query, :offset, 2},
+    {Hologram.Query, :one, 1},
     {Hologram.Router.Helpers, :asset_path, 1},
     {IO, :inspect, 1},
     {IO, :inspect, 2},

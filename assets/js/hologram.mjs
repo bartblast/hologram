@@ -57,6 +57,7 @@ import ManuallyPortedElixirFunctionClauseError from "./elixir/function_clause_er
 import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
 import ManuallyPortedElixirHologramEntity from "./elixir/hologram/entity.mjs";
 import ManuallyPortedElixirHologramJS from "./elixir/hologram/js.mjs";
+import ManuallyPortedElixirHologramQuery from "./elixir/hologram/query.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
 import ManuallyPortedElixirIO from "./elixir/io.mjs";
 import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
@@ -638,6 +639,34 @@ export default class Hologram {
       "generate_id/0",
       "public",
       ManuallyPortedElixirHologramEntity["generate_id/0"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "count/1",
+      "public",
+      ManuallyPortedElixirHologramQuery["count/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "limit/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["limit/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "offset/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["offset/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "one/1",
+      "public",
+      ManuallyPortedElixirHologramQuery["one/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
