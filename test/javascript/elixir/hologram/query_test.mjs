@@ -47,7 +47,9 @@ describe("Elixir_Hologram_Query", () => {
           attributes: {
             created_at: "datetime",
             done: "boolean",
+            due_on: "date",
             id: "uuid",
+            position: "integer",
             status: "enum",
             title: "string",
           },
@@ -76,6 +78,328 @@ describe("Elixir_Hologram_Query", () => {
         () => count(one(task)),
         HologramBoxedError,
         "cardinality is already set to :one",
+      );
+    });
+  });
+
+  describe("filter/2", () => {
+    const filter = Elixir_Hologram_Query["filter/2"];
+
+    const predicates = (pairs) =>
+      Type.list(
+        pairs.map(([name, value]) => Type.tuple([Type.atom(name), value])),
+      );
+
+    const range = (first, last, step = 1) =>
+      Type.map([
+        [Type.atom("__struct__"), Type.alias("Range")],
+        [Type.atom("first"), Type.integer(first)],
+        [Type.atom("last"), Type.integer(last)],
+        [Type.atom("step"), Type.integer(step)],
+      ]);
+
+    const param = (name) =>
+      Type.map([
+        [Type.atom("__struct__"), Type.alias("Hologram.Query.Param")],
+        [Type.atom("name"), Type.atom(name)],
+      ]);
+
+    it("reads a bare value as equality", () => {
+      const query = filter(
+        task,
+        predicates([["title", Type.bitstring("Draft")]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [["title", "==", "Draft"]]);
+    });
+
+    it("reads every operator tuple", () => {
+      const query = filter(
+        task,
+        predicates([
+          ["title", Type.tuple([Type.atom("!="), Type.bitstring("Draft")])],
+          ["position", Type.tuple([Type.atom(">="), Type.integer(3)])],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["title", "!=", "Draft"],
+        ["position", ">=", 3],
+      ]);
+    });
+
+    it("appends to prior predicates", () => {
+      const first = filter(task, predicates([["done", Type.boolean(false)]]));
+      const query = filter(
+        first,
+        predicates([["title", Type.bitstring("Draft")]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["done", "==", false],
+        ["title", "==", "Draft"],
+      ]);
+    });
+
+    it("reads a bare list as membership", () => {
+      const values = Type.list([Type.bitstring("a"), Type.bitstring("b")]);
+      const query = filter(task, predicates([["title", values]]));
+
+      assert.deepStrictEqual(query.filter, [["title", "in", ["a", "b"]]]);
+    });
+
+    it("reads a list of operator tuples as a conjunction", () => {
+      const values = Type.list([
+        Type.tuple([Type.atom(">="), Type.integer(3)]),
+        Type.tuple([Type.atom("<"), Type.integer(9)]),
+      ]);
+
+      const query = filter(task, predicates([["position", values]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["position", ">=", 3],
+        ["position", "<", 9],
+      ]);
+    });
+
+    // A range says the same thing about an integer attribute as its two bounds do.
+    it("reads a range as its two bounds", () => {
+      const query = filter(task, predicates([["position", range(1, 5)]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["position", ">=", 1],
+        ["position", "<=", 5],
+      ]);
+    });
+
+    it("reads a range given to the membership operator the same way", () => {
+      const value = Type.tuple([Type.atom("in"), range(1, 5)]);
+      const query = filter(task, predicates([["position", value]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["position", ">=", 1],
+        ["position", "<=", 5],
+      ]);
+    });
+
+    // Values leave in the spelling the rows carry, whatever they were written as.
+    it("unboxes values into what the rows hold", () => {
+      const date = Type.map([
+        [Type.atom("__struct__"), Type.alias("Date")],
+        [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+        [Type.atom("day"), Type.integer(16)],
+        [Type.atom("month"), Type.integer(8)],
+        [Type.atom("year"), Type.integer(2026)],
+      ]);
+
+      const query = filter(
+        task,
+        predicates([
+          ["due_on", Type.tuple([Type.atom(">="), date])],
+          ["status", Type.atom("open")],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["due_on", ">=", "2026-08-16"],
+        ["status", "==", "open"],
+      ]);
+    });
+
+    it("filters by the reference field of a to-one relationship", () => {
+      const query = filter(
+        Type.alias(PROJECT),
+        predicates([["owner_id", Type.bitstring("u1")]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [["owner_id", "==", "u1"]]);
+    });
+
+    it("reads a param as the leaf a binding fills", () => {
+      const query = filter(task, predicates([["title", param("chosen")]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["title", "==", {param: "chosen"}],
+      ]);
+    });
+
+    it("reads a param under an operator", () => {
+      const value = Type.tuple([Type.atom(">="), param("min")]);
+      const query = filter(task, predicates([["position", value]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["position", ">=", {param: "min"}],
+      ]);
+    });
+
+    it("reads a param among the values of a membership list", () => {
+      const values = Type.list([param("chosen"), Type.bitstring("b")]);
+      const value = Type.tuple([Type.atom("in"), values]);
+      const query = filter(task, predicates([["title", value]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["title", "in", [{param: "chosen"}, "b"]],
+      ]);
+    });
+
+    it("reads the actor leaf", () => {
+      const value = Type.tuple([Type.atom("actor")]);
+      const query = filter(task, predicates([["id", value]]));
+
+      assert.deepStrictEqual(query.filter, [["id", "==", {actor: true}]]);
+    });
+
+    it("reads the actor leaf under an equality operator", () => {
+      const value = Type.tuple([Type.atom("!="), Type.atom("actor")]);
+      const query = filter(task, predicates([["id", value]]));
+
+      assert.deepStrictEqual(query.filter, [["id", "!=", {actor: true}]]);
+    });
+
+    it("raises on predicates that are not a keyword list", () => {
+      assert.throw(
+        () => filter(task, Type.integer(123)),
+        HologramBoxedError,
+        "filter predicates must be a keyword list, got: 123",
+      );
+    });
+
+    it("raises on an unknown attribute", () => {
+      assert.throw(
+        () => filter(task, predicates([["x", Type.integer(1)]])),
+        HologramBoxedError,
+        "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :status, :title",
+      );
+    });
+
+    // A to-one relationship names a reference the predicate can read instead, and the message
+    // says which - a to-many has none to offer.
+    it("raises on a to-one relationship, naming its reference field", () => {
+      assert.throw(
+        () =>
+          filter(Type.alias(PROJECT), predicates([["owner", Type.integer(1)]])),
+        HologramBoxedError,
+        ":owner is a relationship in MyApp.Project - only attributes can be filtered - filter its reference via :owner_id",
+      );
+    });
+
+    it("raises on a to-many relationship", () => {
+      assert.throw(
+        () =>
+          filter(Type.alias(PROJECT), predicates([["tasks", Type.integer(1)]])),
+        HologramBoxedError,
+        ":tasks is a relationship in MyApp.Project - only attributes can be filtered",
+      );
+    });
+
+    it("raises on an unknown operator", () => {
+      const value = Type.tuple([Type.atom("like"), Type.bitstring("a")]);
+
+      assert.throw(
+        () => filter(task, predicates([["title", value]])),
+        HologramBoxedError,
+        "unknown operator :like in the filter predicate for attribute :title - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in",
+      );
+    });
+
+    // Byte order is the same on both tiers but wrong for people, and the key that fixes that
+    // belongs to ordering rather than to comparison.
+    it("raises on an ordering comparison over a string", () => {
+      const value = Type.tuple([Type.atom(">"), Type.bitstring("a")]);
+
+      assert.throw(
+        () => filter(task, predicates([["title", value]])),
+        HologramBoxedError,
+        "operator :> requires a numeric or temporal attribute - attribute :title in MyApp.Task has type :string",
+      );
+    });
+
+    it("raises on a list operand for an equality operator", () => {
+      const value = Type.tuple([
+        Type.atom("=="),
+        Type.list([Type.bitstring("a")]),
+      ]);
+
+      assert.throw(
+        () => filter(task, predicates([["title", value]])),
+        HologramBoxedError,
+        'invalid operand ["a"] for operator :== on attribute :title',
+      );
+    });
+
+    it("raises on a non-list operand for a membership operator", () => {
+      const value = Type.tuple([Type.atom("in"), Type.bitstring("a")]);
+
+      assert.throw(
+        () => filter(task, predicates([["title", value]])),
+        HologramBoxedError,
+        'operator :in on attribute :title requires a list operand, got: "a"',
+      );
+    });
+
+    it("raises on an empty membership list", () => {
+      const value = Type.tuple([Type.atom("in"), Type.list([])]);
+
+      assert.throw(
+        () => filter(task, predicates([["title", value]])),
+        HologramBoxedError,
+        "membership list for attribute :title must not be empty",
+      );
+    });
+
+    it("raises on an empty filter list", () => {
+      assert.throw(
+        () => filter(task, predicates([["title", Type.list([])]])),
+        HologramBoxedError,
+        "filter list for attribute :title must not be empty",
+      );
+    });
+
+    it("raises on a list mixing plain values and operator tuples", () => {
+      const values = Type.list([
+        Type.bitstring("a"),
+        Type.tuple([Type.atom(">="), Type.integer(3)]),
+      ]);
+
+      assert.throw(
+        () => filter(task, predicates([["title", values]])),
+        HologramBoxedError,
+        "use either a membership list of plain values or a list of operator tuples",
+      );
+    });
+
+    it("raises on a range over a non-integer attribute", () => {
+      assert.throw(
+        () => filter(task, predicates([["title", range(1, 5)]])),
+        HologramBoxedError,
+        "requires an integer attribute - attribute :title in MyApp.Task has type :string",
+      );
+    });
+
+    it("raises on a stepped range", () => {
+      assert.throw(
+        () => filter(task, predicates([["position", range(0, 100, 5)]])),
+        HologramBoxedError,
+        "is not supported - membership ranges use step 1",
+      );
+    });
+
+    it("raises on an empty range", () => {
+      assert.throw(
+        () => filter(task, predicates([["position", range(5, 1)]])),
+        HologramBoxedError,
+        "is empty - it would match nothing",
+      );
+    });
+
+    // The actor leaf carries an entity id, so it compares only against names holding one.
+    it("raises on an actor leaf over a non-uuid attribute", () => {
+      const value = Type.tuple([Type.atom("actor")]);
+
+      assert.throw(
+        () => filter(task, predicates([["title", value]])),
+        HologramBoxedError,
+        "user_id() requires a uuid attribute - attribute :title in MyApp.Task has type :string",
       );
     });
   });
@@ -239,7 +563,7 @@ describe("Elixir_Hologram_Query", () => {
       assert.throw(
         () => orderBy(task, Type.atom("x")),
         HologramBoxedError,
-        "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :id, :status, :title",
+        "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :status, :title",
       );
     });
   });

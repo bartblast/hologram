@@ -17,6 +17,11 @@ import Type from "../../type.mjs";
 // What is checked is what the server checks, in the same words: the ArgumentError messages are
 // mirrored, and the consistency suite pins them.
 
+const EQUALITY_OPERATORS = ["!=", "=="];
+const MEMBERSHIP_OPERATORS = ["in", "not_in"];
+const ORDERABLE_TYPES = ["date", "datetime", "float", "integer"];
+const ORDERING_OPERATORS = ["<", "<=", ">", ">="];
+
 // The names an attribute may be ordered or read by - declared and system alike, sorted, the way
 // the model bakes them. Reference fields are deliberately absent, as they are on the server: a
 // relationship is followed, not ordered by.
@@ -72,6 +77,223 @@ function orderEntry(entry, entityType) {
   Interpreter.raiseArgumentError(
     `invalid order_by entry ${Interpreter.inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple`,
   );
+}
+
+function field(struct, name) {
+  return struct.data[Type.encodeMapKey(Type.atom(name))][1];
+}
+
+// The names a predicate may read: the attributes plus the reference field of every to-one
+// relationship, which carries an entity id and so filters like any uuid attribute.
+function filterableNames(entityType) {
+  const relationships = Model.entry(entityType).relationships;
+
+  const references = Object.entries(relationships)
+    .filter(([_name, relationship]) => !relationship.toMany)
+    .map(([name]) => `${name}_id`);
+
+  return [...attributeNames(entityType), ...references].sort();
+}
+
+function isActor(value) {
+  return Type.isAtom(value) && value.value === "actor";
+}
+
+// A two-element tuple led by an atom - what an operator predicate looks like, and what tells a
+// list of them from a list of plain values.
+function isConstraintTuple(value) {
+  return (
+    Type.isTuple(value) && value.data.length === 2 && Type.isAtom(value.data[0])
+  );
+}
+
+function isPlainValue(value) {
+  return (
+    !Type.isTuple(value) && !Type.isList(value) && !isStruct(value, "Range")
+  );
+}
+
+function isStruct(value, name) {
+  if (!Type.isMap(value)) {
+    return false;
+  }
+
+  const entry = value.data[Type.encodeMapKey(Type.atom("__struct__"))];
+
+  return !!entry && Type.isAlias(entry[1]) && structName(value) === name;
+}
+
+// A list is either a membership shorthand or a conjunction of operator tuples - never a mix,
+// since the two read the same at a glance and mean opposite things.
+function listTriples(name, list, entityType) {
+  const values = list.data;
+
+  if (values.length === 0) {
+    Interpreter.raiseArgumentError(
+      `filter list for attribute ${Interpreter.inspect(name)} must not be empty`,
+    );
+  }
+
+  if (values.every(isConstraintTuple)) {
+    return values.flatMap((value) => predicateTriples(name, value, entityType));
+  }
+
+  if (values.every(isPlainValue)) {
+    validateMembershipList(list, name, "in");
+
+    return [
+      [name.value, "in", membershipValues(values, name.value, entityType)],
+    ];
+  }
+
+  Interpreter.raiseArgumentError(
+    `invalid filter list ${Interpreter.inspect(list)} for attribute ${Interpreter.inspect(name)} - use either a membership list of plain values or a list of operator tuples`,
+  );
+}
+
+function membershipValues(values, name, entityType) {
+  return values.map((value) =>
+    isStruct(value, "Hologram.Query.Param")
+      ? paramLeaf(value)
+      : Model.unbox(value, attributeType(entityType, name)),
+  );
+}
+
+function operatorTriples(name, tuple, entityType) {
+  const [operatorAtom, operand] = tuple.data;
+  const operator = operatorAtom.value;
+
+  if (isStruct(operand, "Range") && operator === "in") {
+    return rangeTriples(name, operand, entityType);
+  }
+
+  if (isStruct(operand, "Hologram.Query.Param")) {
+    if (ORDERING_OPERATORS.includes(operator)) {
+      validateOrderableAttribute(name, entityType, operator);
+    } else if (
+      !EQUALITY_OPERATORS.includes(operator) &&
+      !MEMBERSHIP_OPERATORS.includes(operator)
+    ) {
+      raiseUnknownOperator(operator, name);
+    }
+
+    return [[name.value, operator, paramLeaf(operand)]];
+  }
+
+  if (EQUALITY_OPERATORS.includes(operator) && isActor(operand)) {
+    validateActorAttribute(name, entityType);
+
+    return [[name.value, operator, {actor: true}]];
+  }
+
+  if (EQUALITY_OPERATORS.includes(operator)) {
+    validateScalarOperand(name, operator, operand);
+
+    return [
+      [
+        name.value,
+        operator,
+        Model.unbox(operand, attributeType(entityType, name.value)),
+      ],
+    ];
+  }
+
+  if (MEMBERSHIP_OPERATORS.includes(operator)) {
+    validateMembershipList(operand, name, operator);
+
+    return [
+      [
+        name.value,
+        operator,
+        membershipValues(operand.data, name.value, entityType),
+      ],
+    ];
+  }
+
+  if (ORDERING_OPERATORS.includes(operator)) {
+    validateOrderableAttribute(name, entityType, operator);
+    validateScalarOperand(name, operator, operand, true);
+
+    return [
+      [
+        name.value,
+        operator,
+        Model.unbox(operand, attributeType(entityType, name.value)),
+      ],
+    ];
+  }
+
+  raiseUnknownOperator(operator, name);
+}
+
+function paramLeaf(param) {
+  return {param: field(param, "name").value};
+}
+
+// Every shape a predicate value can take, dispatched in the order the Elixir clauses are written
+// in - the shapes that are structures (a range, a param, the actor) before the general tuple, and
+// the general tuple before the plain value a bare term falls through to.
+function predicateTriples(name, value, entityType) {
+  if (isStruct(value, "Range")) {
+    return rangeTriples(name, value, entityType);
+  }
+
+  if (isStruct(value, "Hologram.Query.Param")) {
+    return [[name.value, "==", paramLeaf(value)]];
+  }
+
+  if (
+    Type.isTuple(value) &&
+    value.data.length === 1 &&
+    isActor(value.data[0])
+  ) {
+    validateActorAttribute(name, entityType);
+
+    return [[name.value, "==", {actor: true}]];
+  }
+
+  if (isConstraintTuple(value)) {
+    return operatorTriples(name, value, entityType);
+  }
+
+  if (Type.isTuple(value)) {
+    Interpreter.raiseArgumentError(
+      `invalid filter value ${Interpreter.inspect(value)} for attribute ${Interpreter.inspect(name)}`,
+    );
+  }
+
+  if (Type.isList(value)) {
+    return listTriples(name, value, entityType);
+  }
+
+  return [
+    [
+      name.value,
+      "==",
+      Model.unbox(value, attributeType(entityType, name.value)),
+    ],
+  ];
+}
+
+function raiseUnknownOperator(operator, name) {
+  Interpreter.raiseArgumentError(
+    `unknown operator :${operator} in the filter predicate for attribute ${Interpreter.inspect(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in`,
+  );
+}
+
+// A range is two bounds rather than a membership set - it says the same thing about an integer
+// attribute in the words the two comparisons already have.
+function rangeTriples(name, range, entityType) {
+  validateMembershipRange(range, name, entityType);
+
+  return [
+    [name.value, ">=", Number(field(range, "first").value)],
+    [name.value, "<=", Number(field(range, "last").value)],
+  ];
+}
+
+function structName(value) {
+  return field(value, "__struct__").value.replace(/^Elixir\./, "");
 }
 
 function relationshipNames(entityType) {
@@ -137,6 +359,18 @@ function toTerm(query) {
   };
 }
 
+// The actor leaf carries the acting user's entity id, so it compares only against names holding
+// one - any other type would build a comparison that never matches.
+function validateActorAttribute(name, entityType) {
+  const type = attributeType(entityType, name.value);
+
+  if (type !== "uuid") {
+    Interpreter.raiseArgumentError(
+      `user_id() requires a uuid attribute - attribute ${Interpreter.inspect(name)} in ${entityType} has type :${type}`,
+    );
+  }
+}
+
 function validateAttributeName(name, entityType, usage) {
   const names = attributeNames(entityType);
 
@@ -157,6 +391,104 @@ function validateAttributeName(name, entityType, usage) {
   );
 }
 
+function validateFilteredName(name, entityType) {
+  const names = filterableNames(entityType);
+
+  if (names.includes(name.value)) {
+    return;
+  }
+
+  const relationship = Model.entry(entityType).relationships[name.value];
+
+  if (relationship && !relationship.toMany) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be filtered - filter its reference via :${name.value}_id`,
+    );
+  }
+
+  if (relationship) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be filtered`,
+    );
+  }
+
+  const known = names.map((known) => `:${known}`).join(", ");
+
+  Interpreter.raiseArgumentError(
+    `unknown attribute ${Interpreter.inspect(name)} in ${entityType} - known attributes: ${known}`,
+  );
+}
+
+function validateMembershipList(operand, name, operator) {
+  if (!Type.isList(operand)) {
+    Interpreter.raiseArgumentError(
+      `operator :${operator} on attribute ${Interpreter.inspect(name)} requires a list operand, got: ${Interpreter.inspect(operand)}`,
+    );
+  }
+
+  if (operand.data.length === 0) {
+    Interpreter.raiseArgumentError(
+      `membership list for attribute ${Interpreter.inspect(name)} must not be empty`,
+    );
+  }
+
+  operand.data.forEach((value) => {
+    if (Type.isList(value) || Type.isTuple(value) || isStruct(value, "Range")) {
+      Interpreter.raiseArgumentError(
+        `invalid membership list element ${Interpreter.inspect(value)} for attribute ${Interpreter.inspect(name)} - membership lists hold plain values`,
+      );
+    }
+  });
+}
+
+function validateMembershipRange(range, name, entityType) {
+  const type = attributeType(entityType, name.value);
+
+  if (type !== "integer") {
+    Interpreter.raiseArgumentError(
+      `range ${Interpreter.inspect(range)} requires an integer attribute - attribute ${Interpreter.inspect(name)} in ${entityType} has type :${type}`,
+    );
+  }
+
+  if (field(range, "step").value !== 1n) {
+    Interpreter.raiseArgumentError(
+      `stepped range ${Interpreter.inspect(range)} for attribute ${Interpreter.inspect(name)} is not supported - membership ranges use step 1`,
+    );
+  }
+
+  if (field(range, "last").value < field(range, "first").value) {
+    Interpreter.raiseArgumentError(
+      `range ${Interpreter.inspect(range)} for attribute ${Interpreter.inspect(name)} is empty - it would match nothing`,
+    );
+  }
+}
+
+// The types an ordering line can be drawn through: strings are excluded because byte order is
+// the same on both tiers but wrong for people, and the key that fixes that belongs to ordering.
+function validateOrderableAttribute(name, entityType, operator) {
+  const type = attributeType(entityType, name.value);
+
+  if (!ORDERABLE_TYPES.includes(type)) {
+    Interpreter.raiseArgumentError(
+      `operator :${operator} requires a numeric or temporal attribute - attribute ${Interpreter.inspect(name)} in ${entityType} has type :${type}`,
+    );
+  }
+}
+
+function validateScalarOperand(name, operator, operand, refuseNil = false) {
+  const invalid =
+    Type.isList(operand) ||
+    Type.isTuple(operand) ||
+    isStruct(operand, "Range") ||
+    (refuseNil && Type.isNil(operand));
+
+  if (invalid) {
+    Interpreter.raiseArgumentError(
+      `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${Interpreter.inspect(name)}`,
+    );
+  }
+}
+
 // The two tiers disagree on what order enum values are in - the database orders them by
 // declaration, this side would order them by their labels - so neither orders by them.
 function validateOrderedAttribute(name, entityType) {
@@ -171,6 +503,26 @@ function validateOrderedAttribute(name, entityType) {
 
 const Elixir_Hologram_Query = {
   "count/1": (query) => setCardinality(query, "count"),
+
+  "filter/2": (query, predicates) => {
+    const term = toTerm(query);
+
+    if (!Type.isKeywordList(predicates)) {
+      Interpreter.raiseArgumentError(
+        `filter predicates must be a keyword list, got: ${Interpreter.inspect(predicates)}`,
+      );
+    }
+
+    const triples = predicates.data.flatMap((pair) => {
+      const [name, value] = pair.data;
+
+      validateFilteredName(name, term.entity);
+
+      return predicateTriples(name, value, term.entity);
+    });
+
+    return {...term, filter: [...term.filter, ...triples]};
+  },
   "limit/2": (query, value) => setViewBound(query, "limit", value),
   "offset/2": (query, value) => setViewBound(query, "offset", value),
   "one/1": (query) => setCardinality(query, "one"),

@@ -650,6 +650,13 @@ export default class Hologram {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query",
+      "filter/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["filter/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
       "limit/2",
       "public",
       ManuallyPortedElixirHologramQuery["limit/2"],

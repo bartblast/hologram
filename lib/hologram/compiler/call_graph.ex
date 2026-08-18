@@ -379,6 +379,7 @@ defmodule Hologram.Compiler.CallGraph do
     # the model baked into the bundle rather than against entity reflection, which no client
     # carries. Keeping the transpiled originals out of the bundle is what makes that possible.
     {Hologram.Query, :count, 1},
+    {Hologram.Query, :filter, 2},
     {Hologram.Query, :limit, 2},
     {Hologram.Query, :offset, 2},
     {Hologram.Query, :one, 1},
