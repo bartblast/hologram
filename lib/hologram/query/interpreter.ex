@@ -36,7 +36,8 @@ defmodule Hologram.Query.Interpreter do
 
     case term.cardinality do
       # A count counts what the query evaluates to, so the bounds apply before it is taken -
-      # and never the order, which cannot change how many there are.
+      # and never the order, which cannot change how many there are. A counting query carries no
+      # includes either: an embedded entity cannot change how many there are of what holds it.
       :count ->
         rows
         |> bound(term)
@@ -46,9 +47,12 @@ defmodule Hologram.Query.Interpreter do
         rows
         |> arrange(term)
         |> List.first()
+        |> embed(term, database, opts)
 
       :set ->
-        arrange(rows, term)
+        rows
+        |> arrange(term)
+        |> Enum.map(&embed(&1, term, database, opts))
     end
   end
 
@@ -112,6 +116,43 @@ defmodule Hologram.Query.Interpreter do
   end
 
   defp compare_ordering_values(left, right), do: compare_values(left, right)
+
+  # A relationship the query asked for is filled from the rest of the database - a to-one by
+  # following the id its row carries, a to-many by reading the pairs. What it did not ask for
+  # keeps the sentinel saying so, which is a different answer from an empty one.
+  defp embed(nil, _term, _database, _opts), do: nil
+
+  defp embed(row, term, database, opts) do
+    Enum.reduce(term.include, row, fn {name, sub_term}, embedded ->
+      kind = relationship_kind(term.entity, name)
+
+      Map.put(embedded, name, embedded_value(row, name, kind, sub_term, database, opts))
+    end)
+  end
+
+  defp embedded_value(row, name, :to_one, sub_term, database, opts) do
+    reference = Map.fetch!(row, reference_field(name))
+
+    database
+    |> table(sub_term.entity)
+    |> Enum.find(&(&1.id == reference))
+    |> embed(sub_term, database, opts)
+  end
+
+  # A to-many is the rows the pairs name, put through the clauses the include carries - a set of
+  # its own, filtered, ordered and bounded like any other. A pair naming a row the database does
+  # not hold is passed over: a fill arrives in pieces, and a parent can be told about a child
+  # that has not landed yet.
+  defp embedded_value(row, name, :to_many, sub_term, database, opts) do
+    target_ids = Map.get(database.facts, {row.__struct__, name, row.id}, [])
+    targets = table(database, sub_term.entity)
+
+    target_ids
+    |> Enum.map(fn target_id -> Enum.find(targets, &(&1.id == target_id)) end)
+    |> Enum.filter(&(not is_nil(&1) and matches?(&1, sub_term.filter, opts)))
+    |> arrange(sub_term)
+    |> Enum.map(&embed(&1, sub_term, database, opts))
+  end
 
   defp equal?(%Date{} = left, %Date{} = right), do: Date.compare(left, right) == :eq
 
@@ -191,6 +232,19 @@ defmodule Hologram.Query.Interpreter do
       :eq -> precedes?(left, right, rest)
       :lt -> true
       :gt -> false
+    end
+  end
+
+  # The reference field's atom is one the entity's own struct defines, so it is always there to
+  # be found rather than invented here.
+  defp reference_field(name), do: String.to_existing_atom("#{name}_id")
+
+  defp relationship_kind(entity_type, name) do
+    case Enum.find(entity_type.__relationships__(), fn {field, _target, _opts} ->
+           field == name
+         end) do
+      {_field, [_target], _opts} -> :to_many
+      _to_one -> :to_one
     end
   end
 

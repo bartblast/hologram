@@ -2,18 +2,26 @@ defmodule Hologram.Query.InterpreterTest do
   use Hologram.Test.DatabaseCase, async: true
   use Hologram.Query
 
-  import Hologram.DB.EntityOperations, only: [create: 1]
+  import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1]
   import Hologram.Query.Interpreter
 
+  alias Hologram.DB.Codec
+  alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
+  alias Hologram.Entity.NotIncluded
   alias Hologram.Query
   alias Hologram.Query.Param
+  alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module5
 
-  @mapping Mapper.derive!([Module10, Module2])
+  @entity_types [Module1, Module10, Module2, Module3, Module5]
+
+  @mapping Mapper.derive!(@entity_types)
 
   # The whole point of this module: the same term over the same rows, run by the database and by
   # the interpreter, agreeing. Every test goes through here and then asserts what came back, so
@@ -36,11 +44,11 @@ defmodule Hologram.Query.InterpreterTest do
     actual
   end
 
-  # What the client holds, built from what the database holds - every row of every type, keyed
-  # by id, the way the browser files them.
+  # What the client holds, built from what the database holds - every row of every type keyed by
+  # id, and every to-many pair, the way the browser files them.
   defp database do
     rows =
-      Map.new([Module10, Module2], fn entity_type ->
+      Map.new(@entity_types, fn entity_type ->
         table =
           entity_type
           |> Query.normalize()
@@ -50,7 +58,32 @@ defmodule Hologram.Query.InterpreterTest do
         {entity_type, table}
       end)
 
-    %{facts: %{}, rows: rows}
+    %{facts: Enum.reduce(@entity_types, %{}, &facts/2), rows: rows}
+  end
+
+  # The pairs as the join tables hold them - which is what the wire sends a client and what its
+  # relationship facts keep, read here from the one place the database keeps them.
+  defp facts(entity_type, acc) do
+    entity_type
+    |> Mapper.join_tables()
+    |> Enum.reduce(acc, fn join_table, joined ->
+      {:ok, result} =
+        Connection.query(
+          ~s(SELECT "source_id", "target_id" FROM "hologram_data".#{Mapper.quote_identifier(join_table.name)}),
+          []
+        )
+
+      Enum.reduce(result.rows, joined, fn [source_id, target_id], pairs ->
+        key = {entity_type, join_table.relationship, Codec.decode(source_id, :uuid)}
+
+        Map.update(
+          pairs,
+          key,
+          [Codec.decode(target_id, :uuid)],
+          &[Codec.decode(target_id, :uuid) | &1]
+        )
+      end)
+    end)
   end
 
   defp module_10(attributes) do
@@ -72,6 +105,12 @@ defmodule Hologram.Query.InterpreterTest do
     Module2
     |> Entity.new(a: true, c: title)
     |> create()
+  end
+
+  defp matched_titles(rows) do
+    rows
+    |> titles()
+    |> Enum.sort()
   end
 
   defp names(rows), do: Enum.map(rows, & &1.username)
@@ -197,29 +236,37 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
+  # Every ordering asserted here is settled by the keys the query declares. Two rows that tie on
+  # all of them fall to the id, and ids generated within one millisecond are not ordered among
+  # themselves - so a test resting on that would pass or fail by the clock.
   describe "run/3 - ordering" do
     setup do
       %{
-        first: module_10(count: 2, priority: 5, username: "bob"),
+        first: module_10(count: 3, priority: 5, username: "bob"),
         second: module_10(count: 2, priority: 1, username: "ada"),
         third: module_10(count: 1, username: "cleo")
       }
     end
 
     test "orders by an attribute" do
-      assert names(agreed(order_by(Module10, :count))) == ["cleo", "bob", "ada"]
+      assert names(agreed(order_by(Module10, :count))) == ["cleo", "ada", "bob"]
     end
 
     test "orders by an attribute descending" do
       assert names(agreed(order_by(Module10, [{:count, :desc}]))) == ["bob", "ada", "cleo"]
     end
 
-    # The rows tie on the first key, so the second decides between them - and the id appended at
-    # normalization decides when every declared key has been spent.
+    # The rows tie on the first key, so the second decides between them.
     test "orders by each key in turn" do
-      query = order_by(Module10, [:count, :priority])
+      module_10(count: 7, priority: 5, username: "eve")
+      module_10(count: 7, priority: 1, username: "dana")
 
-      assert names(agreed(query)) == ["cleo", "ada", "bob"]
+      query =
+        Module10
+        |> filter(count: 7)
+        |> order_by([:count, :priority])
+
+      assert names(agreed(query)) == ["dana", "eve"]
     end
 
     # Ascending puts them last and descending puts them first, which is where the database puts
@@ -386,6 +433,124 @@ defmodule Hologram.Query.InterpreterTest do
       query = filter(Module2, id: {:actor})
 
       assert agreed(query, actor_user_id: nil) == []
+    end
+  end
+
+  describe "run/3 - includes" do
+    setup do
+      required =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      target = module_2("the to-one target")
+
+      source =
+        Module3
+        |> Entity.new(b_id: target.id, c_id: required.id)
+        |> create()
+
+      %{required: required, source: source, target: target}
+    end
+
+    test "fills a to-one relationship with the row its reference names", %{target: target} do
+      assert [row] = agreed(include(Module3, :b))
+      assert row.b.id == target.id
+      assert row.b.c == "the to-one target"
+    end
+
+    test "fills a to-one relationship holding nothing with nothing" do
+      Module3
+      |> Entity.new(c_id: create(Entity.new(Module1)).id)
+      |> create()
+
+      rows = agreed(include(Module3, :b))
+
+      assert Enum.count(rows, &is_nil(&1.b)) == 1
+    end
+
+    # What was asked for is filled and what was not keeps the sentinel naming it, which says
+    # something an empty value cannot: that nobody asked.
+    test "leaves the relationships the query did not ask for alone" do
+      assert [row] = agreed(include(Module3, :b))
+      assert row.a == %NotIncluded{relationship: :a}
+      assert row.c == %NotIncluded{relationship: :c}
+    end
+
+    test "fills a to-many relationship with the rows the pairs name", %{source: source} do
+      first = module_2("apple")
+      second = module_2("banana")
+
+      :ok = add_relationship(Module3, source.id, :a, first.id)
+      :ok = add_relationship(Module3, source.id, :a, second.id)
+
+      assert [row] = agreed(include(Module3, :a))
+      assert matched_titles(row.a) == ["apple", "banana"]
+    end
+
+    test "fills a to-many relationship holding no pairs with an empty list" do
+      assert [row] = agreed(include(Module3, :a))
+      assert row.a == []
+    end
+
+    test "reads only the pairs of its own source", %{source: source} do
+      other_source =
+        Module3
+        |> Entity.new(c_id: create(Entity.new(Module1)).id)
+        |> create()
+
+      mine = module_2("mine")
+      theirs = module_2("theirs")
+
+      :ok = add_relationship(Module3, source.id, :a, mine.id)
+      :ok = add_relationship(Module3, other_source.id, :a, theirs.id)
+
+      rows = agreed(order_by(include(Module3, :a), :id))
+      row = Enum.find(rows, &(&1.id == source.id))
+
+      assert titles(row.a) == ["mine"]
+    end
+
+    test "matches a to-many include's own filter", %{source: source} do
+      kept = module_2("kept")
+      dropped = module_2("dropped")
+
+      :ok = add_relationship(Module3, source.id, :a, kept.id)
+      :ok = add_relationship(Module3, source.id, :a, dropped.id)
+
+      query = include(Module3, :a, &filter(&1, c: "kept"))
+
+      assert [row] = agreed(query)
+      assert titles(row.a) == ["kept"]
+    end
+
+    test "orders and bounds a to-many include by its own clauses", %{source: source} do
+      Enum.each(["cherry", "apple", "banana"], fn title ->
+        target = module_2(title)
+
+        :ok = add_relationship(Module3, source.id, :a, target.id)
+      end)
+
+      query =
+        include(Module3, :a, fn related ->
+          related
+          |> order_by(:c)
+          |> limit(2)
+        end)
+
+      assert [row] = agreed(query)
+      assert titles(row.a) == ["apple", "banana"]
+    end
+
+    test "fills what an include includes, two levels down", %{required: required, source: source} do
+      Module5
+      |> Entity.new(a_id: source.id)
+      |> create()
+
+      query = include(Module5, :a, &include(&1, :c))
+
+      assert [row] = agreed(query)
+      assert row.a.c.id == required.id
     end
   end
 
