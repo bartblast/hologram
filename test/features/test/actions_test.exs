@@ -432,5 +432,19 @@ defmodule HologramFeatureTests.ActionsTest do
       |> sleep(3_500)
       |> assert_text("Page 21 title")
     end
+
+    # The page cid resolves on the destination too, but to a different module - one with no
+    # clause for the action the previous page scheduled. A dispatch that survives the navigation
+    # raises there rather than merely doing the wrong thing.
+    feature "navigating to another page cancels a pending action targeting the page",
+            %{session: session} do
+      session
+      |> visit(Page20)
+      |> click(button("Run delayed page action"))
+      |> click(link("Page 21 link"))
+      |> assert_page(Page21)
+      |> sleep(3_500)
+      |> assert_text("Page 21 title")
+    end
   end
 end
