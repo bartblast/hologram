@@ -97,7 +97,6 @@ export default class Hologram {
   static #pageModule = null;
   static #pageParams = null;
   static #pendingJsInteropActions = [];
-  static #preMountActions = [];
   static #registeredPageModules = new Set();
   static #scheduledActionTimerIds = new Set();
   static #scrollPosition = null;
@@ -119,21 +118,21 @@ export default class Hologram {
   // Converts plain JS values to Hologram types and schedules the action for execution.
   // Example: globalThis.Hologram.dispatchAction("increment", "page", {amount: 5})
   static dispatchAction(actionName, target, params = {}) {
+    // Everything arriving here comes from script the page itself carries, so it belongs to the
+    // page on screen. Between a page swap starting and the new page mounting that page is the
+    // destination - its markup is patched in and its scripts have run - while the registry still
+    // answers for the page being left, so dispatching now would resolve against the wrong page.
+    // It waits in the queue a document load buffers into, which the mount drains for both.
+    if ($.#isMountPending) {
+      $.#pendingJsInteropActions.push([actionName, target, params]);
+      return;
+    }
+
     const action = Type.actionStruct({
       name: Type.atom(actionName),
       params: JsInterop.boxActionParam(params),
       target: Type.bitstring(target),
     });
-
-    // Everything arriving here comes from script the page itself carries, so it belongs to the
-    // page on screen. Between a page swap starting and the new page mounting that page is the
-    // destination - its markup is patched in and its scripts have run - while the registry still
-    // answers for the page being left, so dispatching now would resolve against the wrong page.
-    // The action waits instead, until the destination can answer for it.
-    if ($.#isMountPending) {
-      $.#preMountActions.push(action);
-      return;
-    }
 
     Hologram.scheduleAction(action);
   }
@@ -832,6 +831,11 @@ export default class Hologram {
     );
   }
 
+  // Two arrivals buffer here for the same reason - the dispatch reached the runtime before the
+  // page could answer for it. A document load leaves a shim that buffers whatever the page's
+  // script dispatches before the runtime exists, and dispatchAction buffers whatever it
+  // dispatches while a page swap is still short of its mount. The mount is the first moment
+  // either can be answered, so both drain here.
   static #dispatchPendingJsInteropActions() {
     const actions = Hologram.#pendingJsInteropActions;
     Hologram.#pendingJsInteropActions = [];
@@ -1221,7 +1225,6 @@ export default class Hologram {
 
       Hologram.#scheduleQueuedInitActions();
       Hologram.#dispatchPendingJsInteropActions();
-      Hologram.#scheduleHeldActions();
     });
   }
 
@@ -1315,11 +1318,11 @@ export default class Hologram {
 
     // The two halves of one rule, split at this instant: what was scheduled before the swap
     // belongs to the page being left and is dropped above, and what the destination's own script
-    // dispatches after it is held below until the destination can answer for it. A swap starting
-    // while another is still pending drops what the first destination held - that page never
-    // mounted, so nothing will ever be able to answer for it.
+    // dispatches after it waits until the destination can answer for it. Emptying the queue
+    // applies the same rule to what is already in it, which is a dispatch some earlier page
+    // buffered and never got to make - that page is being left too.
     $.#isMountPending = true;
-    $.#preMountActions = [];
+    $.#pendingJsInteropActions = [];
 
     const pageModule = Interpreter.evaluateJavaScriptExpression(
       payload.pageModule,
@@ -1564,16 +1567,6 @@ export default class Hologram {
         );
       }
     }
-  }
-
-  static #scheduleHeldActions() {
-    // The queue is emptied before anything runs, so each held action is released exactly once.
-    const actions = $.#preMountActions;
-    $.#preMountActions = [];
-
-    actions.forEach((action) => {
-      Hologram.scheduleAction(action);
-    });
   }
 
   static #scheduleQueuedInitActions() {
