@@ -37,6 +37,7 @@ describe("Model", () => {
             tags: {toMany: true, type: "MyApp.Tag"},
           },
           serverOnly: ["internal_notes"],
+          sortKeys: [],
         },
       },
     };

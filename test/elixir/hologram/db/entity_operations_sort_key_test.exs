@@ -16,8 +16,8 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
     add_companion_column!("test_fixtures_entity_module7")
 
     original_mapping = DB.mapping()
-    ordered_pairs = MapSet.new([{Module2, :c}, {Module7, :c}])
-    mapping = Mapper.derive!([Module2, Module7], ordered_pairs)
+    sort_key_attributes = MapSet.new([{Module2, :c}, {Module7, :c}])
+    mapping = Mapper.derive!([Module2, Module7], sort_key_attributes)
 
     :persistent_term.put(DB.mapping_key(), Map.merge(original_mapping, mapping))
 

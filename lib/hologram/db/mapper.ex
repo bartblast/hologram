@@ -29,21 +29,21 @@ defmodule Hologram.DB.Mapper do
   automatically), and :source (:system, or the declaration the column is derived from).
   To-many relationships derive no columns - they live in join tables.
 
-  Each {entity type, attribute name} pair in ordered_pairs naming this entity derives a
+  Each {entity type, attribute name} pair in sort_key_attributes naming this entity derives a
   nullable `<attribute>_$sort` companion column (source `{:sort_key, name}`) holding the
-  attribute's derived sort key. Without pairs no companions derive.
+  attribute's derived sort key. Without them no companions derive.
 
   Raises Hologram.CompileError when two declarations derive the same column name (an attribute
   named x_id collides with a to-one relationship named x).
   """
   @spec columns(module, MapSet.t()) :: list(%{atom => any})
-  def columns(entity_type, ordered_pairs \\ MapSet.new()) do
+  def columns(entity_type, sort_key_attributes \\ MapSet.new()) do
     entry = %{
       attributes: entity_type.__attributes__(),
       relationships: entity_type.__relationships__()
     }
 
-    columns_from_entry(entity_type, entry, ordered_pairs)
+    columns_from_entry(entity_type, entry, sort_key_attributes)
   end
 
   @doc """
@@ -54,18 +54,18 @@ defmodule Hologram.DB.Mapper do
   tables and enum types, whose single-underscore seams can merge to the same name across
   entities) - and returns a map from entity type module to its mapping: :table (the table
   name), :pk_constraint (the derived `<table>_$pk` constraint name), :columns (as returned
-  by columns/2, sort-key companions included for the given ordered pairs), and :join_tables
+  by columns/2, sort-key companions included for the given attributes), and :join_tables
   (as returned by join_tables/1).
   """
   @spec derive!(list(module), MapSet.t()) :: %{module => %{atom => any}}
-  def derive!(entity_types, ordered_pairs \\ MapSet.new()) do
+  def derive!(entity_types, sort_key_attributes \\ MapSet.new()) do
     # The collision check is a pure function of the module atoms - running it before
     # reflection keeps its readable error ahead of any missing-module crash.
     validate_table_names!(entity_types)
 
     entity_types
     |> Model.from_modules(Reflection.list_roles())
-    |> derive_from_model!(ordered_pairs)
+    |> derive_from_model!(sort_key_attributes)
   end
 
   @doc """
@@ -77,7 +77,7 @@ defmodule Hologram.DB.Mapper do
   (a replayed migration history names them as plain module atoms).
   """
   @spec derive_from_model!(%{atom => any}, MapSet.t()) :: %{module => %{atom => any}}
-  def derive_from_model!(model, ordered_pairs \\ MapSet.new()) do
+  def derive_from_model!(model, sort_key_attributes \\ MapSet.new()) do
     entities = put_role_grant(model)
 
     entities
@@ -94,7 +94,7 @@ defmodule Hologram.DB.Mapper do
          %{
            table: table_name,
            pk_constraint: fit_identifier("#{table_name}_$pk"),
-           columns: columns_from_entry(entity_type, entry, ordered_pairs),
+           columns: columns_from_entry(entity_type, entry, sort_key_attributes),
            indexes: entity_indexes(entity_type),
            join_tables: join_tables_from_entry(entity_type, entry)
          }}
@@ -251,7 +251,7 @@ defmodule Hologram.DB.Mapper do
 
   defp collation(_type), do: nil
 
-  defp columns_from_entry(entity_type, entry, ordered_pairs) do
+  defp columns_from_entry(entity_type, entry, sort_key_attributes) do
     table_name = table_name(entity_type)
 
     attribute_columns =
@@ -290,7 +290,7 @@ defmodule Hologram.DB.Mapper do
         }
       end)
 
-    sort_columns = sort_key_columns(entity_type, table_name, ordered_pairs)
+    sort_columns = sort_key_columns(entity_type, table_name, sort_key_attributes)
 
     columns =
       [id_column() | attribute_columns] ++ to_one_columns ++ timestamp_columns() ++ sort_columns
@@ -477,8 +477,8 @@ defmodule Hologram.DB.Mapper do
     |> Enum.map(fn {name, target, _opts} -> {name, target} end)
   end
 
-  defp sort_key_columns(entity_type, table_name, ordered_pairs) do
-    ordered_pairs
+  defp sort_key_columns(entity_type, table_name, sort_key_attributes) do
+    sort_key_attributes
     |> Enum.filter(fn {pair_entity, _name} -> pair_entity == entity_type end)
     |> Enum.sort()
     |> Enum.map(fn {_entity, name} ->

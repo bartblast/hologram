@@ -68,8 +68,8 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "applies the sort-key companion to a to-many include ordering" do
-      ordered_pairs = MapSet.new([{Module2, :c}])
-      mapping = Mapper.derive!([Module1, Module2, Module3], ordered_pairs)
+      sort_key_attributes = MapSet.new([{Module2, :c}])
+      mapping = Mapper.derive!([Module1, Module2, Module3], sort_key_attributes)
 
       term =
         Module3
@@ -801,8 +801,8 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
 
     test "compiles string ordering through the sort-key companion" do
-      ordered_pairs = MapSet.new([{Module2, :c}])
-      mapping = Mapper.derive!([Module2], ordered_pairs)
+      sort_key_attributes = MapSet.new([{Module2, :c}])
+      mapping = Mapper.derive!([Module2], sort_key_attributes)
 
       term =
         Module2

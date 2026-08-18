@@ -173,16 +173,16 @@ defmodule Hologram.DB.QueryCache do
     end
   end
 
-  # The registered queries' ordered pairs enrich the mapping with sort-key
+  # The registered queries' sort-key attributes enrich the mapping with sort-key
   # companions - the cache owns this derivation because extraction needs no
   # mapping and the cache boots right after the database. With no pairs the boot
   # mapping stands - a reconciliation-managed database drops orphaned companions
   # on the next model reconciliation, which targets the plain mapping, while a
   # migration-managed one drops them here, the one convergence that reaches them.
   defp ensure_mapping(terms) do
-    ordered_pairs = Registry.ordered_string_pairs(terms)
+    sort_key_attributes = Registry.sort_key_attributes(terms)
 
-    if MapSet.size(ordered_pairs) == 0 do
+    if MapSet.size(sort_key_attributes) == 0 do
       mapping = DB.mapping()
 
       if migrations_managed?() do
@@ -191,7 +191,7 @@ defmodule Hologram.DB.QueryCache do
 
       mapping
     else
-      mapping = Mapper.derive!(Reflection.list_entities(), ordered_pairs)
+      mapping = Mapper.derive!(Reflection.list_entities(), sort_key_attributes)
       :persistent_term.put(DB.mapping_key(), mapping)
 
       ops = converge_artifacts(mapping)

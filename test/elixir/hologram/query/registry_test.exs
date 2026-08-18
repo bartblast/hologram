@@ -94,50 +94,6 @@ defmodule Hologram.Query.RegistryTest do
     end
   end
 
-  describe "ordered_string_pairs/1" do
-    test "collects pairs ordered on string attributes" do
-      term =
-        Module2
-        |> order_by(:c)
-        |> Query.normalize()
-
-      assert ordered_string_pairs([term]) == MapSet.new([{Module2, :c}])
-    end
-
-    test "deduplicates pairs across terms" do
-      term_1 =
-        Module2
-        |> order_by(:c)
-        |> Query.normalize()
-
-      term_2 =
-        Module2
-        |> filter(a: true)
-        |> order_by(:c)
-        |> Query.normalize()
-
-      assert ordered_string_pairs([term_1, term_2]) == MapSet.new([{Module2, :c}])
-    end
-
-    test "skips natively-ordered attribute types" do
-      term =
-        Module2
-        |> order_by(:b)
-        |> Query.normalize()
-
-      assert ordered_string_pairs([term]) == MapSet.new()
-    end
-
-    test "walks include sub-terms" do
-      term =
-        Module3
-        |> include(:a, fn sub_query -> order_by(sub_query, :c) end)
-        |> Query.normalize()
-
-      assert ordered_string_pairs([term]) == MapSet.new([{Module2, :c}])
-    end
-  end
-
   describe "param_shape/1" do
     test "binds membership element params with the attribute type" do
       term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:param, :bound}, 1]}]}
@@ -214,6 +170,50 @@ defmodule Hologram.Query.RegistryTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         param_shape(term)
       end
+    end
+  end
+
+  describe "sort_key_attributes/1" do
+    test "collects pairs ordered on string attributes" do
+      term =
+        Module2
+        |> order_by(:c)
+        |> Query.normalize()
+
+      assert sort_key_attributes([term]) == MapSet.new([{Module2, :c}])
+    end
+
+    test "deduplicates pairs across terms" do
+      term_1 =
+        Module2
+        |> order_by(:c)
+        |> Query.normalize()
+
+      term_2 =
+        Module2
+        |> filter(a: true)
+        |> order_by(:c)
+        |> Query.normalize()
+
+      assert sort_key_attributes([term_1, term_2]) == MapSet.new([{Module2, :c}])
+    end
+
+    test "skips natively-ordered attribute types" do
+      term =
+        Module2
+        |> order_by(:b)
+        |> Query.normalize()
+
+      assert sort_key_attributes([term]) == MapSet.new()
+    end
+
+    test "walks include sub-terms" do
+      term =
+        Module3
+        |> include(:a, fn sub_query -> order_by(sub_query, :c) end)
+        |> Query.normalize()
+
+      assert sort_key_attributes([term]) == MapSet.new([{Module2, :c}])
     end
   end
 end

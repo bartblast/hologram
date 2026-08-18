@@ -124,17 +124,14 @@ export default class Deltas {
     }
   }
 
-  // Which attributes need a key is compile-time true - the build bakes the pairs its own queries
-  // order by - and the key itself is derived, so it is computed here rather than sent.
+  // Which attributes need a key is compile-time true - the model names the ones this build's own
+  // queries order by - and the key itself is derived, so it is computed here rather than sent.
   static #computeSortKeys(type, attributes) {
-    for (const [pairType, name] of globalThis.Hologram.sync
-      ?.orderedStringPairs ?? []) {
-      if (pairType === type) {
-        const value = attributes[name];
+    for (const name of Model.entry(type).sortKeys) {
+      const value = attributes[name];
 
-        attributes[`${name}_sort`] =
-          value === null || value === undefined ? null : SortKey.compute(value);
-      }
+      attributes[`${name}_sort`] =
+        value === null || value === undefined ? null : SortKey.compute(value);
     }
   }
 }

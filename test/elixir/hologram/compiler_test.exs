@@ -57,8 +57,8 @@ defmodule Hologram.CompilerTest do
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
   @empty_sync_constants %{
     entity_types: MapSet.new(),
-    ordered_string_pairs: MapSet.new(),
-    prop_params: %{}
+    prop_params: %{},
+    sort_key_attributes: MapSet.new()
   }
   @tmp_dir Reflection.tmp_dir()
 
@@ -436,13 +436,13 @@ defmodule Hologram.CompilerTest do
       refute Map.has_key?(sync_constants.prop_params, ComponentModule16)
     end
 
-    # The pairs come from a fixture page reaching a query that orders a :string attribute - what
-    # is asserted is the wiring from reachable queries to the pair set, not the derivation rules,
-    # which the registry's own suite pins.
-    test "collects the pairs the queries those pages reach order by", %{
+    # The attributes come from a fixture page reaching a query that orders a :string attribute -
+    # what is asserted is the wiring from reachable queries to the attribute set, not the
+    # derivation rules, which the registry's own suite pins.
+    test "collects the attributes the queries those pages reach order by", %{
       sync_constants: sync_constants
     } do
-      assert MapSet.member?(sync_constants.ordered_string_pairs, {Entity15, :token})
+      assert MapSet.member?(sync_constants.sort_key_attributes, {Entity15, :token})
     end
   end
 
@@ -713,7 +713,7 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
-                 ~s/"updated_at":"datetime"},"relationships":{},"serverOnly":[]}}/
+                 ~s/"updated_at":"datetime"},"relationships":{},"serverOnly":[],"sortKeys":[]}}/
              )
     end
 
@@ -760,20 +760,36 @@ defmodule Hologram.CompilerTest do
       refute String.contains?(js, "secret_note")
     end
 
-    test "injects the sort-key pairs the client computes at ingest", %{
+    # A type's sort keys ride in its own model entry: the ingest path already reads the entry to
+    # decode the row, and every type named here is one the model names anyway.
+    test "injects the sort keys the client computes at ingest", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      pairs = MapSet.new([{Entity15, :token}, {Entity2, :c}])
-      sync_constants = %{@empty_sync_constants | ordered_string_pairs: pairs}
+      attributes = MapSet.new([{Entity15, :secret_note}, {Entity15, :token}])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([Entity15]),
+          sort_key_attributes: attributes
+      }
 
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
-      assert String.contains?(
-               js,
-               ~s/orderedStringPairs: [["Hologram.Test.Fixtures.Entity.Module15","token"],/ <>
-                 ~s/["Hologram.Test.Fixtures.Entity.Module2","c"]]/
-             )
+      assert String.contains?(js, ~s/"sortKeys":["secret_note","token"]/)
+    end
+
+    # A type nothing orders by carries an empty list rather than nothing at all - the ingest path
+    # reads the field unconditionally.
+    test "injects an empty sort-key list for a type no query orders by", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"serverOnly":[],"sortKeys":[]}}/)
     end
 
     # A capture travels in the bundle and is called there, but an encoded function carries no

@@ -23,14 +23,15 @@ describe("Deltas", () => {
             tasks: {toMany: true, type: TASK},
           },
           serverOnly: [],
+          sortKeys: [],
         },
         [TASK]: {
           attributes: {done: "boolean", id: "uuid", title: "string"},
           relationships: {},
           serverOnly: [],
+          sortKeys: ["title"],
         },
       },
-      orderedStringPairs: [[TASK, "title"]],
     };
 
     LocalDatabase.reset();

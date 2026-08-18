@@ -821,10 +821,10 @@ defmodule Hologram.MigratorTest do
       ]
 
       model = apply_pending(migrations, Model.empty(), @context)
-      ordered_pairs = MapSet.new([{MyApp.Task, :title}])
+      sort_key_attributes = MapSet.new([{MyApp.Task, :title}])
 
       [
-        enriched_mapping: Mapper.derive_from_model!(model, ordered_pairs),
+        enriched_mapping: Mapper.derive_from_model!(model, sort_key_attributes),
         plain_mapping: Mapper.derive_from_model!(model)
       ]
     end

@@ -56,8 +56,8 @@ defmodule Hologram.DB.QueryCacheTest do
       |> filter(b: {:>=, %Param{name: :min_b}})
       |> Query.normalize()
 
-    ordered_pairs = MapSet.new([{Entity2, :c}])
-    mapping = Mapper.derive!(Reflection.list_entities(), ordered_pairs)
+    sort_key_attributes = MapSet.new([{Entity2, :c}])
+    mapping = Mapper.derive!(Reflection.list_entities(), sort_key_attributes)
 
     [module_1_term, module_11_term]
     |> Registry.build()

@@ -202,19 +202,21 @@ describe("QueryKernel", () => {
               tasks: {toMany: true, type: TASK},
             },
             serverOnly: [],
+            sortKeys: [],
           },
           [TASK]: {
             attributes: {id: "uuid", position: "integer", title: "string"},
             relationships: {},
             serverOnly: [],
+            sortKeys: ["title"],
           },
           [USER]: {
             attributes: {email: "string", id: "uuid"},
             relationships: {},
             serverOnly: [],
+            sortKeys: [],
           },
         },
-        orderedStringPairs: [[TASK, "title"]],
       };
 
       LocalDatabase.reset();
