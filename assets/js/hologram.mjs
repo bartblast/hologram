@@ -1432,9 +1432,12 @@ export default class Hologram {
       subscriptionReceipts,
     } = pageSnapshot;
 
-    // A restore swaps the registry here rather than in #mountPage, and when the page's bundle
-    // has not been loaded yet its mount is a network round trip away - long enough for a
-    // dispatch decided on the page being left to fire against the restored one.
+    // A restore swaps the registry here rather than in #mountPage, and when the page's bundle has
+    // not been loaded yet its mount is a network round trip away - long enough for a dispatch
+    // decided on the page being left to fire against the restored one. No test reaches that: it
+    // needs an unregistered bundle and a timer falling inside the fetch, and with the bundle
+    // already registered the mount follows this synchronously, so either cancellation alone
+    // covers what a test can stage. This one is for the window a slow connection opens.
     Hologram.cancelScheduledActions();
 
     ComponentRegistry.populate(componentRegistryEntries);
