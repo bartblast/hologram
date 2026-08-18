@@ -148,7 +148,7 @@ defmodule HologramClusterTests.SyncTest do
 
       {data, _client} = await_deltas(client)
 
-      assert data =~ ~s["op":"put_entity"]
+      assert data =~ ~s[put_entity":{"HologramClusterTests.Entities.Item":]
       assert data =~ ~s["title":"Written on peer B"]
       assert data =~ ~s["id":"#{item_id}"]
     end
@@ -164,7 +164,7 @@ defmodule HologramClusterTests.SyncTest do
 
       {data, _client} = await_deltas(client)
 
-      assert data =~ ~s["op":"put_entity"]
+      assert data =~ ~s[put_entity":{"HologramClusterTests.Entities.Item":]
       assert data =~ ~s["title":"Written on peer A"]
       assert data =~ ~s["id":"#{item_id}"]
     end
