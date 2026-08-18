@@ -47,7 +47,12 @@ defmodule App1.SyncTest do
       # And what IS assigned is null, explicitly - not an empty object, which is truthy, so a
       # client finding one would greet with undefined fields rather than staying quiet. One
       # unambiguous value beats probing for a missing global.
-      assert String.contains?(bundle, "Hologram.sync=null")
+      #
+      # Matched loosely around the operator: this is the BUNDLE, so what stands between the parts
+      # is the minifier's business, not this build's. What is asserted is that the shipped
+      # artifact declares the value - that it survives bundling at all is the half the compiler's
+      # own suite cannot answer.
+      assert Regex.match?(~r/Hologram\.sync\s*=\s*null/, bundle)
     end
   end
 
