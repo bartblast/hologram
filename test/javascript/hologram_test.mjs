@@ -142,10 +142,6 @@ describe("Hologram", () => {
     });
   });
 
-  // Nothing in these unit tests reaches #mountPage, which is the only thing that closes the
-  // pre-mount window - so a navigation started by an earlier block would leave it open and the
-  // case below would fail for a reason that has nothing to do with dispatchAction. This block has
-  // to run before describe("loadNewPage()").
   describe("dispatchAction()", () => {
     let clock, executeActionStub;
 
@@ -1355,6 +1351,10 @@ describe("Hologram", () => {
     afterEach(() => {
       Client.fetchPage.restore();
       assignStub.restore();
+
+      // A navigation opens the pre-mount window and only a mount closes it, which these tests
+      // never reach - so it is closed here rather than left open for whatever runs next.
+      Hologram.isMountPending = false;
     });
 
     // A page the client cannot ask for is one only the browser can reach.

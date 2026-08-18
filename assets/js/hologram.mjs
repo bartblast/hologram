@@ -77,6 +77,9 @@ export default class Hologram {
   // Made public to make tests easier
   static virtualDocument = null;
 
+  // Made public to make tests easier
+  static isMountPending = false;
+
   static #deps = {
     Bitstring: Bitstring,
     ERTS: ERTS,
@@ -93,7 +96,6 @@ export default class Hologram {
 
   static #historyId = null;
   static #isInitiated = false;
-  static #isMountPending = false;
   static #pageModule = null;
   static #pageParams = null;
   static #pendingJsInteropActions = [];
@@ -123,7 +125,7 @@ export default class Hologram {
     // destination - its markup is patched in and its scripts have run - while the registry still
     // answers for the page being left, so dispatching now would resolve against the wrong page.
     // It waits in the queue a document load buffers into, which the mount drains for both.
-    if ($.#isMountPending) {
+    if ($.isMountPending) {
       $.#pendingJsInteropActions.push([actionName, target, params]);
       return;
     }
@@ -1165,7 +1167,7 @@ export default class Hologram {
       // dispatch made from here on correct - the registry still answers for the page being left -
       // but it keeps one failing where it can be seen rather than disappearing into a queue with
       // no drain. What is already held belongs to the page that failed to mount, so it goes.
-      $.#isMountPending = false;
+      $.isMountPending = false;
       $.#pendingJsInteropActions = [];
 
       throw new HologramRuntimeError(`Failed to load page bundle: ${src}`);
@@ -1183,7 +1185,7 @@ export default class Hologram {
   static #mountPage(isPageModuleRegistered = false) {
     // Cleared before the mount's own work, so everything it schedules is armed normally and the
     // release below does not simply hold the same actions again.
-    $.#isMountPending = false;
+    $.isMountPending = false;
 
     // Every page-entry path funnels through here (client-side navigation, back/forward
     // restoration, initial mount), so this is where dispatches still pending from the previous
@@ -1329,7 +1331,7 @@ export default class Hologram {
     // dispatches after it waits until the destination can answer for it. Emptying the queue
     // applies the same rule to what is already in it, which is a dispatch some earlier page
     // buffered and never got to make - that page is being left too.
-    $.#isMountPending = true;
+    $.isMountPending = true;
     $.#pendingJsInteropActions = [];
 
     const pageModule = Interpreter.evaluateJavaScriptExpression(
