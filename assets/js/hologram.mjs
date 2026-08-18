@@ -150,8 +150,11 @@ export default class Hologram {
     // getComponentModule() answers with plain null for a cid the registry does not hold, and null
     // reaching callNamedFunction faults on reading a module name off it - a raw TypeError naming
     // neither the cid nor the action, which handleUncaughtError drops because it isn't boxed.
-    // Pending dispatches are cancelled at both registry swaps, so a target the registry never held
-    // is a mistyped cid and nothing else - raised boxed, the way the error overlay reads it.
+    // An action reaches here only through #settleAction, which admits it when its epoch is the
+    // current one and the two epochs agree - so it was created while the registry answered for
+    // the page it answers for now. A target that does not resolve is therefore a cid that page
+    // never held, not a dispatch that outlived its own page - raised boxed, the way the error
+    // overlay reads it.
     if (!ComponentRegistry.isCidRegistered(target)) {
       Interpreter.raiseArgumentError(
         `invalid action target, there is no component with CID: ${Interpreter.inspect(target)}`,
