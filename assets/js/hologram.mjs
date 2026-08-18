@@ -970,6 +970,12 @@ export default class Hologram {
   }
 
   static async #handlePopstateEvent(event) {
+    // The history's side of the boundary #showNewPage guards: everything below belongs to the
+    // page being restored, so this is the last instant at which every pending dispatch provably
+    // belongs to the page being left. The restore below is skipped when there is no snapshot, so
+    // this cannot live there.
+    Hologram.cancelScheduledActions();
+
     await $.#savePageSnapshot();
     $.#historyId = event.state;
 
@@ -1154,11 +1160,10 @@ export default class Hologram {
     // Every page-entry path funnels through here (client-side navigation, back/forward
     // restoration, initial mount), so this is where dispatches still pending from the previous
     // page are dropped - the context they were meant for no longer exists. Cancel, not flush: a
-    // dispatch must never execute on a page the user has left. On the initial mount all three
+    // dispatch must never execute on a page the user has left. On the initial mount both
     // cancellations are no-ops.
     Debouncer.cancelAll();
     Throttler.cancelAll();
-    Hologram.cancelScheduledActions();
 
     let mountData = null;
 
@@ -1284,6 +1289,13 @@ export default class Hologram {
   // is done. Otherwise the bundle is fetched, and running it announces the page is ready to
   // mount.
   static #showNewPage(payload) {
+    // The patch below puts the destination on screen and runs any script it carries, and for a
+    // page whose bundle is not loaded the mount is a fetch away - so cancelling at the mount both
+    // misses the dispatches that fire during that fetch, against a registry that is still the
+    // previous page's, and sweeps the ones the destination arms in the same window. Here nothing
+    // of the destination exists yet, so every pending dispatch belongs to the page being left.
+    Hologram.cancelScheduledActions();
+
     const pageModule = Interpreter.evaluateJavaScriptExpression(
       payload.pageModule,
     );
@@ -1431,14 +1443,6 @@ export default class Hologram {
       scrollPosition,
       subscriptionReceipts,
     } = pageSnapshot;
-
-    // A restore swaps the registry here rather than in #mountPage, and when the page's bundle has
-    // not been loaded yet its mount is a network round trip away - long enough for a dispatch
-    // decided on the page being left to fire against the restored one. No test reaches that: it
-    // needs an unregistered bundle and a timer falling inside the fetch, and with the bundle
-    // already registered the mount follows this synchronously, so either cancellation alone
-    // covers what a test can stage. This one is for the window a slow connection opens.
-    Hologram.cancelScheduledActions();
 
     ComponentRegistry.populate(componentRegistryEntries);
 

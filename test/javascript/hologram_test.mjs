@@ -1387,6 +1387,64 @@ describe("Hologram", () => {
         assert.isFalse(globalThis.Hologram.pageScriptLoaded);
       });
 
+      // The destination is on screen from the patch onward, but its mount waits on the bundle -
+      // so a dispatch that fires in between would run against a registry that is still the
+      // previous page's, and render that page over the destination.
+      it("drops a pending action before the destination is patched in", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+
+        const executeActionStub = sinon
+          .stub(Hologram, "executeAction")
+          .callsFake((_action) => null);
+
+        try {
+          Hologram.scheduleAction(
+            Type.actionStruct({
+              name: Type.atom("stale"),
+              params: Type.map(),
+              target: cid1,
+              delay: Type.integer(100),
+            }),
+          );
+
+          await Hologram.loadNewPage("/target", payloadFor("ddd"));
+
+          clock.tick(5000);
+
+          sinon.assert.notCalled(executeActionStub);
+        } finally {
+          clock.restore();
+          executeActionStub.restore();
+        }
+      });
+
+      // Everything the destination arms is armed after this point, so nothing here may sweep it.
+      it("leaves an action the destination arms alone", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+
+        const executeActionStub = sinon
+          .stub(Hologram, "executeAction")
+          .callsFake((_action) => null);
+
+        try {
+          await Hologram.loadNewPage("/target", payloadFor("fff"));
+
+          const action = Type.actionStruct({
+            name: Type.atom("armed_by_destination"),
+            params: Type.map(),
+            target: cid1,
+          });
+
+          Hologram.scheduleAction(action);
+          clock.tick(0);
+
+          sinon.assert.calledOnceWithExactly(executeActionStub, action);
+        } finally {
+          clock.restore();
+          executeActionStub.restore();
+        }
+      });
+
       it("fetches the bundle of a page this client has not run before", async () => {
         await Hologram.loadNewPage("/target", payloadFor("bbb"));
 
