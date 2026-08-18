@@ -13,6 +13,7 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page18
   alias HologramFeatureTests.Actions.Page19
   alias HologramFeatureTests.Actions.Page2
+  alias HologramFeatureTests.Actions.Page20
   alias HologramFeatureTests.Actions.Page3
   alias HologramFeatureTests.Actions.Page4
   alias HologramFeatureTests.Actions.Page5
@@ -381,6 +382,22 @@ defmodule HologramFeatureTests.ActionsTest do
       |> assert_text(css("#result"), "nil")
       |> sleep(1_000)
       |> assert_text(css("#result"), ":delayed_action_15_executed")
+    end
+  end
+
+  describe "pending actions and navigation" do
+    # Positive control for the cancellation scenarios that follow: the same click schedules a
+    # dispatch that fires when the user stays put.
+    feature "a pending delayed action fires when the user stays on the page", %{session: session} do
+      session
+      |> visit(Page20)
+      |> assert_text(css("#layout_result"), "nil")
+      |> click(button("Run delayed layout action"))
+      |> assert_text(css("#layout_result"), "nil")
+      |> sleep(2_000)
+      |> assert_text(css("#layout_result"), "nil")
+      |> sleep(1_500)
+      |> assert_text(css("#layout_result"), ~s/"layout_action_ran"/)
     end
   end
 end
