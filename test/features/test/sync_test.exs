@@ -8,7 +8,6 @@ defmodule HologramFeatureTests.SyncTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
-  alias Hologram.Sync.Evaluators
   alias Hologram.Test.SyncClient
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
@@ -21,13 +20,8 @@ defmodule HologramFeatureTests.SyncTest do
   # Every entity table truncates, not only the documents: the client's pot is app-wide, so a row
   # left in ANY synced table by an earlier test file would arrive in this client's initial fill
   # and make "the first deltas frame" mean different things on different runs.
-  #
-  # The truncation must find no evaluator alive: TRUNCATE bypasses the write funnel, so no effect
-  # reaches the log and nothing tells a running evaluator the rows are gone - it would keep
-  # serving its pre-truncate round to every client of this test. Waiting for the drain is what
-  # makes each test's first frame mean this test's rows.
   setup do
-    wait_for_evaluators_to_drain()
+    await_evaluator_drain()
 
     tables =
       Enum.map_join([Document, Folder, Review, Product, RoleGrant, User], ", ", fn entity_type ->
@@ -85,20 +79,6 @@ defmodule HologramFeatureTests.SyncTest do
     on_exit(fn -> SyncClient.close(client) end)
 
     client
-  end
-
-  defp wait_for_evaluators_to_drain(attempts_left \\ 2_000) do
-    cond do
-      Evaluators.live() == [] ->
-        :ok
-
-      attempts_left == 0 ->
-        flunk("evaluators from an earlier test never drained")
-
-      true ->
-        Process.sleep(1)
-        wait_for_evaluators_to_drain(attempts_left - 1)
-    end
   end
 
   # The place the frame says the client has reached, which it hands back on reconnect. Read out of
