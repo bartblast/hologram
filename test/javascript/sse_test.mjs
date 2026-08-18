@@ -769,6 +769,111 @@ describe("Sse", () => {
     });
   });
 
+  describe("sync_resync event", () => {
+    const TASK = "MyApp.Task";
+
+    const envelope = () =>
+      JSON.stringify({protocol_version: 1, reason: "retention"});
+
+    beforeEach(() => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "held before the resync"});
+      LocalDatabase.markSynced("all");
+    });
+
+    it("drops what the client holds, because what follows is everything again", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+    });
+
+    it("drops the completeness it had, since the refill has not finished", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      assert.isFalse(LocalDatabase.isSynced("all"));
+    });
+
+    // Repainting an emptied database would show the gap between the discard and the refill,
+    // which lands milliseconds later and schedules its own repaint.
+    it("schedules no repaint of the gap it opens", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      assert.equal(animationFrames.length, 0);
+    });
+
+    // Even when the refill delivers nothing - a client that may now see none of what it held -
+    // the marker ending it repaints, which is what takes those rows off the screen.
+    it("leaves the marker ending the refill to repaint", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      Sse.eventSource.listeners.synced({
+        data: JSON.stringify({protocol_version: 1, scope: "all"}),
+      });
+
+      assert.equal(animationFrames.length, 1);
+    });
+  });
+
+  describe("sync_reload event", () => {
+    const envelope = (reason) =>
+      JSON.stringify({protocol_version: 1, reason: reason});
+
+    afterEach(() => {
+      GlobalRegistry.set("syncStaleReason", null);
+    });
+
+    it("records why the bundle is behind the server", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_reload({data: envelope("model_hash")});
+
+      assert.equal(GlobalRegistry.get("syncStaleReason"), "model_hash");
+    });
+
+    // Restarting the page would throw away what the person was doing to fix a mismatch they did
+    // not cause - and a server serving an older client through lens chains is where this goes,
+    // so a bundle behind the server is a thing to adapt to rather than to correct here.
+    it("leaves the page where it is", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_reload({data: envelope("model_hash")});
+
+      sinon.assert.notCalled(globalThis.window.location.reload);
+    });
+
+    it("keeps what the client already holds", async () => {
+      LocalDatabase.putRow("MyApp.Task", {
+        id: "t1",
+        title: "rendered by the server",
+      });
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_reload({
+        data: envelope("protocol_version"),
+      });
+
+      assert.equal(
+        LocalDatabase.getRow("MyApp.Task", "t1").title,
+        "rendered by the server",
+      );
+    });
+  });
+
   describe("synced event", () => {
     const envelope = (scope) =>
       JSON.stringify({protocol_version: 1, scope: scope});

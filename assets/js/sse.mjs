@@ -203,6 +203,37 @@ export default class Sse {
         $.scheduleRender();
       });
 
+      // A notice rather than an order, and saying so is the whole of what the client does with
+      // it. Restarting the page would throw away what the person was doing to fix a mismatch
+      // they did not cause - and it is not where this is going: the server learns to serve a
+      // client built against an older model through lens chains, so a bundle behind the server
+      // becomes a thing to adapt to rather than to correct. Until then such a client keeps the
+      // stream it has, and its database stops filling - no session was started for it, so no
+      // completeness marker arrives and everything that waits on one keeps waiting.
+      $.eventSource.addEventListener("sync_reload", (event) => {
+        const frame = JSON.parse(event.data);
+
+        Logger.debug(`Hologram: bundle behind the server (${frame.reason})`);
+
+        // TODO: nothing reads this yet - an app surfaces it as its own "a new version is
+        // available" notice, and a feature helper asserts it the way `sseConnected?` is
+        // asserted.
+        GlobalRegistry.set("syncStaleReason", frame.reason);
+      });
+
+      // What follows is the whole of what this client may see rather than what changed in it, so
+      // what it holds now is no part of the answer and goes.
+      //
+      // Nothing is repainted here on purpose: the refill's own frames schedule that, and the
+      // marker ending the refill schedules one even when the refill is empty - which is what
+      // takes rows the client may no longer see off the screen in the case that produced them.
+      $.eventSource.addEventListener("sync_resync", (event) => {
+        const frame = JSON.parse(event.data);
+
+        Logger.debug(`Hologram: sync starting over (${frame.reason})`);
+        LocalDatabase.reset();
+      });
+
       $.eventSource.addEventListener("synced", (event) => {
         const frame = JSON.parse(event.data);
 

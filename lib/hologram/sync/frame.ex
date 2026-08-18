@@ -109,8 +109,11 @@ defmodule Hologram.Sync.Frame do
   @doc """
   Builds the SSE event-stream chunk telling a client its bundle no longer matches this build.
 
-  It is a notice rather than an order: the client reloads at a moment of its own choosing, since
-  its store and its queued writes survive a reload and nothing is lost by waiting.
+  It is a notice rather than an order, and what the client makes of it is the client's business:
+  it is told that nothing will be synced to it, not told to restart. A client that threw its page
+  away over this would be throwing away what someone was doing to fix a mismatch they did not
+  cause - and the direction of travel is the other way, towards serving a client of an older
+  model through adapter chains rather than asking it to catch up.
   """
   @spec encode_reload_envelope(integer, atom) :: String.t()
   def encode_reload_envelope(id, reason) do
