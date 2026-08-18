@@ -1143,10 +1143,11 @@ export default class Hologram {
     // Every page-entry path funnels through here (client-side navigation, back/forward
     // restoration, initial mount), so this is where dispatches still pending from the previous
     // page are dropped - the context they were meant for no longer exists. Cancel, not flush: a
-    // dispatch must never execute on a page the user has left. On the initial mount both
+    // dispatch must never execute on a page the user has left. On the initial mount all three
     // cancellations are no-ops.
     Debouncer.cancelAll();
     Throttler.cancelAll();
+    Hologram.cancelScheduledActions();
 
     let mountData = null;
 
@@ -1366,6 +1367,8 @@ export default class Hologram {
         );
       }
 
+      // A next action with no target of its own inherits the one that produced it, so it belongs
+      // to the page being left - a navigation started below cancels it along with the rest.
       Hologram.scheduleAction(nextAction);
     }
 
@@ -1417,6 +1420,11 @@ export default class Hologram {
       scrollPosition,
       subscriptionReceipts,
     } = pageSnapshot;
+
+    // A restore swaps the registry here rather than in #mountPage, and when the page's bundle
+    // has not been loaded yet its mount is a network round trip away - long enough for a
+    // dispatch decided on the page being left to fire against the restored one.
+    Hologram.cancelScheduledActions();
 
     ComponentRegistry.populate(componentRegistryEntries);
 
