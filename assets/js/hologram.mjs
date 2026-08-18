@@ -72,13 +72,13 @@ export default class Hologram {
   static #PAGE_SNAPSHOT_KEY_PREFIX = "hologram_page_snapshot_";
 
   // Made public to make tests easier
+  static isMountPending = false;
+
+  // Made public to make tests easier
   static prefetchedPages = new Map();
 
   // Made public to make tests easier
   static virtualDocument = null;
-
-  // Made public to make tests easier
-  static isMountPending = false;
 
   static #deps = {
     Bitstring: Bitstring,
