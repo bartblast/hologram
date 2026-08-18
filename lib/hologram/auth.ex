@@ -12,7 +12,25 @@ defmodule Hologram.Auth do
   alias Hologram.Entity.Validator
   alias Hologram.Policy
   alias Hologram.Policy.Evaluator
+  alias Hologram.Query
+  alias Hologram.Query.Window
   alias Hologram.Reflection
+
+  @doc """
+  Returns the window a client checking permissions locally downloads: every grant row, narrowed
+  per client by the policy the read path applies - each client receives its own grants plus the
+  ones it may administer, and nothing else.
+
+  Derived here rather than in either caller so that the build (which decides which pages
+  subscribe to it) and the query cache (which resolves the id back to a term) name one window
+  and not two.
+  """
+  @spec grants_window() :: %{atom => any}
+  def grants_window do
+    RoleGrant
+    |> Query.normalize()
+    |> Window.derive()
+  end
 
   @doc """
   Returns true when the given user may perform the given operation on the given entity, or false otherwise.

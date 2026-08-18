@@ -3,6 +3,7 @@ defmodule Hologram.DB.QueryCache do
 
   use GenServer
 
+  alias Hologram.Auth
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.DB
   alias Hologram.DB.Connection
@@ -267,11 +268,24 @@ defmodule Hologram.DB.QueryCache do
       end)
       |> Map.new()
 
-    windows = Map.new(entries, fn {_id, entry} -> {entry.window_id, entry.window} end)
+    windows =
+      entries
+      |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
+      |> put_grants_window()
 
     data = %{entries: entries, prop_params: prop_params, windows: windows}
 
     :persistent_term.put(impl().persistent_term_key(), data)
+  end
+
+  # Registered unconditionally, because this is a lookup table: what decides whether any client
+  # subscribes to the grants window is the BUILD, which knows whether a page can check permissions
+  # locally. An entry nothing asks for costs one map key, where a missing entry would answer
+  # :no_window to a client the build did tell to ask.
+  defp put_grants_window(windows) do
+    window = Auth.grants_window()
+
+    Map.put_new(windows, Registry.id(window), window)
   end
 
   defp qualified_table(table) do
