@@ -105,6 +105,9 @@ export default class Hologram {
   // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
   static #deadEpochs = new Set();
 
+  // Actions belonging to a page that cannot answer for them yet, waiting for its mount.
+  static #heldActions = [];
+
   static #historyId = null;
   static #isInitiated = false;
   static #pageModule = null;
@@ -563,7 +566,10 @@ export default class Hologram {
 
   // Execute action asynchronously to allow animations and prevent blocking the event loop
   // Deps: [:maps.get/3]
-  static scheduleAction(action) {
+  // The default stamp covers every caller that reasoned about the registry rather than about the
+  // markup - server-pushed actions, command responses, and the queues the mount drains. A caller
+  // whose action came from the DOM passes the displayed page's epoch instead.
+  static scheduleAction(action, epoch = $.registryEpoch) {
     const delay = Erlang_Maps["get/3"](
       Type.atom("delay"),
       action,
@@ -574,7 +580,7 @@ export default class Hologram {
     // doesn't leave a fired timer's id behind for a later cancellation to clear.
     const timerId = setTimeout(() => {
       $.#scheduledActionTimerIds.delete(timerId);
-      Hologram.executeAction(action);
+      Hologram.#settleAction(action, epoch);
     }, Number(delay.value));
 
     $.#scheduledActionTimerIds.add(timerId);
@@ -1258,6 +1264,7 @@ export default class Hologram {
 
       Hologram.#scheduleQueuedInitActions();
       Hologram.#dispatchPendingJsInteropActions();
+      Hologram.#releaseHeldActions();
     });
   }
 
@@ -1470,6 +1477,29 @@ export default class Hologram {
     $.#registeredPageModules.add(pageModule.value);
   }
 
+  static #releaseHeldActions() {
+    const held = $.#heldActions;
+    $.#heldActions = [];
+
+    for (const {action, epoch} of held) {
+      // An entry from a transition that never reached this mount belongs to a page that will
+      // never answer for it.
+      if (epoch !== $.registryEpoch) {
+        continue;
+      }
+
+      // A held action already served its own delay before it was held - the timer is what
+      // delivered it to the settle rule in the first place - so releasing it goes through a bare
+      // macrotask rather than scheduleAction, which would serve that delay a second time. The
+      // macrotask is not incidental: it puts the release behind the init-action and JS-interop
+      // drains, which ride timers of their own, and keeps a raising action surfacing the way
+      // every other timer-driven action does.
+      setTimeout(() => {
+        Hologram.#settleAction(action, epoch);
+      }, 0);
+    }
+  }
+
   static async #restoreEts() {
     const storageKey = $.#ETS_STORAGE_KEY;
 
@@ -1618,6 +1648,34 @@ export default class Hologram {
     actions.forEach((action) => {
       Hologram.scheduleAction(action);
     });
+  }
+
+  // The one place an action meets the registry, and the only thing that decides whether it runs.
+  // An action carries the epoch of the page it was reasoning about when it was created, and this
+  // compares that against where the client has got to since.
+  static #settleAction(action, epoch) {
+    const currentEpoch = Math.max($.domEpoch, $.registryEpoch);
+
+    // The page the action belonged to has been left, or its navigation failed before it could
+    // mount - either way nothing can answer for it any more. The warning is the trace a button
+    // that appears to do nothing leaves behind.
+    if (epoch < currentEpoch || $.#deadEpochs.has(epoch)) {
+      console.warn(
+        "Hologram: dropped an action dispatched on a page that has been left:",
+        Interpreter.inspect(Erlang_Maps["get/2"](Type.atom("name"), action)),
+      );
+
+      return;
+    }
+
+    // The two sides disagree, so the client is mid-transition: the page this action belongs to is
+    // the one being moved to, and it cannot answer until it mounts.
+    if ($.domEpoch !== $.registryEpoch) {
+      $.#heldActions.push({action: action, epoch: epoch});
+      return;
+    }
+
+    return Hologram.executeAction(action);
   }
 }
 
