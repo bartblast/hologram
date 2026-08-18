@@ -382,6 +382,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Hologram.Query, :limit, 2},
     {Hologram.Query, :offset, 2},
     {Hologram.Query, :one, 1},
+    {Hologram.Query, :order_by, 2},
     {Hologram.Router.Helpers, :asset_path, 1},
     {IO, :inspect, 1},
     {IO, :inspect, 2},

@@ -670,6 +670,13 @@ export default class Hologram {
     );
 
     Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "order_by/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["order_by/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
       "Hologram.JS",
       "call/4",
       "public",
