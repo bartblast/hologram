@@ -7,13 +7,19 @@ defmodule Hologram.Sync.Diff do
   # both of those live here rather than in the query.
 
   alias Hologram.Auth
+  alias Hologram.Entity.NotIncluded
 
   @doc """
   Returns what changed for a client between the ids it holds and the round it is being told
   about: the rows that appeared, the rows whose values moved, and the ids that went away.
 
-  Visibility is decided per row, per client, against the round's rows - which is what lets one
-  query answer a hundred clients who may each see a different part of it.
+  A round's rows are the window's roots and every row embedded under them, and each of those is
+  a member in its own right: a row reached only through an include appears, is patched, and
+  vanishes the way a root does, because what a client holds is a flat set of entities rather
+  than a tree.
+
+  Visibility is decided per row, per client, against the round's rows - embedded rows included -
+  which is what lets one query answer a hundred clients who may each see a different part of it.
 
   Which values moved comes from the effects, which name the attributes a transaction touched -
   but every value comes from the round's rows, never from the effects themselves. Effects arrive
@@ -43,7 +49,10 @@ defmodule Hologram.Sync.Diff do
             vanished: list(String.t())
           }
   def deltas(result, held_ids, actor_user_id, transactions) do
-    visible = Map.filter(result.rows, fn {_id, row} -> Auth.can?(actor_user_id, :read, row) end)
+    visible =
+      result.rows
+      |> members()
+      |> Map.filter(fn {_id, row} -> Auth.can?(actor_user_id, :read, row) end)
 
     visible_ids =
       visible
@@ -67,6 +76,27 @@ defmodule Hologram.Sync.Diff do
     data
     |> Map.keys()
     |> MapSet.new()
+  end
+
+  defp changed_attributes(transactions) do
+    transactions
+    |> Enum.flat_map(fn {_tx, events} -> events end)
+    |> Enum.filter(&(&1.op in [:patch_entity, :put_entity]))
+    |> Enum.reduce(%{}, fn event, changed ->
+      names = attribute_names(event.data)
+
+      Map.update(changed, event.entity_id, names, &MapSet.union(&1, names))
+    end)
+  end
+
+  defp collect(row, members) do
+    if Map.has_key?(members, row.id) do
+      members
+    else
+      row.__struct__.__relationships__()
+      |> Enum.flat_map(fn {name, _target, _opts} -> embedded_rows(Map.fetch!(row, name)) end)
+      |> Enum.reduce(Map.put(members, row.id, row), &collect/2)
+    end
   end
 
   defp edge(event, visible) do
@@ -105,15 +135,19 @@ defmodule Hologram.Sync.Diff do
     |> Enum.find_value(fn {field, value} -> Atom.to_string(field) == name && value end)
   end
 
-  defp changed_attributes(transactions) do
-    transactions
-    |> Enum.flat_map(fn {_tx, events} -> events end)
-    |> Enum.filter(&(&1.op in [:patch_entity, :put_entity]))
-    |> Enum.reduce(%{}, fn event, changed ->
-      names = attribute_names(event.data)
+  defp embedded_rows(%NotIncluded{}), do: []
 
-      Map.update(changed, event.entity_id, names, &MapSet.union(&1, names))
-    end)
+  defp embedded_rows(nil), do: []
+
+  defp embedded_rows(rows) when is_list(rows), do: rows
+
+  defp embedded_rows(row), do: [row]
+
+  # Every row a round carries, keyed by id: the roots and every row embedded under them, however
+  # deep. One id can arrive in more than one place, and the first copy found keeps the spot - every
+  # copy was read by the same query in the same round, so they hold the same values.
+  defp members(rows) do
+    Enum.reduce(rows, %{}, fn {_id, row}, members -> collect(row, members) end)
   end
 
   # Names arrive as they were written rather than as atoms, so they are matched against the row's

@@ -11,6 +11,7 @@ defmodule Hologram.Sync.DiffTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
 
   defp events(entity_id, names) do
     data = Map.new(names, &{&1, "whatever the log said"})
@@ -33,6 +34,22 @@ defmodule Hologram.Sync.DiffTest do
     Module2
     |> Entity.new(a: true, c: title)
     |> DB.create()
+  end
+
+  defp source_with_targets(targets) do
+    required =
+      Module1
+      |> Entity.new()
+      |> DB.create()
+
+    source =
+      Module3
+      |> Entity.new(c_id: required.id)
+      |> DB.create()
+
+    Enum.each(targets, &DB.add_relationship(Module3, source.id, :a, &1.id))
+
+    %{source | a: targets}
   end
 
   describe "deltas/4 - appeared" do
@@ -118,6 +135,52 @@ defmodule Hologram.Sync.DiffTest do
 
       assert deltas.patched == [{task, %{a: true, c: "first"}}]
     end
+
+    test "returns a patch for a row held only through an include" do
+      target = row("current value")
+      source = source_with_targets([target])
+      held = MapSet.new([source.id, target.id])
+
+      deltas = deltas(result([source]), held, nil, events(target.id, ["c"]))
+
+      assert deltas.patched == [{target, %{c: "current value"}}]
+    end
+
+    test "returns a patch for a row embedded beneath another embedded row" do
+      author =
+        Module14
+        |> Entity.new(email: "author@example.com")
+        |> DB.create()
+
+      child =
+        PolicyModule1
+        |> Entity.new(author_id: author.id, public: true)
+        |> DB.create()
+
+      parent =
+        PolicyModule3
+        |> Entity.new()
+        |> DB.create()
+
+      round_parent = %{parent | children: [%{child | author: author}]}
+      held = MapSet.new([parent.id, child.id, author.id])
+
+      transactions = [
+        {200,
+         [
+           %{
+             op: :patch_entity,
+             type: Module14,
+             entity_id: author.id,
+             data: %{"email" => "whatever the log said"}
+           }
+         ]}
+      ]
+
+      deltas = deltas(result([round_parent]), held, author.id, transactions)
+
+      assert deltas.patched == [{author, %{email: "author@example.com"}}]
+    end
   end
 
   describe "deltas/4 - edges" do
@@ -127,25 +190,9 @@ defmodule Hologram.Sync.DiffTest do
       [{200, [%{op: op, type: Module3, entity_id: entity_id, data: data}]}]
     end
 
-    defp source_with_targets(target_ids) do
-      required =
-        Module1
-        |> Entity.new()
-        |> DB.create()
-
-      source =
-        Module3
-        |> Entity.new(c_id: required.id)
-        |> DB.create()
-
-      Enum.each(target_ids, &DB.add_relationship(Module3, source.id, :a, &1))
-
-      %{source | a: Enum.map(target_ids, &DB.get(Module2, &1))}
-    end
-
     test "reports an edge the round says is there" do
       target = row("target")
-      source = source_with_targets([target.id])
+      source = source_with_targets([target])
       events = edge_events(source.id, :add_relationship, "a", target.id)
 
       deltas = deltas(result([source]), MapSet.new([source.id]), nil, events)
@@ -269,6 +316,24 @@ defmodule Hologram.Sync.DiffTest do
 
       assert deltas.vanished == []
     end
+
+    test "returns the id of a row the round no longer embeds" do
+      target = row("target")
+      source = source_with_targets([])
+
+      deltas = deltas(result([source]), MapSet.new([source.id, target.id]), nil, [])
+
+      assert deltas.vanished == [target.id]
+    end
+
+    test "returns nothing while the round still embeds the row" do
+      target = row("target")
+      source = source_with_targets([target])
+
+      deltas = deltas(result([source]), MapSet.new([source.id, target.id]), nil, [])
+
+      assert deltas.vanished == []
+    end
   end
 
   describe "deltas/4 - visibility" do
@@ -292,6 +357,26 @@ defmodule Hologram.Sync.DiffTest do
       deltas = deltas(result([hidden]), MapSet.new(), user.id, [])
 
       assert deltas.appeared == []
+    end
+
+    test "leaves out an embedded row this client may not read", %{user: user} do
+      hidden =
+        PolicyModule1
+        |> Entity.new()
+        |> DB.create()
+
+      parent =
+        PolicyModule3
+        |> Entity.new()
+        |> DB.create()
+
+      round_parent = %{parent | children: [hidden]}
+
+      refute Auth.can?(user.id, :read, hidden)
+
+      deltas = deltas(result([round_parent]), MapSet.new(), user.id, [])
+
+      assert Enum.map(deltas.appeared, & &1.id) == [parent.id]
     end
 
     test "returns a row this client may read", %{user: user} do
