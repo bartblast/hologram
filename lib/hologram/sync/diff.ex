@@ -20,6 +20,9 @@ defmodule Hologram.Sync.Diff do
 
   Visibility is decided per row, per client, against the round's rows - embedded rows included -
   which is what lets one query answer a hundred clients who may each see a different part of it.
+  What goes out is scrubbed to match: an unreadable member loses its slot in every embedded
+  to-many list along with its own deltas, so no id list ever names a row the client was not
+  given.
 
   Which values moved comes from the effects, which name the attributes a transaction touched -
   but every value comes from the round's rows, never from the effects themselves. Effects arrive
@@ -63,10 +66,20 @@ defmodule Hologram.Sync.Diff do
     appeared_ids = MapSet.difference(visible_ids, held_ids)
     held_visible_ids = MapSet.intersection(visible_ids, held_ids)
 
+    appeared =
+      appeared_ids
+      |> Enum.map(&Map.fetch!(visible, &1))
+      |> Enum.map(&scrub(&1, visible_ids))
+
+    patched =
+      visible
+      |> patched(held_visible_ids, changed_attributes(transactions))
+      |> Enum.map(fn {row, patch} -> {scrub(row, visible_ids), patch} end)
+
     %{
-      appeared: Enum.map(appeared_ids, &Map.fetch!(visible, &1)),
+      appeared: appeared,
       edges: edges(visible, transactions),
-      patched: patched(visible, held_visible_ids, changed_attributes(transactions)),
+      patched: patched,
       vanished: vanished(held_ids, visible_ids)
     }
   end
@@ -172,6 +185,28 @@ defmodule Hologram.Sync.Diff do
     |> Enum.map(fn id -> {Map.fetch!(visible, id), Map.get(changed, id, MapSet.new())} end)
     |> Enum.map(fn {row, names} -> {row, patch(row, names)} end)
     |> Enum.reject(fn {_row, patch} -> patch == %{} end)
+  end
+
+  # What leaves here is what this client may see, embedded lists included: an unreadable member
+  # loses its slot in every to-many list, however deep, not only its own deltas. To-one embeds
+  # stay as they are - the wire never spells them (the reference field carries the id), so there
+  # is nothing to hide. Scrubbing at the source rather than at the spelling covers every path a
+  # row takes out, the catch-up store included.
+  defp scrub(row, visible_ids) do
+    updates =
+      for {name, _target, _opts} <- row.__struct__.__relationships__(),
+          targets = Map.fetch!(row, name),
+          is_list(targets) do
+        {name, scrub_targets(targets, visible_ids)}
+      end
+
+    struct(row, updates)
+  end
+
+  defp scrub_targets(targets, visible_ids) do
+    targets
+    |> Enum.filter(&MapSet.member?(visible_ids, &1.id))
+    |> Enum.map(&scrub(&1, visible_ids))
   end
 
   defp vanished(held_ids, visible_ids) do

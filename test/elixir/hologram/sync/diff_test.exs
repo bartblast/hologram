@@ -77,6 +77,19 @@ defmodule Hologram.Sync.DiffTest do
 
       assert Enum.sort_by(deltas.appeared, & &1.c) == [first, second]
     end
+
+    # An edge added to a parent the client already holds must deliver the child's row alongside
+    # the pair - an edge naming a row the client does not have would be a fact about nothing.
+    test "returns the row of a child newly embedded under an already-held parent" do
+      target = row("joined later")
+      source = source_with_targets([target])
+      events = edge_events(source.id, :add_relationship, "a", target.id)
+
+      deltas = deltas(result([source]), MapSet.new([source.id]), nil, events)
+
+      assert deltas.appeared == [target]
+      assert [%{op: :add_relationship}] = deltas.edges
+    end
   end
 
   describe "deltas/4 - patched" do
@@ -377,7 +390,39 @@ defmodule Hologram.Sync.DiffTest do
 
       deltas = deltas(result([round_parent]), MapSet.new(), user.id, [])
 
-      assert Enum.map(deltas.appeared, & &1.id) == [parent.id]
+      # Scrubbed, not merely withheld: the parent goes out with the unreadable member filtered
+      # from its list, so no id list names a row this client was not given.
+      assert deltas.appeared == [%{parent | children: []}]
+    end
+
+    test "scrubs each client's embedded lists to what it may see", %{user: user} do
+      public_child =
+        PolicyModule1
+        |> Entity.new(public: true)
+        |> DB.create()
+
+      gated_child =
+        PolicyModule1
+        |> Entity.new()
+        |> DB.create()
+
+      Auth.grant_role(user, gated_child, :viewer)
+
+      parent =
+        PolicyModule3
+        |> Entity.new()
+        |> DB.create()
+
+      round = result([%{parent | children: [public_child, gated_child]}])
+
+      reader_deltas = deltas(round, MapSet.new(), user.id, [])
+      anonymous_deltas = deltas(round, MapSet.new(), nil, [])
+
+      reader_parent = Enum.find(reader_deltas.appeared, &(&1.id == parent.id))
+      anonymous_parent = Enum.find(anonymous_deltas.appeared, &(&1.id == parent.id))
+
+      assert reader_parent == %{parent | children: [public_child, gated_child]}
+      assert anonymous_parent == %{parent | children: [public_child]}
     end
 
     test "returns a row this client may read", %{user: user} do
