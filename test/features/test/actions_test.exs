@@ -14,6 +14,7 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page19
   alias HologramFeatureTests.Actions.Page2
   alias HologramFeatureTests.Actions.Page20
+  alias HologramFeatureTests.Actions.Page21
   alias HologramFeatureTests.Actions.Page3
   alias HologramFeatureTests.Actions.Page4
   alias HologramFeatureTests.Actions.Page5
@@ -398,6 +399,23 @@ defmodule HologramFeatureTests.ActionsTest do
       |> assert_text(css("#layout_result"), "nil")
       |> sleep(1_500)
       |> assert_text(css("#layout_result"), ~s/"layout_action_ran"/)
+    end
+
+    # The layout's cid is the same string on both pages, so the destination's registry answers
+    # for it - a target that still resolves is no evidence the dispatch is still valid. Waiting
+    # out the rest of the delay on the destination proves the dispatch was cancelled rather than
+    # merely deferred: the layout is re-rendered there, so a post-navigation fire would show up
+    # in its result.
+    feature "navigating to another page cancels a pending action targeting the layout",
+            %{session: session} do
+      session
+      |> visit(Page20)
+      |> click(button("Run delayed layout action"))
+      |> click(link("Page 21 link"))
+      |> assert_page(Page21)
+      |> assert_text("Page 21 title")
+      |> sleep(3_500)
+      |> assert_text(css("#layout_result"), "nil")
     end
   end
 end
