@@ -13,6 +13,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.QueryExtractor
+  alias Hologram.DB.Codec
   alias Hologram.Entity.Model
   alias Hologram.Query.Registry
   alias Hologram.Query.Window
@@ -325,9 +326,22 @@ defmodule Hologram.Compiler do
   @doc """
   Builds Hologram runtime JavaScript source code.
   """
-  @spec build_runtime_js(list(mfa), PLT.t(), MapSet.t(mfa), keyword(String.t()), T.file_path()) ::
-          String.t()
-  def build_runtime_js(runtime_mfas, ir_plt, async_mfas, app_versions, js_dir) do
+  @spec build_runtime_js(
+          list(mfa),
+          PLT.t(),
+          MapSet.t(mfa),
+          keyword(String.t()),
+          MapSet.t({module, atom}),
+          T.file_path()
+        ) :: String.t()
+  def build_runtime_js(
+        runtime_mfas,
+        ir_plt,
+        async_mfas,
+        app_versions,
+        ordered_string_pairs,
+        js_dir
+      ) do
     erlang_function_defs =
       runtime_mfas
       |> render_erlang_function_defs(Path.join(js_dir, "erlang"))
@@ -366,7 +380,7 @@ defmodule Hologram.Compiler do
 
     globalThis.Hologram.config = #{render_client_config()};
 
-    #{render_sync_constants()}
+    #{render_sync_constants(ordered_string_pairs)}
 
     ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
@@ -523,11 +537,19 @@ defmodule Hologram.Compiler do
           PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
+          MapSet.t({module, atom}),
           T.opts()
         ) :: T.file_path()
-  def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, app_versions, opts) do
+  def create_runtime_entry_file(
+        runtime_mfas,
+        ir_plt,
+        async_mfas,
+        app_versions,
+        ordered_string_pairs,
+        opts
+      ) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, async_mfas, app_versions, opts[:js_dir])
+    |> build_runtime_js(ir_plt, async_mfas, app_versions, ordered_string_pairs, opts[:js_dir])
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
@@ -686,6 +708,23 @@ defmodule Hologram.Compiler do
     PLT.maybe_load(module_digest_plt, module_digest_plt_dump_path)
 
     {module_digest_plt, module_digest_plt_dump_path}
+  end
+
+  @doc """
+  Returns the set of {entity type, attribute name} pairs the given pages' reachable queries
+  order by on :string attributes - the pairs whose sort-key companions the client computes at
+  ingest, derived from the same registered queries the server derives its companion columns
+  from.
+  """
+  @spec ordered_string_pairs(list(module), CallGraph.t()) :: MapSet.t({module, atom})
+  def ordered_string_pairs(page_modules, call_graph) do
+    graph = CallGraph.get_graph(call_graph)
+    templatables = page_modules ++ Reflection.list_components()
+    analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+
+    page_modules
+    |> Enum.flat_map(&page_query_terms(&1, call_graph, analysis))
+    |> Registry.ordered_string_pairs()
   end
 
   @doc """
@@ -874,15 +913,20 @@ defmodule Hologram.Compiler do
     end
   end
 
-  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
-  # when resolve_beam_source/2 goes (see the removal note there).
-  defp page_window_ids(page_module, call_graph, analysis) do
+  defp page_query_terms(page_module, call_graph, analysis) do
     call_graph
     |> CallGraph.list_page_mfas(page_module, analysis)
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
     |> Enum.filter(&Reflection.component?/1)
     |> Enum.flat_map(&QueryExtractor.extract_module_queries/1)
+  end
+
+  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
+  # when resolve_beam_source/2 goes (see the removal note there).
+  defp page_window_ids(page_module, call_graph, analysis) do
+    page_module
+    |> page_query_terms(call_graph, analysis)
     |> Enum.map(&window_id/1)
     |> Enum.uniq()
     |> Enum.sort()
@@ -939,21 +983,31 @@ defmodule Hologram.Compiler do
     ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
   end
 
+  defp render_ordered_string_pairs(ordered_string_pairs) do
+    ordered_string_pairs
+    |> Enum.map(fn {entity_type, attribute} ->
+      [Codec.encode_enum_value(entity_type), Atom.to_string(attribute)]
+    end)
+    |> Enum.sort()
+    |> Jason.encode!()
+  end
+
   # What the bundle was built against, said by the bundle itself. It has to be baked in rather
   # than handed over at page render: the check these answer is whether a client's JAVASCRIPT is
   # stale, and a value the current server puts in the page would always agree with the current
   # server.
   #
-  # A build declaring no entity types says NOTHING here, and a client whose bundle carries no such
-  # constants does not ask to sync. It has no database - the application tree gates the whole data
-  # layer on exactly that - so the question has no useful answer, and the fields would ride on
-  # every connect to earn a refusal. The server refuses one anyway, for the stale bundle that asks
-  # after a deploy.
-  defp render_sync_constants do
+  # A build declaring no entity types says NULL, explicitly: it has no database - the application
+  # tree gates the whole data layer on exactly that - so a client reads one unambiguous value
+  # instead of probing for a missing global. An empty OBJECT would be worse than nothing at all:
+  # `{}` is truthy, so every "does this bundle sync?" check would pass on a bundle that does not.
+  defp render_sync_constants(ordered_string_pairs) do
     if Reflection.list_entities() == [] do
-      ""
+      ~s/globalThis.Hologram.sync = null;/
     else
-      ~s/globalThis.Hologram.sync = {modelHash: "#{Model.hash()}", protocolVersion: #{Frame.protocol_version()}};/
+      pairs = render_ordered_string_pairs(ordered_string_pairs)
+
+      ~s/globalThis.Hologram.sync = {modelHash: "#{Model.hash()}", orderedStringPairs: #{pairs}, protocolVersion: #{Frame.protocol_version()}};/
     end
   end
 

@@ -172,12 +172,17 @@ defmodule Mix.Tasks.Compile.Hologram do
       # applications reached from pages are named as well.
       app_versions = Compiler.build_app_versions(call_graph_for_runtime)
 
+      # Derived before the split for the same reason the windows are: a query reached through a
+      # runtime MFA still orders rows the client sorts.
+      ordered_string_pairs = Compiler.ordered_string_pairs(page_modules, call_graph_for_runtime)
+
       runtime_entry_file_path =
         Compiler.create_runtime_entry_file(
           runtime_mfas,
           ir_plt,
           async_mfas,
           app_versions,
+          ordered_string_pairs,
           opts
         )
 
