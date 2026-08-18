@@ -174,6 +174,70 @@ describe("LocalDatabase", () => {
     });
   });
 
+  describe("markSynced()", () => {
+    // What is still seeded when the whole pot declares itself complete was never this client's
+    // to hold - a grant revoked between the render and the connect leaves exactly that.
+    it("drops a seeded row the fill never delivered", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
+      LocalDatabase.markSeeded("MyApp.Task", "t1");
+
+      LocalDatabase.markSynced("all");
+
+      assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+      assert.deepEqual(LocalDatabase.seededEntries(), []);
+    });
+
+    it("keeps a seeded row the fill delivered", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
+      LocalDatabase.markSeeded("MyApp.Task", "t1");
+      LocalDatabase.unmarkSeeded("MyApp.Task", "t1");
+
+      LocalDatabase.markSynced("all");
+
+      assert.deepEqual(LocalDatabase.getRow("MyApp.Task", "t1"), {
+        id: "t1",
+        title: "Draft copy",
+      });
+    });
+
+    it("keeps a row that never came from a seed", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
+
+      LocalDatabase.markSynced("all");
+
+      assert.deepEqual(LocalDatabase.getRow("MyApp.Task", "t1"), {
+        id: "t1",
+        title: "Draft copy",
+      });
+    });
+
+    // The page scope says one page's rows are complete, which says nothing about a row seeded
+    // for another - only the whole pot's marker can call one an orphan.
+    it("sweeps nothing at the page scope", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
+      LocalDatabase.markSeeded("MyApp.Task", "t1");
+
+      LocalDatabase.markSynced("page");
+
+      assert.deepEqual(LocalDatabase.seededEntries(), [["MyApp.Task", "t1"]]);
+      assert.isNotNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+    });
+
+    // A swept row takes its relationship facts with it, the way any row leaving the pot does.
+    it("takes the swept row's relationship facts with it", () => {
+      LocalDatabase.putRow("MyApp.Project", {id: "p1", name: "Board"});
+      LocalDatabase.addFact("MyApp.Project", "tasks", "p1", "t1");
+      LocalDatabase.markSeeded("MyApp.Project", "p1");
+
+      LocalDatabase.markSynced("all");
+
+      assert.deepEqual(
+        LocalDatabase.getTargetIds("MyApp.Project", "tasks", "p1"),
+        new Set(),
+      );
+    });
+  });
+
   describe("putRow()", () => {
     it("files the row under its id", () => {
       const row = {id: "t1", title: "Draft copy"};
