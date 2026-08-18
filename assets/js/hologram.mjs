@@ -99,8 +99,21 @@ export default class Hologram {
   static #pageParams = null;
   static #pendingJsInteropActions = [];
   static #registeredPageModules = new Set();
+  static #scheduledActionTimerIds = new Set();
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
+
+  // Clears every action still waiting on its timer without executing any of them, mirroring
+  // Debouncer.cancelAll()/Throttler.cancelAll(). Every action is scheduled onto a timer, even at
+  // delay 0, so a dispatch decided in one page's context is always in flight for at least a
+  // macrotask - long enough to outlive the context it was meant for.
+  static cancelScheduledActions() {
+    for (const timerId of $.#scheduledActionTimerIds) {
+      clearTimeout(timerId);
+    }
+
+    $.#scheduledActionTimerIds.clear();
+  }
 
   // Public API for dispatching actions from JavaScript.
   // Converts plain JS values to Hologram types and schedules the action for execution.
@@ -130,6 +143,17 @@ export default class Hologram {
     const name = Erlang_Maps["get/2"](Type.atom("name"), action);
     const params = Erlang_Maps["get/2"](Type.atom("params"), action);
     const target = Erlang_Maps["get/2"](Type.atom("target"), action);
+
+    // getComponentModule() answers with plain null for a cid the registry does not hold, and null
+    // reaching callNamedFunction faults on reading a module name off it - a raw TypeError naming
+    // neither the cid nor the action, which handleUncaughtError drops because it isn't boxed.
+    // Pending dispatches are cancelled at both registry swaps, so a target the registry never held
+    // is a mistyped cid and nothing else - raised boxed, the way the error overlay reads it.
+    if (!ComponentRegistry.isCidRegistered(target)) {
+      Interpreter.raiseArgumentError(
+        `invalid action target, there is no component with CID: ${Interpreter.inspect(target)}`,
+      );
+    }
 
     const componentModule = ComponentRegistry.getComponentModule(target);
     const componentStruct = ComponentRegistry.getComponentStruct(target);
@@ -530,7 +554,14 @@ export default class Hologram {
       Type.integer(0),
     );
 
-    setTimeout(() => Hologram.executeAction(action), Number(delay.value));
+    // The id is dropped before the action runs rather than after, so an action that raises
+    // doesn't leave a fired timer's id behind for a later cancellation to clear.
+    const timerId = setTimeout(() => {
+      $.#scheduledActionTimerIds.delete(timerId);
+      Hologram.executeAction(action);
+    }, Number(delay.value));
+
+    $.#scheduledActionTimerIds.add(timerId);
   }
 
   static #buildPagePath(toParam) {
@@ -961,6 +992,12 @@ export default class Hologram {
   }
 
   static async #handlePopstateEvent(event) {
+    // The history's side of the boundary #showNewPage guards: everything below belongs to the
+    // page being restored, so this is the last instant at which every pending dispatch provably
+    // belongs to the page being left. The restore below is skipped when there is no snapshot, so
+    // this cannot live there.
+    Hologram.cancelScheduledActions();
+
     await $.#savePageSnapshot();
     $.#historyId = event.state;
 
@@ -1274,6 +1311,13 @@ export default class Hologram {
   // is done. Otherwise the bundle is fetched, and running it announces the page is ready to
   // mount.
   static #showNewPage(payload) {
+    // The patch below puts the destination on screen and runs any script it carries, and for a
+    // page whose bundle is not loaded the mount is a fetch away - so cancelling at the mount both
+    // misses the dispatches that fire during that fetch, against a registry that is still the
+    // previous page's, and sweeps the ones the destination arms in the same window. Here nothing
+    // of the destination exists yet, so every pending dispatch belongs to the page being left.
+    Hologram.cancelScheduledActions();
+
     const pageModule = Interpreter.evaluateJavaScriptExpression(
       payload.pageModule,
     );
@@ -1368,6 +1412,8 @@ export default class Hologram {
         );
       }
 
+      // A next action with no target of its own inherits the one that produced it, so it belongs
+      // to the page being left - a navigation started below cancels it along with the rest.
       Hologram.scheduleAction(nextAction);
     }
 

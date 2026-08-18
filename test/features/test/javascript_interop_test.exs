@@ -277,6 +277,19 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       |> visit(PendingActionsPage)
       |> assert_text(css("#call_result"), "{99, true}")
     end
+
+    # The target comes straight from the caller here, so a cid nothing is registered under is a
+    # mistake in the calling code rather than a dispatch that outlived its page. It is named as
+    # one, which is what puts it in front of whoever mistyped it.
+    feature "target that no component is registered under", %{session: session} do
+      expected_msg = ~s(invalid action target, there is no component with CID: "no_such_cid")
+
+      assert_client_error session, ArgumentError, expected_msg, fn ->
+        session
+        |> visit(DispatchActionPage)
+        |> execute_script("Hologram.dispatchAction('whatever', 'no_such_cid');")
+      end
+    end
   end
 
   describe "binding resolution" do
