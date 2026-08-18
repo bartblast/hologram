@@ -63,6 +63,26 @@ describe("Model", () => {
   const field = (boxed, name) =>
     boxed.data[Type.encodeMapKey(Type.atom(name))][1];
 
+  const datetime = (amount, precision) =>
+    Type.map([
+      [Type.atom("__struct__"), Type.alias("DateTime")],
+      [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+      [Type.atom("day"), Type.integer(16)],
+      [Type.atom("hour"), Type.integer(15)],
+      [
+        Type.atom("microsecond"),
+        Type.tuple([Type.integer(amount), Type.integer(precision)]),
+      ],
+      [Type.atom("minute"), Type.integer(18)],
+      [Type.atom("month"), Type.integer(8)],
+      [Type.atom("second"), Type.integer(13)],
+      [Type.atom("std_offset"), Type.integer(0)],
+      [Type.atom("time_zone"), Type.bitstring("Etc/UTC")],
+      [Type.atom("utc_offset"), Type.integer(0)],
+      [Type.atom("year"), Type.integer(2026)],
+      [Type.atom("zone_abbr"), Type.bitstring("UTC")],
+    ]);
+
   describe("box()", () => {
     it("names the struct by its entity type", () => {
       const boxed = Model.box(TASK, row());
@@ -201,6 +221,96 @@ describe("Model", () => {
       const boxed = Model.box(TASK, row(), {tags: tags});
 
       assert.deepEqual(field(boxed, "tags"), tags);
+    });
+  });
+
+  describe("unbox()", () => {
+    it("unboxes a string and a uuid as the text they hold", () => {
+      assert.equal(
+        Model.unbox(Type.bitstring("Draft copy"), "string"),
+        "Draft copy",
+      );
+      assert.equal(Model.unbox(Type.bitstring("t1"), "uuid"), "t1");
+    });
+
+    it("unboxes a boolean, an integer and a float as plain values", () => {
+      assert.isFalse(Model.unbox(Type.boolean(false), "boolean"));
+      assert.equal(Model.unbox(Type.integer(7), "integer"), 7);
+      assert.equal(Model.unbox(Type.float(1.5), "float"), 1.5);
+    });
+
+    it("unboxes nil as nothing", () => {
+      assert.isNull(Model.unbox(Type.nil(), "string"));
+    });
+
+    it("unboxes a date the way the wire spells one", () => {
+      const date = Type.map([
+        [Type.atom("__struct__"), Type.alias("Date")],
+        [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+        [Type.atom("day"), Type.integer(6)],
+        [Type.atom("month"), Type.integer(8)],
+        [Type.atom("year"), Type.integer(2026)],
+      ]);
+
+      assert.equal(Model.unbox(date, "date"), "2026-08-06");
+    });
+
+    // One spelling per instant is what lets a datetime compare as a plain string, so a value
+    // written at any precision leaves here with six fractional digits.
+    it("unboxes a datetime at the precision the wire carries", () => {
+      assert.equal(
+        Model.unbox(datetime(22508, 6), "datetime"),
+        "2026-08-16T15:18:13.022508Z",
+      );
+      assert.equal(
+        Model.unbox(datetime(0, 0), "datetime"),
+        "2026-08-16T15:18:13.000000Z",
+      );
+      assert.equal(
+        Model.unbox(datetime(5, 1), "datetime"),
+        "2026-08-16T15:18:13.500000Z",
+      );
+    });
+
+    it("unboxes an enum label as the atom names it", () => {
+      assert.equal(Model.unbox(Type.atom("open"), "enum"), "open");
+    });
+
+    it("unboxes an enum naming a module without the prefix it carries", () => {
+      assert.equal(
+        Model.unbox(Type.alias("MyApp.Status.Open"), "enum"),
+        "MyApp.Status.Open",
+      );
+    });
+
+    // What leaves here goes back through boxing when a result is read, so the pair has to be a
+    // round trip - a value that changed shape on the way out would compare against rows fine and
+    // render as something else.
+    it("round-trips every admitted type through boxing", () => {
+      const row = {
+        done: false,
+        due_on: "2026-08-16",
+        id: "t1",
+        position: 7,
+        status: "open",
+        title: "Draft copy",
+        updated_at: "2026-08-16T15:18:13.022508Z",
+        weight: 1.5,
+      };
+
+      const boxed = Model.box(TASK, row);
+
+      for (const [name, attributeType] of Object.entries(
+        Model.entry(TASK).attributes,
+      )) {
+        if (name in row) {
+          assert.deepEqual(
+            Model.unbox(field(boxed, name), attributeType),
+            row[name],
+            `round trip failed for ${name}`,
+          );
+        }
+      }
     });
   });
 

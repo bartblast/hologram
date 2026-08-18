@@ -1,5 +1,6 @@
 "use strict";
 
+import Bitstring from "./bitstring.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Type from "./type.mjs";
 
@@ -76,6 +77,37 @@ export default class Model {
 
   static relationships(type) {
     return Model.entry(type).relationships;
+  }
+
+  // The way back over the same boundary: a value written in a query becomes the way the wire
+  // spells it, because that is what the rows it will be compared against hold. A date written as
+  // a date compares with a date written as a string only if one of them stops being what it was,
+  // and the rows cannot be the ones to change.
+  static unbox(value, attributeType) {
+    if (Type.isNil(value)) {
+      return null;
+    }
+
+    switch (attributeType) {
+      case "boolean":
+        return Type.isTrue(value);
+
+      case "date":
+        return Model.#unboxDate(value);
+
+      case "datetime":
+        return Model.#unboxDateTime(value);
+
+      case "enum":
+        return Model.#unboxEnum(value);
+
+      case "float":
+      case "integer":
+        return Number(value.value);
+
+      default:
+        return Bitstring.toText(value);
+    }
   }
 
   static reset() {
@@ -179,6 +211,49 @@ export default class Model {
       default:
         return Type.bitstring(value);
     }
+  }
+
+  static #field(struct, name) {
+    return struct.data[Type.encodeMapKey(Type.atom(name))][1];
+  }
+
+  static #pad(value, width) {
+    return String(value).padStart(width, "0");
+  }
+
+  static #unboxDate(value) {
+    const year = Model.#field(value, "year").value;
+    const month = Model.#field(value, "month").value;
+    const day = Model.#field(value, "day").value;
+
+    return `${Model.#pad(year, 4)}-${Model.#pad(month, 2)}-${Model.#pad(day, 2)}`;
+  }
+
+  // Always six fractional digits, whatever precision the value was written at: the wire carries
+  // one spelling per instant, which is what lets these compare as plain strings at all. A value
+  // written with fewer digits and left that way would sort before an instant it comes after.
+  static #unboxDateTime(value) {
+    const microsecond = Model.#field(value, "microsecond");
+    const [amount, precision] = microsecond.data.map((part) =>
+      Number(part.value),
+    );
+    const fraction = amount * 10 ** (6 - precision);
+
+    const date = Model.#unboxDate(value);
+
+    const hour = Model.#pad(Model.#field(value, "hour").value, 2);
+    const minute = Model.#pad(Model.#field(value, "minute").value, 2);
+    const second = Model.#pad(Model.#field(value, "second").value, 2);
+
+    return `${date}T${hour}:${minute}:${second}.${Model.#pad(fraction, 6)}Z`;
+  }
+
+  // A module travels as its name without the prefix every module atom carries, a plain atom as
+  // it is spelled - the same two cases the label reader tells apart coming the other way.
+  static #unboxEnum(value) {
+    return Type.isAlias(value)
+      ? value.value.replace(/^Elixir\./, "")
+      : value.value;
   }
 
   static #notIncluded(name) {
