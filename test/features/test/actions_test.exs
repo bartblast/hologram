@@ -15,6 +15,7 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page2
   alias HologramFeatureTests.Actions.Page20
   alias HologramFeatureTests.Actions.Page21
+  alias HologramFeatureTests.Actions.Page22
   alias HologramFeatureTests.Actions.Page3
   alias HologramFeatureTests.Actions.Page4
   alias HologramFeatureTests.Actions.Page5
@@ -459,6 +460,34 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(link("Page 21 link"))
       |> assert_page(Page21)
       |> sleep(3_500)
+      |> assert_text("Page 21 title")
+    end
+
+    # Positive control for the continuation drop below: the same click arms a continuation that
+    # fires when the user stays put, proving the fixture schedules a real one.
+    feature "an async action's continuation fires when the user stays on the page",
+            %{session: session} do
+      session
+      |> visit(Page22)
+      |> click(button("Run async continuation action"))
+      |> assert_text(css("#result"), "nil")
+      |> sleep(3_000)
+      |> assert_text(css("#result"), ":async_continuation_ran")
+    end
+
+    # The await spans the navigation, so the continuation is scheduled only after the swap - a
+    # window the timer cancellation never covered, the timer being armed after it already ran.
+    # The continuation inherits the page its parent ran on, and that page has been left; on the
+    # destination it would raise, Page21 having no action clause for it, which the post-sleep
+    # command would surface from the browser log as a Wallaby.JSError.
+    feature "navigating to another page drops the continuation of an async action",
+            %{session: session} do
+      session
+      |> visit(Page22)
+      |> click(button("Run async continuation action"))
+      |> click(link("Page 21 link"))
+      |> assert_page(Page21)
+      |> sleep(3_000)
       |> assert_text("Page 21 title")
     end
   end

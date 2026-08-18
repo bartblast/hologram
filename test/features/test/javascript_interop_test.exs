@@ -7,6 +7,7 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
   alias HologramFeatureTests.JavaScriptInterop.DOMPatchingPage
   alias HologramFeatureTests.JavaScriptInterop.NpmImportPage
   alias HologramFeatureTests.JavaScriptInterop.PendingActionsPage
+  alias HologramFeatureTests.JavaScriptInterop.PendingActionsSourcePage
   alias HologramFeatureTests.JavaScriptInterop.SyncPage
 
   describe "JS.call/2" do
@@ -275,6 +276,15 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     feature "pending action dispatched before runtime loads", %{session: session} do
       session
       |> visit(PendingActionsPage)
+      |> assert_text(css("#call_result"), "{99, true}")
+    end
+
+    feature "action dispatched by an inline script after a client-side navigation",
+            %{session: session} do
+      session
+      |> visit(PendingActionsSourcePage)
+      |> click(link("Pending actions link"))
+      |> assert_page(PendingActionsPage)
       |> assert_text(css("#call_result"), "{99, true}")
     end
 

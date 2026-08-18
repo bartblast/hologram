@@ -77,7 +77,15 @@ export default class Hologram {
   static #PAGE_SNAPSHOT_KEY_PREFIX = "hologram_page_snapshot_";
 
   // Made public to make tests easier
+  // The epoch of the page whose markup is on screen.
+  static domEpoch = 0;
+
+  // Made public to make tests easier
   static prefetchedPages = new Map();
+
+  // Made public to make tests easier
+  // The epoch of the page the component registry answers for.
+  static registryEpoch = 0;
 
   // Made public to make tests easier
   static virtualDocument = null;
@@ -96,27 +104,20 @@ export default class Hologram {
   // In-memory cache for page snapshots (fastest access)
   static #pageSnapshots = new Map();
 
+  // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
+  static #deadEpochs = new Set();
+
+  // Actions belonging to a page that cannot answer for them yet, waiting for its mount.
+  static #heldActions = [];
+
   static #historyId = null;
   static #isInitiated = false;
   static #pageModule = null;
   static #pageParams = null;
   static #pendingJsInteropActions = [];
   static #registeredPageModules = new Set();
-  static #scheduledActionTimerIds = new Set();
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
-
-  // Clears every action still waiting on its timer without executing any of them, mirroring
-  // Debouncer.cancelAll()/Throttler.cancelAll(). Every action is scheduled onto a timer, even at
-  // delay 0, so a dispatch decided in one page's context is always in flight for at least a
-  // macrotask - long enough to outlive the context it was meant for.
-  static cancelScheduledActions() {
-    for (const timerId of $.#scheduledActionTimerIds) {
-      clearTimeout(timerId);
-    }
-
-    $.#scheduledActionTimerIds.clear();
-  }
 
   // Public API for dispatching actions from JavaScript.
   // Converts plain JS values to Hologram types and schedules the action for execution.
@@ -128,7 +129,11 @@ export default class Hologram {
       target: Type.bitstring(target),
     });
 
-    Hologram.scheduleAction(action);
+    // Everything arriving here comes from script the page's own markup carries, so it belongs to
+    // the page on screen - which during a transition is not yet the page the registry answers
+    // for. The stamp is what lets it wait for that page's mount instead of resolving against the
+    // page being left.
+    Hologram.scheduleAction(action, $.domEpoch);
   }
 
   // This function is intentionally NOT async. Actions that use Task.await/1 return
@@ -139,7 +144,7 @@ export default class Hologram {
   // "unhandledrejection" event listener in #init().
   // TODO: make private (tested implicitely in feature tests)
   // Deps: [:maps.get/2]
-  static executeAction(action) {
+  static executeAction(action, epoch = $.registryEpoch) {
     const startTime = performance.now();
     globalThis.Hologram.isProfilingEnabled = true;
 
@@ -150,8 +155,11 @@ export default class Hologram {
     // getComponentModule() answers with plain null for a cid the registry does not hold, and null
     // reaching callNamedFunction faults on reading a module name off it - a raw TypeError naming
     // neither the cid nor the action, which handleUncaughtError drops because it isn't boxed.
-    // Pending dispatches are cancelled at both registry swaps, so a target the registry never held
-    // is a mistyped cid and nothing else - raised boxed, the way the error overlay reads it.
+    // An action reaches here only through #settleAction, which admits it when its epoch is the
+    // current one and the two epochs agree - so it was created while the registry answered for
+    // the page it answers for now. A target that does not resolve is therefore a cid that page
+    // never held, not a dispatch that outlived its own page - raised boxed, the way the error
+    // overlay reads it.
     if (!ComponentRegistry.isCidRegistered(target)) {
       Interpreter.raiseArgumentError(
         `invalid action target, there is no component with CID: ${Interpreter.inspect(target)}`,
@@ -176,7 +184,7 @@ export default class Hologram {
 
     if (resultComponentStruct instanceof Promise) {
       resultComponentStruct.then((resolved) =>
-        Hologram.#processActionResult(resolved, name, target, startTime),
+        Hologram.#processActionResult(resolved, name, target, startTime, epoch),
       );
     } else {
       Hologram.#processActionResult(
@@ -184,6 +192,7 @@ export default class Hologram {
         name,
         target,
         startTime,
+        epoch,
       );
     }
   }
@@ -336,6 +345,11 @@ export default class Hologram {
     const eventParam = eventImpl.buildOperationParam(event);
     const eventTarget = event.target;
 
+    // The dispatch below can run later than the event that caused it - a debounce or a throttle
+    // holds it, and a navigation can start in between - so the page the user acted on is recorded
+    // now, while it is still the page on screen.
+    const epoch = $.domEpoch;
+
     return () => {
       const operation = Operation.fromSpecDom(
         operationSpecDom,
@@ -361,10 +375,12 @@ export default class Hologram {
               Type.integer(0),
             );
 
+            // Settling directly keeps an undelayed dispatch synchronous on a stable page, which
+            // is what lets a raising action reach the "error" event the feature tests read.
             if (delay.value === 0n) {
-              return Hologram.executeAction(operation);
+              return Hologram.#settleAction(operation, epoch);
             } else {
-              return Hologram.scheduleAction(operation);
+              return Hologram.scheduleAction(operation, epoch);
             }
           }
         }
@@ -550,21 +566,19 @@ export default class Hologram {
 
   // Execute action asynchronously to allow animations and prevent blocking the event loop
   // Deps: [:maps.get/3]
-  static scheduleAction(action) {
+  // The default stamp covers every caller that reasoned about the registry rather than about the
+  // markup - server-pushed actions, command responses, and the queues the mount drains. A caller
+  // whose action came from the DOM passes the displayed page's epoch instead.
+  static scheduleAction(action, epoch = $.registryEpoch) {
     const delay = Erlang_Maps["get/3"](
       Type.atom("delay"),
       action,
       Type.integer(0),
     );
 
-    // The id is dropped before the action runs rather than after, so an action that raises
-    // doesn't leave a fired timer's id behind for a later cancellation to clear.
-    const timerId = setTimeout(() => {
-      $.#scheduledActionTimerIds.delete(timerId);
-      Hologram.executeAction(action);
+    setTimeout(() => {
+      Hologram.#settleAction(action, epoch);
     }, Number(delay.value));
-
-    $.#scheduledActionTimerIds.add(timerId);
   }
 
   static #buildPagePath(toParam) {
@@ -908,6 +922,10 @@ export default class Hologram {
     );
   }
 
+  // A document load leaves a shim that buffers whatever the page's script dispatches before the
+  // runtime exists, since there is nothing yet to dispatch it to. The mount is the first moment
+  // any of it can be answered, so that is where it drains. A dispatch made once the runtime is up
+  // needs no buffer - it carries the epoch of the page that made it and waits on that instead.
   static #dispatchPendingJsInteropActions() {
     const actions = Hologram.#pendingJsInteropActions;
     Hologram.#pendingJsInteropActions = [];
@@ -1058,12 +1076,6 @@ export default class Hologram {
   }
 
   static async #handlePopstateEvent(event) {
-    // The history's side of the boundary #showNewPage guards: everything below belongs to the
-    // page being restored, so this is the last instant at which every pending dispatch provably
-    // belongs to the page being left. The restore below is skipped when there is no snapshot, so
-    // this cannot live there.
-    Hologram.cancelScheduledActions();
-
     await $.#savePageSnapshot();
     $.#historyId = event.state;
 
@@ -1071,16 +1083,31 @@ export default class Hologram {
 
     if (pageSnapshot) {
       $.#restorePageSnapshot(pageSnapshot);
+    } else {
+      // With no snapshot to restore, the mount below reads the document's mount data instead and
+      // repopulates the registry from it, putting every component back to the state it was
+      // rendered with. That is as much a change of what the registry answers for as a restore is,
+      // so it advances the same way - otherwise an action armed before this point would settle
+      // against state that has been reset underneath it.
+      $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
     }
 
     if ($.#isPageModuleRegistered(Hologram.#pageModule)) {
       return $.#mountPage(true);
     }
 
+    // The epoch of the navigation this restore opened. The fetch below is a round trip, and a
+    // later navigation may supersede this one before it answers - the failure of a superseded
+    // fetch says nothing about the navigation now in flight.
+    const epoch = Math.max($.domEpoch, $.registryEpoch);
+
     await Client.fetchPageBundlePath(
       Hologram.#pageModule,
-      (resp) => $.#loadPageBundle(resp),
+      (resp) => $.#loadPageBundle(resp, epoch),
       (_resp) => {
+        // The mount that would have closed this transition is never going to run.
+        $.#deadEpochs.add(epoch);
+
         throw new HologramRuntimeError(
           "Failed to fetch page bundle path for: " +
             Interpreter.inspect(Hologram.#pageModule),
@@ -1237,13 +1264,21 @@ export default class Hologram {
   // runs off the event loop. It surfaces as an uncaught error instead, which is what the console
   // and the feature tests read. handleUncaughtError/1 passes it over rather than showing the
   // overlay, that being reserved for errors a page raised.
-  static #loadPageBundle(src) {
+  // The epoch defaults to an at-call capture, which is right for the forward path, where the
+  // call follows the transition's epoch advance synchronously. The popstate path reaches here a
+  // round trip after its advance and passes the epoch it captured before that trip - a later
+  // navigation may have started in between, and the failure of a superseded fetch says nothing
+  // about the navigation now in flight.
+  static #loadPageBundle(src, epoch = Math.max($.domEpoch, $.registryEpoch)) {
     const script = document.createElement("script");
 
     script.src = src;
     script.fetchpriority = "high";
 
     script.onerror = () => {
+      // The mount that would have released this epoch's held dispatches is never going to run.
+      $.#deadEpochs.add(epoch);
+
       throw new HologramRuntimeError(`Failed to load page bundle: ${src}`);
     };
 
@@ -1257,6 +1292,10 @@ export default class Hologram {
   }
 
   static #mountPage(isPageModuleRegistered = false) {
+    // Whichever pointer ran ahead during the transition, the mount is where they converge: from
+    // here the page on screen and the page the registry answers for are the same page.
+    $.domEpoch = $.registryEpoch = Math.max($.domEpoch, $.registryEpoch);
+
     // Every page-entry path funnels through here (client-side navigation, back/forward
     // restoration, initial mount), so this is where dispatches still pending from the previous
     // page are dropped - the context they were meant for no longer exists. Cancel, not flush: a
@@ -1305,6 +1344,7 @@ export default class Hologram {
 
       Hologram.#scheduleQueuedInitActions();
       Hologram.#dispatchPendingJsInteropActions();
+      Hologram.#releaseHeldActions();
     });
   }
 
@@ -1389,12 +1429,17 @@ export default class Hologram {
   // is done. Otherwise the bundle is fetched, and running it announces the page is ready to
   // mount.
   static #showNewPage(payload) {
-    // The patch below puts the destination on screen and runs any script it carries, and for a
-    // page whose bundle is not loaded the mount is a fetch away - so cancelling at the mount both
-    // misses the dispatches that fire during that fetch, against a registry that is still the
-    // previous page's, and sweeps the ones the destination arms in the same window. Here nothing
-    // of the destination exists yet, so every pending dispatch belongs to the page being left.
-    Hologram.cancelScheduledActions();
+    // What an earlier page buffered and never got to dispatch belongs to that page, and that
+    // page is being left too. The buffer predates stamping - a document load fills it before the
+    // runtime exists - so it is the one queue the epoch cannot speak for, and it is emptied by
+    // hand.
+    $.#pendingJsInteropActions = [];
+
+    // The patch below puts the destination's markup on screen and runs its scripts, so the epoch
+    // of what is displayed advances here, ahead of the registry - the mount brings the registry
+    // level. What the destination's script dispatches from here on carries that epoch and waits
+    // for the mount, while everything armed before this line belongs to the page being left.
+    $.domEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
 
     const pageModule = Interpreter.evaluateJavaScriptExpression(
       payload.pageModule,
@@ -1426,7 +1471,13 @@ export default class Hologram {
   }
 
   // Deps: [:maps.get/2, :maps.put/3]
-  static #processActionResult(resultComponentStruct, name, target, startTime) {
+  static #processActionResult(
+    resultComponentStruct,
+    name,
+    target,
+    startTime,
+    epoch,
+  ) {
     let nextAction = Erlang_Maps["get/2"](
       Type.atom("next_action"),
       resultComponentStruct,
@@ -1490,9 +1541,11 @@ export default class Hologram {
         );
       }
 
-      // A next action with no target of its own inherits the one that produced it, so it belongs
-      // to the page being left - a navigation started below cancels it along with the rest.
-      Hologram.scheduleAction(nextAction);
+      // A next action belongs to whatever page its parent belonged to, so it inherits the
+      // parent's stamp rather than reading the epoch afresh. That matters most when the parent
+      // was asynchronous: its promise can resolve after a navigation, and the inherited stamp is
+      // what makes the next action drop instead of landing on a page that never produced it.
+      Hologram.scheduleAction(nextAction, epoch);
     }
 
     if (!Type.isNil(nextPage)) {
@@ -1502,6 +1555,29 @@ export default class Hologram {
 
   static #registerPageModule(pageModule) {
     $.#registeredPageModules.add(pageModule.value);
+  }
+
+  static #releaseHeldActions() {
+    const held = $.#heldActions;
+    $.#heldActions = [];
+
+    for (const {action, epoch} of held) {
+      // An entry from a transition that never reached this mount belongs to a page that will
+      // never answer for it.
+      if (epoch !== $.registryEpoch) {
+        continue;
+      }
+
+      // A held action already served its own delay before it was held - the timer is what
+      // delivered it to the settle rule in the first place - so releasing it goes through a bare
+      // macrotask rather than scheduleAction, which would serve that delay a second time. The
+      // macrotask is not incidental: it puts the release behind the init-action and JS-interop
+      // drains, which ride timers of their own, and keeps a raising action surfacing the way
+      // every other timer-driven action does.
+      setTimeout(() => {
+        Hologram.#settleAction(action, epoch);
+      }, 0);
+    }
   }
 
   static async #restoreEts() {
@@ -1545,6 +1621,11 @@ export default class Hologram {
     } = pageSnapshot;
 
     ComponentRegistry.populate(componentRegistryEntries);
+
+    // A restore swaps the registry while the previous page is still on screen - the mirror of a
+    // forward navigation, where the markup runs ahead instead. The epoch of what the registry
+    // answers for advances here; the mount brings the displayed side level.
+    $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
 
     App.instanceId = instanceId;
     App.subscriptionReceiptRegistry.populate(subscriptionReceipts);
@@ -1647,6 +1728,34 @@ export default class Hologram {
     actions.forEach((action) => {
       Hologram.scheduleAction(action);
     });
+  }
+
+  // The one place an action meets the registry, and the only thing that decides whether it runs.
+  // An action carries the epoch of the page it was reasoning about when it was created, and this
+  // compares that against where the client has got to since.
+  static #settleAction(action, epoch) {
+    const currentEpoch = Math.max($.domEpoch, $.registryEpoch);
+
+    // The page the action belonged to has been left, or its navigation failed before it could
+    // mount - either way nothing can answer for it any more. The warning is the trace a button
+    // that appears to do nothing leaves behind.
+    if (epoch < currentEpoch || $.#deadEpochs.has(epoch)) {
+      console.warn(
+        "Hologram: dropped an action dispatched on a page that has been left:",
+        Interpreter.inspect(Erlang_Maps["get/2"](Type.atom("name"), action)),
+      );
+
+      return;
+    }
+
+    // The two sides disagree, so the client is mid-transition: the page this action belongs to is
+    // the one being moved to, and it cannot answer until it mounts.
+    if ($.domEpoch !== $.registryEpoch) {
+      $.#heldActions.push({action: action, epoch: epoch});
+      return;
+    }
+
+    return Hologram.executeAction(action, epoch);
   }
 }
 
