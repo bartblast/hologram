@@ -12,7 +12,9 @@ import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
+import Model from "../../assets/js/model.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -20,6 +22,7 @@ import Type from "../../assets/js/type.mjs";
 defineRuntimeGlobals();
 
 describe("Sse", () => {
+  let animationFrames;
   let fetchStub;
   let mockEventSource;
   let originalInstanceId;
@@ -86,8 +89,22 @@ describe("Sse", () => {
     globalThis.EventSource = sinon.stub().returns(mockEventSource);
     fetchStub = sinon.stub(globalThis, "fetch");
 
+    Sse.renderScheduled = false;
+    Sse.syncCursor = null;
+
+    LocalDatabase.reset();
+    Model.reset();
+
     originalWindow = globalThis.window;
-    globalThis.window = {location: {reload: sinon.spy()}};
+
+    // The scheduled repaint is captured rather than run: what a test asserts is that ONE was
+    // asked for, and running it here would drag a whole render into a transport test.
+    animationFrames = [];
+
+    globalThis.window = {
+      location: {reload: sinon.spy()},
+      requestAnimationFrame: (callback) => animationFrames.push(callback),
+    };
 
     originalInstanceId = App.instanceId;
     App.instanceId = "test-instance-id";
@@ -160,6 +177,26 @@ describe("Sse", () => {
       globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
 
       assert.deepStrictEqual(Sse.buildSyncGreeting(null), {});
+    });
+
+    // A client coming back names where it got to, and is told what moved since instead of
+    // everything it may see.
+    it("names the place the client has been brought up to", () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      Sse.syncCursor = "Nzc4LjA";
+
+      assert.deepStrictEqual(Sse.buildSyncGreeting(pageModule), {
+        cursor: "Nzc4LjA",
+        model_hash: "a3f9c2",
+        page: "MyApp.BoardPage",
+        protocol_version: 1,
+      });
+    });
+
+    it("names no place for a client arriving with nothing", () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+
+      assert.notProperty(Sse.buildSyncGreeting(pageModule), "cursor");
     });
   });
 
@@ -261,6 +298,29 @@ describe("Sse", () => {
       sinon.assert.calledOnceWithExactly(
         globalThis.EventSource,
         "/hologram/sse?instance_id=test-instance-id&handshake_id=abc-handshake-id&model_hash=a3f9c2&page=MyApp.BoardPage&protocol_version=1",
+      );
+    });
+
+    // The listeners are registered again on every new stream, so the place has to outlive the
+    // one that delivered it - a reconnect is exactly when the client needs to say what it has.
+    it("opens the EventSource naming the place a previous stream left it at", async () => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      sinon
+        .stub(Hologram, "currentPageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({
+        data: JSON.stringify({cursor: "Nzc4LjA", deltas: {}}),
+      });
+
+      await Sse.connect();
+
+      sinon.assert.calledWithExactly(
+        globalThis.EventSource,
+        "/hologram/sse?instance_id=test-instance-id&handshake_id=abc-handshake-id&model_hash=a3f9c2&page=MyApp.BoardPage&protocol_version=1&cursor=Nzc4LjA",
       );
     });
 
@@ -596,6 +656,142 @@ describe("Sse", () => {
       Sse.eventSource.listeners.action({data: "encoded-action-expression"});
 
       sinon.assert.notCalled(scheduleStub);
+    });
+  });
+
+  describe("sync_deltas event", () => {
+    const TASK = "MyApp.Task";
+
+    const frame = (overrides = {}) =>
+      JSON.stringify(
+        Object.assign(
+          {
+            cursor: "Nzc4LjA",
+            deltas: {put_entity: {[TASK]: [{id: "t1", title: "Draft copy"}]}},
+            model_hash: "a3f9c2",
+            protocol_version: 1,
+          },
+          overrides,
+        ),
+      );
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {id: "uuid", title: "string"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+        modelHash: "a3f9c2",
+        orderedStringPairs: [],
+        protocolVersion: 1,
+      };
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+    });
+
+    it("files the rows the frame carries into the database", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      assert.equal(LocalDatabase.getRow(TASK, "t1").title, "Draft copy");
+    });
+
+    it("keeps the place the frame leaves the client at", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      assert.equal(Sse.syncCursor, "Nzc4LjA");
+    });
+
+    // Mid-fill the server hands over no place, because a client holding part of a pot could not
+    // honour the claim one makes - and a client that forgot the place it DID have would come
+    // back asking only for what changed since a moment it never reached.
+    it("keeps the place it already had when a frame names none", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+      Sse.eventSource.listeners.sync_deltas({data: frame({cursor: null})});
+
+      assert.equal(Sse.syncCursor, "Nzc4LjA");
+    });
+
+    it("schedules a repaint rather than repainting in the handler", async () => {
+      const renderStub = sinon.stub(Hologram, "render");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      sinon.assert.notCalled(renderStub);
+      assert.equal(animationFrames.length, 1);
+
+      animationFrames[0]();
+
+      sinon.assert.calledOnce(renderStub);
+    });
+
+    // A fill arrives as a burst of frames, and a repaint per frame would be work nobody sees.
+    it("schedules one repaint however many frames arrive before it runs", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      assert.equal(animationFrames.length, 1);
+    });
+
+    it("schedules the next repaint once the scheduled one has run", async () => {
+      sinon.stub(Hologram, "render");
+      stubHandshakeResponse();
+
+      await Sse.connect();
+
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+      animationFrames[0]();
+
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      assert.equal(animationFrames.length, 2);
+    });
+  });
+
+  describe("synced event", () => {
+    const envelope = (scope) =>
+      JSON.stringify({protocol_version: 1, scope: scope});
+
+    it("records the scope the client may now answer for itself", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.synced({data: envelope("page")});
+
+      assert.isTrue(LocalDatabase.isSynced("page"));
+      assert.isFalse(LocalDatabase.isSynced("all"));
+    });
+
+    // What a query answers can change the moment a scope is complete - a count that was reading
+    // the server's number starts counting rows.
+    it("schedules a repaint", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.synced({data: envelope("all")});
+
+      assert.equal(animationFrames.length, 1);
     });
   });
 

@@ -2,9 +2,11 @@
 
 import App from "./app.mjs";
 import ComponentRegistry from "./component_registry.mjs";
+import Deltas from "./deltas.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
+import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
@@ -33,7 +35,14 @@ export default class Sse {
 
   static eventSource = null;
   static reconnectAttempts = 0;
+  static renderScheduled = false;
   static stabilityTimer = null;
+
+  // The place in the log this client has been brought up to, kept across reconnects rather than
+  // with the stream that delivered it: the listeners are registered again on every new stream,
+  // and a place held with them would be dropped exactly when the client needs it to say what it
+  // already has. What it is made of is the server's business - it is kept and handed back.
+  static syncCursor = null;
 
   // What the client tells the server so it can be kept up to date: the wire format this bundle
   // speaks, the model it was built against, and the page it is on. The first two are baked into
@@ -49,11 +58,19 @@ export default class Sse {
       return {};
     }
 
-    return {
+    const greeting = {
       model_hash: sync.modelHash,
       page: Interpreter.moduleExName(pageModule),
       protocol_version: sync.protocolVersion,
     };
+
+    // A client arriving for the first time has no place to name, and asks for everything it may
+    // see. One coming back names where it got to, and is told only what moved since.
+    if ($.syncCursor !== null) {
+      greeting.cursor = $.syncCursor;
+    }
+
+    return greeting;
   }
 
   // Exponential backoff with ±RECONNECT_JITTER noise. Mirrors the established
@@ -167,6 +184,36 @@ export default class Sse {
         App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
       });
 
+      // The four sync kinds carry JSON rather than the JavaScript every other kind on this
+      // stream is written in - a delta holds the values a database stores, and spelling those as
+      // source costs ten times the bytes on the payload a whole-app fill is mostly made of.
+      $.eventSource.addEventListener("sync_deltas", (event) => {
+        const frame = JSON.parse(event.data);
+
+        Deltas.apply(frame.deltas);
+
+        // Mid-fill the server hands over no place, because a client holding part of a pot could
+        // not honour the claim one makes. Keeping the last place it DID name is what lets a
+        // client cut off mid-fill come back asking for everything again rather than for the
+        // little that changed since.
+        if (frame.cursor !== null) {
+          $.syncCursor = frame.cursor;
+        }
+
+        $.scheduleRender();
+      });
+
+      $.eventSource.addEventListener("synced", (event) => {
+        const frame = JSON.parse(event.data);
+
+        LocalDatabase.markSynced(frame.scope);
+
+        // What a query answers can change the moment a scope is complete - a count that was
+        // reading the server's number starts counting rows - so the marker is a reason to
+        // render like any frame is.
+        $.scheduleRender();
+      });
+
       $.eventSource.onopen = () => {
         GlobalRegistry.set("sseConnected?", true);
 
@@ -197,6 +244,25 @@ export default class Sse {
       Logger.debug(`SSE handshake error: ${error}`);
       $.scheduleReconnect();
     }
+  }
+
+  // One render per animation frame, however many frames arrive in between: a fill lands as a
+  // burst, and a repaint per frame would be work nobody sees.
+  //
+  // Scheduled rather than run here, always. Rendering reconciles, attaching listeners as it
+  // goes, and an action dispatched by one of those renders again - a repaint started from inside
+  // this handler would be a repaint started from inside a repaint.
+  static scheduleRender() {
+    if ($.renderScheduled) {
+      return;
+    }
+
+    $.renderScheduled = true;
+
+    window.requestAnimationFrame(() => {
+      $.renderScheduled = false;
+      Hologram.render();
+    });
   }
 
   // Bump the failure counter and re-run the handshake protocol from scratch
