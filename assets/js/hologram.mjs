@@ -1241,16 +1241,16 @@ export default class Hologram {
     // Before the first render, so that a prop reading a query answers from the database rather
     // than from nothing - the rows the server read to render this page are the rows those
     // queries need, and they go in through the same ingest the stream uses. Every page visit
-    // seeds again, which is how navigation needs no server for what it already has.
+    // carries again, which is how navigation needs no server for what it already has.
     //
     // A bundle built before any of this existed carries neither field, and a build with no data
-    // model carries an empty seed - both leave the database as it was.
-    if (mountData.syncSeed) {
+    // model carries no rows - both leave the database as it was.
+    if (mountData.syncRows) {
       LocalDatabase.actorUserId = mountData.actorUserId;
-      Deltas.apply(mountData.syncSeed, {seed: true});
+      Deltas.apply(mountData.syncRows, {insertOnly: true});
 
-      // A count has no rows behind it, so the seed cannot carry one - the numbers this render
-      // answered with travel beside it, and each page visit replaces them the way it replaces
+      // A count has no rows behind it, so the rows cannot carry one - the numbers this render
+      // answered with travel beside them, and each page visit replaces them the way it replaces
       // what its own props read.
       LocalDatabase.syncCounts = mountData.syncCounts ?? {};
     }

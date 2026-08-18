@@ -135,19 +135,19 @@ describe("Deltas", () => {
     });
   });
 
-  describe("apply() - a seed", () => {
-    const seed = (rows) =>
-      Deltas.apply({put_entity: {[TASK]: rows}}, {seed: true});
+  describe("apply() - rows a page carried", () => {
+    const carry = (rows) =>
+      Deltas.apply({put_entity: {[TASK]: rows}}, {insertOnly: true});
 
     it("files a row the client does not hold", () => {
-      seed([{done: false, id: "t1", title: "Draft copy"}]);
+      carry([{done: false, id: "t1", title: "Draft copy"}]);
 
       assert.equal(LocalDatabase.getRow(TASK, "t1").title, "Draft copy");
     });
 
-    // A seed can be OLDER than what the client holds: a page rendered at one moment lands after
-    // the stream delivered a later change to the same row, and overwriting would put back a
-    // value nothing will correct.
+    // What a page carries can be OLDER than what the client holds: a page rendered at one moment
+    // lands after the stream delivered a later change to the same row, and overwriting would put
+    // back a value nothing will correct.
     it("leaves a row the client already holds alone", () => {
       Deltas.apply({
         put_entity: {
@@ -155,7 +155,7 @@ describe("Deltas", () => {
         },
       });
 
-      seed([{done: false, id: "t1", title: "from the page"}]);
+      carry([{done: false, id: "t1", title: "from the page"}]);
 
       assert.equal(LocalDatabase.getRow(TASK, "t1").title, "from the stream");
     });
@@ -167,7 +167,7 @@ describe("Deltas", () => {
         },
       });
 
-      seed([
+      carry([
         {done: false, id: "t1", title: "from the page"},
         {done: false, id: "t2", title: "new to the client"},
       ]);
@@ -177,9 +177,9 @@ describe("Deltas", () => {
     });
 
     it("remembers what it filed as unconfirmed by the stream", () => {
-      seed([{done: false, id: "t1", title: "Draft copy"}]);
+      carry([{done: false, id: "t1", title: "Draft copy"}]);
 
-      assert.deepEqual(LocalDatabase.seededEntries(), [[TASK, "t1"]]);
+      assert.deepEqual(LocalDatabase.carriedEntries(), [[TASK, "t1"]]);
     });
 
     it("remembers nothing for a row it left alone", () => {
@@ -189,15 +189,15 @@ describe("Deltas", () => {
         },
       });
 
-      seed([{done: false, id: "t1", title: "from the page"}]);
+      carry([{done: false, id: "t1", title: "from the page"}]);
 
-      assert.deepEqual(LocalDatabase.seededEntries(), []);
+      assert.deepEqual(LocalDatabase.carriedEntries(), []);
     });
 
     // Once the stream delivers it, it is no longer a row the client has only because a page said
     // so - and no longer one the completeness marker should take away.
-    it("forgets a seeded row the stream then delivers", () => {
-      seed([{done: false, id: "t1", title: "from the page"}]);
+    it("forgets a carried rowed row the stream then delivers", () => {
+      carry([{done: false, id: "t1", title: "from the page"}]);
 
       Deltas.apply({
         put_entity: {
@@ -205,14 +205,14 @@ describe("Deltas", () => {
         },
       });
 
-      assert.deepEqual(LocalDatabase.seededEntries(), []);
+      assert.deepEqual(LocalDatabase.carriedEntries(), []);
       assert.equal(LocalDatabase.getRow(TASK, "t1").title, "from the stream");
     });
 
-    it("files the relationship facts of a row it seeds", () => {
+    it("files the relationship facts of a row it files", () => {
       Deltas.apply(
         {put_entity: {[PROJECT]: [{id: "p1", name: "Website", tasks: ["t1"]}]}},
-        {seed: true},
+        {insertOnly: true},
       );
 
       assert.deepEqual(
@@ -222,7 +222,7 @@ describe("Deltas", () => {
     });
 
     it("derives sort keys the way the stream's rows get them", () => {
-      seed([{done: false, id: "t1", title: "Łódź"}]);
+      carry([{done: false, id: "t1", title: "Łódź"}]);
 
       assert.equal(LocalDatabase.getRow(TASK, "t1").title_sort, "lodz");
     });

@@ -18,7 +18,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.Server
-  alias Hologram.Sync.Seed
+  alias Hologram.Sync.Carry
   alias Hologram.Template.DOM
 
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
@@ -201,7 +201,7 @@ defmodule Hologram.Template.Renderer do
   defp render_page_as_actor(page_module, params, server_struct, opts) do
     initial_page? = opts[:initial_page?] || false
 
-    Seed.start()
+    Carry.start()
 
     {page_component_struct, page_server_struct} =
       init_component(page_module, params, server_struct)
@@ -250,11 +250,11 @@ defmodule Hologram.Template.Renderer do
 
     # The rows this render read, and who read them - both spelled as JSON rather than as the
     # boxed terms the rest of the mount data carries, because both are read by the data layer
-    # rather than by transpiled code: the seed goes through the same ingest a frame does, and
-    # the acting user is what binds the actor predicates of the queries the client re-runs.
+    # rather than by transpiled code: the rows go through the same ingest a frame does, and the
+    # acting user is what binds the actor predicates of the queries the client re-runs.
     actor_user_id_js = Jason.encode!(server_struct.user_id)
-    sync_counts_js = Jason.encode!(Seed.take_counts())
-    sync_seed_js = Jason.encode!(Seed.take())
+    sync_counts_js = Jason.encode!(Carry.take_counts())
+    sync_rows_js = Jason.encode!(Carry.take())
 
     html_with_interpolated_js =
       initial_tree
@@ -265,7 +265,7 @@ defmodule Hologram.Template.Renderer do
       |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
       |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
       |> String.replace("$SYNC_COUNTS_JS_PLACEHOLDER", sync_counts_js)
-      |> String.replace("$SYNC_SEED_JS_PLACEHOLDER", sync_seed_js)
+      |> String.replace("$SYNC_ROWS_JS_PLACEHOLDER", sync_rows_js)
 
     tree_with_interpolated_js =
       initial_tree
@@ -275,7 +275,7 @@ defmodule Hologram.Template.Renderer do
       |> interpolate_js_in_tree("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
       |> interpolate_js_in_tree("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
       |> interpolate_js_in_tree("$SYNC_COUNTS_JS_PLACEHOLDER", sync_counts_js)
-      |> interpolate_js_in_tree("$SYNC_SEED_JS_PLACEHOLDER", sync_seed_js)
+      |> interpolate_js_in_tree("$SYNC_ROWS_JS_PLACEHOLDER", sync_rows_js)
 
     {html_with_interpolated_js, tree_with_interpolated_js, component_registry_with_page_struct,
      final_server_struct}
@@ -978,12 +978,12 @@ defmodule Hologram.Template.Renderer do
     # Gathered as the prop resolves, so the client is handed the rows this render read - which is
     # what lets its own first render answer the same query from its own database rather than from
     # a value passed down beside it.
-    Seed.collect(result)
+    Carry.collect(result)
 
-    # A count has no rows behind it, so a seeded pot cannot re-derive one - the number itself is
+    # A count has no rows behind it, so carried rows cannot re-derive one - the number itself is
     # handed over, and the client holds it until its own database is complete enough to count.
     if is_integer(result) do
-      Seed.collect_count(module, prop_name, args, result)
+      Carry.collect_count(module, prop_name, args, result)
     end
 
     result

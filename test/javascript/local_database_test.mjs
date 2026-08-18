@@ -175,22 +175,22 @@ describe("LocalDatabase", () => {
   });
 
   describe("markSynced()", () => {
-    // What is still seeded when the whole pot declares itself complete was never this client's
-    // to hold - a grant revoked between the render and the connect leaves exactly that.
-    it("drops a seeded row the fill never delivered", () => {
+    // What a page still carries when the whole pot declares itself complete was never this
+    // client's to hold - a grant revoked between the render and the connect leaves exactly that.
+    it("drops a carried row the fill never delivered", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
-      LocalDatabase.markSeeded("MyApp.Task", "t1");
+      LocalDatabase.markCarried("MyApp.Task", "t1");
 
       LocalDatabase.markSynced("all");
 
       assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
-      assert.deepEqual(LocalDatabase.seededEntries(), []);
+      assert.deepEqual(LocalDatabase.carriedEntries(), []);
     });
 
-    it("keeps a seeded row the fill delivered", () => {
+    it("keeps a carried row the fill delivered", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
-      LocalDatabase.markSeeded("MyApp.Task", "t1");
-      LocalDatabase.unmarkSeeded("MyApp.Task", "t1");
+      LocalDatabase.markCarried("MyApp.Task", "t1");
+      LocalDatabase.unmarkCarried("MyApp.Task", "t1");
 
       LocalDatabase.markSynced("all");
 
@@ -200,7 +200,7 @@ describe("LocalDatabase", () => {
       });
     });
 
-    it("keeps a row that never came from a seed", () => {
+    it("keeps a row no page carried", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
 
       LocalDatabase.markSynced("all");
@@ -211,15 +211,15 @@ describe("LocalDatabase", () => {
       });
     });
 
-    // The page scope says one page's rows are complete, which says nothing about a row seeded
-    // for another - only the whole pot's marker can call one an orphan.
+    // The page scope says one page's rows are complete, which says nothing about a row another
+    // page carried - only the whole pot's marker can call one an orphan.
     it("sweeps nothing at the page scope", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
-      LocalDatabase.markSeeded("MyApp.Task", "t1");
+      LocalDatabase.markCarried("MyApp.Task", "t1");
 
       LocalDatabase.markSynced("page");
 
-      assert.deepEqual(LocalDatabase.seededEntries(), [["MyApp.Task", "t1"]]);
+      assert.deepEqual(LocalDatabase.carriedEntries(), [["MyApp.Task", "t1"]]);
       assert.isNotNull(LocalDatabase.getRow("MyApp.Task", "t1"));
     });
 
@@ -227,7 +227,7 @@ describe("LocalDatabase", () => {
     it("takes the swept row's relationship facts with it", () => {
       LocalDatabase.putRow("MyApp.Project", {id: "p1", name: "Board"});
       LocalDatabase.addFact("MyApp.Project", "tasks", "p1", "t1");
-      LocalDatabase.markSeeded("MyApp.Project", "p1");
+      LocalDatabase.markCarried("MyApp.Project", "p1");
 
       LocalDatabase.markSynced("all");
 
@@ -290,42 +290,42 @@ describe("LocalDatabase", () => {
     });
   });
 
-  describe("seededEntries()", () => {
+  describe("carriedEntries()", () => {
     it("returns the rows marked as arrived with a page", () => {
-      LocalDatabase.markSeeded("MyApp.Task", "t1");
-      LocalDatabase.markSeeded("MyApp.Project", "p1");
+      LocalDatabase.markCarried("MyApp.Task", "t1");
+      LocalDatabase.markCarried("MyApp.Project", "p1");
 
-      assert.sameDeepMembers(LocalDatabase.seededEntries(), [
+      assert.sameDeepMembers(LocalDatabase.carriedEntries(), [
         ["MyApp.Task", "t1"],
         ["MyApp.Project", "p1"],
       ]);
     });
 
     it("returns nothing once a row is unmarked", () => {
-      LocalDatabase.markSeeded("MyApp.Task", "t1");
-      LocalDatabase.unmarkSeeded("MyApp.Task", "t1");
+      LocalDatabase.markCarried("MyApp.Task", "t1");
+      LocalDatabase.unmarkCarried("MyApp.Task", "t1");
 
-      assert.deepEqual(LocalDatabase.seededEntries(), []);
+      assert.deepEqual(LocalDatabase.carriedEntries(), []);
     });
 
     it("marks a row of one type without marking the same id of another", () => {
-      LocalDatabase.markSeeded("MyApp.Task", "t1");
-      LocalDatabase.unmarkSeeded("MyApp.Project", "t1");
+      LocalDatabase.markCarried("MyApp.Task", "t1");
+      LocalDatabase.unmarkCarried("MyApp.Project", "t1");
 
-      assert.deepEqual(LocalDatabase.seededEntries(), [["MyApp.Task", "t1"]]);
+      assert.deepEqual(LocalDatabase.carriedEntries(), [["MyApp.Task", "t1"]]);
     });
   });
 
   describe("reset()", () => {
-    it("drops the rows, the facts, the scope marks and what a page seeded", () => {
+    it("drops the rows, the facts, the scope marks and what a page carried", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
       LocalDatabase.addFact("MyApp.Project", "tasks", "p1", "t1");
-      LocalDatabase.markSeeded("MyApp.Task", "t1");
+      LocalDatabase.markCarried("MyApp.Task", "t1");
       LocalDatabase.markSynced("page");
 
       LocalDatabase.reset();
 
-      assert.deepEqual(LocalDatabase.seededEntries(), []);
+      assert.deepEqual(LocalDatabase.carriedEntries(), []);
 
       assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
 

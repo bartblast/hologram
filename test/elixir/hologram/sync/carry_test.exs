@@ -1,7 +1,7 @@
-defmodule Hologram.Sync.SeedTest do
+defmodule Hologram.Sync.CarryTest do
   use Hologram.Test.BasicCase, async: true
 
-  import Hologram.Sync.Seed
+  import Hologram.Sync.Carry
 
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
@@ -75,9 +75,9 @@ defmodule Hologram.Sync.SeedTest do
 
       collect([source])
 
-      seed = take()
+      carried = take()
 
-      assert %{@module_2_type => [embedded], @module_3_type => [row]} = seed.put_entity
+      assert %{@module_2_type => [embedded], @module_3_type => [row]} = carried.put_entity
       assert embedded.c == "embedded"
       assert row.id == source.id
     end
@@ -89,10 +89,10 @@ defmodule Hologram.Sync.SeedTest do
 
       collect([outer])
 
-      seed = take()
+      carried = take()
 
-      assert Enum.map(seed.put_entity[@module_2_type], & &1.c) == ["two levels down"]
-      assert length(seed.put_entity[@module_3_type]) == 2
+      assert Enum.map(carried.put_entity[@module_2_type], & &1.c) == ["two levels down"]
+      assert length(carried.put_entity[@module_3_type]) == 2
     end
 
     test "records a row reached through several results once" do
@@ -102,10 +102,10 @@ defmodule Hologram.Sync.SeedTest do
 
       collect([first, second])
 
-      seed = take()
+      carried = take()
 
-      assert length(seed.put_entity[@module_2_type]) == 1
-      assert length(seed.put_entity[@module_3_type]) == 2
+      assert length(carried.put_entity[@module_2_type]) == 1
+      assert length(carried.put_entity[@module_3_type]) == 2
     end
 
     test "gathers the rows of every result collected" do
@@ -148,8 +148,8 @@ defmodule Hologram.Sync.SeedTest do
 
       collect([user])
 
-      seed = take()
-      [row] = seed.put_entity["Hologram.Test.Fixtures.Entity.Module14"]
+      carried = take()
+      [row] = carried.put_entity["Hologram.Test.Fixtures.Entity.Module14"]
 
       assert row.email == "user@test.com"
       refute Map.has_key?(row, :password_hash)
@@ -159,9 +159,9 @@ defmodule Hologram.Sync.SeedTest do
       collect([module_2(c: "a task")])
       collect([Entity.new(Module1)])
 
-      seed = take()
+      carried = take()
 
-      assert Map.keys(seed.put_entity) == [
+      assert Map.keys(carried.put_entity) == [
                "Hologram.Test.Fixtures.Entity.Module1",
                @module_2_type
              ]

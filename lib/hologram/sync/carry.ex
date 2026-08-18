@@ -1,8 +1,8 @@
-defmodule Hologram.Sync.Seed do
+defmodule Hologram.Sync.Carry do
   @moduledoc false
 
-  # The rows a page's own render resolved, gathered as it renders and handed to the client with
-  # the page.
+  # What a page's own render resolved - its rows, and the counts nothing but a number came back
+  # for - gathered as it renders and handed to the client with the page.
   #
   # What it buys: from the first client render, every `from_query` prop answers from the client's
   # own database rather than from a value the server passed down - no second evaluation path, no
@@ -10,10 +10,10 @@ defmodule Hologram.Sync.Seed do
   # render match the HTML the server sent.
   #
   # Rows are spelled the way a frame spells them, so the client reads them through the same
-  # ingest as everything else. What arrives this way is INSERT-ONLY there: a seed can be older
-  # than what the client already holds - a page rendered at one moment can land after the stream
-  # delivered a later change to the same row - and overwriting would put back a value nothing
-  # would correct.
+  # ingest as everything else. What arrives this way is applied INSERT-ONLY there: what a page
+  # carries can be older than what the client already holds - a page rendered at one moment can
+  # land after the stream delivered a later change to the same row - and overwriting would put
+  # back a value nothing would correct.
   #
   # Gathered in the process dictionary rather than threaded through the render: what a render
   # resolved is ambient to it, the way the acting user is, and the alternative is a new argument
@@ -30,8 +30,8 @@ defmodule Hologram.Sync.Seed do
   Clears what a previous render gathered and returns :ok.
 
   A render ends by taking what it gathered, so this is what covers the render that does not end -
-  one that raises leaves its rows behind, and the process serving the next request would seed a
-  page with them.
+  one that raises leaves its rows behind, and the process serving the next request would hand
+  them to a page they never belonged to.
   """
   @spec start() :: :ok
   def start do
@@ -45,7 +45,7 @@ defmodule Hologram.Sync.Seed do
   Records the given count under the key naming the query prop that answered it.
 
   A counting query answers with a number and no rows, so nothing about it can be re-derived from
-  a seeded pot - the client is told the number itself, and holds it until its own database is
+  the rows a page carries - the client is told the number itself, and holds it until its own database is
   complete enough to count.
 
   The key names the component, the prop, and the arguments the builder was called with, which is
@@ -136,7 +136,7 @@ defmodule Hologram.Sync.Seed do
 
   defp gathered_counts, do: Process.get(@counts_key, %{})
 
-  # Ordered by id within each type, so that one render's seed is spelled the same way twice -
+  # Ordered by id within each type, so that one render's rows are spelled the same way twice -
   # what a map hands its values over in follows the hashes of the keys.
   defp group(entities) do
     entities

@@ -14,14 +14,15 @@ import SortKey from "./sort_key.mjs";
 // one means putting its attributes in its type's table and its target ids in the relationship
 // facts, with nothing left nested.
 export default class Deltas {
-  // `seed` marks what arrived with the page rather than from the stream, which changes two
-  // things and nothing else: a row already held is left alone, and one that is filed is
-  // remembered as unconfirmed until the stream delivers it.
+  // `insertOnly` is how rows a page carried are applied, which changes two things and nothing
+  // else: a row already held is left alone, and one that is filed is remembered as unconfirmed
+  // until the stream delivers it.
   //
-  // Left alone because a seed can be OLDER than what the client holds - a page rendered at one
-  // moment lands after the stream delivered a later change to the same row - and overwriting
-  // would put back a value nothing will correct, since the server sees nothing new to send. It
-  // loses nothing: every change to a row the client already has arrives on the stream, in order.
+  // Left alone because what a page carries can be OLDER than what the client holds - a page
+  // rendered at one moment lands after the stream delivered a later change to the same row - and
+  // overwriting would put back a value nothing will correct, since the server sees nothing new to
+  // send. It loses nothing: every change to a row the client already has arrives on the stream,
+  // in order.
   static apply(deltas, opts = {}) {
     for (const [op, byType] of Object.entries(deltas)) {
       for (const [type, items] of Object.entries(byType)) {
@@ -83,13 +84,13 @@ export default class Deltas {
   }
 
   static #putRow(type, row, opts) {
-    if (opts.seed) {
+    if (opts.insertOnly) {
       if (LocalDatabase.getRow(type, row.id) !== null) {
         return;
       }
 
       Deltas.#fileRow(type, row);
-      LocalDatabase.markSeeded(type, row.id);
+      LocalDatabase.markCarried(type, row.id);
 
       return;
     }
@@ -97,8 +98,8 @@ export default class Deltas {
     Deltas.#fileRow(type, row);
 
     // The stream has delivered it, so it is no longer a row the client only has because a page
-    // said so - and no longer one the completeness marker should take away.
-    LocalDatabase.unmarkSeeded(type, row.id);
+    // carried it - and no longer one the completeness marker should take away.
+    LocalDatabase.unmarkCarried(type, row.id);
   }
 
   static #fileRow(type, row) {

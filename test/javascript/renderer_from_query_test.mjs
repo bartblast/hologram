@@ -297,7 +297,7 @@ describe("Renderer from_query props", () => {
     assert.deepStrictEqual(renderedProp("count"), Type.integer(3));
   });
 
-  // A count has no rows behind it, so a seeded pot cannot re-derive one - the number the render
+  // A count has no rows behind it, so carried rows cannot re-derive one - the number the render
   // answered with is held until this client can count for itself.
   describe("a count the page carried", () => {
     const countCapture = () =>

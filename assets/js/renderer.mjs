@@ -515,8 +515,8 @@ export default class Renderer {
   // What the render that handed this page over counted, for as long as this client's own database
   // cannot count for itself.
   //
-  // A count has no rows behind it, so seeding cannot answer one: until the fill is complete for
-  // the rows it counts, counting locally would count a pot that is still filling and report a
+  // A count has no rows behind it, so carrying rows cannot answer one: until the fill is complete
+  // for the rows it counts, counting locally would count a pot that is still filling and report a
   // number climbing towards the truth. The marker says when that stops - the page's own scope for
   // the page this client connected on, whose rows the server declares complete first, and the
   // whole pot's for any page reached since, whose rows are only promised at "all".

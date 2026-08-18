@@ -179,7 +179,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     end
   end
 
-  describe "the seed a page hands its client" do
+  describe "the rows a page hands its client" do
     setup do
       setup_asset_path_registry(AssetPathRegistryStub)
       AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
@@ -197,11 +197,11 @@ defmodule Hologram.Template.RendererFromQueryTest do
       :ok
     end
 
-    # What the seed carries, apart from what the page around it renders - a template that prints
-    # the sentinel names a server-only attribute legitimately, and the question here is what the
-    # data layer was handed.
-    defp seed_json(html) do
-      [_full, json] = Regex.run(~r/syncSeed: (.+)$/m, html)
+    # What the page carries, apart from what it renders - a template that prints the sentinel
+    # names a server-only attribute legitimately, and the question here is what the data layer
+    # was handed.
+    defp carried_rows_json(html) do
+      [_full, json] = Regex.run(~r/syncRows: (.+)$/m, html)
 
       json
     end
@@ -235,7 +235,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       html = render_page_html(Module99)
 
-      assert String.contains?(html, ~s|syncSeed: {"put_entity":{|)
+      assert String.contains?(html, ~s|syncRows: {"put_entity":{|)
       assert String.contains?(html, ~s|"#{@entity_2_type}":[{|)
       assert String.contains?(html, ~s|"c":"the embedded row"|)
       assert String.contains?(html, ~s|"a":["#{target.id}"]|)
@@ -244,10 +244,10 @@ defmodule Hologram.Template.RendererFromQueryTest do
     test "carries nothing for a page whose props read no rows" do
       html = render_page_html(Module99)
 
-      assert String.contains?(html, "syncSeed: {}")
+      assert String.contains?(html, "syncRows: {}")
     end
 
-    # The positive artifact beside the negative one: this is the seed the row travelled in, so
+    # The positive artifact beside the negative one: this is what the row travelled in, so
     # what it does not carry is what the model kept from it rather than what happened to be
     # missing.
     test "never carries a value the client may not have" do
@@ -255,13 +255,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
       |> Entity.new(label: "Report", secret_note: "note_secret_v7", token: "tok_R4mQ")
       |> create()
 
-      seed = seed_json(render_page_html(Module100))
+      carried = carried_rows_json(render_page_html(Module100))
 
-      assert String.contains?(seed, ~s|"label":"Report"|)
-      refute String.contains?(seed, "note_secret_v7")
-      refute String.contains?(seed, "secret_note")
-      refute String.contains?(seed, "tok_R4mQ")
-      refute String.contains?(seed, "token")
+      assert String.contains?(carried, ~s|"label":"Report"|)
+      refute String.contains?(carried, "note_secret_v7")
+      refute String.contains?(carried, "secret_note")
+      refute String.contains?(carried, "tok_R4mQ")
+      refute String.contains?(carried, "token")
     end
 
     test "names who the render read the rows as" do
@@ -282,7 +282,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     end
   end
 
-  # A count has no rows behind it, so a seeded pot cannot re-derive one - the number itself
+  # A count has no rows behind it, so carried rows cannot re-derive one - the number itself
   # travels, keyed by the prop instance that answered it.
   describe "the counts a page hands its client" do
     setup do
