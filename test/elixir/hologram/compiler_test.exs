@@ -625,7 +625,48 @@ defmodule Hologram.CompilerTest do
 
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
 
-      assert String.contains?(js, ~s/globalThis.Hologram.sync = {modelHash: "#{Model.hash()}", /)
+      assert String.contains?(js, ~s/modelHash: "#{Model.hash()}", /)
+    end
+
+    # Every admitted attribute type in one entry, since a value's type is not recoverable from
+    # the value itself - the client reads a date, an enum and a uuid apart only by what this says.
+    test "injects the attribute types the client reads rows by", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date","b":"datetime",/ <>
+                 ~s/"c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
+                 ~s/"updated_at":"datetime"},"relationships":{},"serverOnly":[]}/
+             )
+    end
+
+    test "injects the relationships with their target types and cardinality", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"relationships":{"a":{"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
+                 ~s/"b":{"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
+                 ~s/"c":{"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module1"}}/
+             )
+    end
+
+    # The NAME travels while the value never does: a client that knows the attribute exists and
+    # is not for it can say so, where one that never heard of it would answer nil.
+    test "injects the names of the attributes a client may not have", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+
+      assert String.contains?(js, ~s/"serverOnly":["secret_note","token"]/)
     end
 
     test "injects the sort-key pairs the client computes at ingest", %{

@@ -14,6 +14,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.DB.Codec
+  alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Query.Registry
   alias Hologram.Query.Window
@@ -983,6 +984,80 @@ defmodule Hologram.Compiler do
     ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
   end
 
+  # What a client needs to read its own rows: a value's type is not recoverable from the value
+  # itself - a date, an enum and a uuid all arrive as strings - so reading one back means knowing
+  # the attribute it belongs to, which is what this says.
+  #
+  # It rides with the bundle rather than with the entity modules, for two reasons. A module says
+  # this through functions nothing calls statically, so nothing keeps them: the caller names them
+  # on a module it is handed, an edge no call graph can see. And a module travels in its PAGE's
+  # bundle, while the database holds every type the app syncs - a row of a type the current page
+  # never mentions still has to be read.
+  #
+  # Server-only attributes are named here, values and all: what the client holds of one is the
+  # knowledge that it exists and is not for it, which is what lets a read of that field say so
+  # rather than answer nil.
+  defp render_entity_model do
+    Reflection.list_entities()
+    |> Enum.map(&{Codec.encode_enum_value(&1), render_entity_model_entry(&1)})
+    |> render_json_object()
+  end
+
+  defp render_entity_model_entry(entity_type) do
+    attributes =
+      entity_type.__attributes__()
+      |> Enum.concat(entity_type.__system_attributes__())
+      |> Enum.map(fn {name, type, _opts} -> {Atom.to_string(name), Jason.encode!(type)} end)
+      |> render_json_object()
+
+    server_only =
+      entity_type
+      |> Entity.server_only_attribute_names()
+      |> Enum.sort()
+      |> Jason.encode!()
+
+    render_json_object([
+      {"attributes", attributes},
+      {"relationships", render_relationships(entity_type)},
+      {"serverOnly", server_only}
+    ])
+  end
+
+  # Keys are written in sorted order rather than the order a map hands them over in - that one
+  # follows the atom table, which follows what the build happened to load first, and the bundle
+  # this text ends up in is addressed by its content.
+  defp render_json_object(members) do
+    members
+    |> Enum.sort_by(fn {key, _value} -> key end)
+    |> Enum.map_join(",", fn {key, value} -> ~s/#{Jason.encode!(key)}:#{value}/ end)
+    |> then(&"{#{&1}}")
+  end
+
+  # A to-many is spelled apart from a to-one because they are read apart: a to-many is assembled
+  # from the relationship facts, a to-one is followed through the reference field the row carries.
+  defp render_relationships(entity_type) do
+    entity_type.__relationships__()
+    |> Enum.map(fn {name, target, _opts} ->
+      {Atom.to_string(name), render_relationship(target)}
+    end)
+    |> render_json_object()
+  end
+
+  defp render_relationship(target) when is_list(target) do
+    render_relationship_entry(hd(target), true)
+  end
+
+  defp render_relationship(target), do: render_relationship_entry(target, false)
+
+  defp render_relationship_entry(target, to_many?) do
+    type =
+      target
+      |> Codec.encode_enum_value()
+      |> Jason.encode!()
+
+    render_json_object([{"toMany", Jason.encode!(to_many?)}, {"type", type}])
+  end
+
   defp render_ordered_string_pairs(ordered_string_pairs) do
     ordered_string_pairs
     |> Enum.map(fn {entity_type, attribute} ->
@@ -1007,7 +1082,7 @@ defmodule Hologram.Compiler do
     else
       pairs = render_ordered_string_pairs(ordered_string_pairs)
 
-      ~s/globalThis.Hologram.sync = {modelHash: "#{Model.hash()}", orderedStringPairs: #{pairs}, protocolVersion: #{Frame.protocol_version()}};/
+      ~s/globalThis.Hologram.sync = {model: #{render_entity_model()}, modelHash: "#{Model.hash()}", orderedStringPairs: #{pairs}, protocolVersion: #{Frame.protocol_version()}};/
     end
   end
 
