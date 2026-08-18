@@ -449,8 +449,17 @@ function setViewBound(query, field, value) {
 }
 
 // Conjunction is commutative, so the order predicates were written in carries nothing - one
-// canonical order is what makes two spellings of the same query the same term. The order itself
-// is this tier's: a term never travels, so nothing compares one against the server's.
+// canonical order is what makes two spellings of the same query the same term. What that is FOR
+// is the server's: it hashes the normalized term into the query's content id, and two spellings
+// hashing apart would register, cache and scope one query twice. The kernel here evaluates the
+// filter as a conjunction, so this side is indifferent to the order - it is sorted because
+// normalize is one function, mirrored.
+//
+// The order itself is this tier's own, and cannot be the server's: the operands are already the
+// wire spellings here ("2026-08-18") where the server holds Elixir values (~D[2026-08-18]), so
+// ordering them by anything orders them differently. Nothing compares the two, and nothing may:
+// a hash taken of a term on this side is NOT the server's content id for that query. If one is
+// ever needed here, it comes from the server.
 function sortedFilter(filter) {
   return [...filter].sort((left, right) => {
     const [leftKey, rightKey] = [left, right].map(([name, operator, operand]) =>
