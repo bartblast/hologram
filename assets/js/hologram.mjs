@@ -111,21 +111,8 @@ export default class Hologram {
   static #pageParams = null;
   static #pendingJsInteropActions = [];
   static #registeredPageModules = new Set();
-  static #scheduledActionTimerIds = new Set();
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
-
-  // Clears every action still waiting on its timer without executing any of them, mirroring
-  // Debouncer.cancelAll()/Throttler.cancelAll(). Every action is scheduled onto a timer, even at
-  // delay 0, so a dispatch decided in one page's context is always in flight for at least a
-  // macrotask - long enough to outlive the context it was meant for.
-  static cancelScheduledActions() {
-    for (const timerId of $.#scheduledActionTimerIds) {
-      clearTimeout(timerId);
-    }
-
-    $.#scheduledActionTimerIds.clear();
-  }
 
   // Public API for dispatching actions from JavaScript.
   // Converts plain JS values to Hologram types and schedules the action for execution.
@@ -575,14 +562,9 @@ export default class Hologram {
       Type.integer(0),
     );
 
-    // The id is dropped before the action runs rather than after, so an action that raises
-    // doesn't leave a fired timer's id behind for a later cancellation to clear.
-    const timerId = setTimeout(() => {
-      $.#scheduledActionTimerIds.delete(timerId);
+    setTimeout(() => {
       Hologram.#settleAction(action, epoch);
     }, Number(delay.value));
-
-    $.#scheduledActionTimerIds.add(timerId);
   }
 
   static #buildPagePath(toParam) {
@@ -1003,12 +985,6 @@ export default class Hologram {
   }
 
   static async #handlePopstateEvent(event) {
-    // The history's side of the boundary #showNewPage guards: everything below belongs to the
-    // page being restored, so this is the last instant at which every pending dispatch provably
-    // belongs to the page being left. The restore below is skipped when there is no snapshot, so
-    // this cannot live there.
-    Hologram.cancelScheduledActions();
-
     await $.#savePageSnapshot();
     $.#historyId = event.state;
 
@@ -1016,6 +992,13 @@ export default class Hologram {
 
     if (pageSnapshot) {
       $.#restorePageSnapshot(pageSnapshot);
+    } else {
+      // With no snapshot to restore, the mount below reads the document's mount data instead and
+      // repopulates the registry from it, putting every component back to the state it was
+      // rendered with. That is as much a change of what the registry answers for as a restore is,
+      // so it advances the same way - otherwise an action armed before this point would settle
+      // against state that has been reset underneath it.
+      $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
     }
 
     if ($.#isPageModuleRegistered(Hologram.#pageModule)) {
@@ -1335,13 +1318,6 @@ export default class Hologram {
   // is done. Otherwise the bundle is fetched, and running it announces the page is ready to
   // mount.
   static #showNewPage(payload) {
-    // The patch below puts the destination on screen and runs any script it carries, and for a
-    // page whose bundle is not loaded the mount is a fetch away - so cancelling at the mount both
-    // misses the dispatches that fire during that fetch, against a registry that is still the
-    // previous page's, and sweeps the ones the destination arms in the same window. Here nothing
-    // of the destination exists yet, so every pending dispatch belongs to the page being left.
-    Hologram.cancelScheduledActions();
-
     // What an earlier page buffered and never got to dispatch belongs to that page, and that
     // page is being left too. The buffer predates stamping - a document load fills it before the
     // runtime exists - so it is the one queue the epoch cannot speak for, and it is emptied by
