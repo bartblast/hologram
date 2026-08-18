@@ -142,6 +142,50 @@ describe("Hologram", () => {
     });
   });
 
+  describe("dispatchAction()", () => {
+    let clock, executeActionStub;
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers();
+
+      executeActionStub = sinon
+        .stub(Hologram, "executeAction")
+        .callsFake((_action) => null);
+    });
+
+    afterEach(() => {
+      clock.restore();
+      executeActionStub.restore();
+    });
+
+    // The counterpart of the hold covered in loadNewPage(): with no page swap in flight the page
+    // on screen is the page the registry answers for, so there is nothing to wait for.
+    it("dispatches an action right away when no page swap is in flight", () => {
+      Hologram.dispatchAction("my_action", "my_component_1", {a: 1});
+
+      clock.tick(0);
+
+      sinon.assert.calledOnce(executeActionStub);
+
+      const action = executeActionStub.firstCall.args[0];
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("name"), action),
+        Type.atom("my_action"),
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("target"), action),
+        Type.bitstring("my_component_1"),
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("params"), action),
+        Type.map([[Type.atom("a"), Type.integer(1)]]),
+      );
+    });
+  });
+
   describe("executeAction()", () => {
     let callNamedFunctionStub, renderStub;
 
@@ -1307,6 +1351,10 @@ describe("Hologram", () => {
     afterEach(() => {
       Client.fetchPage.restore();
       assignStub.restore();
+
+      // A navigation opens the pre-mount window and only a mount closes it, which these tests
+      // never reach - so it is closed here rather than left open for whatever runs next.
+      Hologram.isMountPending = false;
     });
 
     // A page the client cannot ask for is one only the browser can reach.
@@ -1445,6 +1493,30 @@ describe("Hologram", () => {
         }
       });
 
+      // The destination's script runs during the patch, which for a page whose bundle is still
+      // being fetched is a whole fetch before the mount - so dispatching then would resolve the
+      // target against the page being left rather than against the page that carries the script.
+      it("holds an action the destination's script dispatches before the mount", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+
+        const executeActionStub = sinon
+          .stub(Hologram, "executeAction")
+          .callsFake((_action) => null);
+
+        try {
+          await Hologram.loadNewPage("/target", payloadFor("ggg"));
+
+          Hologram.dispatchAction("dispatched_by_script", "page", {value: 99});
+
+          clock.tick(5000);
+
+          sinon.assert.notCalled(executeActionStub);
+        } finally {
+          clock.restore();
+          executeActionStub.restore();
+        }
+      });
+
       it("fetches the bundle of a page this client has not run before", async () => {
         await Hologram.loadNewPage("/target", payloadFor("bbb"));
 
@@ -1496,6 +1568,35 @@ describe("Hologram", () => {
           HologramRuntimeError,
           "Failed to load page bundle: /hologram/page-eee.js",
         );
+      });
+
+      // The mount that would have released a held dispatch is never going to run, so holding one
+      // past this point would swallow it for the rest of the session. It goes back to failing
+      // where it can be seen instead.
+      it("stops holding dispatches once the mount can no longer happen", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+
+        const executeActionStub = sinon
+          .stub(Hologram, "executeAction")
+          .callsFake((_action) => null);
+
+        try {
+          await Hologram.loadNewPage("/target-hhh", payloadFor("hhh"));
+
+          assert.throws(
+            () => bundleScript("hhh").onerror(),
+            HologramRuntimeError,
+            "Failed to load page bundle: /hologram/page-hhh.js",
+          );
+
+          Hologram.dispatchAction("after_bundle_failure", "page", {});
+          clock.tick(0);
+
+          sinon.assert.calledOnce(executeActionStub);
+        } finally {
+          clock.restore();
+          executeActionStub.restore();
+        }
       });
     });
   });

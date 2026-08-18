@@ -72,6 +72,9 @@ export default class Hologram {
   static #PAGE_SNAPSHOT_KEY_PREFIX = "hologram_page_snapshot_";
 
   // Made public to make tests easier
+  static isMountPending = false;
+
+  // Made public to make tests easier
   static prefetchedPages = new Map();
 
   // Made public to make tests easier
@@ -117,6 +120,16 @@ export default class Hologram {
   // Converts plain JS values to Hologram types and schedules the action for execution.
   // Example: globalThis.Hologram.dispatchAction("increment", "page", {amount: 5})
   static dispatchAction(actionName, target, params = {}) {
+    // Everything arriving here comes from script the page itself carries, so it belongs to the
+    // page on screen. Between a page swap starting and the new page mounting that page is the
+    // destination - its markup is patched in and its scripts have run - while the registry still
+    // answers for the page being left, so dispatching now would resolve against the wrong page.
+    // It waits in the queue a document load buffers into, which the mount drains for both.
+    if ($.isMountPending) {
+      $.#pendingJsInteropActions.push([actionName, target, params]);
+      return;
+    }
+
     const action = Type.actionStruct({
       name: Type.atom(actionName),
       params: JsInterop.boxActionParam(params),
@@ -820,6 +833,11 @@ export default class Hologram {
     );
   }
 
+  // Two arrivals buffer here for the same reason - the dispatch reached the runtime before the
+  // page could answer for it. A document load leaves a shim that buffers whatever the page's
+  // script dispatches before the runtime exists, and dispatchAction buffers whatever it
+  // dispatches while a page swap is still short of its mount. The mount is the first moment
+  // either can be answered, so both drain here.
   static #dispatchPendingJsInteropActions() {
     const actions = Hologram.#pendingJsInteropActions;
     Hologram.#pendingJsInteropActions = [];
@@ -1144,6 +1162,14 @@ export default class Hologram {
     script.fetchpriority = "high";
 
     script.onerror = () => {
+      // The mount this navigation was waiting on is never going to run, so nothing would ever
+      // release what dispatchAction is holding for it. Reopening the gate does not make a
+      // dispatch made from here on correct - the registry still answers for the page being left -
+      // but it keeps one failing where it can be seen rather than disappearing into a queue with
+      // no drain. What is already held belongs to the page that failed to mount, so it goes.
+      $.isMountPending = false;
+      $.#pendingJsInteropActions = [];
+
       throw new HologramRuntimeError(`Failed to load page bundle: ${src}`);
     };
 
@@ -1157,6 +1183,10 @@ export default class Hologram {
   }
 
   static #mountPage(isPageModuleRegistered = false) {
+    // Cleared before the mount's own work, so everything it schedules is armed normally and the
+    // release below does not simply hold the same actions again.
+    $.isMountPending = false;
+
     // Every page-entry path funnels through here (client-side navigation, back/forward
     // restoration, initial mount), so this is where dispatches still pending from the previous
     // page are dropped - the context they were meant for no longer exists. Cancel, not flush: a
@@ -1295,6 +1325,14 @@ export default class Hologram {
     // previous page's, and sweeps the ones the destination arms in the same window. Here nothing
     // of the destination exists yet, so every pending dispatch belongs to the page being left.
     Hologram.cancelScheduledActions();
+
+    // The two halves of one rule, split at this instant: what was scheduled before the swap
+    // belongs to the page being left and is dropped above, and what the destination's own script
+    // dispatches after it waits until the destination can answer for it. Emptying the queue
+    // applies the same rule to what is already in it, which is a dispatch some earlier page
+    // buffered and never got to make - that page is being left too.
+    $.isMountPending = true;
+    $.#pendingJsInteropActions = [];
 
     const pageModule = Interpreter.evaluateJavaScriptExpression(
       payload.pageModule,
