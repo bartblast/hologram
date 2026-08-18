@@ -1160,6 +1160,14 @@ export default class Hologram {
     script.fetchpriority = "high";
 
     script.onerror = () => {
+      // The mount this navigation was waiting on is never going to run, so nothing would ever
+      // release what dispatchAction is holding for it. Reopening the gate does not make a
+      // dispatch made from here on correct - the registry still answers for the page being left -
+      // but it keeps one failing where it can be seen rather than disappearing into a queue with
+      // no drain. What is already held belongs to the page that failed to mount, so it goes.
+      $.#isMountPending = false;
+      $.#pendingJsInteropActions = [];
+
       throw new HologramRuntimeError(`Failed to load page bundle: ${src}`);
     };
 

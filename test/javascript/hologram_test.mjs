@@ -142,6 +142,10 @@ describe("Hologram", () => {
     });
   });
 
+  // Nothing in these unit tests reaches #mountPage, which is the only thing that closes the
+  // pre-mount window - so a navigation started by an earlier block would leave it open and the
+  // case below would fail for a reason that has nothing to do with dispatchAction. This block has
+  // to run before describe("loadNewPage()").
   describe("dispatchAction()", () => {
     let clock, executeActionStub;
 
@@ -1564,6 +1568,35 @@ describe("Hologram", () => {
           HologramRuntimeError,
           "Failed to load page bundle: /hologram/page-eee.js",
         );
+      });
+
+      // The mount that would have released a held dispatch is never going to run, so holding one
+      // past this point would swallow it for the rest of the session. It goes back to failing
+      // where it can be seen instead.
+      it("stops holding dispatches once the mount can no longer happen", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+
+        const executeActionStub = sinon
+          .stub(Hologram, "executeAction")
+          .callsFake((_action) => null);
+
+        try {
+          await Hologram.loadNewPage("/target-hhh", payloadFor("hhh"));
+
+          assert.throws(
+            () => bundleScript("hhh").onerror(),
+            HologramRuntimeError,
+            "Failed to load page bundle: /hologram/page-hhh.js",
+          );
+
+          Hologram.dispatchAction("after_bundle_failure", "page", {});
+          clock.tick(0);
+
+          sinon.assert.calledOnce(executeActionStub);
+        } finally {
+          clock.restore();
+          executeActionStub.restore();
+        }
       });
     });
   });
