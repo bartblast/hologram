@@ -44,10 +44,10 @@ defmodule App1.SyncTest do
       # them whatever the build declares, so only the VALUE says whether this one was told.
       refute String.contains?(bundle, Model.hash())
 
-      # And nothing is ASSIGNED, not even an empty object - `{}` is truthy, so a client finding one
-      # would greet with undefined fields rather than staying quiet. The reader spells its own use
-      # `Hologram.sync;`, so only an assignment matches this.
-      refute String.contains?(bundle, "Hologram.sync=")
+      # And what IS assigned is null, explicitly - not an empty object, which is truthy, so a
+      # client finding one would greet with undefined fields rather than staying quiet. One
+      # unambiguous value beats probing for a missing global.
+      assert String.contains?(bundle, "Hologram.sync=null")
     end
   end
 
