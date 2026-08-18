@@ -167,23 +167,13 @@ defmodule Hologram.Sync.WireDataTest do
       refute Map.has_key?(wire, :b)
     end
 
-    test "writes an included to-one relationship as the row it holds" do
+    # The row it holds travels once, as its own delta - here its reference field already says
+    # everything this row has to say about it.
+    test "leaves out an included to-one relationship" do
       entity =
         struct(Module3, %{
           b: module_2(),
-          b_id: @entity_id,
-          created_at: @created_at,
-          id: @entity_id,
-          updated_at: @updated_at
-        })
-
-      assert row(entity).b.c == "text"
-    end
-
-    test "writes an included to-one relationship holding nothing as null" do
-      entity =
-        struct(Module3, %{
-          b: nil,
+          b_id: @target_id,
           created_at: @created_at,
           id: @entity_id,
           updated_at: @updated_at
@@ -191,55 +181,52 @@ defmodule Hologram.Sync.WireDataTest do
 
       wire = row(entity)
 
-      assert Map.fetch(wire, :b) == {:ok, nil}
+      assert wire.b_id == @target_id
+      refute Map.has_key?(wire, :b)
     end
 
-    test "writes an included to-many relationship as the rows it holds" do
+    test "leaves out an included to-one relationship holding nothing" do
       entity =
         struct(Module3, %{
-          a: [module_2(), module_2(%{c: "second"})],
+          b: nil,
+          b_id: nil,
           created_at: @created_at,
           id: @entity_id,
           updated_at: @updated_at
         })
 
-      assert [first, second] = row(entity).a
-      assert second.c == "second"
+      wire = row(entity)
 
-      # The whole row, not just its shape: a value left as a struct inside a to-many would still
-      # answer to `.c` while travelling as something no client can read.
-      assert first == %{
-               a: true,
-               b: 7,
-               c: "text",
-               created_at: "2026-08-16T15:18:13.022508Z",
-               id: @entity_id,
-               updated_at: "2026-08-16T16:20:00.000000Z"
-             }
+      assert Map.fetch(wire, :b_id) == {:ok, nil}
+      refute Map.has_key?(wire, :b)
     end
 
-    test "hides a server-only value however deep the row sits" do
-      user =
-        struct(Module14, %{
-          created_at: @created_at,
-          email: "nested@test.com",
-          id: @entity_id,
-          password_hash: %ServerOnly{attribute: :password_hash},
-          updated_at: @updated_at
-        })
-
+    test "writes an included to-many relationship as the ids of the rows it holds" do
       entity =
         struct(Module3, %{
-          b: user,
+          a: [module_2(), module_2(%{c: "second", id: @target_id})],
           created_at: @created_at,
           id: @entity_id,
           updated_at: @updated_at
         })
 
-      nested = row(entity).b
+      assert row(entity).a == [@entity_id, @target_id]
+    end
 
-      assert nested.email == "nested@test.com"
-      refute Map.has_key?(nested, :password_hash)
+    # Empty and not-included cannot be confused: a window that includes the relationship says []
+    # when there are no pairs, and one that does not include it says nothing at all.
+    test "writes an included to-many relationship holding nothing as an empty list" do
+      entity =
+        struct(Module3, %{
+          a: [],
+          created_at: @created_at,
+          id: @entity_id,
+          updated_at: @updated_at
+        })
+
+      wire = row(entity)
+
+      assert Map.fetch(wire, :a) == {:ok, []}
     end
   end
 end
