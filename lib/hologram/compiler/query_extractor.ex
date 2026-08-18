@@ -65,6 +65,12 @@ defmodule Hologram.Compiler.QueryExtractor do
   the capture points at one) - a position no clause binds as a plain variable
   yields nil. Zero-arity captures and modules without prop declarations yield no
   entries.
+
+  The names are read from compiled beams rather than recorded by the prop macro
+  into the prop's own opts, because a remote capture's names are unreadable while
+  the consuming component compiles: a target module compiling in the same batch
+  exists only in memory, and its beam - the only carrier of its clauses - is
+  written when the batch ends.
   """
   @spec extract_prop_params(module) :: keyword(list(atom | nil))
   def extract_prop_params(module) do

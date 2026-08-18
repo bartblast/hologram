@@ -1149,7 +1149,18 @@ defmodule Hologram.Compiler do
 
   # What each argument of a parameterized builder binds by: its authored name. The capture itself
   # travels in the bundle and is called there, but an encoded function carries no argument names -
-  # so the names ride here, in the order the arguments are passed in.
+  # the encoder names capture parameters positionally ($1, $2) - so the names ride here, in the
+  # order the arguments are passed in.
+  #
+  # They ride as a build constant rather than inside the prop's own opts, where they would have
+  # transpiled with __props__/0, because they cannot be known while the component compiles: a
+  # remote capture's names live in the target module's clauses, and when both modules compile in
+  # one batch the target exists only in memory - Code.ensure_compiled waits for it, but its beam
+  # is written when the batch ends, so there is no binary to read the clause names from (probed:
+  # :code.get_object_code answers :error mid-batch, and the path :code.which names does not exist
+  # yet). Deriving after the whole project compiles is what keeps local, inline and remote
+  # captures uniform - and mirrors the server, which derives the same names into the query cache
+  # rather than into the declarations.
   defp render_prop_params(prop_params) do
     prop_params
     |> Enum.map(fn {module, params} ->
