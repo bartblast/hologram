@@ -29,9 +29,12 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9
+  alias Hologram.Test.Fixtures.Component.Module10, as: Component10
   alias Hologram.Test.Fixtures.Component.Module11, as: Component11
   alias Hologram.Test.Fixtures.Component.Module12, as: Component12
   alias Hologram.Test.Fixtures.Component.Module14, as: Component14
+  alias Hologram.Test.Fixtures.Component.Module22, as: Component22
+  alias Hologram.Test.Fixtures.Component.Module23, as: Component23
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
 
@@ -338,6 +341,49 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Query.normalize()
 
       assert extract_queries([Module1, Entity2, Module4]) == [module_1_term, module_4_term]
+    end
+  end
+
+  describe "validate_slot_bindings!/1" do
+    test "passes a capture binding declared props" do
+      assert validate_slot_bindings!(Component22) == :ok
+    end
+
+    test "passes a module without prop declarations" do
+      assert validate_slot_bindings!(Entity2) == :ok
+    end
+
+    test "passes a zero-arity capture" do
+      assert validate_slot_bindings!(Component10) == :ok
+    end
+
+    test "raises when a local capture argument binds no declared prop" do
+      expected_msg =
+        "from_query for prop :entities in Hologram.Test.Fixtures.Component.Module11 binds argument :min_b - no like-named prop is declared"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_slot_bindings!(Component11)
+      end
+    end
+
+    # A shared builder's argument names are a cross-module contract - each consumer is validated
+    # against its own declared slots.
+    test "raises when a remote capture argument binds no declared prop" do
+      expected_msg =
+        "from_query for prop :entities in Hologram.Test.Fixtures.Component.Module14 binds argument :min_b - no like-named prop is declared"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_slot_bindings!(Component14)
+      end
+    end
+
+    test "raises when an argument position is named by no clause" do
+      expected_msg =
+        "from_query capture for prop :entities in Hologram.Test.Fixtures.Component.Module23 has an argument position no clause names - it cannot bind a prop"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_slot_bindings!(Component23)
+      end
     end
   end
 end

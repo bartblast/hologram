@@ -159,6 +159,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       Compiler.validate_page_modules(page_modules)
 
+      # A builder's argument names bind the consuming component's like-named declared slots, and
+      # a remote capture makes those names a cross-module contract - so a renamed argument fails
+      # the build here, every reachable consumer at once, rather than one render at a time.
+      Compiler.validate_slot_bindings!(page_modules, call_graph_for_runtime)
+
       # Derived before the graph is split, so that a component reached through a runtime MFA is
       # still counted as one the page can reach.
       {page_windows_plt, page_windows_plt_dump_path} =

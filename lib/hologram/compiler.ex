@@ -826,6 +826,26 @@ defmodule Hologram.Compiler do
     end)
   end
 
+  @doc """
+  Validates the from_query slot bindings of every component reachable from the given
+  page modules - a parameterized builder's argument names must bind like-named
+  declared slots (today, declared props) on the consuming component.
+
+  Raises Hologram.CompileError when a capture argument names no declared slot, or
+  when an argument position is named by no clause of the capture's target.
+  """
+  @spec validate_slot_bindings!(list(module), CallGraph.t()) :: :ok
+  def validate_slot_bindings!(page_modules, call_graph) do
+    graph = CallGraph.get_graph(call_graph)
+    templatables = page_modules ++ Reflection.list_components()
+    analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+
+    page_modules
+    |> Enum.flat_map(&page_component_modules(&1, call_graph, analysis))
+    |> Enum.uniq()
+    |> Enum.each(&QueryExtractor.validate_slot_bindings!/1)
+  end
+
   defp create_entry_file(js, entry_name, tmp_dir) do
     entry_file_path = Path.join(tmp_dir, "#{entry_name}.entry.js")
     File.write!(entry_file_path, js)
@@ -928,12 +948,17 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp page_query_terms(page_module, call_graph, analysis) do
+  defp page_component_modules(page_module, call_graph, analysis) do
     call_graph
     |> CallGraph.list_page_mfas(page_module, analysis)
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
     |> Enum.filter(&Reflection.component?/1)
+  end
+
+  defp page_query_terms(page_module, call_graph, analysis) do
+    page_module
+    |> page_component_modules(call_graph, analysis)
     |> Enum.flat_map(&QueryExtractor.extract_module_queries/1)
   end
 

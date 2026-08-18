@@ -18,6 +18,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Reflection
   alias Hologram.Sync.Frame
 
+  alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
@@ -1693,6 +1694,31 @@ defmodule Hologram.CompilerTest do
 
       assert_raise Hologram.CompileError, expected_msg, fn ->
         validate_page_modules([Module11, InlinePageModuleFixture2])
+      end
+    end
+  end
+
+  # The validation rules live in QueryExtractor's own suite - what is asserted here is the wiring:
+  # the components swept are the ones the given pages reach through the call graph.
+  describe "validate_slot_bindings!/2" do
+    test "passes when every reachable component binds declared slots", %{call_graph: call_graph} do
+      assert validate_slot_bindings!(Reflection.list_pages(), call_graph) == :ok
+    end
+
+    test "raises when a reachable component binds an undeclared slot", %{call_graph: call_graph} do
+      patched_call_graph =
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.add_edge(
+          {PageModule7, :template, 0},
+          {ComponentModule11, :template, 0}
+        )
+
+      expected_msg =
+        "from_query for prop :entities in Hologram.Test.Fixtures.Component.Module11 binds argument :min_b - no like-named prop is declared"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_slot_bindings!([PageModule7], patched_call_graph)
       end
     end
   end

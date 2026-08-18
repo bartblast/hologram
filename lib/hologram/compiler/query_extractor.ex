@@ -84,6 +84,31 @@ defmodule Hologram.Compiler.QueryExtractor do
     Enum.flat_map(modules, &extract_module_queries/1)
   end
 
+  @doc """
+  Validates that every parameterized from_query capture on the given module's prop
+  declarations binds only the module's declared reactive slots - today, its declared
+  props. A builder's argument names bind the like-named slots of the consuming
+  component, so a shared builder is validated against each consumer's own slots.
+
+  Raises Hologram.CompileError when a capture argument names no declared slot, or
+  when an argument position is named by no clause of the capture's target. Modules
+  without parameterized captures pass vacuously.
+  """
+  @spec validate_slot_bindings!(module) :: :ok
+  def validate_slot_bindings!(module) do
+    case extract_prop_params(module) do
+      [] ->
+        :ok
+
+      prop_params ->
+        slot_names = declared_slot_names(module)
+
+        Enum.each(prop_params, fn {prop_name, param_names} ->
+          Enum.each(param_names, &validate_slot_binding!(module, prop_name, &1, slot_names))
+        end)
+    end
+  end
+
   # A closure evaluates with choices :none - a fork inside would restart the
   # whole body with a stale choice list, so branching inside raises instead.
   defp anonymous_closure!(1, clause, closure_env, context) do
@@ -189,6 +214,13 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp contains_symbol?(_other), do: false
+
+  # The set a builder argument may bind - the component's declared reactive slots, which today
+  # means its declared props and nothing else. Declared state and derived values extend this
+  # set later without reshaping the check.
+  defp declared_slot_names(module) do
+    Enum.map(module.__props__(), fn {name, _type, _opts} -> name end)
+  end
 
   defp evaluate!(%IR.AnonymousFunctionType{arity: arity, clauses: [clause]}, state, context) do
     {anonymous_closure!(arity, clause, state.env, context), state}
@@ -594,5 +626,21 @@ defmodule Hologram.Compiler.QueryExtractor do
     raise Hologram.CompileError,
       message:
         "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} branches inside an anonymous function - not extractable yet"
+  end
+
+  defp validate_slot_binding!(module, prop_name, nil, _slot_names) do
+    raise Hologram.CompileError,
+      message:
+        "from_query capture for prop #{inspect(prop_name)} in #{inspect(module)} has an argument position no clause names - it cannot bind a prop"
+  end
+
+  defp validate_slot_binding!(module, prop_name, param_name, slot_names) do
+    if param_name not in slot_names do
+      raise Hologram.CompileError,
+        message:
+          "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(param_name)} - no like-named prop is declared"
+    end
+
+    :ok
   end
 end
