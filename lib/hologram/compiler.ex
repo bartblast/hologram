@@ -332,7 +332,7 @@ defmodule Hologram.Compiler do
           PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
-          MapSet.t({module, atom}),
+          %{entity_types: MapSet.t(module), ordered_string_pairs: MapSet.t({module, atom})},
           T.file_path()
         ) :: String.t()
   def build_runtime_js(
@@ -340,7 +340,7 @@ defmodule Hologram.Compiler do
         ir_plt,
         async_mfas,
         app_versions,
-        ordered_string_pairs,
+        sync_constants,
         js_dir
       ) do
     erlang_function_defs =
@@ -381,7 +381,7 @@ defmodule Hologram.Compiler do
 
     globalThis.Hologram.config = #{render_client_config()};
 
-    #{render_sync_constants(ordered_string_pairs)}
+    #{render_sync_constants(sync_constants)}
 
     ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
@@ -538,7 +538,7 @@ defmodule Hologram.Compiler do
           PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
-          MapSet.t({module, atom}),
+          %{entity_types: MapSet.t(module), ordered_string_pairs: MapSet.t({module, atom})},
           T.opts()
         ) :: T.file_path()
   def create_runtime_entry_file(
@@ -546,11 +546,11 @@ defmodule Hologram.Compiler do
         ir_plt,
         async_mfas,
         app_versions,
-        ordered_string_pairs,
+        sync_constants,
         opts
       ) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, async_mfas, app_versions, ordered_string_pairs, opts[:js_dir])
+    |> build_runtime_js(ir_plt, async_mfas, app_versions, sync_constants, opts[:js_dir])
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
@@ -712,20 +712,34 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns the set of {entity type, attribute name} pairs the given pages' reachable queries
-  order by on :string attributes - the pairs whose sort-key companions the client computes at
-  ingest, derived from the same registered queries the server derives its companion columns
-  from.
+  Returns what the client's data layer is compiled with, derived from the queries the given
+  pages reach.
+
+  `:entity_types` are the types a client can ever hold - every window's own type and everything
+  it includes. Nothing else can reach a client's database, so nothing else is worth telling it
+  about.
+
+  `:ordered_string_pairs` are the {entity type, attribute name} pairs those queries order by on
+  :string attributes - the pairs whose sort-key companions the client computes at ingest,
+  derived from the same registered queries the server derives its companion columns from.
   """
-  @spec ordered_string_pairs(list(module), CallGraph.t()) :: MapSet.t({module, atom})
-  def ordered_string_pairs(page_modules, call_graph) do
+  @spec build_sync_constants(list(module), CallGraph.t()) :: %{
+          entity_types: MapSet.t(module),
+          ordered_string_pairs: MapSet.t({module, atom})
+        }
+  def build_sync_constants(page_modules, call_graph) do
     graph = CallGraph.get_graph(call_graph)
     templatables = page_modules ++ Reflection.list_components()
     analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
 
-    page_modules
-    |> Enum.flat_map(&page_query_terms(&1, call_graph, analysis))
-    |> Registry.ordered_string_pairs()
+    terms = Enum.flat_map(page_modules, &page_query_terms(&1, call_graph, analysis))
+
+    entity_types =
+      Enum.reduce(terms, MapSet.new(), fn term, types ->
+        MapSet.union(types, Registry.entity_types(term))
+      end)
+
+    %{entity_types: entity_types, ordered_string_pairs: Registry.ordered_string_pairs(terms)}
   end
 
   @doc """
@@ -997,8 +1011,8 @@ defmodule Hologram.Compiler do
   # Server-only attributes are named here, values and all: what the client holds of one is the
   # knowledge that it exists and is not for it, which is what lets a read of that field say so
   # rather than answer nil.
-  defp render_entity_model do
-    Reflection.list_entities()
+  defp render_entity_model(entity_types) do
+    entity_types
     |> Enum.map(&{Codec.encode_enum_value(&1), render_entity_model_entry(&1)})
     |> render_json_object()
   end
@@ -1076,13 +1090,14 @@ defmodule Hologram.Compiler do
   # tree gates the whole data layer on exactly that - so a client reads one unambiguous value
   # instead of probing for a missing global. An empty OBJECT would be worse than nothing at all:
   # `{}` is truthy, so every "does this bundle sync?" check would pass on a bundle that does not.
-  defp render_sync_constants(ordered_string_pairs) do
+  defp render_sync_constants(sync_constants) do
     if Reflection.list_entities() == [] do
       ~s/globalThis.Hologram.sync = null;/
     else
-      pairs = render_ordered_string_pairs(ordered_string_pairs)
+      model = render_entity_model(sync_constants.entity_types)
+      pairs = render_ordered_string_pairs(sync_constants.ordered_string_pairs)
 
-      ~s/globalThis.Hologram.sync = {model: #{render_entity_model()}, modelHash: "#{Model.hash()}", orderedStringPairs: #{pairs}, protocolVersion: #{Frame.protocol_version()}};/
+      ~s/globalThis.Hologram.sync = {model: #{model}, modelHash: "#{Model.hash()}", orderedStringPairs: #{pairs}, protocolVersion: #{Frame.protocol_version()}};/
     end
   end
 

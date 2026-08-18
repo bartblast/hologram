@@ -49,6 +49,15 @@ defmodule Hologram.Query.Registry do
   end
 
   @doc """
+  Returns the set of entity types the given normalized query term reads - its own
+  and every one it includes, walked recursively.
+  """
+  @spec entity_types(%{atom => any}) :: MapSet.t(module)
+  def entity_types(term) do
+    collect_entity_types(term, MapSet.new())
+  end
+
+  @doc """
   Returns the set of {entity type, attribute name} pairs the given normalized
   query terms order by on :string attributes - the pairs whose practical ordering
   needs a derived sort-key companion. Includes are walked recursively. Attributes
@@ -85,6 +94,12 @@ defmodule Hologram.Query.Registry do
       {_name, type, _opts} -> type
       nil -> :uuid
     end
+  end
+
+  defp collect_entity_types(term, acc) do
+    term.include
+    |> Map.values()
+    |> Enum.reduce(MapSet.put(acc, term.entity), &collect_entity_types/2)
   end
 
   defp collect_ordered_pairs(term, acc) do

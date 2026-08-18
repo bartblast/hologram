@@ -7,6 +7,7 @@ defmodule Hologram.Sync.Scoper do
   # every rule here errs towards including.
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Query.Registry
 
   @grant_edges [:global_grants, :own_grants, :relationship_grants, :resource_grants, :type_grants]
 
@@ -57,18 +58,12 @@ defmodule Hologram.Sync.Scoper do
   end
 
   defp dependencies(term, edges) do
-    read_types = read_types(term, MapSet.new())
+    read_types = Registry.entity_types(term)
 
     Enum.reduce(read_types, read_types, fn entity_type, types ->
       edges
       |> Map.get({entity_type, :read}, [])
       |> Enum.reduce(types, &add_edge_types/2)
     end)
-  end
-
-  defp read_types(term, types) do
-    term.include
-    |> Map.values()
-    |> Enum.reduce(MapSet.put(types, term.entity), &read_types/2)
   end
 end

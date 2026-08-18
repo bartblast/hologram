@@ -18,8 +18,12 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Reflection
   alias Hologram.Sync.Frame
 
+  alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
+  alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
+  alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
 
@@ -48,6 +52,7 @@ defmodule Hologram.CompilerTest do
   @erlang_js_dir Path.join(@js_dir, "erlang")
 
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
+  @empty_sync_constants %{entity_types: MapSet.new(), ordered_string_pairs: MapSet.new()}
   @tmp_dir Reflection.tmp_dir()
 
   defp setup_js_deps_test(test_subdir) do
@@ -384,14 +389,39 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "ordered_string_pairs/2" do
-    # The pair comes from a fixture page reaching a query that orders a :string attribute - what
+  describe "build_sync_constants/2" do
+    setup %{call_graph: call_graph} do
+      [sync_constants: build_sync_constants(Reflection.list_pages(), call_graph)]
+    end
+
+    test "collects the types the queries the given pages reach read", %{
+      sync_constants: sync_constants
+    } do
+      assert MapSet.member?(sync_constants.entity_types, Entity15)
+    end
+
+    # An included type is one a client holds without any window being rooted in it - reaching it
+    # is what puts its rows in the database, so it is named here like any other.
+    test "collects the types those queries reach only through an include", %{
+      sync_constants: sync_constants
+    } do
+      assert MapSet.member?(sync_constants.entity_types, Entity3)
+      assert MapSet.member?(sync_constants.entity_types, Entity1)
+    end
+
+    # A type no query reads can never reach a client's database, so the build tells it nothing
+    # about one - not its attributes, and not that it exists.
+    test "leaves out a type no query reads", %{sync_constants: sync_constants} do
+      refute MapSet.member?(sync_constants.entity_types, Entity12)
+    end
+
+    # The pairs come from a fixture page reaching a query that orders a :string attribute - what
     # is asserted is the wiring from reachable queries to the pair set, not the derivation rules,
     # which the registry's own suite pins.
-    test "collects the pairs of the queries the given pages reach", %{call_graph: call_graph} do
-      pairs = ordered_string_pairs(Reflection.list_pages(), call_graph)
-
-      assert MapSet.member?(pairs, {Entity15, :token})
+    test "collects the pairs the queries those pages reach order by", %{
+      sync_constants: sync_constants
+    } do
+      assert MapSet.member?(sync_constants.ordered_string_pairs, {Entity15, :token})
     end
   end
 
@@ -489,7 +519,8 @@ defmodule Hologram.CompilerTest do
     end
 
     test "renders reachable function defs", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+      js =
+        build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @empty_sync_constants, @js_dir)
 
       assert String.contains?(
                js,
@@ -525,7 +556,8 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+      js =
+        build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @empty_sync_constants, @js_dir)
 
       assert String.contains?(
                js,
@@ -546,7 +578,8 @@ defmodule Hologram.CompilerTest do
       Application.put_env(:hologram, :client_error_overlay, true)
       Application.put_env(:hologram, :client_stacktraces, true)
 
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+      js =
+        build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @empty_sync_constants, @js_dir)
 
       assert String.contains?(
                js,
@@ -561,7 +594,8 @@ defmodule Hologram.CompilerTest do
       Application.put_env(:hologram, :client_error_overlay, false)
       Application.put_env(:hologram, :client_stacktraces, false)
 
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+      js =
+        build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @empty_sync_constants, @js_dir)
 
       assert String.contains?(
                js,
@@ -575,7 +609,8 @@ defmodule Hologram.CompilerTest do
     } do
       Application.put_env(:hologram, :client_stacktraces, true)
 
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+      js =
+        build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @empty_sync_constants, @js_dir)
 
       assert String.contains?(
                js,
@@ -592,7 +627,14 @@ defmodule Hologram.CompilerTest do
       app_versions = [hologram: "0.1.0", my_app: "9.8.7"]
 
       js =
-        build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), app_versions, MapSet.new(), @js_dir)
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          MapSet.new(),
+          app_versions,
+          @empty_sync_constants,
+          @js_dir
+        )
 
       assert String.contains?(
                js,
@@ -609,7 +651,14 @@ defmodule Hologram.CompilerTest do
       app_versions = [{:"my-app", "9.8.7"}]
 
       js =
-        build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), app_versions, MapSet.new(), @js_dir)
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          MapSet.new(),
+          app_versions,
+          @empty_sync_constants,
+          @js_dir
+        )
 
       assert String.contains?(js, ~s/ERTS.appVersions = {"my-app": "9.8.7"};/)
     end
@@ -623,7 +672,8 @@ defmodule Hologram.CompilerTest do
     } do
       refute Reflection.list_entities() == []
 
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+      js =
+        build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @empty_sync_constants, @js_dir)
 
       assert String.contains?(js, ~s/modelHash: "#{Model.hash()}", /)
     end
@@ -634,13 +684,15 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
       assert String.contains?(
                js,
-               ~s/"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date","b":"datetime",/ <>
-                 ~s/"c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
-                 ~s/"updated_at":"datetime"},"relationships":{},"serverOnly":[]}/
+               ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
+                 ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
+                 ~s/"updated_at":"datetime"},"relationships":{},"serverOnly":[]}}/
              )
     end
 
@@ -648,7 +700,9 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity3])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
       assert String.contains?(
                js,
@@ -664,9 +718,25 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
       assert String.contains?(js, ~s/"serverOnly":["secret_note","token"]/)
+    end
+
+    # A bundle carries the model of the types its own queries reach and no others: a type a
+    # client can never hold is one it is told nothing about, its attribute names included.
+    test "injects nothing about a type the client can never hold", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      refute String.contains?(js, "Hologram.Test.Fixtures.Entity.Module15")
+      refute String.contains?(js, "secret_note")
     end
 
     test "injects the sort-key pairs the client computes at ingest", %{
@@ -674,8 +744,9 @@ defmodule Hologram.CompilerTest do
       runtime_mfas: runtime_mfas
     } do
       pairs = MapSet.new([{Entity15, :token}, {Entity2, :c}])
+      sync_constants = %{@empty_sync_constants | ordered_string_pairs: pairs}
 
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], pairs, @js_dir)
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
       assert String.contains?(
                js,
@@ -685,7 +756,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "injects the wire format the bundle speaks" do
-      js = build_runtime_js([], PLT.start(), MapSet.new(), [], MapSet.new(), @js_dir)
+      js = build_runtime_js([], PLT.start(), MapSet.new(), [], @empty_sync_constants, @js_dir)
 
       assert String.contains?(js, ~s/protocolVersion: #{Frame.protocol_version()}};/)
     end
@@ -699,7 +770,14 @@ defmodule Hologram.CompilerTest do
       app_versions = [hologram: "0.1.0", my_app: "9.8.7"]
 
       js =
-        build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), app_versions, MapSet.new(), @js_dir)
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          MapSet.new(),
+          app_versions,
+          @empty_sync_constants,
+          @js_dir
+        )
 
       assert String.contains?(js, "ERTS.appVersions = {};")
     end
@@ -711,7 +789,8 @@ defmodule Hologram.CompilerTest do
       Application.put_env(:hologram, :client_error_overlay, false)
       Application.put_env(:hologram, :client_stacktraces, true)
 
-      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), @js_dir)
+      js =
+        build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @empty_sync_constants, @js_dir)
 
       assert String.contains?(
                js,
@@ -984,7 +1063,14 @@ defmodule Hologram.CompilerTest do
     clean_dir(opts[:tmp_dir])
 
     entry_file_path =
-      create_runtime_entry_file(runtime_mfas, ir_plt, MapSet.new(), [], MapSet.new(), opts)
+      create_runtime_entry_file(
+        runtime_mfas,
+        ir_plt,
+        MapSet.new(),
+        [],
+        @empty_sync_constants,
+        opts
+      )
 
     assert entry_file_path == Path.join(opts[:tmp_dir], "runtime.entry.js")
 

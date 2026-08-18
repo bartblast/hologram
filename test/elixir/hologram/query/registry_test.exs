@@ -8,6 +8,7 @@ defmodule Hologram.Query.RegistryTest do
   alias Hologram.Query.Window
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module5
 
   describe "build/1" do
     test "builds entries with the term, its param shape, and the window it downloads" do
@@ -44,6 +45,32 @@ defmodule Hologram.Query.RegistryTest do
       registry = build([term, term])
 
       assert map_size(registry) == 1
+    end
+  end
+
+  describe "entity_types/1" do
+    test "returns the type a term reads" do
+      term = Query.normalize(Module2)
+
+      assert entity_types(term) == MapSet.new([Module2])
+    end
+
+    test "returns the types a term includes alongside its own" do
+      term =
+        Module3
+        |> include(:a)
+        |> Query.normalize()
+
+      assert entity_types(term) == MapSet.new([Module2, Module3])
+    end
+
+    test "walks includes to any depth" do
+      term =
+        Module5
+        |> include(:a, &include(&1, :b))
+        |> Query.normalize()
+
+      assert entity_types(term) == MapSet.new([Module2, Module3, Module5])
     end
   end
 
