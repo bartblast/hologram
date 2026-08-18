@@ -1352,9 +1352,8 @@ describe("Hologram", () => {
       Client.fetchPage.restore();
       assignStub.restore();
 
-      // A navigation opens the pre-mount window and only a mount closes it, which these tests
+      // A navigation opens a transition window and only a mount closes it, which these tests
       // never reach - so it is closed here rather than left open for whatever runs next.
-      Hologram.isMountPending = false;
       Hologram.domEpoch = 0;
       Hologram.registryEpoch = 0;
     });
@@ -1490,6 +1489,8 @@ describe("Hologram", () => {
           .stub(Hologram, "executeAction")
           .callsFake((_action) => null);
 
+        const warnStub = sinon.stub(console, "warn");
+
         try {
           await Hologram.loadNewPage("/target", payloadFor("fff"));
 
@@ -1503,9 +1504,14 @@ describe("Hologram", () => {
           clock.tick(5000);
 
           sinon.assert.notCalled(executeActionStub);
+
+          // A held action and a dropped one both leave executeAction uncalled. The absence of the
+          // warning is what says this one is waiting rather than gone.
+          sinon.assert.notCalled(warnStub);
         } finally {
           clock.restore();
           executeActionStub.restore();
+          warnStub.restore();
         }
       });
 
@@ -1552,6 +1558,8 @@ describe("Hologram", () => {
           .stub(Hologram, "executeAction")
           .callsFake((_action) => null);
 
+        const warnStub = sinon.stub(console, "warn");
+
         try {
           await Hologram.loadNewPage("/target", payloadFor("ggg"));
 
@@ -1560,9 +1568,15 @@ describe("Hologram", () => {
           clock.tick(5000);
 
           sinon.assert.notCalled(executeActionStub);
+
+          // A held action and a dropped one both leave executeAction uncalled. The absence of the
+          // warning is what says the script's dispatch is waiting for its page rather than having
+          // been resolved against the page being left.
+          sinon.assert.notCalled(warnStub);
         } finally {
           clock.restore();
           executeActionStub.restore();
+          warnStub.restore();
         }
       });
 
