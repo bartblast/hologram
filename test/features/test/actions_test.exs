@@ -433,6 +433,21 @@ defmodule HologramFeatureTests.ActionsTest do
       |> assert_text("Page 21 title")
     end
 
+    # Going back restores the registry from a snapshot rather than from mount data, reaching the
+    # cancellation down a different path than a forward navigation does.
+    feature "going back to another page cancels a pending action targeting the layout",
+            %{session: session} do
+      session
+      |> visit(Page21)
+      |> click(link("Page 20 link"))
+      |> assert_page(Page20)
+      |> click(button("Run delayed layout action"))
+      |> go_back()
+      |> assert_page(Page21)
+      |> sleep(3_500)
+      |> assert_text(css("#layout_result"), "nil")
+    end
+
     # The page cid resolves on the destination too, but to a different module - one with no
     # clause for the action the previous page scheduled. A dispatch that survives the navigation
     # raises there rather than merely doing the wrong thing.
