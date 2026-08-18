@@ -417,5 +417,20 @@ defmodule HologramFeatureTests.ActionsTest do
       |> sleep(3_500)
       |> assert_text(css("#layout_result"), "nil")
     end
+
+    # The component is mounted on one page only, so after the navigation its cid is registered
+    # nowhere and the dispatch resolves to nothing at all. Interacting with the destination
+    # afterwards is what reads the browser log - an uncaught error from the stale dispatch
+    # surfaces as a Wallaby.JSError on the next command, whatever the page shows.
+    feature "navigating to another page cancels a pending action whose component is gone",
+            %{session: session} do
+      session
+      |> visit(Page20)
+      |> click(button("Run delayed component action"))
+      |> click(link("Page 21 link"))
+      |> assert_page(Page21)
+      |> sleep(3_500)
+      |> assert_text("Page 21 title")
+    end
   end
 end
