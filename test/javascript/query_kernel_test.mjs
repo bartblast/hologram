@@ -1,8 +1,12 @@
 "use strict";
 
-import {assert} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
+import LocalDatabase from "../../assets/js/local_database.mjs";
+import Model from "../../assets/js/model.mjs";
 import QueryKernel from "../../assets/js/query_kernel.mjs";
+
+defineRuntimeGlobals();
 
 // Mirrors the predicate cases of test/elixir/hologram/query/interpreter_test.exs, case for case
 // and in the same order - that suite proves the reference answers what the database answers, and
@@ -164,6 +168,393 @@ describe("QueryKernel", () => {
       const context = {bindings: {priority: 3}};
 
       assert.deepEqual(matching(filter, context), ["ada", "bob"]);
+    });
+  });
+
+  describe("run()", () => {
+    const PROJECT = "MyApp.Project";
+    const TASK = "MyApp.Task";
+    const USER = "MyApp.User";
+
+    const term = (overrides = {}) =>
+      Object.assign(
+        {
+          cardinality: "set",
+          entity: TASK,
+          filter: [],
+          include: {},
+          limit: null,
+          offset: null,
+          orderBy: [["id", "asc"]],
+        },
+        overrides,
+      );
+
+    const titles = (nodes) => nodes.map((node) => node.row.title);
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [PROJECT]: {
+            attributes: {id: "uuid", name: "string"},
+            relationships: {
+              owner: {toMany: false, type: USER},
+              tasks: {toMany: true, type: TASK},
+            },
+            serverOnly: [],
+          },
+          [TASK]: {
+            attributes: {id: "uuid", position: "integer", title: "string"},
+            relationships: {},
+            serverOnly: [],
+          },
+          [USER]: {
+            attributes: {email: "string", id: "uuid"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+        orderedStringPairs: [[TASK, "title"]],
+      };
+
+      LocalDatabase.reset();
+      Model.reset();
+    });
+
+    describe("ordering", () => {
+      beforeEach(() => {
+        LocalDatabase.putRow(TASK, {id: "t1", position: 3, title: "bob"});
+        LocalDatabase.putRow(TASK, {id: "t2", position: 2, title: "ada"});
+        LocalDatabase.putRow(TASK, {id: "t3", position: 1, title: "cleo"});
+      });
+
+      it("orders by an attribute", () => {
+        const ordered = term({
+          orderBy: [
+            ["position", "asc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), [
+          "cleo",
+          "ada",
+          "bob",
+        ]);
+      });
+
+      it("orders by an attribute descending", () => {
+        const ordered = term({
+          orderBy: [
+            ["position", "desc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), [
+          "bob",
+          "ada",
+          "cleo",
+        ]);
+      });
+
+      // Ascending puts them last and descending puts them first, which is where the database
+      // puts them - a page reading its own rows shows them where the server would have.
+      it("places missing values last when ascending", () => {
+        LocalDatabase.reset();
+        LocalDatabase.putRow(TASK, {id: "t1", position: 1, title: "ada"});
+        LocalDatabase.putRow(TASK, {id: "t2", position: null, title: "bob"});
+
+        const ordered = term({
+          orderBy: [
+            ["position", "asc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), ["ada", "bob"]);
+      });
+
+      it("places missing values first when descending", () => {
+        LocalDatabase.reset();
+        LocalDatabase.putRow(TASK, {id: "t1", position: 1, title: "ada"});
+        LocalDatabase.putRow(TASK, {id: "t2", position: null, title: "bob"});
+
+        const ordered = term({
+          orderBy: [
+            ["position", "desc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), ["bob", "ada"]);
+      });
+
+      // The rows tie on the first key, so the second decides between them.
+      it("orders by each key in turn", () => {
+        LocalDatabase.reset();
+        LocalDatabase.putRow(TASK, {id: "t1", position: 7, title: "eve"});
+        LocalDatabase.putRow(TASK, {id: "t2", position: 7, title: "dana"});
+
+        const ordered = term({
+          orderBy: [
+            ["position", "asc"],
+            ["title", "asc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), ["dana", "eve"]);
+      });
+
+      // The key the ingest derived carries the practical order, which the bytes do not: an
+      // uppercase letter sorts before every lowercase one, and a diacritic after all of them.
+      it("orders a string by the key derived from it", () => {
+        LocalDatabase.reset();
+
+        LocalDatabase.putRow(TASK, {id: "t1", title: "Zoe", title_sort: "zoe"});
+        LocalDatabase.putRow(TASK, {id: "t2", title: "ada", title_sort: "ada"});
+
+        LocalDatabase.putRow(TASK, {
+          id: "t3",
+          title: "Ödön",
+          title_sort: "odon",
+        });
+
+        LocalDatabase.putRow(TASK, {id: "t4", title: "bob", title_sort: "bob"});
+
+        const ordered = term({
+          orderBy: [
+            ["title", "asc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), [
+          "ada",
+          "bob",
+          "Ödön",
+          "Zoe",
+        ]);
+      });
+
+      // Two values sharing a key are settled by themselves, the way the database settles them
+      // with the column behind the companion.
+      it("settles a tie on the derived key by the value itself", () => {
+        LocalDatabase.reset();
+
+        LocalDatabase.putRow(TASK, {id: "t1", title: "zoe", title_sort: "zoe"});
+        LocalDatabase.putRow(TASK, {id: "t2", title: "Zoe", title_sort: "zoe"});
+
+        const ordered = term({
+          orderBy: [
+            ["title", "asc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), ["Zoe", "zoe"]);
+      });
+    });
+
+    describe("view bounds", () => {
+      beforeEach(() => {
+        LocalDatabase.putRow(TASK, {id: "t1", position: 1, title: "ada"});
+        LocalDatabase.putRow(TASK, {id: "t2", position: 2, title: "bob"});
+        LocalDatabase.putRow(TASK, {id: "t3", position: 3, title: "cleo"});
+      });
+
+      it("takes at most the limit", () => {
+        assert.deepEqual(titles(QueryKernel.run(term({limit: 2}))), [
+          "ada",
+          "bob",
+        ]);
+      });
+
+      it("skips the offset", () => {
+        assert.deepEqual(titles(QueryKernel.run(term({offset: 1}))), [
+          "bob",
+          "cleo",
+        ]);
+      });
+
+      it("skips before it takes", () => {
+        const bounded = term({limit: 1, offset: 1});
+
+        assert.deepEqual(titles(QueryKernel.run(bounded)), ["bob"]);
+      });
+    });
+
+    describe("terminals", () => {
+      beforeEach(() => {
+        LocalDatabase.putRow(TASK, {id: "t1", position: 1, title: "ada"});
+        LocalDatabase.putRow(TASK, {id: "t2", position: 2, title: "bob"});
+      });
+
+      it("returns the first row of a single-result query", () => {
+        const single = term({cardinality: "one"});
+
+        assert.equal(QueryKernel.run(single).row.title, "ada");
+      });
+
+      it("returns nothing for a single-result query matching no row", () => {
+        const single = term({
+          cardinality: "one",
+          filter: [["title", "==", "nobody"]],
+        });
+
+        assert.isNull(QueryKernel.run(single));
+      });
+
+      it("returns how many rows match", () => {
+        const counting = term({
+          cardinality: "count",
+          filter: [["position", ">", 1]],
+        });
+
+        assert.equal(QueryKernel.run(counting), 1);
+      });
+
+      // A count counts what the query evaluates to, so a bounded query counts what its bounds
+      // leave rather than what its filter matched.
+      it("counts what the view bounds leave", () => {
+        const counting = term({cardinality: "count", limit: 1});
+
+        assert.equal(QueryKernel.run(counting), 1);
+      });
+    });
+
+    describe("includes", () => {
+      const projectTerm = (include) =>
+        term({entity: PROJECT, include: include});
+
+      const subTerm = (overrides = {}) =>
+        Object.assign(
+          {
+            cardinality: "set",
+            entity: TASK,
+            filter: [],
+            include: {},
+            limit: null,
+            offset: null,
+            orderBy: [["id", "asc"]],
+          },
+          overrides,
+        );
+
+      beforeEach(() => {
+        LocalDatabase.putRow(PROJECT, {
+          id: "p1",
+          name: "Website",
+          owner_id: "u1",
+        });
+
+        LocalDatabase.putRow(USER, {email: "ada@example.com", id: "u1"});
+      });
+
+      it("fills a to-one relationship with the row its reference names", () => {
+        const [node] = QueryKernel.run(
+          projectTerm({owner: subTerm({entity: USER})}),
+        );
+
+        assert.equal(node.includes.owner.row.email, "ada@example.com");
+      });
+
+      it("fills a to-one relationship holding nothing with nothing", () => {
+        LocalDatabase.putRow(PROJECT, {
+          id: "p2",
+          name: "Launch",
+          owner_id: null,
+        });
+
+        const nodes = QueryKernel.run(
+          projectTerm({owner: subTerm({entity: USER})}),
+        );
+
+        assert.isNull(nodes[1].includes.owner);
+      });
+
+      it("fills a to-many relationship with the rows the pairs name", () => {
+        LocalDatabase.putRow(TASK, {id: "t1", position: 1, title: "ada"});
+        LocalDatabase.putRow(TASK, {id: "t2", position: 2, title: "bob"});
+        LocalDatabase.replaceFacts(PROJECT, "tasks", "p1", ["t1", "t2"]);
+
+        const [node] = QueryKernel.run(projectTerm({tasks: subTerm()}));
+
+        assert.deepEqual(titles(node.includes.tasks), ["ada", "bob"]);
+      });
+
+      it("fills a to-many relationship holding no pairs with an empty list", () => {
+        const [node] = QueryKernel.run(projectTerm({tasks: subTerm()}));
+
+        assert.deepEqual(node.includes.tasks, []);
+      });
+
+      // A fill arrives in pieces, so a parent can be told about a child before the child lands.
+      it("passes over a pair naming a row the database does not hold", () => {
+        LocalDatabase.putRow(TASK, {id: "t1", position: 1, title: "ada"});
+        LocalDatabase.replaceFacts(PROJECT, "tasks", "p1", ["t1", "t_missing"]);
+
+        const [node] = QueryKernel.run(projectTerm({tasks: subTerm()}));
+
+        assert.deepEqual(titles(node.includes.tasks), ["ada"]);
+      });
+
+      it("matches a to-many include's own filter", () => {
+        LocalDatabase.putRow(TASK, {id: "t1", position: 1, title: "kept"});
+        LocalDatabase.putRow(TASK, {id: "t2", position: 2, title: "dropped"});
+        LocalDatabase.replaceFacts(PROJECT, "tasks", "p1", ["t1", "t2"]);
+
+        const include = {
+          tasks: subTerm({filter: [["title", "==", "kept"]]}),
+        };
+
+        const [node] = QueryKernel.run(projectTerm(include));
+
+        assert.deepEqual(titles(node.includes.tasks), ["kept"]);
+      });
+
+      it("orders and bounds a to-many include by its own clauses", () => {
+        LocalDatabase.putRow(TASK, {id: "t1", position: 3, title: "cherry"});
+        LocalDatabase.putRow(TASK, {id: "t2", position: 1, title: "apple"});
+        LocalDatabase.putRow(TASK, {id: "t3", position: 2, title: "banana"});
+        LocalDatabase.replaceFacts(PROJECT, "tasks", "p1", ["t1", "t2", "t3"]);
+
+        const include = {
+          tasks: subTerm({
+            limit: 2,
+            orderBy: [
+              ["position", "asc"],
+              ["id", "asc"],
+            ],
+          }),
+        };
+
+        const [node] = QueryKernel.run(projectTerm(include));
+
+        assert.deepEqual(titles(node.includes.tasks), ["apple", "banana"]);
+      });
+
+      it("fills what an include includes, two levels down", () => {
+        LocalDatabase.putRow(TASK, {id: "t1", position: 1, title: "ada"});
+        LocalDatabase.replaceFacts(PROJECT, "tasks", "p1", ["t1"]);
+
+        const include = {
+          owner: subTerm({entity: USER}),
+          tasks: subTerm(),
+        };
+
+        const [node] = QueryKernel.run(projectTerm(include));
+
+        assert.equal(node.includes.owner.row.id, "u1");
+        assert.deepEqual(titles(node.includes.tasks), ["ada"]);
+      });
+
+      it("leaves a node's includes empty when the query asked for none", () => {
+        const [node] = QueryKernel.run(projectTerm({}));
+
+        assert.deepEqual(node.includes, {});
+      });
     });
   });
 
