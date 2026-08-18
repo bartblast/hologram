@@ -95,6 +95,60 @@ function filterableNames(entityType) {
   return [...attributeNames(entityType), ...references].sort();
 }
 
+function includeDepth(term) {
+  const subTerms = Object.values(term.include);
+
+  return subTerms.length === 0
+    ? 0
+    : 1 + Math.max(...subTerms.map(includeDepth));
+}
+
+// The sub-builder is handed a fresh term for the related type, so what it returns is a query in
+// its own right - filtered, ordered and bounded like any other - which is then embedded under the
+// relationship's name.
+function includeOne(query, name, subBuilder) {
+  const term = toTerm(query);
+  const {kind, target} = validateRelationshipName(name, term.entity);
+
+  if (name.value in term.include) {
+    Interpreter.raiseArgumentError(
+      `relationship ${Interpreter.inspect(name)} is already included`,
+    );
+  }
+
+  const relatedBaseTerm = toTerm(Type.alias(target));
+
+  const subTerm = subBuilder
+    ? Interpreter.callAnonymousFunction(subBuilder, [relatedBaseTerm])
+    : relatedBaseTerm;
+
+  validateSubTerm(subTerm, name, target, kind);
+
+  return {...term, include: {...term.include, [name.value]: subTerm}};
+}
+
+// A spec entry is a relationship name, a {name, sub-builder} pair, or a {name, nested spec} pair -
+// the last traversing deeper without writing a function for it.
+function includeSpecEntry(term, entry) {
+  const include = Elixir_Hologram_Query["include/3"];
+
+  if (Type.isAtom(entry)) {
+    return include(term, entry, Type.nil());
+  }
+
+  if (isConstraintTuple(entry)) {
+    const [name, spec] = entry.data;
+
+    return Type.isAnonymousFunction(spec)
+      ? include(term, name, spec)
+      : includeOne(term, name, nestedSubBuilder(spec));
+  }
+
+  Interpreter.raiseArgumentError(
+    `invalid include spec entry ${Interpreter.inspect(entry)} - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair`,
+  );
+}
+
 function isActor(value) {
   return Type.isAtom(value) && value.value === "actor";
 }
@@ -111,6 +165,12 @@ function isPlainValue(value) {
   return (
     !Type.isTuple(value) && !Type.isList(value) && !isStruct(value, "Range")
   );
+}
+
+// A stage returns the plain term this file builds, so what a sub-builder gives back is told from
+// anything else by being one - a boxed value never carries an entity.
+function isQueryTerm(value) {
+  return value !== null && typeof value === "object" && "entity" in value;
 }
 
 function isStruct(value, name) {
@@ -157,6 +217,56 @@ function membershipValues(values, name, entityType) {
       ? paramLeaf(value)
       : Model.unbox(value, attributeType(entityType, name)),
   );
+}
+
+// The nested-spec shorthand is the sub-builder that includes through the nested spec, boxed the
+// way a builder's own function arrives - so one code path calls both.
+function nestedSubBuilder(spec) {
+  const clause = {
+    params: (_context) => [Type.variablePattern("related_term")],
+    guards: [],
+    body: (context) =>
+      Elixir_Hologram_Query["include/2"](context.vars.related_term, spec),
+  };
+
+  return Type.anonymousFunction(1, [clause], Interpreter.buildContext());
+}
+
+function normalizedIncludes(term) {
+  return Object.fromEntries(
+    Object.entries(term.include).map(([name, subTerm]) => {
+      const {kind} = validateRelationshipName(Type.atom(name), term.entity);
+
+      return [
+        name,
+        kind === "to_many"
+          ? normalizedTerm(subTerm)
+          : {...subTerm, include: normalizedIncludes(subTerm)},
+      ];
+    }),
+  );
+}
+
+// Every set-returning shape gets a total order, since two rows the ordering does not tell apart
+// would otherwise come back in whatever order the rows happen to sit in. A count is order-blind,
+// and a to-one embeds a single entity, so neither takes one.
+function normalizedOrder(term) {
+  if (term.cardinality === "count") {
+    return [];
+  }
+
+  return term.orderBy.some(([name]) => name === "id")
+    ? term.orderBy
+    : [...term.orderBy, ["id", "asc"]];
+}
+
+function normalizedTerm(term) {
+  return {
+    ...term,
+    filter: sortedFilter(term.filter),
+    include: normalizedIncludes(term),
+    orderBy: normalizedOrder(term),
+  };
 }
 
 function operatorTriples(name, tuple, entityType) {
@@ -296,6 +406,15 @@ function structName(value) {
   return field(value, "__struct__").value.replace(/^Elixir\./, "");
 }
 
+function subTermHasClauses(subTerm) {
+  return (
+    subTerm.filter.length > 0 ||
+    subTerm.orderBy.length > 0 ||
+    subTerm.limit !== null ||
+    subTerm.offset !== null
+  );
+}
+
 function relationshipNames(entityType) {
   return Object.keys(Model.entry(entityType).relationships);
 }
@@ -329,6 +448,19 @@ function setViewBound(query, field, value) {
   return {...term, [field]: Number(value.value)};
 }
 
+// Conjunction is commutative, so the order predicates were written in carries nothing - one
+// canonical order is what makes two spellings of the same query the same term. The order itself
+// is this tier's: a term never travels, so nothing compares one against the server's.
+function sortedFilter(filter) {
+  return [...filter].sort((left, right) => {
+    const [leftKey, rightKey] = [left, right].map(([name, operator, operand]) =>
+      [name, operator, JSON.stringify(operand ?? null)].join("\u0000"),
+    );
+
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  });
+}
+
 // A stage takes either the module a query starts from or the term a previous stage returned. A
 // term is a plain object here, so it is told from a boxed module by being one.
 //
@@ -336,7 +468,7 @@ function setViewBound(query, field, value) {
 // this client can hold, so a name missing from it is either not an entity type or one whose
 // rows never reach a client - neither is a query this side can answer.
 function toTerm(query) {
-  if (query !== null && typeof query === "object" && "entity" in query) {
+  if (isQueryTerm(query)) {
     return query;
   }
 
@@ -475,6 +607,31 @@ function validateOrderableAttribute(name, entityType, operator) {
   }
 }
 
+function validateRelationshipName(name, entityType) {
+  const relationship = Model.entry(entityType).relationships[name.value];
+
+  if (relationship) {
+    return {
+      kind: relationship.toMany ? "to_many" : "to_one",
+      target: relationship.type,
+    };
+  }
+
+  if (attributeNames(entityType).includes(name.value)) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} is an attribute in ${entityType} - only relationships can be included`,
+    );
+  }
+
+  const known = relationshipNames(entityType)
+    .map((relationshipName) => `:${relationshipName}`)
+    .join(", ");
+
+  Interpreter.raiseArgumentError(
+    `unknown relationship ${Interpreter.inspect(name)} in ${entityType} - known relationships: ${known}`,
+  );
+}
+
 function validateScalarOperand(name, operator, operand, refuseNil = false) {
   const invalid =
     Type.isList(operand) ||
@@ -485,6 +642,40 @@ function validateScalarOperand(name, operator, operand, refuseNil = false) {
   if (invalid) {
     Interpreter.raiseArgumentError(
       `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${Interpreter.inspect(name)}`,
+    );
+  }
+}
+
+// A to-one embeds one entity, so there is nothing for a filter, an order or a bound to do to it -
+// nesting is its only refinement, and two levels is as deep as either tier traverses.
+function validateSubTerm(subTerm, name, target, kind) {
+  if (!isQueryTerm(subTerm)) {
+    Interpreter.raiseArgumentError(
+      `include sub-builder for relationship ${Interpreter.inspect(name)} must return a query term for ${target}, got: ${Interpreter.inspect(subTerm)}`,
+    );
+  }
+
+  if (subTerm.entity !== target) {
+    Interpreter.raiseArgumentError(
+      `include sub-builder for relationship ${Interpreter.inspect(name)} must return a query term for ${target} - got a query term for ${subTerm.entity}`,
+    );
+  }
+
+  if (subTerm.cardinality !== "set") {
+    Interpreter.raiseArgumentError(
+      "include sub-terms take no cardinality marker - the relationship declaration governs cardinality",
+    );
+  }
+
+  if (kind === "to_one" && subTermHasClauses(subTerm)) {
+    Interpreter.raiseArgumentError(
+      `to-one relationship ${Interpreter.inspect(name)} takes no clauses - clauses apply to to-many includes`,
+    );
+  }
+
+  if (includeDepth(subTerm) > 1) {
+    Interpreter.raiseArgumentError(
+      `including ${Interpreter.inspect(name)} exceeds the traversal depth limit of 2 levels`,
     );
   }
 }
@@ -523,7 +714,48 @@ const Elixir_Hologram_Query = {
 
     return {...term, filter: [...term.filter, ...triples]};
   },
+  "include/2": (query, spec) =>
+    Elixir_Hologram_Query["include/3"](query, spec, Type.nil()),
+
+  "include/3": (query, spec, subBuilder) => {
+    if (Type.isAtom(spec)) {
+      if (Type.isNil(subBuilder)) {
+        return includeOne(query, spec, null);
+      }
+
+      if (Type.isAnonymousFunction(subBuilder) && subBuilder.arity === 1) {
+        return includeOne(query, spec, subBuilder);
+      }
+
+      Interpreter.raiseArgumentError(
+        `include sub-builder for relationship ${Interpreter.inspect(spec)} must be a one-argument function, got: ${Interpreter.inspect(subBuilder)}`,
+      );
+    }
+
+    if (Type.isList(spec)) {
+      if (!Type.isNil(subBuilder)) {
+        Interpreter.raiseArgumentError(
+          "an include shape spec takes no separate sub-builder - nest it in the spec as a {name, sub_builder} pair",
+        );
+      }
+
+      if (spec.data.length === 0) {
+        Interpreter.raiseArgumentError("include spec must not be empty");
+      }
+
+      return spec.data.reduce(includeSpecEntry, toTerm(query));
+    }
+
+    Interpreter.raiseArgumentError(
+      `include spec must be a relationship name or a shape list, got: ${Interpreter.inspect(spec)}`,
+    );
+  },
+
   "limit/2": (query, value) => setViewBound(query, "limit", value),
+
+  // The canonical form of a query - what the kernel runs literally.
+  "normalize/1": (query) => normalizedTerm(toTerm(query)),
+
   "offset/2": (query, value) => setViewBound(query, "offset", value),
   "one/1": (query) => setCardinality(query, "one"),
 

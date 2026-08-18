@@ -380,7 +380,10 @@ defmodule Hologram.Compiler.CallGraph do
     # carries. Keeping the transpiled originals out of the bundle is what makes that possible.
     {Hologram.Query, :count, 1},
     {Hologram.Query, :filter, 2},
+    {Hologram.Query, :include, 2},
+    {Hologram.Query, :include, 3},
     {Hologram.Query, :limit, 2},
+    {Hologram.Query, :normalize, 1},
     {Hologram.Query, :offset, 2},
     {Hologram.Query, :one, 1},
     {Hologram.Query, :order_by, 2},

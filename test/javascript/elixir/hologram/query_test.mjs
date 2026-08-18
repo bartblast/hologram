@@ -1,6 +1,10 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals} from "../../support/helpers.mjs";
+import {
+  assert,
+  contextFixture,
+  defineRuntimeGlobals,
+} from "../../support/helpers.mjs";
 
 import Elixir_Hologram_Query from "../../../../assets/js/elixir/hologram/query.mjs";
 import HologramBoxedError from "../../../../assets/js/errors/boxed_error.mjs";
@@ -14,23 +18,52 @@ defineRuntimeGlobals();
 describe("Elixir_Hologram_Query", () => {
   const PROJECT = "MyApp.Project";
   const TASK = "MyApp.Task";
+  const USER = "MyApp.User";
 
+  const project = Type.alias(PROJECT);
   const task = Type.alias(TASK);
+  const user = Type.alias(USER);
 
   const count = Elixir_Hologram_Query["count/1"];
+  const filter = Elixir_Hologram_Query["filter/2"];
+  const include = Elixir_Hologram_Query["include/3"];
   const limit = Elixir_Hologram_Query["limit/2"];
+  const normalize = Elixir_Hologram_Query["normalize/1"];
   const offset = Elixir_Hologram_Query["offset/2"];
   const one = Elixir_Hologram_Query["one/1"];
+  const orderBy = Elixir_Hologram_Query["order_by/2"];
 
-  const freshTerm = {
+  const baseTerm = (entityType) => ({
     cardinality: "set",
-    entity: TASK,
+    entity: entityType,
     filter: [],
     include: {},
     limit: null,
     offset: null,
     orderBy: [],
-  };
+  });
+
+  const freshTerm = baseTerm(TASK);
+
+  const predicates = (pairs) =>
+    Type.list(
+      pairs.map(([name, value]) => Type.tuple([Type.atom(name), value])),
+    );
+
+  // A builder's sub-builder is an ordinary Elixir function, so it arrives boxed - what the port
+  // calls through the interpreter is what these build.
+  const subBuilder = (build) =>
+    Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_context) => [Type.variablePattern("related_query")],
+          guards: [],
+          body: (context) => build(context.vars.related_query),
+        },
+      ],
+      contextFixture(),
+    );
 
   beforeEach(() => {
     globalThis.Hologram.sync = {
@@ -54,6 +87,14 @@ describe("Elixir_Hologram_Query", () => {
             title: "string",
           },
           relationships: {},
+          serverOnly: [],
+        },
+        [USER]: {
+          attributes: {email: "string", id: "uuid"},
+          relationships: {
+            manager: {toMany: false, type: USER},
+            projects: {toMany: true, type: PROJECT},
+          },
           serverOnly: [],
         },
       },
@@ -83,13 +124,6 @@ describe("Elixir_Hologram_Query", () => {
   });
 
   describe("filter/2", () => {
-    const filter = Elixir_Hologram_Query["filter/2"];
-
-    const predicates = (pairs) =>
-      Type.list(
-        pairs.map(([name, value]) => Type.tuple([Type.atom(name), value])),
-      );
-
     const range = (first, last, step = 1) =>
       Type.map([
         [Type.atom("__struct__"), Type.alias("Range")],
@@ -404,6 +438,292 @@ describe("Elixir_Hologram_Query", () => {
     });
   });
 
+  describe("include/3", () => {
+    it("accepts a sub-builder as a spec value", () => {
+      const spec = Type.list([
+        Type.tuple([
+          Type.atom("tasks"),
+          subBuilder((related) =>
+            filter(related, predicates([["done", Type.boolean(true)]])),
+          ),
+        ]),
+      ]);
+
+      const query = include(project, spec, Type.nil());
+
+      assert.deepStrictEqual(query.include, {
+        tasks: {...freshTerm, filter: [["done", "==", true]]},
+      });
+    });
+
+    it("accumulates multiple includes", () => {
+      const query = include(
+        include(project, Type.atom("owner"), Type.nil()),
+        Type.atom("tasks"),
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(query.include, {
+        owner: baseTerm(USER),
+        tasks: freshTerm,
+      });
+    });
+
+    it("embeds a to-many relationship", () => {
+      assert.deepStrictEqual(include(project, Type.atom("tasks"), Type.nil()), {
+        ...baseTerm(PROJECT),
+        include: {tasks: freshTerm},
+      });
+    });
+
+    it("embeds a to-one relationship", () => {
+      const query = include(project, Type.atom("owner"), Type.nil());
+
+      assert.deepStrictEqual(query.include, {owner: baseTerm(USER)});
+    });
+
+    it("includes several relationships from a list spec", () => {
+      const spec = Type.list([Type.atom("owner"), Type.atom("tasks")]);
+
+      const query = include(project, spec, Type.nil());
+
+      assert.deepStrictEqual(query.include, {
+        owner: baseTerm(USER),
+        tasks: freshTerm,
+      });
+    });
+
+    it("mixes flat and nested entries", () => {
+      const spec = Type.list([
+        Type.atom("manager"),
+        Type.tuple([Type.atom("projects"), Type.atom("owner")]),
+      ]);
+
+      const query = include(user, spec, Type.nil());
+
+      assert.deepStrictEqual(query.include, {
+        manager: baseTerm(USER),
+        projects: {...baseTerm(PROJECT), include: {owner: baseTerm(USER)}},
+      });
+    });
+
+    it("nests a list spec", () => {
+      const spec = Type.list([
+        Type.tuple([
+          Type.atom("projects"),
+          Type.list([Type.atom("owner"), Type.atom("tasks")]),
+        ]),
+      ]);
+
+      const query = include(user, spec, Type.nil());
+
+      assert.deepStrictEqual(query.include, {
+        projects: {
+          ...baseTerm(PROJECT),
+          include: {owner: baseTerm(USER), tasks: freshTerm},
+        },
+      });
+    });
+
+    it("nests includes through the sub-builder", () => {
+      const query = include(
+        user,
+        Type.atom("projects"),
+        subBuilder((related) =>
+          include(related, Type.atom("owner"), Type.nil()),
+        ),
+      );
+
+      assert.deepStrictEqual(query.include, {
+        projects: {...baseTerm(PROJECT), include: {owner: baseTerm(USER)}},
+      });
+    });
+
+    it("nests traversal from a keyword spec", () => {
+      const spec = Type.list([
+        Type.tuple([Type.atom("projects"), Type.atom("owner")]),
+      ]);
+
+      const query = include(user, spec, Type.nil());
+
+      assert.deepStrictEqual(query.include, {
+        projects: {...baseTerm(PROJECT), include: {owner: baseTerm(USER)}},
+      });
+    });
+
+    it("refines a to-many include with a sub-builder", () => {
+      const query = include(
+        project,
+        Type.atom("tasks"),
+        subBuilder((related) =>
+          orderBy(
+            filter(related, predicates([["done", Type.boolean(false)]])),
+            Type.atom("position"),
+          ),
+        ),
+      );
+
+      assert.deepStrictEqual(query.include, {
+        tasks: {
+          ...freshTerm,
+          filter: [["done", "==", false]],
+          orderBy: [["position", "asc"]],
+        },
+      });
+    });
+
+    it("raises on a duplicate include", () => {
+      assert.throw(
+        () =>
+          include(
+            include(project, Type.atom("tasks"), Type.nil()),
+            Type.atom("tasks"),
+            Type.nil(),
+          ),
+        HologramBoxedError,
+        "relationship :tasks is already included",
+      );
+    });
+
+    it("raises on a non-function sub-builder", () => {
+      assert.throw(
+        () => include(project, Type.atom("tasks"), Type.integer(5)),
+        HologramBoxedError,
+        "include sub-builder for relationship :tasks must be a one-argument function, got: 5",
+      );
+    });
+
+    it("raises on a separate sub-builder with a shape spec", () => {
+      assert.throw(
+        () =>
+          include(
+            project,
+            Type.list([Type.atom("tasks")]),
+            subBuilder((related) => related),
+          ),
+        HologramBoxedError,
+        "an include shape spec takes no separate sub-builder - nest it in the spec as a {name, sub_builder} pair",
+      );
+    });
+
+    it("raises on a sub-builder returning a different entity's term", () => {
+      assert.throw(
+        () =>
+          include(
+            project,
+            Type.atom("tasks"),
+            subBuilder((_related) => filter(project, Type.list([]))),
+          ),
+        HologramBoxedError,
+        "include sub-builder for relationship :tasks must return a query term for MyApp.Task - got a query term for MyApp.Project",
+      );
+    });
+
+    it("raises on a sub-builder returning a non-term", () => {
+      assert.throw(
+        () =>
+          include(
+            project,
+            Type.atom("tasks"),
+            subBuilder((_related) => Type.integer(123)),
+          ),
+        HologramBoxedError,
+        "include sub-builder for relationship :tasks must return a query term for MyApp.Task, got: 123",
+      );
+    });
+
+    // The relationship declaration already says how many entities are embedded, so a sub-term
+    // marking a cardinality of its own would be saying something the shape cannot honour.
+    it("raises on a sub-term carrying a cardinality marker", () => {
+      assert.throw(
+        () =>
+          include(
+            project,
+            Type.atom("tasks"),
+            subBuilder((related) => count(related)),
+          ),
+        HologramBoxedError,
+        "include sub-terms take no cardinality marker - the relationship declaration governs cardinality",
+      );
+    });
+
+    it("raises on an attribute name", () => {
+      assert.throw(
+        () => include(project, Type.atom("name"), Type.nil()),
+        HologramBoxedError,
+        ":name is an attribute in MyApp.Project - only relationships can be included",
+      );
+    });
+
+    it("raises on an empty include spec", () => {
+      assert.throw(
+        () => include(project, Type.list([]), Type.nil()),
+        HologramBoxedError,
+        "include spec must not be empty",
+      );
+    });
+
+    it("raises on an invalid include spec", () => {
+      assert.throw(
+        () => include(project, Type.integer(123), Type.nil()),
+        HologramBoxedError,
+        "include spec must be a relationship name or a shape list, got: 123",
+      );
+    });
+
+    it("raises on an invalid include spec entry", () => {
+      assert.throw(
+        () => include(project, Type.list([Type.integer(123)]), Type.nil()),
+        HologramBoxedError,
+        "invalid include spec entry 123 - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair",
+      );
+    });
+
+    it("raises on an unknown relationship", () => {
+      assert.throw(
+        () => include(project, Type.atom("x"), Type.nil()),
+        HologramBoxedError,
+        "unknown relationship :x in MyApp.Project - known relationships: :owner, :tasks",
+      );
+    });
+
+    it("raises on clauses on a to-one include", () => {
+      assert.throw(
+        () =>
+          include(
+            project,
+            Type.atom("owner"),
+            subBuilder((related) =>
+              filter(related, predicates([["email", Type.bitstring("x")]])),
+            ),
+          ),
+        HologramBoxedError,
+        "to-one relationship :owner takes no clauses - clauses apply to to-many includes",
+      );
+    });
+
+    it("raises on excessive traversal depth", () => {
+      assert.throw(
+        () =>
+          include(
+            user,
+            Type.atom("manager"),
+            subBuilder((levelOne) =>
+              include(
+                levelOne,
+                Type.atom("manager"),
+                subBuilder((levelTwo) =>
+                  include(levelTwo, Type.atom("manager"), Type.nil()),
+                ),
+              ),
+            ),
+          ),
+        HologramBoxedError,
+        "including :manager exceeds the traversal depth limit of 2 levels",
+      );
+    });
+  });
+
   describe("limit/2", () => {
     it("accepts zero", () => {
       assert.equal(limit(task, Type.integer(0)).limit, 0);
@@ -448,9 +768,160 @@ describe("Elixir_Hologram_Query", () => {
     });
   });
 
-  describe("order_by/2", () => {
-    const orderBy = Elixir_Hologram_Query["order_by/2"];
+  describe("normalize/1", () => {
+    it("appends an ascending id tiebreaker to orderings", () => {
+      const query = normalize(orderBy(task, Type.atom("position")));
 
+      assert.deepStrictEqual(query.orderBy, [
+        ["position", "asc"],
+        ["id", "asc"],
+      ]);
+    });
+
+    it("defaults an empty ordering to the id order", () => {
+      assert.deepStrictEqual(normalize(task), {
+        ...freshTerm,
+        orderBy: [["id", "asc"]],
+      });
+    });
+
+    it("drops the ordering from counting queries", () => {
+      const query = normalize(count(orderBy(task, Type.atom("position"))));
+
+      assert.deepStrictEqual(query.orderBy, []);
+    });
+
+    it("is idempotent", () => {
+      const normalized = normalize(
+        orderBy(
+          include(
+            filter(project, predicates([["name", Type.bitstring("Board")]])),
+            Type.atom("tasks"),
+            Type.nil(),
+          ),
+          Type.atom("name"),
+        ),
+      );
+
+      assert.deepStrictEqual(normalize(normalized), normalized);
+    });
+
+    it("leaves orderings already keyed by id untouched", () => {
+      const spec = Type.list([
+        Type.tuple([Type.atom("id"), Type.atom("desc")]),
+      ]);
+
+      assert.deepStrictEqual(normalize(orderBy(task, spec)).orderBy, [
+        ["id", "desc"],
+      ]);
+    });
+
+    it("normalizes includes nested under a to-one include", () => {
+      const spec = Type.list([
+        Type.tuple([Type.atom("owner"), Type.atom("projects")]),
+      ]);
+
+      const query = normalize(include(project, spec, Type.nil()));
+
+      assert.deepStrictEqual(query.include.owner.orderBy, []);
+
+      assert.deepStrictEqual(query.include.owner.include.projects.orderBy, [
+        ["id", "asc"],
+      ]);
+    });
+
+    it("normalizes to-many sub-terms", () => {
+      const query = normalize(
+        include(
+          project,
+          Type.atom("tasks"),
+          subBuilder((related) =>
+            filter(
+              related,
+              predicates([
+                ["title", Type.bitstring("x")],
+                ["done", Type.boolean(true)],
+              ]),
+            ),
+          ),
+        ),
+      );
+
+      assert.deepStrictEqual(query.include.tasks.filter, [
+        ["done", "==", true],
+        ["title", "==", "x"],
+      ]);
+
+      assert.deepStrictEqual(query.include.tasks.orderBy, [["id", "asc"]]);
+    });
+
+    it("skips ordering for to-one includes", () => {
+      const query = normalize(include(project, Type.atom("owner"), Type.nil()));
+
+      assert.deepStrictEqual(query.include.owner.orderBy, []);
+    });
+
+    it("sorts filter predicates canonically", () => {
+      const query = normalize(
+        filter(
+          task,
+          predicates([
+            ["title", Type.bitstring("x")],
+            ["done", Type.boolean(true)],
+          ]),
+        ),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["done", "==", true],
+        ["title", "==", "x"],
+      ]);
+    });
+  });
+
+  describe("offset/2", () => {
+    it("sets the offset", () => {
+      assert.deepStrictEqual(offset(task, Type.integer(20)), {
+        ...freshTerm,
+        offset: 20,
+      });
+    });
+
+    it("raises on a negative offset", () => {
+      assert.throw(
+        () => offset(task, Type.integer(-5)),
+        HologramBoxedError,
+        "offset must be a non-negative integer, got: -5",
+      );
+    });
+
+    it("raises when the offset is already set", () => {
+      assert.throw(
+        () => offset(offset(task, Type.integer(20)), Type.integer(40)),
+        HologramBoxedError,
+        "offset is already set to 20",
+      );
+    });
+  });
+
+  describe("one/1", () => {
+    it("marks the query as single-result", () => {
+      assert.deepStrictEqual(one(task), {...freshTerm, cardinality: "one"});
+    });
+
+    it("raises when cardinality is already marked", () => {
+      assert.throw(
+        () => one(count(task)),
+        HologramBoxedError,
+        "cardinality is already set to :count",
+      );
+    });
+  });
+
+  // A stage takes the module a query starts from or the term the stage before it returned, and
+  // the term it hands on is what the kernel reads - so what a stage refuses is what the client
+  // could not have answered anyway.
+  describe("order_by/2", () => {
     it("defaults a bare attribute name to ascending", () => {
       assert.deepStrictEqual(orderBy(task, Type.atom("title")).orderBy, [
         ["title", "asc"],
@@ -568,48 +1039,6 @@ describe("Elixir_Hologram_Query", () => {
     });
   });
 
-  describe("offset/2", () => {
-    it("sets the offset", () => {
-      assert.deepStrictEqual(offset(task, Type.integer(20)), {
-        ...freshTerm,
-        offset: 20,
-      });
-    });
-
-    it("raises on a negative offset", () => {
-      assert.throw(
-        () => offset(task, Type.integer(-5)),
-        HologramBoxedError,
-        "offset must be a non-negative integer, got: -5",
-      );
-    });
-
-    it("raises when the offset is already set", () => {
-      assert.throw(
-        () => offset(offset(task, Type.integer(20)), Type.integer(40)),
-        HologramBoxedError,
-        "offset is already set to 20",
-      );
-    });
-  });
-
-  describe("one/1", () => {
-    it("marks the query as single-result", () => {
-      assert.deepStrictEqual(one(task), {...freshTerm, cardinality: "one"});
-    });
-
-    it("raises when cardinality is already marked", () => {
-      assert.throw(
-        () => one(count(task)),
-        HologramBoxedError,
-        "cardinality is already set to :count",
-      );
-    });
-  });
-
-  // A stage takes the module a query starts from or the term the stage before it returned, and
-  // the term it hands on is what the kernel reads - so what a stage refuses is what the client
-  // could not have answered anyway.
   describe("the query a stage starts from", () => {
     it("carries the stages already applied", () => {
       const query = offset(limit(task, Type.integer(5)), Type.integer(10));
