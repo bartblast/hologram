@@ -253,6 +253,7 @@ defmodule Hologram.Template.Renderer do
     # rather than by transpiled code: the seed goes through the same ingest a frame does, and
     # the acting user is what binds the actor predicates of the queries the client re-runs.
     actor_user_id_js = Jason.encode!(server_struct.user_id)
+    sync_counts_js = Jason.encode!(Seed.take_counts())
     sync_seed_js = Jason.encode!(Seed.take())
 
     html_with_interpolated_js =
@@ -263,6 +264,7 @@ defmodule Hologram.Template.Renderer do
       |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
       |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
       |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
+      |> String.replace("$SYNC_COUNTS_JS_PLACEHOLDER", sync_counts_js)
       |> String.replace("$SYNC_SEED_JS_PLACEHOLDER", sync_seed_js)
 
     tree_with_interpolated_js =
@@ -272,6 +274,7 @@ defmodule Hologram.Template.Renderer do
       |> interpolate_js_in_tree("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
       |> interpolate_js_in_tree("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
       |> interpolate_js_in_tree("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
+      |> interpolate_js_in_tree("$SYNC_COUNTS_JS_PLACEHOLDER", sync_counts_js)
       |> interpolate_js_in_tree("$SYNC_SEED_JS_PLACEHOLDER", sync_seed_js)
 
     {html_with_interpolated_js, tree_with_interpolated_js, component_registry_with_page_struct,
@@ -976,6 +979,12 @@ defmodule Hologram.Template.Renderer do
     # what lets its own first render answer the same query from its own database rather than from
     # a value passed down beside it.
     Seed.collect(result)
+
+    # A count has no rows behind it, so a seeded pot cannot re-derive one - the number itself is
+    # handed over, and the client holds it until its own database is complete enough to count.
+    if is_integer(result) do
+      Seed.collect_count(module, prop_name, args, result)
+    end
 
     result
   end

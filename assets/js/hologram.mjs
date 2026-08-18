@@ -1248,6 +1248,11 @@ export default class Hologram {
     if (mountData.syncSeed) {
       LocalDatabase.actorUserId = mountData.actorUserId;
       Deltas.apply(mountData.syncSeed, {seed: true});
+
+      // A count has no rows behind it, so the seed cannot carry one - the numbers this render
+      // answered with travel beside it, and each page visit replaces them the way it replaces
+      // what its own props read.
+      LocalDatabase.syncCounts = mountData.syncCounts ?? {};
     }
 
     return mountData;

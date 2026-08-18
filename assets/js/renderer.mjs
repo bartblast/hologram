@@ -6,6 +6,7 @@ import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Debouncer from "./debouncer.mjs";
 import EventListeners from "./event_listeners.mjs";
+import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
@@ -509,6 +510,36 @@ export default class Renderer {
     }
 
     return Type.list(result.map((node) => Renderer.#boxNode(term, node)));
+  }
+
+  // What the render that handed this page over counted, for as long as this client's own database
+  // cannot count for itself.
+  //
+  // A count has no rows behind it, so seeding cannot answer one: until the fill is complete for
+  // the rows it counts, counting locally would count a pot that is still filling and report a
+  // number climbing towards the truth. The marker says when that stops - the page's own scope for
+  // the page this client connected on, whose rows the server declares complete first, and the
+  // whole pot's for any page reached since, whose rows are only promised at "all".
+  //
+  // The key names the component, the prop and the arguments the builder was called with - which
+  // is what tells two instances of one component apart, and what both tiers can spell alike.
+  static #carriedCount(module, propName, args, term) {
+    if (term.cardinality !== "count") {
+      return null;
+    }
+
+    const scope =
+      module === GlobalRegistry.get("connectPageModule") ? "page" : "all";
+
+    if (LocalDatabase.isSynced(scope)) {
+      return null;
+    }
+
+    const key = `${module}/${propName.value}/${args
+      .map((arg) => Interpreter.inspect(arg))
+      .join(",")}`;
+
+    return LocalDatabase.syncCounts[key] ?? null;
   }
 
   static #castProps(propsDom, moduleProxy) {
@@ -1164,6 +1195,12 @@ export default class Renderer {
     const term = ManuallyPortedElixirHologramQuery["normalize/1"](
       Interpreter.callAnonymousFunction(capture, args),
     );
+
+    const carried = Renderer.#carriedCount(module, propName, args, term);
+
+    if (carried !== null) {
+      return Type.integer(carried);
+    }
 
     const result = QueryKernel.run(term, {
       actorUserId: LocalDatabase.actorUserId,

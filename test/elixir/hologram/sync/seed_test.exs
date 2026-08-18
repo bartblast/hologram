@@ -15,7 +15,10 @@ defmodule Hologram.Sync.SeedTest do
   @module_3_type "Hologram.Test.Fixtures.Entity.Module3"
 
   setup do
-    on_exit(fn -> take() end)
+    on_exit(fn ->
+      take()
+      take_counts()
+    end)
 
     :ok
   end
@@ -165,6 +168,61 @@ defmodule Hologram.Sync.SeedTest do
     end
   end
 
+  describe "collect_count/4" do
+    test "records a count under the prop that answered it" do
+      collect_count(Module2, :total, [], 7)
+
+      assert take_counts() == %{"Hologram.Test.Fixtures.Entity.Module2/total/" => 7}
+    end
+
+    # Two instances of one component answer two counts, and what tells them apart is what their
+    # builders were called with.
+    test "keys instances apart by the arguments the builder was called with" do
+      collect_count(Module2, :total, ["p1"], 7)
+      collect_count(Module2, :total, ["p2"], 3)
+
+      assert take_counts() == %{
+               ~s(Hologram.Test.Fixtures.Entity.Module2/total/"p1") => 7,
+               ~s(Hologram.Test.Fixtures.Entity.Module2/total/"p2") => 3
+             }
+    end
+
+    test "spells every argument of a multi-argument builder" do
+      collect_count(Module2, :total, ["p1", true], 7)
+
+      assert take_counts() == %{~s(Hologram.Test.Fixtures.Entity.Module2/total/"p1",true) => 7}
+    end
+
+    test "keys props of one component apart" do
+      collect_count(Module2, :open_total, [], 7)
+      collect_count(Module2, :done_total, [], 3)
+
+      assert take_counts() == %{
+               "Hologram.Test.Fixtures.Entity.Module2/open_total/" => 7,
+               "Hologram.Test.Fixtures.Entity.Module2/done_total/" => 3
+             }
+    end
+
+    # The same prop of the same instance resolved twice is one answer, not two - the later one,
+    # which is what a re-render would have produced.
+    test "records one count per prop instance" do
+      collect_count(Module2, :total, ["p1"], 7)
+      collect_count(Module2, :total, ["p1"], 9)
+
+      assert take_counts() == %{~s(Hologram.Test.Fixtures.Entity.Module2/total/"p1") => 9}
+    end
+  end
+
+  describe "start/0" do
+    test "clears the counts a previous render gathered" do
+      collect_count(Module2, :total, [], 7)
+
+      start()
+
+      assert take_counts() == %{}
+    end
+  end
+
   describe "take/0" do
     test "returns nothing when no result was collected" do
       assert take() == %{}
@@ -178,6 +236,20 @@ defmodule Hologram.Sync.SeedTest do
       take()
 
       assert take() == %{}
+    end
+  end
+
+  describe "take_counts/0" do
+    test "returns nothing when no count was collected" do
+      assert take_counts() == %{}
+    end
+
+    test "leaves nothing behind for the next render" do
+      collect_count(Module2, :total, [], 7)
+
+      take_counts()
+
+      assert take_counts() == %{}
     end
   end
 end

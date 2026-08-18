@@ -24,6 +24,7 @@ defmodule Hologram.Sync.Seed do
   alias Hologram.Sync.WireData
 
   @key {__MODULE__, :entities}
+  @counts_key {__MODULE__, :counts}
 
   @doc """
   Clears what a previous render gathered and returns :ok.
@@ -35,6 +36,27 @@ defmodule Hologram.Sync.Seed do
   @spec start() :: :ok
   def start do
     Process.delete(@key)
+    Process.delete(@counts_key)
+
+    :ok
+  end
+
+  @doc """
+  Records the given count under the key naming the query prop that answered it.
+
+  A counting query answers with a number and no rows, so nothing about it can be re-derived from
+  a seeded pot - the client is told the number itself, and holds it until its own database is
+  complete enough to count.
+
+  The key names the component, the prop, and the arguments the builder was called with, which is
+  what tells two instances of one component apart - `inspect/1` spells the arguments, being the
+  spelling both tiers already agree on.
+  """
+  @spec collect_count(module, atom, list, integer) :: :ok
+  def collect_count(module, prop_name, args, count) do
+    collected = Map.put(gathered_counts(), count_key(module, prop_name, args), count)
+
+    Process.put(@counts_key, collected)
 
     :ok
   end
@@ -77,6 +99,22 @@ defmodule Hologram.Sync.Seed do
     end
   end
 
+  @doc """
+  Returns the counts gathered so far, keyed by query prop, and clears what was gathered.
+  """
+  @spec take_counts() :: %{String.t() => integer}
+  def take_counts do
+    counts = gathered_counts()
+
+    Process.delete(@counts_key)
+
+    counts
+  end
+
+  defp count_key(module, prop_name, args) do
+    "#{inspect(module)}/#{prop_name}/#{Enum.map_join(args, ",", &inspect/1)}"
+  end
+
   defp entities(%NotIncluded{}), do: []
 
   defp entities(nil), do: []
@@ -95,6 +133,8 @@ defmodule Hologram.Sync.Seed do
   defp entities(_count), do: []
 
   defp gathered, do: Process.get(@key, %{})
+
+  defp gathered_counts, do: Process.get(@counts_key, %{})
 
   # Ordered by id within each type, so that one render's seed is spelled the same way twice -
   # what a map hands its values over in follows the hashes of the keys.

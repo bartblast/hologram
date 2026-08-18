@@ -22,6 +22,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Template.Renderer.Module100
+  alias Hologram.Test.Fixtures.Template.Renderer.Module101
+  alias Hologram.Test.Fixtures.Template.Renderer.Module102
   alias Hologram.Test.Fixtures.Template.Renderer.Module89
   alias Hologram.Test.Fixtures.Template.Renderer.Module90
   alias Hologram.Test.Fixtures.Template.Renderer.Module91
@@ -187,8 +189,9 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module99, :dummy_module_99_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module100, :dummy_module_100_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module102, :dummy_module_102_digest)
 
-      stub(QueryCacheMock, :component_modules, fn -> [Module98, Module95] end)
+      stub(QueryCacheMock, :component_modules, fn -> [Module98, Module95, Module101] end)
       QueryCache.init(nil)
 
       :ok
@@ -276,6 +279,50 @@ defmodule Hologram.Template.RendererFromQueryTest do
       html = render_page_html(Module99)
 
       assert String.contains?(html, "actorUserId: null")
+    end
+  end
+
+  # A count has no rows behind it, so a seeded pot cannot re-derive one - the number itself
+  # travels, keyed by the prop instance that answered it.
+  describe "the counts a page hands its client" do
+    setup do
+      setup_asset_path_registry(AssetPathRegistryStub)
+      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
+
+      setup_asset_manifest_cache(AssetManifestCacheStub)
+      setup_page_digest_registry(PageDigestRegistryStub)
+
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module99, :dummy_module_99_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module102, :dummy_module_102_digest)
+
+      stub(QueryCacheMock, :component_modules, fn -> [Module101, Module98] end)
+      QueryCache.init(nil)
+
+      :ok
+    end
+
+    defp render_counts_page_html do
+      {html, _tree, _component_registry, _final_server_struct} =
+        render_page(Module102, %{}, %Server{}, @page_opts)
+
+      html
+    end
+
+    test "carries the count each instance of a count prop answered" do
+      create_entities()
+
+      html = render_counts_page_html()
+
+      assert String.contains?(
+               html,
+               ~s|syncCounts: {"#{inspect(Module101)}/total/false":1,"#{inspect(Module101)}/total/true":2}|
+             )
+    end
+
+    test "carries nothing for a page whose props count nothing" do
+      html = render_page_html(Module99)
+
+      assert String.contains?(html, "syncCounts: {}")
     end
   end
 

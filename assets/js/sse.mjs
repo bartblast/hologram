@@ -58,9 +58,17 @@ export default class Sse {
       return {};
     }
 
+    const pageModuleName = Interpreter.moduleExName(pageModule);
+
+    // The page this client greeted with - the one whose rows the server declares complete at the
+    // "page" scope, which is a narrower promise than "all" and arrives sooner. Navigation moves
+    // the current page and leaves this one behind, since only what the connect asked for is
+    // covered by that scope.
+    GlobalRegistry.set("connectPageModule", pageModuleName);
+
     const greeting = {
       model_hash: sync.modelHash,
-      page: Interpreter.moduleExName(pageModule),
+      page: pageModuleName,
       protocol_version: sync.protocolVersion,
     };
 

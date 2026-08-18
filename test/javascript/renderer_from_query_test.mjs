@@ -6,6 +6,7 @@ import {
   defineRuntimeGlobals,
 } from "./support/helpers.mjs";
 
+import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
@@ -148,6 +149,7 @@ describe("Renderer from_query props", () => {
     Model.reset();
     LocalDatabase.reset();
     LocalDatabase.actorUserId = null;
+    GlobalRegistry.set("connectPageModule", null);
 
     LocalDatabase.putRow(TASK, taskRow("t1", "Buy milk", false));
     LocalDatabase.putRow(TASK, taskRow("t2", "Call Ann", true));
@@ -293,6 +295,167 @@ describe("Renderer from_query props", () => {
     render(componentNode("MyApp.Counting"));
 
     assert.deepStrictEqual(renderedProp("count"), Type.integer(3));
+  });
+
+  // A count has no rows behind it, so a seeded pot cannot re-derive one - the number the render
+  // answered with is held until this client can count for itself.
+  describe("a count the page carried", () => {
+    const countCapture = () =>
+      builder(1, (done) =>
+        ManuallyPortedElixirHologramQuery["count/1"](
+          filter(
+            Type.alias(TASK),
+            Type.list([Type.tuple([Type.atom("done"), done])]),
+          ),
+        ),
+      );
+
+    const defineCounting = (moduleName) => {
+      defineComponent(moduleName, [
+        propDefinition("done", []),
+        queryProp("count", countCapture()),
+      ]);
+
+      globalThis.Hologram.sync.propParams = {[moduleName]: {count: ["done"]}};
+    };
+
+    const renderCounting = (moduleName) =>
+      render(
+        componentNode(moduleName, [
+          Type.tuple([
+            Type.bitstring("done"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.boolean(false)])],
+            ]),
+          ]),
+        ]),
+      );
+
+    it("answers with the carried count before the marker arrives", () => {
+      defineCounting("MyApp.Carried");
+
+      LocalDatabase.syncCounts = {"MyApp.Carried/count/false": 42};
+
+      renderCounting("MyApp.Carried");
+
+      assert.deepStrictEqual(renderedProp("count"), Type.integer(42));
+    });
+
+    it("counts locally once the whole pot is complete", () => {
+      defineCounting("MyApp.Complete");
+
+      LocalDatabase.syncCounts = {"MyApp.Complete/count/false": 42};
+      LocalDatabase.markSynced("all");
+
+      renderCounting("MyApp.Complete");
+
+      assert.deepStrictEqual(renderedProp("count"), Type.integer(2));
+    });
+
+    // The page scope covers the page this client connected on, and nothing else - a component on
+    // any other page is only promised its rows at "all".
+    it("counts locally at the page marker on the page it connected with", () => {
+      defineCounting("MyApp.ConnectPage");
+
+      GlobalRegistry.set("connectPageModule", "MyApp.ConnectPage");
+      LocalDatabase.syncCounts = {"MyApp.ConnectPage/count/false": 42};
+      LocalDatabase.markSynced("page");
+
+      renderCounting("MyApp.ConnectPage");
+
+      assert.deepStrictEqual(renderedProp("count"), Type.integer(2));
+    });
+
+    it("keeps carrying at the page marker for a page reached since", () => {
+      defineCounting("MyApp.NavigatedTo");
+
+      GlobalRegistry.set("connectPageModule", "MyApp.SomeOtherPage");
+      LocalDatabase.syncCounts = {"MyApp.NavigatedTo/count/false": 42};
+      LocalDatabase.markSynced("page");
+
+      renderCounting("MyApp.NavigatedTo");
+
+      assert.deepStrictEqual(renderedProp("count"), Type.integer(42));
+    });
+
+    // Two instances of one component answer two counts, and the arguments their builders were
+    // called with are what tell them apart.
+    it("reads the count of the instance that asked", () => {
+      defineCounting("MyApp.TwoInstances");
+
+      LocalDatabase.syncCounts = {
+        "MyApp.TwoInstances/count/false": 42,
+        "MyApp.TwoInstances/count/true": 7,
+      };
+
+      renderCounting("MyApp.TwoInstances");
+
+      assert.deepStrictEqual(renderedProp("count"), Type.integer(42));
+    });
+
+    // Nothing carried is not zero carried: a count the page never answered is one this client
+    // has to work out for itself, however incomplete its answer.
+    it("counts locally when the page carried nothing for it", () => {
+      defineCounting("MyApp.NothingCarried");
+
+      renderCounting("MyApp.NothingCarried");
+
+      assert.deepStrictEqual(renderedProp("count"), Type.integer(2));
+    });
+
+    // Two arguments are two values, not their concatenation: 1 and 23 must not read the key
+    // 12 and 3 wrote.
+    it("separates the arguments a multi-argument builder was called with", () => {
+      const capture = builder(2, (_from, _to) =>
+        ManuallyPortedElixirHologramQuery["count/1"](Type.alias(TASK)),
+      );
+
+      defineComponent("MyApp.TwoArgs", [
+        propDefinition("from", []),
+        propDefinition("to", []),
+        queryProp("count", capture),
+      ]);
+
+      globalThis.Hologram.sync.propParams = {
+        "MyApp.TwoArgs": {count: ["from", "to"]},
+      };
+
+      LocalDatabase.syncCounts = {
+        "MyApp.TwoArgs/count/1,23": 42,
+        "MyApp.TwoArgs/count/123": 7,
+      };
+
+      render(
+        componentNode("MyApp.TwoArgs", [
+          Type.tuple([
+            Type.bitstring("from"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.integer(1)])],
+            ]),
+          ]),
+          Type.tuple([
+            Type.bitstring("to"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.integer(23)])],
+            ]),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(renderedProp("count"), Type.integer(42));
+    });
+
+    it("leaves a non-counting prop alone", () => {
+      const capture = builder(0, () => Type.alias(TASK));
+
+      defineComponent("MyApp.NotCounting", [queryProp("tasks", capture)]);
+
+      LocalDatabase.syncCounts = {"MyApp.NotCounting/tasks/": 42};
+
+      render(componentNode("MyApp.NotCounting"));
+
+      assert.equal(renderedProp("tasks").data.length, 3);
+    });
   });
 
   it("boxes the entities an included relationship embeds", () => {

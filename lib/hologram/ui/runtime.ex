@@ -39,6 +39,7 @@ defmodule Hologram.UI.Runtime do
               selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER,
               subReceiptAdds: $SUB_RECEIPT_ADDS_JS_PLACEHOLDER,
               subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER,
+              syncCounts: $SYNC_COUNTS_JS_PLACEHOLDER,
               syncSeed: $SYNC_SEED_JS_PLACEHOLDER
             };
           };
