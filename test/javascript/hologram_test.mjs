@@ -1355,6 +1355,8 @@ describe("Hologram", () => {
       // A navigation opens the pre-mount window and only a mount closes it, which these tests
       // never reach - so it is closed here rather than left open for whatever runs next.
       Hologram.isMountPending = false;
+      Hologram.domEpoch = 0;
+      Hologram.registryEpoch = 0;
     });
 
     // A page the client cannot ask for is one only the browser can reach.
@@ -1433,6 +1435,18 @@ describe("Hologram", () => {
 
         assert.include(document.body.textContent, "new content");
         assert.isFalse(globalThis.Hologram.pageScriptLoaded);
+      });
+
+      // The swap advances the epoch of what is displayed while the registry's epoch stays put -
+      // the gap between the two is what marks the transition window until the mount closes it.
+      it("advances the epoch of what is on screen ahead of the registry", async () => {
+        assert.equal(Hologram.domEpoch, 0);
+        assert.equal(Hologram.registryEpoch, 0);
+
+        await Hologram.loadNewPage("/target", payloadFor("epoch1"));
+
+        assert.equal(Hologram.domEpoch, 1);
+        assert.equal(Hologram.registryEpoch, 0);
       });
 
       // The destination is on screen from the patch onward, but its mount waits on the bundle -

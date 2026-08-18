@@ -72,10 +72,18 @@ export default class Hologram {
   static #PAGE_SNAPSHOT_KEY_PREFIX = "hologram_page_snapshot_";
 
   // Made public to make tests easier
+  // The epoch of the page whose markup is on screen.
+  static domEpoch = 0;
+
+  // Made public to make tests easier
   static isMountPending = false;
 
   // Made public to make tests easier
   static prefetchedPages = new Map();
+
+  // Made public to make tests easier
+  // The epoch of the page the component registry answers for.
+  static registryEpoch = 0;
 
   // Made public to make tests easier
   static virtualDocument = null;
@@ -93,6 +101,9 @@ export default class Hologram {
 
   // In-memory cache for page snapshots (fastest access)
   static #pageSnapshots = new Map();
+
+  // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
+  static #deadEpochs = new Set();
 
   static #historyId = null;
   static #isInitiated = false;
@@ -1156,12 +1167,20 @@ export default class Hologram {
   // and the feature tests read. handleUncaughtError/1 passes it over rather than showing the
   // overlay, that being reserved for errors a page raised.
   static #loadPageBundle(src) {
+    // The epoch of the navigation this fetch serves - whichever pointer the transition advanced.
+    // A later navigation may supersede it before this resolves, and the failure of a superseded
+    // fetch says nothing about the navigation now in flight.
+    const epoch = Math.max($.domEpoch, $.registryEpoch);
+
     const script = document.createElement("script");
 
     script.src = src;
     script.fetchpriority = "high";
 
     script.onerror = () => {
+      // The mount that would have released this epoch's held dispatches is never going to run.
+      $.#deadEpochs.add(epoch);
+
       // The mount this navigation was waiting on is never going to run, so nothing would ever
       // release what dispatchAction is holding for it. Reopening the gate does not make a
       // dispatch made from here on correct - the registry still answers for the page being left -
@@ -1186,6 +1205,10 @@ export default class Hologram {
     // Cleared before the mount's own work, so everything it schedules is armed normally and the
     // release below does not simply hold the same actions again.
     $.isMountPending = false;
+
+    // Whichever pointer ran ahead during the transition, the mount is where they converge: from
+    // here the page on screen and the page the registry answers for are the same page.
+    $.domEpoch = $.registryEpoch = Math.max($.domEpoch, $.registryEpoch);
 
     // Every page-entry path funnels through here (client-side navigation, back/forward
     // restoration, initial mount), so this is where dispatches still pending from the previous
@@ -1333,6 +1356,11 @@ export default class Hologram {
     // buffered and never got to make - that page is being left too.
     $.isMountPending = true;
     $.#pendingJsInteropActions = [];
+
+    // The patch below puts the destination's markup on screen and runs its scripts, so the epoch
+    // of what is displayed advances here, ahead of the registry - the mount brings the registry
+    // level.
+    $.domEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
 
     const pageModule = Interpreter.evaluateJavaScriptExpression(
       payload.pageModule,
@@ -1483,6 +1511,11 @@ export default class Hologram {
     } = pageSnapshot;
 
     ComponentRegistry.populate(componentRegistryEntries);
+
+    // A restore swaps the registry while the previous page is still on screen - the mirror of a
+    // forward navigation, where the markup runs ahead instead. The epoch of what the registry
+    // answers for advances here; the mount brings the displayed side level.
+    $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
 
     App.instanceId = instanceId;
     App.subscriptionReceiptRegistry.populate(subscriptionReceipts);
