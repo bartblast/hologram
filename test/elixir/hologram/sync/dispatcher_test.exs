@@ -219,6 +219,13 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
       refute_receive {:dispatched, _transactions, _place}, 100
 
+      # The round is awaited rather than timed. Its non-empty sibling gets that for free - it
+      # waits for the delivery - where an empty round delivers nothing to wait for, and a
+      # refute_receive proves only that nothing ARRIVED. A synchronous call to the dispatcher is
+      # the barrier: it is answered after the wake sent before it was handled, and the edge is
+      # recorded inside that handler.
+      :sys.get_state(dispatcher)
+
       recorded = ReadEdge.get(read_edge)
 
       assert is_integer(recorded)
