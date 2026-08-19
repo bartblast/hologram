@@ -35,6 +35,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Component.Module14, as: Component14
   alias Hologram.Test.Fixtures.Component.Module22, as: Component22
   alias Hologram.Test.Fixtures.Component.Module23, as: Component23
+  alias Hologram.Test.Fixtures.Component.Module25, as: Component25
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
 
@@ -324,6 +325,15 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
     test "yields no entries for zero-arity captures" do
       assert extract_prop_params(Module1) == []
+    end
+
+    test "raises when clauses name one argument position differently" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Component.Module25 names argument 1 differently across its clauses (:min_b, :max_b) - one argument position binds one prop, and which prop it is has to be known before any clause is chosen, so every clause must name it alike. Rename them to the prop this argument binds, leave the position a literal or an underscored name in the clauses that do not use it, or bind through an adapter naming it once: from_query: fn min_b -> your_query(min_b) end"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_prop_params(Component25)
+      end
     end
   end
 

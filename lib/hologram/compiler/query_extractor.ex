@@ -66,6 +66,15 @@ defmodule Hologram.Compiler.QueryExtractor do
   yields nil. Zero-arity captures and modules without prop declarations yield no
   entries.
 
+  One position takes ONE name across every clause. The name is what says which
+  prop feeds the argument, and the value is chosen before clause dispatch happens,
+  so two clauses naming a position differently pose a question nothing can answer.
+  Clauses that do not use a position leave it a literal or an underscored name and
+  cost nothing.
+
+  Raises Hologram.CompileError when a position carries more than one distinct
+  name.
+
   The names are read from compiled beams rather than recorded by the prop macro
   into the prop's own opts, because a remote capture's names are unreadable while
   the consuming component compiles: a target module compiling in the same batch
@@ -505,10 +514,30 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
-  defp merged_param_names(clauses, arity) do
+  # A position named by some clauses and left a literal by others merges to the one name - that is
+  # what this is for, and it is how a `def q(nil)` clause sits beside a `def q(min_b)` one. Two
+  # clauses naming it DIFFERENTLY is the shape that cannot merge, since the caller must pick a
+  # prop's value before any clause is chosen.
+  defp merged_param_names(module, prop_name, clauses, arity) do
     Enum.map(0..(arity - 1), fn index ->
-      Enum.find_value(clauses, &param_name(&1, index))
+      clauses
+      |> Enum.map(&param_name(&1, index))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+      |> merged_param_name!(module, prop_name, index)
     end)
+  end
+
+  defp merged_param_name!([], _module, _prop_name, _index), do: nil
+
+  defp merged_param_name!([name], _module, _prop_name, _index), do: name
+
+  defp merged_param_name!(names, module, prop_name, index) do
+    spelled = Enum.map_join(names, ", ", &inspect/1)
+
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(prop_name)} in #{inspect(module)} names argument #{index + 1} differently across its clauses (#{spelled}) - one argument position binds one prop, and which prop it is has to be known before any clause is chosen, so every clause must name it alike. Rename them to the prop this argument binds, leave the position a literal or an underscored name in the clauses that do not use it, or bind through an adapter naming it once: from_query: fn #{hd(names)} -> your_query(#{hd(names)}) end"
   end
 
   defp module_funs(module) do
@@ -536,7 +565,7 @@ defmodule Hologram.Compiler.QueryExtractor do
       {_target_module, clauses} = resolve_capture_clauses!(module, name, capture)
       arity = Function.info(capture)[:arity]
 
-      [{name, merged_param_names(clauses, arity)}]
+      [{name, merged_param_names(module, name, clauses, arity)}]
     else
       _absent_zero_arity_or_non_capture -> []
     end
