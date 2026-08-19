@@ -8,17 +8,25 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias HologramFeatureTests.Entities.Product
+  alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Queries.Page2
 
   # The inversion the sync tests were waiting for: those assert what the SERVER says on the wire,
   # and these assert what the CLIENT does with it. Nothing here dispatches an action or reloads -
   # a row moves in Postgres, and the DOM that read it through a from_query prop follows, because
   # the prop re-resolves against the client's own database on every render the stream schedules.
+
+  # Both tables truncate in one statement: the review table's foreign key to the product table
+  # makes Postgres reject truncating the referenced table alone.
   setup do
     await_evaluator_drain()
 
-    statement = ~s(TRUNCATE "hologram_data"."#{Mapper.table_name(Product)}")
-    {:ok, _result} = Connection.query(statement, [])
+    tables =
+      Enum.map_join([Product, Review], ", ", fn entity_type ->
+        ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
+      end)
+
+    {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
 
     :ok
   end
