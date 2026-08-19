@@ -6,6 +6,7 @@ defmodule HologramFeatureTests.PermissionChecksTest do
 
   alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
+  alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
@@ -47,7 +48,9 @@ defmodule HologramFeatureTests.PermissionChecksTest do
   end
 
   defp session_user do
-    Enum.find(Hologram.DB.run(User), &(&1.email == "manager@example.com"))
+    User
+    |> DB.run()
+    |> Enum.find(&(&1.email == "manager@example.com"))
   end
 
   feature "shows what a grant arriving on the stream allows", %{session: session} do
