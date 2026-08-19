@@ -25,11 +25,11 @@ defmodule Hologram.Query.Interpreter do
 
   `:actor_user_id` in the options is who is asking, for the predicates that name the acting user.
   An anonymous one matches nothing, the way an actor-referencing statement matches nothing when
-  there is no actor to compare against. `:bindings` gives the values of the term's params, none of
-  which may be nil - neither as a value nor as an element of a list - which is what the database
-  refuses one for.
+  there is no actor to compare against. `:bindings` gives the values of the term's params, every
+  one of which the term names, and none of which may be nil - neither as a value nor as an element
+  of a list - which is what the database refuses one for.
 
-  Raises ArgumentError on a nil binding.
+  Raises ArgumentError on a missing or nil binding.
   """
   @spec run(%{atom => any}, %{atom => any}, keyword) :: list(struct) | struct | integer | nil
   def run(term, database, opts \\ []) do
@@ -191,10 +191,12 @@ defmodule Hologram.Query.Interpreter do
   end
 
   defp resolve({:param, name}, opts) do
-    opts
-    |> Keyword.get(:bindings, %{})
-    |> Map.fetch!(name)
-    |> validate_binding!(name)
+    bindings = Keyword.get(opts, :bindings, %{})
+
+    case Map.fetch(bindings, name) do
+      :error -> raise ArgumentError, message: "missing value for param #{inspect(name)}"
+      {:ok, value} -> validate_binding!(value, name)
+    end
   end
 
   defp resolve(operand, opts) when is_list(operand) do

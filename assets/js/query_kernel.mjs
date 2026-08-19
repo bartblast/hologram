@@ -1,5 +1,6 @@
 "use strict";
 
+import HologramRuntimeError from "./errors/runtime_error.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Model from "./model.mjs";
 
@@ -191,7 +192,36 @@ export default class QueryKernel {
       return context.actorUserId ?? QueryKernel.#NO_ACTOR;
     }
 
-    return (context.bindings ?? {})[operand.param];
+    return QueryKernel.#resolveParam(operand.param, context);
+  }
+
+  // Refused in the three cases the reference refuses, and in its words: identity with it covers
+  // what each REFUSES, not only what each answers, and this is the executor whose answer reaches
+  // a screen. A predicate about the rows that have no value is written as one, in the query,
+  // where the operator can be chosen to suit - a LITERAL nil in a term is a value like any other
+  // and never comes through here.
+  static #resolveParam(name, context) {
+    const bindings = context.bindings ?? {};
+
+    if (!(name in bindings)) {
+      throw new HologramRuntimeError(`missing value for param :${name}`);
+    }
+
+    const value = bindings[name];
+
+    if (value === null || value === undefined) {
+      throw new HologramRuntimeError(
+        `nil value for param :${name} - use an explicit nil predicate instead`,
+      );
+    }
+
+    if (Array.isArray(value) && value.some((element) => element == null)) {
+      throw new HologramRuntimeError(
+        `nil element in the list for param :${name} - use an explicit nil predicate instead`,
+      );
+    }
+
+    return value;
   }
 
   // Every key of the order is spent before two rows are called equal, and the last of them is

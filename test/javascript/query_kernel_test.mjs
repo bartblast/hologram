@@ -2,6 +2,7 @@
 
 import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
+import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
 import QueryKernel from "../../assets/js/query_kernel.mjs";
@@ -168,6 +169,41 @@ describe("QueryKernel", () => {
       const context = {bindings: {priority: 3}};
 
       assert.deepEqual(matching(filter, context), ["ada", "bob"]);
+    });
+
+    // The reference raises on each of these, and in these words - this side is the one whose
+    // answer reaches a screen, so answering where the server refuses is the divergence that
+    // shows. A LITERAL nil in a term is a value like any other and never comes through here.
+    it("refuses a param the bindings do not name", () => {
+      const filter = [["priority", "==", {param: "priority"}]];
+
+      assert.throw(
+        () => matching(filter, {}),
+        HologramRuntimeError,
+        "missing value for param :priority",
+      );
+    });
+
+    it("refuses a nil value bound to a param", () => {
+      const filter = [["priority", "==", {param: "priority"}]];
+      const context = {bindings: {priority: null}};
+
+      assert.throw(
+        () => matching(filter, context),
+        HologramRuntimeError,
+        "nil value for param :priority - use an explicit nil predicate instead",
+      );
+    });
+
+    it("refuses a nil element in a list bound to a param", () => {
+      const filter = [["priority", "in", {param: "priorities"}]];
+      const context = {bindings: {priorities: [null, 3]}};
+
+      assert.throw(
+        () => matching(filter, context),
+        HologramRuntimeError,
+        "nil element in the list for param :priorities - use an explicit nil predicate instead",
+      );
     });
   });
 
