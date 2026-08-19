@@ -131,9 +131,15 @@ defmodule Hologram.Compiler do
     Map.new(page_modules, fn page_module ->
       window_ids = page_window_ids(page_module, call_graph, analysis)
 
+      # Deduplicated because the grants window is derivable by an ordinary query: the grant entity
+      # is an entity type like any other, so a page listing grants and checking permissions reaches
+      # one window by two routes - and a list naming it twice is subscribed to twice, monitored
+      # twice, and rounded twice for one set of rows.
       window_ids =
         if page_module in permission_checking_pages do
-          Enum.sort([grants_window_id() | window_ids])
+          [grants_window_id() | window_ids]
+          |> Enum.uniq()
+          |> Enum.sort()
         else
           window_ids
         end

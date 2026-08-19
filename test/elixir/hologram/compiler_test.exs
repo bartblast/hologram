@@ -31,6 +31,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
+  alias Hologram.Test.Fixtures.Page.Module12, as: PageModule12
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
@@ -422,6 +423,17 @@ defmodule Hologram.CompilerTest do
       assert Registry.id(Auth.grants_window()) in page_windows[PageModule8]
       assert length(page_windows[PageModule8]) == 2
     end
+
+    # The grant entity is an entity type like any other, so a page's own query can derive the very
+    # window the permission check downloads - and then it is named once rather than subscribed to
+    # twice.
+    test "names the grants window once for a page whose own query derives it", %{
+      call_graph: call_graph
+    } do
+      page_windows = build_page_windows([PageModule12], call_graph, [PageModule12])
+
+      assert page_windows[PageModule12] == [Registry.id(Auth.grants_window())]
+    end
   end
 
   # The gate reads the graph the bundles come from, so what registers the window is what actually
@@ -488,19 +500,23 @@ defmodule Hologram.CompilerTest do
       refute Map.has_key?(sync_constants.prop_params, ComponentModule16)
     end
 
-    # No query names the grant type - its window is registered rather than extracted - so a
-    # client checking permissions locally would hold rows of a type the model never described.
+    # The grant type reaches the model by being CHECKED rather than by being queried - its window
+    # is registered rather than extracted - so a client checking permissions locally would
+    # otherwise hold rows of a type the model never described. Both cases run over one page that
+    # queries no grants, so the flag is the only thing that differs between them.
     test "names the grant type when a page checks permissions on the client", %{
       call_graph: call_graph
     } do
-      sync_constants = build_sync_constants(Reflection.list_pages(), call_graph, true)
+      sync_constants = build_sync_constants([PageModule8], call_graph, true)
 
       assert MapSet.member?(sync_constants.entity_types, RoleGrant)
     end
 
     test "leaves the grant type out when no page checks permissions on the client", %{
-      sync_constants: sync_constants
+      call_graph: call_graph
     } do
+      sync_constants = build_sync_constants([PageModule8], call_graph, false)
+
       refute MapSet.member?(sync_constants.entity_types, RoleGrant)
     end
 
