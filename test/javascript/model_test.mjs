@@ -161,6 +161,21 @@ describe("Model", () => {
       );
     });
 
+    // The wire can spell more precision than a datetime holds, and Elixir reading the same string
+    // keeps the first six digits - so this side keeps the same six, rather than a precision the
+    // struct cannot carry.
+    it("boxes a datetime carrying more fractional digits than microseconds", () => {
+      const boxed = Model.box(
+        TASK,
+        row({updated_at: "2026-08-16T15:18:13.0225081Z"}),
+      );
+
+      assert.deepEqual(
+        field(field(boxed, "updated_at"), "microsecond"),
+        Type.tuple([Type.integer(22508), Type.integer(6)]),
+      );
+    });
+
     it("boxes an enum label as the atom it names", () => {
       const boxed = Model.box(TASK, row());
 

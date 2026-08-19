@@ -154,8 +154,14 @@ export default class Model {
       throw new HologramRuntimeError(`invalid datetime on the wire: ${value}`);
     }
 
-    const [_full, year, month, day, hour, minute, second, fraction = ""] =
+    const [_full, year, month, day, hour, minute, second, rawFraction = ""] =
       match;
+
+    // A datetime holds microseconds and no more, so digits past the sixth are dropped rather
+    // than read - which is what Elixir does with the same string, and being the same is the
+    // whole point of this side. Keeping them would put a precision outside 0..6 in the struct
+    // and make an amount that no longer means what its digits say.
+    const fraction = rawFraction.slice(0, 6);
 
     const microsecond = Type.tuple([
       Type.integer(fraction === "" ? 0 : parseInt(fraction.padEnd(6, "0"), 10)),
