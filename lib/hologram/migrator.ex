@@ -29,6 +29,16 @@ defmodule Hologram.Migrator do
   # table, so it waits for them, and they wait for it. Frozen forever for the same reason as the
   # key above. Provenance (for uniqueness, not for re-derivation): first 8 bytes of
   # md5("hologram_index_repair") as a signed int64.
+  #
+  # EVERY concurrent index build in this module runs under this key - the repair path and the
+  # applier's tail alike. Two concurrent builds on one relation deadlock each other directly
+  # (each waits on the other's virtual transaction), so a builder this key does not cover is a
+  # deadlock on every deploy where two nodes reach their builds together.
+  #
+  # Taken ONLY with pg_try_advisory_lock, never pg_advisory_lock: a session queued on the
+  # blocking form holds a virtual transaction for as long as it waits, and a concurrent build
+  # waits on every virtual transaction that could see the table - so a queued waiter and the
+  # builder it waits for deadlock. A loser polls instead.
   @index_advisory_lock_key 6_059_159_047_318_510_073
 
   # How often a node that missed the index lock looks again. A politeness knob, not a
@@ -314,7 +324,7 @@ defmodule Hologram.Migrator do
     if invalid_indexes() == [] and missing_indexes(mapping) == [] do
       :ok
     else
-      with_repair_connection(fn -> rebuild_and_create_indexes(mapping) end)
+      with_index_build_connection(fn -> rebuild_and_create_indexes(mapping) end)
     end
   end
 
@@ -364,11 +374,21 @@ defmodule Hologram.Migrator do
         end
       end)
 
-    if status == :applied do
-      Enum.each(render.tail, &execute_tail_op/1)
+    if status == :applied and render.tail != [] do
+      execute_tail_ops(render.tail)
     end
 
     render.post_model
+  end
+
+  # Acquired by polling, never by queuing - see @index_advisory_lock_key. The work behind the
+  # lock is ours to do, so unlike the repair path's loser there is no done-by-someone-else exit:
+  # the loop ends by winning the lock.
+  defp acquire_index_build_lock do
+    unless try_index_advisory_lock?() do
+      Process.sleep(@index_repair_poll_interval_ms)
+      acquire_index_build_lock()
+    end
   end
 
   defp apply_op(%{op: :add_column, backfill: value} = op, _mapping) do
@@ -571,6 +591,26 @@ defmodule Hologram.Migrator do
     execute_statements(DDL.statements(op))
   end
 
+  # A tail op is a concurrent index build, so it is a BUILDER and runs like the other one: on a
+  # session of its own (the pool can put the lock and the statement on different connections),
+  # under the builder lock. Unlocked, another node that finds the chain applied reaches its
+  # repair while this build is mid-flight, reads the half-built index as broken, and REINDEXes
+  # it - two concurrent builds on one relation, waiting on each other's virtual transactions.
+  # The lock is also what tells that node in-progress apart from abandoned: it polls until this
+  # session is done and then finds nothing to repair.
+  defp execute_tail_ops(tail) do
+    with_index_build_connection(fn ->
+      acquire_index_build_lock()
+
+      try do
+        Enum.each(tail, &execute_tail_op/1)
+      after
+        {:ok, _result} =
+          Connection.query("SELECT pg_advisory_unlock($1)", [@index_advisory_lock_key])
+      end
+    end)
+  end
+
   defp fill_column(table, column, encoded_value) do
     fill_statement = DDL.fill_statement(table, column)
 
@@ -718,9 +758,10 @@ defmodule Hologram.Migrator do
   end
 
   # Opened against the database currently connected rather than the configured one:
-  # they are the same at boot, and following the caller keeps the repair honest wherever
-  # else the applier is pointed.
-  defp with_repair_connection(fun) do
+  # they are the same at boot, and following the caller keeps the builds honest wherever
+  # else the applier is pointed. A session of its own, because the builder lock is
+  # session-scoped and the pool can put the lock and the build on different connections.
+  defp with_index_build_connection(fun) do
     {:ok, %{rows: [[database]]}} = Connection.query("SELECT current_database()")
     connection_opts = Config.connection_opts(database: database)
     {:ok, connection_pid} = Postgrex.start_link(connection_opts)
