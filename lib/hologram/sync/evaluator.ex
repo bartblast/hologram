@@ -82,6 +82,11 @@ defmodule Hologram.Sync.Evaluator do
     # No terminate/2 comes with it, deliberately. Nothing is cleaned up on the way out - what an
     # evaluator leaves behind is cleared by the NEXT one at start, below, because that is the one
     # moment reachable however the last one ended.
+    #
+    # And no {:EXIT, ...} clause below, because none can arrive: the supervisor that starts this is
+    # its only link, and a gen_server consumes ITS parent's exit itself rather than passing it to
+    # handle_info. Subscribers are monitored, never linked - a link to anything else would need
+    # that clause, and would be adding it for a message that could then actually come.
     Process.flag(:trap_exit, true)
 
     window_id = Keyword.fetch!(opts, :window_id)
