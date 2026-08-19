@@ -16,6 +16,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
+  alias Hologram.Test.Fixtures.Template.Renderer.Module104
   alias Hologram.Test.Fixtures.Template.Renderer.Module11
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
@@ -2090,6 +2091,29 @@ defmodule Hologram.Template.RendererTest do
       assert registry["layout"].struct.state.observed_cid == "layout"
     end
 
+    # A token is a JavaScript expression and means nothing outside a script, so one that reaches
+    # the markup through what someone typed stays the text it is. Substituting there would put a
+    # value into an attribute along with the quotes that end it.
+    test "leaves a placeholder the markup carries as text and in an attribute alone" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module104,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      {html, tree, _component_registry, _server_struct} =
+        render_page(Module104, %{label: "$PAGE_PARAMS_JS_PLACEHOLDER"}, @server, @opts)
+
+      assert String.contains?(
+               html,
+               ~s(<div title="$PAGE_PARAMS_JS_PLACEHOLDER">$PAGE_PARAMS_JS_PLACEHOLDER</div>)
+             )
+
+      # And the two projections say the same thing, which is what lets a navigating client adopt
+      # the served document rather than rebuild it.
+      assert print_dom(tree) == html
+    end
+
     test "returns the tree the HTML is printed from" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
@@ -2473,75 +2497,6 @@ defmodule Hologram.Template.RendererTest do
 
       assert result ==
                {:element, "script", [{"data-info", [text: "$SELF_ECHOES_JS_PLACEHOLDER"]}], []}
-    end
-  end
-
-  describe "interpolate_self_echoes_js/2" do
-    test "substitutes the placeholder with the encoded list of actions" do
-      html = ~s'before selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER after'
-
-      actions = [
-        %Hologram.Component.Action{
-          name: :my_action,
-          params: %{text: "hi"},
-          target: "page"
-        }
-      ]
-
-      result = Renderer.interpolate_self_echoes_js(html, actions)
-
-      assert result ==
-               ~s'before selfEchoes: Type.list([Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action")], [Type.atom("params"), Type.map([[Type.atom("text"), Type.bitstring("hi")]])], [Type.atom("target"), Type.bitstring("page")]])]) after'
-    end
-
-    test "substitutes the placeholder with an empty list when no actions are provided" do
-      html = ~s'before selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER after'
-
-      result = Renderer.interpolate_self_echoes_js(html, [])
-
-      assert result == ~s'before selfEchoes: Type.list([]) after'
-    end
-  end
-
-  describe "interpolate_sub_receipt_adds_js/2" do
-    test "substitutes the placeholder with the encoded list of subscription receipts" do
-      html = ~s'before subReceiptAdds: $SUB_RECEIPT_ADDS_JS_PLACEHOLDER after'
-
-      sub_receipt_adds = [{:room_a, "page", "signed-token"}]
-
-      result = Renderer.interpolate_sub_receipt_adds_js(html, sub_receipt_adds)
-
-      assert result ==
-               ~s'before subReceiptAdds: Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page"), Type.bitstring("signed-token")])]) after'
-    end
-
-    test "substitutes the placeholder with an empty list when no receipts are provided" do
-      html = ~s'before subReceiptAdds: $SUB_RECEIPT_ADDS_JS_PLACEHOLDER after'
-
-      result = Renderer.interpolate_sub_receipt_adds_js(html, [])
-
-      assert result == ~s'before subReceiptAdds: Type.list([]) after'
-    end
-  end
-
-  describe "interpolate_sub_receipt_drops_js/2" do
-    test "substitutes the placeholder with the encoded list of subscription drops" do
-      html = ~s'before subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER after'
-
-      sub_receipt_drops = [{:room_a, "page"}]
-
-      result = Renderer.interpolate_sub_receipt_drops_js(html, sub_receipt_drops)
-
-      assert result ==
-               ~s'before subReceiptDrops: Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])]) after'
-    end
-
-    test "substitutes the placeholder with an empty list when no drops are provided" do
-      html = ~s'before subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER after'
-
-      result = Renderer.interpolate_sub_receipt_drops_js(html, [])
-
-      assert result == ~s'before subReceiptDrops: Type.list([]) after'
     end
   end
 

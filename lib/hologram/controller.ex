@@ -458,11 +458,14 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       {:rendered, conn, result} ->
+        # Interpolated into the TREE and printed from there, the way the navigation path does it -
+        # substituting into the printed document instead would reach text and attribute values a
+        # page renders from what someone typed, where a token means nothing and an inserted value
+        # brings quotes that end the attribute it lands in.
         final_html =
-          result.html
-          |> Renderer.interpolate_self_echoes_js(result.self_echoes)
-          |> Renderer.interpolate_sub_receipt_adds_js(result.sub_receipt_adds)
-          |> Renderer.interpolate_sub_receipt_drops_js(result.sub_receipt_drops)
+          result.tree
+          |> Renderer.interpolate_js_in_tree(realtime_js(result))
+          |> Renderer.print_dom()
 
         conn
         |> Controller.html(final_html)
@@ -567,18 +570,7 @@ defmodule Hologram.Controller do
         # into the tree's scripts, so the tree describes the page completely. Encoded the way that
         # path encodes them - through the client encoder, which strips server-only attribute
         # values - since the same page served either way must not say more one way than the other.
-        self_echoes_js = Encoder.encode_client_term!(result.self_echoes)
-        sub_receipt_adds_js = Encoder.encode_client_term!(result.sub_receipt_adds)
-        sub_receipt_drops_js = Encoder.encode_client_term!(result.sub_receipt_drops)
-
-        # One pass over the three, for the reason Renderer.interpolate_js/2 carries: a sequence
-        # of substitutions reads what the ones before it inserted.
-        tree =
-          Renderer.interpolate_js_in_tree(result.tree, %{
-            "$SELF_ECHOES_JS_PLACEHOLDER" => self_echoes_js,
-            "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER" => sub_receipt_adds_js,
-            "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER" => sub_receipt_drops_js
-          })
+        tree = Renderer.interpolate_js_in_tree(result.tree, realtime_js(result))
 
         payload =
           build_page_data_payload(%{
@@ -811,6 +803,18 @@ defmodule Hologram.Controller do
   # Marks a response as carrying page data, so the client can tell one from a response a page's
   # middleware wrote itself. Status alone cannot: middleware is free to answer 200 with a body of
   # its own, which is a page's answer rather than a page.
+  # The three values the render could not settle: self echoes and the two receipt lists are a
+  # Realtime concern, worked out after the render and substituted by whoever serves the page.
+  # Encoded through the client encoder, which strips server-only attribute values - the same page
+  # served either way must not say more one way than the other.
+  defp realtime_js(result) do
+    %{
+      "$SELF_ECHOES_JS_PLACEHOLDER" => Encoder.encode_client_term!(result.self_echoes),
+      "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER" => Encoder.encode_client_term!(result.sub_receipt_adds),
+      "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER" => Encoder.encode_client_term!(result.sub_receipt_drops)
+    }
+  end
+
   defp send_page_data(conn, payload) do
     conn
     |> Plug.Conn.put_resp_header("hologram-page-data", "true")

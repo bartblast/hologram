@@ -115,37 +115,6 @@ defmodule Hologram.Template.Renderer do
   def interpolate_js_in_tree(node, _replacements), do: node
 
   @doc """
-  Substitutes the `$SELF_ECHOES_JS_PLACEHOLDER` token in the given HTML with
-  the encoded list of actions supplied by the caller.
-  """
-  @spec interpolate_self_echoes_js(String.t(), [Component.Action.t()]) :: String.t()
-  def interpolate_self_echoes_js(html, self_echoes) do
-    self_echoes_js = Encoder.encode_client_term!(self_echoes)
-
-    interpolate_js(html, %{"$SELF_ECHOES_JS_PLACEHOLDER" => self_echoes_js})
-  end
-
-  @doc """
-  Substitutes the `$SUB_RECEIPT_ADDS_JS_PLACEHOLDER` token in the given HTML with
-  the encoded list of subscription receipts supplied by the caller.
-  """
-  @spec interpolate_sub_receipt_adds_js(String.t(), list) :: String.t()
-  def interpolate_sub_receipt_adds_js(html, sub_receipt_adds) do
-    sub_receipt_adds_js = Encoder.encode_client_term!(sub_receipt_adds)
-    String.replace(html, "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER", sub_receipt_adds_js)
-  end
-
-  @doc """
-  Substitutes the `$SUB_RECEIPT_DROPS_JS_PLACEHOLDER` token in the given HTML with
-  the encoded list of subscription drops supplied by the caller.
-  """
-  @spec interpolate_sub_receipt_drops_js(String.t(), list) :: String.t()
-  def interpolate_sub_receipt_drops_js(html, sub_receipt_drops) do
-    sub_receipt_drops_js = Encoder.encode_client_term!(sub_receipt_drops)
-    String.replace(html, "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER", sub_receipt_drops_js)
-  end
-
-  @doc """
   Prints an evaluated DOM as HTML.
 
   An evaluated DOM holds text verbatim and each attribute value as a single string, both
@@ -316,12 +285,15 @@ defmodule Hologram.Template.Renderer do
       "$SYNC_ROWS_JS_PLACEHOLDER" => sync_rows_js
     }
 
-    html_with_interpolated_js =
-      initial_tree
-      |> print_dom()
-      |> interpolate_js(replacements)
-
+    # The HTML is the PRINTED tree rather than a projection interpolated on its own: a token is a
+    # JavaScript expression and means nothing outside a script, so substituting one into the whole
+    # document reaches text and attribute values a page renders from what someone typed - and a
+    # value inserted there brings its quotes with it, which end the attribute they land in.
+    #
+    # Deriving one from the other also makes the two agree by construction, which is what the
+    # navigating client and the served document have to do to hydrate rather than rebuild.
     tree_with_interpolated_js = interpolate_js_in_tree(initial_tree, replacements)
+    html_with_interpolated_js = print_dom(tree_with_interpolated_js)
 
     {html_with_interpolated_js, tree_with_interpolated_js, component_registry_with_page_struct,
      final_server_struct}
