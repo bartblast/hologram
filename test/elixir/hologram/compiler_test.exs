@@ -865,8 +865,6 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(js, ~s/"sortKeys":["secret_note","token"]/)
     end
 
-    # A type nothing orders by carries an empty list rather than nothing at all - the ingest path
-    # reads the field unconditionally.
     # The rules a client checks permissions by, spelled the way the rows it checks them against
     # are spelled - a predicate value travels as the wire spells it.
     test "injects the rules a client checks permissions by", %{
@@ -970,6 +968,8 @@ defmodule Hologram.CompilerTest do
              )
     end
 
+    # A type nothing orders by carries an empty list rather than nothing at all - the ingest path
+    # reads the field unconditionally.
     test "injects an empty sort-key list for a type no query orders by", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
