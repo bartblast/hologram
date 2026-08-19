@@ -1,15 +1,10 @@
 "use strict";
 
-// The support modules come first on purpose: assets/js/type.mjs and assets/js/erts.mjs import
-// one another, and erts reads Type at module scope - so whichever import order a script
-// establishes first decides whether that read lands before Type exists. The test helpers these
-// pull in establish the order the suite already runs under.
+import Deltas from "../../../../../assets/js/deltas.mjs";
+import LocalDatabase from "../../../../../assets/js/local_database.mjs";
 
 import {benchmark, benchmarkMemory} from "../../../support/helpers.mjs";
 import {defineModel, fillFrame, TASK} from "../../../support/data_layer.mjs";
-
-import Deltas from "../../../../../assets/js/deltas.mjs";
-import LocalDatabase from "../../../../../assets/js/local_database.mjs";
 
 defineModel();
 

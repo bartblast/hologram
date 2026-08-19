@@ -6,7 +6,20 @@ import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 export default class Bitstring {
-  static #decoder = ERTS.utf8Decoder;
+  // Lazy for the same reason ERTS.INIT_PID is: bitstring and erts import one another, so reading
+  // ERTS here at class-initializer time reads it before it exists whenever a bundle's import
+  // order reaches bitstring first. Deferring to first use puts the read after every module in
+  // the cycle has finished evaluating, whatever order they went in.
+  static #decoderValue = null;
+
+  static get #decoder() {
+    if (!$.#decoderValue) {
+      $.#decoderValue = ERTS.utf8Decoder;
+    }
+
+    return $.#decoderValue;
+  }
+
   static #encoder = new TextEncoder("utf-8");
 
   static calculateBitCount(bitstring) {
