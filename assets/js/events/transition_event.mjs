@@ -7,7 +7,7 @@ export default class TransitionEvent {
   static isDefaultAllowed = true;
 
   // TODO: add fields specific to TransitionEvent
-  static buildOperationParam(_event) {
+  static buildEventParam(_event) {
     return Type.map();
   }
 

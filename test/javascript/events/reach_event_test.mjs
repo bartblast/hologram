@@ -8,8 +8,8 @@ import Type from "../../../assets/js/type.mjs";
 defineRuntimeGlobals();
 
 describe("ReachEvent", () => {
-  it("buildOperationParam()", () => {
-    const result = ReachEvent.buildOperationParam({target: {}});
+  it("buildEventParam()", () => {
+    const result = ReachEvent.buildEventParam({target: {}});
 
     assert.deepStrictEqual(result, Type.map());
   });

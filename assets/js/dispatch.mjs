@@ -6,55 +6,62 @@ import Interpreter from "./interpreter.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 
-export default class Operation {
+// What an event binding makes when its event fires - an action, run on the client, or a
+// command, run on the server. The class parses the binding's spec into the boxed struct the
+// runtime dispatches, in each of the syntaxes a template may write it in.
+//
+// Named for what it produces rather than what it is: "operation" is the data layer's word for
+// a policy verb (`can?(user, :archive, doc)`), and since the permission check is evaluated on
+// the client both senses would otherwise live in one bundle.
+export default class Dispatch {
   #defaultTarget;
   #eventParam;
   #specDom;
 
   static fromSpecDom(specDom, defaultTarget, eventParam) {
-    const operation = new Operation();
+    const dispatch = new Dispatch();
 
-    operation.#defaultTarget = defaultTarget;
-    operation.#eventParam = eventParam;
-    operation.#specDom = specDom;
+    dispatch.#defaultTarget = defaultTarget;
+    dispatch.#eventParam = eventParam;
+    dispatch.#specDom = specDom;
 
-    if (Operation.#isTextSyntax(specDom)) {
-      operation.#constructFromTextSyntaxSpec();
-    } else if (Operation.#isExpressionShorthandSyntax(specDom)) {
-      operation.#constructFromExpressionShorthandSyntaxSpec();
-    } else if (Operation.#isExpressionLonghandSyntax(specDom)) {
-      return operation.#constructFromExpressionLonghandSyntaxSpec(specDom);
+    if (Dispatch.#isTextSyntax(specDom)) {
+      dispatch.#constructFromTextSyntaxSpec();
+    } else if (Dispatch.#isExpressionShorthandSyntax(specDom)) {
+      dispatch.#constructFromExpressionShorthandSyntaxSpec();
+    } else if (Dispatch.#isExpressionLonghandSyntax(specDom)) {
+      return dispatch.#constructFromExpressionLonghandSyntaxSpec(specDom);
     } else {
-      operation.#constructFromMultiChunkSyntaxSpec();
+      dispatch.#constructFromMultiChunkSyntaxSpec();
     }
 
     return Type.actionStruct({
-      name: operation.name,
-      params: operation.params,
-      target: operation.target,
-      delay: operation.delay,
+      name: dispatch.name,
+      params: dispatch.params,
+      target: dispatch.target,
+      delay: dispatch.delay,
     });
   }
 
   // Deps: [:maps.get/2]
-  static isAction(operation) {
+  static isAction(dispatch) {
     return (
-      Erlang_Maps["get/2"](Type.atom("__struct__"), operation).value ===
+      Erlang_Maps["get/2"](Type.atom("__struct__"), dispatch).value ===
       "Elixir.Hologram.Component.Action"
     );
   }
 
-  // An event binding is disabled when its operation name resolves to nil: the whole value
+  // An event binding is disabled when its dispatch name resolves to nil: the whole value
   // (e.g. $click={nil}), the shorthand name slot (e.g. $click={nil, a: 1}), or the longhand
   // action/command key (e.g. $click={action: nil}). The longhand branch mirrors the name
-  // resolution in #constructFromExpressionLonghandSyntaxSpec, so this predicate and dispatch
-  // can never disagree on which key names the operation.
+  // resolution in #constructFromExpressionLonghandSyntaxSpec, so this predicate and the
+  // dispatch itself can never disagree on which key names it.
   static isDisabled(specDom) {
-    if (Operation.#isExpressionShorthandSyntax(specDom)) {
+    if (Dispatch.#isExpressionShorthandSyntax(specDom)) {
       return Type.isNil(specDom.data[0].data[1].data[0]);
     }
 
-    if (Operation.#isExpressionLonghandSyntax(specDom)) {
+    if (Dispatch.#isExpressionLonghandSyntax(specDom)) {
       const specKeywordList = specDom.data[0].data[1].data[0];
 
       const actionName = Interpreter.accessKeywordListElement(

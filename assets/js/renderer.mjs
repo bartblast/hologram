@@ -568,7 +568,7 @@ export default class Renderer {
         return;
       }
 
-      const operationSpecDom = attrDom.data[1];
+      const dispatchSpecDom = attrDom.data[1];
       const once = $.#onceFromModifiers(attrDom.data[2]);
 
       const handler = (event) => {
@@ -579,7 +579,7 @@ export default class Renderer {
         const dispatch = Hologram.handleUiEvent(
           event,
           "click_outside",
-          operationSpecDom,
+          dispatchSpecDom,
           defaultTarget,
         );
 

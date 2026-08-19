@@ -8,7 +8,7 @@ import Type from "../../../assets/js/type.mjs";
 defineRuntimeGlobals();
 
 describe("MouseEvent", () => {
-  it("buildOperationParam()", () => {
+  it("buildEventParam()", () => {
     const event = {
       clientX: 10,
       clientY: 20,
@@ -22,7 +22,7 @@ describe("MouseEvent", () => {
       screenY: 200,
     };
 
-    const result = MouseEvent.buildOperationParam(event);
+    const result = MouseEvent.buildEventParam(event);
 
     assert.deepStrictEqual(
       result,

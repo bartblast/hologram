@@ -21,7 +21,7 @@ import Interpreter from "./interpreter.mjs";
 import JsInterop from "./js_interop.mjs";
 import LocalDatabase from "./local_database.mjs";
 import MemoryStorage from "./memory_storage.mjs";
-import Operation from "./operation.mjs";
+import Dispatch from "./dispatch.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
 import Serializer from "./serializer.mjs";
@@ -307,7 +307,7 @@ export default class Hologram {
   static handleUiEvent(
     event,
     eventType,
-    operationSpecDom,
+    dispatchSpecDom,
     defaultTarget,
     allowDefault = false,
     stopPropagation = false,
@@ -315,7 +315,7 @@ export default class Hologram {
   ) {
     // The guard runs before preventDefault and stopPropagation, so a disabled binding leaves
     // native browser behavior fully untouched.
-    if (Operation.isDisabled(operationSpecDom)) {
+    if (Dispatch.isDisabled(dispatchSpecDom)) {
       return null;
     }
 
@@ -342,7 +342,7 @@ export default class Hologram {
       event.stopPropagation?.();
     }
 
-    const eventParam = eventImpl.buildOperationParam(event);
+    const eventParam = eventImpl.buildEventParam(event);
     const eventTarget = event.target;
 
     // The dispatch below can run later than the event that caused it - a debounce or a throttle
@@ -351,41 +351,41 @@ export default class Hologram {
     const epoch = $.domEpoch;
 
     return () => {
-      const operation = Operation.fromSpecDom(
-        operationSpecDom,
+      const dispatch = Dispatch.fromSpecDom(
+        dispatchSpecDom,
         defaultTarget,
         eventParam,
       );
 
-      if (Operation.isAction(operation)) {
-        switch (Hologram.#getActionName(operation)) {
+      if (Dispatch.isAction(dispatch)) {
+        switch (Hologram.#getActionName(dispatch)) {
           case "__load_prefetched_page__":
             return Hologram.executeLoadPrefetchedPageAction(
-              operation,
+              dispatch,
               eventTarget,
             );
 
           case "__prefetch_page__":
-            return Hologram.executePrefetchPageAction(operation, eventTarget);
+            return Hologram.executePrefetchPageAction(dispatch, eventTarget);
 
           default: {
             const delay = Erlang_Maps["get/3"](
               Type.atom("delay"),
-              operation,
+              dispatch,
               Type.integer(0),
             );
 
             // Settling directly keeps an undelayed dispatch synchronous on a stable page, which
             // is what lets a raising action reach the "error" event the feature tests read.
             if (delay.value === 0n) {
-              return Hologram.#settleAction(operation, epoch);
+              return Hologram.#settleAction(dispatch, epoch);
             } else {
-              return Hologram.scheduleAction(operation, epoch);
+              return Hologram.scheduleAction(dispatch, epoch);
             }
           }
         }
       } else {
-        Client.sendCommand(operation);
+        Client.sendCommand(dispatch);
       }
     };
   }
@@ -1068,10 +1068,10 @@ export default class Hologram {
   }
 
   // Deps: [:maps.get/2]
-  static #getToParam(operation) {
+  static #getToParam(dispatch) {
     return Erlang_Maps["get/2"](
       Type.atom("to"),
-      Erlang_Maps["get/2"](Type.atom("params"), operation),
+      Erlang_Maps["get/2"](Type.atom("params"), dispatch),
     );
   }
 

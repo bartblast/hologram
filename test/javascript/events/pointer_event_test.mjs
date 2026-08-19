@@ -9,7 +9,7 @@ import Type from "../../../assets/js/type.mjs";
 defineRuntimeGlobals();
 
 describe("PointerEvent", () => {
-  describe("buildOperationParam()", () => {
+  describe("buildEventParam()", () => {
     it("known pointer type", () => {
       const event = {
         clientX: 10,
@@ -25,7 +25,7 @@ describe("PointerEvent", () => {
         screenY: 200,
       };
 
-      const result = PointerEvent.buildOperationParam(event);
+      const result = PointerEvent.buildEventParam(event);
 
       const expected = Type.map([
         [Type.atom("client_x"), Type.float(10)],
@@ -59,7 +59,7 @@ describe("PointerEvent", () => {
         screenY: 200,
       };
 
-      const result = PointerEvent.buildOperationParam(event);
+      const result = PointerEvent.buildEventParam(event);
 
       const expected = Type.map([
         [Type.atom("client_x"), Type.float(10)],

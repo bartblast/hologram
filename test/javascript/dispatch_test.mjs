@@ -2,7 +2,7 @@
 
 import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
-import Operation from "../../assets/js/operation.mjs";
+import Dispatch from "../../assets/js/dispatch.mjs";
 import Type from "../../assets/js/type.mjs";
 
 const defaultTarget = Type.bitstring("my_default_target");
@@ -10,7 +10,7 @@ const eventParam = "my_event_param";
 
 defineRuntimeGlobals();
 
-describe("Operation", () => {
+describe("Dispatch", () => {
   describe("fromSpecDom()", () => {
     it("single text chunk", () => {
       // Example: $click="my_action"
@@ -20,14 +20,10 @@ describe("Operation", () => {
         [Type.atom("text"), Type.bitstring("my_action")],
       ]);
 
-      const operation = Operation.fromSpecDom(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      const dispatch = Dispatch.fromSpecDom(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(
-        operation,
+        dispatch,
         Type.actionStruct({
           name: Type.atom("my_action"),
           params: Type.map([[Type.atom("event"), eventParam]]),
@@ -45,14 +41,10 @@ describe("Operation", () => {
         [Type.atom("expression"), Type.tuple([Type.atom("my_action")])],
       ]);
 
-      const operation = Operation.fromSpecDom(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      const dispatch = Dispatch.fromSpecDom(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(
-        operation,
+        dispatch,
         Type.actionStruct({
           name: Type.atom("my_action"),
           params: Type.map([[Type.atom("event"), eventParam]]),
@@ -79,14 +71,10 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = Operation.fromSpecDom(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      const dispatch = Dispatch.fromSpecDom(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(
-        operation,
+        dispatch,
         Type.actionStruct({
           name: Type.atom("my_action"),
           params: Type.map([
@@ -113,14 +101,10 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = Operation.fromSpecDom(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      const dispatch = Dispatch.fromSpecDom(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(
-        operation,
+        dispatch,
         Type.actionStruct({
           name: Type.atom("my_action"),
           params: Type.map([[Type.atom("event"), eventParam]]),
@@ -143,14 +127,10 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = Operation.fromSpecDom(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      const dispatch = Dispatch.fromSpecDom(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(
-        operation,
+        dispatch,
         Type.commandStruct({
           name: Type.atom("my_command"),
           params: Type.map([[Type.atom("event"), eventParam]]),
@@ -176,14 +156,10 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = Operation.fromSpecDom(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      const dispatch = Dispatch.fromSpecDom(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(
-        operation,
+        dispatch,
         Type.actionStruct({
           name: Type.atom("my_action"),
           params: Type.map([[Type.atom("event"), eventParam]]),
@@ -215,14 +191,10 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = Operation.fromSpecDom(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      const dispatch = Dispatch.fromSpecDom(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(
-        operation,
+        dispatch,
         Type.actionStruct({
           name: Type.atom("my_action"),
           params: Type.map([
@@ -246,14 +218,10 @@ describe("Operation", () => {
         [Type.atom("text"), Type.bitstring("bbb")],
       ]);
 
-      const operation = Operation.fromSpecDom(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      const dispatch = Dispatch.fromSpecDom(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(
-        operation,
+        dispatch,
         Type.actionStruct({
           name: Type.atom("aaa123bbb"),
           params: Type.map([[Type.atom("event"), eventParam]]),
@@ -279,14 +247,10 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = Operation.fromSpecDom(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      const dispatch = Dispatch.fromSpecDom(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(
-        operation,
+        dispatch,
         Type.actionStruct({
           name: Type.atom("my_action"),
           params: Type.map([[Type.atom("event"), eventParam]]),
@@ -317,14 +281,10 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = Operation.fromSpecDom(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      const dispatch = Dispatch.fromSpecDom(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(
-        operation,
+        dispatch,
         Type.actionStruct({
           name: Type.atom("my_action"),
           params: Type.map([
@@ -354,7 +314,7 @@ describe("Operation", () => {
       ]);
 
       assert.throws(() => {
-        Operation.fromSpecDom(specDom, defaultTarget, eventParam);
+        Dispatch.fromSpecDom(specDom, defaultTarget, eventParam);
       }, "Command delay is not yet implemented in Hologram");
     });
 
@@ -374,14 +334,10 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = Operation.fromSpecDom(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      const dispatch = Dispatch.fromSpecDom(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(
-        operation,
+        dispatch,
         Type.commandStruct({
           name: Type.atom("my_command"),
           params: Type.map([[Type.atom("event"), eventParam]]),
@@ -399,7 +355,7 @@ describe("Operation", () => {
         target: Type.bitstring("my_target"),
       });
 
-      assert.isTrue(Operation.isAction(action));
+      assert.isTrue(Dispatch.isAction(action));
     });
 
     it("command", () => {
@@ -409,7 +365,7 @@ describe("Operation", () => {
         target: Type.bitstring("my_target"),
       });
 
-      assert.isFalse(Operation.isAction(command));
+      assert.isFalse(Dispatch.isAction(command));
     });
   });
 
@@ -422,7 +378,7 @@ describe("Operation", () => {
         [Type.atom("expression"), Type.tuple([Type.nil()])],
       ]);
 
-      assert.isTrue(Operation.isDisabled(specDom));
+      assert.isTrue(Dispatch.isDisabled(specDom));
     });
 
     it("shorthand syntax, nil name, with params", () => {
@@ -442,7 +398,7 @@ describe("Operation", () => {
         ],
       ]);
 
-      assert.isTrue(Operation.isDisabled(specDom));
+      assert.isTrue(Dispatch.isDisabled(specDom));
     });
 
     it("longhand syntax, nil action", () => {
@@ -456,7 +412,7 @@ describe("Operation", () => {
         ],
       ]);
 
-      assert.isTrue(Operation.isDisabled(specDom));
+      assert.isTrue(Dispatch.isDisabled(specDom));
     });
 
     it("longhand syntax, nil action, with params", () => {
@@ -481,7 +437,7 @@ describe("Operation", () => {
         ],
       ]);
 
-      assert.isTrue(Operation.isDisabled(specDom));
+      assert.isTrue(Dispatch.isDisabled(specDom));
     });
 
     it("longhand syntax, nil command", () => {
@@ -495,7 +451,7 @@ describe("Operation", () => {
         ],
       ]);
 
-      assert.isTrue(Operation.isDisabled(specDom));
+      assert.isTrue(Dispatch.isDisabled(specDom));
     });
 
     it("longhand syntax, nil command, with params", () => {
@@ -520,7 +476,7 @@ describe("Operation", () => {
         ],
       ]);
 
-      assert.isTrue(Operation.isDisabled(specDom));
+      assert.isTrue(Dispatch.isDisabled(specDom));
     });
 
     it("shorthand syntax, non-nil name", () => {
@@ -531,7 +487,7 @@ describe("Operation", () => {
         [Type.atom("expression"), Type.tuple([Type.atom("my_action")])],
       ]);
 
-      assert.isFalse(Operation.isDisabled(specDom));
+      assert.isFalse(Dispatch.isDisabled(specDom));
     });
 
     it("shorthand syntax, non-nil name, with params", () => {
@@ -551,7 +507,7 @@ describe("Operation", () => {
         ],
       ]);
 
-      assert.isFalse(Operation.isDisabled(specDom));
+      assert.isFalse(Dispatch.isDisabled(specDom));
     });
 
     it("longhand syntax, non-nil action", () => {
@@ -567,7 +523,7 @@ describe("Operation", () => {
         ],
       ]);
 
-      assert.isFalse(Operation.isDisabled(specDom));
+      assert.isFalse(Dispatch.isDisabled(specDom));
     });
 
     it("longhand syntax, non-nil action, with params", () => {
@@ -592,7 +548,7 @@ describe("Operation", () => {
         ],
       ]);
 
-      assert.isFalse(Operation.isDisabled(specDom));
+      assert.isFalse(Dispatch.isDisabled(specDom));
     });
 
     it("longhand syntax, non-nil command", () => {
@@ -608,7 +564,7 @@ describe("Operation", () => {
         ],
       ]);
 
-      assert.isFalse(Operation.isDisabled(specDom));
+      assert.isFalse(Dispatch.isDisabled(specDom));
     });
 
     it("longhand syntax, non-nil command, with params", () => {
@@ -633,7 +589,7 @@ describe("Operation", () => {
         ],
       ]);
 
-      assert.isFalse(Operation.isDisabled(specDom));
+      assert.isFalse(Dispatch.isDisabled(specDom));
     });
 
     it("text syntax", () => {
@@ -644,7 +600,7 @@ describe("Operation", () => {
         [Type.atom("text"), Type.bitstring("my_action")],
       ]);
 
-      assert.isFalse(Operation.isDisabled(specDom));
+      assert.isFalse(Dispatch.isDisabled(specDom));
     });
 
     it("multi-chunk syntax", () => {
@@ -657,7 +613,7 @@ describe("Operation", () => {
         [Type.atom("text"), Type.bitstring("bbb")],
       ]);
 
-      assert.isFalse(Operation.isDisabled(specDom));
+      assert.isFalse(Dispatch.isDisabled(specDom));
     });
   });
 });

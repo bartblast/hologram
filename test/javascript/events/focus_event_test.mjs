@@ -10,8 +10,8 @@ defineRuntimeGlobals();
 describe("FocusEvent", () => {
   const event = {};
 
-  it("buildOperationParam()", () => {
-    assert.deepStrictEqual(FocusEvent.buildOperationParam(event), Type.map());
+  it("buildEventParam()", () => {
+    assert.deepStrictEqual(FocusEvent.buildEventParam(event), Type.map());
   });
 
   it("isEventIgnored()", () => {

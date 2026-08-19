@@ -7,14 +7,14 @@ export default class ChangeEvent {
   // The DOM change event is not cancelable, so preventDefault would be a no-op.
   static isDefaultAllowed = true;
 
-  static buildOperationParam(event) {
+  static buildEventParam(event) {
     const target = event.target;
     const tagName = target.tagName;
 
     // Check if this is a form-level change event by examining currentTarget
     if (event.currentTarget.tagName === "FORM") {
       const formEvent = {target: event.currentTarget};
-      return SubmitEvent.buildOperationParam(formEvent);
+      return SubmitEvent.buildEventParam(formEvent);
     }
 
     const type = target.type;

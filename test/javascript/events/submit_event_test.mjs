@@ -8,7 +8,7 @@ import Type from "../../../assets/js/type.mjs";
 defineRuntimeGlobals();
 
 describe("SubmitEvent", () => {
-  describe("buildOperationParam()", () => {
+  describe("buildEventParam()", () => {
     it("handles text-based inputs", () => {
       const dom = new JSDOM(`
         <html>
@@ -22,7 +22,7 @@ describe("SubmitEvent", () => {
       `);
 
       const event = {target: dom.window.document.getElementById("my_form")};
-      const result = SubmitEvent.buildOperationParam(event);
+      const result = SubmitEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -47,7 +47,7 @@ describe("SubmitEvent", () => {
       `);
 
       const event = {target: dom.window.document.getElementById("my_form")};
-      const result = SubmitEvent.buildOperationParam(event);
+      const result = SubmitEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -72,7 +72,7 @@ describe("SubmitEvent", () => {
       `);
 
       const event = {target: dom.window.document.getElementById("my_form")};
-      const result = SubmitEvent.buildOperationParam(event);
+      const result = SubmitEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -100,7 +100,7 @@ describe("SubmitEvent", () => {
       `);
 
       const event = {target: dom.window.document.getElementById("my_form")};
-      const result = SubmitEvent.buildOperationParam(event);
+      const result = SubmitEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
