@@ -725,11 +725,15 @@ defmodule Hologram.Template.Renderer do
 
   # Runs after the other prop sources - a parameterized query capture binds
   # like-named props, which template values, context, and defaults supply.
+  # Every query reads its arguments from the props the component was GIVEN, never from the
+  # accumulator - so what one query answers can never reach another's arguments, and the order
+  # these run in cannot change what any of them returns. The build refuses such a binding
+  # outright; this is the same rule holding by construction rather than by check.
   defp inject_props_from_query(props, module) do
     module.__props__()
     |> Enum.filter(fn {_name, _type, opts} -> opts[:from_query] end)
     |> Enum.reduce(props, fn {name, _type, opts}, acc ->
-      Map.put(acc, name, run_prop_query!(module, name, opts[:from_query], acc))
+      Map.put(acc, name, run_prop_query!(module, name, opts[:from_query], props))
     end)
   end
 

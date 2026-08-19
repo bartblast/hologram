@@ -1214,6 +1214,10 @@ export default class Renderer {
   // The last prop source, as on the server: a parameterized capture binds like-named props, and
   // template values, context and defaults are what supply them - so they must all be in before
   // this runs. Each resolved query prop joins them, which is what lets a later one bind it.
+  // Every query reads its arguments from the props the component was GIVEN, never from the
+  // accumulator - so what one query answers can never reach another's arguments, and the order
+  // these run in cannot change what any of them returns. The build refuses such a binding
+  // outright; this is the same rule holding by construction rather than by check.
   static #injectPropsFromQuery(props, moduleProxy, alias) {
     return Renderer.#getPropDefinitions(moduleProxy).data.reduce(
       (acc, prop) => {
@@ -1228,7 +1232,7 @@ export default class Renderer {
         // Optimized (mutates map)
         acc.data[Type.encodeMapKey(propName)] = [
           propName,
-          Renderer.#runPropQuery(alias, propName, capture, acc),
+          Renderer.#runPropQuery(alias, propName, capture, props),
         ];
 
         return acc;

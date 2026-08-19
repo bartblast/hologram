@@ -101,13 +101,15 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   @doc """
   Validates that every parameterized from_query capture on the given module's prop
-  declarations binds only the module's declared reactive slots - today, its declared
-  props. A builder's argument names bind the like-named slots of the consuming
-  component, so a shared builder is validated against each consumer's own slots.
+  declarations binds only the module's declared reactive slots - today, the props it
+  is given, which is every declared prop except the ones from_query itself fills. A
+  builder's argument names bind the like-named slots of the consuming component, so a
+  shared builder is validated against each consumer's own slots.
 
-  Raises Hologram.CompileError when a capture argument names no declared slot, or
-  when an argument position is named by no clause of the capture's target. Modules
-  without parameterized captures pass vacuously.
+  Raises Hologram.CompileError when a capture argument names no declared slot, when it
+  names a from_query prop of the same component, or when an argument position is named
+  by no clause of the capture's target. Modules without parameterized captures pass
+  vacuously.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/query_extractor/validate_slot_bindings!_1/README.md
   """
@@ -118,10 +120,10 @@ defmodule Hologram.Compiler.QueryExtractor do
         :ok
 
       prop_params ->
-        slot_names = declared_slot_names(module)
+        names = %{queries: query_prop_names(module), slots: declared_slot_names(module)}
 
         Enum.each(prop_params, fn {prop_name, param_names} ->
-          Enum.each(param_names, &validate_slot_binding!(module, prop_name, &1, slot_names))
+          Enum.each(param_names, &validate_slot_binding!(module, prop_name, &1, names))
         end)
     end
   end
@@ -233,10 +235,23 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp contains_symbol?(_other), do: false
 
   # The set a builder argument may bind - the component's declared reactive slots, which today
-  # means its declared props and nothing else. Declared state and derived values extend this
+  # means the props it is GIVEN and nothing else. Declared state and derived values extend this
   # set later without reshaping the check.
+  #
+  # A prop that from_query fills is not one of them: it is what a query PRODUCED, not something
+  # the component was handed. Binding one would make a query's answer depend on another query's,
+  # which nothing here orders - the injector runs them in declaration order, so the same two
+  # declarations resolve or raise depending on which was written first.
   defp declared_slot_names(module) do
-    Enum.map(module.__props__(), fn {name, _type, _opts} -> name end)
+    module.__props__()
+    |> Enum.reject(fn {_name, _type, opts} -> opts[:from_query] end)
+    |> Enum.map(fn {name, _type, _opts} -> name end)
+  end
+
+  defp query_prop_names(module) do
+    module.__props__()
+    |> Enum.filter(fn {_name, _type, opts} -> opts[:from_query] end)
+    |> Enum.map(fn {name, _type, _opts} -> name end)
   end
 
   defp evaluate!(%IR.AnonymousFunctionType{arity: arity, clauses: [clause]}, state, context) do
@@ -671,13 +686,20 @@ defmodule Hologram.Compiler.QueryExtractor do
         "from_query capture for prop #{inspect(prop_name)} in #{inspect(module)} has an argument position no clause names - it cannot bind a prop"
   end
 
-  defp validate_slot_binding!(module, prop_name, param_name, slot_names) do
-    if param_name not in slot_names do
-      raise Hologram.CompileError,
-        message:
-          "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(param_name)} - no like-named prop is declared"
-    end
+  defp validate_slot_binding!(module, prop_name, param_name, names) do
+    cond do
+      param_name in names.slots ->
+        :ok
 
-    :ok
+      param_name in names.queries ->
+        raise Hologram.CompileError,
+          message:
+            "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(param_name)}, which is a from_query prop of the same component - a query argument binds a value the component is GIVEN, never one another query produced"
+
+      true ->
+        raise Hologram.CompileError,
+          message:
+            "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(param_name)} - no like-named prop is declared"
+    end
   end
 end

@@ -36,6 +36,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Component.Module22, as: Component22
   alias Hologram.Test.Fixtures.Component.Module23, as: Component23
   alias Hologram.Test.Fixtures.Component.Module25, as: Component25
+  alias Hologram.Test.Fixtures.Component.Module27, as: Component27
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
 
@@ -384,6 +385,18 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_slot_bindings!(Component14)
+      end
+    end
+
+    # Slots are what a component is GIVEN. A query's answer is not that, and binding one would
+    # make a query depend on another query with nothing ordering the two - the injector runs them
+    # in declaration order, so the same pair resolves or raises by which was written first.
+    test "raises when a capture argument binds a from_query prop of the same component" do
+      expected_msg =
+        "from_query for prop :derived in Hologram.Test.Fixtures.Component.Module27 binds argument :entities, which is a from_query prop of the same component - a query argument binds a value the component is GIVEN, never one another query produced"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_slot_bindings!(Component27)
       end
     end
 
