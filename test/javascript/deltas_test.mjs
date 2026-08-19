@@ -196,7 +196,7 @@ describe("Deltas", () => {
 
     // Once the stream delivers it, it is no longer a row the client has only because a page said
     // so - and no longer one the completeness marker should take away.
-    it("forgets a carried rowed row the stream then delivers", () => {
+    it("forgets a carried row the stream then delivers", () => {
       carry([{done: false, id: "t1", title: "from the page"}]);
 
       Deltas.apply({
