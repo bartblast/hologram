@@ -243,6 +243,37 @@ defmodule Hologram.Template.RendererFromQueryTest do
       assert String.contains?(html, ~s|"a":["#{target.id}"]|)
     end
 
+    # A row holds whatever was written to the database, and it is printed into a script element -
+    # so a value that spells a closing tag would end that element and put whatever follows it into
+    # the document as markup. The escape leaves the value identical to whoever parses the JSON.
+    test "carries a value that spells a closing tag without ending the script" do
+      required =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      target =
+        Entity2
+        |> Entity.new(a: true, c: "</script><script>alert(1)</script>")
+        |> create()
+
+      source =
+        Module3
+        |> Entity.new(c_id: required.id)
+        |> create()
+
+      :ok = add_relationship(Module3, source.id, :a, target.id)
+
+      carried = carried_rows_json(render_page_html(Module99))
+
+      refute String.contains?(carried, "</script>")
+
+      assert String.contains?(
+               carried,
+               ~S|"c":"\u003C\/script>\u003Cscript>alert(1)\u003C\/script>"|
+             )
+    end
+
     test "carries nothing for a page whose props read no rows" do
       html = render_page_html(Module99)
 
@@ -303,6 +334,12 @@ defmodule Hologram.Template.RendererFromQueryTest do
       :ok
     end
 
+    defp carried_counts_json(html) do
+      [_full, json] = Regex.run(~r/syncCounts: (.+),$/m, html)
+
+      json
+    end
+
     defp render_counts_page_html do
       {html, _tree, _component_registry, _final_server_struct} =
         render_page(Module102, %{}, %Server{}, @page_opts)
@@ -310,15 +347,21 @@ defmodule Hologram.Template.RendererFromQueryTest do
       html
     end
 
+    # Read back through a JSON decoder rather than matched as a substring: the counts are printed
+    # into a script element, so their spelling carries escapes an HTML parser must not read as
+    # markup - and what this test is about is the counts, not how they are spelled.
     test "carries the count each instance of a count prop answered" do
       create_entities()
 
-      html = render_counts_page_html()
+      counts =
+        render_counts_page_html()
+        |> carried_counts_json()
+        |> Jason.decode!()
 
-      assert String.contains?(
-               html,
-               ~s|syncCounts: {"#{inspect(Module101)}/total/false":1,"#{inspect(Module101)}/total/true":2}|
-             )
+      assert counts == %{
+               "#{inspect(Module101)}/total/false" => 1,
+               "#{inspect(Module101)}/total/true" => 2
+             }
     end
 
     test "carries nothing for a page whose props count nothing" do

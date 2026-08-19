@@ -259,9 +259,14 @@ defmodule Hologram.Template.Renderer do
     |> Auth.carried_grants()
     |> Carry.collect()
 
-    actor_user_id_js = Jason.encode!(server_struct.user_id)
-    sync_counts_js = Jason.encode!(Carry.take_counts())
-    sync_rows_js = Jason.encode!(Carry.take())
+    # Escaped for the SCRIPT ELEMENT they are printed into, not only for JSON: a row holds
+    # whatever was written to the database, and a `</script>` in a string ends the element around
+    # it whatever the JavaScript is doing - the HTML parser reads the tag before the JavaScript
+    # engine reads anything at all. `:html_safe` spells the `<` as an escape, which is the same
+    # string to a JSON reader and nothing to an HTML one.
+    actor_user_id_js = Jason.encode!(server_struct.user_id, escape: :html_safe)
+    sync_counts_js = Jason.encode!(Carry.take_counts(), escape: :html_safe)
+    sync_rows_js = Jason.encode!(Carry.take(), escape: :html_safe)
 
     html_with_interpolated_js =
       initial_tree
