@@ -263,7 +263,18 @@ const Elixir_Hologram_Auth = {
 
     const actorUserId = unboxActorUserId(userOrId);
     const operationName = operation.value;
-    const rules = Model.entry(entityType).policy[operationName] ?? [];
+
+    // An entry absent from a permission-checking build is a type that declares NO policy - the
+    // build ships an entry for every policied type, checked or not, precisely so this read can
+    // mean that. And a policy-less type is denied by the server's own default, so no is not a
+    // fallback here: it is the server's answer.
+    const entry = globalThis.Hologram.sync?.model?.[entityType];
+
+    if (!entry) {
+      return Type.boolean(false);
+    }
+
+    const rules = entry.policy[operationName] ?? [];
 
     // An operation with no rules grants nothing, which is what makes the default deny.
     return Type.boolean(

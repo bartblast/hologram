@@ -745,4 +745,22 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
   });
+
+  // A case this side alone has - the reference always holds every type. An entry absent from a
+  // permission-checking build is a type declaring NO policy (the build ships an entry for every
+  // policied type, checked or not), and a policy-less type is denied by the server's own
+  // default - so no is the server's answer, not a fallback.
+  describe("a type the model does not carry", () => {
+    it("denies without asking the model for an entry", () => {
+      const unmodelled = Type.map([
+        [Type.atom("__struct__"), Type.alias("MyApp.Unpolicied")],
+        [Type.atom("id"), Type.bitstring(DOC)],
+      ]);
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), unmodelled),
+        Type.boolean(false),
+      );
+    });
+  });
 });
