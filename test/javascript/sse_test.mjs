@@ -798,6 +798,20 @@ describe("Sse", () => {
       assert.isFalse(LocalDatabase.isSynced("all"));
     });
 
+    // The place described the rows, so it goes with them - a client cut off before the refill
+    // lands would otherwise ask for what moved since a place it holds nothing from, and be given
+    // deltas where it needs everything. What a client with no place greets with is pinned by
+    // buildSyncGreeting()'s own case.
+    it("drops the place it had been brought up to", async () => {
+      stubHandshakeResponse();
+      Sse.syncCursor = "Nzc4LjA";
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_resync({data: envelope()});
+
+      assert.isNull(Sse.syncCursor);
+    });
+
     // Repainting an emptied database would show the gap between the discard and the refill,
     // which lands milliseconds later and schedules its own repaint.
     it("schedules no repaint of the gap it opens", async () => {

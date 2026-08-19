@@ -232,6 +232,12 @@ export default class Sse {
       // What follows is the whole of what this client may see rather than what changed in it, so
       // what it holds now is no part of the answer and goes.
       //
+      // The place goes with the rows, because it described them: a client cut off before the
+      // refill lands would otherwise come back naming a place it no longer holds anything from,
+      // and be told what moved since instead of what it may see - an empty store, filled with a
+      // few deltas, calling itself complete. The refill's frames name no place while it runs, so
+      // the next one to arrive is one this client can honour.
+      //
       // Nothing is repainted here on purpose: the refill's own frames schedule that, and the
       // marker ending the refill schedules one even when the refill is empty - which is what
       // takes rows the client may no longer see off the screen in the case that produced them.
@@ -240,6 +246,7 @@ export default class Sse {
 
         Logger.debug(`Hologram: sync starting over (${frame.reason})`);
         LocalDatabase.reset();
+        $.syncCursor = null;
       });
 
       $.eventSource.addEventListener("synced", (event) => {
