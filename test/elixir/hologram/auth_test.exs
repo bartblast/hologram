@@ -32,6 +32,14 @@ defmodule Hologram.AuthTest do
     |> DB.create()
   end
 
+  defp grant_id(user_id) do
+    select_sql = ~s|SELECT "id" FROM "hologram_data"."hologram_role_grant" WHERE "user_id" = $1|
+
+    {:ok, %{rows: [[id]]}} = Connection.query(select_sql, [Codec.encode(user_id, :uuid)])
+
+    Codec.decode(id, :uuid)
+  end
+
   defp grant_rows(user_id) do
     select_sql =
       ~s|SELECT "resource_type", "resource_id", "role", "granted_by_id", "created_at" | <>
@@ -48,6 +56,19 @@ defmodule Hologram.AuthTest do
         role: role
       }
     end)
+  end
+
+  defp revocation_effects do
+    select_sql = """
+    SELECT "type", "entity_id"
+    FROM "hologram_system"."outbox"
+    WHERE "op" = 'del_entity'
+    ORDER BY "seq"
+    """
+
+    {:ok, %{rows: rows}} = Connection.query(select_sql)
+
+    Enum.map(rows, fn [type, entity_id] -> {type, Codec.decode(entity_id, :uuid)} end)
   end
 
   # What a check asks is whether a grant EXISTS, so nothing it reads can be gathered - the
@@ -573,11 +594,24 @@ defmodule Hologram.AuthTest do
       assert grant_rows(user.id) == []
     end
 
+    # A client watching its own grants learns a row is gone from the round an effect wakes, so a
+    # revocation nothing records is one no client hears about until it renders afresh.
+    test "records the removal of a global grant" do
+      user = create_user("user_51@example.com")
+      grant_role(user, Role.Module1)
+      revoked_id = grant_id(user.id)
+
+      revoke_role(user, Role.Module1)
+
+      assert revocation_effects() == [{"Hologram.Auth.RoleGrant", revoked_id}]
+    end
+
     test "is a no-op for a role the user does not hold" do
       user = create_user("user_25@example.com")
 
       assert revoke_role(user, Role.Module1) == :ok
       assert grant_rows(user.id) == []
+      assert revocation_effects() == []
     end
 
     test "raises on a module that is not a global role" do
@@ -613,6 +647,18 @@ defmodule Hologram.AuthTest do
 
       assert revoke_role(user, resource, :owner) == :ok
       assert grant_rows(user.id) == []
+    end
+
+    test "records the removal of an instance grant" do
+      user = create_user("user_52@example.com")
+      resource = create_resource()
+
+      grant_role(user, resource, :owner)
+      revoked_id = grant_id(user.id)
+
+      revoke_role(user, resource, :owner)
+
+      assert revocation_effects() == [{"Hologram.Auth.RoleGrant", revoked_id}]
     end
 
     test "lets a user revoke their own role" do
