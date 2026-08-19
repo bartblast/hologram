@@ -1,4 +1,10 @@
 defmodule Hologram.DB.SortKeyTest do
+  @moduledoc """
+  IMPORTANT!
+  Each test here has a related JavaScript test in test/javascript/sort_key_test.mjs, in the same
+  order - the two tiers compute the same keys or a client sorts its own rows differently from the
+  server. Always update both together, and the two implementations with them.
+  """
   use Hologram.Test.BasicCase, async: true
 
   import Hologram.DB.SortKey
@@ -28,6 +34,14 @@ defmodule Hologram.DB.SortKeyTest do
       assert compute("straße") == "strasse"
       assert compute("Łukasz") == "lukasz"
       assert compute("Œuvre") == "oeuvre"
+    end
+
+    # One letter with two lowercase spellings, so a dictionary puts them together - and the two
+    # tiers spell it differently on the way in, since only JavaScript applies Unicode's
+    # Final_Sigma mapping. Folding answers both at once.
+    test "folds the two spellings of greek lowercase sigma together" do
+      assert compute("ΑΘΗΝΑΣ") == "αθηνασ"
+      assert compute("αθηνας") == "αθηνασ"
     end
 
     test "keeps cjk characters unchanged" do

@@ -1,9 +1,22 @@
 "use strict";
 
+// IMPORTANT!
+// This module has a twin in lib/hologram/db/sort_key.ex, and their suites mirror each other case
+// for case (test/javascript/sort_key_test.mjs and test/elixir/hologram/db/sort_key_test.exs).
+// Always update all four together: a rule that holds on one tier and not the other sorts a
+// client's own rows differently from the server's, silently, and only for the values the rule
+// touches.
+//
 // Computes practical-order sort keys for string attribute values - the derived values that
 // order_by companion columns store and both tiers compare. Hologram.DB.SortKey is the reference
-// implementation, pinned by mirrored suites: the version 1 rules are frozen, and a version bump
-// regenerates every stored key from source values on both tiers.
+// implementation: the version 1 rules are frozen, and a version bump regenerates every stored key
+// from source values on both tiers.
+//
+// Where the tiers cannot be made to agree: the two runtimes carry Unicode case tables of different
+// vintages, so a handful of very recently assigned codepoints (measured at 28 in V8 under Node 23
+// against OTP 28 - three in Latin Extended-D, the rest in the 0x16EA0 run) downcase on one tier and
+// not the other. Nothing here can close that without shipping our own case tables, and it resolves
+// as the runtimes catch up.
 
 export default class SortKey {
   // The pinned strip ranges cover marks that dictionaries ignore: general combining diacritics,
@@ -22,6 +35,12 @@ export default class SortKey {
   ];
 
   // Letters NFD cannot decompose, folded to their dictionary neighbors.
+  //
+  // Greek sigma is here for two reasons at once. It is one letter with two lowercase spellings, so
+  // folding them together is what puts ΑΘΗΝΑΣ beside αθηνας the way a dictionary does. It is ALSO
+  // what makes the tiers agree: toLowerCase applies Unicode's Final_Sigma mapping and Elixir's
+  // String.downcase/1 does not, so the same word reaches this fold spelled differently on each
+  // side - and leaves it spelled the same.
   static #foldMap = {
     ß: "ss",
     æ: "ae",
@@ -36,6 +55,7 @@ export default class SortKey {
     ø: "o",
     þ: "th",
     ſ: "s",
+    ς: "σ",
   };
 
   static #maxKeyBytes = 64;

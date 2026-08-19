@@ -4,8 +4,11 @@ import {assert} from "./support/helpers.mjs";
 
 import SortKey from "../../assets/js/sort_key.mjs";
 
-// Mirrors test/elixir/hologram/db/sort_key_test.exs - the Elixir module is the reference
-// implementation, and the two suites carry the same cases in the same order.
+// IMPORTANT!
+// Each test here has a related Elixir test in test/elixir/hologram/db/sort_key_test.exs, in the
+// same order - the two tiers compute the same keys or a client sorts its own rows differently from
+// the server. Always update both together, and the two implementations with them. The Elixir
+// module is the reference implementation.
 describe("SortKey", () => {
   describe("compute()", () => {
     const compute = SortKey.compute;
@@ -34,6 +37,14 @@ describe("SortKey", () => {
       assert.equal(compute("straße"), "strasse");
       assert.equal(compute("Łukasz"), "lukasz");
       assert.equal(compute("Œuvre"), "oeuvre");
+    });
+
+    // One letter with two lowercase spellings, so a dictionary puts them together - and the two
+    // tiers spell it differently on the way in, since only JavaScript applies Unicode's
+    // Final_Sigma mapping. Folding answers both at once.
+    it("folds the two spellings of greek lowercase sigma together", () => {
+      assert.equal(compute("ΑΘΗΝΑΣ"), "αθηνασ");
+      assert.equal(compute("αθηνας"), "αθηνασ");
     });
 
     it("keeps cjk characters unchanged", () => {

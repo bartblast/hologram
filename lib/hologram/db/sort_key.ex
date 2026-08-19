@@ -1,11 +1,25 @@
 defmodule Hologram.DB.SortKey do
   @moduledoc false
 
+  # IMPORTANT!
+  # This module has a twin in assets/js/sort_key.mjs, and their suites mirror each
+  # other case for case (test/elixir/hologram/db/sort_key_test.exs and
+  # test/javascript/sort_key_test.mjs). Always update all four together: a rule
+  # that holds on one tier and not the other sorts a client's own rows differently
+  # from the server's, silently, and only for the values the rule touches.
+  #
   # Computes practical-order sort keys for string attribute values - the derived
   # values that `order_by` companion columns store and both tiers compare. The
   # rule set is versioned: keys are always recomputable from source values, so a
   # version bump regenerates them (server-side by the reconciler, client-side
   # from local rows) without migrations or wire cost.
+  #
+  # Where the tiers cannot be made to agree: the two runtimes carry Unicode case
+  # tables of different vintages, so a handful of very recently assigned
+  # codepoints (measured at 28 in OTP 28 against V8 in Node 23 - three in Latin
+  # Extended-D, the rest in the 0x16EA0 run) downcase on one tier and not the
+  # other. Nothing here can close that without shipping our own case tables, and
+  # it resolves as the runtimes catch up.
 
   # Version 1 rules: Unicode downcase, canonical decomposition (NFD), combining
   # marks stripped in the pinned ranges below, non-decomposable letters folded
@@ -29,6 +43,13 @@ defmodule Hologram.DB.SortKey do
   ]
 
   # Letters NFD cannot decompose, folded to their dictionary neighbors.
+  #
+  # Greek sigma is here for two reasons at once. It is one letter with two
+  # lowercase spellings, so folding them together is what puts ΑΘΗΝΑΣ beside
+  # αθηνας the way a dictionary does. It is ALSO what makes the tiers agree:
+  # JavaScript's toLowerCase applies Unicode's Final_Sigma mapping and Elixir's
+  # String.downcase/1 does not, so the same word reaches this fold spelled
+  # differently on each side - and leaves it spelled the same.
   @fold_map %{
     "ß" => "ss",
     "æ" => "ae",
@@ -42,7 +63,8 @@ defmodule Hologram.DB.SortKey do
     "ð" => "d",
     "ø" => "o",
     "þ" => "th",
-    "ſ" => "s"
+    "ſ" => "s",
+    "ς" => "σ"
   }
 
   @max_key_bytes 64
