@@ -411,6 +411,46 @@ defmodule Hologram.Query.InterpreterTest do
 
       assert matched_names(agreed(query, bindings: %{priorities: [1, 3]})) == ["ada", "bob"]
     end
+
+    # Identity with the database covers what each REFUSES, not only what each answers - so a nil
+    # binding is a caller error here too, rather than a filter nothing passes. Both refusals are
+    # asserted of both, which is the only way the messages are held together.
+    test "refuses a nil value bound to a param, as the database does" do
+      term =
+        Module10
+        |> filter(priority: %Param{name: :priority})
+        |> Query.normalize()
+
+      expected_msg = "nil value for param :priority - use an explicit nil predicate instead"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        QueryRunner.run(term, @mapping, %{priority: nil})
+      end
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, database(), bindings: %{priority: nil})
+      end
+    end
+
+    # A literal list may name nil - it is part of a term rather than a value handed to one - so
+    # the refusal is of the BINDING, not of the operator it feeds.
+    test "refuses a nil element in a list bound to a param, as the database does" do
+      term =
+        Module10
+        |> filter(priority: {:in, %Param{name: :priorities}})
+        |> Query.normalize()
+
+      expected_msg =
+        "nil element in the list for param :priorities - use an explicit nil predicate instead"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        QueryRunner.run(term, @mapping, %{priorities: [nil, 3]})
+      end
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, database(), bindings: %{priorities: [nil, 3]})
+      end
+    end
   end
 
   # Read policies are the server's business and the interpreter evaluates none of them, so the

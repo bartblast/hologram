@@ -25,7 +25,11 @@ defmodule Hologram.Query.Interpreter do
 
   `:actor_user_id` in the options is who is asking, for the predicates that name the acting user.
   An anonymous one matches nothing, the way an actor-referencing statement matches nothing when
-  there is no actor to compare against. `:bindings` gives the values of the term's params.
+  there is no actor to compare against. `:bindings` gives the values of the term's params, none of
+  which may be nil - neither as a value nor as an element of a list - which is what the database
+  refuses one for.
+
+  Raises ArgumentError on a nil binding.
   """
   @spec run(%{atom => any}, %{atom => any}, keyword) :: list(struct) | struct | integer | nil
   def run(term, database, opts \\ []) do
@@ -190,6 +194,7 @@ defmodule Hologram.Query.Interpreter do
     opts
     |> Keyword.get(:bindings, %{})
     |> Map.fetch!(name)
+    |> validate_binding!(name)
   end
 
   defp resolve(operand, opts) when is_list(operand) do
@@ -257,4 +262,26 @@ defmodule Hologram.Query.Interpreter do
   defp take(rows, nil), do: rows
 
   defp take(rows, limit), do: Enum.take(rows, limit)
+
+  # A binding carries no nil anywhere, which is what the database refuses it for - and identity
+  # with the database covers what each REFUSES, not only what each answers. A predicate about the
+  # rows that have no value is written as one, in the query, where the operator can be chosen to
+  # suit. A LITERAL list may still name nil: it is part of a term rather than a value handed to
+  # one, so it says what it means on its face.
+  defp validate_binding!(nil, name) do
+    raise ArgumentError,
+      message: "nil value for param #{inspect(name)} - use an explicit nil predicate instead"
+  end
+
+  defp validate_binding!(values, name) when is_list(values) do
+    if Enum.any?(values, &is_nil/1) do
+      raise ArgumentError,
+        message:
+          "nil element in the list for param #{inspect(name)} - use an explicit nil predicate instead"
+    end
+
+    values
+  end
+
+  defp validate_binding!(value, _name), do: value
 end
