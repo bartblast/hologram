@@ -781,8 +781,8 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
-                 ~s/"updated_at":"datetime"},"policy":{},"relationships":{},"serverOnly":[],/ <>
-                 ~s/"sortKeys":[]}}/
+                 ~s/"updated_at":"datetime"},"policy":{},"relationships":{},/ <>
+                 ~s/"resourceType":"test_fixtures_entity_module4","serverOnly":[],"sortKeys":[]}}/
              )
     end
 
@@ -870,7 +870,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"to":[["own",["viewer"]],["type","Hologram.Test.Fixtures.Policy.Module2",["admin"]]]/
+               ~s/"to":[["own",["viewer"]],["type","test_fixtures_policy_module2",["admin"]]]/
              )
 
       assert String.contains?(js, ~s/"publish":[{"predicates":[],"to":null,"via":"parent"}]/)

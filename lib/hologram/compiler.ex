@@ -1155,6 +1155,7 @@ defmodule Hologram.Compiler do
       {"attributes", attributes},
       {"policy", render_policy(entity_type, permission_checking?)},
       {"relationships", render_relationships(entity_type)},
+      {"resourceType", render_resource_type(entity_type)},
       {"serverOnly", server_only},
       {"sortKeys", render_sort_keys(entity_type, sort_key_attributes)}
     ])
@@ -1243,7 +1244,7 @@ defmodule Hologram.Compiler do
   defp render_policy_rule(entity_type, rule) do
     render_json_object([
       {"predicates", render_policy_predicates(entity_type, rule.predicates)},
-      {"to", render_policy_references(rule.to)},
+      {"to", render_policy_references(entity_type, rule.to)},
       {"via", Jason.encode!(rule.via)}
     ])
   end
@@ -1288,39 +1289,41 @@ defmodule Hologram.Compiler do
 
   # A grant reference names WHERE a role must be held: on the entity itself, on its whole type,
   # on a related entity, on the resource a grant row names, or nowhere at all (a global role).
-  defp render_policy_references(nil), do: "null"
+  defp render_policy_references(_entity_type, nil), do: "null"
 
-  defp render_policy_references(references) do
+  defp render_policy_references(entity_type, references) do
     references
-    |> Enum.map_join(",", &render_policy_reference/1)
+    |> Enum.map_join(",", &render_policy_reference(entity_type, &1))
     |> then(&"[#{&1}]")
   end
 
-  defp render_policy_reference({:own, role_names}) do
+  defp render_policy_reference(_entity_type, {:own, role_names}) do
     render_policy_reference_entry("own", [render_policy_roles(role_names)])
   end
 
-  defp render_policy_reference({:global, role_modules}) do
+  defp render_policy_reference(_entity_type, {:global, role_modules}) do
     render_policy_reference_entry("global", [render_policy_roles(role_modules)])
   end
 
-  defp render_policy_reference({:rel, relationship_name, role_names}) do
+  defp render_policy_reference(entity_type, {:rel, relationship_name, role_names}) do
     name_js =
       relationship_name
       |> Atom.to_string()
       |> Jason.encode!()
 
-    render_policy_reference_entry("rel", [name_js, render_policy_roles(role_names)])
+    {_name, target_type, _opts} =
+      List.keyfind(entity_type.__relationships__(), relationship_name, 0)
+
+    render_policy_reference_entry("rel", [
+      name_js,
+      render_resource_type(target_type),
+      render_policy_roles(role_names)
+    ])
   end
 
-  defp render_policy_reference({kind, target_type, role_names}) do
-    target_js =
-      target_type
-      |> Codec.encode_enum_value()
-      |> Jason.encode!()
-
+  defp render_policy_reference(_entity_type, {kind, target_type, role_names}) do
     render_policy_reference_entry(Atom.to_string(kind), [
-      target_js,
+      render_resource_type(target_type),
       render_policy_roles(role_names)
     ])
   end
@@ -1339,6 +1342,17 @@ defmodule Hologram.Compiler do
       |> Jason.encode!()
     end)
     |> then(&"[#{&1}]")
+  end
+
+  # The name a grant row spells this type by - what its resource_type column holds. A reference
+  # carries it rather than the module name so that matching a row is a comparison rather than a
+  # lookup, and so that a reference may name a type the client never syncs: a role held on an
+  # admin-only type can gate a synced type's rules, and the model would have nothing to look up.
+  defp render_resource_type(entity_type) do
+    entity_type
+    |> RoleGrant.resource_type()
+    |> Codec.encode_enum_value()
+    |> Jason.encode!()
   end
 
   # A name matching no attribute definition is a to-one reference field, and every one of those

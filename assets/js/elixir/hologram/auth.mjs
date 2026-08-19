@@ -1,15 +1,280 @@
 "use strict";
 
 import Interpreter from "../../interpreter.mjs";
+import LocalDatabase from "../../local_database.mjs";
+import Model from "../../model.mjs";
+import Type from "../../type.mjs";
 
-// TODO: replace the placeholder with the client-side check - it evaluates the entity type's
-// compiled policy rules against the grant tuples synced to the local database and the session
-// identity held by the runtime, so that call sites read the same on both tiers.
+// Whether the acting user may do something, answered here rather than asked of the server.
+//
+// Hologram.Policy.Evaluator is the reference this mirrors, and Hologram.Auth is where its
+// checker lives on that side. The split is kept: rules are evaluated over plain values, and
+// what a rule REFERENCES - a role held somewhere - is answered by reading grant rows. The
+// server reads them with SELECT EXISTS, this reads them from the pot.
+//
+// Both halves of what it needs are compile-time facts the bundle carries: the rules in each
+// type's model entry, and the name the grant store spells that type by. The rows are ordinary
+// synced rows, and a page that checks permissions hands over the ones its own checks asked
+// about, so the first render answers what the server answered.
+const GRANT_TYPE = "Hologram.Auth.RoleGrant";
+
+// A rule that references the acting user is skipped for a visitor rather than evaluated with
+// nobody - evaluating it would let a row whose reference is missing match everyone. A delegating
+// rule is still evaluated, because the type it delegates to skips its own actor rules in turn.
+function actorGated(rule) {
+  return (
+    rule.to !== null ||
+    rule.predicates.some(([_name, _operator, value]) => isActorValue(value))
+  );
+}
+
+// Every value compares as the wire spells it - dates and datetimes as their strings, whose
+// character order IS their instant order - so one comparison serves every type.
+function compare(left, right) {
+  if (left === right) {
+    return "eq";
+  }
+
+  return left < right ? "lt" : left > right ? "gt" : "eq";
+}
+
+function equal(left, right) {
+  return compare(left, right) === "eq";
+}
+
+// The role a grant row holds, and where it holds it, are what a reference names - so a match is
+// a comparison against the row's own columns.
+function grantExists(rows, userId, roles, resourceType, resourceIds) {
+  return rows.some(
+    (row) =>
+      row.user_id === userId &&
+      roles.includes(row.role) &&
+      row.resource_type === resourceType &&
+      resourceIds.includes(row.resource_id),
+  );
+}
+
+function grantRows() {
+  return Object.values(LocalDatabase.getTable(GRANT_TYPE));
+}
+
+function holds(fieldValue, operator, value) {
+  if (operator === "==") {
+    return equal(fieldValue, value);
+  }
+
+  if (operator === "!=") {
+    return !equal(fieldValue, value);
+  }
+
+  if (operator === "in") {
+    return value.some((element) => equal(fieldValue, element));
+  }
+
+  if (operator === "not_in") {
+    return !value.some((element) => equal(fieldValue, element));
+  }
+
+  // An ordering comparison never matches a missing value, on either side - the same rule the
+  // database applies, where a comparison with NULL is unknown rather than true.
+  if (fieldValue === null || value === null) {
+    return false;
+  }
+
+  switch (operator) {
+    case "<":
+      return compare(fieldValue, value) === "lt";
+
+    case "<=":
+      return compare(fieldValue, value) !== "gt";
+
+    case ">":
+      return compare(fieldValue, value) === "gt";
+
+    default:
+      return compare(fieldValue, value) !== "lt";
+  }
+}
+
+function isActorValue(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    value.actor === true
+  );
+}
+
+// The value a rule compares against, read off the boxed entity in the spelling the rules were
+// baked in - the rules travel wire-spelled, so what they are compared with must be too.
+function entityValue(entityType, entity, name) {
+  const attributeType = Model.entry(entityType).attributes[name] ?? "uuid";
+  const key = Type.encodeMapKey(Type.atom(name));
+  const entry = entity.data[key];
+
+  return entry ? Model.unbox(entry[1], attributeType) : null;
+}
+
+function predicatesHold(entityType, entity, predicates, actorUserId) {
+  return predicates.every(([name, operator, value]) =>
+    holds(
+      entityValue(entityType, entity, name),
+      operator,
+      isActorValue(value) ? actorUserId : value,
+    ),
+  );
+}
+
+// Where a role must be held for a reference to be satisfied. Each shape names a scope the grant
+// store keeps apart by its resource columns - an own-scope role is held on the entity itself OR
+// on its whole type, which the store spells as a null resource id.
+function referenceHolds(reference, entityType, entity, actorUserId) {
+  const rows = grantRows();
+  const [kind] = reference;
+
+  switch (kind) {
+    case "global": {
+      const [_kind, roles] = reference;
+
+      return grantExists(rows, actorUserId, roles, null, [null]);
+    }
+
+    case "own": {
+      const [_kind, roles] = reference;
+      const resourceType = Model.entry(entityType).resourceType;
+      const id = entityValue(entityType, entity, "id");
+
+      return grantExists(rows, actorUserId, roles, resourceType, [id, null]);
+    }
+
+    case "rel": {
+      const [_kind, relationshipName, resourceType, roles] = reference;
+      const targetId = entityValue(
+        entityType,
+        entity,
+        `${relationshipName}_id`,
+      );
+
+      return (
+        targetId !== null &&
+        grantExists(rows, actorUserId, roles, resourceType, [targetId])
+      );
+    }
+
+    // The grant store's own rule: a role held on the resource the grant row names.
+    case "resource": {
+      const [_kind, resourceType, roles] = reference;
+      const rowResourceId = entityValue(entityType, entity, "resource_id");
+
+      return (
+        rowResourceId !== null &&
+        grantExists(rows, actorUserId, roles, resourceType, [rowResourceId])
+      );
+    }
+
+    default: {
+      const [_kind, resourceType, roles] = reference;
+
+      return grantExists(rows, actorUserId, roles, resourceType, [null]);
+    }
+  }
+}
+
+function ruleMatches(rule, entityType, entity, actorUserId) {
+  if (actorUserId === null && actorGated(rule)) {
+    return false;
+  }
+
+  if (!predicatesHold(entityType, entity, rule.predicates, actorUserId)) {
+    return false;
+  }
+
+  if (
+    rule.to !== null &&
+    !rule.to.some((reference) =>
+      referenceHolds(reference, entityType, entity, actorUserId),
+    )
+  ) {
+    return false;
+  }
+
+  return rule.via === null || viaHolds(rule, entityType, entity, actorUserId);
+}
+
+// The acting user, as a bare id: a check takes the user entity or the id itself, and nobody at
+// all for a visitor.
+function unboxActorUserId(userOrId) {
+  if (Type.isNil(userOrId)) {
+    return null;
+  }
+
+  if (Type.isMap(userOrId)) {
+    const entry = userOrId.data[Type.encodeMapKey(Type.atom("id"))];
+
+    return entry ? Model.unbox(entry[1], "uuid") : null;
+  }
+
+  return Model.unbox(userOrId, "uuid");
+}
+
+// Delegation asks the RELATED entity's policy for the same operation, so it needs that row and
+// its rules. A client holds neither for a type its build never syncs, and cannot ask the server
+// mid-render - so the answer is no, the way it is for any rule the rows do not satisfy.
+function viaHolds(rule, entityType, entity, actorUserId) {
+  const relationship = Model.entry(entityType).relationships[rule.via];
+  const targetId = entityValue(entityType, entity, `${rule.via}_id`);
+
+  if (!relationship || targetId === null) {
+    return false;
+  }
+
+  const target = LocalDatabase.getRow(relationship.type, targetId);
+
+  return (
+    target !== null && grants(relationship.type, target, rule, actorUserId)
+  );
+}
+
+function grants(entityType, row, rule, actorUserId) {
+  const entry = globalThis.Hologram.sync?.model?.[entityType];
+
+  if (!entry) {
+    return false;
+  }
+
+  const rules = entry.policy[rule.operation] ?? [];
+  const boxed = Model.box(entityType, row);
+
+  return rules.some((related) =>
+    ruleMatches(
+      {...related, operation: rule.operation},
+      entityType,
+      boxed,
+      actorUserId,
+    ),
+  );
+}
+
 const Elixir_Hologram_Auth = {
-  "can?/3": (_userOrId, _operation, _entity) => {
-    Interpreter.raiseError(
-      "RuntimeError",
-      "can?/3 is not available on the client yet - call it from a command handler, which runs on the server",
+  "can?/3": (userOrId, operation, entity) => {
+    const entityType = Interpreter.moduleExName(
+      entity.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
+    );
+
+    const actorUserId = unboxActorUserId(userOrId);
+    const operationName = operation.value;
+    const rules = Model.entry(entityType).policy[operationName] ?? [];
+
+    // An operation with no rules grants nothing, which is what makes the default deny.
+    return Type.boolean(
+      rules.some((rule) =>
+        ruleMatches(
+          {...rule, operation: operationName},
+          entityType,
+          entity,
+          actorUserId,
+        ),
+      ),
     );
   },
 };

@@ -361,8 +361,6 @@ defmodule Hologram.Compiler.CallGraph do
     {Code, :ensure_loaded, 1},
     {Exception, :format_stacktrace, 1},
     {FunctionClauseError, :message, 1},
-    # TODO: the port raises - replace it with the client-side check evaluating compiled policy
-    # rules against synced grant tuples.
     {Hologram.Auth, :can?, 3},
     {Hologram.Entity, :generate_id, 0},
     {Hologram.JS, :call, 4},
