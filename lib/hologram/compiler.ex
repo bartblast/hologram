@@ -1,6 +1,7 @@
 defmodule Hologram.Compiler do
   @moduledoc false
 
+  alias Hologram.Auth
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.MapUtils
   alias Hologram.Commons.PathUtils
@@ -112,15 +113,53 @@ defmodule Hologram.Compiler do
 
   A page reaching no query at all has no windows, and answers with an empty list rather than
   being left out.
+
+  Pages listed in `permission_checking_pages` also download the grants window: what a client
+  evaluates permissions against is grant rows, so a page that checks them on the client needs
+  them held like any other rows it reads. The list is derived apart, from the call graph BEFORE
+  manually ported MFAs are removed - see `pages_checking_permissions/2`.
   """
-  @spec build_page_windows(list(module), CallGraph.t()) :: %{module => list(String.t())}
-  def build_page_windows(page_modules, call_graph) do
+  @spec build_page_windows(list(module), CallGraph.t(), list(module)) ::
+          %{module => list(String.t())}
+  def build_page_windows(page_modules, call_graph, permission_checking_pages \\ []) do
     graph = CallGraph.get_graph(call_graph)
     templatables = page_modules ++ Reflection.list_components()
     analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
 
     Map.new(page_modules, fn page_module ->
-      {page_module, page_window_ids(page_module, call_graph, analysis)}
+      window_ids = page_window_ids(page_module, call_graph, analysis)
+
+      window_ids =
+        if page_module in permission_checking_pages do
+          Enum.sort([grants_window_id() | window_ids])
+        else
+          window_ids
+        end
+
+      {page_module, window_ids}
+    end)
+  end
+
+  @doc """
+  Returns the given pages that can check permissions on the CLIENT - the ones whose bundled code
+  reaches `Hologram.Auth.can?/3`.
+
+  Takes the call graph BEFORE manually ported MFAs are removed: `can?/3` is one of them, so the
+  graph the bundles are derived from no longer holds the vertex to ask about. Reachability is
+  read through the same page walk the bundles use, so what registers the grants window is what
+  actually ships - a `can?` reached only from command handlers, which run on the server, does
+  not.
+  """
+  @spec pages_checking_permissions(list(module), CallGraph.t()) :: list(module)
+  def pages_checking_permissions(page_modules, call_graph) do
+    graph = CallGraph.get_graph(call_graph)
+    templatables = page_modules ++ Reflection.list_components()
+    analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+
+    Enum.filter(page_modules, fn page_module ->
+      call_graph
+      |> CallGraph.list_page_mfas(page_module, analysis)
+      |> Enum.member?({Hologram.Auth, :can?, 3})
     end)
   end
 
@@ -1318,6 +1357,10 @@ defmodule Hologram.Compiler do
     if beam_path != :non_existing do
       beam_path
     end
+  end
+
+  defp grants_window_id do
+    Registry.id(Auth.grants_window())
   end
 
   defp window_id(term) do

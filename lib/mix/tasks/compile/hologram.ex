@@ -164,11 +164,16 @@ defmodule Mix.Tasks.Compile.Hologram do
       # the build here, every reachable consumer at once, rather than one render at a time.
       Compiler.validate_slot_bindings!(page_modules, call_graph_for_runtime)
 
+      # Asked of the UNSPLIT graph on purpose: can?/3 is manually ported, so the graph the
+      # bundles are derived from no longer holds the vertex to ask about - while the question is
+      # exactly whether the bundles reach it.
+      permission_checking_pages = Compiler.pages_checking_permissions(page_modules, call_graph)
+
       # Derived before the graph is split, so that a component reached through a runtime MFA is
       # still counted as one the page can reach.
       {page_windows_plt, page_windows_plt_dump_path} =
         page_modules
-        |> Compiler.build_page_windows(call_graph_for_runtime)
+        |> Compiler.build_page_windows(call_graph_for_runtime, permission_checking_pages)
         |> Compiler.build_page_windows_plt(Keyword.put(opts, :supervisor, sup))
 
       runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime, page_modules)

@@ -4,6 +4,7 @@ defmodule Hologram.CompilerTest do
 
   import Hologram.Compiler
 
+  alias Hologram.Auth
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
@@ -27,6 +28,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
+  alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
+  alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
 
@@ -366,7 +369,7 @@ defmodule Hologram.CompilerTest do
     assert CallGraph.has_vertex?(call_graph, {Compiler, :build_call_graph, 1})
   end
 
-  describe "build_page_windows/2" do
+  describe "build_page_windows/3" do
     setup %{call_graph: call_graph} do
       [page_windows: build_page_windows(Reflection.list_pages(), call_graph)]
     end
@@ -393,6 +396,53 @@ defmodule Hologram.CompilerTest do
         |> Enum.sort()
 
       assert answered_pages == Enum.sort(Reflection.list_pages())
+    end
+
+    # What a client evaluates permissions against is grant rows, so a page checking them on the
+    # client downloads them like any other rows it reads.
+    test "gives a permission-checking page the grants window", %{call_graph: call_graph} do
+      page_windows = build_page_windows([PageModule7], call_graph, [PageModule7])
+
+      assert page_windows[PageModule7] == [Registry.id(Auth.grants_window())]
+    end
+
+    test "leaves the grants window out of a page that checks nothing", %{
+      page_windows: page_windows
+    } do
+      refute Registry.id(Auth.grants_window()) in page_windows[PageModule7]
+    end
+
+    test "keeps a permission-checking page's own windows beside the grants window", %{
+      call_graph: call_graph
+    } do
+      page_windows = build_page_windows([PageModule8], call_graph, [PageModule8])
+
+      assert Registry.id(Auth.grants_window()) in page_windows[PageModule8]
+      assert length(page_windows[PageModule8]) == 2
+    end
+  end
+
+  # The gate reads the graph the bundles come from, so what registers the window is what actually
+  # ships - not every mention of the check in the project.
+  describe "pages_checking_permissions/2" do
+    test "names a page whose template checks permissions", %{call_graph: call_graph} do
+      pages = pages_checking_permissions(Reflection.list_pages(), call_graph)
+
+      assert PageModule10 in pages
+    end
+
+    test "passes over a page that checks permissions only in a command handler", %{
+      call_graph: call_graph
+    } do
+      pages = pages_checking_permissions(Reflection.list_pages(), call_graph)
+
+      refute PageModule11 in pages
+    end
+
+    test "passes over a page that checks nothing", %{call_graph: call_graph} do
+      pages = pages_checking_permissions(Reflection.list_pages(), call_graph)
+
+      refute PageModule7 in pages
     end
   end
 
