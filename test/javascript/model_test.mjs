@@ -17,6 +17,11 @@ describe("Model", () => {
 
   // One attribute of every admitted type, a server-only one, and both relationship
   // cardinalities - the shape the build bakes for a type this client can hold.
+  //
+  // Neither relationship target has an entry of its own, deliberately: a build carries a type
+  // when a query reaches it, so a relationship nothing queries through points at a name the model
+  // does not hold. Boxing reads the reference field and leaves the sentinel, asking the target
+  // nothing - and a query that DID include one would have put it in the model by including it.
   beforeEach(() => {
     globalThis.Hologram.sync = {
       model: {
