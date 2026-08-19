@@ -2,7 +2,6 @@
 defmodule Hologram.Test.Fixtures.Page.Module10 do
   use Hologram.Page
 
-  alias Hologram.Auth
   alias Hologram.Test.Fixtures.Entity.Module2
 
   route "/hologram-test-fixtures-page-module10"
@@ -19,7 +18,7 @@ defmodule Hologram.Test.Fixtures.Page.Module10 do
   @impl Page
   def template do
     ~HOLO"""
-    {Auth.can?(nil, :read, @entity)}
+    {can?(nil, :read, @entity)}
     """
   end
 end

@@ -2,7 +2,6 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module103 do
   use Hologram.Page
 
-  alias Hologram.Auth
   alias Hologram.Test.Fixtures.Policy.Module1
 
   param :entity_id, :string
@@ -23,7 +22,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module103 do
   @impl Page
   def template do
     ~HOLO"""
-    may read = {Auth.can?(@user_id, :read, @entity)}
+    may read = {can?(@user_id, :read, @entity)}
     """
   end
 end
