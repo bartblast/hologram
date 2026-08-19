@@ -92,6 +92,12 @@ describe("Sse", () => {
     Sse.renderScheduled = false;
     Sse.syncCursor = null;
 
+    // Level, which is what "not mid-navigation" is - the state a repaint is allowed to run in.
+    // Reset here rather than by the one test that parts them, so a failing assertion cannot leave
+    // every test after it looking mid-navigation.
+    Hologram.domEpoch = 0;
+    Hologram.registryEpoch = 0;
+
     LocalDatabase.reset();
     Model.reset();
 
@@ -752,6 +758,24 @@ describe("Sse", () => {
       Sse.eventSource.listeners.sync_deltas({data: frame()});
 
       assert.equal(animationFrames.length, 1);
+    });
+
+    // Between the destination's markup going up and its mount, the page on screen is one the
+    // registry cannot answer for - the window an action is held in rather than run. Rendering
+    // there would draw the page being left over the destination's virtual document.
+    it("stands down from a repaint that lands mid-navigation", async () => {
+      const renderStub = sinon.stub(Hologram, "render");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.listeners.sync_deltas({data: frame()});
+
+      Hologram.domEpoch = Hologram.registryEpoch + 1;
+
+      animationFrames[0]();
+
+      sinon.assert.notCalled(renderStub);
     });
 
     it("schedules the next repaint once the scheduled one has run", async () => {

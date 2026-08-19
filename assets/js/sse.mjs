@@ -307,6 +307,16 @@ export default class Sse {
 
     window.requestAnimationFrame(() => {
       $.renderScheduled = false;
+
+      // Frames keep arriving through a navigation, and between the destination's markup going up
+      // and its mount there is a page on screen that the registry cannot yet answer for. A render
+      // there would draw the page being LEFT over the destination's virtual document - the same
+      // window in which an action is held rather than run. Nothing is lost by standing down: the
+      // mount renders when it closes the transition.
+      if (Hologram.domEpoch !== Hologram.registryEpoch) {
+        return;
+      }
+
       Hologram.render();
     });
   }
