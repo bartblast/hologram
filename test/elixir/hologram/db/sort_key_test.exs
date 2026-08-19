@@ -2,8 +2,8 @@ defmodule Hologram.DB.SortKeyTest do
   @moduledoc """
   IMPORTANT!
   Each test here has a related JavaScript test in test/javascript/sort_key_test.mjs, in the same
-  order - the two tiers compute the same keys or a client sorts its own rows differently from the
-  server. Always update both together, and the two implementations with them.
+  order - the two tiers must compute the same keys, or a client sorts its own rows differently from
+  the server. Always update both together, and the two implementations with them.
   """
   use Hologram.Test.BasicCase, async: true
 

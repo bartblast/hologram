@@ -6,8 +6,8 @@ import SortKey from "../../assets/js/sort_key.mjs";
 
 // IMPORTANT!
 // Each test here has a related Elixir test in test/elixir/hologram/db/sort_key_test.exs, in the
-// same order - the two tiers compute the same keys or a client sorts its own rows differently from
-// the server. Always update both together, and the two implementations with them. The Elixir
+// same order - the two tiers must compute the same keys, or a client sorts its own rows differently
+// from the server. Always update both together, and the two implementations with them. The Elixir
 // module is the reference implementation.
 describe("SortKey", () => {
   describe("compute()", () => {
