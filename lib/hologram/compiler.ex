@@ -1401,10 +1401,18 @@ defmodule Hologram.Compiler do
   # stale, and a value the current server puts in the page would always agree with the current
   # server.
   #
-  # A build declaring no entity types says NULL, explicitly: it has no database - the application
-  # tree gates the whole data layer on exactly that - so a client reads one unambiguous value
-  # instead of probing for a missing global. An empty OBJECT would be worse than nothing at all:
-  # `{}` is truthy, so every "does this bundle sync?" check would pass on a bundle that does not.
+  # NULL means the APPLICATION declares no entity type - `Reflection.list_entities() == []`, the
+  # same predicate `application.ex` gates the database children on and `Handshake.check/1` refuses
+  # sync by. The three answer alike on purpose: the bundle claims a data layer exactly when the
+  # server has one. Null rather than nothing, so a client reads one unambiguous value instead of
+  # probing for a missing global - and rather than `{}`, which is truthy, so every "does this
+  # bundle sync?" check would pass on a bundle that never syncs.
+  #
+  # This is NOT the same as the build's own `:entity_types` being empty, which says only that no
+  # page reaches a query and no page checks permissions on the client. Such an app HAS a database
+  # and will answer a greeting, so its bundle keeps saying so: the client greets, its session
+  # opens with no windows, and its model is empty because nothing syncs yet - not because nothing
+  # can.
   defp render_sync_constants(sync_constants) do
     if Reflection.list_entities() == [] do
       ~s/globalThis.Hologram.sync = null;/
