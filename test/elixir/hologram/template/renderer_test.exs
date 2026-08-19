@@ -2127,6 +2127,27 @@ defmodule Hologram.Template.RendererTest do
       refute String.contains?(script_text, "$PAGE_PARAMS_JS_PLACEHOLDER")
       assert String.contains?(script_text, "selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER")
     end
+
+    # The mount data goes into a script element as source, and a param comes from the URL - so a
+    # param spelling a closing tag would end that element and put what follows it into the
+    # document as markup. The escape leaves the string the page carries unchanged.
+    test "carries a param that spells a closing tag without ending the script" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      {html, _tree, _component_registry, _server_struct} =
+        render_page(Module48, %{probe: "</script><script>alert(1)</script>"}, @server, @opts)
+
+      refute String.contains?(html, "</script><script>alert(1)")
+
+      assert String.contains?(
+               html,
+               ~S|Type.bitstring("\u{3C}/script>\u{3C}script>alert(1)\u{3C}/script>")|
+             )
+    end
   end
 
   # IMPORTANT!

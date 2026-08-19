@@ -1166,6 +1166,16 @@ defmodule Hologram.Compiler.Encoder do
     "\\u{2029}" <> escape_non_printable_and_special_chars(rest)
   end
 
+  # Encoded source is printed into script elements, and a string holding `</script>` would end the
+  # element around it whatever the JavaScript is doing - an HTML parser reads the closing tag
+  # before any engine reads the code. Escaping the `<` leaves the string identical and leaves
+  # nothing a parser can read as a tag. Done here rather than where a term meets a page because
+  # this is the one place that knows it is inside a string literal, where an escape means what it
+  # says.
+  defp escape_non_printable_and_special_chars("<" <> rest) do
+    "\\u{3C}" <> escape_non_printable_and_special_chars(rest)
+  end
+
   defp escape_non_printable_and_special_chars(<<code::utf8, rest::binary>>) do
     char = <<code::utf8>>
 

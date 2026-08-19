@@ -3128,6 +3128,15 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == ~s/Type.bitstring("\\u{2029}")/
     end
 
+    # Encoded source is printed into script elements, where a `</script>` in a string would end
+    # the element whatever the JavaScript around it is doing.
+    test "less-than char" do
+      # "<"
+      ir = %IR.StringType{value: "<"}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\u{3C}")/
+    end
+
     test "non-printable Unicode char" do
       # <<133::utf8>> (equivalent to <<194, 133>>)
       ir = %IR.StringType{value: <<133::utf8>>}
