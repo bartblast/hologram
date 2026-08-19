@@ -2365,18 +2365,16 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
-  describe "interpolate_js_in_tree/3" do
+  describe "interpolate_js_in_tree/2" do
     test "substitutes the placeholder inside a script element's text" do
       tree =
         {:element, "script", [],
          [{:text, "window.registry = $COMPONENT_REGISTRY_JS_PLACEHOLDER;"}]}
 
       result =
-        Renderer.interpolate_js_in_tree(
-          tree,
-          "$COMPONENT_REGISTRY_JS_PLACEHOLDER",
-          "Type.map([])"
-        )
+        Renderer.interpolate_js_in_tree(tree, %{
+          "$COMPONENT_REGISTRY_JS_PLACEHOLDER" => "Type.map([])"
+        })
 
       assert result == {:element, "script", [], [{:text, "window.registry = Type.map([]);"}]}
     end
@@ -2387,7 +2385,7 @@ defmodule Hologram.Template.RendererTest do
          [{:text, "$PAGE_PARAMS_JS_PLACEHOLDER, $PAGE_PARAMS_JS_PLACEHOLDER"}]}
 
       result =
-        Renderer.interpolate_js_in_tree(tree, "$PAGE_PARAMS_JS_PLACEHOLDER", "Type.map([])")
+        Renderer.interpolate_js_in_tree(tree, %{"$PAGE_PARAMS_JS_PLACEHOLDER" => "Type.map([])"})
 
       assert result == {:element, "script", [], [{:text, "Type.map([]), Type.map([])"}]}
     end
@@ -2401,7 +2399,9 @@ defmodule Hologram.Template.RendererTest do
          ]}
 
       result =
-        Renderer.interpolate_js_in_tree(tree, "$PAGE_MODULE_JS_PLACEHOLDER", ~s/Type.atom("abc")/)
+        Renderer.interpolate_js_in_tree(tree, %{
+          "$PAGE_MODULE_JS_PLACEHOLDER" => ~s/Type.atom("abc")/
+        })
 
       assert result ==
                {:element, "html", [],
@@ -2418,7 +2418,7 @@ defmodule Hologram.Template.RendererTest do
       ]
 
       result =
-        Renderer.interpolate_js_in_tree(tree, "$SELF_ECHOES_JS_PLACEHOLDER", "Type.list([])")
+        Renderer.interpolate_js_in_tree(tree, %{"$SELF_ECHOES_JS_PLACEHOLDER" => "Type.list([])"})
 
       assert result == [
                {:element, "script", [], [{:text, "Type.list([])"}]},
@@ -2430,16 +2430,46 @@ defmodule Hologram.Template.RendererTest do
       tree = {:element, "div", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
 
       result =
-        Renderer.interpolate_js_in_tree(tree, "$SELF_ECHOES_JS_PLACEHOLDER", "Type.list([])")
+        Renderer.interpolate_js_in_tree(tree, %{"$SELF_ECHOES_JS_PLACEHOLDER" => "Type.list([])"})
 
       assert result == {:element, "div", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
+    end
+
+    # A token the map does not answer for belongs to whoever interpolates next, so it has to
+    # survive this pass exactly as it was.
+    test "leaves a placeholder the map does not answer for alone" do
+      tree = {:element, "script", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
+
+      result =
+        Renderer.interpolate_js_in_tree(tree, %{"$PAGE_MODULE_JS_PLACEHOLDER" => "Type.nil()"})
+
+      assert result == {:element, "script", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
+    end
+
+    # The values these carry hold whatever a URL, a database or a component's state put there.
+    # Read as a placeholder in turn, a value naming another token would have that token's
+    # JavaScript inserted inside the string it travels in, whose quotes end that string.
+    test "leaves a placeholder carried by an inserted value unsubstituted" do
+      tree = {:element, "script", [], [{:text, "p = $PAGE_PARAMS_JS_PLACEHOLDER;"}]}
+
+      result =
+        Renderer.interpolate_js_in_tree(tree, %{
+          "$PAGE_MODULE_JS_PLACEHOLDER" => ~s/Type.atom("abc")/,
+          "$PAGE_PARAMS_JS_PLACEHOLDER" => ~s/Type.bitstring("$PAGE_MODULE_JS_PLACEHOLDER")/
+        })
+
+      # The `$` is spelled as an escape, so the string still reads as the token and no later
+      # pass can act on it.
+      assert result ==
+               {:element, "script", [],
+                [{:text, ~S/p = Type.bitstring("\u0024PAGE_MODULE_JS_PLACEHOLDER");/}]}
     end
 
     test "leaves attribute values untouched" do
       tree = {:element, "script", [{"data-info", [text: "$SELF_ECHOES_JS_PLACEHOLDER"]}], []}
 
       result =
-        Renderer.interpolate_js_in_tree(tree, "$SELF_ECHOES_JS_PLACEHOLDER", "Type.list([])")
+        Renderer.interpolate_js_in_tree(tree, %{"$SELF_ECHOES_JS_PLACEHOLDER" => "Type.list([])"})
 
       assert result ==
                {:element, "script", [{"data-info", [text: "$SELF_ECHOES_JS_PLACEHOLDER"]}], []}

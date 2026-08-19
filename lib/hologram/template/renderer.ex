@@ -21,6 +21,10 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Sync.Carry
   alias Hologram.Template.DOM
 
+  # Every placeholder the mount script carries, whoever fills it in - the renderer answers for
+  # most, the controller for the rest.
+  @js_placeholder_pattern ~r/\$[A-Z_]+_JS_PLACEHOLDER/
+
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
 
@@ -55,35 +59,60 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
-  Substitutes the given placeholder with the given JavaScript source inside every script
-  element's text across the given tree.
+  Substitutes the given placeholders with the JavaScript source each maps to, in one pass over
+  the given text.
+
+  ONE pass, so nothing a replacement carries is read as a placeholder in turn - a value holding
+  the text of another token would otherwise have that token honoured inside it, and these values
+  hold whatever a URL, a database or a component's state put there.
+
+  What an inserted value carries is neutralized for the same reason one stage further out: a
+  token inside it survives this pass untouched and would be substituted by whoever interpolates
+  next. Inserted values are JavaScript source or JSON, and in both a token can only sit inside a
+  string, where spelling its `$` as an escape leaves the string saying exactly what it said.
+
+  A token the map does not answer for is left as it was, for whoever answers for it later.
+  """
+  @spec interpolate_js(String.t(), %{String.t() => String.t()}) :: String.t()
+  def interpolate_js(text, replacements) do
+    Regex.replace(@js_placeholder_pattern, text, fn token ->
+      case Map.fetch(replacements, token) do
+        {:ok, js} -> neutralize_js_placeholders(js)
+        :error -> token
+      end
+    end)
+  end
+
+  @doc """
+  Substitutes the given placeholders with the JavaScript source each maps to, inside every
+  script element's text across the given tree.
 
   Placeholders are JavaScript expressions, meaningful only where JavaScript lives, so text
   outside a script element is left alone - a placeholder string occurring in user-visible
   content stays literal.
   """
-  @spec interpolate_js_in_tree(tree, String.t(), String.t()) :: tree
-  def interpolate_js_in_tree(tree, placeholder, js)
+  @spec interpolate_js_in_tree(tree, %{String.t() => String.t()}) :: tree
+  def interpolate_js_in_tree(tree, replacements)
 
-  def interpolate_js_in_tree({:element, "script", attributes, children}, placeholder, js) do
+  def interpolate_js_in_tree({:element, "script", attributes, children}, replacements) do
     interpolated_children =
       Enum.map(children, fn
-        {:text, text} -> {:text, String.replace(text, placeholder, js)}
-        child -> interpolate_js_in_tree(child, placeholder, js)
+        {:text, text} -> {:text, interpolate_js(text, replacements)}
+        child -> interpolate_js_in_tree(child, replacements)
       end)
 
     {:element, "script", attributes, interpolated_children}
   end
 
-  def interpolate_js_in_tree({:element, tag_name, attributes, children}, placeholder, js) do
-    {:element, tag_name, attributes, interpolate_js_in_tree(children, placeholder, js)}
+  def interpolate_js_in_tree({:element, tag_name, attributes, children}, replacements) do
+    {:element, tag_name, attributes, interpolate_js_in_tree(children, replacements)}
   end
 
-  def interpolate_js_in_tree(nodes, placeholder, js) when is_list(nodes) do
-    Enum.map(nodes, &interpolate_js_in_tree(&1, placeholder, js))
+  def interpolate_js_in_tree(nodes, replacements) when is_list(nodes) do
+    Enum.map(nodes, &interpolate_js_in_tree(&1, replacements))
   end
 
-  def interpolate_js_in_tree(node, _placeholder, _js), do: node
+  def interpolate_js_in_tree(node, _replacements), do: node
 
   @doc """
   Substitutes the `$SELF_ECHOES_JS_PLACEHOLDER` token in the given HTML with
@@ -92,7 +121,8 @@ defmodule Hologram.Template.Renderer do
   @spec interpolate_self_echoes_js(String.t(), [Component.Action.t()]) :: String.t()
   def interpolate_self_echoes_js(html, self_echoes) do
     self_echoes_js = Encoder.encode_client_term!(self_echoes)
-    String.replace(html, "$SELF_ECHOES_JS_PLACEHOLDER", self_echoes_js)
+
+    interpolate_js(html, %{"$SELF_ECHOES_JS_PLACEHOLDER" => self_echoes_js})
   end
 
   @doc """
@@ -268,26 +298,30 @@ defmodule Hologram.Template.Renderer do
     sync_counts_js = Jason.encode!(Carry.take_counts(), escape: :html_safe)
     sync_rows_js = Jason.encode!(Carry.take(), escape: :html_safe)
 
+    # Substituted in ONE pass rather than seven, and the order they are written in stops meaning
+    # anything. A sequence of replacements rescans what the ones before it inserted, so a value
+    # holding the text of a LATER token has that token honoured inside it - and a page param
+    # carrying `$SYNC_ROWS_JS_PLACEHOLDER` put the rows JSON inside the string literal the param
+    # travels in, whose quotes end that literal. A URL is enough to reach it.
+    #
+    # `$SELF_ECHOES_JS_PLACEHOLDER` is not in the map and survives the pass: a token nothing here
+    # answers for is left exactly as it was, for the caller who does answer for it.
+    replacements = %{
+      "$ACTOR_USER_ID_JS_PLACEHOLDER" => actor_user_id_js,
+      "$ASSET_MANIFEST_JS_PLACEHOLDER" => asset_manifest_js,
+      "$COMPONENT_REGISTRY_JS_PLACEHOLDER" => component_registry_js,
+      "$PAGE_MODULE_JS_PLACEHOLDER" => page_module_js,
+      "$PAGE_PARAMS_JS_PLACEHOLDER" => page_params_js,
+      "$SYNC_COUNTS_JS_PLACEHOLDER" => sync_counts_js,
+      "$SYNC_ROWS_JS_PLACEHOLDER" => sync_rows_js
+    }
+
     html_with_interpolated_js =
       initial_tree
       |> print_dom()
-      |> String.replace("$ACTOR_USER_ID_JS_PLACEHOLDER", actor_user_id_js)
-      |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
-      |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
-      |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
-      |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
-      |> String.replace("$SYNC_COUNTS_JS_PLACEHOLDER", sync_counts_js)
-      |> String.replace("$SYNC_ROWS_JS_PLACEHOLDER", sync_rows_js)
+      |> interpolate_js(replacements)
 
-    tree_with_interpolated_js =
-      initial_tree
-      |> interpolate_js_in_tree("$ACTOR_USER_ID_JS_PLACEHOLDER", actor_user_id_js)
-      |> interpolate_js_in_tree("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
-      |> interpolate_js_in_tree("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
-      |> interpolate_js_in_tree("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
-      |> interpolate_js_in_tree("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
-      |> interpolate_js_in_tree("$SYNC_COUNTS_JS_PLACEHOLDER", sync_counts_js)
-      |> interpolate_js_in_tree("$SYNC_ROWS_JS_PLACEHOLDER", sync_rows_js)
+    tree_with_interpolated_js = interpolate_js_in_tree(initial_tree, replacements)
 
     {html_with_interpolated_js, tree_with_interpolated_js, component_registry_with_page_struct,
      final_server_struct}
@@ -734,6 +768,15 @@ defmodule Hologram.Template.Renderer do
     |> Enum.filter(fn {_name, _type, opts} -> opts[:from_query] end)
     |> Enum.reduce(props, fn {name, _type, opts}, acc ->
       Map.put(acc, name, run_prop_query!(module, name, opts[:from_query], props))
+    end)
+  end
+
+  # A `$` inside an inserted value cannot begin a token once it is spelled as an escape, and the
+  # string it sits in says the same thing either way: `\u0024` is `$` to a JSON reader and to a
+  # JavaScript one alike. Only the `$` moves - the rest of the token is ordinary text.
+  defp neutralize_js_placeholders(js) do
+    Regex.replace(@js_placeholder_pattern, js, fn <<?$, rest::binary>> ->
+      "\\u0024" <> rest
     end)
   end
 

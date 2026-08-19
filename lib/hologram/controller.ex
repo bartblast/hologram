@@ -571,17 +571,14 @@ defmodule Hologram.Controller do
         sub_receipt_adds_js = Encoder.encode_client_term!(result.sub_receipt_adds)
         sub_receipt_drops_js = Encoder.encode_client_term!(result.sub_receipt_drops)
 
+        # One pass over the three, for the reason Renderer.interpolate_js/2 carries: a sequence
+        # of substitutions reads what the ones before it inserted.
         tree =
-          result.tree
-          |> Renderer.interpolate_js_in_tree("$SELF_ECHOES_JS_PLACEHOLDER", self_echoes_js)
-          |> Renderer.interpolate_js_in_tree(
-            "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER",
-            sub_receipt_adds_js
-          )
-          |> Renderer.interpolate_js_in_tree(
-            "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER",
-            sub_receipt_drops_js
-          )
+          Renderer.interpolate_js_in_tree(result.tree, %{
+            "$SELF_ECHOES_JS_PLACEHOLDER" => self_echoes_js,
+            "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER" => sub_receipt_adds_js,
+            "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER" => sub_receipt_drops_js
+          })
 
         payload =
           build_page_data_payload(%{
