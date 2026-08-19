@@ -34,8 +34,11 @@ defmodule Hologram.Sync.Diff do
   Edges of to-many relationships are reported the way values are: the effects name which edge to
   look at, and whether it is there now is read from the round. An edge is only reported for a row
   the client can see, and only for a relationship the window embeds - a window that never carried
-  those edges has nothing to say about them. Each carries the type of the row the relationship
-  lives on, which is what names it on the wire.
+  those edges has nothing to say about them. An ADDED edge is reported only for a target the client
+  is also being given, since it names that row the way an embedded list does. A REMOVED one names a
+  row the round does not hold, which is what removing it means, so it is never measured against
+  what the round makes visible. Each carries the type of the row the relationship lives on, which
+  is what names it on the wire.
 
   Vanishing is reported per window. Whether the client is told to drop the row depends on the
   rest of what it holds, which only the session knows.
@@ -78,7 +81,7 @@ defmodule Hologram.Sync.Diff do
 
     %{
       appeared: appeared,
-      edges: edges(visible, transactions),
+      edges: edges(visible, visible_ids, transactions),
       patched: patched,
       vanished: vanished(held_ids, visible_ids)
     }
@@ -141,11 +144,12 @@ defmodule Hologram.Sync.Diff do
     end
   end
 
-  defp edges(visible, transactions) do
+  defp edges(visible, visible_ids, transactions) do
     transactions
     |> Enum.flat_map(fn {_tx, events} -> events end)
     |> Enum.filter(&(&1.op in [:add_relationship, :del_relationship]))
     |> Enum.flat_map(&edge(&1, visible))
+    |> Enum.reject(&hidden_target?(&1, visible_ids))
     |> Enum.uniq()
   end
 
@@ -164,6 +168,16 @@ defmodule Hologram.Sync.Diff do
   defp embedded_rows(rows) when is_list(rows), do: rows
 
   defp embedded_rows(row), do: [row]
+
+  # An added edge names its target the way an embedded list does, so it is withheld on the same
+  # terms - a client is never told about a row it is not being given. A removed one is not measured
+  # against what the round makes visible at all: the round no longer holds that row, which is what
+  # removing it means, so absence there says nothing about who may read it.
+  defp hidden_target?(%{op: :add_relationship, target_id: target_id}, visible_ids) do
+    not MapSet.member?(visible_ids, target_id)
+  end
+
+  defp hidden_target?(_edge, _visible_ids), do: false
 
   # Every row a round carries, keyed by id: the roots and every row embedded under them, however
   # deep. One id can arrive in more than one place, and the first copy found keeps the spot - every

@@ -281,6 +281,40 @@ defmodule Hologram.Sync.DiffTest do
 
     # The row carries no field of that name at all, which is what a window embedding no such
     # relationship looks like from here - there is nothing to say the edge moved WITHIN.
+    # An added edge names its target the way an embedded list does, so it is withheld on the same
+    # terms - here the parent goes out with its list emptied, and the edge would have named the
+    # very row that emptying withheld.
+    test "reports nothing for a target this client cannot see" do
+      hidden =
+        PolicyModule1
+        |> Entity.new()
+        |> DB.create()
+
+      parent =
+        PolicyModule3
+        |> Entity.new()
+        |> DB.create()
+
+      round_parent = %{parent | children: [hidden]}
+
+      events = [
+        {200,
+         [
+           %{
+             op: :add_relationship,
+             type: PolicyModule3,
+             entity_id: parent.id,
+             data: %{"relationship" => "children", "target_id" => hidden.id}
+           }
+         ]}
+      ]
+
+      deltas = deltas(result([round_parent]), MapSet.new(), nil, events)
+
+      assert deltas.appeared == [%{parent | children: []}]
+      assert deltas.edges == []
+    end
+
     test "reports nothing for a relationship the window does not embed" do
       task = row("no embeds here")
 
