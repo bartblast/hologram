@@ -58,6 +58,6 @@ ruling chose - every from_query prop of a page re-evaluated, against a 16.7 ms f
 From the `assets` directory, with the DOM shim the client modules expect and the collector
 exposed for the heap reading:
 
-```
+```sh
 node --expose-gc --require jsdom-global/register ../benchmarks/javascript/query_kernel/run/page_of_5_queries_over_2k_rows/run.mjs
 ```

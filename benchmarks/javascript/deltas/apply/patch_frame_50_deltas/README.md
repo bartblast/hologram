@@ -57,6 +57,6 @@ merges into its held row and re-derives that row's sort key.
 From the `assets` directory, with the DOM shim the client modules expect and the collector
 exposed for the heap reading:
 
-```
+```sh
 node --expose-gc --require jsdom-global/register ../benchmarks/javascript/deltas/apply/patch_frame_50_deltas/run.mjs
 ```

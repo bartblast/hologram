@@ -63,6 +63,6 @@ datetime is itself a 13-field boxed map, which is where the memory goes.
 From the `assets` directory, with the DOM shim the client modules expect and the collector
 exposed for the heap reading:
 
-```
+```sh
 node --expose-gc --require jsdom-global/register ../benchmarks/javascript/model/box/10k_rows/run.mjs
 ```

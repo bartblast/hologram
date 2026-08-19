@@ -63,6 +63,6 @@ boxed entity structs are measured next door, under model/box/10k_rows.
 From the `assets` directory, with the DOM shim the client modules expect and the collector
 exposed for the heap reading:
 
-```
+```sh
 node --expose-gc --require jsdom-global/register ../benchmarks/javascript/deltas/apply/fill_10k_rows/run.mjs
 ```
