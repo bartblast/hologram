@@ -308,7 +308,7 @@ describe("LocalDatabase", () => {
       assert.deepEqual(LocalDatabase.carriedEntries(), []);
     });
 
-    it("marks a row of one type without marking the same id of another", () => {
+    it("returns a row whose id was unmarked under another type", () => {
       LocalDatabase.markCarried("MyApp.Task", "t1");
       LocalDatabase.unmarkCarried("MyApp.Project", "t1");
 
