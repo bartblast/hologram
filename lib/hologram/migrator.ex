@@ -585,10 +585,19 @@ defmodule Hologram.Migrator do
     end)
   end
 
+  # Asked for rather than done: the applier records a migration inside its transaction and builds
+  # the tail's indexes after it commits, so in between another node finds the chain applied,
+  # reaches its own repair, and can build the very index this tail is about to. Both nodes are
+  # asking for the same index, and the second one to get the lock finds it already there.
+  #
+  # An INVALID one is not that - it is a build that died partway, which the line above drops so
+  # this one rebuilds it.
   defp execute_tail_op(%{op: :create_index} = op) do
     drop_invalid_index(op.index)
 
-    execute_statements(DDL.statements(op))
+    if count_result(DDL.built_index_check_statement(op.index)) == 0 do
+      execute_statements(DDL.statements(op))
+    end
   end
 
   # A tail op is a concurrent index build, so it is a BUILDER and runs like the other one: on a
