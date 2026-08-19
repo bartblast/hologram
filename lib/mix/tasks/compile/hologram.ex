@@ -184,7 +184,12 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       # Derived before the split for the same reason the windows are: a query reached through a
       # runtime MFA still names types the client holds and orders rows it sorts.
-      sync_constants = Compiler.build_sync_constants(page_modules, call_graph_for_runtime)
+      sync_constants =
+        Compiler.build_sync_constants(
+          page_modules,
+          call_graph_for_runtime,
+          permission_checking_pages != []
+        )
 
       runtime_entry_file_path =
         Compiler.create_runtime_entry_file(

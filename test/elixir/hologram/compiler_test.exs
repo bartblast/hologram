@@ -5,6 +5,7 @@ defmodule Hologram.CompilerTest do
   import Hologram.Compiler
 
   alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
@@ -446,7 +447,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_sync_constants/2" do
+  describe "build_sync_constants/3" do
     setup %{call_graph: call_graph} do
       [sync_constants: build_sync_constants(Reflection.list_pages(), call_graph)]
     end
@@ -484,6 +485,22 @@ defmodule Hologram.CompilerTest do
       sync_constants: sync_constants
     } do
       refute Map.has_key?(sync_constants.prop_params, ComponentModule16)
+    end
+
+    # No query names the grant type - its window is registered rather than extracted - so a
+    # client checking permissions locally would hold rows of a type the model never described.
+    test "names the grant type when a page checks permissions on the client", %{
+      call_graph: call_graph
+    } do
+      sync_constants = build_sync_constants(Reflection.list_pages(), call_graph, true)
+
+      assert MapSet.member?(sync_constants.entity_types, RoleGrant)
+    end
+
+    test "leaves the grant type out when no page checks permissions on the client", %{
+      sync_constants: sync_constants
+    } do
+      refute MapSet.member?(sync_constants.entity_types, RoleGrant)
     end
 
     # The attributes come from a fixture page reaching a query that orders a :string attribute -
@@ -831,6 +848,24 @@ defmodule Hologram.CompilerTest do
 
     # A type nothing orders by carries an empty list rather than nothing at all - the ingest path
     # reads the field unconditionally.
+    # The grant type has no server-only attributes and its relationships resolve to the app's
+    # designated user entity, so it bakes like any other type once the model names it.
+    test "injects the grant type's model entry when a page checks permissions on the client", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([RoleGrant])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/model: {"Hologram.Auth.RoleGrant":{"attributes":{/)
+
+      assert String.contains?(
+               js,
+               ~s/"user":{"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module14"}/
+             )
+    end
+
     test "injects an empty sort-key list for a type no query orders by", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas

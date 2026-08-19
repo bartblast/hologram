@@ -2,6 +2,7 @@ defmodule Hologram.Compiler do
   @moduledoc false
 
   alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.MapUtils
   alias Hologram.Commons.PathUtils
@@ -149,18 +150,26 @@ defmodule Hologram.Compiler do
   read through the same page walk the bundles use, so what registers the grants window is what
   actually ships - a `can?` reached only from command handlers, which run on the server, does
   not.
+
+  An app that designates no user entity type has no grant store at all - the framework's grant
+  entity joins the data model only with one - so no page checks permissions against anything and
+  the answer is empty whatever the call graph says.
   """
   @spec pages_checking_permissions(list(module), CallGraph.t()) :: list(module)
   def pages_checking_permissions(page_modules, call_graph) do
-    graph = CallGraph.get_graph(call_graph)
-    templatables = page_modules ++ Reflection.list_components()
-    analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+    if Reflection.user_entity() do
+      graph = CallGraph.get_graph(call_graph)
+      templatables = page_modules ++ Reflection.list_components()
+      analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
 
-    Enum.filter(page_modules, fn page_module ->
-      call_graph
-      |> CallGraph.list_page_mfas(page_module, analysis)
-      |> Enum.member?({Hologram.Auth, :can?, 3})
-    end)
+      Enum.filter(page_modules, fn page_module ->
+        call_graph
+        |> CallGraph.list_page_mfas(page_module, analysis)
+        |> Enum.member?({Hologram.Auth, :can?, 3})
+      end)
+    else
+      []
+    end
   end
 
   @doc """
@@ -774,13 +783,18 @@ defmodule Hologram.Compiler do
   components declare, keyed by component and prop. A capture travels in the bundle and is called
   there, but the names its arguments were written with do not survive encoding - and those names
   are what each argument binds by.
+
+  When any of the given pages checks permissions on the client (`permission_checking?`), the
+  grant type joins the entity types: those clients hold grant rows, and a row of a type the model
+  does not name cannot be read back at all. No query names that type - the grants window is
+  registered rather than extracted - so it is added here rather than derived.
   """
-  @spec build_sync_constants(list(module), CallGraph.t()) :: %{
+  @spec build_sync_constants(list(module), CallGraph.t(), boolean) :: %{
           entity_types: MapSet.t(module),
           prop_params: %{module => keyword(list(atom))},
           sort_key_attributes: MapSet.t({module, atom})
         }
-  def build_sync_constants(page_modules, call_graph) do
+  def build_sync_constants(page_modules, call_graph, permission_checking? \\ false) do
     graph = CallGraph.get_graph(call_graph)
     templatables = page_modules ++ Reflection.list_components()
     analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
@@ -792,10 +806,17 @@ defmodule Hologram.Compiler do
 
     terms = Enum.flat_map(component_modules, &QueryExtractor.extract_module_queries/1)
 
-    entity_types =
+    queried_entity_types =
       Enum.reduce(terms, MapSet.new(), fn term, types ->
         MapSet.union(types, Registry.entity_types(term))
       end)
+
+    entity_types =
+      if permission_checking? do
+        MapSet.put(queried_entity_types, RoleGrant)
+      else
+        queried_entity_types
+      end
 
     %{
       entity_types: entity_types,

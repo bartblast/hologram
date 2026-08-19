@@ -278,14 +278,22 @@ defmodule Hologram.DB.QueryCache do
     :persistent_term.put(impl().persistent_term_key(), data)
   end
 
-  # Registered unconditionally, because this is a lookup table: what decides whether any client
-  # subscribes to the grants window is the BUILD, which knows whether a page can check permissions
+  # Registered whenever the app HAS a grant store, because this is a lookup table: what decides
+  # whether any client subscribes is the BUILD, which knows whether a page can check permissions
   # locally. An entry nothing asks for costs one map key, where a missing entry would answer
   # :no_window to a client the build did tell to ask.
+  #
+  # An app designating no user entity type has no grant store - the grant entity joins the data
+  # model only with one - so there is no table to evaluate the window against and nothing to
+  # register.
   defp put_grants_window(windows) do
-    window = Auth.grants_window()
+    if Reflection.user_entity() do
+      window = Auth.grants_window()
 
-    Map.put_new(windows, Registry.id(window), window)
+      Map.put_new(windows, Registry.id(window), window)
+    else
+      windows
+    end
   end
 
   defp qualified_table(table) do
