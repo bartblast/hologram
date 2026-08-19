@@ -25,6 +25,7 @@ defmodule Hologram.Sync.Carry do
 
   @key {__MODULE__, :entities}
   @counts_key {__MODULE__, :counts}
+  @grant_scopes_key {__MODULE__, :grant_scopes}
 
   @doc """
   Clears what a previous render gathered and returns :ok.
@@ -37,6 +38,11 @@ defmodule Hologram.Sync.Carry do
   def start do
     Process.delete(@key)
     Process.delete(@counts_key)
+
+    # Armed rather than cleared: a permission check outside a render finds no set here and
+    # records nothing, which is what keeps the trusted paths (commands, mix tasks, IEx) free of
+    # this entirely.
+    Process.put(@grant_scopes_key, MapSet.new())
 
     :ok
   end
@@ -59,6 +65,28 @@ defmodule Hologram.Sync.Carry do
     Process.put(@counts_key, collected)
 
     :ok
+  end
+
+  @doc """
+  Records that a permission check asked the grant store about the given user and scope, and
+  returns :ok. Recording only happens while a render is gathering - outside one this is a no-op,
+  so the trusted paths that check permissions without rendering pay nothing.
+
+  A check asks whether a grant EXISTS - it reads no rows, so there is nothing for the entity
+  collector to gather. What is kept is the question, which is what the rows answering it are
+  looked up by when the render ends.
+  """
+  @spec record_grant_scope(String.t() | nil, tuple | atom) :: :ok
+  def record_grant_scope(user_id, scope) do
+    case Process.get(@grant_scopes_key) do
+      nil ->
+        :ok
+
+      scopes ->
+        Process.put(@grant_scopes_key, MapSet.put(scopes, {user_id, scope}))
+
+        :ok
+    end
   end
 
   @doc """
@@ -109,6 +137,18 @@ defmodule Hologram.Sync.Carry do
     Process.delete(@counts_key)
 
     counts
+  end
+
+  @doc """
+  Returns the {user id, scope} pairs the render's permission checks asked about, and clears them.
+  """
+  @spec take_grant_scopes() :: MapSet.t({String.t() | nil, tuple | atom})
+  def take_grant_scopes do
+    scopes = Process.get(@grant_scopes_key, MapSet.new())
+
+    Process.delete(@grant_scopes_key)
+
+    scopes
   end
 
   defp count_key(module, prop_name, args) do

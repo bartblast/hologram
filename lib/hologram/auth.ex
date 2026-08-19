@@ -8,6 +8,7 @@ defmodule Hologram.Auth do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Mapper
+  alias Hologram.DB.QueryRunner
   alias Hologram.Entity
   alias Hologram.Entity.Validator
   alias Hologram.Policy
@@ -15,6 +16,7 @@ defmodule Hologram.Auth do
   alias Hologram.Query
   alias Hologram.Query.Window
   alias Hologram.Reflection
+  alias Hologram.Sync.Carry
 
   @doc """
   Returns the window a client checking permissions locally downloads: every grant row, narrowed
@@ -30,6 +32,32 @@ defmodule Hologram.Auth do
     RoleGrant
     |> Query.normalize()
     |> Window.derive()
+  end
+
+  @doc """
+  Returns the grant rows answering the permission checks a render ran - the rows the given
+  {user id, scope} pairs ask about, read as the session user.
+
+  What a check asks is whether a grant EXISTS, so nothing it reads can be gathered. The questions
+  are gathered instead, and answered here in one query per distinct user and resource type: a
+  page checking a hundred rows of one type asks once, with the ids as a membership list.
+
+  Read through the policied path, as the fill is - so a row travels only when the session user
+  may hold it. A template checking ANOTHER user's access carries that user's row exactly when
+  the session user's own read rules admit it.
+  """
+  @spec carried_grants(MapSet.t({String.t() | nil, tuple | atom})) :: list(struct)
+  def carried_grants(scopes) do
+    session_user_id = user_id()
+
+    if session_user_id && MapSet.size(scopes) > 0 do
+      scopes
+      |> grant_scope_groups()
+      |> Enum.flat_map(&grant_group_rows(&1, session_user_id))
+      |> Enum.uniq_by(& &1.id)
+    else
+      []
+    end
   end
 
   @doc """
@@ -307,16 +335,74 @@ defmodule Hologram.Auth do
     :ok
   end
 
+  # An own-scope check matches the row naming the resource AND the type-wide row, which is why
+  # nil rides in the id list beside the ids - the store keeps the two apart by that column being
+  # null, and a membership list holding nil compiles to "= ANY(...) OR IS NULL".
+  defp grant_group_key({user_id, {:own, entity_type, _resource_id}}), do: {user_id, entity_type}
+
+  defp grant_group_key({user_id, {:instance, entity_type, _resource_id}}),
+    do: {user_id, entity_type}
+
+  defp grant_group_key({user_id, {:type, entity_type}}), do: {user_id, entity_type}
+
+  defp grant_group_key({user_id, :global}), do: {user_id, nil}
+
+  defp grant_group_resource_ids({:own, _entity_type, resource_id}), do: [resource_id, nil]
+
+  defp grant_group_resource_ids({:instance, _entity_type, resource_id}), do: [resource_id]
+
+  defp grant_group_resource_ids({:type, _entity_type}), do: [nil]
+
+  defp grant_group_resource_ids(:global), do: [nil]
+
+  defp grant_group_rows({{user_id, nil}, _scopes}, session_user_id) do
+    RoleGrant
+    |> Query.filter(user_id: user_id, resource_type: nil, resource_id: nil)
+    |> run_carried_grants_query(session_user_id)
+  end
+
+  defp grant_group_rows({{user_id, entity_type}, scopes}, session_user_id) do
+    resource_ids =
+      scopes
+      |> Enum.flat_map(&grant_group_resource_ids/1)
+      |> Enum.uniq()
+
+    RoleGrant
+    |> Query.filter(
+      user_id: user_id,
+      resource_type: RoleGrant.resource_type(entity_type),
+      resource_id: resource_ids
+    )
+    |> run_carried_grants_query(session_user_id)
+  end
+
+  defp grant_scope_groups(scopes) do
+    scopes
+    |> Enum.group_by(&grant_group_key/1, fn {_user_id, scope} -> scope end)
+    |> Enum.sort_by(fn {{user_id, entity_type}, _scopes} -> {user_id, inspect(entity_type)} end)
+  end
+
   defp grant_exists?(_actor_user_id, _scope, []), do: false
 
   # No stored grant can name an id the framework never generated, so an id in any other
   # spelling holds nothing - checking access with one is a denial, not an error.
   defp grant_exists?(actor_user_id, scope, role_names) do
     if Validator.attribute_value_valid?(actor_user_id, :uuid) do
+      # Every rule kind funnels through here, so this is the one place a render's questions can
+      # be caught - and questions are all there is to catch: what runs below is an EXISTS, which
+      # answers with a boolean and materializes no row.
+      Carry.record_grant_scope(actor_user_id, scope)
+
       query_grant_exists?(actor_user_id, scope, role_names)
     else
       false
     end
+  end
+
+  defp run_carried_grants_query(query, session_user_id) do
+    query
+    |> Query.normalize()
+    |> QueryRunner.run_policied(DB.mapping(), session_user_id)
   end
 
   defp grantee_fk_constraint do

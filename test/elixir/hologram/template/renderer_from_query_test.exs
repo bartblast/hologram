@@ -24,6 +24,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module100
   alias Hologram.Test.Fixtures.Template.Renderer.Module101
   alias Hologram.Test.Fixtures.Template.Renderer.Module102
+  alias Hologram.Test.Fixtures.Template.Renderer.Module103
   alias Hologram.Test.Fixtures.Template.Renderer.Module89
   alias Hologram.Test.Fixtures.Template.Renderer.Module90
   alias Hologram.Test.Fixtures.Template.Renderer.Module91
@@ -56,6 +57,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   @env %Renderer.Env{}
 
   @entity_2_type "Hologram.Test.Fixtures.Entity.Module2"
+  @role_grant_type "Hologram.Auth.RoleGrant"
   @page_opts [csrf_token: "test-csrf-token", initial_page?: true, instance_id: "instance-1"]
   @server %Server{}
 
@@ -323,6 +325,81 @@ defmodule Hologram.Template.RendererFromQueryTest do
       html = render_page_html(Module99)
 
       assert String.contains?(html, "syncCounts: {}")
+    end
+  end
+
+  # A permission check reads no rows - it asks whether a grant exists - so the rows behind its
+  # answer are looked up once the render's questions are all in, and carried like any others.
+  # Without them the client's first render would deny what the server just allowed.
+  describe "the grants a page hands its client" do
+    setup do
+      setup_asset_path_registry(AssetPathRegistryStub)
+      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
+
+      setup_asset_manifest_cache(AssetManifestCacheStub)
+      setup_page_digest_registry(PageDigestRegistryStub)
+
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module103, :dummy_module_103_digest)
+
+      stub(QueryCacheMock, :component_modules, fn -> [] end)
+      QueryCache.init(nil)
+
+      :ok
+    end
+
+    defp render_grants_page_html(entity_id, server_struct) do
+      {html, _tree, _component_registry, _final_server_struct} =
+        render_page(Module103, %{entity_id: entity_id}, server_struct, @page_opts)
+
+      html
+    end
+
+    test "carries the row answering a check the render ran" do
+      user =
+        Module14
+        |> Entity.new(email: "renderer_grants_1@example.com")
+        |> create()
+
+      entity =
+        PolicyEntity
+        |> Entity.new(priority: 5)
+        |> create()
+
+      Auth.grant_role(user, entity, :viewer)
+
+      html = render_grants_page_html(entity.id, %Server{user_id: user.id})
+
+      assert String.contains?(html, "may read = true")
+      assert String.contains?(html, ~s|"#{@role_grant_type}":[{|)
+      assert String.contains?(html, ~s|"user_id":"#{user.id}"|)
+    end
+
+    test "carries no grant row for a check nothing answers" do
+      user =
+        Module14
+        |> Entity.new(email: "renderer_grants_2@example.com")
+        |> create()
+
+      entity =
+        PolicyEntity
+        |> Entity.new(priority: 5)
+        |> create()
+
+      html = render_grants_page_html(entity.id, %Server{user_id: user.id})
+
+      assert String.contains?(html, "may read = false")
+      refute String.contains?(html, @role_grant_type)
+    end
+
+    test "carries no grant row for an anonymous session" do
+      entity =
+        PolicyEntity
+        |> Entity.new(priority: 5)
+        |> create()
+
+      html = render_grants_page_html(entity.id, %Server{})
+
+      refute String.contains?(html, @role_grant_type)
     end
   end
 

@@ -50,6 +50,130 @@ defmodule Hologram.AuthTest do
     end)
   end
 
+  # What a check asks is whether a grant EXISTS, so nothing it reads can be gathered - the
+  # questions are gathered and answered here, as the session user, so the client's first render
+  # can evaluate the same checks against rows rather than waiting for the fill.
+  describe "carried_grants/1" do
+    test "returns the row answering a check about the session user's own grant" do
+      user = create_user("user_80@example.com")
+      resource = create_resource()
+
+      grant_role(user, resource, :editor)
+
+      scopes = MapSet.new([{user.id, {:own, Module1, resource.id}}])
+
+      rows = Context.with_actor(user.id, fn -> carried_grants(scopes) end)
+
+      assert [%RoleGrant{user_id: grantee_id, resource_id: resource_id}] = rows
+      assert grantee_id == user.id
+      assert resource_id == resource.id
+    end
+
+    test "answers questions about several resources of one type at once" do
+      user = create_user("user_81@example.com")
+      resource_1 = create_resource()
+      resource_2 = create_resource()
+
+      grant_role(user, resource_1, :editor)
+      grant_role(user, resource_2, :owner)
+
+      scopes =
+        MapSet.new([
+          {user.id, {:own, Module1, resource_1.id}},
+          {user.id, {:own, Module1, resource_2.id}}
+        ])
+
+      rows = Context.with_actor(user.id, fn -> carried_grants(scopes) end)
+
+      assert length(rows) == 2
+    end
+
+    # An own-scope check matches the type-wide row too, which the store keeps apart by a null
+    # resource id - so the row answering it has to travel with the rest.
+    test "returns the type-wide row an own-scope question also asks about" do
+      user = create_user("user_82@example.com")
+      resource = create_resource()
+
+      grant_role(user, Module1, :editor)
+
+      scopes = MapSet.new([{user.id, {:own, Module1, resource.id}}])
+
+      rows = Context.with_actor(user.id, fn -> carried_grants(scopes) end)
+
+      assert [%RoleGrant{resource_id: nil}] = rows
+    end
+
+    test "returns the row answering a global question" do
+      user = create_user("user_83@example.com")
+
+      grant_role(user, Role.Module1)
+
+      scopes = MapSet.new([{user.id, :global}])
+
+      rows = Context.with_actor(user.id, fn -> carried_grants(scopes) end)
+
+      assert [%RoleGrant{resource_type: nil, resource_id: nil}] = rows
+    end
+
+    test "returns nothing for a question no grant answers" do
+      user = create_user("user_84@example.com")
+      resource = create_resource()
+
+      scopes = MapSet.new([{user.id, {:own, Module1, resource.id}}])
+
+      assert Context.with_actor(user.id, fn -> carried_grants(scopes) end) == []
+    end
+
+    test "returns nothing when the render asked nothing" do
+      user = create_user("user_85@example.com")
+
+      assert Context.with_actor(user.id, fn -> carried_grants(MapSet.new()) end) == []
+    end
+
+    # Every grant read rule is actor- or role-shaped, so a visitor holds nothing - the query is
+    # skipped rather than run to learn it answers empty.
+    test "returns nothing for an anonymous session" do
+      user = create_user("user_86@example.com")
+      resource = create_resource()
+
+      grant_role(user, resource, :editor)
+
+      scopes = MapSet.new([{user.id, {:own, Module1, resource.id}}])
+
+      assert carried_grants(scopes) == []
+    end
+
+    # The scope says which rows to LOOK FOR, the read policy says which the session user may
+    # HOLD - so a question about someone else answers with their row only when the asker's own
+    # rules admit it.
+    test "withholds another user's row from a session that may not read it" do
+      user = create_user("user_87@example.com")
+      other_user = create_user("user_88@example.com")
+      resource = create_resource()
+
+      grant_role(other_user, resource, :editor)
+
+      scopes = MapSet.new([{other_user.id, {:own, Module1, resource.id}}])
+
+      assert Context.with_actor(user.id, fn -> carried_grants(scopes) end) == []
+    end
+
+    test "returns another user's row to a session that may read it" do
+      user = create_user("user_89@example.com")
+      other_user = create_user("user_90@example.com")
+      resource = create_parent()
+
+      grant_role(user, resource, :member)
+      grant_role(other_user, resource, :member)
+
+      scopes = MapSet.new([{other_user.id, {:own, Module2, resource.id}}])
+
+      rows = Context.with_actor(user.id, fn -> carried_grants(scopes) end)
+
+      assert Enum.any?(rows, &(&1.user_id == other_user.id))
+    end
+  end
+
   describe "can?/3" do
     test "grants an operation through a rule whose predicates hold" do
       assert can?(nil, :read, %Module1{public: true})

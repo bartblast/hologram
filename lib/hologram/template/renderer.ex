@@ -252,6 +252,13 @@ defmodule Hologram.Template.Renderer do
     # boxed terms the rest of the mount data carries, because both are read by the data layer
     # rather than by transpiled code: the rows go through the same ingest a frame does, and the
     # acting user is what binds the actor predicates of the queries the client re-runs.
+    # Gathered last, because it answers what the render ASKED rather than what it read: a
+    # permission check reads no rows, so the rows behind its answer are looked up once the
+    # questions are all in - and they join what the page carries like any other rows.
+    Carry.take_grant_scopes()
+    |> Auth.carried_grants()
+    |> Carry.collect()
+
     actor_user_id_js = Jason.encode!(server_struct.user_id)
     sync_counts_js = Jason.encode!(Carry.take_counts())
     sync_rows_js = Jason.encode!(Carry.take())

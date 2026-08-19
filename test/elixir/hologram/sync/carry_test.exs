@@ -18,6 +18,7 @@ defmodule Hologram.Sync.CarryTest do
     on_exit(fn ->
       take()
       take_counts()
+      take_grant_scopes()
     end)
 
     :ok
@@ -213,6 +214,44 @@ defmodule Hologram.Sync.CarryTest do
     end
   end
 
+  describe "record_grant_scope/2" do
+    test "records the question a permission check asked" do
+      start()
+
+      record_grant_scope("user-1", {:own, Module2, "row-1"})
+
+      assert take_grant_scopes() == MapSet.new([{"user-1", {:own, Module2, "row-1"}}])
+    end
+
+    test "records one entry for a question asked twice" do
+      start()
+
+      record_grant_scope("user-1", {:own, Module2, "row-1"})
+      record_grant_scope("user-1", {:own, Module2, "row-1"})
+
+      assert MapSet.size(take_grant_scopes()) == 1
+    end
+
+    test "keeps questions about different users apart" do
+      start()
+
+      record_grant_scope("user-1", :global)
+      record_grant_scope("user-2", :global)
+
+      assert MapSet.size(take_grant_scopes()) == 2
+    end
+
+    # A permission check outside a render - a command handler, a mix task, an IEx session - finds
+    # no collector armed and records nothing, so the trusted paths pay none of this.
+    test "records nothing when no render is gathering" do
+      take_grant_scopes()
+
+      record_grant_scope("user-1", :global)
+
+      assert take_grant_scopes() == MapSet.new()
+    end
+  end
+
   describe "start/0" do
     test "clears the counts a previous render gathered" do
       collect_count(Module2, :total, [], 7)
@@ -220,6 +259,24 @@ defmodule Hologram.Sync.CarryTest do
       start()
 
       assert take_counts() == %{}
+    end
+
+    test "arms the grant-scope recorder" do
+      take_grant_scopes()
+      start()
+
+      record_grant_scope("user-1", :global)
+
+      assert MapSet.size(take_grant_scopes()) == 1
+    end
+
+    test "clears the questions a previous render asked" do
+      start()
+      record_grant_scope("user-1", :global)
+
+      start()
+
+      assert take_grant_scopes() == MapSet.new()
     end
   end
 
@@ -236,6 +293,21 @@ defmodule Hologram.Sync.CarryTest do
       take()
 
       assert take() == %{}
+    end
+  end
+
+  describe "take_grant_scopes/0" do
+    test "returns nothing when no question was asked" do
+      assert take_grant_scopes() == MapSet.new()
+    end
+
+    test "leaves nothing behind for the next render" do
+      start()
+      record_grant_scope("user-1", :global)
+
+      take_grant_scopes()
+
+      assert take_grant_scopes() == MapSet.new()
     end
   end
 
