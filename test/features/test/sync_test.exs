@@ -153,8 +153,18 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas_carrying(client, ~s["name":"folder_after_patch"])
 
-    assert data =~ ~s[patch_entity":{"HologramFeatureTests.Entities.Folder":]
-    assert data =~ ~s["id":"#{folder.id}"]
+    # Read out of the frame rather than matched against its text: what else shares the round is
+    # not this test's business. A round reports every member of the window's reach, so the
+    # document that reaches this folder can be grouped beside it - and being grouped FIRST, since
+    # the types are keyed by module name, would break a match that expects to find the folder
+    # right after the op.
+    folder_rows =
+      data
+      |> Jason.decode!()
+      |> get_in(["deltas", "patch_entity", "HologramFeatureTests.Entities.Folder"])
+
+    assert [%{"id" => patched_id, "name" => "folder_after_patch"}] = folder_rows
+    assert patched_id == folder.id
   end
 
   feature "delivers a row created while the client watches, whole", %{session: _session} do
