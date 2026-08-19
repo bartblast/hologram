@@ -442,6 +442,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       html = render_grants_page_html(entity.id, %Server{})
 
+      assert String.contains?(html, "may read = false")
       refute String.contains?(html, @role_grant_type)
     end
   end
