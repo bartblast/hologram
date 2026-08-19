@@ -334,10 +334,15 @@ defmodule Hologram.Template.RendererFromQueryTest do
       :ok
     end
 
+    # The trailing comma and the line ending belong to the script around the value rather than to
+    # the value - and the line ending is not always one character, since a checkout on Windows
+    # carries CRLF into the template the script is written in.
     defp carried_counts_json(html) do
-      [_full, json] = Regex.run(~r/syncCounts: (.+),$/m, html)
+      [_full, json] = Regex.run(~r/syncCounts: (.+)$/m, html)
 
       json
+      |> String.trim()
+      |> String.trim_trailing(",")
     end
 
     defp render_counts_page_html do
