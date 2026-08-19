@@ -191,8 +191,15 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas_carrying(client, ~s["unsync_entity":])
 
-    # An unsync travels as the bare id in its type's list, so the id alone is the whole delta.
-    assert data =~ document.id
+    # An unsync travels as the bare id in its type's list, so the id alone is the whole delta -
+    # read out of the frame rather than matched against its text, which a delta of any shape at
+    # all would satisfy as long as the id appeared somewhere in it.
+    unsynced_ids =
+      data
+      |> Jason.decode!()
+      |> get_in(["deltas", "unsync_entity", "HologramFeatureTests.Entities.Document"])
+
+    assert unsynced_ids == [document.id]
   end
 
   feature "keeps a server-only value out of the frame its row travels in", %{session: _session} do
