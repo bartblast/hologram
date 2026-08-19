@@ -242,7 +242,7 @@ describe("QueryKernel", () => {
           },
           [TASK]: {
             attributes: {id: "uuid", position: "integer", title: "string"},
-            relationships: {},
+            relationships: {owner: {toMany: false, type: USER}},
             serverOnly: [],
             sortKeys: ["title"],
           },
@@ -574,18 +574,23 @@ describe("QueryKernel", () => {
       });
 
       it("fills what an include includes, two levels down", () => {
-        LocalDatabase.putRow(TASK, {id: "t1", position: 1, title: "ada"});
+        LocalDatabase.putRow(TASK, {
+          id: "t1",
+          owner_id: "u1",
+          position: 1,
+          title: "ada",
+        });
+
         LocalDatabase.replaceFacts(PROJECT, "tasks", "p1", ["t1"]);
 
         const include = {
-          owner: subTerm({entity: USER}),
-          tasks: subTerm(),
+          tasks: subTerm({include: {owner: subTerm({entity: USER})}}),
         };
 
         const [node] = QueryKernel.run(projectTerm(include));
+        const [task] = node.includes.tasks;
 
-        assert.equal(node.includes.owner.row.id, "u1");
-        assert.deepEqual(titles(node.includes.tasks), ["ada"]);
+        assert.equal(task.includes.owner.row.id, "u1");
       });
 
       it("leaves a node's includes empty when the query asked for none", () => {
