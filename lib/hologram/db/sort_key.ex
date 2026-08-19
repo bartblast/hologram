@@ -87,6 +87,16 @@ defmodule Hologram.DB.SortKey do
   @doc """
   Returns the version of the sort-key rule set.
   """
+  # Staying at 1 is the correct state until the data layer ships, and CORRECTING
+  # the version 1 rules costs nothing while it holds: the hazard a bump answers
+  # is rows already keyed under older rules, and none exist while nothing runs
+  # this in production. So a rule found wrong is fixed in place rather than
+  # frozen and versioned around - shipping a known-wrong rule set would buy a
+  # migration later for nothing now.
+  #
+  # This stops being true the day the local-first work reaches dev. From then on
+  # a rule change means a bump, and a bump means the regeneration below.
+  #
   # TODO: reconciliation bookkeeps this version in hologram_system and
   # regenerates stale companions on a mismatch (clients regenerate their stored
   # keys the same way) - the version must not bump before that wiring exists,

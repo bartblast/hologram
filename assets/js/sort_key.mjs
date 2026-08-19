@@ -72,6 +72,10 @@ export default class SortKey {
   }
 
   // Returns the version of the sort-key rule set.
+  //
+  // Staying at 1 is the correct state until the data layer ships, and correcting the version 1
+  // rules costs nothing while it holds - see Hologram.DB.SortKey.version/0, which carries the
+  // reasoning and the regeneration work the first bump waits on.
   static version() {
     return 1;
   }
