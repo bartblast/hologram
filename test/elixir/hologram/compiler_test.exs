@@ -63,6 +63,7 @@ defmodule Hologram.CompilerTest do
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
   @empty_sync_constants %{
     entity_types: MapSet.new(),
+    permission_checking?: false,
     prop_params: %{},
     sort_key_attributes: MapSet.new()
   }
@@ -873,7 +874,12 @@ defmodule Hologram.CompilerTest do
       runtime_mfas: runtime_mfas
     } do
       entity_types = MapSet.new([PolicyEntity, RoleGrant])
-      sync_constants = %{@empty_sync_constants | entity_types: entity_types}
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
 
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
@@ -899,7 +905,12 @@ defmodule Hologram.CompilerTest do
       runtime_mfas: runtime_mfas
     } do
       entity_types = MapSet.new([PolicyEntity, RoleGrant])
-      sync_constants = %{@empty_sync_constants | entity_types: entity_types}
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
 
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
@@ -922,9 +933,28 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(js, ~s/"policy":{},"relationships":/)
     end
 
+    # The grant type reaches the model by two routes - the check that needs it, and any ordinary
+    # query that reads grant rows - so its presence cannot stand in for the check. A build that
+    # read it that way would hand every client the whole authorization model because one component
+    # listed grants.
+    test "injects an empty policy when a query names the grant type and no page checks", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([PolicyEntity, RoleGrant])
+      sync_constants = %{@empty_sync_constants | entity_types: entity_types}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"policy":{},"relationships":/)
+      refute String.contains?(js, ~s/"predicates":/)
+    end
+
     # The grant type has no server-only attributes and its relationships resolve to the app's
-    # designated user entity, so it bakes like any other type once the model names it.
-    test "injects the grant type's model entry when a page checks permissions on the client", %{
+    # designated user entity, so it bakes like any other type once the model names it - by the
+    # check that needs it or by a query that reads grant rows, the entry being the same either
+    # way. What the CHECK gates is the policy, which is a separate case.
+    test "injects the grant type's model entry once the model names it", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do

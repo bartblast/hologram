@@ -389,6 +389,7 @@ defmodule Hologram.Compiler do
           keyword(String.t()),
           %{
             entity_types: MapSet.t(module),
+            permission_checking?: boolean,
             sort_key_attributes: MapSet.t({module, atom}),
             prop_params: %{module => keyword(list(atom))}
           },
@@ -599,6 +600,7 @@ defmodule Hologram.Compiler do
           keyword(String.t()),
           %{
             entity_types: MapSet.t(module),
+            permission_checking?: boolean,
             sort_key_attributes: MapSet.t({module, atom}),
             prop_params: %{module => keyword(list(atom))}
           },
@@ -798,6 +800,7 @@ defmodule Hologram.Compiler do
   """
   @spec build_sync_constants(list(module), CallGraph.t(), boolean) :: %{
           entity_types: MapSet.t(module),
+          permission_checking?: boolean,
           prop_params: %{module => keyword(list(atom))},
           sort_key_attributes: MapSet.t({module, atom})
         }
@@ -825,8 +828,12 @@ defmodule Hologram.Compiler do
         queried_entity_types
       end
 
+    # The flag is carried rather than recovered from the type set: a component query reading grant
+    # rows puts the type there too, and a build that bakes every policy because someone LISTED
+    # grants would hand each client the whole authorization model to read for nothing.
     %{
       entity_types: entity_types,
+      permission_checking?: permission_checking?,
       prop_params: prop_params(component_modules),
       sort_key_attributes: Registry.sort_key_attributes(terms)
     }
@@ -1427,7 +1434,7 @@ defmodule Hologram.Compiler do
         render_entity_model(
           sync_constants.entity_types,
           sync_constants.sort_key_attributes,
-          MapSet.member?(sync_constants.entity_types, RoleGrant)
+          sync_constants.permission_checking?
         )
 
       params = render_prop_params(sync_constants.prop_params)
