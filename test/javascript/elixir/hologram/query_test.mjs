@@ -8,6 +8,7 @@ import {
 
 import Elixir_Hologram_Query from "../../../../assets/js/elixir/hologram/query.mjs";
 import HologramBoxedError from "../../../../assets/js/errors/boxed_error.mjs";
+import Model from "../../../../assets/js/model.mjs";
 import Type from "../../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -102,6 +103,11 @@ describe("Elixir_Hologram_Query", () => {
         },
       },
     };
+
+    // Model reads an entry once and keeps it, so the model installed above is only what these
+    // stages see if the entries another suite left behind go first - and the suites share these
+    // type names while spelling them differently.
+    Model.reset();
   });
 
   describe("count/1", () => {
