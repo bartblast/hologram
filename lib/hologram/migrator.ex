@@ -592,6 +592,10 @@ defmodule Hologram.Migrator do
   #
   # An INVALID one is not that - it is a build that died partway, which the line above drops so
   # this one rebuilds it.
+  #
+  # CONCURRENTLY is not decided here: the renderer decides what belongs in the tail at all, and
+  # what it decides IS concurrent - it stamps every op it puts there, because being unable to run
+  # inside the migration's transaction is the whole reason the tail exists.
   defp execute_tail_op(%{op: :create_index} = op) do
     drop_invalid_index(op.index)
 
