@@ -73,6 +73,17 @@ defmodule Hologram.Sync.Evaluator do
 
   @impl GenServer
   def init(opts) do
+    # A round runs the window's query on a borrowed connection, and an exit signal reaching a
+    # process that does not trap kills it where it stands - mid-query, taking that connection down
+    # with it and everything pooled behind it. Trapping turns the signal into a message, which
+    # queues behind the round in flight: the query finishes, the connection goes back, and the
+    # stop happens between callbacks rather than inside one.
+    #
+    # No terminate/2 comes with it, deliberately. Nothing is cleaned up on the way out - what an
+    # evaluator leaves behind is cleared by the NEXT one at start, below, because that is the one
+    # moment reachable however the last one ended.
+    Process.flag(:trap_exit, true)
+
     window_id = Keyword.fetch!(opts, :window_id)
 
     # Rounds are counted from zero again here, so whatever the store still holds for this window
