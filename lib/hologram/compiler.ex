@@ -797,6 +797,13 @@ defmodule Hologram.Compiler do
   grant type joins the entity types: those clients hold grant rows, and a row of a type the model
   does not name cannot be read back at all. No query names that type - the grants window is
   registered rather than extracted - so it is added here rather than derived.
+
+  Every entity type declaring a policy joins them too: a check's argument is whatever a template
+  passes - a constructed struct as often as a queried row, `can?(user, :create, %Task{})` being
+  the ordinary spelling of a create check - so which types get checked is not derivable from the
+  queries. Shipping every policied type's rules is what lets the client answer every check the
+  way the server would. What is left out is exactly the types declaring no policy, which is what
+  lets the client read an ABSENT entry as the server's own default deny.
   """
   @spec build_sync_constants(list(module), CallGraph.t(), boolean) :: %{
           entity_types: MapSet.t(module),
@@ -823,7 +830,9 @@ defmodule Hologram.Compiler do
 
     entity_types =
       if permission_checking? do
-        MapSet.put(queried_entity_types, RoleGrant)
+        queried_entity_types
+        |> MapSet.put(RoleGrant)
+        |> MapSet.union(policied_entity_types())
       else
         queried_entity_types
       end
@@ -1076,6 +1085,14 @@ defmodule Hologram.Compiler do
     |> Enum.map(&window_id/1)
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  # RoleGrant's policy is framework-supplied rather than declared, so its empty __policies__ does
+  # not exclude it - it joins by name beside this set.
+  defp policied_entity_types do
+    Reflection.list_entities()
+    |> Enum.filter(&(&1.__policies__() != []))
+    |> MapSet.new()
   end
 
   defp rebuild_ir_plt_entry!(ir_plt, module, umbrella?) do

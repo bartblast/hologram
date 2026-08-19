@@ -521,6 +521,27 @@ defmodule Hologram.CompilerTest do
       refute MapSet.member?(sync_constants.entity_types, RoleGrant)
     end
 
+    # A check's argument is whatever a template passes - a constructed struct as often as a
+    # queried row - so which types get checked is not derivable from the queries, and every
+    # policied type's rules ship. What stays out is exactly the types declaring no policy,
+    # which is what lets the client read an ABSENT entry as the server's own default deny.
+    test "names every policied type when a page checks permissions on the client", %{
+      call_graph: call_graph
+    } do
+      sync_constants = build_sync_constants([PageModule8], call_graph, true)
+
+      assert MapSet.member?(sync_constants.entity_types, PolicyEntity)
+      refute MapSet.member?(sync_constants.entity_types, Entity4)
+    end
+
+    test "leaves unqueried policied types out when no page checks permissions on the client", %{
+      call_graph: call_graph
+    } do
+      sync_constants = build_sync_constants([PageModule8], call_graph, false)
+
+      refute MapSet.member?(sync_constants.entity_types, PolicyEntity)
+    end
+
     # The attributes come from a fixture page reaching a query that orders a :string attribute -
     # what is asserted is the wiring from reachable queries to the attribute set, not the
     # derivation rules, which the registry's own suite pins.
