@@ -33,6 +33,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
+  alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module11
@@ -780,7 +781,8 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
-                 ~s/"updated_at":"datetime"},"relationships":{},"serverOnly":[],"sortKeys":[]}}/
+                 ~s/"updated_at":"datetime"},"policy":{},"relationships":{},"serverOnly":[],/ <>
+                 ~s/"sortKeys":[]}}/
              )
     end
 
@@ -848,6 +850,62 @@ defmodule Hologram.CompilerTest do
 
     # A type nothing orders by carries an empty list rather than nothing at all - the ingest path
     # reads the field unconditionally.
+    # The rules a client checks permissions by, spelled the way the rows it checks them against
+    # are spelled - a predicate value travels as the wire spells it.
+    test "injects the rules a client checks permissions by", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([PolicyEntity, RoleGrant])
+      sync_constants = %{@empty_sync_constants | entity_types: entity_types}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      # A predicate rule, a grant reference on the entity itself and one on its whole type, and a
+      # delegating rule - one of each kind the evaluator has to read.
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[["public","==",true]],"to":null,"via":null}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"to":[["own",["viewer"]],["type","Hologram.Test.Fixtures.Policy.Module2",["admin"]]]/
+             )
+
+      assert String.contains?(js, ~s/"publish":[{"predicates":[],"to":null,"via":"parent"}]/)
+    end
+
+    # The acting user is named rather than carried: the client binds its own id at evaluation,
+    # the way the query kernel binds an actor leaf.
+    test "names the acting user in a rule that references them", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([PolicyEntity, RoleGrant])
+      sync_constants = %{@empty_sync_constants | entity_types: entity_types}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(
+               js,
+               ~s/"archive":[{"predicates":[["author_id","==",{"actor":true}]]/
+             )
+    end
+
+    # A build whose clients check nothing carries no rules for them to read - and an empty policy
+    # grants nothing, which is the answer a client that cannot check should give.
+    test "injects an empty policy when no page checks permissions on the client", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"policy":{},"relationships":/)
+    end
+
     # The grant type has no server-only attributes and its relationships resolve to the app's
     # designated user entity, so it bakes like any other type once the model names it.
     test "injects the grant type's model entry when a page checks permissions on the client", %{

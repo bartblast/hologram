@@ -18,6 +18,7 @@ defmodule Hologram.Compiler do
   alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.Policy
   alias Hologram.Query.Registry
   alias Hologram.Query.Window
   alias Hologram.Reflection
@@ -1128,15 +1129,16 @@ defmodule Hologram.Compiler do
   # Server-only attributes are named here, values and all: what the client holds of one is the
   # knowledge that it exists and is not for it, which is what lets a read of that field say so
   # rather than answer nil.
-  defp render_entity_model(entity_types, sort_key_attributes) do
+  defp render_entity_model(entity_types, sort_key_attributes, permission_checking?) do
     entity_types
     |> Enum.map(
-      &{Codec.encode_enum_value(&1), render_entity_model_entry(&1, sort_key_attributes)}
+      &{Codec.encode_enum_value(&1),
+       render_entity_model_entry(&1, sort_key_attributes, permission_checking?)}
     )
     |> render_json_object()
   end
 
-  defp render_entity_model_entry(entity_type, sort_key_attributes) do
+  defp render_entity_model_entry(entity_type, sort_key_attributes, permission_checking?) do
     attributes =
       entity_type.__attributes__()
       |> Enum.concat(entity_type.__system_attributes__())
@@ -1151,6 +1153,7 @@ defmodule Hologram.Compiler do
 
     render_json_object([
       {"attributes", attributes},
+      {"policy", render_policy(entity_type, permission_checking?)},
       {"relationships", render_relationships(entity_type)},
       {"serverOnly", server_only},
       {"sortKeys", render_sort_keys(entity_type, sort_key_attributes)}
@@ -1207,6 +1210,148 @@ defmodule Hologram.Compiler do
     |> Jason.encode!()
   end
 
+  # The rules a client evaluates permissions by, spelled the way the rows it evaluates them
+  # against are spelled: a predicate value travels as the wire spells it, so a date compares with
+  # a date rather than with the way Elixir happens to print one.
+  #
+  # It rides in the type's own model entry rather than in a map of its own, for the reason sort
+  # keys do: both are keyed by entity type, the ingest and read paths already fetch the entry,
+  # and every type named here is one the model names anyway.
+  #
+  # A build whose clients check nothing carries an empty policy per type - not the rules with
+  # nobody to read them. An empty policy grants nothing, which is what a client that cannot check
+  # should answer.
+  defp render_policy(_entity_type, false = _permission_checking?) do
+    render_json_object([])
+  end
+
+  defp render_policy(entity_type, _permission_checking?) do
+    entity_type
+    |> Policy.build()
+    |> Enum.map(fn {operation, rules} ->
+      {Atom.to_string(operation), render_policy_rules(entity_type, rules)}
+    end)
+    |> render_json_object()
+  end
+
+  defp render_policy_rules(entity_type, rules) do
+    rules
+    |> Enum.map_join(",", &render_policy_rule(entity_type, &1))
+    |> then(&"[#{&1}]")
+  end
+
+  defp render_policy_rule(entity_type, rule) do
+    render_json_object([
+      {"predicates", render_policy_predicates(entity_type, rule.predicates)},
+      {"to", render_policy_references(rule.to)},
+      {"via", Jason.encode!(rule.via)}
+    ])
+  end
+
+  # Triples, the same shape the client's query filters take - name, operator, value - so one
+  # reader spells both.
+  defp render_policy_predicates(entity_type, predicates) do
+    predicates
+    |> Enum.map_join(",", fn {name, operator, value} ->
+      name_js =
+        name
+        |> Atom.to_string()
+        |> Jason.encode!()
+
+      operator_js =
+        operator
+        |> Atom.to_string()
+        |> Jason.encode!()
+
+      ~s/[#{name_js},#{operator_js},#{render_policy_value(entity_type, name, value)}]/
+    end)
+    |> then(&"[#{&1}]")
+  end
+
+  # The acting user's own id, named rather than carried: the client binds it at evaluation the
+  # way the kernel binds an actor leaf in a query.
+  defp render_policy_value(_entity_type, _name, {:actor}) do
+    render_json_object([{"actor", "true"}])
+  end
+
+  defp render_policy_value(entity_type, name, values) when is_list(values) do
+    values
+    |> Enum.map_join(",", &render_policy_value(entity_type, name, &1))
+    |> then(&"[#{&1}]")
+  end
+
+  defp render_policy_value(entity_type, name, value) do
+    value
+    |> Codec.encode_json(policy_attribute_type(entity_type, name))
+    |> Jason.encode!()
+  end
+
+  # A grant reference names WHERE a role must be held: on the entity itself, on its whole type,
+  # on a related entity, on the resource a grant row names, or nowhere at all (a global role).
+  defp render_policy_references(nil), do: "null"
+
+  defp render_policy_references(references) do
+    references
+    |> Enum.map_join(",", &render_policy_reference/1)
+    |> then(&"[#{&1}]")
+  end
+
+  defp render_policy_reference({:own, role_names}) do
+    render_policy_reference_entry("own", [render_policy_roles(role_names)])
+  end
+
+  defp render_policy_reference({:global, role_modules}) do
+    render_policy_reference_entry("global", [render_policy_roles(role_modules)])
+  end
+
+  defp render_policy_reference({:rel, relationship_name, role_names}) do
+    name_js =
+      relationship_name
+      |> Atom.to_string()
+      |> Jason.encode!()
+
+    render_policy_reference_entry("rel", [name_js, render_policy_roles(role_names)])
+  end
+
+  defp render_policy_reference({kind, target_type, role_names}) do
+    target_js =
+      target_type
+      |> Codec.encode_enum_value()
+      |> Jason.encode!()
+
+    render_policy_reference_entry(Atom.to_string(kind), [
+      target_js,
+      render_policy_roles(role_names)
+    ])
+  end
+
+  defp render_policy_reference_entry(kind, members) do
+    [Jason.encode!(kind) | members]
+    |> Enum.join(",")
+    |> then(&"[#{&1}]")
+  end
+
+  defp render_policy_roles(role_names) do
+    role_names
+    |> Enum.map_join(",", fn role_name ->
+      role_name
+      |> Codec.encode_enum_value()
+      |> Jason.encode!()
+    end)
+    |> then(&"[#{&1}]")
+  end
+
+  # A name matching no attribute definition is a to-one reference field, and every one of those
+  # carries an entity id - the fallback the query stages make.
+  defp policy_attribute_type(entity_type, name) do
+    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+
+    case List.keyfind(definitions, name, 0) do
+      {_name, type, _opts} -> type
+      nil -> :uuid
+    end
+  end
+
   # What each argument of a parameterized builder binds by: its authored name. The capture itself
   # travels in the bundle and is called there, but an encoded function carries no argument names -
   # the encoder names capture parameters positionally ($1, $2) - so the names ride here, in the
@@ -1251,7 +1396,11 @@ defmodule Hologram.Compiler do
       ~s/globalThis.Hologram.sync = null;/
     else
       model =
-        render_entity_model(sync_constants.entity_types, sync_constants.sort_key_attributes)
+        render_entity_model(
+          sync_constants.entity_types,
+          sync_constants.sort_key_attributes,
+          MapSet.member?(sync_constants.entity_types, RoleGrant)
+        )
 
       params = render_prop_params(sync_constants.prop_params)
 
