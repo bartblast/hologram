@@ -253,6 +253,22 @@ describe("Deltas", () => {
       assert.equal(LocalDatabase.getRow(TASK, "t1").title_sort, "zurich");
     });
 
+    // A patch is a bag of attributes, and the row it merges into is the FILED one, whose
+    // relationships were split out into the facts when it was filed - so a patch carries nothing
+    // that could restate a target set, however many edges ride in the same frame.
+    it("leaves the row's relationship facts alone", () => {
+      Deltas.apply({
+        put_entity: {[PROJECT]: [{id: "p1", name: "Website", tasks: ["t1"]}]},
+      });
+
+      Deltas.apply({patch_entity: {[PROJECT]: [{id: "p1", name: "Intranet"}]}});
+
+      assert.deepEqual(
+        LocalDatabase.getTargetIds(PROJECT, "tasks", "p1"),
+        new Set(["t1"]),
+      );
+    });
+
     // A patch names a row the client was told about, so one it does not hold is one it has been
     // told to let go of - filing the changes alone would leave a row with holes.
     it("passes over a row the client does not hold", () => {
@@ -376,6 +392,54 @@ describe("Deltas", () => {
         LocalDatabase.getTargetIds(PROJECT, "tasks", "p1"),
         new Set(["t3"]),
       );
+    });
+  });
+
+  // A row and an edge of its own can both be in one frame - a row that arrives with a pair added
+  // in the same round is the ordinary case. They cannot disagree, because the server read both
+  // from one round: the put states the whole target set, the edge states one pair of it, and the
+  // set already reflects the pair. Applied either way round the facts land the same, which is
+  // what lets the payload be grouped by op at all.
+  describe("apply() - a row and an edge of its own in one frame", () => {
+    const edge = {
+      [PROJECT]: [{id: "p1", relationship: "tasks", target_id: "t2"}],
+    };
+
+    const rowHoldingBoth = {
+      [PROJECT]: [{id: "p1", name: "Website", tasks: ["t1", "t2"]}],
+    };
+
+    const rowHoldingOne = {
+      [PROJECT]: [{id: "p1", name: "Website", tasks: ["t1"]}],
+    };
+
+    const targetIds = () =>
+      new Set(LocalDatabase.getTargetIds(PROJECT, "tasks", "p1"));
+
+    it("lands the same facts whichever way round an added pair is applied", () => {
+      Deltas.apply({add_relationship: edge, put_entity: rowHoldingBoth});
+
+      const edgeFirst = targetIds();
+
+      LocalDatabase.reset();
+
+      Deltas.apply({put_entity: rowHoldingBoth, add_relationship: edge});
+
+      assert.deepEqual(edgeFirst, new Set(["t1", "t2"]));
+      assert.deepEqual(targetIds(), edgeFirst);
+    });
+
+    it("lands the same facts whichever way round a removed pair is applied", () => {
+      Deltas.apply({del_relationship: edge, put_entity: rowHoldingOne});
+
+      const edgeFirst = targetIds();
+
+      LocalDatabase.reset();
+
+      Deltas.apply({put_entity: rowHoldingOne, del_relationship: edge});
+
+      assert.deepEqual(edgeFirst, new Set(["t1"]));
+      assert.deepEqual(targetIds(), edgeFirst);
     });
   });
 

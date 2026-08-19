@@ -54,8 +54,11 @@ defmodule Hologram.Sync.Frame do
   put (its id is one of its attributes), the changed attributes plus the id for a patch or an
   edge, and the bare id for an unsync. The op and type are spelled once per group rather than
   once per delta - constants amortize to nothing on the payload an app-wide fill is mostly made
-  of. Grouping loses no ordering, because a frame's deltas are statements about one snapshot: no
-  row gets two conflicting ones, and they may be applied in any order.
+  of. Grouping loses no ordering, because a frame's deltas are statements about one snapshot. A
+  row and an edge of its own can both be in one, and often are - a row that arrives with a pair
+  added in the same round is the ordinary case - but they cannot disagree: the row states the
+  whole target set of what the window embeds, the edge states one pair of it, and both were read
+  from the one round. Whichever is applied first, the same facts are left behind.
   """
   @spec encode_deltas_envelope(integer, String.t() | nil, list(map)) :: String.t()
   def encode_deltas_envelope(id, cursor, deltas) do

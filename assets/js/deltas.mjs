@@ -6,8 +6,11 @@ import Model from "./model.mjs";
 import SortKey from "./sort_key.mjs";
 
 // What a frame does to the database. Deltas arrive grouped by op and then by entity type, and
-// each of them is a statement about one moment: no row is spoken of twice in a frame, so they
-// may be applied in any order.
+// each of them is a statement about one moment - so they may be applied in any order. A row and
+// an edge of its own do both arrive in one frame, and agree rather than conflict: the row states
+// the whole target set of a relationship, the edge states one pair of it, and the server read
+// both from one round. A patch cannot enter into it at all, since it merges into the FILED row,
+// whose relationships were split into the facts when it was filed.
 //
 // Rows arrive flat and are filed flat. A row carries the target ids of the relationships the
 // query included, never the rows behind them - those travel as deltas of their own - so filing

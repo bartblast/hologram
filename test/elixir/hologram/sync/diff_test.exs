@@ -339,6 +339,25 @@ defmodule Hologram.Sync.DiffTest do
       assert deltas.edges == []
     end
 
+    # What makes a frame's deltas safe to apply in any order: the edge and the row that travels
+    # beside it are read from the same round, so they cannot say different things about the same
+    # pair. The put states the whole target set, the edge states one pair of it, and here both
+    # name the target.
+    test "agrees with the row the same round hands over" do
+      target = row("target")
+      source = source_with_targets([target])
+      events = edge_events(source.id, :add_relationship, "a", target.id)
+
+      deltas = deltas(result([source]), MapSet.new(), nil, events)
+
+      appeared_source = Enum.find(deltas.appeared, &(&1.id == source.id))
+
+      assert Enum.map(appeared_source.a, & &1.id) == [target.id]
+
+      assert [%{op: :add_relationship, target_id: target_id}] = deltas.edges
+      assert target_id == target.id
+    end
+
     test "reports nothing when no effect touched an edge" do
       task = row("first")
 
