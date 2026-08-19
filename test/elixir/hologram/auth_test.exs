@@ -191,7 +191,11 @@ defmodule Hologram.AuthTest do
 
       rows = Context.with_actor(user.id, fn -> carried_grants(scopes) end)
 
-      assert Enum.any?(rows, &(&1.user_id == other_user.id))
+      # The asker holds a grant on the same resource, so "their row came back" is not the same
+      # answer as "only their row did" - the scope named one user and the reply carries one.
+      assert [%RoleGrant{user_id: grantee_id, resource_id: resource_id}] = rows
+      assert grantee_id == other_user.id
+      assert resource_id == resource.id
     end
   end
 
