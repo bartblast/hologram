@@ -49,13 +49,13 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
 
     session
     |> visit(Page2)
-    |> assert_text(css("#live_products"), "abacus")
+    |> assert_text(css("#live_products"), ~r/^abacus$/)
     |> mark_this_page_load()
 
     update(Product, product.id, name: "armchair")
 
     session
-    |> assert_text(css("#live_products"), "armchair")
+    |> assert_text(css("#live_products"), ~r/^armchair$/)
     |> assert_same_page_load()
   end
 
@@ -66,7 +66,7 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
 
     session
     |> visit(Page2)
-    |> assert_text(css("#live_products"), "bicycle")
+    |> assert_text(css("#live_products"), ~r/^bicycle$/)
     |> mark_this_page_load()
 
     Product
@@ -74,7 +74,7 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
     |> create()
 
     session
-    |> assert_text(css("#live_products"), "bicycle,birdcage")
+    |> assert_text(css("#live_products"), ~r/^bicycle,birdcage$/)
     |> assert_same_page_load()
   end
 
@@ -91,13 +91,13 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
 
     session
     |> visit(Page2)
-    |> assert_text(css("#live_products"), "cabinet,candle")
+    |> assert_text(css("#live_products"), ~r/^cabinet,candle$/)
     |> mark_this_page_load()
 
     delete(Product, removed.id)
 
     session
-    |> assert_text(css("#live_products"), "cabinet")
+    |> assert_text(css("#live_products"), ~r/^cabinet$/)
     |> assert_same_page_load()
 
     # The row that stayed is still the row it was - an unsync takes one row out of the pot, not
@@ -118,7 +118,7 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
 
     session
     |> visit(Page2)
-    |> assert_text(css("#live_products"), "dolphin,dragon")
+    |> assert_text(css("#live_products"), ~r/^dolphin,dragon$/)
     |> mark_this_page_load()
 
     Product
@@ -126,7 +126,7 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
     |> create()
 
     session
-    |> assert_text(css("#live_products"), "daffodil,dolphin,dragon")
+    |> assert_text(css("#live_products"), ~r/^daffodil,dolphin,dragon$/)
     |> assert_same_page_load()
   end
 end

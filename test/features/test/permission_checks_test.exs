@@ -61,13 +61,13 @@ defmodule HologramFeatureTests.PermissionChecksTest do
     |> click(button("Log in"))
     |> assert_text(css("#result"), "logged_in")
     |> reload()
-    |> assert_text(css("#managed_documents"), "")
+    |> assert_text(css("#managed_documents"), ~r/^$/)
     |> mark_this_page_load()
 
     Auth.grant_role(session_user(), document, :owner)
 
     session
-    |> assert_text(css("#managed_documents"), "almanac")
+    |> assert_text(css("#managed_documents"), ~r/^almanac$/)
     |> assert_same_page_load()
   end
 
@@ -84,13 +84,13 @@ defmodule HologramFeatureTests.PermissionChecksTest do
 
     session
     |> reload()
-    |> assert_text(css("#managed_documents"), "bestiary")
+    |> assert_text(css("#managed_documents"), ~r/^bestiary$/)
     |> mark_this_page_load()
 
     Auth.revoke_role(user, document, :owner)
 
     session
-    |> assert_text(css("#managed_documents"), "")
+    |> assert_text(css("#managed_documents"), ~r/^$/)
     |> assert_same_page_load()
   end
 
@@ -110,7 +110,7 @@ defmodule HologramFeatureTests.PermissionChecksTest do
     Auth.grant_role(session_user(), dossier, :owner)
 
     session
-    |> assert_text(css("#managed_documents"), "dossier")
+    |> assert_text(css("#managed_documents"), ~r/^dossier$/)
     |> assert_same_page_load()
   end
 
@@ -119,6 +119,6 @@ defmodule HologramFeatureTests.PermissionChecksTest do
 
     session
     |> visit(Page1)
-    |> assert_text(css("#managed_documents"), "")
+    |> assert_text(css("#managed_documents"), ~r/^$/)
   end
 end
