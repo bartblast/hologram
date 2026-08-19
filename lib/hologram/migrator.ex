@@ -31,6 +31,11 @@ defmodule Hologram.Migrator do
   # md5("hologram_index_repair") as a signed int64.
   @index_advisory_lock_key 6_059_159_047_318_510_073
 
+  # How often a node that missed the index lock looks again. A politeness knob, not a
+  # correctness bound - the loop exits by the work being done or by the freed lock, never
+  # by a deadline.
+  @index_repair_poll_interval_ms 1_000
+
   @managed_by "migrations"
 
   @doc """
@@ -286,14 +291,23 @@ defmodule Hologram.Migrator do
   behind a state nothing can reach on its own. Everything else the drift check still
   refuses.
 
-  The work runs on a connection of its own, holding a session-scoped advisory lock: a
+  The work runs on a connection of its own, guarded by a session-scoped advisory lock: a
   concurrent build cannot run inside a transaction, and nodes building the same index at
-  the same moment deadlock each other. Nodes that wait re-read the catalog and find
-  nothing left to do.
+  the same moment deadlock each other.
+
+  The lock is TRIED, never waited on. A concurrent build waits for every open transaction
+  that could see the table, and a node queued on the lock is exactly that - its blocked
+  SELECT holds a virtual transaction for as long as it queues - so a polite waiter and the
+  builder deadlock each other, each holding what the other needs. A node that misses the
+  lock polls the catalog instead: each check is a millisecond statement that opens and
+  closes between the build's waits, jamming nothing. It leaves when the work is done, or
+  acquires the lock and does the work itself when the holder dies - a session lock frees
+  with its session, so a crashed builder cannot strand the fleet, and the half-built index
+  it leaves reads as invalid and is rebuilt by whoever takes over.
 
   That lock is NOT the one the appliers share. An applier waits for its lock inside a
-  transaction, and a concurrent build waits for every transaction that could see the table -
-  so one key for both makes a deploy wait on itself, each side holding what the other needs.
+  transaction, so one key for both would hand the builder-versus-waiter deadlock to every
+  deploy rather than to unlucky timing.
   """
   @spec repair_indexes(%{module => %{atom => any}}) :: :ok
   def repair_indexes(mapping) do
@@ -624,20 +638,42 @@ defmodule Hologram.Migrator do
   end
 
   defp rebuild_and_create_indexes(mapping) do
-    {:ok, _result} = Connection.query("SELECT pg_advisory_lock($1)", [@index_advisory_lock_key])
+    if try_index_advisory_lock?() do
+      try do
+        Enum.each(invalid_indexes(), &rebuild_index/1)
 
-    try do
-      Enum.each(invalid_indexes(), &rebuild_index/1)
+        mapping
+        |> missing_indexes()
+        |> Enum.each(&create_index_concurrently/1)
+      after
+        {:ok, _result} =
+          Connection.query("SELECT pg_advisory_unlock($1)", [@index_advisory_lock_key])
+      end
 
-      missing = missing_indexes(mapping)
-
-      Enum.each(missing, &create_index_concurrently/1)
-    after
-      {:ok, _result} =
-        Connection.query("SELECT pg_advisory_unlock($1)", [@index_advisory_lock_key])
+      :ok
+    else
+      await_index_repair(mapping)
     end
+  end
 
-    :ok
+  # Another node holds the lock and is doing this work. Polling the catalog is the one way to
+  # wait that cannot jam it - and re-trying the lock each round is what takes over when the
+  # holder dies, since a session lock frees with its session.
+  defp await_index_repair(mapping) do
+    Process.sleep(@index_repair_poll_interval_ms)
+
+    if invalid_indexes() == [] and missing_indexes(mapping) == [] do
+      :ok
+    else
+      rebuild_and_create_indexes(mapping)
+    end
+  end
+
+  defp try_index_advisory_lock? do
+    {:ok, %{rows: [[acquired?]]}} =
+      Connection.query("SELECT pg_try_advisory_lock($1)", [@index_advisory_lock_key])
+
+    acquired?
   end
 
   defp rebuild_index(index) do
