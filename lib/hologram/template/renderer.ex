@@ -236,11 +236,10 @@ defmodule Hologram.Template.Renderer do
         %{module: page_module, struct: page_component_struct_with_emitted_context_after_rendering}
       )
 
-    # `$SELF_ECHOES_JS_PLACEHOLDER` is intentionally left in both projections
-    # for the caller to substitute via `interpolate_self_echoes_js/2` or
-    # `interpolate_js_in_tree/3`. The value depends on the post-render
-    # `server.broadcasts`, which is a `Hologram.Realtime` concern - keeping the
-    # renderer Realtime-agnostic means the controller does the final
+    # `$SELF_ECHOES_JS_PLACEHOLDER` is intentionally left in both projections for the caller to
+    # substitute via `interpolate_js_in_tree/2`, along with the two sub-receipt tokens. Their
+    # values depend on the post-render `server.broadcasts`, which is a `Hologram.Realtime`
+    # concern - keeping the renderer Realtime-agnostic means the controller does the final
     # substitution after `Realtime.get_self_echoes/1`.
     asset_manifest_js = AssetManifestCache.get_manifest_js()
     component_registry_js = Encoder.encode_client_term!(component_registry_with_page_struct)
