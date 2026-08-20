@@ -463,7 +463,7 @@ defmodule Hologram.Component do
   # numbers, which is everything a :values list realistically holds.
   defp scalar_literal?(value), do: is_atom(value) or is_binary(value) or is_number(value)
 
-  defp validate_prop_opt_key!({key, _value}, name, module) when is_atom(key) do
+  defp validate_prop_opt_entry!({key, _value}, name, module) when is_atom(key) do
     if key not in @prop_opt_keys do
       raise Hologram.CompileError,
         message:
@@ -472,20 +472,44 @@ defmodule Hologram.Component do
     end
   end
 
-  defp validate_prop_opt_key!(_entry, _name, _module), do: :ok
+  # An entry that is a literal but not a {atom, value} pair can only be a mistake - a string key, a
+  # bare atom in a list - so it is rejected rather than stored. One that isn't a literal is an
+  # expression whose shape is unknown until it runs, and is deferred.
+  defp validate_prop_opt_entry!(entry, name, module) do
+    if Macro.quoted_literal?(entry) do
+      raise Hologram.CompileError,
+        message:
+          ~s/invalid option #{Macro.to_string(entry)} for prop "#{name}" in #{inspect(module)}, / <>
+            "options must be given as a keyword list"
+    end
+
+    :ok
+  end
 
   # Options reach the macro as AST, so only literal keys and literal option values can be checked -
   # which is every declaration written as a literal keyword list, even when some values aren't
-  # literals (default: some_var parses as [{:default, {:some_var, _, nil}}]). An opts argument that
-  # isn't a literal list, an entry that isn't a literal key/value pair, or an option value that
-  # isn't a literal, can't be inspected here and is passed through unchecked.
+  # literals (default: some_var parses as [{:default, {:some_var, _, nil}}]). An option value that
+  # isn't a literal can't be inspected here and is passed through unchecked.
   defp validate_prop_opts!(opts, name, module) when is_list(opts) and is_atom(name) do
-    Enum.each(opts, &validate_prop_opt_key!(&1, name, module))
+    Enum.each(opts, &validate_prop_opt_entry!(&1, name, module))
 
     validate_prop_required_opt!(opts, name, module)
     validate_prop_values_opt!(opts, name, module)
     validate_prop_required_default_conflict!(opts, name, module)
     validate_prop_default_in_values!(opts, name, module)
+  end
+
+  # A literal that isn't a list can't become one at runtime, so it is rejected here. Anything else
+  # is an expression - a module attribute, a variable - and only says what it is once it runs.
+  defp validate_prop_opts!(opts, name, module) when is_atom(name) do
+    if Macro.quoted_literal?(opts) do
+      raise Hologram.CompileError,
+        message:
+          ~s/the options for prop "#{name}" in #{inspect(module)} must be a keyword list, got: / <>
+            Macro.to_string(opts)
+    end
+
+    :ok
   end
 
   defp validate_prop_opts!(_opts, _name, _module), do: :ok

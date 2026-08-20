@@ -286,6 +286,47 @@ defmodule Hologram.ComponentTest do
       assert module.__props__() == [{:b, :string, [required: false, default: "abc"]}]
     end
 
+    test "raises when the options are a literal that is not a list" do
+      expected_error_msg =
+        ~s/the options for prop "b" in Hologram.Test.Fixtures.Component.NonListPropOpts / <>
+          "must be a keyword list, got: :values"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.NonListPropOpts do
+          use Hologram.Component
+
+          prop :b, :string, :values
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when a literal option entry is not a key/value pair" do
+      expected_error_msg =
+        ~s/invalid option {"values", [:small]} for prop "b" in / <>
+          "Hologram.Test.Fixtures.Component.MalformedPropOptEntry, " <>
+          "options must be given as a keyword list"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.MalformedPropOptEntry do
+          use Hologram.Component
+
+          prop :b, :string, [{"values", [:small]}]
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
     test "doesn't raise when an option value is not a literal" do
       {{:module, module, _binary, _result}, _bindings} =
         Code.eval_string("""

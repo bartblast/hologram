@@ -272,20 +272,43 @@ defmodule Hologram.Page do
   # (e.g. :default, once params can be sourced from the query string), this becomes a check against
   # a list of allowed keys, the way prop/3 does it.
   #
-  # Options reach the macro as AST, so only literal keys can be checked - which is every declaration
-  # written as a literal keyword list. An opts argument that isn't a literal list, or an entry that
-  # isn't a literal key/value pair, can't be inspected here and is passed through unchecked.
+  # Options reach the macro as AST, so only literals can be checked - which is every declaration
+  # written out. An option value that isn't a literal is an expression, and says what it is only
+  # once it runs, so it is passed through unchecked.
   defp validate_param_opts!(opts, name, module) when is_list(opts) and is_atom(name) do
-    Enum.each(opts, fn
-      {key, _value} when is_atom(key) ->
-        raise Hologram.CompileError,
-          message:
-            ~s/params don't support options yet, got #{inspect(key)} for param "#{name}" in #{inspect(module)}/
+    Enum.each(opts, &validate_param_opt_entry!(&1, name, module))
+  end
 
-      _entry ->
-        :ok
-    end)
+  # A literal that isn't a list can't become one at runtime, so it is rejected here.
+  defp validate_param_opts!(opts, name, module) when is_atom(name) do
+    if Macro.quoted_literal?(opts) do
+      raise Hologram.CompileError,
+        message:
+          ~s/the options for param "#{name}" in #{inspect(module)} must be a keyword list, got: / <>
+            Macro.to_string(opts)
+    end
+
+    :ok
   end
 
   defp validate_param_opts!(_opts, _name, _module), do: :ok
+
+  defp validate_param_opt_entry!({key, _value}, name, module) when is_atom(key) do
+    raise Hologram.CompileError,
+      message:
+        ~s/params don't support options yet, got #{inspect(key)} for param "#{name}" in #{inspect(module)}/
+  end
+
+  # An entry that is a literal but not a {atom, value} pair can only be a mistake - a string key, a
+  # bare atom in a list - so it is rejected rather than stored.
+  defp validate_param_opt_entry!(entry, name, module) do
+    if Macro.quoted_literal?(entry) do
+      raise Hologram.CompileError,
+        message:
+          ~s/invalid option #{Macro.to_string(entry)} for param "#{name}" in #{inspect(module)}, / <>
+            "options must be given as a keyword list"
+    end
+
+    :ok
+  end
 end

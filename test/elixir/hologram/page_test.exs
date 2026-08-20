@@ -175,6 +175,30 @@ defmodule Hologram.PageTest do
       end
     end
 
+    test "raises when the options are a literal that is not a list" do
+      expected_error_msg =
+        ~s/the options for param "b" in Hologram.Test.Fixtures.Page.NonListParamOpts / <>
+          "must be a keyword list, got: :default"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.NonListParamOpts do
+          use Hologram.Page
+
+          param :b, :integer, :default
+
+          route "/hologram-test-fixtures-page-non-list-param-opts/:b"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
     test "doesn't raise when the options are not a literal keyword list" do
       {{:module, module, _binary, _result}, _bindings} =
         Code.eval_string("""
