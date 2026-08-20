@@ -33,6 +33,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module32
   alias Hologram.Test.Fixtures.Compiler.Module34
   alias Hologram.Test.Fixtures.Compiler.Module36
+  alias Hologram.Test.Fixtures.Compiler.Module37
+  alias Hologram.Test.Fixtures.Compiler.Module38
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
@@ -1089,15 +1091,22 @@ defmodule Hologram.CompilerTest do
   describe "list_component_usages/1" do
     test "collects plain and nested usages, in template order" do
       assert Module28 |> IR.for_module() |> list_component_usages() == [
-               {Module27, ["a", "b"], false},
-               {Module27, ["a"], false},
-               {Module27, ["b"], false}
+               {Module27, [{"a", {:ok, "1"}}, {"b", :unknown}], false},
+               {Module27, [{"a", {:ok, "2"}}], false},
+               {Module27, [{"b", {:ok, "3"}}], false}
+             ]
+    end
+
+    test "reports the value of a prop written as a literal expression" do
+      assert Module38 |> IR.for_module() |> list_component_usages() == [
+               {Module37, [{"size", {:ok, :small}}, {"label", {:ok, "abc"}}, {"free", :unknown}],
+                false}
              ]
     end
 
     test "flags a usage carrying a spread" do
       assert Module29 |> IR.for_module() |> list_component_usages() == [
-               {Module27, ["a"], true}
+               {Module27, [{"a", {:ok, "1"}}], true}
              ]
     end
 
@@ -1502,6 +1511,81 @@ defmodule Hologram.CompilerTest do
 
     test "skips modules that are not in the IR PLT" do
       assert validate_prop_usages([Module32], PLT.start()) == :ok
+    end
+
+    test "doesn't raise when a written value is in the prop's :values list" do
+      plt = PLT.start() |> PLT.put(Module38, IR.for_module(Module38))
+
+      assert validate_prop_usages([Module38], plt) == :ok
+    end
+
+    test "raises when a literal expression value is not in the prop's :values list" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module37, [{"size", [expression: {:huge}]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.start() |> PLT.put(Module38, ir)
+
+      expected_msg =
+        ~s/prop "size" of component Hologram.Test.Fixtures.Compiler.Module37 must be one of / <>
+          "[:small, :large], got: :huge, " <>
+          "in Hologram.Test.Fixtures.Compiler.Module38's template"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_prop_usages([Module38], plt)
+      end
+    end
+
+    test "raises when a text value is not in the prop's :values list" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module37, [{"label", [text: "nope"]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.start() |> PLT.put(Module38, ir)
+
+      expected_msg =
+        ~s/prop "label" of component Hologram.Test.Fixtures.Compiler.Module37 must be one of / <>
+          ~s/["abc", "xyz"], got: "nope", / <>
+          "in Hologram.Test.Fixtures.Compiler.Module38's template"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_prop_usages([Module38], plt)
+      end
+    end
+
+    test "raises for a value written at a usage that also carries a spread" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module37, [{"size", [expression: {:huge}]}, {:spread, {vars.props}}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.start() |> PLT.put(Module38, ir)
+
+      expected_msg =
+        ~s/prop "size" of component Hologram.Test.Fixtures.Compiler.Module37 must be one of / <>
+          "[:small, :large], got: :huge, " <>
+          "in Hologram.Test.Fixtures.Compiler.Module38's template"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_prop_usages([Module38], plt)
+      end
+    end
+
+    test "doesn't raise when the value is not known at compile time" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module37, [{"size", [expression: {vars.x}]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.start() |> PLT.put(Module38, ir)
+
+      assert validate_prop_usages([Module38], plt) == :ok
     end
   end
 

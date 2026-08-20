@@ -579,21 +579,23 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns every component usage found in the given IR, as
-  `{component_module, prop_names, has_spread?}` tuples, in the order they appear in the template.
+  Returns every component usage found in the given IR, as `{component_module, props, has_spread?}`
+  tuples, in the order they appear in the template.
 
-  `prop_names` holds the prop names written at the usage, without the framework's own `$`-prefixed
-  entries. `has_spread?` says whether the usage carries a `...{expr}` spread, which makes its set of
-  props impossible to know before the expression has a value.
+  `props` holds one entry per prop written at the usage, without the framework's own `$`-prefixed
+  entries, as `{name, {:ok, value}}` when the value is known without running anything, and
+  `{name, :unknown}` otherwise. `has_spread?` says whether the usage carries a `...{expr}` spread,
+  which makes its set of props impossible to know before the expression has a value.
 
   Dynamic tags (`<{@module} />`) are skipped - the component module itself is a runtime value there.
 
   ## Examples
 
       iex> list_component_usages(IR.for_module(MyApp.HomePage))
-      [{MyApp.Card, ["size"], false}]
+      [{MyApp.Card, [{"size", {:ok, :small}}, {"count", :unknown}], false}]
   """
-  @spec list_component_usages(IR.t()) :: list({module, list(String.t()), boolean})
+  @spec list_component_usages(IR.t()) ::
+          list({module, list({String.t(), {:ok, any} | :unknown}), boolean})
   def list_component_usages(ir) do
     ir
     |> collect_component_usages([])
@@ -785,7 +787,7 @@ defmodule Hologram.Compiler do
          },
          acc
        ) do
-    usage = {component_module, prop_names(props), has_spread?(props)}
+    usage = {component_module, prop_entries(props), has_spread?(props)}
 
     collect_component_usages(children, collect_component_usages(props, [usage | acc]))
   end
@@ -816,6 +818,14 @@ defmodule Hologram.Compiler do
       message:
         "component #{Reflection.module_name(component_module)} is missing required prop " <>
           ~s/"#{name}" in #{Reflection.module_name(module)}'s template/
+  end
+
+  defp component_value_error!(component_module, {name, value, values}, module) do
+    raise Hologram.CompileError,
+      message:
+        ~s/prop "#{name}" of component #{Reflection.module_name(component_module)} must be one of / <>
+          "#{inspect(values)}, got: #{inspect(value)}, " <>
+          "in #{Reflection.module_name(module)}'s template"
   end
 
   defp create_entry_file(js, entry_name, tmp_dir) do
@@ -859,6 +869,28 @@ defmodule Hologram.Compiler do
 
   defp has_spread?(props) do
     Enum.any?(props, &match?(%IR.TupleType{data: [%IR.AtomType{value: :spread}, _expr]}, &1))
+  end
+
+  # Only props whose value is known without running anything are judged. The comparison needs no
+  # type guard: nothing casts a prop to its declared type, so a text value stays the string it was
+  # written as, and the renderers compare it against values: exactly the same way.
+  defp invalid_prop_values(component_module, prop_entries) do
+    values_by_name =
+      component_module.__props__()
+      |> Enum.flat_map(fn {name, _type, opts} ->
+        if opts[:values], do: [{to_string(name), opts[:values]}], else: []
+      end)
+      |> Map.new()
+
+    Enum.flat_map(prop_entries, fn
+      {name, {:ok, value}} ->
+        values = values_by_name[name]
+
+        if values && value not in values, do: [{name, value, values}], else: []
+
+      {_name, :unknown} ->
+        []
+    end)
   end
 
   defp included_protocol_implementations(reachable_mfas, protocol) do
@@ -924,6 +956,14 @@ defmodule Hologram.Compiler do
     end
   end
 
+  # Composite literals (lists, maps, tuples) are deliberately not evaluated - a values: list holding
+  # one is vanishingly rare, and stopping at scalars keeps this from growing into an interpreter.
+  defp literal_value(%IR.AtomType{value: value}), do: {:ok, value}
+  defp literal_value(%IR.FloatType{value: value}), do: {:ok, value}
+  defp literal_value(%IR.IntegerType{value: value}), do: {:ok, value}
+  defp literal_value(%IR.StringType{value: value}), do: {:ok, value}
+  defp literal_value(_ir), do: :unknown
+
   # A prop sourced from context is never written at the usage, so its absence there says nothing -
   # only the renderers can tell whether the context supplied it.
   defp missing_required_props(component_module, prop_names) do
@@ -935,15 +975,43 @@ defmodule Hologram.Compiler do
   end
 
   # $-prefixed entries are the framework's own ($key, event bindings), never something the author
-  # declared with prop/3, so they are not prop names as far as a usage is concerned.
-  defp prop_names(props) do
+  # declared with prop/3, so they are not props as far as a usage is concerned.
+  defp prop_entries(props) do
     props
     |> Enum.flat_map(fn
-      %IR.TupleType{data: [%IR.StringType{value: name}, _value]} -> [name]
-      _entry -> []
+      %IR.TupleType{data: [%IR.StringType{value: name}, %IR.ListType{data: value_dom}]} ->
+        [{name, static_prop_value(value_dom)}]
+
+      _entry ->
+        []
     end)
-    |> Enum.reject(&String.starts_with?(&1, "$"))
+    |> Enum.reject(fn {name, _value} -> String.starts_with?(name, "$") end)
   end
+
+  # Mirrors evaluate_prop_value/1 in the renderer: a lone expression yields its term as it is, and
+  # anything else is rendered to a string. So a value is known here only when the expression is a
+  # literal, or when the value is text with nothing interpolated into it.
+  defp static_prop_value([
+         %IR.TupleType{data: [%IR.AtomType{value: :expression}, %IR.TupleType{data: [expr]}]}
+       ]) do
+    literal_value(expr)
+  end
+
+  defp static_prop_value([_first | _rest] = value_dom) do
+    if Enum.all?(
+         value_dom,
+         &match?(%IR.TupleType{data: [%IR.AtomType{value: :text}, %IR.StringType{}]}, &1)
+       ) do
+      {:ok,
+       Enum.map_join(value_dom, "", fn %IR.TupleType{data: [_tag, %IR.StringType{value: str}]} ->
+         str
+       end)}
+    else
+      :unknown
+    end
+  end
+
+  defp static_prop_value(_value_dom), do: :unknown
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
@@ -1122,12 +1190,30 @@ defmodule Hologram.Compiler do
   defp validate_module_prop_usages(module, ir) do
     ir
     |> list_component_usages()
-    |> Enum.each(fn {component_module, prop_names, has_spread?} ->
-      if !has_spread? && Reflection.has_function?(component_module, :__props__, 0) do
-        component_module
-        |> missing_required_props(prop_names)
-        |> Enum.each(&component_usage_error!(component_module, &1, module))
-      end
-    end)
+    |> Enum.each(&validate_prop_usage(&1, module))
+  end
+
+  # A spread decides only whether a prop is present, so it blocks the required check and nothing
+  # else. A value written at the usage is judged either way: being overridden by a later spread
+  # doesn't make an invalid literal valid, it just makes it dead as well as wrong.
+  defp validate_prop_usage({component_module, prop_entries, has_spread?}, module) do
+    if Reflection.has_function?(component_module, :__props__, 0) do
+      validate_required_props(component_module, prop_entries, has_spread?, module)
+
+      component_module
+      |> invalid_prop_values(prop_entries)
+      |> Enum.each(&component_value_error!(component_module, &1, module))
+    end
+  end
+
+  # A spread could supply any prop, so nothing can be proven missing at a usage carrying one.
+  defp validate_required_props(_component_module, _prop_entries, true, _module), do: :ok
+
+  defp validate_required_props(component_module, prop_entries, false, module) do
+    prop_names = Enum.map(prop_entries, fn {name, _value} -> name end)
+
+    component_module
+    |> missing_required_props(prop_names)
+    |> Enum.each(&component_usage_error!(component_module, &1, module))
   end
 end
