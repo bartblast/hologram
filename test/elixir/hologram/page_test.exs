@@ -32,7 +32,7 @@ defmodule Hologram.PageTest do
   end
 
   test "__params__/0" do
-    assert Module7.__params__() == [{:a, :string, []}, {:b, :integer, [opt_1: 111, opt_2: 222]}]
+    assert Module7.__params__() == [{:a, :string, []}, {:b, :integer, []}]
   end
 
   test "__route__/0" do
@@ -130,6 +130,54 @@ defmodule Hologram.PageTest do
     test "overridden" do
       assert Module2.init(:params_dummy, build_component_struct(), build_server_struct()) ==
                {%Component{state: %{overriden: true}}, %Server{}}
+    end
+  end
+
+  describe "param/3" do
+    test "raises when any option is given" do
+      expected_error_msg =
+        ~s/params don't support options yet, got :default for param "b" in Hologram.Test.Fixtures.Page.ParamOpt/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.ParamOpt do
+          use Hologram.Page
+
+          param :b, :integer, default: 1
+
+          route "/hologram-test-fixtures-page-param-opt/:b"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "doesn't raise when the options are not a literal keyword list" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.NonLiteralParamOpts do
+          use Hologram.Page
+
+          @my_opts []
+
+          param :b, :integer, @my_opts
+
+          route "/hologram-test-fixtures-page-non-literal-param-opts/:b"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__params__() == [{:b, :integer, []}]
     end
   end
 

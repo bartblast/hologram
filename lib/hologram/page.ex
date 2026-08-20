@@ -228,6 +228,8 @@ defmodule Hologram.Page do
   """
   @spec param(atom, atom, T.opts()) :: Macro.t()
   defmacro param(name, type, opts \\ []) do
+    validate_param_opts!(opts, name, __CALLER__.module)
+
     quote do
       Module.put_attribute(__MODULE__, :__params__, {unquote(name), unquote(type), unquote(opts)})
     end
@@ -263,4 +265,25 @@ defmodule Hologram.Page do
       end
     end
   end
+
+  # Params support no options yet, so every option given is rejected. When the first one lands
+  # (e.g. :default, once params can be sourced from the query string), this becomes a check against
+  # a list of allowed keys, the way prop/3 does it.
+  #
+  # Options reach the macro as AST, so only literal keys can be checked - which is every declaration
+  # written as a literal keyword list. An opts argument that isn't a literal list, or an entry that
+  # isn't a literal key/value pair, can't be inspected here and is passed through unchecked.
+  defp validate_param_opts!(opts, name, module) when is_list(opts) and is_atom(name) do
+    Enum.each(opts, fn
+      {key, _value} when is_atom(key) ->
+        raise Hologram.CompileError,
+          message:
+            ~s/params don't support options yet, got #{inspect(key)} for param "#{name}" in #{inspect(module)}/
+
+      _entry ->
+        :ok
+    end)
+  end
+
+  defp validate_param_opts!(_opts, _name, _module), do: :ok
 end
