@@ -48,7 +48,15 @@ export default class Renderer {
   // renderer builds for the page's own render - otherwise hydration rebuilds nodes instead of
   // adopting them. Every normalization step here must therefore match render_tree/3, clause by
   // clause.
-  static renderDom(dom, context, slots, defaultTarget, parentTagName) {
+  static renderDom(
+    dom,
+    context,
+    slots,
+    defaultTarget,
+    parentTagName,
+    parentModule,
+    slotsParentModule,
+  ) {
     if (Type.isList(dom)) {
       return Renderer.#renderNodes(
         dom,
@@ -56,6 +64,8 @@ export default class Renderer {
         slots,
         defaultTarget,
         parentTagName,
+        parentModule,
+        slotsParentModule,
       );
     }
 
@@ -73,6 +83,8 @@ export default class Renderer {
           slots,
           defaultTarget,
           parentTagName,
+          parentModule,
+          slotsParentModule,
         );
 
       case "component":
@@ -82,6 +94,7 @@ export default class Renderer {
           slots,
           defaultTarget,
           parentTagName,
+          parentModule,
         );
 
       case "expression":
@@ -101,6 +114,8 @@ export default class Renderer {
           slots,
           Type.bitstring("page"),
           parentTagName,
+          parentModule,
+          slotsParentModule,
         );
 
       case "dynamic_tag":
@@ -110,6 +125,8 @@ export default class Renderer {
           slots,
           defaultTarget,
           parentTagName,
+          parentModule,
+          slotsParentModule,
         );
 
       case "doctype":
@@ -122,6 +139,8 @@ export default class Renderer {
           slots,
           defaultTarget,
           parentTagName,
+          parentModule,
+          slotsParentModule,
         );
     }
   }
@@ -168,6 +187,8 @@ export default class Renderer {
         Type.map(),
         Type.keywordList(),
         Type.bitstring("page"),
+        null,
+        null,
         null,
       ),
     );
@@ -974,6 +995,45 @@ export default class Renderer {
     );
   }
 
+  // Which props carry a required: or values: option is a property of the module, not of the render,
+  // so it is derived once and cached on the module proxy the way __props__ already is. Most
+  // components constrain nothing, which leaves the per-render cost at a single length check.
+  // Deps: [:lists.keyfind/3]
+  static #getConstrainedProps(moduleProxy) {
+    if (!("__constrainedProps__" in moduleProxy)) {
+      moduleProxy.__constrainedProps__ = Renderer.#getPropDefinitions(
+        moduleProxy,
+      )
+        .data.map((prop) => {
+          const opts = prop.data[2];
+
+          const requiredEntry = Erlang_Lists["keyfind/3"](
+            Type.atom("required"),
+            Type.integer(1),
+            opts,
+          );
+
+          const valuesEntry = Erlang_Lists["keyfind/3"](
+            Type.atom("values"),
+            Type.integer(1),
+            opts,
+          );
+
+          const required =
+            !Type.isFalse(requiredEntry) && Type.isTrue(requiredEntry.data[1]);
+
+          const values = Type.isFalse(valuesEntry) ? null : valuesEntry.data[1];
+
+          return required || values !== null
+            ? {name: prop.data[0], required: required, values: values}
+            : null;
+        })
+        .filter((entry) => entry !== null);
+    }
+
+    return moduleProxy.__constrainedProps__;
+  }
+
   static #getPropDefinitions(moduleProxy) {
     if (!("__props__" in moduleProxy)) {
       moduleProxy.__props__ = moduleProxy["__props__/0"]();
@@ -1385,7 +1445,14 @@ export default class Renderer {
   }
 
   // Based on render_tree/3 (component case)
-  static #renderComponent(dom, context, slots, defaultTarget, parentTagName) {
+  static #renderComponent(
+    dom,
+    context,
+    slots,
+    defaultTarget,
+    parentTagName,
+    parentModule,
+  ) {
     const moduleProxy = Interpreter.moduleProxy(dom.data[1]);
     const propsDom = dom.data[2];
     let childrenDom = dom.data[3];
@@ -1400,6 +1467,8 @@ export default class Renderer {
 
     props = Renderer.#injectDefaultPropValues(props, moduleProxy);
 
+    Renderer.#validateProps(props, moduleProxy, dom.data[1], parentModule);
+
     if (Renderer.#hasCidProp(props)) {
       return Renderer.#renderStatefulComponent(
         moduleProxy,
@@ -1407,6 +1476,7 @@ export default class Renderer {
         expandedChildrenDom,
         context,
         parentTagName,
+        parentModule,
       );
     } else {
       return Renderer.#renderTemplate(
@@ -1416,12 +1486,21 @@ export default class Renderer {
         context,
         defaultTarget,
         parentTagName,
+        parentModule,
       );
     }
   }
 
   // Based on render_tree/3 (dynamic tag cases)
-  static #renderDynamicTag(dom, context, slots, defaultTarget, parentTagName) {
+  static #renderDynamicTag(
+    dom,
+    context,
+    slots,
+    defaultTarget,
+    parentTagName,
+    parentModule,
+    slotsParentModule,
+  ) {
     const value = dom.data[1].data[0];
     const attrsDom = dom.data[2];
     const childrenDom = dom.data[3];
@@ -1434,6 +1513,8 @@ export default class Renderer {
         slots,
         defaultTarget,
         parentTagName,
+        parentModule,
+        slotsParentModule,
       );
     }
 
@@ -1451,11 +1532,28 @@ export default class Renderer {
       slots,
       defaultTarget,
       parentTagName,
+      parentModule,
+      slotsParentModule,
     );
   }
 
+  // Based on rendered_from/1
+  static #renderedFrom(parentModule) {
+    return parentModule === null || typeof parentModule === "undefined"
+      ? ""
+      : `, rendered from "${Interpreter.moduleExName(parentModule)}"`;
+  }
+
   // Based on render_tree/3 (element & slot case)
-  static #renderElement(dom, context, slots, defaultTarget, parentTagName) {
+  static #renderElement(
+    dom,
+    context,
+    slots,
+    defaultTarget,
+    parentTagName,
+    parentModule,
+    slotsParentModule,
+  ) {
     const currentTagName = Bitstring.toText(dom.data[1]);
 
     if (currentTagName === "slot") {
@@ -1464,6 +1562,7 @@ export default class Renderer {
         context,
         defaultTarget,
         parentTagName,
+        slotsParentModule,
       );
     }
 
@@ -1499,6 +1598,8 @@ export default class Renderer {
         slots,
         defaultTarget,
         currentTagName,
+        parentModule,
+        slotsParentModule,
       ),
     );
 
@@ -1646,7 +1747,15 @@ export default class Renderer {
   // Blocks are left alone here: a block's body and a loop's iterations are lists of their own, and
   // the nodes they render are only ever part of the enclosing element's children. Numbering the
   // keys belongs to whoever owns that list - see Vdom.finalizeChildren.
-  static #renderNodes(nodes, context, slots, defaultTarget, parentTagName) {
+  static #renderNodes(
+    nodes,
+    context,
+    slots,
+    defaultTarget,
+    parentTagName,
+    parentModule,
+    slotsParentModule,
+  ) {
     return Renderer.#mergeNeighbouringTextNodes(
       nodes.data
         // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if} or DOCTYPE
@@ -1658,6 +1767,8 @@ export default class Renderer {
             slots,
             defaultTarget,
             parentTagName,
+            parentModule,
+            slotsParentModule,
           ),
         )
         .flat(),
@@ -1706,6 +1817,8 @@ export default class Renderer {
       Type.keywordList(),
       Type.bitstring("layout"),
       null,
+      pageModuleProxy.__exModule__,
+      null,
     );
   }
 
@@ -1716,6 +1829,8 @@ export default class Renderer {
     slots,
     defaultTarget,
     parentTagName,
+    parentModule,
+    slotsParentModule,
   ) {
     const childrenDom = dom.data[1];
 
@@ -1725,6 +1840,8 @@ export default class Renderer {
       slots,
       defaultTarget,
       parentTagName,
+      parentModule,
+      slotsParentModule,
     );
 
     const commentContent = childrenVdom
@@ -1766,7 +1883,13 @@ export default class Renderer {
   }
 
   // Based on render_tree/3 (slot case)
-  static #renderSlotElement(slots, context, defaultTarget, parentTagName) {
+  static #renderSlotElement(
+    slots,
+    context,
+    defaultTarget,
+    parentTagName,
+    slotsParentModule,
+  ) {
     const slotDom = Interpreter.accessKeywordListElement(
       slots,
       Type.atom("default"),
@@ -1778,6 +1901,8 @@ export default class Renderer {
       Type.keywordList(),
       defaultTarget,
       parentTagName,
+      slotsParentModule,
+      slotsParentModule,
     );
   }
 
@@ -1789,6 +1914,7 @@ export default class Renderer {
     childrenDom,
     context,
     parentTagName,
+    parentModule,
   ) {
     const cid = Erlang_Maps["get/2"](Type.atom("cid"), props);
 
@@ -1808,6 +1934,7 @@ export default class Renderer {
       mergedContext,
       cid,
       parentTagName,
+      parentModule,
     );
   }
 
@@ -1819,6 +1946,7 @@ export default class Renderer {
     context,
     defaultTarget,
     parentTagName,
+    parentModule,
   ) {
     const dom = Renderer.#evaluateTemplate(moduleProxy, vars);
     const slots = Type.keywordList([[Type.atom("default"), childrenDom]]);
@@ -1829,6 +1957,8 @@ export default class Renderer {
       slots,
       defaultTarget,
       parentTagName,
+      moduleProxy.__exModule__,
+      parentModule,
     );
   }
 
@@ -1917,6 +2047,47 @@ export default class Renderer {
       Renderer.#invalidDynamicTagValueMessage(module) +
         ", which is not a component module",
     );
+  }
+
+  // Based on validate_props/3
+  // Runs last in the props pipeline, so the map it sees is exactly what the component's template
+  // will see. The compiler judges what a template spells out and what a declaration defaults to, so
+  // what reaches here is what only exists once the page runs: a value from context, or one arriving
+  // through a spread.
+  // Deps: [:lists.member/2, :maps.get/2, :maps.is_key/2]
+  static #validateProps(props, moduleProxy, module, parentModule) {
+    const constrainedProps = Renderer.#getConstrainedProps(moduleProxy);
+
+    if (constrainedProps.length === 0) {
+      return;
+    }
+
+    const moduleName = Interpreter.moduleExName(module);
+
+    for (const {name, required, values} of constrainedProps) {
+      const isPresent = Type.isTrue(Erlang_Maps["is_key/2"](name, props));
+
+      if (required && !isPresent) {
+        Interpreter.raiseError(
+          "Hologram.PropError",
+          `component "${moduleName}" is missing required prop "${name.value}"` +
+            Renderer.#renderedFrom(parentModule),
+        );
+      }
+
+      if (values !== null && isPresent) {
+        const value = Erlang_Maps["get/2"](name, props);
+
+        if (Type.isFalse(Erlang_Lists["member/2"](value, values))) {
+          Interpreter.raiseError(
+            "Hologram.PropError",
+            `prop "${name.value}" of component "${moduleName}" must be one of ` +
+              `${Interpreter.inspect(values)}, got: ${Interpreter.inspect(value)}` +
+              Renderer.#renderedFrom(parentModule),
+          );
+        }
+      }
+    }
   }
 
   // Based on validate_spread_key/1
