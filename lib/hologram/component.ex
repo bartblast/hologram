@@ -459,6 +459,10 @@ defmodule Hologram.Component do
 
   defp normalize_except(list) when is_list(list), do: list
 
+  # An AST node that is its own value - true for atoms (nil and booleans included), strings and
+  # numbers, which is everything a :values list realistically holds.
+  defp scalar_literal?(value), do: is_atom(value) or is_binary(value) or is_number(value)
+
   defp validate_prop_opt_key!({key, _value}, name, module) when is_atom(key) do
     if key not in @prop_opt_keys do
       raise Hologram.CompileError,
@@ -481,9 +485,27 @@ defmodule Hologram.Component do
     validate_prop_required_opt!(opts, name, module)
     validate_prop_values_opt!(opts, name, module)
     validate_prop_required_default_conflict!(opts, name, module)
+    validate_prop_default_in_values!(opts, name, module)
   end
 
   defp validate_prop_opts!(_opts, _name, _module), do: :ok
+
+  # Both options sit in the same declaration, so a default outside its own :values list is decidable
+  # right here rather than on every render. Only scalars are compared - a values: list holding a
+  # composite term is vanishingly rare, and the render-time check still covers it.
+  defp validate_prop_default_in_values!(opts, name, module) do
+    with {:values, values} when is_list(values) <- List.keyfind(opts, :values, 0),
+         {:default, default} <- List.keyfind(opts, :default, 0),
+         true <- scalar_literal?(default) && Enum.all?(values, &scalar_literal?/1),
+         true <- default not in values do
+      raise Hologram.CompileError,
+        message:
+          ~s/the :default value #{inspect(default)} for prop "#{name}" in #{inspect(module)} / <>
+            "is not one of #{inspect(values)}"
+    else
+      _fallback -> :ok
+    end
+  end
 
   # A default makes the prop impossible to miss, so required: true next to one could never fire -
   # the declaration would contradict itself. required with from_context stays allowed: a

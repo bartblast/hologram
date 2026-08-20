@@ -933,15 +933,33 @@ defmodule Hologram.Template.Renderer do
   # and props sourced from context. Mirrored by #validateProps in renderer.mjs.
   defp validate_props(props, module, parent_module) do
     Enum.each(module.__props__(), fn {name, _type, opts} ->
-      if opts[:required] && !Map.has_key?(props, name) do
+      validate_prop(props, name, opts, module, parent_module)
+    end)
+
+    props
+  end
+
+  # The compiler judges a value written in a template and a default written in a declaration, so what
+  # is left here is what only exists once the page runs: a value from context, or one arriving
+  # through a spread.
+  defp validate_prop(props, name, opts, module, parent_module) do
+    cond do
+      opts[:required] && !Map.has_key?(props, name) ->
         raise Hologram.PropError,
           message:
             ~s/component "#{Reflection.module_name(module)}" is missing required prop "#{name}"/ <>
               rendered_from(parent_module)
-      end
-    end)
 
-    props
+      opts[:values] && Map.has_key?(props, name) && props[name] not in opts[:values] ->
+        raise Hologram.PropError,
+          message:
+            ~s/prop "#{name}" of component "#{Reflection.module_name(module)}" must be one of / <>
+              "#{inspect(opts[:values])}, got: #{inspect(props[name])}" <>
+              rendered_from(parent_module)
+
+      true ->
+        :ok
+    end
   end
 
   # Event bindings require compile-time modifier parsing and listener collection, so they can be

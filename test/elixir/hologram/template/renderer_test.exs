@@ -74,6 +74,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module89
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
   alias Hologram.Test.Fixtures.Template.Renderer.Module90
+  alias Hologram.Test.Fixtures.Template.Renderer.Module91
+  alias Hologram.Test.Fixtures.Template.Renderer.Module92
 
   @csrf_token "test-csrf-token"
   @env %Renderer.Env{}
@@ -831,6 +833,59 @@ defmodule Hologram.Template.RendererTest do
       assert_raise Hologram.PropError, expected_msg, fn ->
         render_dom(node, @env, @server)
       end
+    end
+
+    test "prop value in the :values list" do
+      node = {:component, Module91, [{"aaa", [expression: {:small}]}], []}
+
+      assert render_dom(node, @env, @server) == {"component vars = %{aaa: :small}", %{}, @server}
+    end
+
+    # A value written in a template is rejected by the compiler, so what reaches this check comes
+    # from a spread or from context.
+    test "prop value not in the :values list, arriving through a spread" do
+      node = {:component, Module91, [{:spread, {%{aaa: :huge}}}], []}
+
+      expected_msg =
+        ~s/prop "aaa" of component "Hologram.Test.Fixtures.Template.Renderer.Module91" / <>
+          "must be one of [:small, :large], got: :huge"
+
+      assert_raise Hologram.PropError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "prop value not in the :values list names the template it was rendered from" do
+      node = {:component, Module91, [{:spread, {%{aaa: :huge}}}], []}
+      env = %Renderer.Env{parent_module: Module64}
+
+      expected_msg =
+        ~s/prop "aaa" of component "Hologram.Test.Fixtures.Template.Renderer.Module91" / <>
+          "must be one of [:small, :large], got: :huge, " <>
+          ~s/rendered from "Hologram.Test.Fixtures.Template.Renderer.Module64"/
+
+      assert_raise Hologram.PropError, expected_msg, fn ->
+        render_dom(node, env, @server)
+      end
+    end
+
+    test "prop value from context not in the :values list" do
+      node = {:component, Module92, [], []}
+      env = %Renderer.Env{context: %{my_context_key: :huge}}
+
+      expected_msg =
+        ~s/prop "aaa" of component "Hologram.Test.Fixtures.Template.Renderer.Module92" / <>
+          "must be one of [:small, :large], got: :huge"
+
+      assert_raise Hologram.PropError, expected_msg, fn ->
+        render_dom(node, env, @server)
+      end
+    end
+
+    test "absent prop with a :values list doesn't raise" do
+      node = {:component, Module91, [], []}
+
+      assert render_dom(node, @env, @server) == {"component vars = %{}", %{}, @server}
     end
   end
 

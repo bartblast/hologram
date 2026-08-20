@@ -213,6 +213,43 @@ defmodule Hologram.ComponentTest do
       end
     end
 
+    test "raises when the default value is not in the :values list" do
+      expected_error_msg =
+        ~s/the :default value :medium for prop "b" in Hologram.Test.Fixtures.Component.DefaultOutsideValues / <>
+          "is not one of [:small, :large]"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DefaultOutsideValues do
+          use Hologram.Component
+
+          prop :b, :atom, values: [:small, :large], default: :medium
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "accepts a default value that is in the :values list" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DefaultInsideValues do
+          use Hologram.Component
+
+          prop :b, :atom, values: [:small, :large], default: :small
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__props__() == [{:b, :atom, [values: [:small, :large], default: :small]}]
+    end
+
     test "accepts a required prop sourced from context" do
       {{:module, module, _binary, _result}, _bindings} =
         Code.eval_string("""
