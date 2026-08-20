@@ -9,11 +9,12 @@ defmodule Hologram.Query.Window do
   Returns the window term of the given query term - the same query with the predicates that
   cannot say anything about the download taken out.
 
-  A predicate comparing an attribute to a PARAM is dropped, whatever the operator: the value is
-  unknown when the window is derived, so it bounds nothing, and the answer for every value it may
-  take has to be in what arrives. What keeps that download finite is elsewhere - the model bounds
-  an enum or a boolean by what it declares, and the read policy bounds a reference by the rows
-  the actor may see, which is applied to the download in any case.
+  A predicate is dropped when a PARAM stands on either side of it - as the value, whatever the
+  operator, or as the attribute being compared. Both are unknown when the window is derived, so
+  the predicate bounds nothing, and the answer for every value it may take has to be in what
+  arrives. What keeps that download finite is elsewhere - the model bounds an enum or a boolean by
+  what it declares, and the read policy bounds a reference by the rows the actor may see, which is
+  applied to the download in any case.
 
   A predicate comparing to a LITERAL stays: an app whose only query asks for todo projects is
   saying the others are never needed.
@@ -49,5 +50,5 @@ defmodule Hologram.Query.Window do
 
   defp param?(_value), do: false
 
-  defp param_bound?({_name, _operator, value}), do: param?(value)
+  defp param_bound?({name, _operator, value}), do: param?(name) or param?(value)
 end

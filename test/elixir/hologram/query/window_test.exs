@@ -31,8 +31,20 @@ defmodule Hologram.Query.WindowTest do
       assert window.filter == []
     end
 
+    test "drops a predicate whose attribute is a param" do
+      window = derive(term(Module2, [{{:param, :field}, :==, 5}]))
+
+      assert window.filter == []
+    end
+
     test "keeps the literal predicates of a query that also has param ones" do
-      window = derive(term(Module2, [{:a, :==, true}, {:c, :==, {:param, :search}}]))
+      filter = [
+        {:a, :==, true},
+        {:c, :==, {:param, :search}},
+        {{:param, :field}, :==, 5}
+      ]
+
+      window = derive(term(Module2, filter))
 
       assert window.filter == [{:a, :==, true}]
     end
