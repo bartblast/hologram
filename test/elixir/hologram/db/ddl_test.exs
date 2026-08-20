@@ -25,24 +25,36 @@ defmodule Hologram.DB.DDLTest do
   end
 
   describe "cast_check_statement/4" do
-    test "counts rows with fractional parts for float8 to int8" do
+    test "counts rows with fractional parts or an out-of-range magnitude for float8 to int8" do
       assert cast_check_statement("task", "score", "float8", "int8") ==
-               ~s{SELECT COUNT(*) FROM "hologram_data"."task" } <>
-                 ~s{WHERE "score" <> trunc("score")}
+               ~s/SELECT COUNT(*) FROM "hologram_data"."task" / <>
+                 ~s/WHERE "score" <> trunc("score") / <>
+                 ~s/OR "score" >= 9223372036854775808::float8 / <>
+                 ~s/OR "score" < -9223372036854775808::float8/
     end
 
-    test "counts rows with non-integer text for text to int8" do
+    test "counts rows with non-integer or out-of-range text for text to int8" do
       assert cast_check_statement("task", "count", "text", "int8") ==
-               ~s{SELECT COUNT(*) FROM "hologram_data"."task" } <>
-                 ~s{WHERE NOT ("count" ~ '^\\s*[+-]?[0-9]+\\s*$')}
+               ~s/SELECT COUNT(*) FROM "hologram_data"."task" WHERE / <>
+                 ~s/CASE WHEN NOT ("count" ~ '^\\s*[+-]?[0-9]+\\s*$') THEN true / <>
+                 ~s/WHEN "count" ~ '^\\s*[+-]?0*[1-9][0-9]{19,}\\s*$' THEN true / <>
+                 ~s/ELSE "count"::numeric NOT BETWEEN / <>
+                 ~s/-9223372036854775808 AND 9223372036854775807 END/
     end
 
-    test "counts rows with non-numeric text for text to float8" do
+    test "counts rows with non-numeric or out-of-range text for text to float8" do
       assert cast_check_statement("task", "score", "text", "float8") ==
-               ~s{SELECT COUNT(*) FROM "hologram_data"."task" } <>
-                 ~s{WHERE NOT ("score" ~ } <>
-                 ~s{'^\\s*[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?\\s*$' } <>
-                 ~s{OR "score" ~* '^\\s*[+-]?(inf(inity)?|nan)\\s*$')}
+               ~s/SELECT COUNT(*) FROM "hologram_data"."task" WHERE / <>
+                 ~s/CASE WHEN "score" ~* '^\\s*[+-]?(inf(inity)?|nan)\\s*$' THEN false / <>
+                 ~s/WHEN NOT ("score" ~ / <>
+                 ~s/'^\\s*[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?\\s*$') / <>
+                 ~s/THEN true / <>
+                 ~s/WHEN "score" ~ '^\\s*[+-]?(0+(\\.0*)?|\\.0+)([eE][+-]?[0-9]+)?\\s*$' / <>
+                 ~s/THEN false / <>
+                 ~s/WHEN length("score") > 2000 THEN true / <>
+                 ~s/WHEN "score" ~ '[eE][+-]?[0-9]{4,}\\s*$' THEN true / <>
+                 ~s/ELSE abs("score"::numeric) > 1.7976931348623157e308 / <>
+                 ~s/OR abs("score"::numeric) < 4.9406564584124654e-324 END/
     end
 
     test "counts rows with a time part for timestamptz to date" do
@@ -53,43 +65,100 @@ defmodule Hologram.DB.DDLTest do
   end
 
   describe "cast_class/2" do
-    test "classifies identity as safe" do
-      assert cast_class("int8", "int8") == :safe
+    # Every ordered pair of the seven builtin types, as a literal table: 49 cells, so no
+    # combination can be added to the type set and quietly land in :unsupported unnoticed.
+    # Read down the FROM column, across the TO row.
+    test "classifies every pair of builtin types" do
+      classes = %{
+        {"boolean", "boolean"} => :safe,
+        {"boolean", "date"} => :unsupported,
+        {"boolean", "float8"} => :unsupported,
+        {"boolean", "int8"} => :unsupported,
+        {"boolean", "text"} => :safe,
+        {"boolean", "timestamptz"} => :unsupported,
+        {"boolean", "uuid"} => :unsupported,
+        {"date", "boolean"} => :unsupported,
+        {"date", "date"} => :safe,
+        {"date", "float8"} => :unsupported,
+        {"date", "int8"} => :unsupported,
+        {"date", "text"} => :safe,
+        {"date", "timestamptz"} => :safe,
+        {"date", "uuid"} => :unsupported,
+        {"float8", "boolean"} => :unsupported,
+        {"float8", "date"} => :unsupported,
+        {"float8", "float8"} => :safe,
+        {"float8", "int8"} => :data_dependent,
+        {"float8", "text"} => :safe,
+        {"float8", "timestamptz"} => :unsupported,
+        {"float8", "uuid"} => :unsupported,
+        {"int8", "boolean"} => :unsupported,
+        {"int8", "date"} => :unsupported,
+        {"int8", "float8"} => :safe,
+        {"int8", "int8"} => :safe,
+        {"int8", "text"} => :safe,
+        {"int8", "timestamptz"} => :unsupported,
+        {"int8", "uuid"} => :unsupported,
+        {"text", "boolean"} => :unsupported,
+        {"text", "date"} => :unsupported,
+        {"text", "float8"} => :data_dependent,
+        {"text", "int8"} => :data_dependent,
+        {"text", "text"} => :safe,
+        {"text", "timestamptz"} => :unsupported,
+        {"text", "uuid"} => :unsupported,
+        {"timestamptz", "boolean"} => :unsupported,
+        {"timestamptz", "date"} => :data_dependent,
+        {"timestamptz", "float8"} => :unsupported,
+        {"timestamptz", "int8"} => :unsupported,
+        {"timestamptz", "text"} => :safe,
+        {"timestamptz", "timestamptz"} => :safe,
+        {"timestamptz", "uuid"} => :unsupported,
+        {"uuid", "boolean"} => :unsupported,
+        {"uuid", "date"} => :unsupported,
+        {"uuid", "float8"} => :unsupported,
+        {"uuid", "int8"} => :unsupported,
+        {"uuid", "text"} => :safe,
+        {"uuid", "timestamptz"} => :unsupported,
+        {"uuid", "uuid"} => :safe
+      }
+
+      actual =
+        Map.new(classes, fn {{from_type, to_type}, _class} ->
+          {{from_type, to_type}, cast_class(from_type, to_type)}
+        end)
+
+      assert actual == classes
     end
 
-    test "classifies any type to text as safe" do
-      assert cast_class("int8", "text") == :safe
+    # A derived enum type is not in the builtin set, and only one direction is automatic:
+    # text is the universal sink, and nothing casts INTO an enum without knowing its values.
+    test "classifies a derived enum type to text as safe and back as unsupported" do
       assert cast_class("task_status_$enum", "text") == :safe
-    end
-
-    test "classifies int8 to float8 as safe" do
-      assert cast_class("int8", "float8") == :safe
-    end
-
-    test "classifies date to timestamptz as safe" do
-      assert cast_class("date", "timestamptz") == :safe
-    end
-
-    test "classifies text to int8 as data-dependent" do
-      assert cast_class("text", "int8") == :data_dependent
-    end
-
-    test "classifies text to float8 as data-dependent" do
-      assert cast_class("text", "float8") == :data_dependent
-    end
-
-    test "classifies float8 to int8 as data-dependent" do
-      assert cast_class("float8", "int8") == :data_dependent
-    end
-
-    test "classifies timestamptz to date as data-dependent" do
-      assert cast_class("timestamptz", "date") == :data_dependent
-    end
-
-    test "classifies conversions with no automatic path as unsupported" do
-      assert cast_class("boolean", "date") == :unsupported
+      assert cast_class("task_status_$enum", "task_status_$enum") == :safe
       assert cast_class("text", "task_status_$enum") == :unsupported
-      assert cast_class("uuid", "int8") == :unsupported
+      assert cast_class("int8", "task_status_$enum") == :unsupported
+    end
+
+    # Every pair the table above marks :data_dependent has a check statement, and no other
+    # pair does - the two are one fact. A pair in only one of them would raise at apply time
+    # for want of a clause, or refuse rows that nothing ever checks.
+    test "gives every data-dependent pair a check statement, and only those" do
+      builtin_types = ["boolean", "date", "float8", "int8", "text", "timestamptz", "uuid"]
+      pairs = for from_type <- builtin_types, to_type <- builtin_types, do: {from_type, to_type}
+
+      {data_dependent, others} =
+        Enum.split_with(pairs, fn {from_type, to_type} ->
+          cast_class(from_type, to_type) == :data_dependent
+        end)
+
+      Enum.each(data_dependent, fn {from_type, to_type} ->
+        assert is_binary(cast_check_statement("task", "value", from_type, to_type))
+      end)
+
+      Enum.each(others, fn {from_type, to_type} ->
+        assert_raise FunctionClauseError, fn ->
+          cast_check_statement("task", "value", from_type, to_type)
+        end
+      end)
     end
   end
 

@@ -1,14 +1,20 @@
 defmodule Hologram.Migration.AtomicityTest do
-  # A file applies whole or not at all, through both of the gates that can stop it: the
-  # pre-flight refusal, which runs over every op of the file before any of them executes,
-  # and the transaction, which carries the ops that do execute together with the row
-  # recording them.
+  # A file applies whole or not at all. The gate that enforces it is the pre-flight refusal,
+  # which runs over every op of the file before any of them executes - so a file with one
+  # bad op does not apply its good ones first.
+  #
+  # The transaction underneath is the second gate, and it has no reachable trigger: every
+  # op the migration DSL can express is pre-flight checked, and the checks are total in the
+  # direction that matters - each refuses at least every row PostgreSQL would. A file that
+  # gets past pre-flight and then fails mid-apply is by construction a Hologram bug, not a
+  # scenario, so it is recorded here rather than tested. It WAS testable until the cast
+  # checks gained their range branches: an out-of-range numeric used to pass the syntax-only
+  # check and fail the cast, which is the state this suite reproduced before that was fixed.
   #
   # Only the scratch tier can ask the question at all. Under the sandbox every apply is
   # already inside a never-committed transaction, so "the file left nothing behind" is true
-  # there whatever the migrator does - the rollback observed would be the one the sandbox
-  # performs anyway. Here the applies commit, so what a failed file leaves behind is what
-  # the next deploy would really find.
+  # there whatever the migrator does. Here the applies commit, so what a refused file leaves
+  # behind is what the next deploy would really find.
   #
   # async: false - every test of the tier opens raw sessions beside its scratch connection,
   # several in the contention suites, so the tier's modules run one at a time to keep the
@@ -19,7 +25,6 @@ defmodule Hologram.Migration.AtomicityTest do
 
   alias Hologram.DB.Connection
   alias Hologram.Entity.Model
-  alias Hologram.Migration.Renderer
 
   @context %{
     otp_app: "hologram",
@@ -27,11 +32,6 @@ defmodule Hologram.Migration.AtomicityTest do
     hologram_version: "0.5.0",
     timestamp: ~U[2026-08-13 09:15:22.000000Z]
   }
-
-  # Passes the cast pre-flight, which tests the SYNTAX of a text value against int8's
-  # input rules, and fails the cast itself, which also has a range. The one way a legal
-  # migration reaches a database-level failure mid-file - see the plan's finding F-1.
-  @out_of_range_amount "99999999999999999999"
 
   defp insert_task(title, amount) do
     statement = """
@@ -96,13 +96,12 @@ defmodule Hologram.Migration.AtomicityTest do
 
     first_model = Model.fold(Model.empty(), create.ops)
 
-    # One row that follows any change, and one that follows neither of the changes the
-    # tests make: its NULL title blocks a tightening, its amount overflows int8.
+    # One row that follows the change the tests make, and one that blocks it with a NULL.
     route(scratch, fn ->
       :ok = run([create], first_model, @context)
 
       insert_task("first", "10")
-      insert_task(nil, @out_of_range_amount)
+      insert_task(nil, "20")
     end)
 
     [create: create, first_model: first_model]
@@ -149,49 +148,7 @@ defmodule Hologram.Migration.AtomicityTest do
         # op that earned it.
         assert task_columns() == ["amount", "created_at", "id", "title", "updated_at"]
         assert applied_versions() == MapSet.new(["20260813091522"])
-        assert task_rows() == [["first", "10"], [nil, @out_of_range_amount]]
-      end)
-    end
-
-    test "leaves nothing behind when a statement fails at the database", %{
-      create: create,
-      first_model: first_model,
-      scratch: scratch
-    } do
-      # A file the pre-flight passes and the database refuses: the cast check tests the
-      # SYNTAX of a text value against int8's input rules, and int8 also has a range.
-      failing =
-        migration("20260813142237", [
-          %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :name, line: 3},
-          %{
-            op: :change_attribute,
-            entity: MyApp.Task,
-            name: :amount,
-            changes: [type: :integer],
-            line: 4
-          }
-        ])
-
-      full_model = Model.fold(first_model, failing.ops)
-
-      # The file really does carry an op ahead of the one that fails - a rename renders
-      # into a chunk of its own, ahead of the plain ops - so the apply reaches the failure
-      # with work behind it rather than refusing at the first statement.
-      render = Renderer.render(failing.ops, first_model)
-
-      assert Enum.map(render.transactional, & &1.op) == [:rename_column, :alter_column]
-
-      route(scratch, fn ->
-        assert_raise MatchError, fn -> run([create, failing], full_model, @context) end
-
-        # Nothing of the file stands, which is the whole of what a database outside the
-        # transaction can be asked: an op applied and rolled back and an op that never ran
-        # leave the same database behind, because uncommitted work is invisible to every
-        # other session by construction. Verified rather than assumed - reversing the apply
-        # order, so the cast fails before the rename runs, leaves this test green.
-        assert task_columns() == ["amount", "created_at", "id", "title", "updated_at"]
-        assert applied_versions() == MapSet.new(["20260813091522"])
-        assert task_rows() == [["first", "10"], [nil, @out_of_range_amount]]
+        assert task_rows() == [["first", "10"], [nil, "20"]]
       end)
     end
 
@@ -240,7 +197,7 @@ defmodule Hologram.Migration.AtomicityTest do
                ]
 
         assert applied_versions() == MapSet.new(["20260813091522", "20260813142237"])
-        assert task_rows() == [["first", "10"], ["second", @out_of_range_amount]]
+        assert task_rows() == [["first", "10"], ["second", "20"]]
       end)
     end
   end
