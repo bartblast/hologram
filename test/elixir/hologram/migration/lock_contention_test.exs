@@ -225,6 +225,42 @@ defmodule Hologram.Migration.LockContentionTest do
       assert index_validity(observer) == true
     end
 
+    test "takes over the build when the lock holder's session dies", %{
+      mapping: mapping,
+      observer: observer,
+      scratch_opts: scratch_opts
+    } do
+      # Temporary, so stopping it below is final - a permanent child would be restarted,
+      # which would say nothing about a node that is gone for good.
+      holder =
+        start_supervised!({Postgrex, scratch_opts}, id: :holder, restart: :temporary)
+
+      assert %{rows: [[true]]} =
+               Postgrex.query!(holder, "SELECT pg_try_advisory_lock($1)", [@index_lock_key])
+
+      repair = start_repair(mapping, scratch_opts)
+
+      Process.sleep(2 * @poll_interval_ms)
+
+      # Nothing to do but wait: the lock is held, and the node holding it has not built
+      # anything. A repair that gave up here would leave the fleet without its index.
+      assert Task.yield(repair, 0) == nil
+      assert index_validity(observer) == :absent
+
+      # The holder does not release the lock - its session ends, which is what a killed
+      # node does. An advisory lock lives on its session, so it goes with it.
+      stop_supervised!(:holder)
+
+      # The next poll finds the lock free and does the work itself.
+      assert Task.await(repair, 30_000) == :ok
+      assert index_validity(observer) == true
+
+      # And it let go of what it took: a lock left held would strand the next node exactly
+      # as the dead one nearly did.
+      assert %{rows: [[true]]} =
+               Postgrex.query!(observer, "SELECT pg_try_advisory_lock($1)", [@index_lock_key])
+    end
+
     test "lets a migration take its own lock while an index build is running", %{
       mapping: mapping,
       observer: observer,
