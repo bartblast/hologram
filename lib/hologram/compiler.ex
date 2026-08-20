@@ -579,6 +579,28 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns every component usage found in the given IR, as
+  `{component_module, prop_names, has_spread?}` tuples, in the order they appear in the template.
+
+  `prop_names` holds the prop names written at the usage, without the framework's own `$`-prefixed
+  entries. `has_spread?` says whether the usage carries a `...{expr}` spread, which makes its set of
+  props impossible to know before the expression has a value.
+
+  Dynamic tags (`<{@module} />`) are skipped - the component module itself is a runtime value there.
+
+  ## Examples
+
+      iex> list_component_usages(IR.for_module(MyApp.HomePage))
+      [{MyApp.Card, ["size"], false}]
+  """
+  @spec list_component_usages(IR.t()) :: list({module, list(String.t()), boolean})
+  def list_component_usages(ir) do
+    ir
+    |> collect_component_usages([])
+    |> Enum.reverse()
+  end
+
+  @doc """
   Installs JavaScript deps if package.json has changed or if the deps haven't been installed yet.
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_install_js_deps_2/README.md
@@ -729,6 +751,47 @@ defmodule Hologram.Compiler do
     end)
   end
 
+  # A component node is a 4-element tuple whose first element is the :component atom and whose
+  # second is the component module, already resolved by the time the template AST becomes IR. A
+  # dynamic tag carries :dynamic_tag instead and never matches, which is what leaves it out.
+  # Props and children are walked as well - props hold expressions, children hold nested usages.
+  defp collect_component_usages(
+         %IR.TupleType{
+           data: [
+             %IR.AtomType{value: :component},
+             %IR.AtomType{value: component_module},
+             %IR.ListType{data: props},
+             %IR.ListType{data: children}
+           ]
+         },
+         acc
+       ) do
+    usage = {component_module, prop_names(props), has_spread?(props)}
+
+    collect_component_usages(children, collect_component_usages(props, [usage | acc]))
+  end
+
+  defp collect_component_usages(list, acc) when is_list(list) do
+    Enum.reduce(list, acc, &collect_component_usages/2)
+  end
+
+  # Structs are maps too, so this walks every IR node's fields without naming any of them.
+  defp collect_component_usages(map, acc) when is_map(map) do
+    map
+    |> Map.to_list()
+    |> Enum.reduce(acc, fn {key, value}, key_acc ->
+      collect_component_usages(value, collect_component_usages(key, key_acc))
+    end)
+  end
+
+  defp collect_component_usages(tuple, acc) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> Enum.reduce(acc, &collect_component_usages/2)
+  end
+
+  defp collect_component_usages(_ir, acc), do: acc
+
   defp create_entry_file(js, entry_name, tmp_dir) do
     entry_file_path = Path.join(tmp_dir, "#{entry_name}.entry.js")
     File.write!(entry_file_path, js)
@@ -766,6 +829,10 @@ defmodule Hologram.Compiler do
     |> Path.join("package.json")
     |> File.read!()
     |> CryptographicUtils.digest(:sha256, :binary)
+  end
+
+  defp has_spread?(props) do
+    Enum.any?(props, &match?(%IR.TupleType{data: [%IR.AtomType{value: :spread}, _expr]}, &1))
   end
 
   defp included_protocol_implementations(reachable_mfas, protocol) do
@@ -829,6 +896,17 @@ defmodule Hologram.Compiler do
     else
       function_defs
     end
+  end
+
+  # $-prefixed entries are the framework's own ($key, event bindings), never something the author
+  # declared with prop/3, so they are not prop names as far as a usage is concerned.
+  defp prop_names(props) do
+    props
+    |> Enum.flat_map(fn
+      %IR.TupleType{data: [%IR.StringType{value: name}, _value]} -> [name]
+      _entry -> []
+    end)
+    |> Enum.reject(&String.starts_with?(&1, "$"))
   end
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1

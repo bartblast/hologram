@@ -25,7 +25,11 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module24
   alias Hologram.Test.Fixtures.Compiler.Module25
   alias Hologram.Test.Fixtures.Compiler.Module26
+  alias Hologram.Test.Fixtures.Compiler.Module27
+  alias Hologram.Test.Fixtures.Compiler.Module28
+  alias Hologram.Test.Fixtures.Compiler.Module29
   alias Hologram.Test.Fixtures.Compiler.Module3
+  alias Hologram.Test.Fixtures.Compiler.Module30
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
@@ -1076,6 +1080,30 @@ defmodule Hologram.CompilerTest do
 
       package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       refute File.exists?(package_json_digest_path)
+    end
+  end
+
+  describe "list_component_usages/1" do
+    test "collects plain and nested usages, in template order" do
+      assert Module28 |> IR.for_module() |> list_component_usages() == [
+               {Module27, ["a", "b"], false},
+               {Module27, ["a"], false},
+               {Module27, ["b"], false}
+             ]
+    end
+
+    test "flags a usage carrying a spread" do
+      assert Module29 |> IR.for_module() |> list_component_usages() == [
+               {Module27, ["a"], true}
+             ]
+    end
+
+    test "skips dynamic tags" do
+      assert Module30 |> IR.for_module() |> list_component_usages() == []
+    end
+
+    test "returns an empty list for a module without component usages" do
+      assert Module27 |> IR.for_module() |> list_component_usages() == []
     end
   end
 
