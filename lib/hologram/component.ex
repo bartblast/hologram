@@ -459,25 +459,71 @@ defmodule Hologram.Component do
 
   defp normalize_except(list) when is_list(list), do: list
 
-  # Options reach the macro as AST, so only literal keys can be checked - which is every declaration
-  # written as a literal keyword list, even when the values themselves aren't literals
-  # (default: some_var parses as [{:default, {:some_var, _, nil}}]). An opts argument that isn't a
-  # literal list, or an entry that isn't a literal key/value pair, can't be inspected here and is
-  # passed through unchecked.
-  defp validate_prop_opts!(opts, name, module) when is_list(opts) and is_atom(name) do
-    Enum.each(opts, fn
-      {key, _value} when is_atom(key) ->
-        if key not in @prop_opt_keys do
-          raise Hologram.CompileError,
-            message:
-              ~s/invalid option #{inspect(key)} for prop "#{name}" in #{inspect(module)}, / <>
-                "expected one of: " <> Enum.map_join(@prop_opt_keys, ", ", &inspect/1)
-        end
+  defp validate_prop_opt_key!({key, _value}, name, module) when is_atom(key) do
+    if key not in @prop_opt_keys do
+      raise Hologram.CompileError,
+        message:
+          ~s/invalid option #{inspect(key)} for prop "#{name}" in #{inspect(module)}, / <>
+            "expected one of: " <> Enum.map_join(@prop_opt_keys, ", ", &inspect/1)
+    end
+  end
 
-      _entry ->
-        :ok
-    end)
+  defp validate_prop_opt_key!(_entry, _name, _module), do: :ok
+
+  # Options reach the macro as AST, so only literal keys and literal option values can be checked -
+  # which is every declaration written as a literal keyword list, even when some values aren't
+  # literals (default: some_var parses as [{:default, {:some_var, _, nil}}]). An opts argument that
+  # isn't a literal list, an entry that isn't a literal key/value pair, or an option value that
+  # isn't a literal, can't be inspected here and is passed through unchecked.
+  defp validate_prop_opts!(opts, name, module) when is_list(opts) and is_atom(name) do
+    Enum.each(opts, &validate_prop_opt_key!(&1, name, module))
+
+    validate_prop_required_opt!(opts, name, module)
+    validate_prop_values_opt!(opts, name, module)
+    validate_prop_required_default_conflict!(opts, name, module)
   end
 
   defp validate_prop_opts!(_opts, _name, _module), do: :ok
+
+  # A default makes the prop impossible to miss, so required: true next to one could never fire -
+  # the declaration would contradict itself. required with from_context stays allowed: a
+  # context-sourced prop genuinely can be missing, and required then means the context must have
+  # supplied it.
+  defp validate_prop_required_default_conflict!(opts, name, module) do
+    if List.keyfind(opts, :required, 0) == {:required, true} && List.keyfind(opts, :default, 0) do
+      raise Hologram.CompileError,
+        message:
+          ~s/prop "#{name}" in #{inspect(module)} can't be both required and have a default value/
+    end
+  end
+
+  defp validate_prop_required_opt!(opts, name, module) do
+    case List.keyfind(opts, :required, 0) do
+      {:required, value} when not is_boolean(value) ->
+        if Macro.quoted_literal?(value) do
+          raise Hologram.CompileError,
+            message:
+              ~s/the :required option for prop "#{name}" in #{inspect(module)} / <>
+                "must be a boolean, got: #{Macro.to_string(value)}"
+        end
+
+      _other ->
+        :ok
+    end
+  end
+
+  defp validate_prop_values_opt!(opts, name, module) do
+    case List.keyfind(opts, :values, 0) do
+      {:values, value} when not is_list(value) ->
+        if Macro.quoted_literal?(value) do
+          raise Hologram.CompileError,
+            message:
+              ~s/the :values option for prop "#{name}" in #{inspect(module)} / <>
+                "must be a list, got: #{Macro.to_string(value)}"
+        end
+
+      _other ->
+        :ok
+    end
+  end
 end

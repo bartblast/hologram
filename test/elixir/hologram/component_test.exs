@@ -153,6 +153,121 @@ defmodule Hologram.ComponentTest do
       end
     end
 
+    test "raises when the :required option is not a boolean" do
+      expected_error_msg =
+        ~s/the :required option for prop "b" in Hologram.Test.Fixtures.Component.NonBooleanRequiredOpt / <>
+          ~s/must be a boolean, got: "yes"/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.NonBooleanRequiredOpt do
+          use Hologram.Component
+
+          prop :b, :string, required: "yes"
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when the :values option is not a list" do
+      expected_error_msg =
+        ~s/the :values option for prop "b" in Hologram.Test.Fixtures.Component.NonListValuesOpt / <>
+          "must be a list, got: :abc"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.NonListValuesOpt do
+          use Hologram.Component
+
+          prop :b, :string, values: :abc
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when a prop is both required and has a default value" do
+      expected_error_msg =
+        ~s/prop "b" in Hologram.Test.Fixtures.Component.RequiredPropWithDefault / <>
+          "can't be both required and have a default value"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.RequiredPropWithDefault do
+          use Hologram.Component
+
+          prop :b, :string, required: true, default: "abc"
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "accepts a required prop sourced from context" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.RequiredPropFromContext do
+          use Hologram.Component
+
+          prop :b, :string, required: true, from_context: :my_context_key
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__props__() == [
+               {:b, :string, [required: true, from_context: :my_context_key]}
+             ]
+    end
+
+    test "accepts required: false combined with a default value" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.NotRequiredPropWithDefault do
+          use Hologram.Component
+
+          prop :b, :string, required: false, default: "abc"
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__props__() == [{:b, :string, [required: false, default: "abc"]}]
+    end
+
+    test "doesn't raise when an option value is not a literal" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.NonLiteralRequiredOptValue do
+          use Hologram.Component
+
+          @my_flag "not a boolean"
+
+          prop :b, :string, required: @my_flag
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__props__() == [{:b, :string, [required: "not a boolean"]}]
+    end
+
     test "doesn't raise when the options are not a literal keyword list" do
       {{:module, module, _binary, _result}, _bindings} =
         Code.eval_string("""
