@@ -31,6 +31,9 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module31
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module32
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module33
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module34
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module35
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module36
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
@@ -46,6 +49,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Component.Module27, as: Component27
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
+  alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
 
   describe "extract_module_queries/1" do
     test "extracts a derived placeholder from a nested argument field read" do
@@ -74,6 +78,21 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Query.normalize()
 
       assert extract_module_queries(Module29) == [expected_term]
+    end
+
+    test "extracts every entity type admitting a query whose entity is an argument" do
+      terms = extract_module_queries(Module36)
+
+      assert Enum.map(terms, & &1.entity) == [Entity2, Entity4]
+    end
+
+    test "extracts one entity type when only one admits the query" do
+      expected_term =
+        Entity4
+        |> filter(d: 1)
+        |> Query.normalize()
+
+      assert extract_module_queries(Module34) == [expected_term]
     end
 
     test "extracts a guarded capture ignoring the guard" do
@@ -284,6 +303,15 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       end
     end
 
+    test "raises on a capture no entity type admits" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module35 builds no query that any entity type of the build admits - a prop with no window would read rows nothing ever fills"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module35)
+      end
+    end
+
     test "raises on a capture targeting an undefined function" do
       # Defined at runtime - a compile-time fixture cannot hold a missing-target
       # capture, because the fun value inlined into __props__/0 trips the
@@ -352,7 +380,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
     test "raises on an argument the build cannot enumerate" do
       expected_msg =
-        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module30 passes an argument to filter/2 - an argument's value is unknown at build time, so it can only be a value a filter compares against"
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module30 passes an argument to filter/2 in a position the build cannot enumerate - the rows to download cannot be worked out without its value"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module30)

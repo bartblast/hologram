@@ -151,15 +151,46 @@ defmodule Hologram.Compiler.QueryExtractor do
         "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses an anonymous function of arity #{arity} - only arities 1-3 are extractable yet"
   end
 
-  # A stage call is the developer's own query, so a refusal from it is theirs to read - reraised
-  # carrying the prop it belongs to, which the ArgumentError cannot know.
-  defp apply_query_stage!(function, arg_values, context) do
+  # The query position decides WHICH TABLE the window downloads, so unlike a value it cannot stay a
+  # placeholder. The candidates are finite - every entity type of the build - so the evaluation
+  # FORKS over them, exactly as it forks a case clause, and each variant becomes its own window.
+  #
+  # What narrows the set is the query itself: a variant the stage refuses (an attribute that type
+  # does not declare, an operand of the wrong type) is PRUNED, so `filter(entity.type, done: false)`
+  # keeps precisely the types declaring a boolean `done`. No separate narrowing rule exists, and
+  # none should - Hologram.Query's own validation is the satisfiability check.
+  defp apply_query_stage!(function, [%Placeholder{} | rest_args], state, context) do
+    candidates = Reflection.list_entities()
+
+    {choice, state_after_choice} = take_choice!(state, length(candidates), context)
+
+    substituted_args = [Enum.at(candidates, choice) | rest_args]
+
+    {apply_speculated_stage!(function, substituted_args), state_after_choice}
+  end
+
+  defp apply_query_stage!(function, arg_values, state, context) do
+    {apply_authored_stage!(function, arg_values, context), state}
+  end
+
+  # A stage call the developer wrote is theirs to read, so a refusal from it is reraised carrying
+  # the prop it belongs to, which the ArgumentError cannot know.
+  defp apply_authored_stage!(function, arg_values, context) do
     apply(Query, function, arg_values)
   rescue
     error in ArgumentError ->
       reraise Hologram.CompileError,
               [message: stage_error_message(function, arg_values, error, context)],
               __STACKTRACE__
+  end
+
+  # A stage the BUILD speculated, never the developer. Its refusal says the candidate is wrong,
+  # not that the query is - so the variant dies and the others carry on. Scoping the prune here is
+  # what keeps an authored mistake loud: apply_authored_stage!/3 still reraises.
+  defp apply_speculated_stage!(function, arg_values) do
+    apply(Query, function, arg_values)
+  rescue
+    ArgumentError -> throw(@prune_signal)
   end
 
   # A cover-compiled module (coverage runs) is loaded from instrumented code,
@@ -374,7 +405,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     cond do
       target_module == Query ->
-        {apply_query_stage!(function, arg_values, context), state_after_args}
+        apply_query_stage!(function, arg_values, state_after_args, context)
 
       not contains_placeholder?(arg_values) ->
         {apply(target_module, function, arg_values), state_after_args}
@@ -674,14 +705,23 @@ defmodule Hologram.Compiler.QueryExtractor do
       stack: []
     }
 
-    clauses
-    |> Enum.flat_map(fn clause ->
-      env = head_env!(module, prop_name, clause)
+    terms =
+      clauses
+      |> Enum.flat_map(fn clause ->
+        env = head_env!(module, prop_name, clause)
 
-      evaluate_variants!(clause.body, env, context, [])
-    end)
-    |> Enum.map(&Query.normalize/1)
-    |> Enum.uniq()
+        evaluate_variants!(clause.body, env, context, [])
+      end)
+      |> Enum.map(&Query.normalize/1)
+      |> Enum.uniq()
+
+    if terms == [] do
+      raise Hologram.CompileError,
+        message:
+          "query capture for prop #{inspect(prop_name)} in #{inspect(module)} builds no query that any entity type of the build admits - a prop with no window would read rows nothing ever fills"
+    end
+
+    terms
   end
 
   defp prop_query!(module, prop_name, value) do
@@ -729,7 +769,7 @@ defmodule Hologram.Compiler.QueryExtractor do
       "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)}"
 
     if contains_placeholder?(arg_values) do
-      "#{prefix} passes an argument to #{function}/#{length(arg_values)} - an argument's value is unknown at build time, so it can only be a value a filter compares against"
+      "#{prefix} passes an argument to #{function}/#{length(arg_values)} in a position the build cannot enumerate - the rows to download cannot be worked out without its value"
     else
       "#{prefix} builds an invalid query - #{Exception.message(error)}"
     end
