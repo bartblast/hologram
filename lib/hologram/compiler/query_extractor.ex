@@ -150,6 +150,17 @@ defmodule Hologram.Compiler.QueryExtractor do
         "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses an anonymous function of arity #{arity} - only arities 1-3 are extractable yet"
   end
 
+  # A stage call is the developer's own query, so a refusal from it is theirs to read - reraised
+  # carrying the prop it belongs to, which the ArgumentError cannot know.
+  defp apply_query_stage!(function, arg_values, context) do
+    apply(Query, function, arg_values)
+  rescue
+    error in ArgumentError ->
+      reraise Hologram.CompileError,
+              [message: stage_error_message(function, arg_values, error, context)],
+              __STACKTRACE__
+  end
+
   # A cover-compiled module (coverage runs) is loaded from instrumented code,
   # but its beam still lives on disk in the code path.
   defp beam_path(module) do
@@ -361,7 +372,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     cond do
       target_module == Query ->
-        {apply(target_module, function, arg_values), state_after_args}
+        {apply_query_stage!(function, arg_values, context), state_after_args}
 
       not contains_symbol?(arg_values) ->
         {apply(target_module, function, arg_values), state_after_args}
@@ -683,6 +694,20 @@ defmodule Hologram.Compiler.QueryExtractor do
       Keyword.get(module.__from_query_delegations__(), fun_name, fun_name)
     else
       fun_name
+    end
+  end
+
+  # An argument among the values gets a message of its own. The value it stands for arrives long
+  # after the build, so what went wrong is that a query's SHAPE was asked to depend on it - and
+  # naming the sentinel would show a compiler internal to someone who wrote a prop.
+  defp stage_error_message(function, arg_values, error, context) do
+    prefix =
+      "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)}"
+
+    if contains_symbol?(arg_values) do
+      "#{prefix} passes an argument to #{function}/#{length(arg_values)} - an argument's value is unknown at build time, so it can only be a value a filter compares against"
+    else
+      "#{prefix} builds an invalid query - #{Exception.message(error)}"
     end
   end
 

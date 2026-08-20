@@ -27,6 +27,8 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module28
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module29
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module30
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module31
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
@@ -325,6 +327,24 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module13)
+      end
+    end
+
+    test "raises on an argument shaping a query" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module30 passes an argument to order_by/2 - an argument's value is unknown at build time, so it can only be a value a filter compares against"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module30)
+      end
+    end
+
+    test "raises on an invalid query built by a capture" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module31 builds an invalid query - limit is already set to 50"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module31)
       end
     end
 
