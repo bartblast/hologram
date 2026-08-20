@@ -20,6 +20,13 @@ defmodule Hologram.Test.ScratchDatabaseCase do
   # on_exit process after the scratch connection is gone (the test supervisor's children
   # terminate before on_exit callbacks run). WITH (FORCE) ends the sessions a test's
   # actors leave behind.
+  #
+  # The name carries the OS process before the counter, because the counter alone is not
+  # unique where it has to be. System.unique_integer/1 is unique within ONE VM, and two VMs
+  # started moments apart hand out values from the same narrow band - probed: three fresh
+  # ones answered 1348, 1355 and 1349 - so two `mix test` runs against one server would pick
+  # the same name and the second CREATE DATABASE would fail. The OS process id separates
+  # them, and it also says which run owns a database, should a killed one leave one behind.
 
   use ExUnit.CaseTemplate
 
@@ -38,7 +45,7 @@ defmodule Hologram.Test.ScratchDatabaseCase do
   end
 
   setup do
-    database = "hologram_scratch_#{System.unique_integer([:positive])}"
+    database = "hologram_scratch_#{System.pid()}_#{System.unique_integer([:positive])}"
     quoted_database = Mapper.quote_identifier(database)
 
     with_maintenance_connection(fn connection ->
