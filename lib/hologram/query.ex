@@ -267,14 +267,17 @@ defmodule Hologram.Query do
   end
 
   @doc """
-  Appends ordering keys to the given query's order list and returns the resulting
-  query term.
+  Sets the given query's ordering keys and returns the resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built
   query term. The spec is an attribute name (ascending), or a list whose entries are
   attribute names (ascending) or `{attribute, :asc | :desc}` tuples - keyword syntax
   reads naturally (`order_by(query, title: :desc)`). Each entry becomes an
-  `{attribute, direction}` pair, appended in the given order, accumulating across calls.
+  `{attribute, direction}` pair, in the given order.
+
+  An ordering is atomic - a later call replaces the ordering an earlier one set rather
+  than adding to it. Precedence is positional, so an ordering states itself in one place
+  or not at all.
 
   Ordering by enum attributes is not supported - the two execution tiers disagree on
   enum order (PostgreSQL uses declaration order, the client would use term order).
@@ -290,7 +293,7 @@ defmodule Hologram.Query do
 
     entries = order_entries!(spec, term.entity)
 
-    %{term | order_by: term.order_by ++ entries}
+    %{term | order_by: entries}
   end
 
   @doc """

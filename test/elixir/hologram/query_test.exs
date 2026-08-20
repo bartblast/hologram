@@ -944,15 +944,6 @@ defmodule Hologram.QueryTest do
       assert query.order_by == [{:c, :asc}, {:b, :desc}]
     end
 
-    test "appends to prior ordering" do
-      query =
-        Module2
-        |> order_by(:c)
-        |> order_by(b: :desc)
-
-      assert query.order_by == [{:c, :asc}, {:b, :desc}]
-    end
-
     test "composes with filtering" do
       query =
         Module2
@@ -985,6 +976,15 @@ defmodule Hologram.QueryTest do
       query = order_by(Module2, :created_at)
 
       assert query.order_by == [{:created_at, :asc}]
+    end
+
+    test "replaces prior ordering" do
+      query =
+        Module2
+        |> order_by(:c)
+        |> order_by(b: :desc)
+
+      assert query.order_by == [{:b, :desc}]
     end
 
     test "raises on a non-atom spec" do

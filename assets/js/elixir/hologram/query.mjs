@@ -771,10 +771,7 @@ const Elixir_Hologram_Query = {
   "order_by/2": (query, spec) => {
     const term = toTerm(query);
 
-    return {
-      ...term,
-      orderBy: [...term.orderBy, ...orderEntries(spec, term.entity)],
-    };
+    return {...term, orderBy: orderEntries(spec, term.entity)};
   },
 };
 

@@ -965,16 +965,13 @@ describe("Elixir_Hologram_Query", () => {
       ]);
     });
 
-    it("appends to prior ordering", () => {
+    it("replaces prior ordering", () => {
       const query = orderBy(
         orderBy(task, Type.atom("done")),
         Type.atom("title"),
       );
 
-      assert.deepStrictEqual(query.orderBy, [
-        ["done", "asc"],
-        ["title", "asc"],
-      ]);
+      assert.deepStrictEqual(query.orderBy, [["title", "asc"]]);
     });
 
     it("orders by a system attribute", () => {
