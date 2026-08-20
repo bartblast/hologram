@@ -13,8 +13,8 @@ defmodule Hologram.DB.QueryCompiler do
   physical name mapping.
 
   Returns a map with :sql (the statement string, identifiers quoted and
-  schema-qualified) and :placeholders (the bind slots in placeholder order). Every filter
-  value binds as a placeholder - literal values are Codec-encoded at compilation into
+  schema-qualified) and :params (the bind slots in parameter order). Every filter
+  value binds as a parameter - literal values are Codec-encoded at compilation into
   `{:value, encoded}` slots (membership lists encode element-wise into one array
   slot), placeholder leaves become `{:placeholder, name, type}` slots carrying the attribute's
   logical type for runtime encoding (`{:list, type}` for membership operands). A
@@ -35,15 +35,15 @@ defmodule Hologram.DB.QueryCompiler do
   physical column names in mapping order. A to-one subselect is NULL when the
   reference is. A to-many subselect aggregates the related set through its join table
   into a jsonb array (empty set = empty array), applying the sub-term's filter,
-  ordering, and view bounds inside the aggregation - include placeholder slots follow the
-  root's in placeholder order.
+  ordering, and view bounds inside the aggregation - include param slots follow the
+  root's in parameter order.
 
   A compiled policy composes into the statement when one is given: its rules render as an
   OR group ANDed after the authored filter, so a row must satisfy the query and at least one
   rule. Rules are conjunctions of the same predicate triples the authored filter uses, and an
   unconditional rule (no conditions) satisfies the group on its own, which drops the group
   from the statement. An empty rule list denies everything (`FALSE`) - default deny. The
-  actor leaf binds ONE reserved slot allocated after the authored and include placeholders and
+  actor leaf binds ONE reserved slot allocated after the authored and include params and
   reused by every actor reference in the policy, so the caller binds the session's user once.
 
   Includes are policied too, at every nesting level: an include subquery ANDs the included
