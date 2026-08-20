@@ -309,6 +309,32 @@ defmodule Hologram.Compiler.QueryExtractor do
         "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses a composite case pattern - only variables, literals, and _ are extractable yet"
   end
 
+  # A read the build performs for real, so a bad one is a bad builder - reported like every other
+  # build refusal here, naming the prop the ArgumentError-free raisers of Map cannot know about.
+  defp concrete_field!(value, field, context) when is_map(value) do
+    case Map.fetch(value, field) do
+      {:ok, field_value} ->
+        field_value
+
+      :error ->
+        known =
+          value
+          |> Map.keys()
+          |> Enum.sort()
+          |> Enum.map_join(", ", &inspect/1)
+
+        raise Hologram.CompileError,
+          message:
+            "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} reads field #{inspect(field)} off a value that has no such field - known fields: #{known}"
+    end
+  end
+
+  defp concrete_field!(value, field, context) do
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} reads field #{inspect(field)} off #{inspect(value)}, which is not a map"
+  end
+
   defp contains_placeholder?(%Placeholder{}), do: true
 
   defp contains_placeholder?(list) when is_list(list) do
@@ -401,7 +427,7 @@ defmodule Hologram.Compiler.QueryExtractor do
       # The name is built from source-level field names, so the set is bounded by the code itself.
       # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       %Placeholder{name: name} -> {%Placeholder{name: :"#{name}.#{field}"}, state_after_field}
-      value -> {Map.fetch!(value, field), state_after_field}
+      value -> {concrete_field!(value, field, context), state_after_field}
     end
   end
 

@@ -39,6 +39,8 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module39
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module40
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module41
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module42
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
@@ -332,6 +334,24 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module40)
+      end
+    end
+
+    test "raises on a concrete field read off a value that is not a map" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module42 reads field :limit off 5, which is not a map"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module42)
+      end
+    end
+
+    test "raises on a concrete field read the value has no field for" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module41 reads field :mising off a value that has no such field - known fields: :limit"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module41)
       end
     end
 
