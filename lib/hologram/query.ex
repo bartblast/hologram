@@ -86,6 +86,10 @@ defmodule Hologram.Query do
   execution). A membership-element param binds a single value of the attribute's
   type. Ordering comparisons still require an orderable attribute.
 
+  A param also stands where an ordering key or its direction goes (`order_by(query, sort)`,
+  `order_by(query, name: dir)`), storing a `{:param, name}` leaf in place of the attribute or
+  the direction and skipping the checks that would need a concrete one.
+
   To-one reference fields (`<relationship name>_id`) are filterable alongside attributes -
   they carry the `:uuid` type, so they take equality, membership and param values, while
   ordering comparisons and ranges reject them like any other non-orderable type. To-many
@@ -334,8 +338,9 @@ defmodule Hologram.Query do
   end
 
   @doc """
-  Returns the names of every param leaf in the given query term, filter values and
-  include sub-terms included - an empty list for a term with concrete values only.
+  Returns the names of every param leaf in the given query term, filter values,
+  ordering keys and directions, and include sub-terms included - an empty list for a
+  term with concrete values only.
   """
   @spec param_names(%{atom => any}) :: list(atom)
   def param_names(term) do
@@ -344,13 +349,20 @@ defmodule Hologram.Query do
       |> Map.get(:filter, [])
       |> Enum.flat_map(fn {_name, _operator, value} -> value_param_names(value) end)
 
+    order_names =
+      term
+      |> Map.get(:order_by, [])
+      |> Enum.flat_map(fn {key, direction} ->
+        value_param_names(key) ++ value_param_names(direction)
+      end)
+
     include_names =
       term
       |> Map.get(:include, %{})
       |> Map.values()
       |> Enum.flat_map(&param_names/1)
 
-    filter_names ++ include_names
+    filter_names ++ order_names ++ include_names
   end
 
   @doc false
@@ -463,6 +475,23 @@ defmodule Hologram.Query do
     }
   end
 
+  defp order_direction!(%Param{name: param_name}, _key), do: {:param, param_name}
+
+  defp order_direction!(direction, _key) when direction in @directions, do: direction
+
+  defp order_direction!(direction, key) do
+    raise ArgumentError,
+      message:
+        "invalid direction #{inspect(direction)} for attribute #{inspect(key)} - use :asc or :desc"
+  end
+
+  # A param spec binds either a single ordering key or a whole spec list at execution - the build
+  # cannot tell which, and does not need to: the registered term's ordering is dead weight, since
+  # Hologram.Query.Window empties it. One entry stands for whatever arrives.
+  defp order_entries!(%Param{name: param_name}, _entity_type) do
+    [{{:param, param_name}, :asc}]
+  end
+
   defp order_entries!(name, entity_type) when is_atom(name) do
     [order_entry!(name, entity_type)]
   end
@@ -486,13 +515,17 @@ defmodule Hologram.Query do
   defp order_entry!({name, direction}, entity_type) when is_atom(name) do
     validate_ordered_attribute!(name, entity_type)
 
-    if direction not in @directions do
-      raise ArgumentError,
-        message:
-          "invalid direction #{inspect(direction)} for attribute #{inspect(name)} - use :asc or :desc"
-    end
+    {name, order_direction!(direction, name)}
+  end
 
-    {name, direction}
+  defp order_entry!({%Param{name: param_name}, direction}, _entity_type) do
+    key = {:param, param_name}
+
+    {key, order_direction!(direction, key)}
+  end
+
+  defp order_entry!(%Param{name: param_name}, _entity_type) do
+    {{:param, param_name}, :asc}
   end
 
   defp order_entry!(name, entity_type) when is_atom(name) do

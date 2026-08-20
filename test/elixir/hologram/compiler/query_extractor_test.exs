@@ -330,9 +330,9 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       end
     end
 
-    test "raises on an argument shaping a query" do
+    test "raises on an argument the build cannot enumerate" do
       expected_msg =
-        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module30 passes an argument to order_by/2 - an argument's value is unknown at build time, so it can only be a value a filter compares against"
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module30 passes an argument to filter/2 - an argument's value is unknown at build time, so it can only be a value a filter compares against"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module30)

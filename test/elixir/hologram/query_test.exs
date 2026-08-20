@@ -773,6 +773,15 @@ defmodule Hologram.QueryTest do
   end
 
   describe "normalize/1" do
+    test "appends an ascending id tiebreaker after a param ordering key" do
+      query =
+        Module2
+        |> order_by(%Param{name: :sort})
+        |> normalize()
+
+      assert query.order_by == [{{:param, :sort}, :asc}, {:id, :asc}]
+    end
+
     test "appends an ascending id tiebreaker to orderings" do
       query =
         Module2
@@ -950,6 +959,24 @@ defmodule Hologram.QueryTest do
       query = order_by(Module2, [:c, {:b, :desc}])
 
       assert query.order_by == [{:c, :asc}, {:b, :desc}]
+    end
+
+    test "accepts a param as a bare spec" do
+      query = order_by(Module2, %Param{name: :sort})
+
+      assert query.order_by == [{{:param, :sort}, :asc}]
+    end
+
+    test "accepts a param as a direction" do
+      query = order_by(Module2, c: %Param{name: :dir})
+
+      assert query.order_by == [{:c, {:param, :dir}}]
+    end
+
+    test "accepts a param as an ordering key" do
+      query = order_by(Module2, [{%Param{name: :sort}, :desc}])
+
+      assert query.order_by == [{{:param, :sort}, :desc}]
     end
 
     test "composes with filtering" do

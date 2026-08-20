@@ -77,5 +77,16 @@ defmodule Hologram.DBRunTest do
         |> DB.run()
       end
     end
+
+    test "raises on a query term ordered by a param" do
+      expected_msg =
+        "cannot run a query term containing params - param :sort has no value: directly executed queries embed concrete runtime values, params exist only in compiler-registered queries"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module2
+        |> order_by(%Param{name: :sort})
+        |> DB.run()
+      end
+    end
   end
 end
