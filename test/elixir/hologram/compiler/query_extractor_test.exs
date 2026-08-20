@@ -29,6 +29,8 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module30
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module31
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module32
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module33
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
@@ -90,6 +92,33 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Query.normalize()
 
       assert extract_module_queries(Module26) == [expected_term]
+    end
+
+    test "extracts a param from a call on an argument" do
+      expected_term =
+        Entity2
+        |> filter(c: %Param{name: :search})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module13) == [expected_term]
+    end
+
+    test "extracts a param from arithmetic on an argument" do
+      expected_term =
+        Entity2
+        |> filter(b: %Param{name: :n})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module32) == [expected_term]
+    end
+
+    test "extracts a param from a call whose argument nests it in a map" do
+      expected_term =
+        Entity2
+        |> filter(b: %Param{name: :n})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module33) == [expected_term]
     end
 
     test "extracts a query registered through a cross-module capture" do
@@ -318,15 +347,6 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module21)
-      end
-    end
-
-    test "raises on an argument passed to a non-stage call" do
-      expected_msg =
-        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module13 passes an argument to String.downcase/1 - arguments must flow directly into query stage calls, computing on them is not extractable yet"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module13)
       end
     end
 

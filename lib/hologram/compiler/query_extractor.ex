@@ -38,15 +38,16 @@ defmodule Hologram.Compiler.QueryExtractor do
   rejected), sentinel-free remote calls and query stage calls run natively, and
   single-clause anonymous functions evaluate on invocation with their captured
   scope (branch-free bodies only). A sentinel reaching a call outside the
-  project build raises - computing on a param cannot yield a static term.
+  project build makes the call's result a sentinel too, named for the argument it
+  derives from: what a build cannot compute is what a run supplies, and the
+  predicate it lands in is dropped from the download either way.
 
   Raises Hologram.CompileError when a from_query value is not a function capture,
   when a capture argument is destructured instead of a plain name, when a capture
   argument is named vars (reserved), when a case clause or function head uses a
   composite pattern, when a helper recurses, when an anonymous function has
-  multiple clauses, arity above 3, or branches, when a sentinel is passed to a
-  call outside the project build, or when a body uses a construct symbolic
-  evaluation does not cover. Zero-arity captures are free of these limits - they
+  multiple clauses, arity above 3, or branches, or when a body uses a construct
+  symbolic evaluation does not cover. Zero-arity captures are free of these limits - they
   evaluate concretely at build time.
   """
   @spec extract_module_queries(module) :: list(%{atom => any})
@@ -382,9 +383,7 @@ defmodule Hologram.Compiler.QueryExtractor do
         interpret_call!(target_module, function, arg_values, state_after_args, context)
 
       true ->
-        raise Hologram.CompileError,
-          message:
-            "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} passes an argument to #{inspect(target_module)}.#{function}/#{length(arg_values)} - arguments must flow directly into query stage calls, computing on them is not extractable yet"
+        {%Param{name: first_symbol_name(arg_values)}, state_after_args}
     end
   end
 
@@ -472,6 +471,30 @@ defmodule Hologram.Compiler.QueryExtractor do
             "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} calls undefined function #{inspect(module)}.#{function}/#{arity}"
     end
   end
+
+  # A computed value carries the name of the argument it derives from - the first one reached, and
+  # any of them says the same thing about the term: this is not knowable until the query runs. The
+  # name never reaches a window id (Hologram.Query.Window drops what a param stands in), so what it
+  # is FOR is saying which argument the value came from when a term is read.
+  defp first_symbol_name(%Param{name: name}), do: name
+
+  defp first_symbol_name(list) when is_list(list) do
+    Enum.find_value(list, &first_symbol_name/1)
+  end
+
+  defp first_symbol_name(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> first_symbol_name()
+  end
+
+  defp first_symbol_name(map) when is_map(map) do
+    map
+    |> Map.to_list()
+    |> first_symbol_name()
+  end
+
+  defp first_symbol_name(_other), do: nil
 
   # TODO: an argument named vars will bind the full assigns bag once that
   # convention lands - until then the name is reserved.
