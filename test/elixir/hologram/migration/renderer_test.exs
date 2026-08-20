@@ -371,6 +371,68 @@ defmodule Hologram.Migration.RendererTest do
              }
     end
 
+    # Both of the store's enums derive SORTED, and a value rename moves a label without moving
+    # its position - so a new label that sorts elsewhere leaves the database in an order the
+    # model does not derive, which the drift check refuses on the next boot.
+    test "renders an entity rename that moves its resource_type position as a rebuild" do
+      pre = model(%{MyApp.Task => %{}, UserEntity => %{}})
+
+      ops = [%{op: :rename_entity, from: UserEntity, to: MyApp.Account, line: 3}]
+
+      result = render(ops, pre)
+
+      assert Enum.find(result.transactional, &(&1.op == :rebuild_enum_type)) == %{
+               op: :rebuild_enum_type,
+               enum_type: "hologram_role_grant_resource_type_$enum",
+               values: ["my_app_account", "my_app_task"],
+               columns: [{"hologram_role_grant", "resource_type"}],
+               remap: [
+                 %{from: "test_fixtures_entity_module14", to: "my_app_account", scope: nil}
+               ]
+             }
+
+      refute Enum.any?(result.transactional, &(&1.op == :rename_enum_value))
+    end
+
+    test "renders an entity rename that keeps its resource_type position as a value rename" do
+      pre = model(%{MyApp.Task => %{}, UserEntity => %{}})
+
+      ops = [%{op: :rename_entity, from: UserEntity, to: MyApp.Zebra, line: 3}]
+
+      result = render(ops, pre)
+
+      assert Enum.find(result.transactional, &(&1.op == :rename_enum_value)) == %{
+               op: :rename_enum_value,
+               enum_type: "hologram_role_grant_resource_type_$enum",
+               from: "test_fixtures_entity_module14",
+               to: "my_app_zebra"
+             }
+
+      refute Enum.any?(result.transactional, &(&1.op == :rebuild_enum_type))
+    end
+
+    test "renders a role rename that moves its position as a rebuild" do
+      pre =
+        model(%{
+          MyApp.Task => %{roles: [{:editor, []}, {:viewer, []}]},
+          UserEntity => %{}
+        })
+
+      ops = [%{op: :rename_role, entity: MyApp.Task, from: :viewer, to: :admin, line: 3}]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{
+                 op: :rebuild_enum_type,
+                 enum_type: "hologram_role_grant_role_$enum",
+                 values: ["admin", "editor"],
+                 columns: [{"hologram_role_grant", "role"}],
+                 remap: [%{from: "viewer", to: "admin", scope: nil}]
+               }
+             ]
+    end
+
     test "renders a role rename no other entity type shares as a value rename" do
       pre = model(%{MyApp.Task => %{roles: [{:moderator, []}]}, UserEntity => %{}})
 

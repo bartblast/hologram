@@ -36,6 +36,9 @@ defmodule Hologram.DB.Preflight do
   Returns :ok, or raises naming the obstacle and the ways out - the transformations rows
   cannot follow fail before any DDL runs, so PostgreSQL never arbitrates: an error
   surfacing from an apply is by definition a Hologram bug.
+
+  An enum rebuild's removed values exclude the ones an unscoped remap carries: those rows
+  follow the value to its new label rather than losing it.
   """
   @spec run!(list(%{atom => any}), %{atom => any}, %{module => %{atom => any}}) :: :ok
   def run!(ops, actual, mapping) do
@@ -87,7 +90,7 @@ defmodule Hologram.DB.Preflight do
   # schema this checks against is the one from before the file ran.
   defp check_op!(%{op: :rebuild_enum_type} = op, actual, _mapping) do
     existing_values = Map.get(actual.enum_types, op.enum_type, [])
-    removed_values = existing_values -- op.values
+    removed_values = (existing_values -- op.values) -- carried_values(op)
 
     if removed_values != [] do
       Enum.each(op.columns, fn {table, column} ->
@@ -107,6 +110,17 @@ defmodule Hologram.DB.Preflight do
               "cannot convert from #{op.before.type} to #{op.after.type} - " <>
               "fix the data or remove the attribute and re-add it with the new type"
     end
+  end
+
+  # A value the rebuild carries to a new label is not a value it removes: the rows holding it
+  # follow it through the remap, so counting them would refuse the very rename doing the
+  # carrying. Only an UNSCOPED entry says that of every row - a scoped one carries the rows of
+  # one resource type and leaves the rest, which is a removal for those.
+  defp carried_values(op) do
+    op
+    |> Map.get(:remap, [])
+    |> Enum.filter(&(&1.scope == nil))
+    |> Enum.map(& &1.from)
   end
 
   defp check_null_tightening!(op, actual, mapping) do
