@@ -312,6 +312,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   # A derived param is a VALUE. Every position deciding the term's SHAPE - the entity, a filter
   # key, an order_by attribute, an include name, a view bound - refuses a param in Hologram.Query,
   # which is what keeps a window derivable.
+  # sobelow_skip ["DOS.BinToAtom"]
   defp evaluate!(%IR.DotOperator{left: left, right: right}, state, context) do
     {left_value, state_after_left} = evaluate!(left, state, context)
     {field, state_after_field} = evaluate!(right, state_after_left, context)
