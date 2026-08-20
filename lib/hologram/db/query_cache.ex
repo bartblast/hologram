@@ -8,7 +8,6 @@ defmodule Hologram.DB.QueryCache do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
-  alias Hologram.DB.QueryCompiler
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SortKey
   alias Hologram.Entity
@@ -50,8 +49,7 @@ defmodule Hologram.DB.QueryCache do
   end
 
   @doc """
-  Returns all query cache entries - a map from query content ID to the registry
-  entry extended with the query's compiled form under the :compiled key.
+  Returns all query cache entries - a map from query content ID to its registry entry.
   """
   @spec entries() :: %{String.t() => %{atom => any}}
   def entries do
@@ -250,14 +248,12 @@ defmodule Hologram.DB.QueryCache do
     Enum.each(module_queries, &validate_client_evaluable_queries!/1)
 
     terms = Enum.flat_map(module_queries, fn {_module, module_terms} -> module_terms end)
-    mapping = ensure_mapping(terms)
 
-    entries =
-      terms
-      |> Registry.build()
-      |> Map.new(fn {id, entry} ->
-        {id, Map.put(entry, :compiled, QueryCompiler.compile(entry.term, mapping))}
-      end)
+    # Called for what it DOES, not what it returns: it publishes the sort-key mapping and converges
+    # the companion artifacts the registered queries need.
+    ensure_mapping(terms)
+
+    entries = Registry.build(terms)
 
     prop_params =
       modules

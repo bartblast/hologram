@@ -8,12 +8,9 @@ defmodule Hologram.DB.QueryCacheTest do
 
   alias Hologram.Auth
   alias Hologram.DB.Connection
-  alias Hologram.DB.Mapper
-  alias Hologram.DB.QueryCompiler
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Registry
-  alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Component.Module11
   alias Hologram.Test.Fixtures.Component.Module15
   alias Hologram.Test.Fixtures.Component.Module16
@@ -63,14 +60,7 @@ defmodule Hologram.DB.QueryCacheTest do
       |> filter(b: {:>=, %Placeholder{name: :min_b}})
       |> Query.normalize()
 
-    sort_key_attributes = MapSet.new([{Entity2, :c}])
-    mapping = Mapper.derive!(Reflection.list_entities(), sort_key_attributes)
-
-    [module_1_term, module_11_term]
-    |> Registry.build()
-    |> Map.new(fn {id, entry} ->
-      {id, Map.put(entry, :compiled, QueryCompiler.compile(entry.term, mapping))}
-    end)
+    Registry.build([module_1_term, module_11_term])
   end
 
   test "entries/0" do
