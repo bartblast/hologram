@@ -777,9 +777,9 @@ A `default` value that isn't in the prop's own `values` list is a compile error.
 
 ###### When Violations Are Reported
 
-Whatever a template spells out is checked at compile time: a missing required prop, or a value written outside the prop's `values` list. The build fails, naming the component and the template it was used in.
+A missing required prop is reported at compile time wherever a template writes the component out, and so is any value the compiler can work out without running anything: plain text with nothing interpolated into it, or a literal - `:small`, `"small"`, `1`, `true`, and composites built from them such as `{[:small, :large]}` or `{%{size: :small}}`. The build fails, naming the component and the template it was used in.
 
-What only exists once the page runs is checked while rendering, and raises `Hologram.PropError` naming the template the component was rendered from. That covers a prop arriving through a spread, a component chosen by a dynamic tag, and a prop sourced from the Context.
+Everything else is checked while rendering, and raises `Hologram.PropError` naming the template the component was rendered from. That covers a prop arriving through a spread, a component chosen by a dynamic tag, a prop sourced from the Context, an interpolated value such as `size="a{@b}"`, and any expression - including one nested inside an otherwise literal value, such as `{[:small, @other]}`.
 
 #### Stateful vs. Stateless Components
 
