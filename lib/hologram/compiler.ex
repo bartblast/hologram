@@ -1232,9 +1232,19 @@ defmodule Hologram.Compiler do
 
   defp validate_module_prop_usages(module, ir) do
     ir
+    |> template_ir()
     |> list_component_usages()
     |> Enum.each(&validate_prop_usage(&1, module))
   end
+
+  # Only the template's own DOM is validated. A component node is an ordinary 4-tuple, so code
+  # elsewhere in the module - a helper building DOM by hand, a fixture - can hold one without any
+  # template rendering it, and validating those would fail a build over a component nobody uses.
+  defp template_ir(%IR.ModuleDefinition{body: %IR.Block{expressions: expressions}}) do
+    Enum.find(expressions, &match?(%IR.FunctionDefinition{name: :template, arity: 0}, &1))
+  end
+
+  defp template_ir(_ir), do: nil
 
   # A spread decides only whether a prop is present, so it blocks the required check and nothing
   # else. A value written at the usage is judged either way: being overridden by a later spread

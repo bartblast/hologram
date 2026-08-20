@@ -36,6 +36,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module37
   alias Hologram.Test.Fixtures.Compiler.Module38
   alias Hologram.Test.Fixtures.Compiler.Module4
+  alias Hologram.Test.Fixtures.Compiler.Module40
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
 
@@ -46,6 +47,30 @@ defmodule Hologram.CompilerTest do
 
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
   @tmp_dir Reflection.tmp_dir()
+
+  # validate_prop_usages/2 walks a module's template/0, so hand-built DOM IR has to be wrapped the way
+  # a compiled module carries it. Built by hand rather than taken from a fixture module, because a
+  # fixture with a deliberately invalid usage would fail the compile.hologram Mix task tests.
+  defp module_ir_with_template(dom_ir) do
+    # The module field is left unset - the message names the module validate_prop_usages/2 was given,
+    # not the one recorded in the IR.
+    %IR.ModuleDefinition{
+      body: %IR.Block{
+        expressions: [
+          %IR.FunctionDefinition{
+            name: :template,
+            arity: 0,
+            visibility: :public,
+            clause: %IR.FunctionClause{
+              params: [],
+              guards: [],
+              body: %IR.Block{expressions: [dom_ir]}
+            }
+          }
+        ]
+      }
+    }
+  end
 
   defp setup_js_deps_test(test_subdir) do
     test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", test_subdir])
@@ -1511,7 +1536,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.put(PLT.start(), Module32, ir)
+      plt = PLT.put(PLT.start(), Module32, module_ir_with_template(ir))
 
       expected_msg =
         "component Hologram.Test.Fixtures.Compiler.Module31 is missing required prop " <>
@@ -1534,6 +1559,14 @@ defmodule Hologram.CompilerTest do
       assert validate_prop_usages([Module36], plt) == :ok
     end
 
+    # A component node is an ordinary 4-tuple, so code outside the template can hold one without any
+    # template rendering it.
+    test "ignores a component tuple returned by a non-template function" do
+      plt = PLT.put(PLT.start(), Module40, IR.for_module(Module40))
+
+      assert validate_prop_usages([Module40], plt) == :ok
+    end
+
     test "skips modules that are not in the IR PLT" do
       assert validate_prop_usages([Module32], PLT.start()) == :ok
     end
@@ -1551,7 +1584,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.put(PLT.start(), Module38, ir)
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
       expected_msg =
         ~s/prop "size" of component Hologram.Test.Fixtures.Compiler.Module37 must be one of / <>
@@ -1570,7 +1603,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.put(PLT.start(), Module38, ir)
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
       expected_msg =
         ~s/prop "label" of component Hologram.Test.Fixtures.Compiler.Module37 must be one of / <>
@@ -1589,7 +1622,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.put(PLT.start(), Module38, ir)
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
       expected_msg =
         ~s/prop "size" of component Hologram.Test.Fixtures.Compiler.Module37 must be one of / <>
@@ -1608,7 +1641,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.put(PLT.start(), Module38, ir)
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
       expected_msg =
         ~s/prop "size" of component Hologram.Test.Fixtures.Compiler.Module39 must be one of / <>
@@ -1627,7 +1660,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.put(PLT.start(), Module38, ir)
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
       assert validate_prop_usages([Module38], plt) == :ok
     end
@@ -1640,7 +1673,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.put(PLT.start(), Module38, ir)
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
       assert validate_prop_usages([Module38], plt) == :ok
     end
@@ -1652,7 +1685,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.put(PLT.start(), Module38, ir)
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
 
       assert validate_prop_usages([Module38], plt) == :ok
     end
