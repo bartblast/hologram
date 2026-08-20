@@ -1097,6 +1097,20 @@ defmodule Hologram.QueryTest do
   end
 
   describe "paginate/2" do
+    test "accepts a param page" do
+      query = paginate(Module2, page: %Param{name: :page}, size: 20)
+
+      assert query.offset == {:param, :page}
+      assert query.limit == 20
+    end
+
+    test "accepts a param size" do
+      query = paginate(Module2, page: 3, size: %Param{name: :size})
+
+      assert query.offset == {:param, :size}
+      assert query.limit == {:param, :size}
+    end
+
     test "computes a zero offset for the first page" do
       query = paginate(Module2, page: 1, size: 20)
 

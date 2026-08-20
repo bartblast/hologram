@@ -309,7 +309,8 @@ defmodule Hologram.Query do
   integer, the number of results per page), both required. Pagination expands into the
   offset and limit view bounds - `paginate(page: 2, size: 20)` sets offset 20 and
   limit 20 - and slices what the query evaluates to, not the underlying data, replacing
-  view bounds already set.
+  view bounds already set. Either option may be a param, which makes the bounds it feeds
+  params too.
 
   Raises ArgumentError when the query is neither an entity type module nor a query
   term, when the options are not a keyword list holding exactly :page and :size, or when
@@ -334,7 +335,7 @@ defmodule Hologram.Query do
     size = validate_paginate_option!(opts, :size)
 
     query
-    |> offset((page - 1) * size)
+    |> offset(paginate_offset(page, size))
     |> limit(size)
   end
 
@@ -545,6 +546,15 @@ defmodule Hologram.Query do
       message:
         "invalid order_by entry #{inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple"
   end
+
+  # The offset a page produces depends on both options, so a param in either makes it one too -
+  # named for whichever option it varies with, page first. The name is descriptive only: the window
+  # discards view bounds, and the real builder computes the real offset when the values arrive.
+  defp paginate_offset(%Param{} = page, _size), do: page
+
+  defp paginate_offset(_page, %Param{} = size), do: size
+
+  defp paginate_offset(page, size), do: (page - 1) * size
 
   defp ordering_triple!(name, operator, operand, entity_type) do
     validate_orderable_attribute!(name, entity_type, operator)
@@ -849,6 +859,9 @@ defmodule Hologram.Query do
 
   defp validate_paginate_option!(opts, key) do
     case Keyword.fetch(opts, key) do
+      {:ok, %Param{} = param} ->
+        param
+
       {:ok, value} when is_integer(value) and value >= 1 ->
         value
 
