@@ -34,7 +34,11 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module34
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module35
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module36
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module37
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module38
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module39
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module40
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
@@ -47,6 +51,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Component.Module23, as: Component23
   alias Hologram.Test.Fixtures.Component.Module25, as: Component25
   alias Hologram.Test.Fixtures.Component.Module27, as: Component27
+  alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
@@ -80,10 +85,28 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert extract_module_queries(Module29) == [expected_term]
     end
 
+    test "extracts every relationship of the target when an include name is an argument" do
+      terms = extract_module_queries(Module37)
+
+      assert Enum.map(terms, &Map.keys(&1.include)) == [[:a], [:b], [:c]]
+    end
+
+    test "extracts every entity and relationship pair when both are arguments" do
+      terms = extract_module_queries(Module39)
+
+      assert Enum.map(terms, &{&1.entity, Map.keys(&1.include)}) == [{Entity13, [:parent]}]
+    end
+
     test "extracts every entity type admitting a query whose entity is an argument" do
       terms = extract_module_queries(Module36)
 
       assert Enum.map(terms, & &1.entity) == [Entity2, Entity4]
+    end
+
+    test "extracts only the relationships a sub-builder admits" do
+      terms = extract_module_queries(Module38)
+
+      assert Enum.map(terms, &Map.keys(&1.include)) == [[:a]]
     end
 
     test "extracts one entity type when only one admits the query" do
@@ -300,6 +323,15 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module24)
+      end
+    end
+
+    test "raises on an include name argument the target has no relationship for" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module40 passes an argument to include/2 in a position the build cannot enumerate - the rows to download cannot be worked out without its value"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module40)
       end
     end
 

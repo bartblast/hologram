@@ -159,18 +159,46 @@ defmodule Hologram.Compiler.QueryExtractor do
   # does not declare, an operand of the wrong type) is PRUNED, so `filter(entity.type, done: false)`
   # keeps precisely the types declaring a boolean `done`. No separate narrowing rule exists, and
   # none should - Hologram.Query's own validation is the satisfiability check.
-  defp apply_query_stage!(function, [%Placeholder{} | rest_args], state, context) do
-    candidates = Reflection.list_entities()
+  # One position per pass, recursing until none is left - a query whose entity AND include name both
+  # arrive at run time forks twice, over the product of the two candidate sets.
+  defp apply_query_stage!(function, arg_values, state, context) do
+    case forked_position(function, arg_values) do
+      nil ->
+        {apply_authored_stage!(function, arg_values, context), state}
 
-    {choice, state_after_choice} = take_choice!(state, length(candidates), context)
+      {index, candidates} ->
+        {choice, state_after_choice} = take_choice!(state, length(candidates), context)
 
-    substituted_args = [Enum.at(candidates, choice) | rest_args]
+        substituted_args = List.replace_at(arg_values, index, Enum.at(candidates, choice))
 
-    {apply_speculated_stage!(function, substituted_args), state_after_choice}
+        apply_speculated_stage!(function, substituted_args, state_after_choice, context)
+    end
   end
 
-  defp apply_query_stage!(function, arg_values, state, context) do
-    {apply_authored_stage!(function, arg_values, context), state}
+  # The two positions a placeholder cannot stay in, because the window is derived from them: the
+  # entity says which table to download, an include name says which relationship travels with it.
+  # Both have a finite candidate set, so both fork rather than refuse.
+  #
+  # An entity declaring no relationship yields no candidates, so there is nothing to fork over and
+  # the call falls through to the stage, which refuses the placeholder - located when the developer
+  # named that entity, pruned when a fork chose it.
+  defp forked_position(_function, [%Placeholder{} | _rest_args]) do
+    {0, Reflection.list_entities()}
+  end
+
+  defp forked_position(:include, [query | [%Placeholder{} | _rest_args]]) do
+    case relationship_names(query) do
+      [] -> nil
+      names -> {1, names}
+    end
+  end
+
+  defp forked_position(_function, _arg_values), do: nil
+
+  defp relationship_names(%{entity: entity_type}), do: relationship_names(entity_type)
+
+  defp relationship_names(entity_type) when is_atom(entity_type) do
+    Enum.map(entity_type.__relationships__(), fn {name, _target, _opts} -> name end)
   end
 
   # A stage call the developer wrote is theirs to read, so a refusal from it is reraised carrying
@@ -184,13 +212,19 @@ defmodule Hologram.Compiler.QueryExtractor do
               __STACKTRACE__
   end
 
-  # A stage the BUILD speculated, never the developer. Its refusal says the candidate is wrong,
-  # not that the query is - so the variant dies and the others carry on. Scoping the prune here is
-  # what keeps an authored mistake loud: apply_authored_stage!/3 still reraises.
-  defp apply_speculated_stage!(function, arg_values) do
-    apply(Query, function, arg_values)
+  # A stage the BUILD speculated, never the developer. Its refusal says the candidate is wrong, not
+  # that the query is - so the variant dies and the others carry on.
+  #
+  # The rescue wraps the whole substituted call, so EVERYTHING a candidate makes happen is
+  # speculative however deep it runs: a sub-builder refusing the relationship the fork chose is the
+  # fork's problem, not the developer's. A builder with no fork in it never reaches here, which is
+  # what keeps an authored mistake loud - apply_authored_stage!/3 reraises it with the prop's name.
+  # A fork signal is a throw rather than an exception, so it passes through untouched.
+  defp apply_speculated_stage!(function, arg_values, state, context) do
+    apply_query_stage!(function, arg_values, state, context)
   rescue
     ArgumentError -> throw(@prune_signal)
+    Hologram.CompileError -> throw(@prune_signal)
   end
 
   # A cover-compiled module (coverage runs) is loaded from instrumented code,
