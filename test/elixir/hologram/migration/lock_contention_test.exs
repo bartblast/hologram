@@ -125,6 +125,14 @@ defmodule Hologram.Migration.LockContentionTest do
     %{version: version, path: "#{version}.exs", ops: ops}
   end
 
+  # The same index, built the ordinary way - available to a session that is not the repair
+  # path and so is under no obligation to build concurrently.
+  defp plain_build_statement do
+    [statement] = DDL.statements(@index_op)
+
+    statement
+  end
+
   # A session waiting for an advisory lock, which is the shape the deadlock is made of.
   defp queued_advisory_lock_count(session) do
     statement = """
@@ -222,6 +230,37 @@ defmodule Hologram.Migration.LockContentionTest do
       # The repair leaves through its work-done branch: the index it was going to build is
       # there, built by the node that held the lock.
       assert Task.await(repair, 30_000) == :ok
+      assert index_validity(observer) == true
+    end
+
+    test "leaves once another node has done the work, without taking the lock", %{
+      mapping: mapping,
+      observer: observer,
+      scratch_opts: scratch_opts
+    } do
+      holder =
+        start_supervised!({Postgrex, scratch_opts}, id: :holder, restart: :temporary)
+
+      assert %{rows: [[true]]} =
+               Postgrex.query!(holder, "SELECT pg_try_advisory_lock($1)", [@index_lock_key])
+
+      repair = start_repair(mapping, scratch_opts)
+
+      Process.sleep(2 * @poll_interval_ms)
+
+      assert Task.yield(repair, 0) == nil
+
+      # The node holding the lock finishes the work the repair came to do.
+      Postgrex.query!(holder, plain_build_statement(), [])
+
+      # The repair returns while another session still holds the lock - which it can only
+      # do by finding nothing left to do, since the lock was never available to it.
+      assert Task.await(repair, 30_000) == :ok
+
+      # Still held, so the repair never took it: it left through the work-done branch.
+      assert %{rows: [[false]]} =
+               Postgrex.query!(observer, "SELECT pg_try_advisory_lock($1)", [@index_lock_key])
+
       assert index_validity(observer) == true
     end
 
