@@ -718,6 +718,12 @@ defmodule Hologram.QueryTest do
   end
 
   describe "limit/2" do
+    test "accepts a param" do
+      query = limit(Module2, %Param{name: :size})
+
+      assert query.limit == {:param, :size}
+    end
+
     test "accepts zero" do
       query = limit(Module2, 0)
 
@@ -875,6 +881,12 @@ defmodule Hologram.QueryTest do
   end
 
   describe "offset/2" do
+    test "accepts a param" do
+      query = offset(Module2, %Param{name: :start})
+
+      assert query.offset == {:param, :start}
+    end
+
     test "replaces a prior offset" do
       query =
         Module2
@@ -1160,6 +1172,29 @@ defmodule Hologram.QueryTest do
       assert_error ArgumentError, expected_msg, fn ->
         paginate(Module2, size: 20)
       end
+    end
+  end
+
+  describe "param_names/1" do
+    test "collects params from every position of a term" do
+      query =
+        Module2
+        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> limit(%Param{name: :size})
+        |> offset(%Param{name: :start})
+        |> order_by([{%Param{name: :sort}, %Param{name: :dir}}])
+
+      assert param_names(query) == [:min_b, :size, :start, :sort, :dir]
+    end
+
+    test "collects params from include sub-terms" do
+      query = include(Module3, :a, &filter(&1, c: %Param{name: :owner}))
+
+      assert param_names(query) == [:owner]
+    end
+
+    test "yields an empty list for a concrete term" do
+      assert param_names(filter(Module2, a: true)) == []
     end
   end
 end

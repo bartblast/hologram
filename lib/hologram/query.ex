@@ -87,8 +87,9 @@ defmodule Hologram.Query do
   type. Ordering comparisons still require an orderable attribute.
 
   A param also stands where an ordering key or its direction goes (`order_by(query, sort)`,
-  `order_by(query, name: dir)`), storing a `{:param, name}` leaf in place of the attribute or
-  the direction and skipping the checks that would need a concrete one.
+  `order_by(query, name: dir)`) and where a view bound goes (`limit(query, size)`,
+  `offset(query, start)`), storing a `{:param, name}` leaf in place of the attribute, the
+  direction or the bound, and skipping the checks that would need a concrete one.
 
   To-one reference fields (`<relationship name>_id`) are filterable alongside attributes -
   they carry the `:uuid` type, so they take equality, membership and param values, while
@@ -338,9 +339,9 @@ defmodule Hologram.Query do
   end
 
   @doc """
-  Returns the names of every param leaf in the given query term, filter values,
-  ordering keys and directions, and include sub-terms included - an empty list for a
-  term with concrete values only.
+  Returns the names of every param leaf in the given query term, filter values, view
+  bounds, ordering keys and directions, and include sub-terms included - an empty list
+  for a term with concrete values only.
   """
   @spec param_names(%{atom => any}) :: list(atom)
   def param_names(term) do
@@ -348,6 +349,11 @@ defmodule Hologram.Query do
       term
       |> Map.get(:filter, [])
       |> Enum.flat_map(fn {_name, _operator, value} -> value_param_names(value) end)
+
+    bound_names =
+      [:limit, :offset]
+      |> Enum.map(&Map.get(term, &1))
+      |> Enum.flat_map(&value_param_names/1)
 
     order_names =
       term
@@ -362,7 +368,7 @@ defmodule Hologram.Query do
       |> Map.values()
       |> Enum.flat_map(&param_names/1)
 
-    filter_names ++ order_names ++ include_names
+    filter_names ++ bound_names ++ order_names ++ include_names
   end
 
   @doc false
@@ -662,6 +668,12 @@ defmodule Hologram.Query do
 
   defp relationship_names(entity_type) do
     Enum.map(entity_type.__relationships__(), fn {name, _type, _opts} -> name end)
+  end
+
+  defp set_view_bound!(query, field, %Param{name: param_name}) do
+    term = to_term(query)
+
+    Map.put(term, field, {:param, param_name})
   end
 
   defp set_view_bound!(query, field, value) do
