@@ -30,6 +30,9 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module29
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module30
+  alias Hologram.Test.Fixtures.Compiler.Module32
+  alias Hologram.Test.Fixtures.Compiler.Module34
+  alias Hologram.Test.Fixtures.Compiler.Module36
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
@@ -1456,6 +1459,50 @@ defmodule Hologram.CompilerTest do
 
     refute String.contains?(js, "Elixir.String.Chars.Version")
     refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+  end
+
+  describe "validate_prop_usages/2" do
+    test "doesn't raise when every required prop is written at the usage" do
+      plt = PLT.start() |> PLT.put(Module32, IR.for_module(Module32))
+
+      assert validate_prop_usages([Module32], plt) == :ok
+    end
+
+    test "raises when a required prop is missing from the usage" do
+      # The offending usage is built as IR rather than as a file fixture, because a file fixture
+      # would raise in the compile.hologram Mix task tests, which compile the whole project.
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module31, [{"label", [text: "abc"]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.start() |> PLT.put(Module32, ir)
+
+      expected_msg =
+        "component Hologram.Test.Fixtures.Compiler.Module31 is missing required prop " <>
+          ~s/"size" in Hologram.Test.Fixtures.Compiler.Module32's template/
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_prop_usages([Module32], plt)
+      end
+    end
+
+    test "doesn't raise when the usage carries a spread" do
+      plt = PLT.start() |> PLT.put(Module34, IR.for_module(Module34))
+
+      assert validate_prop_usages([Module34], plt) == :ok
+    end
+
+    test "doesn't raise when the required prop is sourced from context" do
+      plt = PLT.start() |> PLT.put(Module36, IR.for_module(Module36))
+
+      assert validate_prop_usages([Module36], plt) == :ok
+    end
+
+    test "skips modules that are not in the IR PLT" do
+      assert validate_prop_usages([Module32], PLT.start()) == :ok
+    end
   end
 
   describe "validate_page_modules/1" do

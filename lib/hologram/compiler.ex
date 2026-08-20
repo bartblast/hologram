@@ -751,6 +751,25 @@ defmodule Hologram.Compiler do
     end)
   end
 
+  @doc """
+  Raises a compilation error if a template uses a component without one of its required props.
+
+  Only usages the compiler can decide are checked. A usage carrying a `...{expr}` spread is skipped,
+  since any prop could be in the spread, and so is a prop declared with `:from_context`, which is
+  never written at the usage. Those cases, along with dynamic tags, are left to the renderers.
+
+  Modules missing from the IR PLT are skipped - a module without a BEAM source has no IR to walk.
+  """
+  @spec validate_prop_usages(list(module), PLT.t()) :: :ok
+  def validate_prop_usages(modules, ir_plt) do
+    Enum.each(modules, fn module ->
+      case PLT.get(ir_plt, module) do
+        {:ok, ir} -> validate_module_prop_usages(module, ir)
+        _fallback -> :ok
+      end
+    end)
+  end
+
   # A component node is a 4-element tuple whose first element is the :component atom and whose
   # second is the component module, already resolved by the time the template AST becomes IR. A
   # dynamic tag carries :dynamic_tag instead and never matches, which is what leaves it out.
@@ -791,6 +810,13 @@ defmodule Hologram.Compiler do
   end
 
   defp collect_component_usages(_ir, acc), do: acc
+
+  defp component_usage_error!(component_module, name, module) do
+    raise Hologram.CompileError,
+      message:
+        "component #{Reflection.module_name(component_module)} is missing required prop " <>
+          ~s/"#{name}" in #{Reflection.module_name(module)}'s template/
+  end
 
   defp create_entry_file(js, entry_name, tmp_dir) do
     entry_file_path = Path.join(tmp_dir, "#{entry_name}.entry.js")
@@ -896,6 +922,16 @@ defmodule Hologram.Compiler do
     else
       function_defs
     end
+  end
+
+  # A prop sourced from context is never written at the usage, so its absence there says nothing -
+  # only the renderers can tell whether the context supplied it.
+  defp missing_required_props(component_module, prop_names) do
+    component_module.__props__()
+    |> Enum.filter(fn {name, _type, opts} ->
+      opts[:required] && !opts[:from_context] && to_string(name) not in prop_names
+    end)
+    |> Enum.map(fn {name, _type, _opts} -> name end)
   end
 
   # $-prefixed entries are the framework's own ($key, event bindings), never something the author
@@ -1081,5 +1117,17 @@ defmodule Hologram.Compiler do
     if beam_path != :non_existing do
       beam_path
     end
+  end
+
+  defp validate_module_prop_usages(module, ir) do
+    ir
+    |> list_component_usages()
+    |> Enum.each(fn {component_module, prop_names, has_spread?} ->
+      if !has_spread? && Reflection.has_function?(component_module, :__props__, 0) do
+        component_module
+        |> missing_required_props(prop_names)
+        |> Enum.each(&component_usage_error!(component_module, &1, module))
+      end
+    end)
   end
 end
