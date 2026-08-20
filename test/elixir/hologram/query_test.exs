@@ -81,6 +81,24 @@ defmodule Hologram.QueryTest do
       assert query.filter == [{:b, :in, [{:param, :bound}, 1]}]
     end
 
+    test "accepts a param sentinel as an attribute name" do
+      query = filter(Module2, [{%Param{name: :field}, 5}])
+
+      assert query.filter == [{{:param, :field}, :==, 5}]
+    end
+
+    test "accepts a param sentinel as an attribute name with an operator" do
+      query = filter(Module2, [{%Param{name: :field}, {:>=, 5}}])
+
+      assert query.filter == [{{:param, :field}, :>=, 5}]
+    end
+
+    test "accepts a param sentinel as an attribute name with a param value" do
+      query = filter(Module2, [{%Param{name: :field}, %Param{name: :value}}])
+
+      assert query.filter == [{{:param, :field}, :==, {:param, :value}}]
+    end
+
     test "accepts a param sentinel in an inequality operator tuple" do
       query = filter(Module2, c: {:!=, %Param{name: :search}})
 
@@ -1194,11 +1212,12 @@ defmodule Hologram.QueryTest do
       query =
         Module2
         |> filter(b: {:>=, %Param{name: :min_b}})
+        |> filter([{%Param{name: :field}, 5}])
         |> limit(%Param{name: :size})
         |> offset(%Param{name: :start})
         |> order_by([{%Param{name: :sort}, %Param{name: :dir}}])
 
-      assert param_names(query) == [:min_b, :size, :start, :sort, :dir]
+      assert param_names(query) == [:min_b, :field, :size, :start, :sort, :dir]
     end
 
     test "collects params from include sub-terms" do

@@ -87,9 +87,12 @@ defmodule Hologram.Query do
   type. Ordering comparisons still require an orderable attribute.
 
   A param also stands where an ordering key or its direction goes (`order_by(query, sort)`,
-  `order_by(query, name: dir)`) and where a view bound goes (`limit(query, size)`,
-  `offset(query, start)`), storing a `{:param, name}` leaf in place of the attribute, the
-  direction or the bound, and skipping the checks that would need a concrete one.
+  `order_by(query, name: dir)`), where a view bound goes (`limit(query, size)`,
+  `offset(query, start)`), and where a filtered attribute's name goes
+  (`filter(query, [{attribute, value}])`), storing a `{:param, name}` leaf in place of the
+  attribute, the direction or the bound, and skipping the checks that would need a concrete
+  one. A param-keyed predicate leaves its operand unchecked too - the attribute's type is
+  unknown, so nothing about the operand can be judged against it.
 
   To-one reference fields (`<relationship name>_id`) are filterable alongside attributes -
   they carry the `:uuid` type, so they take equality, membership and param values, while
@@ -105,7 +108,7 @@ defmodule Hologram.Query do
   def filter(query, predicates) do
     term = to_term(query)
 
-    if not Keyword.keyword?(predicates) do
+    if not filterable_predicates?(predicates) do
       raise ArgumentError,
         message: "filter predicates must be a keyword list, got: #{inspect(predicates)}"
     end
@@ -340,16 +343,18 @@ defmodule Hologram.Query do
   end
 
   @doc """
-  Returns the names of every param leaf in the given query term, filter values, view
-  bounds, ordering keys and directions, and include sub-terms included - an empty list
-  for a term with concrete values only.
+  Returns the names of every param leaf in the given query term, filter attributes and
+  values, view bounds, ordering keys and directions, and include sub-terms included - an
+  empty list for a term with concrete values only.
   """
   @spec param_names(%{atom => any}) :: list(atom)
   def param_names(term) do
     filter_names =
       term
       |> Map.get(:filter, [])
-      |> Enum.flat_map(fn {_name, _operator, value} -> value_param_names(value) end)
+      |> Enum.flat_map(fn {name, _operator, value} ->
+        value_param_names(name) ++ value_param_names(value)
+      end)
 
     bound_names =
       [:limit, :offset]
@@ -375,9 +380,13 @@ defmodule Hologram.Query do
   @doc false
   @spec predicate_triples!(module, keyword) :: list({atom, atom, any})
   def predicate_triples!(entity_type, predicates) do
-    Enum.flat_map(predicates, fn {name, value} ->
-      validate_filtered_name!(name, entity_type)
-      predicate_triples!(name, value, entity_type)
+    Enum.flat_map(predicates, fn
+      {%Param{name: param_name}, value} ->
+        [param_key_triple(param_name, value)]
+
+      {name, value} ->
+        validate_filtered_name!(name, entity_type)
+        predicate_triples!(name, value, entity_type)
     end)
   end
 
@@ -403,6 +412,35 @@ defmodule Hologram.Query do
   defp constraint_tuple?(value) do
     is_tuple(value) and tuple_size(value) == 2 and is_atom(elem(value, 0))
   end
+
+  # Keyword.keyword?/1 with param keys admitted - a param names an attribute nobody knows yet.
+  defp filterable_predicates?(predicates) when is_list(predicates) do
+    Enum.all?(predicates, fn
+      {%Param{}, _value} -> true
+      {name, _value} when is_atom(name) -> true
+      _entry -> false
+    end)
+  end
+
+  defp filterable_predicates?(_predicates), do: false
+
+  # Nothing about a param-keyed predicate can be checked - the attribute is unknown, so its type,
+  # its operators and its operand's shape are all unknown with it. The triple records what was
+  # written and Hologram.Query.Window drops it from the download, the real builder validating for
+  # real once the attribute arrives.
+  defp param_key_triple(param_name, {operator, value}) when is_atom(operator) do
+    {{:param, param_name}, operator, param_operand(value)}
+  end
+
+  defp param_key_triple(param_name, value) do
+    {{:param, param_name}, :==, param_operand(value)}
+  end
+
+  defp param_operand(%Param{name: param_name}), do: {:param, param_name}
+
+  defp param_operand(values) when is_list(values), do: normalize_membership_values(values)
+
+  defp param_operand(value), do: value
 
   defp filterable_names(entity_type) do
     Enum.sort(attribute_names(entity_type) ++ reference_field_names(entity_type))
