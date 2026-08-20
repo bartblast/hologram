@@ -522,9 +522,8 @@ defmodule Hologram.Component do
   defp validate_prop_default_in_values!(opts, name, module) do
     with {:values, values_ast} when is_list(values_ast) <- List.keyfind(opts, :values, 0),
          {:default, default_ast} <- List.keyfind(opts, :default, 0),
-         true <- Macro.quoted_literal?(default_ast) && Macro.quoted_literal?(values_ast),
-         values = literal_term(values_ast),
-         default = literal_term(default_ast),
+         {:ok, values} <- literal_term(values_ast),
+         {:ok, default} <- literal_term(default_ast),
          true <- default not in values do
       raise Hologram.CompileError,
         message:
@@ -535,9 +534,53 @@ defmodule Hologram.Component do
     end
   end
 
-  defp literal_term(ast) do
-    {term, _bindings} = Code.eval_quoted(ast)
-    term
+  # Literal AST is converted to its term here rather than evaluated. Code.eval_quoted/1 would be
+  # simpler but is a code-execution surface, and Macro.quoted_literal?/1 - the guard that would
+  # justify it - is true for a struct literal, whose evaluation calls the struct's __struct__/1 on a
+  # module that may not be compiled yet while this macro runs. Struct and binary-construction
+  # literals therefore resolve to :unknown and are left to the render-time check.
+  defp literal_term({:{}, _meta, items}) do
+    with {:ok, terms} <- literal_terms(items), do: {:ok, List.to_tuple(terms)}
+  end
+
+  defp literal_term({:%{}, _meta, pairs}) do
+    {key_asts, value_asts} = Enum.unzip(pairs)
+
+    with {:ok, keys} <- literal_terms(key_asts),
+         {:ok, values} <- literal_terms(value_asts) do
+      map =
+        keys
+        |> Enum.zip(values)
+        |> Map.new()
+
+      {:ok, map}
+    end
+  end
+
+  defp literal_term({left_ast, right_ast}) do
+    with {:ok, [left, right]} <- literal_terms([left_ast, right_ast]), do: {:ok, {left, right}}
+  end
+
+  defp literal_term(ast) when is_list(ast), do: literal_terms(ast)
+
+  defp literal_term(ast) when is_atom(ast) or is_binary(ast) or is_number(ast), do: {:ok, ast}
+
+  defp literal_term(_ast), do: :unknown
+
+  # One unresolvable part makes the whole composite unresolvable.
+  defp literal_terms(asts) do
+    result =
+      Enum.reduce_while(asts, {:ok, []}, fn ast, {:ok, acc} ->
+        case literal_term(ast) do
+          {:ok, term} -> {:cont, {:ok, [term | acc]}}
+          :unknown -> {:halt, :unknown}
+        end
+      end)
+
+    case result do
+      {:ok, reversed_terms} -> {:ok, Enum.reverse(reversed_terms)}
+      :unknown -> :unknown
+    end
   end
 
   # A default makes the prop impossible to miss, so required: true next to one could never fire -

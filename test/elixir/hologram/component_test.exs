@@ -288,6 +288,26 @@ defmodule Hologram.ComponentTest do
       assert module.__props__() == [{:b, :map, [values: [%{a: 1, b: 2}], default: %{b: 2, a: 1}]}]
     end
 
+    # A struct literal can't be resolved without calling its __struct__/1, on a module that may not
+    # be compiled yet, so it is left to the render-time check rather than compared here.
+    test "accepts a struct default value without judging it" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.StructDefaultOutsideValues do
+          use Hologram.Component
+
+          prop :b, :struct, values: [%Range{first: 1, last: 2, step: 1}], default: 1..3
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert [{:b, :struct, opts}] = module.__props__()
+      assert opts[:default] == 1..3
+    end
+
     test "accepts a required prop sourced from context" do
       {{:module, module, _binary, _result}, _bindings} =
         Code.eval_string("""
