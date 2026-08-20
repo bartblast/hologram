@@ -735,6 +735,8 @@ Props can be typed using the following types:
 
 ##### Options
 
+Props can be configured using the `default`, `from_context`, `required` and `values` options. Any other option is a compile error, so a typo such as `defualt:` fails the build instead of being silently ignored.
+
 ###### Default Value
 
 Set a default value for optional props using the `default` option:
@@ -752,6 +754,32 @@ prop :user, :map, from_context: :current_user
 ```
 
 For more information about Context, see the Context page.
+
+###### Required
+
+Mark a prop as mandatory using the `required` option:
+
+```elixir
+prop :size, :atom, required: true
+```
+
+It can't be combined with `default`, since a prop with a default is never missing. It can be combined with `from_context`, which then means the Context must supply the value.
+
+###### Allowed Values
+
+Restrict a prop to a set of acceptable values using the `values` option:
+
+```elixir
+prop :size, :atom, values: [:small, :large]
+```
+
+A `default` value that isn't in the prop's own `values` list is a compile error.
+
+###### When Violations Are Reported
+
+A missing required prop is reported at compile time wherever a template writes the component out, and so is any value the compiler can work out without running anything: plain text with nothing interpolated into it, or a literal - `:small`, `"small"`, `1`, `true`, and composites built from them such as `{[:small, :large]}` or `{%{size: :small}}`. The build fails, naming the component and the template it was used in.
+
+Everything else is checked while rendering, and raises `Hologram.PropError` naming the template the component was rendered from. That covers a prop arriving through a spread, a component chosen by a dynamic tag, a prop sourced from the Context, an interpolated value such as `size="a{@b}"`, and any expression - including one nested inside an otherwise literal value, such as `{[:small, @other]}`.
 
 #### Stateful vs. Stateless Components
 

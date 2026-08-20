@@ -73,7 +73,9 @@ import {defineModule78Fixture} from "./support/fixtures/renderer/module_78.mjs";
 import {defineModule86Fixture} from "./support/fixtures/renderer/module_86.mjs";
 import {defineModule87Fixture} from "./support/fixtures/renderer/module_87.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
+import {defineModule89Fixture} from "./support/fixtures/renderer/module_89.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
+import {defineModule91Fixture} from "./support/fixtures/renderer/module_91.mjs";
 import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client_only/module_1.mjs";
 import {defineClientOnlyModule2Fixture} from "./support/fixtures/renderer/client_only/module_2.mjs";
 
@@ -148,7 +150,9 @@ defineModule77Fixture();
 defineModule78Fixture();
 defineModule86Fixture();
 defineModule87Fixture();
+defineModule89Fixture();
 defineModule8Fixture();
+defineModule91Fixture();
 defineModule9Fixture();
 defineClientOnlyModule1Fixture();
 defineClientOnlyModule2Fixture();
@@ -5837,6 +5841,152 @@ describe("Renderer", () => {
       const expected = ["prop_aaa = 987"];
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("required prop given", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module89"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("aaa"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring("my_value")]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, ["prop_aaa = my_value"]);
+    });
+
+    it("required prop missing", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module89"),
+        Type.list(),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        "Hologram.PropError",
+        'component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa"',
+      );
+    });
+
+    it("required prop missing, rendered from a parent template", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module89"),
+        Type.list(),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module64"),
+            null,
+          ),
+        "Hologram.PropError",
+        'component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", ' +
+          'rendered from "Hologram.Test.Fixtures.Template.Renderer.Module64"',
+      );
+    });
+
+    it("prop value in the :values list", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module91"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("aaa"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.atom("small")])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, ["component vars = %{aaa: :small}"]);
+    });
+
+    it("prop value not in the :values list", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module91"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("aaa"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.atom("huge")])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        "Hologram.PropError",
+        'prop "aaa" of component "Hologram.Test.Fixtures.Template.Renderer.Module91" ' +
+          "must be one of [:small, :large], got: :huge",
+      );
+    });
+
+    it("absent prop with a :values list doesn't raise", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module91"),
+        Type.list(),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, ["component vars = %{}"]);
     });
   });
 

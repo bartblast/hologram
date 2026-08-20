@@ -30,6 +30,8 @@ defmodule Hologram.Page do
 
   @optional_callbacks [action: 3, command: 3]
 
+  @invalid_type_reason ", because it's of invalid type"
+
   defmacro __using__(_opts) do
     template_path = Component.colocated_template_path(__CALLER__.file)
 
@@ -110,83 +112,83 @@ defmodule Hologram.Page do
             ~s/page "#{Reflection.module_name(page_module)}" doesn't expect "#{name_atom}" param/
       end
 
-      {name_atom, cast_param(types[name_atom], value, name_atom)}
+      {name_atom, cast_param(types[name_atom], value, name_atom, page_module)}
     end)
     |> Enum.into(%{})
   end
 
-  defp cast_param(:atom, value, _name) when is_atom(value) do
+  defp cast_param(:atom, value, _name, _page_module) when is_atom(value) do
     value
   end
 
-  defp cast_param(:atom, value, name) when is_binary(value) do
+  defp cast_param(:atom, value, name, page_module) when is_binary(value) do
     String.to_existing_atom(value)
   rescue
     ArgumentError ->
       message =
-        ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to atom, because it's not an already existing atom/
+        cast_error_msg(name, value, :atom, page_module) <>
+          ", because it's not an already existing atom"
 
       reraise Hologram.ParamError, [message: message], __STACKTRACE__
   end
 
-  defp cast_param(:atom, value, name) do
+  defp cast_param(:atom, value, name, page_module) do
     raise Hologram.ParamError,
-      message:
-        ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to atom, because it's of invalid type/
+      message: cast_error_msg(name, value, :atom, page_module) <> @invalid_type_reason
   end
 
-  defp cast_param(:float, value, _name) when is_float(value) do
+  defp cast_param(:float, value, _name, _page_module) when is_float(value) do
     value
   end
 
-  defp cast_param(:float, value, name) when is_binary(value) do
+  defp cast_param(:float, value, name, page_module) when is_binary(value) do
     case Float.parse(value) do
       {float, _remainder} ->
         float
 
       :error ->
-        raise Hologram.ParamError,
-          message:
-            ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to float/
+        raise Hologram.ParamError, message: cast_error_msg(name, value, :float, page_module)
     end
   end
 
-  defp cast_param(:float, value, name) do
+  defp cast_param(:float, value, name, page_module) do
     raise Hologram.ParamError,
-      message:
-        ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to float, because it's of invalid type/
+      message: cast_error_msg(name, value, :float, page_module) <> @invalid_type_reason
   end
 
-  defp cast_param(:integer, value, _name) when is_integer(value) do
+  defp cast_param(:integer, value, _name, _page_module) when is_integer(value) do
     value
   end
 
-  defp cast_param(:integer, value, name) when is_binary(value) do
+  defp cast_param(:integer, value, name, page_module) when is_binary(value) do
     case Integer.parse(value) do
       {integer, _remainder} ->
         integer
 
       :error ->
-        raise Hologram.ParamError,
-          message:
-            ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to integer/
+        raise Hologram.ParamError, message: cast_error_msg(name, value, :integer, page_module)
     end
   end
 
-  defp cast_param(:integer, value, name) do
+  defp cast_param(:integer, value, name, page_module) do
     raise Hologram.ParamError,
-      message:
-        ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to integer, because it's of invalid type/
+      message: cast_error_msg(name, value, :integer, page_module) <> @invalid_type_reason
   end
 
-  defp cast_param(:string, value, _name) when is_binary(value) do
+  defp cast_param(:string, value, _name, _page_module) when is_binary(value) do
     value
   end
 
-  defp cast_param(:string, value, name) do
+  defp cast_param(:string, value, name, page_module) do
     raise Hologram.ParamError,
-      message:
-        ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to string, because it's of invalid type/
+      message: cast_error_msg(name, value, :string, page_module) <> @invalid_type_reason
+  end
+
+  # Naming the page is what makes the message actionable: the same param name can be declared on
+  # any number of pages, and the value alone doesn't say which route was being served.
+  defp cast_error_msg(name, value, type, page_module) do
+    ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to #{type} / <>
+      ~s/in page "#{Reflection.module_name(page_module)}"/
   end
 
   @doc """
@@ -228,6 +230,8 @@ defmodule Hologram.Page do
   """
   @spec param(atom, atom, T.opts()) :: Macro.t()
   defmacro param(name, type, opts \\ []) do
+    validate_param_opts!(opts, name, __CALLER__.module)
+
     quote do
       Module.put_attribute(__MODULE__, :__params__, {unquote(name), unquote(type), unquote(opts)})
     end
@@ -262,5 +266,49 @@ defmodule Hologram.Page do
         unquote(path)
       end
     end
+  end
+
+  # Params support no options yet, so every option given is rejected. When the first one lands
+  # (e.g. :default, once params can be sourced from the query string), this becomes a check against
+  # a list of allowed keys, the way prop/3 does it.
+  #
+  # Options reach the macro as AST, so only literals can be checked - which is every declaration
+  # written out. An option value that isn't a literal is an expression, and says what it is only
+  # once it runs, so it is passed through unchecked.
+  defp validate_param_opts!(opts, name, module) when is_list(opts) and is_atom(name) do
+    Enum.each(opts, &validate_param_opt_entry!(&1, name, module))
+  end
+
+  # A literal that isn't a list can't become one at runtime, so it is rejected here.
+  defp validate_param_opts!(opts, name, module) when is_atom(name) do
+    if Macro.quoted_literal?(opts) do
+      raise Hologram.CompileError,
+        message:
+          ~s/the options for param "#{name}" in #{inspect(module)} must be a keyword list, got: / <>
+            Macro.to_string(opts)
+    end
+
+    :ok
+  end
+
+  defp validate_param_opts!(_opts, _name, _module), do: :ok
+
+  defp validate_param_opt_entry!({key, _value}, name, module) when is_atom(key) do
+    raise Hologram.CompileError,
+      message:
+        ~s/params don't support options yet, got #{inspect(key)} for param "#{name}" in #{inspect(module)}/
+  end
+
+  # An entry that is a literal but not a {atom, value} pair can only be a mistake - a string key, a
+  # bare atom in a list - so it is rejected rather than stored.
+  defp validate_param_opt_entry!(entry, name, module) do
+    if Macro.quoted_literal?(entry) do
+      raise Hologram.CompileError,
+        message:
+          ~s/invalid option #{Macro.to_string(entry)} for param "#{name}" in #{inspect(module)}, / <>
+            "options must be given as a keyword list"
+    end
+
+    :ok
   end
 end

@@ -1,11 +1,11 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Component.Module4 do
+defmodule Hologram.Test.Fixtures.Compiler.Module27 do
   use Hologram.Component
 
   prop :a, :string
-  prop :b, :integer, default: 222
+  prop :b, :string
 
   def template do
-    ~HOLO""
+    ~HOLO"Module27 template"
   end
 end

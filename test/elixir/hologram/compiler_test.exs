@@ -25,8 +25,18 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module24
   alias Hologram.Test.Fixtures.Compiler.Module25
   alias Hologram.Test.Fixtures.Compiler.Module26
+  alias Hologram.Test.Fixtures.Compiler.Module27
+  alias Hologram.Test.Fixtures.Compiler.Module28
+  alias Hologram.Test.Fixtures.Compiler.Module29
   alias Hologram.Test.Fixtures.Compiler.Module3
+  alias Hologram.Test.Fixtures.Compiler.Module30
+  alias Hologram.Test.Fixtures.Compiler.Module32
+  alias Hologram.Test.Fixtures.Compiler.Module34
+  alias Hologram.Test.Fixtures.Compiler.Module36
+  alias Hologram.Test.Fixtures.Compiler.Module37
+  alias Hologram.Test.Fixtures.Compiler.Module38
   alias Hologram.Test.Fixtures.Compiler.Module4
+  alias Hologram.Test.Fixtures.Compiler.Module40
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
 
@@ -37,6 +47,30 @@ defmodule Hologram.CompilerTest do
 
   @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
   @tmp_dir Reflection.tmp_dir()
+
+  # validate_prop_usages/2 walks a module's template/0, so hand-built DOM IR has to be wrapped the way
+  # a compiled module carries it. Built by hand rather than taken from a fixture module, because a
+  # fixture with a deliberately invalid usage would fail the compile.hologram Mix task tests.
+  defp module_ir_with_template(dom_ir) do
+    # The module field is left unset - the message names the module validate_prop_usages/2 was given,
+    # not the one recorded in the IR.
+    %IR.ModuleDefinition{
+      body: %IR.Block{
+        expressions: [
+          %IR.FunctionDefinition{
+            name: :template,
+            arity: 0,
+            visibility: :public,
+            clause: %IR.FunctionClause{
+              params: [],
+              guards: [],
+              body: %IR.Block{expressions: [dom_ir]}
+            }
+          }
+        ]
+      }
+    }
+  end
 
   defp setup_js_deps_test(test_subdir) do
     test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", test_subdir])
@@ -1079,6 +1113,62 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "list_component_usages/1" do
+    test "collects plain and nested usages, in template order" do
+      usages =
+        Module28
+        |> IR.for_module()
+        |> list_component_usages()
+
+      assert usages == [
+               {Module27, [{"a", {:ok, "1"}}, {"b", :unknown}], false},
+               {Module27, [{"a", {:ok, "2"}}], false},
+               {Module27, [{"b", {:ok, "3"}}], false}
+             ]
+    end
+
+    test "reports the value of a prop written as a literal expression" do
+      usages =
+        Module38
+        |> IR.for_module()
+        |> list_component_usages()
+
+      assert usages == [
+               {Module37, [{"size", {:ok, :small}}, {"label", {:ok, "abc"}}, {"free", :unknown}],
+                false}
+             ]
+    end
+
+    test "flags a usage carrying a spread" do
+      usages =
+        Module29
+        |> IR.for_module()
+        |> list_component_usages()
+
+      assert usages == [
+               {Module27, [{"a", {:ok, "1"}}], true}
+             ]
+    end
+
+    test "skips dynamic tags" do
+      usages =
+        Module30
+        |> IR.for_module()
+        |> list_component_usages()
+
+      assert usages == []
+    end
+
+    test "returns an empty list for a module without component usages" do
+      usages =
+        Module27
+        |> IR.for_module()
+        |> list_component_usages()
+
+      assert usages == []
+    end
+  end
+
   describe "maybe_install_js_deps/1" do
     setup do
       setup_js_deps_test("maybe_install_js_deps_1")
@@ -1428,6 +1518,177 @@ defmodule Hologram.CompilerTest do
 
     refute String.contains?(js, "Elixir.String.Chars.Version")
     refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+  end
+
+  describe "validate_prop_usages/2" do
+    test "doesn't raise when every required prop is written at the usage" do
+      plt = PLT.put(PLT.start(), Module32, IR.for_module(Module32))
+
+      assert validate_prop_usages([Module32], plt) == :ok
+    end
+
+    test "raises when a required prop is missing from the usage" do
+      # The offending usage is built as IR rather than as a file fixture, because a file fixture
+      # would raise in the compile.hologram Mix task tests, which compile the whole project.
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module31, [{"label", [text: "abc"]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.put(PLT.start(), Module32, module_ir_with_template(ir))
+
+      expected_msg =
+        "component Hologram.Test.Fixtures.Compiler.Module31 is missing required prop " <>
+          ~s/"size" in Hologram.Test.Fixtures.Compiler.Module32's template/
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_prop_usages([Module32], plt)
+      end
+    end
+
+    test "doesn't raise when the usage carries a spread" do
+      plt = PLT.put(PLT.start(), Module34, IR.for_module(Module34))
+
+      assert validate_prop_usages([Module34], plt) == :ok
+    end
+
+    test "doesn't raise when the required prop is sourced from context" do
+      plt = PLT.put(PLT.start(), Module36, IR.for_module(Module36))
+
+      assert validate_prop_usages([Module36], plt) == :ok
+    end
+
+    # A component node is an ordinary 4-tuple, so code outside the template can hold one without any
+    # template rendering it.
+    test "ignores a component tuple returned by a non-template function" do
+      plt = PLT.put(PLT.start(), Module40, IR.for_module(Module40))
+
+      assert validate_prop_usages([Module40], plt) == :ok
+    end
+
+    test "skips modules that are not in the IR PLT" do
+      assert validate_prop_usages([Module32], PLT.start()) == :ok
+    end
+
+    test "doesn't raise when a written value is in the prop's :values list" do
+      plt = PLT.put(PLT.start(), Module38, IR.for_module(Module38))
+
+      assert validate_prop_usages([Module38], plt) == :ok
+    end
+
+    test "raises when a literal expression value is not in the prop's :values list" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module37, [{"size", [expression: {:huge}]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
+
+      expected_msg =
+        ~s/prop "size" of component Hologram.Test.Fixtures.Compiler.Module37 must be one of / <>
+          "[:small, :large], got: :huge, " <>
+          "in Hologram.Test.Fixtures.Compiler.Module38's template"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_prop_usages([Module38], plt)
+      end
+    end
+
+    test "raises when a text value is not in the prop's :values list" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module37, [{"label", [text: "nope"]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
+
+      expected_msg =
+        ~s/prop "label" of component Hologram.Test.Fixtures.Compiler.Module37 must be one of / <>
+          ~s/["abc", "xyz"], got: "nope", / <>
+          "in Hologram.Test.Fixtures.Compiler.Module38's template"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_prop_usages([Module38], plt)
+      end
+    end
+
+    test "raises for a value written at a usage that also carries a spread" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module37, [{"size", [expression: {:huge}]}, {:spread, {vars.props}}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
+
+      expected_msg =
+        ~s/prop "size" of component Hologram.Test.Fixtures.Compiler.Module37 must be one of / <>
+          "[:small, :large], got: :huge, " <>
+          "in Hologram.Test.Fixtures.Compiler.Module38's template"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_prop_usages([Module38], plt)
+      end
+    end
+
+    test "raises when a composite literal value is not in the prop's :values list" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module39, [{"size", [expression: {[:huge]}]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
+
+      expected_msg =
+        ~s/prop "size" of component Hologram.Test.Fixtures.Compiler.Module39 must be one of / <>
+          "[[:small], [:large]], got: [:huge], " <>
+          "in Hologram.Test.Fixtures.Compiler.Module38's template"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_prop_usages([Module38], plt)
+      end
+    end
+
+    test "doesn't raise when a composite literal value is in the prop's :values list" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module39, [{"size", [expression: {[:small]}]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
+
+      assert validate_prop_usages([Module38], plt) == :ok
+    end
+
+    # One expression anywhere inside makes the whole composite unknowable until it runs.
+    test "doesn't raise when a composite value holds an expression" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module39, [{"size", [expression: {[vars.x]}]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
+
+      assert validate_prop_usages([Module38], plt) == :ok
+    end
+
+    test "doesn't raise when the value is not known at compile time" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module37, [{"size", [expression: {vars.x}]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.put(PLT.start(), Module38, module_ir_with_template(ir))
+
+      assert validate_prop_usages([Module38], plt) == :ok
+    end
   end
 
   describe "validate_page_modules/1" do
