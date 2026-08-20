@@ -13,13 +13,13 @@ defmodule Hologram.DB.QueryCompiler do
   physical name mapping.
 
   Returns a map with :sql (the statement string, identifiers quoted and
-  schema-qualified) and :params (the bind slots in placeholder order). Every filter
-  value binds as a placeholder - literal values are Codec-encoded at compilation into
+  schema-qualified) and :params (the bind slots in parameter order). Every filter
+  value binds as a parameter - literal values are Codec-encoded at compilation into
   `{:value, encoded}` slots (membership lists encode element-wise into one array
-  slot), param leaves become `{:param, name, type}` slots carrying the attribute's
+  slot), placeholder leaves become `{:placeholder, name, type}` slots carrying the attribute's
   logical type for runtime encoding (`{:list, type}` for membership operands). A
-  membership list holding param elements binds one slot per element inside a cast
-  ARRAY constructor instead - each element param is a scalar slot. Nil
+  membership list holding placeholder elements binds one slot per element inside a cast
+  ARRAY constructor instead - each element placeholder is a scalar slot. Nil
   equality compiles to `IS NULL` and nil inequality to `IS NOT NULL`, with no bind
   slot. Column selection follows the mapping's physical column order.
 
@@ -36,7 +36,7 @@ defmodule Hologram.DB.QueryCompiler do
   reference is. A to-many subselect aggregates the related set through its join table
   into a jsonb array (empty set = empty array), applying the sub-term's filter,
   ordering, and view bounds inside the aggregation - include param slots follow the
-  root's in placeholder order.
+  root's in parameter order.
 
   A compiled policy composes into the statement when one is given: its rules render as an
   OR group ANDed after the authored filter, so a row must satisfy the query and at least one
@@ -108,7 +108,7 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   # A rule referencing the actor cannot match without one, so an anonymous statement drops it
-  # rather than binding a nil param - at every nesting level, delegated policies included.
+  # rather than binding a nil placeholder - at every nesting level, delegated policies included.
   defp applicable_rules(rules, %{anonymous?: true}), do: Enum.reject(rules, &actor_gated?/1)
 
   defp applicable_rules(rules, _context), do: rules
@@ -131,8 +131,9 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  defp bind_slot({:param, param_name}, column, reversed_params) do
-    {"$#{length(reversed_params) + 1}", [{:param, param_name, column.type} | reversed_params]}
+  defp bind_slot({:placeholder, placeholder_name}, column, reversed_params) do
+    {"$#{length(reversed_params) + 1}",
+     [{:placeholder, placeholder_name, column.type} | reversed_params]}
   end
 
   defp bind_slot(literal, column, reversed_params) do
@@ -332,7 +333,7 @@ defmodule Hologram.DB.QueryCompiler do
 
     if Enum.any?(rendered_rules, &(&1 == :unconditional)) do
       # Dropping the group drops its placeholders, so the slots its rules bound go with it -
-      # a param the statement doesn't carry fails the bind.
+      # a placeholder the statement doesn't carry fails the bind.
       {[], reversed_params}
     else
       {[group_condition(rendered_rules)], new_params}
@@ -346,7 +347,7 @@ defmodule Hologram.DB.QueryCompiler do
     |> Enum.find(&(&1.name == name))
   end
 
-  # Enum values bind as params cast to their column type, so the lookup keeps using the grant
+  # Enum values bind as placeholders cast to their column type, so the lookup keeps using the grant
   # store's unique index - the same shape the in-memory grant lookups use.
   defp grant_exists_condition(reference, context, reversed_params) do
     role_names = reference_role_names(reference)
@@ -535,15 +536,15 @@ defmodule Hologram.DB.QueryCompiler do
     end)
   end
 
-  defp membership_slot({:param, param_name}, column, reversed_params) do
+  defp membership_slot({:placeholder, placeholder_name}, column, reversed_params) do
     {"$#{length(reversed_params) + 1}",
-     [{:param, param_name, {:list, column.type}} | reversed_params]}
+     [{:placeholder, placeholder_name, {:list, column.type}} | reversed_params]}
   end
 
-  # A list holding param elements binds one slot per element inside an ARRAY
-  # constructor - each element param is a scalar slot of the attribute's type.
+  # A list holding placeholder elements binds one slot per element inside an ARRAY
+  # constructor - each element placeholder is a scalar slot of the attribute's type.
   defp membership_slot(values, column, reversed_params) do
-    if Enum.any?(values, &match?({:param, _param_name}, &1)) do
+    if Enum.any?(values, &match?({:placeholder, _placeholder_name}, &1)) do
       {reversed_placeholders, new_params} =
         Enum.reduce(values, {[], reversed_params}, fn value, {acc_placeholders, acc_params} ->
           {placeholder, next_params} = bind_slot(value, column, acc_params)

@@ -7,11 +7,11 @@ defmodule Hologram.Query.Registry do
 
   @doc """
   Builds the query registry from the given normalized query terms - a map from
-  content id to an entry holding the term, its derived param shape, the window it
+  content id to an entry holding the term, its derived placeholder shape, the window it
   downloads and that window's id.
 
   The window is what a client keeps for the query, which is wider than what the
-  query answers whenever a param picks among rows the client should already hold -
+  query answers whenever a placeholder picks among rows the client should already hold -
   see `Hologram.Query.Window`. Its id is the content id of the window term, so
   queries downloading the same rows name one window between them. Structurally equal
   terms collapse into one entry.
@@ -22,7 +22,7 @@ defmodule Hologram.Query.Registry do
       window = Window.derive(term)
 
       entry = %{
-        param_shape: param_shape(term),
+        placeholder_shape: placeholder_shape(term),
         term: term,
         window: window,
         window_id: id(window)
@@ -70,19 +70,19 @@ defmodule Hologram.Query.Registry do
   end
 
   @doc """
-  Derives the param shape of the given normalized query term - a map from param name
-  to the logical type the param binds as.
+  Derives the placeholder shape of the given normalized query term - a map from placeholder name
+  to the logical type the placeholder binds as.
 
-  The term's filter predicates are walked recursively through its includes. A param
+  The term's filter predicates are walked recursively through its includes. A placeholder
   bound as a whole membership operand binds as a list of the attribute's logical
-  type - `{:list, type}` - a param as a membership list element or under any other
-  operator binds the attribute's type directly. A param met several times with one
+  type - `{:list, type}` - a placeholder as a membership list element or under any other
+  operator binds the attribute's type directly. A placeholder met several times with one
   type appears once.
 
-  Raises Hologram.CompileError when one param name meets conflicting types.
+  Raises Hologram.CompileError when one placeholder name meets conflicting types.
   """
-  @spec param_shape(%{atom => any}) :: %{atom => atom | {:list, atom}}
-  def param_shape(term) do
+  @spec placeholder_shape(%{atom => any}) :: %{atom => atom | {:list, atom}}
+  def placeholder_shape(term) do
     collect_params(term, %{})
   end
 
@@ -118,46 +118,53 @@ defmodule Hologram.Query.Registry do
     |> Enum.reduce(acc_with_own_attributes, &collect_sort_key_attributes/2)
   end
 
-  defp collect_param({name, operator, {:param, param_name}}, entity_type, acc) do
+  # A triple keyed by a placeholder contributes no shape: the attribute is unknown, so its type is
+  # unknown with it, and attribute_type/2's :uuid fallback (which exists for reference fields) would
+  # otherwise record a lie - and collide with the same placeholder's real type elsewhere, refusing a
+  # legitimate query. The same reason Hologram.Query.Window drops such a predicate.
+  defp collect_placeholder({{:placeholder, _key_name}, _operator, _value}, _entity_type, acc),
+    do: acc
+
+  defp collect_placeholder({name, operator, {:placeholder, placeholder_name}}, entity_type, acc) do
     base_type = attribute_type(entity_type, name)
     type = if operator in [:in, :not_in], do: {:list, base_type}, else: base_type
 
-    collect_param_type(acc, param_name, type)
+    collect_placeholder_type(acc, placeholder_name, type)
   end
 
-  # A param as a membership list element binds a single value of the
+  # A placeholder as a membership list element binds a single value of the
   # attribute's type.
-  defp collect_param({name, _operator, values}, entity_type, acc) when is_list(values) do
+  defp collect_placeholder({name, _operator, values}, entity_type, acc) when is_list(values) do
     base_type = attribute_type(entity_type, name)
 
     values
-    |> Enum.filter(&match?({:param, _param_name}, &1))
-    |> Enum.reduce(acc, fn {:param, param_name}, inner_acc ->
-      collect_param_type(inner_acc, param_name, base_type)
+    |> Enum.filter(&match?({:placeholder, _placeholder_name}, &1))
+    |> Enum.reduce(acc, fn {:placeholder, placeholder_name}, inner_acc ->
+      collect_placeholder_type(inner_acc, placeholder_name, base_type)
     end)
   end
 
-  defp collect_param(_triple, _entity_type, acc), do: acc
+  defp collect_placeholder(_triple, _entity_type, acc), do: acc
 
-  defp collect_param_type(acc, param_name, type) do
+  defp collect_placeholder_type(acc, placeholder_name, type) do
     case acc do
-      %{^param_name => ^type} ->
+      %{^placeholder_name => ^type} ->
         acc
 
-      %{^param_name => existing_type} ->
+      %{^placeholder_name => existing_type} ->
         raise Hologram.CompileError,
           message:
-            "param #{inspect(param_name)} binds as #{inspect(existing_type)} and #{inspect(type)} - rename one of the conflicting variables"
+            "placeholder #{inspect(placeholder_name)} binds as #{inspect(existing_type)} and #{inspect(type)} - rename one of the conflicting variables"
 
       _acc ->
-        Map.put(acc, param_name, type)
+        Map.put(acc, placeholder_name, type)
     end
   end
 
   defp collect_params(term, acc) do
     filter_acc =
       Enum.reduce(term.filter, acc, fn triple, inner_acc ->
-        collect_param(triple, term.entity, inner_acc)
+        collect_placeholder(triple, term.entity, inner_acc)
       end)
 
     Enum.reduce(term.include, filter_acc, fn {_name, sub_term}, inner_acc ->

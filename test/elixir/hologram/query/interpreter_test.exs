@@ -12,7 +12,7 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
   alias Hologram.Query
-  alias Hologram.Query.Param
+  alias Hologram.Query.Placeholder
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -392,7 +392,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - params" do
+  describe "run/3 - placeholders" do
     setup do
       %{
         first: module_10(count: 1, priority: 1, username: "ada"),
@@ -400,14 +400,14 @@ defmodule Hologram.Query.InterpreterTest do
       }
     end
 
-    test "matches against the value bound to a param" do
-      query = filter(Module10, priority: %Param{name: :priority})
+    test "matches against the value bound to a placeholder" do
+      query = filter(Module10, priority: %Placeholder{name: :priority})
 
       assert matched_names(agreed(query, bindings: %{priority: 3})) == ["bob"]
     end
 
-    test "matches against a list bound to a param" do
-      query = filter(Module10, priority: {:in, %Param{name: :priorities}})
+    test "matches against a list bound to a placeholder" do
+      query = filter(Module10, priority: {:in, %Placeholder{name: :priorities}})
 
       assert matched_names(agreed(query, bindings: %{priorities: [1, 3]})) == ["ada", "bob"]
     end
@@ -416,13 +416,13 @@ defmodule Hologram.Query.InterpreterTest do
     # binding the caller did not give is a caller error here too, rather than a filter nothing
     # passes. Each refusal is asserted of BOTH, which is the only way the messages are held
     # together.
-    test "refuses a param the bindings do not name, as the database does" do
+    test "refuses a placeholder the bindings do not name, as the database does" do
       term =
         Module10
-        |> filter(priority: %Param{name: :priority})
+        |> filter(priority: %Placeholder{name: :priority})
         |> Query.normalize()
 
-      expected_msg = "missing value for param :priority"
+      expected_msg = "missing value for placeholder :priority"
 
       assert_error ArgumentError, expected_msg, fn ->
         QueryRunner.run(term, @mapping, %{})
@@ -433,13 +433,13 @@ defmodule Hologram.Query.InterpreterTest do
       end
     end
 
-    test "refuses a nil value bound to a param, as the database does" do
+    test "refuses a nil value bound to a placeholder, as the database does" do
       term =
         Module10
-        |> filter(priority: %Param{name: :priority})
+        |> filter(priority: %Placeholder{name: :priority})
         |> Query.normalize()
 
-      expected_msg = "nil value for param :priority - use an explicit nil predicate instead"
+      expected_msg = "nil value for placeholder :priority - use an explicit nil predicate instead"
 
       assert_error ArgumentError, expected_msg, fn ->
         QueryRunner.run(term, @mapping, %{priority: nil})
@@ -452,14 +452,14 @@ defmodule Hologram.Query.InterpreterTest do
 
     # A literal list may name nil - it is part of a term rather than a value handed to one - so
     # the refusal is of the BINDING, not of the operator it feeds.
-    test "refuses a nil element in a list bound to a param, as the database does" do
+    test "refuses a nil element in a list bound to a placeholder, as the database does" do
       term =
         Module10
-        |> filter(priority: {:in, %Param{name: :priorities}})
+        |> filter(priority: {:in, %Placeholder{name: :priorities}})
         |> Query.normalize()
 
       expected_msg =
-        "nil element in the list for param :priorities - use an explicit nil predicate instead"
+        "nil element in the list for placeholder :priorities - use an explicit nil predicate instead"
 
       assert_error ArgumentError, expected_msg, fn ->
         QueryRunner.run(term, @mapping, %{priorities: [nil, 3]})

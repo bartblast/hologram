@@ -3,7 +3,7 @@ defmodule Hologram.QueryTest do
 
   import Hologram.Query
 
-  alias Hologram.Query.Param
+  alias Hologram.Query.Placeholder
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
@@ -57,40 +57,58 @@ defmodule Hologram.QueryTest do
   end
 
   describe "filter/2" do
-    test "accepts a param sentinel as a bare equality value" do
-      query = filter(Module2, b: %Param{name: :bound})
+    test "accepts a placeholder sentinel as a bare equality value" do
+      query = filter(Module2, b: %Placeholder{name: :bound})
 
-      assert query.filter == [{:b, :==, {:param, :bound}}]
+      assert query.filter == [{:b, :==, {:placeholder, :bound}}]
     end
 
-    test "accepts a param sentinel as a membership list element" do
-      query = filter(Module2, b: [%Param{name: :bound}, 1])
+    test "accepts a placeholder sentinel as a membership list element" do
+      query = filter(Module2, b: [%Placeholder{name: :bound}, 1])
 
-      assert query.filter == [{:b, :in, [{:param, :bound}, 1]}]
+      assert query.filter == [{:b, :in, [{:placeholder, :bound}, 1]}]
     end
 
-    test "accepts a param sentinel as a membership operand" do
-      query = filter(Module2, b: {:in, %Param{name: :ids}})
+    test "accepts a placeholder sentinel as a membership operand" do
+      query = filter(Module2, b: {:in, %Placeholder{name: :ids}})
 
-      assert query.filter == [{:b, :in, {:param, :ids}}]
+      assert query.filter == [{:b, :in, {:placeholder, :ids}}]
     end
 
-    test "accepts a param sentinel as a membership operator element" do
-      query = filter(Module2, b: {:in, [%Param{name: :bound}, 1]})
+    test "accepts a placeholder sentinel as a membership operator element" do
+      query = filter(Module2, b: {:in, [%Placeholder{name: :bound}, 1]})
 
-      assert query.filter == [{:b, :in, [{:param, :bound}, 1]}]
+      assert query.filter == [{:b, :in, [{:placeholder, :bound}, 1]}]
     end
 
-    test "accepts a param sentinel in an inequality operator tuple" do
-      query = filter(Module2, c: {:!=, %Param{name: :search}})
+    test "accepts a placeholder sentinel as an attribute name" do
+      query = filter(Module2, [{%Placeholder{name: :field}, 5}])
 
-      assert query.filter == [{:c, :!=, {:param, :search}}]
+      assert query.filter == [{{:placeholder, :field}, :==, 5}]
     end
 
-    test "accepts a param sentinel in an ordering operator tuple" do
-      query = filter(Module2, b: {:>=, %Param{name: :min}})
+    test "accepts a placeholder sentinel as an attribute name with an operator" do
+      query = filter(Module2, [{%Placeholder{name: :field}, {:>=, 5}}])
 
-      assert query.filter == [{:b, :>=, {:param, :min}}]
+      assert query.filter == [{{:placeholder, :field}, :>=, 5}]
+    end
+
+    test "accepts a placeholder sentinel as an attribute name with a placeholder value" do
+      query = filter(Module2, [{%Placeholder{name: :field}, %Placeholder{name: :value}}])
+
+      assert query.filter == [{{:placeholder, :field}, :==, {:placeholder, :value}}]
+    end
+
+    test "accepts a placeholder sentinel in an inequality operator tuple" do
+      query = filter(Module2, c: {:!=, %Placeholder{name: :search}})
+
+      assert query.filter == [{:c, :!=, {:placeholder, :search}}]
+    end
+
+    test "accepts a placeholder sentinel in an ordering operator tuple" do
+      query = filter(Module2, b: {:>=, %Placeholder{name: :min}})
+
+      assert query.filter == [{:b, :>=, {:placeholder, :min}}]
     end
 
     test "accepts an explicit equality operator tuple" do
@@ -129,10 +147,10 @@ defmodule Hologram.QueryTest do
       assert query.filter == [{:b_id, :in, [nil, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"]}]
     end
 
-    test "accepts a param sentinel on a to-one reference field" do
-      query = filter(Module3, c_id: %Param{name: :owner})
+    test "accepts a placeholder sentinel on a to-one reference field" do
+      query = filter(Module3, c_id: %Placeholder{name: :owner})
 
-      assert query.filter == [{:c_id, :==, {:param, :owner}}]
+      assert query.filter == [{:c_id, :==, {:placeholder, :owner}}]
     end
 
     test "accumulates repeated filters on the same attribute" do
@@ -326,12 +344,12 @@ defmodule Hologram.QueryTest do
       end
     end
 
-    test "raises on a param ordering comparison on a string attribute" do
+    test "raises on a placeholder ordering comparison on a string attribute" do
       expected_msg =
         "operator :>= requires a numeric or temporal attribute - attribute :c in Hologram.Test.Fixtures.Entity.Module2 has type :string"
 
       assert_error ArgumentError, expected_msg, fn ->
-        filter(Module2, c: {:>=, %Param{name: :min}})
+        filter(Module2, c: {:>=, %Placeholder{name: :min}})
       end
     end
 
@@ -491,12 +509,12 @@ defmodule Hologram.QueryTest do
       end
     end
 
-    test "raises on an unknown operator with a param operand" do
+    test "raises on an unknown operator with a placeholder operand" do
       expected_msg =
         "unknown operator :like in the filter predicate for attribute :b - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
 
       assert_error ArgumentError, expected_msg, fn ->
-        filter(Module2, b: {:like, %Param{name: :x}})
+        filter(Module2, b: {:like, %Placeholder{name: :x}})
       end
     end
 
@@ -718,6 +736,12 @@ defmodule Hologram.QueryTest do
   end
 
   describe "limit/2" do
+    test "accepts a placeholder" do
+      query = limit(Module2, %Placeholder{name: :size})
+
+      assert query.limit == {:placeholder, :size}
+    end
+
     test "accepts zero" do
       query = limit(Module2, 0)
 
@@ -732,6 +756,15 @@ defmodule Hologram.QueryTest do
 
       assert query.filter == [{:a, :==, true}]
       assert query.limit == 50
+    end
+
+    test "replaces a prior limit" do
+      query =
+        Module2
+        |> limit(50)
+        |> limit(100)
+
+      assert query.limit == 100
     end
 
     test "sets the limit" do
@@ -761,19 +794,18 @@ defmodule Hologram.QueryTest do
         limit(Module2, wrap_term(5.0))
       end
     end
-
-    test "raises when the limit is already set" do
-      expected_msg = "limit is already set to 50"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        Module2
-        |> limit(50)
-        |> limit(100)
-      end
-    end
   end
 
   describe "normalize/1" do
+    test "appends an ascending id tiebreaker after a placeholder ordering key" do
+      query =
+        Module2
+        |> order_by(%Placeholder{name: :sort})
+        |> normalize()
+
+      assert query.order_by == [{{:placeholder, :sort}, :asc}, {:id, :asc}]
+    end
+
     test "appends an ascending id tiebreaker to orderings" do
       query =
         Module2
@@ -867,6 +899,21 @@ defmodule Hologram.QueryTest do
   end
 
   describe "offset/2" do
+    test "accepts a placeholder" do
+      query = offset(Module2, %Placeholder{name: :start})
+
+      assert query.offset == {:placeholder, :start}
+    end
+
+    test "replaces a prior offset" do
+      query =
+        Module2
+        |> offset(20)
+        |> offset(40)
+
+      assert query.offset == 40
+    end
+
     test "sets the offset" do
       assert offset(Module2, 20) == %{
                cardinality: :set,
@@ -944,13 +991,22 @@ defmodule Hologram.QueryTest do
       assert query.order_by == [{:c, :asc}, {:b, :desc}]
     end
 
-    test "appends to prior ordering" do
-      query =
-        Module2
-        |> order_by(:c)
-        |> order_by(b: :desc)
+    test "accepts a placeholder as a bare spec" do
+      query = order_by(Module2, %Placeholder{name: :sort})
 
-      assert query.order_by == [{:c, :asc}, {:b, :desc}]
+      assert query.order_by == [{{:placeholder, :sort}, :asc}]
+    end
+
+    test "accepts a placeholder as a direction" do
+      query = order_by(Module2, c: %Placeholder{name: :dir})
+
+      assert query.order_by == [{:c, {:placeholder, :dir}}]
+    end
+
+    test "accepts a placeholder as an ordering key" do
+      query = order_by(Module2, [{%Placeholder{name: :sort}, :desc}])
+
+      assert query.order_by == [{{:placeholder, :sort}, :desc}]
     end
 
     test "composes with filtering" do
@@ -985,6 +1041,15 @@ defmodule Hologram.QueryTest do
       query = order_by(Module2, :created_at)
 
       assert query.order_by == [{:created_at, :asc}]
+    end
+
+    test "replaces prior ordering" do
+      query =
+        Module2
+        |> order_by(:c)
+        |> order_by(b: :desc)
+
+      assert query.order_by == [{:b, :desc}]
     end
 
     test "raises on a non-atom spec" do
@@ -1050,11 +1115,35 @@ defmodule Hologram.QueryTest do
   end
 
   describe "paginate/2" do
+    test "accepts a placeholder page" do
+      query = paginate(Module2, page: %Placeholder{name: :page}, size: 20)
+
+      assert query.offset == {:placeholder, :page}
+      assert query.limit == 20
+    end
+
+    test "accepts a placeholder size" do
+      query = paginate(Module2, page: 3, size: %Placeholder{name: :size})
+
+      assert query.offset == {:placeholder, :size}
+      assert query.limit == {:placeholder, :size}
+    end
+
     test "computes a zero offset for the first page" do
       query = paginate(Module2, page: 1, size: 20)
 
       assert query.limit == 20
       assert query.offset == 0
+    end
+
+    test "replaces prior view bounds" do
+      query =
+        Module2
+        |> limit(10)
+        |> paginate(page: 2, size: 20)
+
+      assert query.limit == 20
+      assert query.offset == 20
     end
 
     test "sets the view bounds from page and size" do
@@ -1109,22 +1198,36 @@ defmodule Hologram.QueryTest do
       end
     end
 
-    test "raises when the limit is already set" do
-      expected_msg = "limit is already set to 10"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        Module2
-        |> limit(10)
-        |> paginate(page: 2, size: 20)
-      end
-    end
-
     test "raises when the page option is missing" do
       expected_msg = "paginate requires the :page option"
 
       assert_error ArgumentError, expected_msg, fn ->
         paginate(Module2, size: 20)
       end
+    end
+  end
+
+  describe "placeholder_names/1" do
+    test "collects placeholders from every position of a term" do
+      query =
+        Module2
+        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> filter([{%Placeholder{name: :field}, 5}])
+        |> limit(%Placeholder{name: :size})
+        |> offset(%Placeholder{name: :start})
+        |> order_by([{%Placeholder{name: :sort}, %Placeholder{name: :dir}}])
+
+      assert placeholder_names(query) == [:min_b, :field, :size, :start, :sort, :dir]
+    end
+
+    test "collects placeholders from include sub-terms" do
+      query = include(Module3, :a, &filter(&1, c: %Placeholder{name: :owner}))
+
+      assert placeholder_names(query) == [:owner]
+    end
+
+    test "yields an empty list for a concrete term" do
+      assert placeholder_names(filter(Module2, a: true)) == []
     end
   end
 end

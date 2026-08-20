@@ -19,13 +19,13 @@ defmodule Hologram.DB.QueryRunner do
   their NotIncluded defaults. Param values are given in the bindings map and encoded
   with the slot's logical type.
 
-  Bindings are validated before execution: a binding for a param the query does not
+  Bindings are validated before execution: a binding for a placeholder the query does not
   define raises, and each given value must match the logical type of the attribute
-  its param meets, enum membership included. A membership param takes a list whose
+  its placeholder meets, enum membership included. A membership placeholder takes a list whose
   elements are validated the same way - an empty list is legal and matches nothing.
 
-  Raises ArgumentError when a binding is invalid, when a param value is missing, or
-  when a param value or list element is nil - a sometimes-nil variable branches into
+  Raises ArgumentError when a binding is invalid, when a placeholder value is missing, or
+  when a placeholder value or list element is nil - a sometimes-nil variable branches into
   an explicit nil predicate instead.
   """
   @spec run(%{atom => any}, %{module => %{atom => any}}, %{atom => any}) ::
@@ -64,7 +64,7 @@ defmodule Hologram.DB.QueryRunner do
   end
 
   # A name matching no attribute definition is a to-one reference field - every reference
-  # column carries the entity id type, and a bound value is never nil (nil params raise).
+  # column carries the entity id type, and a bound value is never nil (nil placeholders raise).
   defp attribute_definition(entity_type, attribute_name) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 
@@ -74,47 +74,47 @@ defmodule Hologram.DB.QueryRunner do
     end
   end
 
-  # Conflicts mirror the registry's param-shape rule: one param name binds one
+  # Conflicts mirror the registry's placeholder-shape rule: one placeholder name binds one
   # logical type - identical rebinding is reuse, a differing kind or type raises.
   defp binding_description(:list, type), do: inspect({:list, type})
 
   defp binding_description(:scalar, type), do: inspect(type)
 
-  # Conflicts mirror the registry's param-shape rule: one param name binds one
+  # Conflicts mirror the registry's placeholder-shape rule: one placeholder name binds one
   # logical type - identical rebinding is reuse, a differing kind or type raises.
-  defp collect_definition(acc, param_name, {kind, type, _opts} = definition) do
-    case Map.fetch(acc, param_name) do
+  defp collect_definition(acc, placeholder_name, {kind, type, _opts} = definition) do
+    case Map.fetch(acc, placeholder_name) do
       {:ok, {^kind, ^type, _existing_opts}} ->
         acc
 
       {:ok, {existing_kind, existing_type, _existing_opts}} ->
         raise ArgumentError,
           message:
-            "param #{inspect(param_name)} binds as #{binding_description(existing_kind, existing_type)} and #{binding_description(kind, type)} - rename one of the conflicting variables"
+            "placeholder #{inspect(placeholder_name)} binds as #{binding_description(existing_kind, existing_type)} and #{binding_description(kind, type)} - rename one of the conflicting variables"
 
       :error ->
-        Map.put(acc, param_name, definition)
+        Map.put(acc, placeholder_name, definition)
     end
   end
 
-  # A param as a membership list element binds a single value of the attribute's
+  # A placeholder as a membership list element binds a single value of the attribute's
   # type.
   defp collect_param_definitions(term, acc) do
     acc_with_filters =
       Enum.reduce(term.filter, acc, fn
-        {attribute_name, operator, {:param, param_name}}, inner_acc ->
+        {attribute_name, operator, {:placeholder, placeholder_name}}, inner_acc ->
           {type, opts} = attribute_definition(term.entity, attribute_name)
           kind = if operator in [:in, :not_in], do: :list, else: :scalar
 
-          collect_definition(inner_acc, param_name, {kind, type, opts})
+          collect_definition(inner_acc, placeholder_name, {kind, type, opts})
 
         {attribute_name, _operator, values}, inner_acc when is_list(values) ->
           {type, opts} = attribute_definition(term.entity, attribute_name)
 
           values
-          |> Enum.filter(&match?({:param, _param_name}, &1))
-          |> Enum.reduce(inner_acc, fn {:param, param_name}, deeper_acc ->
-            collect_definition(deeper_acc, param_name, {:scalar, type, opts})
+          |> Enum.filter(&match?({:placeholder, _placeholder_name}, &1))
+          |> Enum.reduce(inner_acc, fn {:placeholder, placeholder_name}, deeper_acc ->
+            collect_definition(deeper_acc, placeholder_name, {:scalar, type, opts})
           end)
 
         _triple, inner_acc ->
@@ -220,7 +220,7 @@ defmodule Hologram.DB.QueryRunner do
       nil ->
         raise ArgumentError,
           message:
-            "nil element in the list for param #{inspect(name)} - use an explicit nil predicate instead"
+            "nil element in the list for placeholder #{inspect(name)} - use an explicit nil predicate instead"
 
       value ->
         Codec.encode(value, type)
@@ -255,14 +255,15 @@ defmodule Hologram.DB.QueryRunner do
 
   defp resolve_param!({:value, encoded_value}, _bindings), do: encoded_value
 
-  defp resolve_param!({:param, name, type}, bindings) do
+  defp resolve_param!({:placeholder, name, type}, bindings) do
     case Map.fetch(bindings, name) do
       :error ->
-        raise ArgumentError, message: "missing value for param #{inspect(name)}"
+        raise ArgumentError, message: "missing value for placeholder #{inspect(name)}"
 
       {:ok, nil} ->
         raise ArgumentError,
-          message: "nil value for param #{inspect(name)} - use an explicit nil predicate instead"
+          message:
+            "nil value for placeholder #{inspect(name)} - use an explicit nil predicate instead"
 
       {:ok, value} ->
         encode_param!(value, name, type)
@@ -278,7 +279,7 @@ defmodule Hologram.DB.QueryRunner do
         if not Validator.attribute_value_valid?(value, type, opts) do
           raise ArgumentError,
             message:
-              "invalid element #{inspect(value)} in the list for param #{inspect(name)} - expected #{expected_description(type, opts)}"
+              "invalid element #{inspect(value)} in the list for placeholder #{inspect(name)} - expected #{expected_description(type, opts)}"
         end
     end)
   end
@@ -286,14 +287,14 @@ defmodule Hologram.DB.QueryRunner do
   defp validate_binding!(name, value, :list, _type, _opts) do
     raise ArgumentError,
       message:
-        "non-list value #{inspect(value)} for param #{inspect(name)} - the param binds a membership list"
+        "non-list value #{inspect(value)} for placeholder #{inspect(name)} - the placeholder binds a membership list"
   end
 
   defp validate_binding!(name, value, :scalar, type, opts) do
     if not Validator.attribute_value_valid?(value, type, opts) do
       raise ArgumentError,
         message:
-          "invalid value #{inspect(value)} for param #{inspect(name)} - expected #{expected_description(type, opts)}"
+          "invalid value #{inspect(value)} for placeholder #{inspect(name)} - expected #{expected_description(type, opts)}"
     end
 
     :ok
@@ -330,13 +331,13 @@ defmodule Hologram.DB.QueryRunner do
 
       description =
         if defined_names == [] do
-          "the query defines no params"
+          "the query defines no placeholders"
         else
-          "the query defines params #{inspect(defined_names)}"
+          "the query defines placeholders #{inspect(defined_names)}"
         end
 
       raise ArgumentError,
-        message: "unknown param #{inspect(hd(unknown_names))} in bindings - #{description}"
+        message: "unknown placeholder #{inspect(hd(unknown_names))} in bindings - #{description}"
     end
 
     :ok

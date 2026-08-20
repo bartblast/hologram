@@ -1,7 +1,7 @@
 defmodule Hologram.Query do
   @moduledoc false
 
-  alias Hologram.Query.Param
+  alias Hologram.Query.Placeholder
   alias Hologram.Reflection
 
   defmacro __using__(_opts) do
@@ -79,15 +79,28 @@ defmodule Hologram.Query do
   a nil element means the membership matches missing values too (`[nil, :done]` reads
   "done or unset"), and negated membership without nil matches missing values.
 
-  A `Hologram.Query.Param` struct in a value position - bare, as an operator-tuple
+  A `Hologram.Query.Placeholder` struct in a value position - bare, as an operator-tuple
   operand, or as a membership list element - stands for a runtime-bound value: the
-  triple stores a `{:param, name}` leaf instead of a concrete value, and value
-  validation is skipped (the concrete value is validated when the param binds at
-  execution). A membership-element param binds a single value of the attribute's
+  triple stores a `{:placeholder, name}` leaf instead of a concrete value, and value
+  validation is skipped (the concrete value is validated when the placeholder binds at
+  execution). A membership-element placeholder binds a single value of the attribute's
   type. Ordering comparisons still require an orderable attribute.
 
+  A placeholder also stands where an ordering key or its direction goes (`order_by(query, sort)`,
+  `order_by(query, name: dir)`), where a view bound goes (`limit(query, size)`,
+  `offset(query, start)`), and where a filtered attribute's name goes
+  (`filter(query, [{attribute, value}])`), storing a `{:placeholder, name}` leaf in place of the
+  attribute, the direction or the bound, and skipping the checks that would need a concrete
+  one. A placeholder-keyed predicate leaves its operand unchecked too - the attribute's type is
+  unknown, so nothing about the operand can be judged against it.
+
+  A leaf names the ARGUMENT a value came from, not the value: a computed operand carries the name
+  of the argument it derives from, so `b: n * 2` stores `{:placeholder, :n}`. Nothing binds a leaf
+  back to a value - both execution tiers call the builder with real values and normalize THAT - so
+  the name serves reading a term, never evaluating one.
+
   To-one reference fields (`<relationship name>_id`) are filterable alongside attributes -
-  they carry the `:uuid` type, so they take equality, membership and param values, while
+  they carry the `:uuid` type, so they take equality, membership and placeholder values, while
   ordering comparisons and ranges reject them like any other non-orderable type. To-many
   relationships have no reference field, and neither relationship name itself is filterable.
 
@@ -100,7 +113,7 @@ defmodule Hologram.Query do
   def filter(query, predicates) do
     term = to_term(query)
 
-    if not Keyword.keyword?(predicates) do
+    if not filterable_predicates?(predicates) do
       raise ArgumentError,
         message: "filter predicates must be a keyword list, got: #{inspect(predicates)}"
     end
@@ -200,10 +213,10 @@ defmodule Hologram.Query do
 
   The query is an entity type module (starting a fresh query term) or an already built
   query term. The limit is a non-negative integer. It bounds what the query evaluates
-  to, not the underlying data.
+  to, not the underlying data. A later call replaces a limit an earlier one set.
 
   Raises ArgumentError when the query is neither an entity type module nor a query
-  term, when the limit is not a non-negative integer, or when the limit is already set.
+  term, or when the limit is not a non-negative integer.
   """
   @spec limit(module | %{atom => any}, non_neg_integer) :: %{atom => any}
   def limit(query, value) do
@@ -232,11 +245,10 @@ defmodule Hologram.Query do
 
   The query is an entity type module (starting a fresh query term) or an already built
   query term. The offset is a non-negative integer. It slices what the query evaluates
-  to, not the underlying data.
+  to, not the underlying data. A later call replaces an offset an earlier one set.
 
   Raises ArgumentError when the query is neither an entity type module nor a query
-  term, when the offset is not a non-negative integer, or when the offset is already
-  set.
+  term, or when the offset is not a non-negative integer.
   """
   @spec offset(module | %{atom => any}, non_neg_integer) :: %{atom => any}
   def offset(query, value) do
@@ -267,14 +279,17 @@ defmodule Hologram.Query do
   end
 
   @doc """
-  Appends ordering keys to the given query's order list and returns the resulting
-  query term.
+  Sets the given query's ordering keys and returns the resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built
   query term. The spec is an attribute name (ascending), or a list whose entries are
   attribute names (ascending) or `{attribute, :asc | :desc}` tuples - keyword syntax
   reads naturally (`order_by(query, title: :desc)`). Each entry becomes an
-  `{attribute, direction}` pair, appended in the given order, accumulating across calls.
+  `{attribute, direction}` pair, in the given order.
+
+  An ordering is atomic - a later call replaces the ordering an earlier one set rather
+  than adding to it. Precedence is positional, so an ordering states itself in one place
+  or not at all.
 
   Ordering by enum attributes is not supported - the two execution tiers disagree on
   enum order (PostgreSQL uses declaration order, the client would use term order).
@@ -290,7 +305,7 @@ defmodule Hologram.Query do
 
     entries = order_entries!(spec, term.entity)
 
-    %{term | order_by: term.order_by ++ entries}
+    %{term | order_by: entries}
   end
 
   @doc """
@@ -301,11 +316,13 @@ defmodule Hologram.Query do
   query term. Options are `page:` (a positive integer, 1-based) and `size:` (a positive
   integer, the number of results per page), both required. Pagination expands into the
   offset and limit view bounds - `paginate(page: 2, size: 20)` sets offset 20 and
-  limit 20 - and slices what the query evaluates to, not the underlying data.
+  limit 20 - and slices what the query evaluates to, not the underlying data, replacing
+  view bounds already set. Either option may be a placeholder, which makes the bounds it feeds
+  placeholders too.
 
   Raises ArgumentError when the query is neither an entity type module nor a query
-  term, when the options are not a keyword list holding exactly :page and :size, when
-  either option is not a positive integer, or when the limit or offset is already set.
+  term, when the options are not a keyword list holding exactly :page and :size, or when
+  either option is not a positive integer.
   """
   @spec paginate(module | %{atom => any}, keyword) :: %{atom => any}
   def paginate(query, opts) do
@@ -326,36 +343,55 @@ defmodule Hologram.Query do
     size = validate_paginate_option!(opts, :size)
 
     query
-    |> offset((page - 1) * size)
+    |> offset(paginate_offset(page, size))
     |> limit(size)
   end
 
   @doc """
-  Returns the names of every param leaf in the given query term, filter values and
-  include sub-terms included - an empty list for a term with concrete values only.
+  Returns the names of every placeholder leaf in the given query term, filter attributes and
+  values, view bounds, ordering keys and directions, and include sub-terms included - an
+  empty list for a term with concrete values only.
   """
-  @spec param_names(%{atom => any}) :: list(atom)
-  def param_names(term) do
+  @spec placeholder_names(%{atom => any}) :: list(atom)
+  def placeholder_names(term) do
     filter_names =
       term
       |> Map.get(:filter, [])
-      |> Enum.flat_map(fn {_name, _operator, value} -> value_param_names(value) end)
+      |> Enum.flat_map(fn {name, _operator, value} ->
+        value_placeholder_names(name) ++ value_placeholder_names(value)
+      end)
+
+    bound_names =
+      [:limit, :offset]
+      |> Enum.map(&Map.get(term, &1))
+      |> Enum.flat_map(&value_placeholder_names/1)
+
+    order_names =
+      term
+      |> Map.get(:order_by, [])
+      |> Enum.flat_map(fn {key, direction} ->
+        value_placeholder_names(key) ++ value_placeholder_names(direction)
+      end)
 
     include_names =
       term
       |> Map.get(:include, %{})
       |> Map.values()
-      |> Enum.flat_map(&param_names/1)
+      |> Enum.flat_map(&placeholder_names/1)
 
-    filter_names ++ include_names
+    filter_names ++ bound_names ++ order_names ++ include_names
   end
 
   @doc false
   @spec predicate_triples!(module, keyword) :: list({atom, atom, any})
   def predicate_triples!(entity_type, predicates) do
-    Enum.flat_map(predicates, fn {name, value} ->
-      validate_filtered_name!(name, entity_type)
-      predicate_triples!(name, value, entity_type)
+    Enum.flat_map(predicates, fn
+      {%Placeholder{name: placeholder_name}, value} ->
+        [placeholder_key_triple(placeholder_name, value)]
+
+      {name, value} ->
+        validate_filtered_name!(name, entity_type)
+        predicate_triples!(name, value, entity_type)
     end)
   end
 
@@ -381,6 +417,36 @@ defmodule Hologram.Query do
   defp constraint_tuple?(value) do
     is_tuple(value) and tuple_size(value) == 2 and is_atom(elem(value, 0))
   end
+
+  # Keyword.keyword?/1 with placeholder keys admitted - a placeholder names an attribute nobody knows yet.
+  defp filterable_predicates?(predicates) when is_list(predicates) do
+    Enum.all?(predicates, fn
+      {%Placeholder{}, _value} -> true
+      {name, _value} when is_atom(name) -> true
+      _entry -> false
+    end)
+  end
+
+  defp filterable_predicates?(_predicates), do: false
+
+  # Nothing about a placeholder-keyed predicate can be checked - the attribute is unknown, so its type,
+  # its operators and its operand's shape are all unknown with it. The triple records what was
+  # written and Hologram.Query.Window drops it from the download, the real builder validating for
+  # real once the attribute arrives.
+  defp placeholder_key_triple(placeholder_name, {operator, value}) when is_atom(operator) do
+    {{:placeholder, placeholder_name}, operator, placeholder_operand(value)}
+  end
+
+  defp placeholder_key_triple(placeholder_name, value) do
+    {{:placeholder, placeholder_name}, :==, placeholder_operand(value)}
+  end
+
+  defp placeholder_operand(%Placeholder{name: placeholder_name}),
+    do: {:placeholder, placeholder_name}
+
+  defp placeholder_operand(values) when is_list(values), do: normalize_membership_values(values)
+
+  defp placeholder_operand(value), do: value
 
   defp filterable_names(entity_type) do
     Enum.sort(attribute_names(entity_type) ++ reference_field_names(entity_type))
@@ -460,6 +526,24 @@ defmodule Hologram.Query do
     }
   end
 
+  defp order_direction!(%Placeholder{name: placeholder_name}, _key),
+    do: {:placeholder, placeholder_name}
+
+  defp order_direction!(direction, _key) when direction in @directions, do: direction
+
+  defp order_direction!(direction, key) do
+    raise ArgumentError,
+      message:
+        "invalid direction #{inspect(direction)} for attribute #{inspect(key)} - use :asc or :desc"
+  end
+
+  # A placeholder spec binds either a single ordering key or a whole spec list at execution - the build
+  # cannot tell which, and does not need to: the registered term's ordering is dead weight, since
+  # Hologram.Query.Window empties it. One entry stands for whatever arrives.
+  defp order_entries!(%Placeholder{name: placeholder_name}, _entity_type) do
+    [{{:placeholder, placeholder_name}, :asc}]
+  end
+
   defp order_entries!(name, entity_type) when is_atom(name) do
     [order_entry!(name, entity_type)]
   end
@@ -475,7 +559,7 @@ defmodule Hologram.Query do
 
   defp normalize_membership_values(values) do
     Enum.map(values, fn
-      %Param{name: param_name} -> {:param, param_name}
+      %Placeholder{name: placeholder_name} -> {:placeholder, placeholder_name}
       value -> value
     end)
   end
@@ -483,13 +567,17 @@ defmodule Hologram.Query do
   defp order_entry!({name, direction}, entity_type) when is_atom(name) do
     validate_ordered_attribute!(name, entity_type)
 
-    if direction not in @directions do
-      raise ArgumentError,
-        message:
-          "invalid direction #{inspect(direction)} for attribute #{inspect(name)} - use :asc or :desc"
-    end
+    {name, order_direction!(direction, name)}
+  end
 
-    {name, direction}
+  defp order_entry!({%Placeholder{name: placeholder_name}, direction}, _entity_type) do
+    key = {:placeholder, placeholder_name}
+
+    {key, order_direction!(direction, key)}
+  end
+
+  defp order_entry!(%Placeholder{name: placeholder_name}, _entity_type) do
+    {{:placeholder, placeholder_name}, :asc}
   end
 
   defp order_entry!(name, entity_type) when is_atom(name) do
@@ -503,6 +591,20 @@ defmodule Hologram.Query do
       message:
         "invalid order_by entry #{inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple"
   end
+
+  # The offset a page produces depends on both options, so a placeholder in either makes it one too -
+  # named for whichever option it varies with, page first.
+  #
+  # THE NAME IS NOT A BINDING KEY. A leaf names the ARGUMENT a value derives from, never the value
+  # itself, which is why `offset((page - 1) * size)` written out by hand yields this same leaf, and
+  # why `filter(b: n * 2)` yields `{:b, :==, {:placeholder, :n}}`. Nothing ever turns a leaf back
+  # into a value: both tiers call the real builder with the component's real props, so the offset
+  # that executes is the computed one.
+  defp paginate_offset(%Placeholder{} = page, _size), do: page
+
+  defp paginate_offset(_page, %Placeholder{} = size), do: size
+
+  defp paginate_offset(page, size), do: (page - 1) * size
 
   defp ordering_triple!(name, operator, operand, entity_type) do
     validate_orderable_attribute!(name, entity_type, operator)
@@ -526,19 +628,19 @@ defmodule Hologram.Query do
     [{name, :>=, range.first}, {name, :<=, range.last}]
   end
 
-  defp predicate_triples!(name, %Param{name: param_name}, _entity_type) do
-    [{name, :==, {:param, param_name}}]
+  defp predicate_triples!(name, %Placeholder{name: placeholder_name}, _entity_type) do
+    [{name, :==, {:placeholder, placeholder_name}}]
   end
 
-  defp predicate_triples!(name, {operator, %Param{name: param_name}}, entity_type)
+  defp predicate_triples!(name, {operator, %Placeholder{name: placeholder_name}}, entity_type)
        when is_atom(operator) do
     cond do
       operator in @equality_operators or operator in @membership_operators ->
-        [{name, operator, {:param, param_name}}]
+        [{name, operator, {:placeholder, placeholder_name}}]
 
       operator in @ordering_operators ->
         validate_orderable_attribute!(name, entity_type, operator)
-        [{name, operator, {:param, param_name}}]
+        [{name, operator, {:placeholder, placeholder_name}}]
 
       true ->
         raise_unknown_operator!(operator, name)
@@ -628,18 +730,18 @@ defmodule Hologram.Query do
     Enum.map(entity_type.__relationships__(), fn {name, _type, _opts} -> name end)
   end
 
+  defp set_view_bound!(query, field, %Placeholder{name: placeholder_name}) do
+    term = to_term(query)
+
+    Map.put(term, field, {:placeholder, placeholder_name})
+  end
+
   defp set_view_bound!(query, field, value) do
     term = to_term(query)
 
     if not is_integer(value) or value < 0 do
       raise ArgumentError,
         message: "#{field} must be a non-negative integer, got: #{inspect(value)}"
-    end
-
-    current_value = Map.fetch!(term, field)
-
-    if current_value != nil do
-      raise ArgumentError, message: "#{field} is already set to #{current_value}"
     end
 
     Map.put(term, field, value)
@@ -807,6 +909,9 @@ defmodule Hologram.Query do
 
   defp validate_paginate_option!(opts, key) do
     case Keyword.fetch(opts, key) do
+      {:ok, %Placeholder{} = placeholder} ->
+        placeholder
+
       {:ok, value} when is_integer(value) and value >= 1 ->
         value
 
@@ -880,10 +985,10 @@ defmodule Hologram.Query do
         "include sub-builder for relationship #{inspect(name)} must return a query term for #{inspect(target)}, got: #{inspect(sub_term)}"
   end
 
-  defp value_param_names({:param, name}), do: [name]
+  defp value_placeholder_names({:placeholder, name}), do: [name]
 
-  defp value_param_names(values) when is_list(values),
-    do: Enum.flat_map(values, &value_param_names/1)
+  defp value_placeholder_names(values) when is_list(values),
+    do: Enum.flat_map(values, &value_placeholder_names/1)
 
-  defp value_param_names(_value), do: []
+  defp value_placeholder_names(_value), do: []
 end

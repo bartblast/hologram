@@ -213,8 +213,8 @@ function listTriples(name, list, entityType) {
 
 function membershipValues(values, name, entityType) {
   return values.map((value) =>
-    isStruct(value, "Hologram.Query.Param")
-      ? paramLeaf(value)
+    isStruct(value, "Hologram.Query.Placeholder")
+      ? placeholderLeaf(value)
       : Model.unbox(value, attributeType(entityType, name)),
   );
 }
@@ -277,7 +277,7 @@ function operatorTriples(name, tuple, entityType) {
     return rangeTriples(name, operand, entityType);
   }
 
-  if (isStruct(operand, "Hologram.Query.Param")) {
+  if (isStruct(operand, "Hologram.Query.Placeholder")) {
     if (ORDERING_OPERATORS.includes(operator)) {
       validateOrderableAttribute(name, entityType, operator);
     } else if (
@@ -287,7 +287,7 @@ function operatorTriples(name, tuple, entityType) {
       raiseUnknownOperator(operator, name);
     }
 
-    return [[name.value, operator, paramLeaf(operand)]];
+    return [[name.value, operator, placeholderLeaf(operand)]];
   }
 
   if (EQUALITY_OPERATORS.includes(operator) && isActor(operand)) {
@@ -336,20 +336,20 @@ function operatorTriples(name, tuple, entityType) {
   raiseUnknownOperator(operator, name);
 }
 
-function paramLeaf(param) {
-  return {param: field(param, "name").value};
+function placeholderLeaf(placeholder) {
+  return {placeholder: field(placeholder, "name").value};
 }
 
 // Every shape a predicate value can take, dispatched in the order the Elixir clauses are written
-// in - the shapes that are structures (a range, a param, the actor) before the general tuple, and
+// in - the shapes that are structures (a range, a placeholder, the actor) before the general tuple, and
 // the general tuple before the plain value a bare term falls through to.
 function predicateTriples(name, value, entityType) {
   if (isStruct(value, "Range")) {
     return rangeTriples(name, value, entityType);
   }
 
-  if (isStruct(value, "Hologram.Query.Param")) {
-    return [[name.value, "==", paramLeaf(value)]];
+  if (isStruct(value, "Hologram.Query.Placeholder")) {
+    return [[name.value, "==", placeholderLeaf(value)]];
   }
 
   if (
@@ -439,10 +439,6 @@ function setViewBound(query, field, value) {
     Interpreter.raiseArgumentError(
       `${field} must be a non-negative integer, got: ${Interpreter.inspect(value)}`,
     );
-  }
-
-  if (term[field] !== null) {
-    Interpreter.raiseArgumentError(`${field} is already set to ${term[field]}`);
   }
 
   return {...term, [field]: Number(value.value)};
@@ -771,10 +767,7 @@ const Elixir_Hologram_Query = {
   "order_by/2": (query, spec) => {
     const term = toTerm(query);
 
-    return {
-      ...term,
-      orderBy: [...term.orderBy, ...orderEntries(spec, term.entity)],
-    };
+    return {...term, orderBy: orderEntries(spec, term.entity)};
   },
 };
 

@@ -5,7 +5,7 @@ defmodule Hologram.DBRunTest do
 
   alias Hologram.DB
   alias Hologram.Entity
-  alias Hologram.Query.Param
+  alias Hologram.Query.Placeholder
   alias Hologram.Test.Fixtures.Entity.Module2
 
   defp create_module_2_entity(values) do
@@ -67,13 +67,24 @@ defmodule Hologram.DBRunTest do
       assert count == 2
     end
 
-    test "raises on a query term containing params" do
+    test "raises on a query term containing placeholders" do
       expected_msg =
-        "cannot run a query term containing params - param :min_b has no value: directly executed queries embed concrete runtime values, params exist only in compiler-registered queries"
+        "cannot run a query term containing placeholders - placeholder :min_b has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
 
       assert_error ArgumentError, expected_msg, fn ->
         Module2
-        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> DB.run()
+      end
+    end
+
+    test "raises on a query term ordered by a placeholder" do
+      expected_msg =
+        "cannot run a query term containing placeholders - placeholder :sort has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module2
+        |> order_by(%Placeholder{name: :sort})
         |> DB.run()
       end
     end

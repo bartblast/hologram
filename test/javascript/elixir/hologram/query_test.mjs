@@ -140,9 +140,9 @@ describe("Elixir_Hologram_Query", () => {
         [Type.atom("step"), Type.integer(step)],
       ]);
 
-    const param = (name) =>
+    const placeholder = (name) =>
       Type.map([
-        [Type.atom("__struct__"), Type.alias("Hologram.Query.Param")],
+        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
         [Type.atom("name"), Type.atom(name)],
       ]);
 
@@ -257,30 +257,33 @@ describe("Elixir_Hologram_Query", () => {
       assert.deepStrictEqual(query.filter, [["owner_id", "==", "u1"]]);
     });
 
-    it("reads a param as the leaf a binding fills", () => {
-      const query = filter(task, predicates([["title", param("chosen")]]));
+    it("reads a placeholder as the leaf a binding fills", () => {
+      const query = filter(
+        task,
+        predicates([["title", placeholder("chosen")]]),
+      );
 
       assert.deepStrictEqual(query.filter, [
-        ["title", "==", {param: "chosen"}],
+        ["title", "==", {placeholder: "chosen"}],
       ]);
     });
 
-    it("reads a param under an operator", () => {
-      const value = Type.tuple([Type.atom(">="), param("min")]);
+    it("reads a placeholder under an operator", () => {
+      const value = Type.tuple([Type.atom(">="), placeholder("min")]);
       const query = filter(task, predicates([["position", value]]));
 
       assert.deepStrictEqual(query.filter, [
-        ["position", ">=", {param: "min"}],
+        ["position", ">=", {placeholder: "min"}],
       ]);
     });
 
-    it("reads a param among the values of a membership list", () => {
-      const values = Type.list([param("chosen"), Type.bitstring("b")]);
+    it("reads a placeholder among the values of a membership list", () => {
+      const values = Type.list([placeholder("chosen"), Type.bitstring("b")]);
       const value = Type.tuple([Type.atom("in"), values]);
       const query = filter(task, predicates([["title", value]]));
 
       assert.deepStrictEqual(query.filter, [
-        ["title", "in", [{param: "chosen"}, "b"]],
+        ["title", "in", [{placeholder: "chosen"}, "b"]],
       ]);
     });
 
@@ -767,11 +770,10 @@ describe("Elixir_Hologram_Query", () => {
       );
     });
 
-    it("raises when the limit is already set", () => {
-      assert.throw(
-        () => limit(limit(task, Type.integer(50)), Type.integer(100)),
-        HologramBoxedError,
-        "limit is already set to 50",
+    it("replaces a prior limit", () => {
+      assert.equal(
+        limit(limit(task, Type.integer(50)), Type.integer(100)).limit,
+        100,
       );
     });
   });
@@ -903,11 +905,10 @@ describe("Elixir_Hologram_Query", () => {
       );
     });
 
-    it("raises when the offset is already set", () => {
-      assert.throw(
-        () => offset(offset(task, Type.integer(20)), Type.integer(40)),
-        HologramBoxedError,
-        "offset is already set to 20",
+    it("replaces a prior offset", () => {
+      assert.equal(
+        offset(offset(task, Type.integer(20)), Type.integer(40)).offset,
+        40,
       );
     });
   });
@@ -965,16 +966,13 @@ describe("Elixir_Hologram_Query", () => {
       ]);
     });
 
-    it("appends to prior ordering", () => {
+    it("replaces prior ordering", () => {
       const query = orderBy(
         orderBy(task, Type.atom("done")),
         Type.atom("title"),
       );
 
-      assert.deepStrictEqual(query.orderBy, [
-        ["done", "asc"],
-        ["title", "asc"],
-      ]);
+      assert.deepStrictEqual(query.orderBy, [["title", "asc"]]);
     });
 
     it("orders by a system attribute", () => {

@@ -149,23 +149,23 @@ describe("QueryKernel", () => {
     });
   });
 
-  describe("matches() - params", () => {
-    it("matches against the value bound to a param", () => {
-      const filter = [["priority", "==", {param: "priority"}]];
+  describe("matches() - placeholders", () => {
+    it("matches against the value bound to a placeholder", () => {
+      const filter = [["priority", "==", {placeholder: "priority"}]];
       const context = {bindings: {priority: 3}};
 
       assert.deepEqual(matching(filter, context), ["bob"]);
     });
 
-    it("matches against a list bound to a param", () => {
-      const filter = [["priority", "in", {param: "priorities"}]];
+    it("matches against a list bound to a placeholder", () => {
+      const filter = [["priority", "in", {placeholder: "priorities"}]];
       const context = {bindings: {priorities: [1, 3]}};
 
       assert.deepEqual(matching(filter, context), ["ada", "bob"]);
     });
 
-    it("matches against a param among the values of a list", () => {
-      const filter = [["priority", "in", [{param: "priority"}, 1]]];
+    it("matches against a placeholder among the values of a list", () => {
+      const filter = [["priority", "in", [{placeholder: "priority"}, 1]]];
       const context = {bindings: {priority: 3}};
 
       assert.deepEqual(matching(filter, context), ["ada", "bob"]);
@@ -174,35 +174,35 @@ describe("QueryKernel", () => {
     // The reference raises on each of these, and in these words - this side is the one whose
     // answer reaches a screen, so answering where the server refuses is the divergence that
     // shows. A LITERAL nil in a term is a value like any other and never comes through here.
-    it("refuses a param the bindings do not name", () => {
-      const filter = [["priority", "==", {param: "priority"}]];
+    it("refuses a placeholder the bindings do not name", () => {
+      const filter = [["priority", "==", {placeholder: "priority"}]];
 
       assert.throw(
         () => matching(filter, {}),
         HologramRuntimeError,
-        "missing value for param :priority",
+        "missing value for placeholder :priority",
       );
     });
 
-    it("refuses a nil value bound to a param", () => {
-      const filter = [["priority", "==", {param: "priority"}]];
+    it("refuses a nil value bound to a placeholder", () => {
+      const filter = [["priority", "==", {placeholder: "priority"}]];
       const context = {bindings: {priority: null}};
 
       assert.throw(
         () => matching(filter, context),
         HologramRuntimeError,
-        "nil value for param :priority - use an explicit nil predicate instead",
+        "nil value for placeholder :priority - use an explicit nil predicate instead",
       );
     });
 
-    it("refuses a nil element in a list bound to a param", () => {
-      const filter = [["priority", "in", {param: "priorities"}]];
+    it("refuses a nil element in a list bound to a placeholder", () => {
+      const filter = [["priority", "in", {placeholder: "priorities"}]];
       const context = {bindings: {priorities: [null, 3]}};
 
       assert.throw(
         () => matching(filter, context),
         HologramRuntimeError,
-        "nil element in the list for param :priorities - use an explicit nil predicate instead",
+        "nil element in the list for placeholder :priorities - use an explicit nil predicate instead",
       );
     });
   });

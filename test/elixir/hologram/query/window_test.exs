@@ -25,25 +25,37 @@ defmodule Hologram.Query.WindowTest do
       assert window.filter == [{:a, :==, true}]
     end
 
-    test "drops a predicate comparing to a param" do
-      window = derive(term(Module2, [{:c, :==, {:param, :search}}]))
+    test "drops a predicate comparing to a placeholder" do
+      window = derive(term(Module2, [{:c, :==, {:placeholder, :search}}]))
 
       assert window.filter == []
     end
 
-    test "keeps the literal predicates of a query that also has param ones" do
-      window = derive(term(Module2, [{:a, :==, true}, {:c, :==, {:param, :search}}]))
+    test "drops a predicate whose attribute is a placeholder" do
+      window = derive(term(Module2, [{{:placeholder, :field}, :==, 5}]))
+
+      assert window.filter == []
+    end
+
+    test "keeps the literal predicates of a query that also has placeholder ones" do
+      filter = [
+        {:a, :==, true},
+        {:c, :==, {:placeholder, :search}},
+        {{:placeholder, :field}, :==, 5}
+      ]
+
+      window = derive(term(Module2, filter))
 
       assert window.filter == [{:a, :==, true}]
     end
 
-    test "drops a param predicate whatever the operator compares" do
+    test "drops a placeholder predicate whatever the operator compares" do
       filter = [
-        {:b, :!=, {:param, :excluded}},
-        {:b, :<, {:param, :upper}},
-        {:b, :>, {:param, :lower}},
-        {:b, :in, {:param, :allowed}},
-        {:b, :not_in, {:param, :denied}}
+        {:b, :!=, {:placeholder, :excluded}},
+        {:b, :<, {:placeholder, :upper}},
+        {:b, :>, {:placeholder, :lower}},
+        {:b, :in, {:placeholder, :allowed}},
+        {:b, :not_in, {:placeholder, :denied}}
       ]
 
       window = derive(term(Module2, filter))
@@ -51,8 +63,8 @@ defmodule Hologram.Query.WindowTest do
       assert window.filter == []
     end
 
-    test "drops a membership predicate holding a param among its values" do
-      window = derive(term(Module2, [{:b, :in, [1, {:param, :chosen}]}]))
+    test "drops a membership predicate holding a placeholder among its values" do
+      window = derive(term(Module2, [{:b, :in, [1, {:placeholder, :chosen}]}]))
 
       assert window.filter == []
     end
@@ -97,7 +109,11 @@ defmodule Hologram.Query.WindowTest do
         |> include(:a)
         |> Query.normalize()
 
-      sub_term = %{base_term.include.a | filter: [{:c, :==, {:param, :search}}, {:a, :==, true}]}
+      sub_term = %{
+        base_term.include.a
+        | filter: [{:c, :==, {:placeholder, :search}}, {:a, :==, true}]
+      }
+
       term = %{base_term | include: %{a: sub_term}}
 
       assert derive(term).include.a == %{
@@ -112,16 +128,16 @@ defmodule Hologram.Query.WindowTest do
     end
 
     test "gives two queries choosing different values one window" do
-      searched = derive(term(Module2, [{:c, :==, {:param, :search}}]))
-      chosen = derive(term(Module2, [{:a, :==, {:param, :flag}}]))
+      searched = derive(term(Module2, [{:c, :==, {:placeholder, :search}}]))
+      chosen = derive(term(Module2, [{:a, :==, {:placeholder, :flag}}]))
 
       assert searched == chosen
     end
 
     # Bounding it needs the thirty days written into the query, which the filter surface does not
     # offer yet - a cutoff computed per render says nothing when the window is derived.
-    test "downloads a channel's whole history when its recency bound is a param" do
-      filter = [{:c, :==, "channel-1"}, {:b, :>, {:param, :cutoff}}]
+    test "downloads a channel's whole history when its recency bound is a placeholder" do
+      filter = [{:c, :==, "channel-1"}, {:b, :>, {:placeholder, :cutoff}}]
 
       window = derive(term(Module2, filter))
 
