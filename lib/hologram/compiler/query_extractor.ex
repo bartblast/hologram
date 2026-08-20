@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   alias Hologram.Reflection
 
   # The applications shipped with Elixir itself - their modules are never
-  # interpreted, so a sentinel reaching them raises the flow error naming the
+  # interpreted, so a placeholder reaching them raises the flow error naming the
   # call the developer wrote instead of its internals.
   @elixir_apps [:eex, :elixir, :ex_unit, :iex, :logger, :mix]
 
@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   A zero-arity capture is invoked at build time (query builders are pure term
   constructors) and its result normalized. A capture with arguments is evaluated
-  symbolically over its IR - each argument becomes a placeholder sentinel flowing into
+  symbolically over its IR - each argument becomes a placeholder flowing into
   the term as a `{:placeholder, name}` leaf named after the argument, resolving through
   the generated from_query shim when the capture points at one. Branching forks
   the evaluation: every case/cond clause, every capture head clause, and every
@@ -33,21 +33,39 @@ defmodule Hologram.Compiler.QueryExtractor do
   registry entry, never correctness. A literal head pattern fixes its argument
   concretely in that variant.
 
-  Calls interpret transitively: local helpers and sentinel-receiving functions
+  Calls interpret transitively: local helpers and placeholder-receiving functions
   compiled into the project build evaluate over their own IR (recursion is
-  rejected), sentinel-free remote calls and query stage calls run natively, and
+  rejected), placeholder-free remote calls and query stage calls run natively, and
   single-clause anonymous functions evaluate on invocation with their captured
-  scope (branch-free bodies only). A sentinel reaching a call outside the
-  project build makes the call's result a sentinel too, named for the argument it
-  derives from: what a build cannot compute is what a run supplies, and the
-  predicate it lands in is dropped from the download either way.
+  scope (branch-free bodies only).
+
+  ANYTHING THE BUILD CAN EVALUATE IS PART OF THE QUERY, ANYTHING IT CANNOT IS A
+  PLACEHOLDER. That is the whole rule, and what it serves is the sync window - which
+  rows a client downloads - never validation, which happens when the query runs
+  against real values on either tier. A call the build cannot make yields a
+  placeholder named for the argument it derives from.
+
+  Where a placeholder may land follows from the window, not from the term. A
+  position `Hologram.Query.Window` drops or empties takes one as a leaf: a filter
+  attribute or value, an ordering key or direction, a view bound. A position the
+  window is DERIVED from cannot - the entity says which table to download, an
+  include name says which relationship travels with it - so those FORK instead,
+  one variant per candidate of a finite set (every entity type of the build, or the
+  target's declared relationships). A candidate the query itself refuses is pruned,
+  which is what narrows the set: `filter(entity.type, done: false)` keeps precisely
+  the types declaring a boolean `done`. Everything a pruned candidate caused is
+  pruned with it, however deep, so a sub-builder refusing a speculated relationship
+  kills that variant rather than the build.
 
   Raises Hologram.CompileError when a from_query value is not a function capture,
   when a capture argument is destructured instead of a plain name, when a capture
   argument is named vars (reserved), when a case clause or function head uses a
   composite pattern, when a helper recurses, when an anonymous function has
-  multiple clauses, arity above 3, or branches, or when a body uses a construct
-  symbolic evaluation does not cover. Zero-arity captures are free of these limits - they
+  multiple clauses, arity above 3, or branches, when a body uses a construct
+  symbolic evaluation does not cover, when a placeholder stands somewhere the build
+  can neither drop nor enumerate (a whole predicates list, a paginate option map, a
+  sub-builder), or when no candidate survives - a prop with no window would read
+  rows nothing ever fills. Zero-arity captures are free of these limits - they
   evaluate concretely at build time.
   """
   @spec extract_module_queries(module) :: list(%{atom => any})
@@ -370,14 +388,10 @@ defmodule Hologram.Compiler.QueryExtractor do
     evaluate_cond!(clauses, state, context)
   end
 
-  # Reading a field off a placeholder sentinel yields another placeholder sentinel, named for the path read.
-  # Nothing executes the extracted term - both tiers call the real builder with the component's
-  # real prop values - so the leaf only has to say that the value is unknown until run time, which
-  # is what Hologram.Query.Window keys on when it drops the predicate from the download.
+  # Reading a field off a placeholder yields another placeholder, named for the path read.
   #
-  # A derived placeholder is a VALUE. Every position deciding the term's SHAPE - the entity, a filter
-  # key, an order_by attribute, an include name, a view bound - refuses a placeholder in Hologram.Query,
-  # which is what keeps a window derivable.
+  # Nothing executes the extracted term - both tiers call the real builder with the component's real
+  # prop values - so the leaf only has to say that the value is unknown until the query runs.
   # sobelow_skip ["DOS.BinToAtom"]
   defp evaluate!(%IR.DotOperator{left: left, right: right}, state, context) do
     {left_value, state_after_left} = evaluate!(left, state, context)
@@ -638,10 +652,10 @@ defmodule Hologram.Compiler.QueryExtractor do
     {value, %{state_after_body | env: state_after_choice.env}}
   end
 
-  # Only application-owned Elixir modules outside the Elixir-shipped apps are
-  # interpreted - a sentinel inside stdlib or native code cannot yield a placeholder
-  # leaf. Classified through loaded application specs, never through Mix, which
-  # releases do not ship.
+  # Only application-owned Elixir modules outside the Elixir-shipped apps are interpreted - their IR
+  # is what the build has to follow a placeholder through. A call this refuses is not an error: the
+  # build cannot compute it, so its result becomes a placeholder like any other unknown value.
+  # Classified through loaded application specs, never through Mix, which releases do not ship.
   defp interpretable_module?(module) do
     case :application.get_application(module) do
       {:ok, app} -> app not in @elixir_apps and Reflection.elixir_module?(module)
@@ -797,7 +811,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   # An argument among the values gets a message of its own. The value it stands for arrives long
   # after the build, so what went wrong is that a query's SHAPE was asked to depend on it - and
-  # naming the sentinel would show a compiler internal to someone who wrote a prop.
+  # naming the placeholder would show a compiler internal to someone who wrote a prop.
   defp stage_error_message(function, arg_values, error, context) do
     prefix =
       "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)}"
