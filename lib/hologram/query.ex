@@ -94,6 +94,11 @@ defmodule Hologram.Query do
   one. A placeholder-keyed predicate leaves its operand unchecked too - the attribute's type is
   unknown, so nothing about the operand can be judged against it.
 
+  A leaf names the ARGUMENT a value came from, not the value: a computed operand carries the name
+  of the argument it derives from, so `b: n * 2` stores `{:placeholder, :n}`. Nothing binds a leaf
+  back to a value - both execution tiers call the builder with real values and normalize THAT - so
+  the name serves reading a term, never evaluating one.
+
   To-one reference fields (`<relationship name>_id`) are filterable alongside attributes -
   they carry the `:uuid` type, so they take equality, membership and placeholder values, while
   ordering comparisons and ranges reject them like any other non-orderable type. To-many
@@ -588,8 +593,13 @@ defmodule Hologram.Query do
   end
 
   # The offset a page produces depends on both options, so a placeholder in either makes it one too -
-  # named for whichever option it varies with, page first. The name is descriptive only: the window
-  # discards view bounds, and the real builder computes the real offset when the values arrive.
+  # named for whichever option it varies with, page first.
+  #
+  # THE NAME IS NOT A BINDING KEY. A leaf names the ARGUMENT a value derives from, never the value
+  # itself, which is why `offset((page - 1) * size)` written out by hand yields this same leaf, and
+  # why `filter(b: n * 2)` yields `{:b, :==, {:placeholder, :n}}`. Nothing ever turns a leaf back
+  # into a value: both tiers call the real builder with the component's real props, so the offset
+  # that executes is the computed one.
   defp paginate_offset(%Placeholder{} = page, _size), do: page
 
   defp paginate_offset(_page, %Placeholder{} = size), do: size
