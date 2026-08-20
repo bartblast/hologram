@@ -53,9 +53,13 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 ## Components
 
 - Components use `use Hologram.Component`. **Not** `use Phoenix.Component` or `use Phoenix.LiveComponent`.
-- Define props with `prop :name, :type` or `prop :name, :type, default: value`.
+- Define props with `prop :name, :type` or `prop :name, :type, opt: value`.
 - Available prop types: `:any`, `:atom`, `:boolean`, `:bitstring`, `:float`, `:function`, `:integer`, `:list`, `:map`, `:pid`, `:port`, `:reference`, `:string`, `:tuple`.
+- Prop options are `default:`, `from_context:`, `required:` and `values:`. Any other option is a compile error, so a typo like `defualt:` fails the build instead of being ignored.
 - Source props from context: `prop :user, :map, from_context: :current_user`.
+- Require a prop with `prop :size, :atom, required: true`. It can't be combined with `default:` (a prop with a default is never missing), but it can be combined with `from_context:` (the context must then supply it).
+- Restrict a prop to a set of values with `prop :size, :atom, values: [:small, :large]`. A `default:` outside its own `values:` list is a compile error.
+- Prop violations are caught at compile time wherever the template spells them out - a missing required prop, or a written value outside `values:`. What only exists at runtime - a `...{@props}` spread, a `<{@module} />` dynamic tag, or a `from_context:` prop - is checked while rendering and raises `Hologram.PropError`.
 - Stateful components require a `cid` attribute: `<MyComponent cid="my_id" />`. Without `cid`, the component is stateless.
 - Each stateful instance is initialized exactly once: `init/3` (props, component, server) runs when its lifecycle starts during server-side page rendering, `init/2` (props, component) when it is dynamically added to an already-loaded page.
 - `init/3` can return a `Component` struct, a `Server` struct, or a `{component, server}` tuple.
@@ -72,6 +76,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Pages are always stateful and always initialized server-side with `init/3` (params, component, server).
 - `init/3` receives URL params, not props. Use `param :name, :type` to declare typed route parameters.
 - Supported param types: `:atom`, `:float`, `:integer`, `:string`.
+- `param` takes no options yet - passing one is a compile error.
 - The page's component ID (cid) is always `"page"`. Use `target: "page"` to target actions at it.
 - Hologram uses a search tree router, not ordered routing. Static segments always match before parameterized ones. You cannot have two ambiguous parameterized routes at the same level (e.g. `/:username` and `/:post_slug`) - use distinct prefixes instead.
 
