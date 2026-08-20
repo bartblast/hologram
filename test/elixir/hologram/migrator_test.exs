@@ -484,6 +484,15 @@ defmodule Hologram.MigratorTest do
 
       # The unique: attribute option is not declarable yet, so the op the tail would
       # carry is checked directly - the applier runs the same check over its tail.
+      #
+      # TODO: replace this with a migration once `unique: true` is declarable on an
+      # attribute. The only unique index the model derives today is the grant store's,
+      # born with its own empty table, so no migration file can produce this op against
+      # rows - which is why the op is built by hand here and the check is called rather
+      # than the applier. When the option lands, `change_attribute :slug, unique: true`
+      # over a populated table exercises the same refusal through the real path, and the
+      # applier's whole-file rollback becomes reachable with it (the tail's pre-flight
+      # runs after the file's transactional ops have been applied).
       unique_index_op = %{
         op: :create_index,
         table: "my_app_task",
