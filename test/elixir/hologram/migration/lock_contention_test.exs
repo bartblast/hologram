@@ -134,10 +134,17 @@ defmodule Hologram.Migration.LockContentionTest do
   end
 
   # A session waiting for an advisory lock, which is the shape the deadlock is made of.
+  #
+  # Scoped to this database the way build_states/1 above is: pg_locks is CLUSTER-wide, and an
+  # advisory lock records the database its session took it in - so an unscoped count would read
+  # every database on the server and answer for sessions this test has nothing to do with.
   defp queued_advisory_lock_count(session) do
     statement = """
     SELECT COUNT(*) FROM pg_catalog.pg_locks
     WHERE "locktype" = 'advisory' AND NOT "granted"
+      AND "database" = (
+        SELECT "oid" FROM pg_catalog.pg_database WHERE "datname" = current_database()
+      )
     """
 
     %{rows: [[count]]} = Postgrex.query!(session, statement, [])
