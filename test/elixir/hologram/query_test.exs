@@ -734,6 +734,15 @@ defmodule Hologram.QueryTest do
       assert query.limit == 50
     end
 
+    test "replaces a prior limit" do
+      query =
+        Module2
+        |> limit(50)
+        |> limit(100)
+
+      assert query.limit == 100
+    end
+
     test "sets the limit" do
       assert limit(Module2, 50) == %{
                cardinality: :set,
@@ -759,16 +768,6 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         limit(Module2, wrap_term(5.0))
-      end
-    end
-
-    test "raises when the limit is already set" do
-      expected_msg = "limit is already set to 50"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        Module2
-        |> limit(50)
-        |> limit(100)
       end
     end
   end
@@ -867,6 +866,15 @@ defmodule Hologram.QueryTest do
   end
 
   describe "offset/2" do
+    test "replaces a prior offset" do
+      query =
+        Module2
+        |> offset(20)
+        |> offset(40)
+
+      assert query.offset == 40
+    end
+
     test "sets the offset" do
       assert offset(Module2, 20) == %{
                cardinality: :set,
@@ -1057,6 +1065,16 @@ defmodule Hologram.QueryTest do
       assert query.offset == 0
     end
 
+    test "replaces prior view bounds" do
+      query =
+        Module2
+        |> limit(10)
+        |> paginate(page: 2, size: 20)
+
+      assert query.limit == 20
+      assert query.offset == 20
+    end
+
     test "sets the view bounds from page and size" do
       assert paginate(Module2, page: 2, size: 20) == %{
                cardinality: :set,
@@ -1106,16 +1124,6 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         paginate(Module2, wrap_term(5))
-      end
-    end
-
-    test "raises when the limit is already set" do
-      expected_msg = "limit is already set to 10"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        Module2
-        |> limit(10)
-        |> paginate(page: 2, size: 20)
       end
     end
 

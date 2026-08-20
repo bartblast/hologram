@@ -767,11 +767,10 @@ describe("Elixir_Hologram_Query", () => {
       );
     });
 
-    it("raises when the limit is already set", () => {
-      assert.throw(
-        () => limit(limit(task, Type.integer(50)), Type.integer(100)),
-        HologramBoxedError,
-        "limit is already set to 50",
+    it("replaces a prior limit", () => {
+      assert.equal(
+        limit(limit(task, Type.integer(50)), Type.integer(100)).limit,
+        100,
       );
     });
   });
@@ -903,11 +902,10 @@ describe("Elixir_Hologram_Query", () => {
       );
     });
 
-    it("raises when the offset is already set", () => {
-      assert.throw(
-        () => offset(offset(task, Type.integer(20)), Type.integer(40)),
-        HologramBoxedError,
-        "offset is already set to 20",
+    it("replaces a prior offset", () => {
+      assert.equal(
+        offset(offset(task, Type.integer(20)), Type.integer(40)).offset,
+        40,
       );
     });
   });

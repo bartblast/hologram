@@ -200,10 +200,10 @@ defmodule Hologram.Query do
 
   The query is an entity type module (starting a fresh query term) or an already built
   query term. The limit is a non-negative integer. It bounds what the query evaluates
-  to, not the underlying data.
+  to, not the underlying data. A later call replaces a limit an earlier one set.
 
   Raises ArgumentError when the query is neither an entity type module nor a query
-  term, when the limit is not a non-negative integer, or when the limit is already set.
+  term, or when the limit is not a non-negative integer.
   """
   @spec limit(module | %{atom => any}, non_neg_integer) :: %{atom => any}
   def limit(query, value) do
@@ -232,11 +232,10 @@ defmodule Hologram.Query do
 
   The query is an entity type module (starting a fresh query term) or an already built
   query term. The offset is a non-negative integer. It slices what the query evaluates
-  to, not the underlying data.
+  to, not the underlying data. A later call replaces an offset an earlier one set.
 
   Raises ArgumentError when the query is neither an entity type module nor a query
-  term, when the offset is not a non-negative integer, or when the offset is already
-  set.
+  term, or when the offset is not a non-negative integer.
   """
   @spec offset(module | %{atom => any}, non_neg_integer) :: %{atom => any}
   def offset(query, value) do
@@ -304,11 +303,12 @@ defmodule Hologram.Query do
   query term. Options are `page:` (a positive integer, 1-based) and `size:` (a positive
   integer, the number of results per page), both required. Pagination expands into the
   offset and limit view bounds - `paginate(page: 2, size: 20)` sets offset 20 and
-  limit 20 - and slices what the query evaluates to, not the underlying data.
+  limit 20 - and slices what the query evaluates to, not the underlying data, replacing
+  view bounds already set.
 
   Raises ArgumentError when the query is neither an entity type module nor a query
-  term, when the options are not a keyword list holding exactly :page and :size, when
-  either option is not a positive integer, or when the limit or offset is already set.
+  term, when the options are not a keyword list holding exactly :page and :size, or when
+  either option is not a positive integer.
   """
   @spec paginate(module | %{atom => any}, keyword) :: %{atom => any}
   def paginate(query, opts) do
@@ -637,12 +637,6 @@ defmodule Hologram.Query do
     if not is_integer(value) or value < 0 do
       raise ArgumentError,
         message: "#{field} must be a non-negative integer, got: #{inspect(value)}"
-    end
-
-    current_value = Map.fetch!(term, field)
-
-    if current_value != nil do
-      raise ArgumentError, message: "#{field} is already set to #{current_value}"
     end
 
     Map.put(term, field, value)

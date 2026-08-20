@@ -441,10 +441,6 @@ function setViewBound(query, field, value) {
     );
   }
 
-  if (term[field] !== null) {
-    Interpreter.raiseArgumentError(`${field} is already set to ${term[field]}`);
-  }
-
   return {...term, [field]: Number(value.value)};
 }
 

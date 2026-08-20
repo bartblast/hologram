@@ -15,7 +15,6 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module31 do
   defp entities_query(min_b) do
     Entity2
     |> filter(b: {:>=, min_b})
-    |> limit(50)
-    |> limit(100)
+    |> filter(nonexistent: 1)
   end
 end

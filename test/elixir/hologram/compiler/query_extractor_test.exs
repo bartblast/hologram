@@ -341,7 +341,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
     test "raises on an invalid query built by a capture" do
       expected_msg =
-        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module31 builds an invalid query - limit is already set to 50"
+        "query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module31 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module31)
