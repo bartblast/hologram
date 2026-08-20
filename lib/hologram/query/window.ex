@@ -9,7 +9,7 @@ defmodule Hologram.Query.Window do
   Returns the window term of the given query term - the same query with the predicates that
   cannot say anything about the download taken out.
 
-  A predicate is dropped when a PARAM stands on either side of it - as the value, whatever the
+  A predicate is dropped when a PLACEHOLDER stands on either side of it - as the value, whatever the
   operator, or as the attribute being compared. Both are unknown when the window is derived, so
   the predicate bounds nothing, and the answer for every value it may take has to be in what
   arrives. What keeps that download finite is elsewhere - the model bounds an enum or a boolean by
