@@ -1200,9 +1200,13 @@ defmodule Hologram.Compiler do
     if Reflection.has_function?(component_module, :__props__, 0) do
       validate_required_props(component_module, prop_entries, has_spread?, module)
 
-      component_module
-      |> invalid_prop_values(prop_entries)
-      |> Enum.each(&component_value_error!(component_module, &1, module))
+      # Matched rather than iterated: both error functions only raise, so a capture of one would be
+      # an anonymous function with no local return. Reporting the first violation is what iterating
+      # did anyway - the raise ended it.
+      case invalid_prop_values(component_module, prop_entries) do
+        [] -> :ok
+        [violation | _rest] -> component_value_error!(component_module, violation, module)
+      end
     end
   end
 
@@ -1212,8 +1216,9 @@ defmodule Hologram.Compiler do
   defp validate_required_props(component_module, prop_entries, false, module) do
     prop_names = Enum.map(prop_entries, fn {name, _value} -> name end)
 
-    component_module
-    |> missing_required_props(prop_names)
-    |> Enum.each(&component_usage_error!(component_module, &1, module))
+    case missing_required_props(component_module, prop_names) do
+      [] -> :ok
+      [name | _rest] -> component_usage_error!(component_module, name, module)
+    end
   end
 end
