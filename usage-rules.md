@@ -59,7 +59,8 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Source props from context: `prop :user, :map, from_context: :current_user`.
 - Require a prop with `prop :size, :atom, required: true`. It can't be combined with `default:` (a prop with a default is never missing), but it can be combined with `from_context:` (the context must then supply it).
 - Restrict a prop to a set of values with `prop :size, :atom, values: [:small, :large]`. A `default:` outside its own `values:` list is a compile error.
-- Prop violations are caught at compile time wherever the template spells them out - a missing required prop, or a written value outside `values:`. What only exists at runtime - a `...{@props}` spread, a `<{@module} />` dynamic tag, or a `from_context:` prop - is checked while rendering and raises `Hologram.PropError`.
+- A missing required prop is caught at compile time wherever a template writes the component out, and so is any value the compiler can evaluate without running anything: plain text with no interpolation, or a literal - including composites like `{[:small, :large]}` and `{%{size: :small}}`.
+- Everything else is checked while rendering and raises `Hologram.PropError`: a `...{@props}` spread, a `<{@module} />` dynamic tag, a `from_context:` prop, an interpolated value (`size="a{@b}"`), and any expression, including one nested inside an otherwise literal value (`{[:small, @other]}`).
 - Stateful components require a `cid` attribute: `<MyComponent cid="my_id" />`. Without `cid`, the component is stateless.
 - Each stateful instance is initialized exactly once: `init/3` (props, component, server) runs when its lifecycle starts during server-side page rendering, `init/2` (props, component) when it is dynamically added to an already-loaded page.
 - `init/3` can return a `Component` struct, a `Server` struct, or a `{component, server}` tuple.
