@@ -64,7 +64,9 @@ defmodule Hologram.PageTest do
       random_string = random_string()
 
       assert_raise Hologram.ParamError,
-                   ~s/can't cast param "a" with value "#{random_string}" to atom, because it's not an already existing atom/,
+                   ~s/can't cast param "a" with value "#{random_string}" to atom / <>
+                     ~s/in page "Hologram.Test.Fixtures.Page.Module6", / <>
+                     "because it's not an already existing atom",
                    fn ->
                      cast_params(%{a: random_string}, Module6)
                    end
@@ -79,7 +81,11 @@ defmodule Hologram.PageTest do
     end
 
     test "invalid string representation of float value" do
-      assert_raise Hologram.ParamError, ~s/can't cast param "b" with value "abc" to float/, fn ->
+      expected_msg =
+        ~s/can't cast param "b" with value "abc" to float / <>
+          ~s/in page "Hologram.Test.Fixtures.Page.Module6"/
+
+      assert_raise Hologram.ParamError, expected_msg, fn ->
         cast_params(%{b: "abc"}, Module6)
       end
     end
@@ -93,11 +99,23 @@ defmodule Hologram.PageTest do
     end
 
     test "invalid string representation of integer value" do
-      assert_raise Hologram.ParamError,
-                   ~s/can't cast param "c" with value "abc" to integer/,
-                   fn ->
-                     cast_params(%{c: "abc"}, Module6)
-                   end
+      expected_msg =
+        ~s/can't cast param "c" with value "abc" to integer / <>
+          ~s/in page "Hologram.Test.Fixtures.Page.Module6"/
+
+      assert_raise Hologram.ParamError, expected_msg, fn ->
+        cast_params(%{c: "abc"}, Module6)
+      end
+    end
+
+    test "value of invalid type for a string param" do
+      expected_msg =
+        ~s/can't cast param "d" with value 123 to string / <>
+          ~s/in page "Hologram.Test.Fixtures.Page.Module6", because it's of invalid type/
+
+      assert_raise Hologram.ParamError, expected_msg, fn ->
+        cast_params(%{d: 123}, Module6)
+      end
     end
 
     test "multiple params" do

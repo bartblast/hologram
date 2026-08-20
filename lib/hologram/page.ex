@@ -30,6 +30,8 @@ defmodule Hologram.Page do
 
   @optional_callbacks [action: 3, command: 3]
 
+  @invalid_type_reason ", because it's of invalid type"
+
   defmacro __using__(_opts) do
     template_path = Component.colocated_template_path(__CALLER__.file)
 
@@ -110,83 +112,83 @@ defmodule Hologram.Page do
             ~s/page "#{Reflection.module_name(page_module)}" doesn't expect "#{name_atom}" param/
       end
 
-      {name_atom, cast_param(types[name_atom], value, name_atom)}
+      {name_atom, cast_param(types[name_atom], value, name_atom, page_module)}
     end)
     |> Enum.into(%{})
   end
 
-  defp cast_param(:atom, value, _name) when is_atom(value) do
+  defp cast_param(:atom, value, _name, _page_module) when is_atom(value) do
     value
   end
 
-  defp cast_param(:atom, value, name) when is_binary(value) do
+  defp cast_param(:atom, value, name, page_module) when is_binary(value) do
     String.to_existing_atom(value)
   rescue
     ArgumentError ->
       message =
-        ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to atom, because it's not an already existing atom/
+        cast_error_msg(name, value, :atom, page_module) <>
+          ", because it's not an already existing atom"
 
       reraise Hologram.ParamError, [message: message], __STACKTRACE__
   end
 
-  defp cast_param(:atom, value, name) do
+  defp cast_param(:atom, value, name, page_module) do
     raise Hologram.ParamError,
-      message:
-        ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to atom, because it's of invalid type/
+      message: cast_error_msg(name, value, :atom, page_module) <> @invalid_type_reason
   end
 
-  defp cast_param(:float, value, _name) when is_float(value) do
+  defp cast_param(:float, value, _name, _page_module) when is_float(value) do
     value
   end
 
-  defp cast_param(:float, value, name) when is_binary(value) do
+  defp cast_param(:float, value, name, page_module) when is_binary(value) do
     case Float.parse(value) do
       {float, _remainder} ->
         float
 
       :error ->
-        raise Hologram.ParamError,
-          message:
-            ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to float/
+        raise Hologram.ParamError, message: cast_error_msg(name, value, :float, page_module)
     end
   end
 
-  defp cast_param(:float, value, name) do
+  defp cast_param(:float, value, name, page_module) do
     raise Hologram.ParamError,
-      message:
-        ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to float, because it's of invalid type/
+      message: cast_error_msg(name, value, :float, page_module) <> @invalid_type_reason
   end
 
-  defp cast_param(:integer, value, _name) when is_integer(value) do
+  defp cast_param(:integer, value, _name, _page_module) when is_integer(value) do
     value
   end
 
-  defp cast_param(:integer, value, name) when is_binary(value) do
+  defp cast_param(:integer, value, name, page_module) when is_binary(value) do
     case Integer.parse(value) do
       {integer, _remainder} ->
         integer
 
       :error ->
-        raise Hologram.ParamError,
-          message:
-            ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to integer/
+        raise Hologram.ParamError, message: cast_error_msg(name, value, :integer, page_module)
     end
   end
 
-  defp cast_param(:integer, value, name) do
+  defp cast_param(:integer, value, name, page_module) do
     raise Hologram.ParamError,
-      message:
-        ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to integer, because it's of invalid type/
+      message: cast_error_msg(name, value, :integer, page_module) <> @invalid_type_reason
   end
 
-  defp cast_param(:string, value, _name) when is_binary(value) do
+  defp cast_param(:string, value, _name, _page_module) when is_binary(value) do
     value
   end
 
-  defp cast_param(:string, value, name) do
+  defp cast_param(:string, value, name, page_module) do
     raise Hologram.ParamError,
-      message:
-        ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to string, because it's of invalid type/
+      message: cast_error_msg(name, value, :string, page_module) <> @invalid_type_reason
+  end
+
+  # Naming the page is what makes the message actionable: the same param name can be declared on
+  # any number of pages, and the value alone doesn't say which route was being served.
+  defp cast_error_msg(name, value, type, page_module) do
+    ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to #{type} / <>
+      ~s/in page "#{Reflection.module_name(page_module)}"/
   end
 
   @doc """
