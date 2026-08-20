@@ -71,7 +71,9 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module86
   alias Hologram.Test.Fixtures.Template.Renderer.Module87
   alias Hologram.Test.Fixtures.Template.Renderer.Module88
+  alias Hologram.Test.Fixtures.Template.Renderer.Module89
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
+  alias Hologram.Test.Fixtures.Template.Renderer.Module90
 
   @csrf_token "test-csrf-token"
   @env %Renderer.Env{}
@@ -782,6 +784,54 @@ defmodule Hologram.Template.RendererTest do
       assert {"prop_aaa = 987", _component_registry, _server_struct} =
                render_dom(node, @env, @server)
     end
+
+    test "required prop given" do
+      node = {:component, Module89, [{"aaa", [text: "my_value"]}], []}
+
+      assert render_dom(node, @env, @server) == {"prop_aaa = my_value", %{}, @server}
+    end
+
+    test "required prop missing" do
+      node = {:component, Module89, [], []}
+
+      expected_msg =
+        ~s/component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa"/
+
+      assert_raise Hologram.PropError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "required prop missing, rendered from a parent template" do
+      node = {:component, Module89, [], []}
+      env = %Renderer.Env{parent_module: Module64}
+
+      expected_msg =
+        ~s/component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", / <>
+          ~s/rendered from "Hologram.Test.Fixtures.Template.Renderer.Module64"/
+
+      assert_raise Hologram.PropError, expected_msg, fn ->
+        render_dom(node, env, @server)
+      end
+    end
+
+    test "required prop declared to take value from context, value in context" do
+      node = {:component, Module90, [], []}
+      env = %Renderer.Env{context: %{my_context_key: "my_value"}}
+
+      assert render_dom(node, env, @server) == {"prop_aaa = my_value", %{}, @server}
+    end
+
+    test "required prop declared to take value from context, value not in context" do
+      node = {:component, Module90, [], []}
+
+      expected_msg =
+        ~s/component "Hologram.Test.Fixtures.Template.Renderer.Module90" is missing required prop "aaa"/
+
+      assert_raise Hologram.PropError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
   end
 
   describe "component prop spread" do
@@ -1110,6 +1160,22 @@ defmodule Hologram.Template.RendererTest do
     test "with single node" do
       node = {:component, Module8, [], [text: "123"]}
       assert render_dom(node, @env, @server) == {"abc123xyz", %{}, @server}
+    end
+
+    # Slot content belongs to the template that wrote it, not to the one holding the <slot />, so a
+    # prop error in it must name the writer. The page/layout pair is the same case: a page's whole
+    # template is its layout's slot content.
+    test "a prop error in slot content names the template that wrote it" do
+      node = {:component, Module8, [], [{:component, Module89, [], []}]}
+      env = %Renderer.Env{parent_module: Module64}
+
+      expected_msg =
+        ~s/component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", / <>
+          ~s/rendered from "Hologram.Test.Fixtures.Template.Renderer.Module64"/
+
+      assert_raise Hologram.PropError, expected_msg, fn ->
+        render_dom(node, env, @server)
+      end
     end
 
     test "with multiple nodes" do
