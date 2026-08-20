@@ -24,7 +24,7 @@ defmodule Hologram.Query.Window do
   window - but a window IS a query term and is run as one, so it keeps a term's shape and states
   that it asks for every row, in no order.
 
-  KNOWN CONSEQUENCE, recorded rather than worked around: a query whose only bound is a param
+  KNOWN CONSEQUENCE, recorded rather than worked around: a query whose only bound is a placeholder
   downloads everything the policy admits. A thirty-day message window written as
   `created_at: {:>, ^cutoff}` downloads the channel's whole history, because a cutoff computed
   per render says nothing at compile time. Bounding it needs the thirty days written into the
@@ -36,7 +36,7 @@ defmodule Hologram.Query.Window do
     %{
       cardinality: :set,
       entity: term.entity,
-      filter: Enum.reject(term.filter, &param_bound?/1),
+      filter: Enum.reject(term.filter, &placeholder_bound?/1),
       include: Map.new(term.include, fn {name, sub_term} -> {name, derive(sub_term)} end),
       limit: nil,
       offset: nil,
@@ -44,11 +44,11 @@ defmodule Hologram.Query.Window do
     }
   end
 
-  defp param?({:param, _name}), do: true
+  defp placeholder?({:placeholder, _name}), do: true
 
-  defp param?(values) when is_list(values), do: Enum.any?(values, &param?/1)
+  defp placeholder?(values) when is_list(values), do: Enum.any?(values, &placeholder?/1)
 
-  defp param?(_value), do: false
+  defp placeholder?(_value), do: false
 
-  defp param_bound?({name, _operator, value}), do: param?(name) or param?(value)
+  defp placeholder_bound?({name, _operator, value}), do: placeholder?(name) or placeholder?(value)
 end

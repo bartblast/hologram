@@ -25,7 +25,7 @@ defmodule Hologram.Query.Interpreter do
 
   `:actor_user_id` in the options is who is asking, for the predicates that name the acting user.
   An anonymous one matches nothing, the way an actor-referencing statement matches nothing when
-  there is no actor to compare against. `:bindings` gives the values of the term's params, every
+  there is no actor to compare against. `:bindings` gives the values of the term's placeholders, every
   one of which the term names, and none of which may be nil - neither as a value nor as an element
   of a list - which is what the database refuses one for.
 
@@ -190,11 +190,11 @@ defmodule Hologram.Query.Interpreter do
     Keyword.get(opts, :actor_user_id) || :no_actor
   end
 
-  defp resolve({:param, name}, opts) do
+  defp resolve({:placeholder, name}, opts) do
     bindings = Keyword.get(opts, :bindings, %{})
 
     case Map.fetch(bindings, name) do
-      :error -> raise ArgumentError, message: "missing value for param #{inspect(name)}"
+      :error -> raise ArgumentError, message: "missing value for placeholder #{inspect(name)}"
       {:ok, value} -> validate_binding!(value, name)
     end
   end
@@ -272,14 +272,15 @@ defmodule Hologram.Query.Interpreter do
   # one, so it says what it means on its face.
   defp validate_binding!(nil, name) do
     raise ArgumentError,
-      message: "nil value for param #{inspect(name)} - use an explicit nil predicate instead"
+      message:
+        "nil value for placeholder #{inspect(name)} - use an explicit nil predicate instead"
   end
 
   defp validate_binding!(values, name) when is_list(values) do
     if Enum.any?(values, &is_nil/1) do
       raise ArgumentError,
         message:
-          "nil element in the list for param #{inspect(name)} - use an explicit nil predicate instead"
+          "nil element in the list for placeholder #{inspect(name)} - use an explicit nil predicate instead"
     end
 
     values

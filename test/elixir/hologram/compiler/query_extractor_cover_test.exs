@@ -7,7 +7,7 @@ defmodule Hologram.Compiler.QueryExtractorCoverTest do
   import Hologram.Compiler.QueryExtractor
 
   alias Hologram.Query
-  alias Hologram.Query.Param
+  alias Hologram.Query.Placeholder
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module18
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
@@ -30,7 +30,7 @@ defmodule Hologram.Compiler.QueryExtractorCoverTest do
 
       bound_clause_term =
         Entity2
-        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> Query.normalize()
 
       assert extract_module_queries(Module18) == [nil_clause_term, bound_clause_term]

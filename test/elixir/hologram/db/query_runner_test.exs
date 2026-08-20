@@ -240,7 +240,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert id == public_entity.id
     end
 
-    test "binds authored params alongside the actor slot" do
+    test "binds authored placeholders alongside the actor slot" do
       user = create_policy_user("runner_16@example.com")
 
       public_match =
@@ -263,7 +263,10 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       Auth.grant_role(user, granted_match, :viewer)
 
-      term = %{Query.normalize(PolicyModule1) | filter: [{:priority, :==, {:param, :priority}}]}
+      term = %{
+        Query.normalize(PolicyModule1)
+        | filter: [{:priority, :==, {:placeholder, :priority}}]
+      }
 
       ids =
         term
@@ -347,33 +350,33 @@ defmodule Hologram.DB.QueryRunnerTest do
   end
 
   describe "run/3" do
-    test "binds membership element params" do
+    test "binds membership element placeholders" do
       {_first, _second, third} = create_module_2_entities()
 
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:param, :bound}, 3]}]}
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:placeholder, :bound}, 3]}]}
 
       assert [%{id: id, b: 7}] = run(term, @mapping, %{bound: 7})
       assert id == third.id
     end
 
-    # Constraint options are write-side semantics - a param binding checks the type
+    # Constraint options are write-side semantics - a placeholder binding checks the type
     # only, and an out-of-constraint value is a query matching nothing, not an
     # invalid query.
-    test "binds param values violating declared constraint options" do
+    test "binds placeholder values violating declared constraint options" do
       Module10
       |> Entity.new(count: 5)
       |> create()
 
       mapping = Mapper.derive!([Module10])
-      term = %{Query.normalize(Module10) | filter: [{:count, :==, {:param, :count}}]}
+      term = %{Query.normalize(Module10) | filter: [{:count, :==, {:placeholder, :count}}]}
 
       assert run(term, mapping, %{count: 999}) == []
     end
 
-    test "binds param values with the slot's type" do
+    test "binds placeholder values with the slot's type" do
       {first, _second, _third} = create_module_2_entities()
 
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
+      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
       result = run(term, @mapping, %{search: "banana"})
 
       assert [%{id: id, c: "banana"}] = result
@@ -538,7 +541,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     test "matches nothing for an empty membership list binding" do
       create_module_2_entities()
 
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:param, :ids}}]}
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
 
       assert run(term, @mapping, %{ids: []}) == []
     end
@@ -557,11 +560,11 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert c_id == matching.c_id
     end
 
-    test "filters by a to-one reference field bound as a param" do
+    test "filters by a to-one reference field bound as a placeholder" do
       matching = create_module_3_entity()
       create_module_3_entity()
 
-      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:param, :target}}]}
+      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :target}}]}
 
       assert [%Module3{id: id}] = run(term, @mapping, %{target: matching.c_id})
       assert id == matching.id
@@ -608,10 +611,11 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert id == second.id
     end
 
-    test "raises on a malformed id param value" do
-      term = %{Query.normalize(Module2) | filter: [{:id, :==, {:param, :entity_id}}]}
+    test "raises on a malformed id placeholder value" do
+      term = %{Query.normalize(Module2) | filter: [{:id, :==, {:placeholder, :entity_id}}]}
 
-      expected_msg = ~s(invalid value "not-a-uuid" for param :entity_id - expected a :uuid value)
+      expected_msg =
+        ~s(invalid value "not-a-uuid" for placeholder :entity_id - expected a :uuid value)
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{entity_id: "not-a-uuid"})
@@ -619,9 +623,10 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "raises on a membership binding that is not a list" do
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:param, :ids}}]}
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
 
-      expected_msg = "non-list value 5 for param :ids - the param binds a membership list"
+      expected_msg =
+        "non-list value 5 for placeholder :ids - the placeholder binds a membership list"
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{ids: 5})
@@ -629,73 +634,73 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "raises on a membership element of the wrong type" do
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:param, :ids}}]}
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
 
       expected_msg =
-        ~s(invalid element "x" in the list for param :ids - expected a :integer value)
+        ~s(invalid element "x" in the list for placeholder :ids - expected a :integer value)
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{ids: [1, "x"]})
       end
     end
 
-    test "raises on a missing param value" do
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
+    test "raises on a missing placeholder value" do
+      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
-      assert_error ArgumentError, "missing value for param :search", fn ->
+      assert_error ArgumentError, "missing value for placeholder :search", fn ->
         run(term, @mapping)
       end
     end
 
     test "raises on a nil membership element" do
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:param, :ids}}]}
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
 
       expected_msg =
-        "nil element in the list for param :ids - use an explicit nil predicate instead"
+        "nil element in the list for placeholder :ids - use an explicit nil predicate instead"
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{ids: [1, nil]})
       end
     end
 
-    test "raises on a nil param value" do
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
+    test "raises on a nil placeholder value" do
+      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
-      expected_msg = "nil value for param :search - use an explicit nil predicate instead"
+      expected_msg = "nil value for placeholder :search - use an explicit nil predicate instead"
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{search: nil})
       end
     end
 
-    test "raises on a param binding with conflicting types" do
+    test "raises on a placeholder binding with conflicting types" do
       term = %{
         Query.normalize(Module2)
-        | filter: [{:b, :==, {:param, :x}}, {:b, :in, {:param, :x}}]
+        | filter: [{:b, :==, {:placeholder, :x}}, {:b, :in, {:placeholder, :x}}]
       }
 
       expected_msg =
-        "param :x binds as :integer and {:list, :integer} - rename one of the conflicting variables"
+        "placeholder :x binds as :integer and {:list, :integer} - rename one of the conflicting variables"
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{x: 5})
       end
     end
 
-    test "raises on a param value of the wrong type" do
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
+    test "raises on a placeholder value of the wrong type" do
+      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
-      expected_msg = "invalid value 123 for param :search - expected a :string value"
+      expected_msg = "invalid value 123 for placeholder :search - expected a :string value"
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{search: 123})
       end
     end
 
-    test "raises on an enum param value outside the declared set" do
-      term = %{Query.normalize(Module4) | filter: [{:c, :==, {:param, :choice}}]}
+    test "raises on an enum placeholder value outside the declared set" do
+      term = %{Query.normalize(Module4) | filter: [{:c, :==, {:placeholder, :choice}}]}
 
-      expected_msg = "invalid value :z for param :choice - expected one of [:x, :y]"
+      expected_msg = "invalid value :z for placeholder :choice - expected one of [:x, :y]"
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{choice: :z})
@@ -703,9 +708,10 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "raises on an unknown binding name" do
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
+      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
-      expected_msg = "unknown param :serach in bindings - the query defines params [:search]"
+      expected_msg =
+        "unknown placeholder :serach in bindings - the query defines placeholders [:search]"
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{search: "x", serach: "y"})

@@ -11,13 +11,13 @@ defmodule Hologram.Query.RegistryTest do
   alias Hologram.Test.Fixtures.Entity.Module5
 
   describe "build/1" do
-    test "builds entries with the term, its param shape, and the window it downloads" do
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
+    test "builds entries with the term, its placeholder shape, and the window it downloads" do
+      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
       window = Window.derive(term)
 
       assert build([term]) == %{
                id(term) => %{
-                 param_shape: %{search: :string},
+                 placeholder_shape: %{search: :string},
                  term: term,
                  window: window,
                  window_id: id(window)
@@ -26,8 +26,8 @@ defmodule Hologram.Query.RegistryTest do
     end
 
     test "gives queries downloading the same rows one window between them" do
-      searched_term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
-      chosen_term = %{Query.normalize(Module2) | filter: [{:a, :==, {:param, :flag}}]}
+      searched_term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
+      chosen_term = %{Query.normalize(Module2) | filter: [{:a, :==, {:placeholder, :flag}}]}
 
       registry = build([searched_term, chosen_term])
 
@@ -94,81 +94,81 @@ defmodule Hologram.Query.RegistryTest do
     end
   end
 
-  describe "param_shape/1" do
-    test "binds membership element params with the attribute type" do
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:param, :bound}, 1]}]}
+  describe "placeholder_shape/1" do
+    test "binds membership element placeholders with the attribute type" do
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:placeholder, :bound}, 1]}]}
 
-      assert param_shape(term) == %{bound: :integer}
+      assert placeholder_shape(term) == %{bound: :integer}
     end
 
-    test "collects params from nested includes" do
+    test "collects placeholders from nested includes" do
       base_term =
         Module3
         |> include(:a)
         |> Query.normalize()
 
-      sub_term = %{base_term.include.a | filter: [{:c, :==, {:param, :search}}]}
+      sub_term = %{base_term.include.a | filter: [{:c, :==, {:placeholder, :search}}]}
       term = %{base_term | include: %{a: sub_term}}
 
-      assert param_shape(term) == %{search: :string}
+      assert placeholder_shape(term) == %{search: :string}
     end
 
-    test "dedups a param met several times with one type" do
+    test "dedups a placeholder met several times with one type" do
       term = %{
         Query.normalize(Module2)
-        | filter: [{:b, :>=, {:param, :bound}}, {:b, :<, {:param, :bound}}]
+        | filter: [{:b, :>=, {:placeholder, :bound}}, {:b, :<, {:placeholder, :bound}}]
       }
 
-      assert param_shape(term) == %{bound: :integer}
+      assert placeholder_shape(term) == %{bound: :integer}
     end
 
-    test "derives list types for membership params" do
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:param, :ids}}]}
+    test "derives list types for membership placeholders" do
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
 
-      assert param_shape(term) == %{ids: {:list, :integer}}
+      assert placeholder_shape(term) == %{ids: {:list, :integer}}
     end
 
-    test "derives param types from the attributes met" do
+    test "derives placeholder types from the attributes met" do
       term = %{
         Query.normalize(Module2)
-        | filter: [{:b, :>=, {:param, :min}}, {:c, :==, {:param, :search}}]
+        | filter: [{:b, :>=, {:placeholder, :min}}, {:c, :==, {:placeholder, :search}}]
       }
 
-      assert param_shape(term) == %{min: :integer, search: :string}
+      assert placeholder_shape(term) == %{min: :integer, search: :string}
     end
 
-    test "derives system attribute param types" do
-      term = %{Query.normalize(Module2) | filter: [{:id, :==, {:param, :entity_id}}]}
+    test "derives system attribute placeholder types" do
+      term = %{Query.normalize(Module2) | filter: [{:id, :==, {:placeholder, :entity_id}}]}
 
-      assert param_shape(term) == %{entity_id: :uuid}
+      assert placeholder_shape(term) == %{entity_id: :uuid}
     end
 
-    test "derives to-one reference field param types" do
-      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:param, :target_id}}]}
+    test "derives to-one reference field placeholder types" do
+      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :target_id}}]}
 
-      assert param_shape(term) == %{target_id: :uuid}
+      assert placeholder_shape(term) == %{target_id: :uuid}
     end
 
-    test "returns an empty shape for queries without params" do
+    test "returns an empty shape for queries without placeholders" do
       term =
         Module2
         |> filter(a: true)
         |> Query.normalize()
 
-      assert param_shape(term) == %{}
+      assert placeholder_shape(term) == %{}
     end
 
-    test "raises on conflicting param types" do
+    test "raises on conflicting placeholder types" do
       term = %{
         Query.normalize(Module2)
-        | filter: [{:c, :==, {:param, :value}}, {:b, :==, {:param, :value}}]
+        | filter: [{:c, :==, {:placeholder, :value}}, {:b, :==, {:placeholder, :value}}]
       }
 
       expected_msg =
-        "param :value binds as :string and :integer - rename one of the conflicting variables"
+        "placeholder :value binds as :string and :integer - rename one of the conflicting variables"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        param_shape(term)
+        placeholder_shape(term)
       end
     end
   end

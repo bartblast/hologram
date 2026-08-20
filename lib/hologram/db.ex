@@ -79,12 +79,12 @@ defmodule Hologram.DB do
   defdelegate get(entity_type, id), to: EntityOperations
 
   @doc """
-  Executes the given SQL statement with the given params and returns {:ok, result} or
+  Executes the given SQL statement with the given placeholders and returns {:ok, result} or
   {:error, exception}. Inside transaction/2 the statement runs on the transaction's
   connection, otherwise on the pool.
   """
   @spec query(String.t(), list, keyword) :: {:ok, Postgrex.Result.t()} | {:error, Exception.t()}
-  defdelegate query(statement, params \\ [], opts \\ []), to: Connection
+  defdelegate query(statement, placeholders \\ [], opts \\ []), to: Connection
 
   @doc """
   Aborts the enclosing transaction/2, making it return {:error, reason}. Raises
@@ -100,8 +100,8 @@ defmodule Hologram.DB do
 
   The query is an entity type module (the whole entity set) or a query term built with
   Hologram.Query stages. Directly executed query terms embed concrete runtime values -
-  the query registry is never involved. A term containing param leaves raises
-  ArgumentError: params exist only in compiler-registered queries.
+  the query registry is never involved. A term containing placeholder leaves raises
+  ArgumentError: placeholders exist only in compiler-registered queries.
 
   A :string ordering falls back to byte order when the attribute has no sort-key
   companion column - companions are derived from registered query orderings.
@@ -110,7 +110,7 @@ defmodule Hologram.DB do
   def run(query) do
     term = Query.normalize(query)
 
-    assert_no_params!(term)
+    assert_no_placeholders!(term)
 
     QueryRunner.run(term, mapping())
   end
@@ -300,15 +300,15 @@ defmodule Hologram.DB do
     Supervisor.init(children, strategy: :one_for_one)
   end
 
-  defp assert_no_params!(term) do
-    case Query.param_names(term) do
+  defp assert_no_placeholders!(term) do
+    case Query.placeholder_names(term) do
       [] ->
         :ok
 
       [name | _rest] ->
         raise ArgumentError,
           message:
-            "cannot run a query term containing params - param #{inspect(name)} has no value: directly executed queries embed concrete runtime values, params exist only in compiler-registered queries"
+            "cannot run a query term containing placeholders - placeholder #{inspect(name)} has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
     end
   end
 end

@@ -11,7 +11,7 @@ defmodule Hologram.DB.QueryCacheTest do
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
   alias Hologram.Query
-  alias Hologram.Query.Param
+  alias Hologram.Query.Placeholder
   alias Hologram.Query.Registry
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Component.Module11
@@ -60,7 +60,7 @@ defmodule Hologram.DB.QueryCacheTest do
 
     module_11_term =
       Entity2
-      |> filter(b: {:>=, %Param{name: :min_b}})
+      |> filter(b: {:>=, %Placeholder{name: :min_b}})
       |> Query.normalize()
 
     sort_key_attributes = MapSet.new([{Entity2, :c}])
@@ -191,7 +191,7 @@ defmodule Hologram.DB.QueryCacheTest do
       assert prop_params(Module11, :entities) == [:min_b]
     end
 
-    test "returns nil for a prop without registered params" do
+    test "returns nil for a prop without registered placeholders" do
       init(nil)
 
       assert prop_params(Module11, :unknown) == nil

@@ -20,12 +20,12 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Role
 
   describe "compile/2" do
-    test "assigns placeholders to param slots" do
+    test "assigns placeholders to placeholder slots" do
       mapping = Mapper.derive!([Module2])
-      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:param, :search}}]}
+      term = %{Query.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
       assert %{
-               params: [{:param, :search, :string}],
+               params: [{:placeholder, :search, :string}],
                sql: sql
              } = compile(term, mapping)
 
@@ -84,29 +84,31 @@ defmodule Hologram.DB.QueryCompilerTest do
              )
     end
 
-    test "binds membership element params as scalar slots in an array constructor" do
+    test "binds membership element placeholders as scalar slots in an array constructor" do
       mapping = Mapper.derive!([Module2])
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:param, :bound}, 1]}]}
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, [{:placeholder, :bound}, 1]}]}
 
-      assert %{params: params, sql: sql} = compile(term, mapping)
-      assert params == [{:param, :bound, :integer}, {:value, 1}]
+      assert %{params: placeholders, sql: sql} = compile(term, mapping)
+      assert placeholders == [{:placeholder, :bound, :integer}, {:value, 1}]
       assert String.contains?(sql, ~s|WHERE "b" = ANY(ARRAY[$1, $2]::int8[])|)
     end
 
-    test "binds membership element params under the nil-inclusive branch" do
+    test "binds membership element placeholders under the nil-inclusive branch" do
       mapping = Mapper.derive!([Module2])
-      term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil, {:param, :bound}]}]}
+      term = %{Query.normalize(Module2) | filter: [{:b, :in, [nil, {:placeholder, :bound}]}]}
 
-      assert %{params: [{:param, :bound, :integer}], sql: sql} = compile(term, mapping)
+      assert %{params: [{:placeholder, :bound, :integer}], sql: sql} =
+               compile(term, mapping)
+
       assert String.contains?(sql, ~s|("b" = ANY(ARRAY[$1]::int8[]) OR "b" IS NULL)|)
     end
 
-    test "binds membership params with list types" do
+    test "binds membership placeholders with list types" do
       mapping = Mapper.derive!([Module2])
-      term = %{Query.normalize(Module2) | filter: [{:c, :in, {:param, :names}}]}
+      term = %{Query.normalize(Module2) | filter: [{:c, :in, {:placeholder, :names}}]}
 
       assert %{
-               params: [{:param, :names, {:list, :string}}],
+               params: [{:placeholder, :names, {:list, :string}}],
                sql: sql
              } = compile(term, mapping)
 
@@ -133,12 +135,12 @@ defmodule Hologram.DB.QueryCompilerTest do
              }
     end
 
-    test "binds a to-one reference field param as a uuid slot" do
+    test "binds a to-one reference field placeholder as a uuid slot" do
       mapping = Mapper.derive!([Module1, Module2, Module3])
-      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:param, :owner}}]}
+      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :owner}}]}
 
       assert %{
-               params: [{:param, :owner, :uuid}],
+               params: [{:placeholder, :owner, :uuid}],
                sql: sql
              } = compile(term, mapping)
 
@@ -193,7 +195,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s|WHERE "a" = $1 ORDER BY|)
     end
 
-    test "drops the params bound by the rules of a group an unconditional rule satisfies" do
+    test "drops the placeholders bound by the rules of a group an unconditional rule satisfies" do
       mapping = Mapper.derive!([Module2])
 
       term =
@@ -208,10 +210,10 @@ defmodule Hologram.DB.QueryCompilerTest do
             [conditional_rule, unconditional_rule],
             [unconditional_rule, conditional_rule]
           ] do
-        assert %{params: params, sql: sql} =
+        assert %{params: placeholders, sql: sql} =
                  compile(term, mapping, %{operation: :read, rules: rules})
 
-        assert params == [value: true]
+        assert placeholders == [value: true]
         assert String.contains?(sql, ~s|WHERE "a" = $1 ORDER BY|)
       end
     end
@@ -260,7 +262,8 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module2])
       term = Query.normalize(Module2)
 
-      assert %{params: [], sql: sql} = compile(term, mapping, %{operation: :read, rules: []})
+      assert %{params: [], sql: sql} =
+               compile(term, mapping, %{operation: :read, rules: []})
 
       assert String.contains?(sql, " WHERE FALSE ORDER BY")
     end
@@ -280,14 +283,14 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s|WHERE (("b_id" = $1) OR ("c_id" = $1))|)
     end
 
-    test "allocates the actor slot after the authored params" do
+    test "allocates the actor slot after the authored placeholders" do
       mapping = Mapper.derive!([Module1, Module2, Module3])
 
-      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:param, :target}}]}
+      term = %{Query.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :target}}]}
 
       rules = [%{predicates: [{:b_id, :==, {:actor}}], to: nil, via: nil}]
 
-      assert %{params: [{:param, :target, :uuid}, :actor], sql: sql} =
+      assert %{params: [{:placeholder, :target, :uuid}, :actor], sql: sql} =
                compile(term, mapping, %{operation: :read, rules: rules})
 
       assert String.contains?(sql, ~s|WHERE "c_id" = $1 AND "b_id" = $2|)
@@ -366,10 +369,10 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: [{:global, [Role.Module1]}], via: nil}]
 
-      assert %{params: params, sql: sql} =
+      assert %{params: placeholders, sql: sql} =
                compile(term, mapping, %{operation: :archive, rules: rules, anonymous?: true})
 
-      assert params == []
+      assert placeholders == []
       refute String.contains?(sql, "hologram_role_grant")
     end
 
@@ -379,10 +382,14 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: [{:type, PolicyModule2, [:admin]}], via: nil}]
 
-      assert %{params: params, sql: sql} =
+      assert %{params: placeholders, sql: sql} =
                compile(term, mapping, %{operation: :read, rules: rules})
 
-      assert params == [:actor, {:value, ["admin"]}, {:value, "test_fixtures_policy_module2"}]
+      assert placeholders == [
+               :actor,
+               {:value, ["admin"]},
+               {:value, "test_fixtures_policy_module2"}
+             ]
 
       assert String.contains?(
                sql,
@@ -397,10 +404,14 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: [{:rel, :parent, [:admin]}], via: nil}]
 
-      assert %{params: params, sql: sql} =
+      assert %{params: placeholders, sql: sql} =
                compile(term, mapping, %{operation: :read, rules: rules})
 
-      assert params == [:actor, {:value, ["admin"]}, {:value, "test_fixtures_policy_module2"}]
+      assert placeholders == [
+               :actor,
+               {:value, ["admin"]},
+               {:value, "test_fixtures_policy_module2"}
+             ]
 
       assert String.contains?(
                sql,
@@ -472,10 +483,10 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [{:priority, :>=, 3}], to: nil, via: :parent}]
 
-      assert %{params: params, sql: sql} =
+      assert %{params: placeholders, sql: sql} =
                compile(term, mapping, %{operation: :publish, rules: rules})
 
-      assert params == [{:value, 3}, {:value, true}]
+      assert placeholders == [{:value, 3}, {:value, true}]
       assert String.contains?(sql, ~s|WHERE "priority" >= $1 AND EXISTS (SELECT 1|)
     end
 
@@ -488,10 +499,10 @@ defmodule Hologram.DB.QueryCompilerTest do
         %{predicates: [], to: nil, via: :parent}
       ]
 
-      assert %{params: params, sql: sql} =
+      assert %{params: placeholders, sql: sql} =
                compile(term, mapping, %{operation: :read, rules: rules})
 
-      assert Enum.count(params, &(&1 == :actor)) == 1
+      assert Enum.count(placeholders, &(&1 == :actor)) == 1
 
       assert String.contains?(
                sql,
@@ -507,9 +518,9 @@ defmodule Hologram.DB.QueryCompilerTest do
       term = Query.normalize(RoleGrant)
       policy = %{operation: :read, rules: Policy.build(RoleGrant)[:read]}
 
-      assert %{params: params, sql: sql} = compile(term, mapping, policy)
+      assert %{params: placeholders, sql: sql} = compile(term, mapping, policy)
 
-      assert params == [
+      assert placeholders == [
                :actor,
                {:value, "test_fixtures_policy_module1"},
                {:value, ["owner"]},
@@ -838,16 +849,16 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s( WHERE "c" = $1))
     end
 
-    test "mixes literal and param bindings in placeholder order" do
+    test "mixes literal and placeholder bindings in placeholder order" do
       mapping = Mapper.derive!([Module2])
 
       term = %{
         Query.normalize(Module2)
-        | filter: [{:a, :==, true}, {:c, :==, {:param, :search}}]
+        | filter: [{:a, :==, true}, {:c, :==, {:placeholder, :search}}]
       }
 
       assert %{
-               params: [{:value, true}, {:param, :search, :string}],
+               params: [{:value, true}, {:placeholder, :search, :string}],
                sql: sql
              } = compile(term, mapping)
 
@@ -934,7 +945,7 @@ defmodule Hologram.DB.QueryCompilerTest do
              }
     end
 
-    test "threads include params after the root's" do
+    test "threads include placeholders after the root's" do
       mapping = Mapper.derive!([Module1, Module2, Module3])
 
       base_term =
@@ -942,9 +953,9 @@ defmodule Hologram.DB.QueryCompilerTest do
         |> include(:a, &filter(&1, a: true))
         |> Query.normalize()
 
-      term = %{base_term | filter: [{:id, :==, {:param, :root_id}}]}
+      term = %{base_term | filter: [{:id, :==, {:placeholder, :root_id}}]}
 
-      assert %{params: [{:param, :root_id, :uuid}, {:value, true}], sql: sql} =
+      assert %{params: [{:placeholder, :root_id, :uuid}, {:value, true}], sql: sql} =
                compile(term, mapping)
 
       assert String.contains?(sql, ~s( WHERE "id" = $1))

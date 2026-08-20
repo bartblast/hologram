@@ -3,7 +3,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   alias Hologram.Compiler.IR
   alias Hologram.Query
-  alias Hologram.Query.Param
+  alias Hologram.Query.Placeholder
   alias Hologram.Reflection
 
   # The applications shipped with Elixir itself - their modules are never
@@ -23,8 +23,8 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   A zero-arity capture is invoked at build time (query builders are pure term
   constructors) and its result normalized. A capture with arguments is evaluated
-  symbolically over its IR - each argument becomes a param sentinel flowing into
-  the term as a `{:param, name}` leaf named after the argument, resolving through
+  symbolically over its IR - each argument becomes a placeholder sentinel flowing into
+  the term as a `{:placeholder, name}` leaf named after the argument, resolving through
   the generated from_query shim when the capture points at one. Branching forks
   the evaluation: every case/cond clause, every capture head clause, and every
   clause of a multi-clause helper yields its own variant term, all variants are
@@ -195,8 +195,8 @@ defmodule Hologram.Compiler.QueryExtractor do
         "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} calls a function whose head destructures a parameter - only plain names, literals, and _ are extractable yet"
   end
 
-  defp call_env!(params, arg_values, base_env, context) do
-    params
+  defp call_env!(placeholders, arg_values, base_env, context) do
+    placeholders
     |> Enum.zip(arg_values)
     |> Enum.reduce(base_env, fn {param_ir, value}, env ->
       case call_binding!(param_ir, value, context) do
@@ -226,25 +226,25 @@ defmodule Hologram.Compiler.QueryExtractor do
         "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses a composite case pattern - only variables, literals, and _ are extractable yet"
   end
 
-  defp contains_symbol?(%Param{}), do: true
+  defp contains_placeholder?(%Placeholder{}), do: true
 
-  defp contains_symbol?(list) when is_list(list) do
-    Enum.any?(list, &contains_symbol?/1)
+  defp contains_placeholder?(list) when is_list(list) do
+    Enum.any?(list, &contains_placeholder?/1)
   end
 
-  defp contains_symbol?(tuple) when is_tuple(tuple) do
+  defp contains_placeholder?(tuple) when is_tuple(tuple) do
     tuple
     |> Tuple.to_list()
-    |> Enum.any?(&contains_symbol?/1)
+    |> Enum.any?(&contains_placeholder?/1)
   end
 
-  defp contains_symbol?(map) when is_map(map) do
+  defp contains_placeholder?(map) when is_map(map) do
     map
     |> Map.to_list()
-    |> Enum.any?(&contains_symbol?/1)
+    |> Enum.any?(&contains_placeholder?/1)
   end
 
-  defp contains_symbol?(_other), do: false
+  defp contains_placeholder?(_other), do: false
 
   # The set a builder argument may bind - the component's declared reactive slots, which today
   # means the props it is GIVEN and nothing else. Declared state and derived values extend this
@@ -305,13 +305,13 @@ defmodule Hologram.Compiler.QueryExtractor do
     evaluate_cond!(clauses, state, context)
   end
 
-  # Reading a field off a param sentinel yields another param sentinel, named for the path read.
+  # Reading a field off a placeholder sentinel yields another placeholder sentinel, named for the path read.
   # Nothing executes the extracted term - both tiers call the real builder with the component's
   # real prop values - so the leaf only has to say that the value is unknown until run time, which
   # is what Hologram.Query.Window keys on when it drops the predicate from the download.
   #
-  # A derived param is a VALUE. Every position deciding the term's SHAPE - the entity, a filter
-  # key, an order_by attribute, an include name, a view bound - refuses a param in Hologram.Query,
+  # A derived placeholder is a VALUE. Every position deciding the term's SHAPE - the entity, a filter
+  # key, an order_by attribute, an include name, a view bound - refuses a placeholder in Hologram.Query,
   # which is what keeps a window derivable.
   # sobelow_skip ["DOS.BinToAtom"]
   defp evaluate!(%IR.DotOperator{left: left, right: right}, state, context) do
@@ -321,7 +321,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     case left_value do
       # The name is built from source-level field names, so the set is bounded by the code itself.
       # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-      %Param{name: name} -> {%Param{name: :"#{name}.#{field}"}, state_after_field}
+      %Placeholder{name: name} -> {%Placeholder{name: :"#{name}.#{field}"}, state_after_field}
       value -> {Map.fetch!(value, field), state_after_field}
     end
   end
@@ -376,14 +376,14 @@ defmodule Hologram.Compiler.QueryExtractor do
       target_module == Query ->
         {apply_query_stage!(function, arg_values, context), state_after_args}
 
-      not contains_symbol?(arg_values) ->
+      not contains_placeholder?(arg_values) ->
         {apply(target_module, function, arg_values), state_after_args}
 
       interpretable_module?(target_module) ->
         interpret_call!(target_module, function, arg_values, state_after_args, context)
 
       true ->
-        {%Param{name: first_symbol_name(arg_values)}, state_after_args}
+        {%Placeholder{name: first_placeholder_name(arg_values)}, state_after_args}
     end
   end
 
@@ -474,27 +474,27 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   # A computed value carries the name of the argument it derives from - the first one reached, and
   # any of them says the same thing about the term: this is not knowable until the query runs. The
-  # name never reaches a window id (Hologram.Query.Window drops what a param stands in), so what it
+  # name never reaches a window id (Hologram.Query.Window drops what a placeholder stands in), so what it
   # is FOR is saying which argument the value came from when a term is read.
-  defp first_symbol_name(%Param{name: name}), do: name
+  defp first_placeholder_name(%Placeholder{name: name}), do: name
 
-  defp first_symbol_name(list) when is_list(list) do
-    Enum.find_value(list, &first_symbol_name/1)
+  defp first_placeholder_name(list) when is_list(list) do
+    Enum.find_value(list, &first_placeholder_name/1)
   end
 
-  defp first_symbol_name(tuple) when is_tuple(tuple) do
+  defp first_placeholder_name(tuple) when is_tuple(tuple) do
     tuple
     |> Tuple.to_list()
-    |> first_symbol_name()
+    |> first_placeholder_name()
   end
 
-  defp first_symbol_name(map) when is_map(map) do
+  defp first_placeholder_name(map) when is_map(map) do
     map
     |> Map.to_list()
-    |> first_symbol_name()
+    |> first_placeholder_name()
   end
 
-  defp first_symbol_name(_other), do: nil
+  defp first_placeholder_name(_other), do: nil
 
   # TODO: an argument named vars will bind the full assigns bag once that
   # convention lands - until then the name is reserved.
@@ -505,7 +505,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp head_binding!(_module, _prop_name, %IR.Variable{name: name}) do
-    {name, %Param{name: name}}
+    {name, %Placeholder{name: name}}
   end
 
   defp head_binding!(_module, _prop_name, %IR.AtomType{}), do: nil
@@ -574,7 +574,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   # Only application-owned Elixir modules outside the Elixir-shipped apps are
-  # interpreted - a sentinel inside stdlib or native code cannot yield a param
+  # interpreted - a sentinel inside stdlib or native code cannot yield a placeholder
   # leaf. Classified through loaded application specs, never through Mix, which
   # releases do not ship.
   defp interpretable_module?(module) do
@@ -588,7 +588,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   # what this is for, and it is how a `def q(nil)` clause sits beside a `def q(min_b)` one. Two
   # clauses naming it DIFFERENTLY is the shape that cannot merge, since the caller must pick a
   # prop's value before any clause is chosen.
-  defp merged_param_names(module, prop_name, clauses, arity) do
+  defp merged_placeholder_names(module, prop_name, clauses, arity) do
     Enum.map(0..(arity - 1), fn index ->
       clauses
       |> Enum.map(&param_name(&1, index))
@@ -635,7 +635,7 @@ defmodule Hologram.Compiler.QueryExtractor do
       {_target_module, clauses} = resolve_capture_clauses!(module, name, capture)
       arity = Function.info(capture)[:arity]
 
-      [{name, merged_param_names(module, name, clauses, arity)}]
+      [{name, merged_placeholder_names(module, name, clauses, arity)}]
     else
       _absent_zero_arity_or_non_capture -> []
     end
@@ -728,7 +728,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     prefix =
       "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)}"
 
-    if contains_symbol?(arg_values) do
+    if contains_placeholder?(arg_values) do
       "#{prefix} passes an argument to #{function}/#{length(arg_values)} - an argument's value is unknown at build time, so it can only be a value a filter compares against"
     else
       "#{prefix} builds an invalid query - #{Exception.message(error)}"
@@ -755,20 +755,20 @@ defmodule Hologram.Compiler.QueryExtractor do
         "from_query capture for prop #{inspect(prop_name)} in #{inspect(module)} has an argument position no clause names - it cannot bind a prop"
   end
 
-  defp validate_slot_binding!(module, prop_name, param_name, names) do
+  defp validate_slot_binding!(module, prop_name, placeholder_name, names) do
     cond do
-      param_name in names.slots ->
+      placeholder_name in names.slots ->
         :ok
 
-      param_name in names.queries ->
+      placeholder_name in names.queries ->
         raise Hologram.CompileError,
           message:
-            "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(param_name)}, which is a from_query prop of the same component - a query argument binds a value the component is GIVEN, never one another query produced"
+            "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(placeholder_name)}, which is a from_query prop of the same component - a query argument binds a value the component is GIVEN, never one another query produced"
 
       true ->
         raise Hologram.CompileError,
           message:
-            "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(param_name)} - no like-named prop is declared"
+            "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(placeholder_name)} - no like-named prop is declared"
     end
   end
 end
