@@ -459,10 +459,6 @@ defmodule Hologram.Component do
 
   defp normalize_except(list) when is_list(list), do: list
 
-  # An AST node that is its own value - true for atoms (nil and booleans included), strings and
-  # numbers, which is everything a :values list realistically holds.
-  defp scalar_literal?(value), do: is_atom(value) or is_binary(value) or is_number(value)
-
   defp validate_prop_opt_entry!({key, _value}, name, module) when is_atom(key) do
     if key not in @prop_opt_keys do
       raise Hologram.CompileError,
@@ -515,12 +511,20 @@ defmodule Hologram.Component do
   defp validate_prop_opts!(_opts, _name, _module), do: :ok
 
   # Both options sit in the same declaration, so a default outside its own :values list is decidable
-  # right here rather than on every render. Only scalars are compared - a values: list holding a
-  # composite term is vanishingly rare, and the render-time check still covers it.
+  # right here rather than on every render. Any literal is compared, composites included; a value
+  # built by an expression - self(), a function call, a variable - is not knowable here and is left
+  # to the render-time check.
+  #
+  # The comparison is made on evaluated terms rather than on AST, because one term can have more
+  # than one AST form: %{a: 1, b: 2} and %{b: 2, a: 1} are the same map written two ways, and
+  # comparing their AST would reject a default that is in fact allowed. Evaluating is safe here -
+  # Macro.quoted_literal?/1 has already established there is nothing to run.
   defp validate_prop_default_in_values!(opts, name, module) do
-    with {:values, values} when is_list(values) <- List.keyfind(opts, :values, 0),
-         {:default, default} <- List.keyfind(opts, :default, 0),
-         true <- scalar_literal?(default) && Enum.all?(values, &scalar_literal?/1),
+    with {:values, values_ast} when is_list(values_ast) <- List.keyfind(opts, :values, 0),
+         {:default, default_ast} <- List.keyfind(opts, :default, 0),
+         true <- Macro.quoted_literal?(default_ast) && Macro.quoted_literal?(values_ast),
+         values = literal_term(values_ast),
+         default = literal_term(default_ast),
          true <- default not in values do
       raise Hologram.CompileError,
         message:
@@ -529,6 +533,11 @@ defmodule Hologram.Component do
     else
       _fallback -> :ok
     end
+  end
+
+  defp literal_term(ast) do
+    {term, _bindings} = Code.eval_quoted(ast)
+    term
   end
 
   # A default makes the prop impossible to miss, so required: true next to one could never fire -

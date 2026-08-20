@@ -956,13 +956,56 @@ defmodule Hologram.Compiler do
     end
   end
 
-  # Composite literals (lists, maps, tuples) are deliberately not evaluated - a values: list holding
-  # one is vanishingly rare, and stopping at scalars keeps this from growing into an interpreter.
+  # Any literal is resolved, composites included, as long as every part of it is one too - a single
+  # expression anywhere inside makes the whole value unknowable until it runs. Pids, ports and
+  # references can't be written in a template at all (they only come from calls, which aren't
+  # literals), so the node types for them are not reachable here.
   defp literal_value(%IR.AtomType{value: value}), do: {:ok, value}
   defp literal_value(%IR.FloatType{value: value}), do: {:ok, value}
   defp literal_value(%IR.IntegerType{value: value}), do: {:ok, value}
   defp literal_value(%IR.StringType{value: value}), do: {:ok, value}
+
+  defp literal_value(%IR.ListType{data: data}), do: literal_values(data)
+
+  defp literal_value(%IR.TupleType{data: data}) do
+    case literal_values(data) do
+      {:ok, items} -> {:ok, List.to_tuple(items)}
+      :unknown -> :unknown
+    end
+  end
+
+  defp literal_value(%IR.MapType{data: data}) do
+    {key_irs, value_irs} = Enum.unzip(data)
+
+    with {:ok, keys} <- literal_values(key_irs),
+         {:ok, values} <- literal_values(value_irs) do
+      map =
+        keys
+        |> Enum.zip(values)
+        |> Map.new()
+
+      {:ok, map}
+    end
+  end
+
   defp literal_value(_ir), do: :unknown
+
+  # One unresolvable part makes the whole composite unresolvable - a list holding an expression has
+  # no value until that expression runs.
+  defp literal_values(irs) do
+    result =
+      Enum.reduce_while(irs, {:ok, []}, fn ir, {:ok, acc} ->
+        case literal_value(ir) do
+          {:ok, value} -> {:cont, {:ok, [value | acc]}}
+          :unknown -> {:halt, :unknown}
+        end
+      end)
+
+    case result do
+      {:ok, reversed_values} -> {:ok, Enum.reverse(reversed_values)}
+      :unknown -> :unknown
+    end
+  end
 
   # A prop sourced from context is never written at the usage, so its absence there says nothing -
   # only the renderers can tell whether the context supplied it.

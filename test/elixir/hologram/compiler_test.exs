@@ -1601,6 +1601,50 @@ defmodule Hologram.CompilerTest do
       end
     end
 
+    test "raises when a composite literal value is not in the prop's :values list" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module39, [{"size", [expression: {[:huge]}]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.put(PLT.start(), Module38, ir)
+
+      expected_msg =
+        ~s/prop "size" of component Hologram.Test.Fixtures.Compiler.Module39 must be one of / <>
+          "[[:small], [:large]], got: [:huge], " <>
+          "in Hologram.Test.Fixtures.Compiler.Module38's template"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_prop_usages([Module38], plt)
+      end
+    end
+
+    test "doesn't raise when a composite literal value is in the prop's :values list" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module39, [{"size", [expression: {[:small]}]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.put(PLT.start(), Module38, ir)
+
+      assert validate_prop_usages([Module38], plt) == :ok
+    end
+
+    # One expression anywhere inside makes the whole composite unknowable until it runs.
+    test "doesn't raise when a composite value holds an expression" do
+      ir =
+        IR.for_code(
+          ~s/[{:component, Hologram.Test.Fixtures.Compiler.Module39, [{"size", [expression: {[vars.x]}]}], []}]/,
+          %Context{}
+        )
+
+      plt = PLT.put(PLT.start(), Module38, ir)
+
+      assert validate_prop_usages([Module38], plt) == :ok
+    end
+
     test "doesn't raise when the value is not known at compile time" do
       ir =
         IR.for_code(

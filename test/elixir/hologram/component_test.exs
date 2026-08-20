@@ -250,6 +250,44 @@ defmodule Hologram.ComponentTest do
       assert module.__props__() == [{:b, :atom, [values: [:small, :large], default: :small]}]
     end
 
+    test "raises when a composite default value is not in the :values list" do
+      expected_error_msg =
+        ~s/the :default value [:c] for prop "b" in Hologram.Test.Fixtures.Component.CompositeDefaultOutsideValues / <>
+          "is not one of [[:a], [:b]]"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.CompositeDefaultOutsideValues do
+          use Hologram.Component
+
+          prop :b, :list, values: [[:a], [:b]], default: [:c]
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    # The same map has more than one AST form, so the comparison has to be made on evaluated terms.
+    test "accepts a map default whose key order differs from the :values entry" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.MapDefaultInValues do
+          use Hologram.Component
+
+          prop :b, :map, values: [%{a: 1, b: 2}], default: %{b: 2, a: 1}
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__props__() == [{:b, :map, [values: [%{a: 1, b: 2}], default: %{b: 2, a: 1}]}]
+    end
+
     test "accepts a required prop sourced from context" do
       {{:module, module, _binary, _result}, _bindings} =
         Code.eval_string("""
