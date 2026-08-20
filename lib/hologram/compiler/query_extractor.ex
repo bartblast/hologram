@@ -293,6 +293,26 @@ defmodule Hologram.Compiler.QueryExtractor do
     evaluate_cond!(clauses, state, context)
   end
 
+  # Reading a field off a param sentinel yields another param sentinel, named for the path read.
+  # Nothing executes the extracted term - both tiers call the real builder with the component's
+  # real prop values - so the leaf only has to say that the value is unknown until run time, which
+  # is what Hologram.Query.Window keys on when it drops the predicate from the download.
+  #
+  # A derived param is a VALUE. Every position deciding the term's SHAPE - the entity, a filter
+  # key, an order_by attribute, an include name, a view bound - refuses a param in Hologram.Query,
+  # which is what keeps a window derivable.
+  defp evaluate!(%IR.DotOperator{left: left, right: right}, state, context) do
+    {left_value, state_after_left} = evaluate!(left, state, context)
+    {field, state_after_field} = evaluate!(right, state_after_left, context)
+
+    case left_value do
+      # The name is built from source-level field names, so the set is bounded by the code itself.
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      %Param{name: name} -> {%Param{name: :"#{name}.#{field}"}, state_after_field}
+      value -> {Map.fetch!(value, field), state_after_field}
+    end
+  end
+
   defp evaluate!(%IR.FloatType{value: value}, state, _context), do: {value, state}
 
   defp evaluate!(%IR.IntegerType{value: value}, state, _context), do: {value, state}

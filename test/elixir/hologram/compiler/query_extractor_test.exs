@@ -23,6 +23,9 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module23
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module24
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module26
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module27
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module28
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module29
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
@@ -41,6 +44,34 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
 
   describe "extract_module_queries/1" do
+    test "extracts a derived param from a nested argument field read" do
+      expected_term =
+        Entity2
+        |> filter(c: %Param{name: :"entity.b.c"})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module28) == [expected_term]
+    end
+
+    test "extracts a derived param from an argument field read" do
+      expected_term =
+        Entity2
+        |> filter(b: %Param{name: :"entity.b"})
+        |> Query.normalize()
+
+      assert extract_module_queries(Module27) == [expected_term]
+    end
+
+    test "extracts a field read on a concrete map" do
+      expected_term =
+        Entity2
+        |> filter(b: {:>=, %Param{name: :min_b}})
+        |> limit(5)
+        |> Query.normalize()
+
+      assert extract_module_queries(Module29) == [expected_term]
+    end
+
     test "extracts a guarded capture ignoring the guard" do
       expected_term =
         Entity2
@@ -308,6 +339,10 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   end
 
   describe "extract_prop_params/1" do
+    test "names an argument the builder reads a field from" do
+      assert extract_prop_params(Module27) == [entities: [:entity]]
+    end
+
     test "names arguments of a local parameterized capture through its shim" do
       assert extract_prop_params(Component11) == [entities: [:min_b]]
     end
