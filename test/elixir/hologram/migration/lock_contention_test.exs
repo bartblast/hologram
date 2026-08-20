@@ -14,6 +14,12 @@ defmodule Hologram.Migration.LockContentionTest do
   # production. The build is held in flight here by a third session whose open transaction
   # the build has to wait out.
   #
+  # The second test is the same cycle approached from the other side: the appliers of a
+  # deploy take a lock of their OWN, and a builder must not be holding it. One key for both
+  # would park every applier of a rolling deploy inside an open transaction, waiting on a
+  # build that waits on them - so the two keys being different numbers is not tidiness, it
+  # is what lets a deploy finish while an index is being built.
+  #
   # async: false - every test of the tier opens raw sessions beside its scratch connection,
   # several in the contention suites, so the tier's modules run one at a time to keep the
   # server's connection count bounded.
@@ -26,6 +32,10 @@ defmodule Hologram.Migration.LockContentionTest do
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
 
+  # The value of Hologram.Migrator's @advisory_lock_key - the one the appliers of a deploy
+  # share. Hardcoded rather than read, like the builder key below.
+  @applier_lock_key -335_777_576_117_788_795
+
   @context %{
     otp_app: "hologram",
     env: "test",
@@ -35,6 +45,12 @@ defmodule Hologram.Migration.LockContentionTest do
 
   @index "hologram_role_grant_$uidx"
 
+  # The value of Hologram.Migrator's @index_advisory_lock_key. Hardcoded rather than read:
+  # the key is frozen forever - a different one breaks mutual exclusion across Hologram
+  # versions - so a test that followed a change to it would hide exactly what it must catch.
+  # The two keys being DIFFERENT numbers is the fact the second test below exercises.
+  @index_lock_key 6_059_159_047_318_510_073
+
   @index_op %{
     op: :create_index,
     table: "hologram_role_grant",
@@ -43,11 +59,6 @@ defmodule Hologram.Migration.LockContentionTest do
     nulls_distinct: false,
     unique: true
   }
-
-  # The value of Hologram.Migrator's @index_advisory_lock_key. Hardcoded rather than read:
-  # the key is frozen forever - a different one breaks mutual exclusion across Hologram
-  # versions - so a test that follows a change to it would hide exactly what it must catch.
-  @index_lock_key 6_059_159_047_318_510_073
 
   # Hologram.Migrator's @index_repair_poll_interval_ms. Mirrored for the same reason, and
   # used only to size waits in terms of the loop's own cadence.
@@ -126,6 +137,16 @@ defmodule Hologram.Migration.LockContentionTest do
     count
   end
 
+  # A repair on a session of its own, the way another node would run it. The session is
+  # routed so that the repair's own index-build connection follows it to this database.
+  defp start_repair(mapping, scratch_opts) do
+    Task.async(fn ->
+      {:ok, session} = Postgrex.start_link(scratch_opts)
+
+      route(session, fn -> repair_indexes(mapping) end)
+    end)
+  end
+
   setup %{scratch: scratch, scratch_opts: scratch_opts} do
     create =
       migration("20260813091522", [
@@ -179,12 +200,7 @@ defmodule Hologram.Migration.LockContentionTest do
 
       await_waiting_build(observer)
 
-      repair =
-        Task.async(fn ->
-          {:ok, session} = Postgrex.start_link(scratch_opts)
-
-          route(session, fn -> repair_indexes(mapping) end)
-        end)
+      repair = start_repair(mapping, scratch_opts)
 
       # Two of the repair loop's own rounds, so it has certainly reached the lock and been
       # refused it at least once.
@@ -205,6 +221,50 @@ defmodule Hologram.Migration.LockContentionTest do
 
       # The repair leaves through its work-done branch: the index it was going to build is
       # there, built by the node that held the lock.
+      assert Task.await(repair, 30_000) == :ok
+      assert index_validity(observer) == true
+    end
+
+    test "lets a migration take its own lock while an index build is running", %{
+      mapping: mapping,
+      observer: observer,
+      scratch_opts: scratch_opts
+    } do
+      applier = start_supervised!({Postgrex, scratch_opts}, id: :applier)
+      blocker = start_supervised!({Postgrex, scratch_opts}, id: :blocker)
+
+      # Keeps the repair's build in flight for as long as the test needs it there.
+      Postgrex.query!(blocker, "BEGIN", [])
+
+      Postgrex.query!(
+        blocker,
+        ~s{SELECT COUNT(*) FROM "hologram_data"."hologram_role_grant"},
+        []
+      )
+
+      repair = start_repair(mapping, scratch_opts)
+
+      await_waiting_build(observer)
+
+      # An applier's first move, made while the repair holds the builder lock and is
+      # building. The lock is either free, in which case this returns in about a
+      # millisecond, or held, in which case it waits forever - so the bound only has to be
+      # clear of a loaded machine's noise, and its expiry is the failure, not a retry.
+      Postgrex.query!(applier, "BEGIN", [])
+
+      Postgrex.query!(applier, "SELECT pg_advisory_xact_lock($1)", [@applier_lock_key],
+        timeout: 5_000
+      )
+
+      # Nobody is queued: the applier holds its own lock, the repair holds the builder's,
+      # and neither is waiting on the other. Share one key between them and this applier
+      # would be parked here inside an open transaction - which is precisely what the
+      # build in flight is waiting for, so neither would ever finish.
+      assert queued_advisory_lock_count(observer) == 0
+
+      Postgrex.query!(applier, "COMMIT", [])
+      Postgrex.query!(blocker, "COMMIT", [])
+
       assert Task.await(repair, 30_000) == :ok
       assert index_validity(observer) == true
     end
