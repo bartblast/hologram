@@ -33,6 +33,13 @@ defmodule HologramFeatureTests.QueriesTest do
     |> assert_text(css("#field_read"), "aa,bb")
   end
 
+  feature "renders a page whose parent query matched nothing", %{session: session} do
+    session
+    |> visit(Page3)
+    |> assert_has(css("#dynamic_order"))
+    |> refute_has(css("#field_read"))
+  end
+
   feature "renders a query whose entity type is a prop", %{session: session} do
     seed_products_and_reviews()
 
