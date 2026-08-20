@@ -3,6 +3,7 @@ defmodule HologramFeatureTests.Helpers do
   import Hologram.Commons.Guards, only: [is_regex: 1]
   import Hologram.Test.FeatureHelpers, only: [visit: 2, visit: 3]
 
+  alias Hologram.Realtime
   alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
   alias Wallaby.Browser
@@ -463,8 +464,13 @@ defmodule HologramFeatureTests.Helpers do
   def wait_for_no_subscription(session, channel, cid \\ nil, start_time \\ nil) do
     start_time = start_time || current_time()
 
+    # Dropped AND no longer listening - the registry deletes the binding and then tells the
+    # connection to leave the topic, so between the two a broadcast still lands and a refute
+    # gated on the binding alone can see it. Channel-wide waits only: a single-cid drop
+    # legitimately leaves the connection on the topic for the channel's other cids, so there is
+    # no membership fact for that wait to check.
     cond do
-      !has_subscription?(channel, cid) ->
+      !has_subscription?(channel, cid) and (not is_nil(cid) or not sse_listening?(channel)) ->
         session
 
       timed_out?(start_time) ->
@@ -495,8 +501,13 @@ defmodule HologramFeatureTests.Helpers do
   def wait_for_subscription(session, channel, count \\ 1, cid \\ nil, start_time \\ nil) do
     start_time = start_time || current_time()
 
+    # Registered AND listening, because they happen apart: the registry writes the binding and
+    # then tells the connection to join the channel's PubSub topic, so between the two a
+    # broadcast reaches nobody. The binding is what a test can see - the topic membership is what
+    # delivery needs - and gating on the first alone is how a broadcast fired "after the
+    # subscription" still misses.
     cond do
-      subscription_count(channel, cid) >= count ->
+      subscription_count(channel, cid) >= count and listener_count(channel, cid) >= count ->
         session
 
       timed_out?(start_time) ->
@@ -592,6 +603,18 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
+  # The pids on the channel's PubSub topic. phoenix_pubsub's subscribe is Registry.register on
+  # the registry named by the pubsub, so membership is readable - an implementation detail,
+  # pinned by the lockfile, and no deeper a peek than reading the SubscriptionRegistry's own
+  # table beside it.
+  defp channel_listeners(channel) do
+    topic = Realtime.channel_topic(channel)
+
+    Hologram.PubSub
+    |> Registry.lookup(topic)
+    |> MapSet.new(fn {pid, _value} -> pid end)
+  end
+
   defp has_subscription?(channel, cid) do
     SubscriptionRegistry.ets_table_name()
     |> :ets.tab2list()
@@ -600,6 +623,31 @@ defmodule HologramFeatureTests.Helpers do
         ch == channel and (is_nil(cid) or c == cid)
       end)
     end)
+  end
+
+  # How many of the connections holding the binding are actually ON the channel's topic.
+  defp listener_count(channel, cid) do
+    listening = channel_listeners(channel)
+
+    SubscriptionRegistry.ets_table_name()
+    |> :ets.tab2list()
+    |> Enum.count(fn {_instance_id, entry} ->
+      MapSet.member?(listening, entry.sse_pid) and
+        Enum.any?(entry.bindings, fn {{ch, c}, _user_id} ->
+          ch == channel and (is_nil(cid) or c == cid)
+        end)
+    end)
+  end
+
+  # Whether any live connection is still on the channel's topic. Checked against the
+  # connections rather than against binding-holders, because it gates the state where the
+  # BINDINGS are already gone and only the membership lags.
+  defp sse_listening?(channel) do
+    listening = channel_listeners(channel)
+
+    SubscriptionRegistry.ets_table_name()
+    |> :ets.tab2list()
+    |> Enum.any?(fn {_instance_id, entry} -> MapSet.member?(listening, entry.sse_pid) end)
   end
 
   # credo:disable-for-lines:9 Credo.Check.Refactor.IoPuts

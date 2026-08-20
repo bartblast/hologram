@@ -23,18 +23,18 @@ defmodule Hologram.Sync.Frame do
   that changed travels as the attributes that moved. A row that left travels as its id, and an
   edge as the pair it joined or parted.
 
-  The entity type is the window's own, which is what names the type of a row that is no longer
-  there to be asked - a row that arrived carries its type with it.
+  Every delta names its own type: an arrived row carries it, an edge carries the type of the row
+  the relationship lives on, and a row that left arrives here as its id paired with the type it
+  was held under - a row no longer there to be asked is named by the bookkeeping that watched it
+  arrive.
   """
-  @spec deltas(map, module) :: list(map)
-  def deltas(news, entity_type) do
-    window_type = Codec.encode_enum_value(entity_type)
-
+  @spec deltas(map) :: list(map)
+  def deltas(news) do
     Enum.concat([
       Enum.map(news.appeared, &put_entity/1),
       Enum.map(news.patched, fn {row, patch} -> patch_entity(row, patch) end),
-      Enum.map(news.unsynced, &unsync_entity(&1, entity_type)),
-      Enum.map(news.edges, &relationship(&1, window_type))
+      Enum.map(news.unsynced, fn {id, entity_type} -> unsync_entity(id, entity_type) end),
+      Enum.map(news.edges, &relationship/1)
     ])
   end
 
@@ -49,12 +49,22 @@ defmodule Hologram.Sync.Frame do
   read from the rows as they stand, so a frame's deltas are always of one model - a delta carrying
   values written under an older one is a thing only stored values could produce, and none are
   sent.
+
+  The deltas travel grouped op -> type, with the payload alone as the delta: a whole row for a
+  put (its id is one of its attributes), the changed attributes plus the id for a patch or an
+  edge, and the bare id for an unsync. The op and type are spelled once per group rather than
+  once per delta - constants amortize to nothing on the payload an app-wide fill is mostly made
+  of. Grouping loses no ordering, because a frame's deltas are statements about one snapshot. A
+  row and an edge of its own can both be in one, and often are - a row that arrives with a pair
+  added in the same round is the ordinary case - but they cannot disagree: the row states the
+  whole target set of what the window embeds, the edge states one pair of it, and both were read
+  from the one round. Whichever is applied first, the same facts are left behind.
   """
   @spec encode_deltas_envelope(integer, String.t() | nil, list(map)) :: String.t()
   def encode_deltas_envelope(id, cursor, deltas) do
     payload = %{
       cursor: cursor,
-      deltas: deltas,
+      deltas: group(deltas),
       model_hash: Model.hash(),
       protocol_version: @protocol_version
     }
@@ -102,8 +112,11 @@ defmodule Hologram.Sync.Frame do
   @doc """
   Builds the SSE event-stream chunk telling a client its bundle no longer matches this build.
 
-  It is a notice rather than an order: the client reloads at a moment of its own choosing, since
-  its store and its queued writes survive a reload and nothing is lost by waiting.
+  It is a notice rather than an order, and what the client makes of it is the client's business:
+  it is told that nothing will be synced to it, not told to restart. A client that threw its page
+  away over this would be throwing away what someone was doing to fix a mismatch they did not
+  cause - and the direction of travel is the other way, towards serving a client of an older
+  model through adapter chains rather than asking it to catch up.
   """
   @spec encode_reload_envelope(integer, atom) :: String.t()
   def encode_reload_envelope(id, reason) do
@@ -138,6 +151,18 @@ defmodule Hologram.Sync.Frame do
     %{id: id, op: :unsync_entity, type: Codec.encode_enum_value(entity_type)}
   end
 
+  defp group(deltas) do
+    deltas
+    |> Enum.group_by(& &1.op)
+    |> Map.new(fn {op, grouped} -> {op, group_by_type(op, grouped)} end)
+  end
+
+  defp group_by_type(op, deltas) do
+    deltas
+    |> Enum.group_by(& &1.type)
+    |> Map.new(fn {type, grouped} -> {type, Enum.map(grouped, &payload(op, &1))} end)
+  end
+
   # The row comes along for its type as much as its id: a bag of changed attributes cannot say
   # what it belongs to, and without that the values cannot be written the way the wire wants them.
   defp patch_entity(row, patch) do
@@ -149,10 +174,16 @@ defmodule Hologram.Sync.Frame do
     }
   end
 
-  defp relationship(edge, window_type) do
+  defp payload(:put_entity, delta), do: delta.data
+
+  defp payload(:unsync_entity, delta), do: delta.id
+
+  defp payload(_op_carrying_id_beside_data, delta), do: Map.put(delta.data, :id, delta.id)
+
+  defp relationship(edge) do
     data = %{relationship: edge.relationship, target_id: edge.target_id}
 
-    %{data: data, id: edge.entity_id, op: edge.op, type: window_type}
+    %{data: data, id: edge.entity_id, op: edge.op, type: Codec.encode_enum_value(edge.type)}
   end
 
   defp type_of(row) do

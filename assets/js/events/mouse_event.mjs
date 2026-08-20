@@ -8,7 +8,7 @@ export default class MouseEvent {
   // prevent_default.
   static isDefaultAllowed = true;
 
-  static buildOperationParam(event) {
+  static buildEventParam(event) {
     return Type.map([
       [Type.atom("client_x"), Type.float(event.clientX)],
       [Type.atom("client_y"), Type.float(event.clientY)],

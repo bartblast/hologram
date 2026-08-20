@@ -6,7 +6,7 @@ export default class ScrollEvent {
   // The DOM scroll event is not cancelable, so preventDefault would be a no-op.
   static isDefaultAllowed = true;
 
-  static buildOperationParam(event) {
+  static buildEventParam(event) {
     const target = event.target;
 
     // A window or document scroll fires on the document, whose scroll offsets live on the scrolling

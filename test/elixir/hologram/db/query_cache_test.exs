@@ -6,6 +6,7 @@ defmodule Hologram.DB.QueryCacheTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Auth
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
@@ -40,8 +41,14 @@ defmodule Hologram.DB.QueryCacheTest do
     }
   end
 
+  # The grants window rides with every build's windows, whether or not a page subscribes to it -
+  # the build decides who asks, this is only where an id resolves back to a term.
   defp expected_windows(entries) do
-    Map.new(entries, fn {_id, entry} -> {entry.window_id, entry.window} end)
+    grants_window = Auth.grants_window()
+
+    entries
+    |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
+    |> Map.put(Registry.id(grants_window), grants_window)
   end
 
   defp expected_entries do
@@ -56,8 +63,8 @@ defmodule Hologram.DB.QueryCacheTest do
       |> filter(b: {:>=, %Param{name: :min_b}})
       |> Query.normalize()
 
-    ordered_pairs = MapSet.new([{Entity2, :c}])
-    mapping = Mapper.derive!(Reflection.list_entities(), ordered_pairs)
+    sort_key_attributes = MapSet.new([{Entity2, :c}])
+    mapping = Mapper.derive!(Reflection.list_entities(), sort_key_attributes)
 
     [module_1_term, module_11_term]
     |> Registry.build()
@@ -198,6 +205,16 @@ defmodule Hologram.DB.QueryCacheTest do
       [{_id, entry} | _other_entries] = Enum.to_list(expected_entries())
 
       assert window(entry.window_id) == entry.window
+    end
+
+    # Registered whether or not anything subscribes: the build decides which pages check
+    # permissions locally, and a client the build told to ask must find a term here.
+    test "returns the grants window a client checking permissions locally downloads" do
+      init(nil)
+
+      grants_window = Auth.grants_window()
+
+      assert window(Registry.id(grants_window)) == grants_window
     end
 
     test "returns nil for an id nothing downloads" do

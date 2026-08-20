@@ -54,6 +54,15 @@ defmodule Hologram.Sync.DispatcherTest do
   # say so by what they read - a dispatcher on the wrong connection finds none of these rows.
   # Stops the polling and waits for whatever round is running to finish: a dispatcher taken down
   # mid-read takes the sandbox connection with it, and the owner has a rollback left to do on it.
+  # Every test that starts a dispatcher ends here. A dispatcher borrows the test's connection, so
+  # it must not be MID-QUERY when the sandbox takes that connection back: the shutdown signal kills
+  # it where it stands, the driver sees its client vanish and drops the connection, and the
+  # rollback then finds none to roll back - failing whichever test happened to be last rather than
+  # the one that raced. The messages these tests wait for are sent from the MIDDLE of a round, so
+  # none of them says the work is over.
+  #
+  # Not something the teardown can do instead: ExUnit stops what start_supervised started before
+  # any on_exit runs, so by then the dispatcher is already gone.
   defp settle(dispatcher) do
     :sys.replace_state(dispatcher, &%{&1 | poll_interval_ms: :timer.minutes(1)})
     :ok = :sys.suspend(dispatcher)
@@ -117,6 +126,8 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
 
       refute_receive {:dispatched, _transactions, _place}, 100
+
+      settle(dispatcher)
     end
 
     # The place is taken when the dispatcher starts, not when something first wakes it - and what
@@ -126,6 +137,8 @@ defmodule Hologram.Sync.DispatcherTest do
       dispatcher = start_dispatcher!([])
 
       assert is_integer(:sys.get_state(dispatcher).cursor)
+
+      settle(dispatcher)
     end
 
     # What a dispatcher replacing a crashed one has to do: the state of the one that died is gone,
@@ -139,6 +152,8 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
 
       assert_receive {:dispatched, [{200, _events}], {200, 0}}
+
+      settle(dispatcher)
     end
 
     test "starts at the edge when nothing was recorded to resume from" do
@@ -149,6 +164,8 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
 
       refute_receive {:dispatched, _transactions, _place}, 100
+
+      settle(dispatcher)
     end
 
     test "refuses to start with nowhere to send what it reads" do
@@ -167,6 +184,8 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
 
       assert_receive {:dispatched, _transactions, {200, 0}}
+
+      settle(dispatcher)
     end
 
     test "hands over the transactions the window holds" do
@@ -180,6 +199,8 @@ defmodule Hologram.Sync.DispatcherTest do
       assert event.op == :del_entity
       assert event.type == Module2
       assert event.entity_id == @entity_id
+
+      settle(dispatcher)
     end
 
     test "hands over nothing when the window is empty" do
@@ -188,6 +209,8 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
 
       refute_receive {:dispatched, _transactions, _place}, 100
+
+      settle(dispatcher)
     end
 
     test "records how far it read, for whichever dispatcher replaces it" do
@@ -208,6 +231,8 @@ defmodule Hologram.Sync.DispatcherTest do
       # Past the window just handed over rather than back at its start, which is the difference
       # between a replacement carrying on and one repeating what the client already has.
       assert recorded > 200
+
+      settle(dispatcher)
     end
 
     # The empty round moves the place too, and has to: a node quiet for an hour would otherwise
@@ -219,10 +244,19 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
       refute_receive {:dispatched, _transactions, _place}, 100
 
+      # The round is awaited rather than timed. Its non-empty sibling gets that for free - it
+      # waits for the delivery - where an empty round delivers nothing to wait for, and a
+      # refute_receive proves only that nothing ARRIVED. A synchronous call to the dispatcher is
+      # the barrier: it is answered after the wake sent before it was handled, and the edge is
+      # recorded inside that handler.
+      :sys.get_state(dispatcher)
+
       recorded = ReadEdge.get(read_edge)
 
       assert is_integer(recorded)
       assert recorded > 200
+
+      settle(dispatcher)
     end
 
     test "moves past what it handed over, so a second wake repeats nothing" do
@@ -236,6 +270,8 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
 
       refute_receive {:dispatched, _transactions, _place}, 100
+
+      settle(dispatcher)
     end
 
     # Whether draining the mailbox happens before or after the window is read cannot be told
@@ -256,6 +292,8 @@ defmodule Hologram.Sync.DispatcherTest do
 
       assert Process.alive?(dispatcher)
       refute_receive {:dispatched, _transactions, _place}, 100
+
+      settle(dispatcher)
     end
   end
 
@@ -263,10 +301,12 @@ defmodule Hologram.Sync.DispatcherTest do
     test "listens for appends on the channel they announce themselves on" do
       {:ok, notifications} = start_supervised({NotificationsStub, reply_to: self()})
 
-      start_dispatcher!(notifications: notifications)
+      dispatcher = start_dispatcher!(notifications: notifications)
 
       assert_receive {:listening, channel}
       assert channel == Outbox.channel()
+
+      settle(dispatcher)
     end
 
     # A connection that opens after booting has not opened yet when the dispatcher starts, so this
@@ -284,6 +324,8 @@ defmodule Hologram.Sync.DispatcherTest do
       # which runs after start_link returns, so a refusal of that answer kills the process a moment
       # later. A call queues behind the continue and answers only if it got through.
       assert is_integer(:sys.get_state(dispatcher).cursor)
+
+      settle(dispatcher)
     end
 
     test "reads the log when an append announces itself" do
@@ -294,6 +336,8 @@ defmodule Hologram.Sync.DispatcherTest do
       send(dispatcher, {:notification, self(), make_ref(), Outbox.channel(), ""})
 
       assert_receive {:dispatched, [{200, _events}], _place}
+
+      settle(dispatcher)
     end
   end
 

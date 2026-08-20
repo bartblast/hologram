@@ -641,6 +641,17 @@ defmodule Hologram.QueryTest do
       end
     end
 
+    # The relationship declaration already says how many entities are embedded, so a sub-term
+    # marking a cardinality of its own would be saying something the shape cannot honour.
+    test "raises on a sub-term carrying a cardinality marker" do
+      expected_msg =
+        "include sub-terms take no cardinality marker - the relationship declaration governs cardinality"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, :a, &count/1)
+      end
+    end
+
     test "raises on an attribute name" do
       expected_msg =
         ":a is an attribute in Hologram.Test.Fixtures.Entity.Module2 - only relationships can be included"

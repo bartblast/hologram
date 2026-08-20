@@ -159,11 +159,21 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       Compiler.validate_page_modules(page_modules)
 
+      # A builder's argument names bind the consuming component's like-named declared slots, and
+      # a remote capture makes those names a cross-module contract - so a renamed argument fails
+      # the build here, every reachable consumer at once, rather than one render at a time.
+      Compiler.validate_slot_bindings!(page_modules, call_graph_for_runtime)
+
+      # Asked of the UNSPLIT graph on purpose: can?/3 is manually ported, so the graph the
+      # bundles are derived from no longer holds the vertex to ask about - while the question is
+      # exactly whether the bundles reach it.
+      permission_checking_pages = Compiler.pages_checking_permissions(page_modules, call_graph)
+
       # Derived before the graph is split, so that a component reached through a runtime MFA is
       # still counted as one the page can reach.
       {page_windows_plt, page_windows_plt_dump_path} =
         page_modules
-        |> Compiler.build_page_windows(call_graph_for_runtime)
+        |> Compiler.build_page_windows(call_graph_for_runtime, permission_checking_pages)
         |> Compiler.build_page_windows_plt(Keyword.put(opts, :supervisor, sup))
 
       runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime, page_modules)
@@ -172,12 +182,22 @@ defmodule Mix.Tasks.Compile.Hologram do
       # applications reached from pages are named as well.
       app_versions = Compiler.build_app_versions(call_graph_for_runtime)
 
+      # Derived before the split for the same reason the windows are: a query reached through a
+      # runtime MFA still names types the client holds and orders rows it sorts.
+      sync_constants =
+        Compiler.build_sync_constants(
+          page_modules,
+          call_graph_for_runtime,
+          permission_checking_pages != []
+        )
+
       runtime_entry_file_path =
         Compiler.create_runtime_entry_file(
           runtime_mfas,
           ir_plt,
           async_mfas,
           app_versions,
+          sync_constants,
           opts
         )
 

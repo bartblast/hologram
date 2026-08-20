@@ -16,7 +16,7 @@ export default class KeyboardEvent {
   // automatic preventDefault would block keyboard input.
   static isDefaultAllowed = true;
 
-  static buildOperationParam(event) {
+  static buildEventParam(event) {
     return Type.map([
       [Type.atom("alt_key"), Type.boolean(event.altKey)],
       [Type.atom("code"), Type.bitstring(event.code)],

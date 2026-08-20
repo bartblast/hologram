@@ -7,7 +7,7 @@ export default class FocusEvent {
   static isDefaultAllowed = true;
 
   // TODO: add fields specific to FocusEvent
-  static buildOperationParam(_event) {
+  static buildEventParam(_event) {
     return Type.map();
   }
 

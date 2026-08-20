@@ -5,7 +5,7 @@ import Type from "../type.mjs";
 export default class SubmitEvent {
   static isDefaultAllowed = false;
 
-  static buildOperationParam(event) {
+  static buildEventParam(event) {
     const form = event.target;
     const formData = new FormData(form);
 

@@ -140,6 +140,21 @@ defmodule Hologram.DB.DDL do
   end
 
   @doc """
+  Returns the check statement counting the VALID indexes carrying the given name - the ones
+  already built and in use, which a build asked for again has nothing left to do about.
+  """
+  @spec built_index_check_statement(String.t()) :: String.t()
+  def built_index_check_statement(index) do
+    """
+    SELECT COUNT(*)
+    FROM pg_catalog.pg_index i
+    JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = '#{@data_schema}' AND c.relname = #{literal(index)} AND i.indisvalid = TRUE\
+    """
+  end
+
+  @doc """
   Returns the check statement counting the invalid indexes carrying the given name - the
   leftovers of a concurrent build that failed partway.
 

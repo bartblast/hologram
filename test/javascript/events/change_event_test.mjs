@@ -8,7 +8,7 @@ import Type from "../../../assets/js/type.mjs";
 defineRuntimeGlobals();
 
 describe("ChangeEvent", () => {
-  describe("buildOperationParam()", () => {
+  describe("buildEventParam()", () => {
     it("handles checkbox inputs", () => {
       const target = {tagName: "INPUT", type: "checkbox", checked: true};
 
@@ -17,7 +17,7 @@ describe("ChangeEvent", () => {
         currentTarget: target, // For individual field events, currentTarget == target
       };
 
-      const result = ChangeEvent.buildOperationParam(event);
+      const result = ChangeEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -33,7 +33,7 @@ describe("ChangeEvent", () => {
         currentTarget: target, // For individual field events, currentTarget = target
       };
 
-      const result = ChangeEvent.buildOperationParam(event);
+      const result = ChangeEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -49,7 +49,7 @@ describe("ChangeEvent", () => {
         currentTarget: target, // For individual field events, currentTarget = target
       };
 
-      const result = ChangeEvent.buildOperationParam(event);
+      const result = ChangeEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -71,7 +71,7 @@ describe("ChangeEvent", () => {
         currentTarget: target, // For individual field events, currentTarget = target
       };
 
-      const result = ChangeEvent.buildOperationParam(event);
+      const result = ChangeEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -92,7 +92,7 @@ describe("ChangeEvent", () => {
         currentTarget: target, // For individual field events, currentTarget = target
       };
 
-      const result = ChangeEvent.buildOperationParam(event);
+      const result = ChangeEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -112,7 +112,7 @@ describe("ChangeEvent", () => {
         currentTarget: target, // For individual field events, currentTarget = target
       };
 
-      const result = ChangeEvent.buildOperationParam(event);
+      const result = ChangeEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -141,7 +141,7 @@ describe("ChangeEvent", () => {
         currentTarget: form,
       };
 
-      const result = ChangeEvent.buildOperationParam(event);
+      const result = ChangeEvent.buildEventParam(event);
 
       // Should delegate to SubmitEvent and collect all form data
       assert.deepStrictEqual(

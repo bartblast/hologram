@@ -1,5 +1,32 @@
 "use strict";
 
+// What the given function's result costs to HOLD, which is the question a data structure is
+// chosen by as much as by what it costs to build.
+//
+// Run node with --expose-gc: without it the reading includes whatever the collector has not got
+// to yet, and the number says more about timing than about the structure. The function must
+// RETURN what it keeps - a result nothing references is collected before it can be measured.
+export function benchmarkMemory(fun) {
+  const collect = () => {
+    if (globalThis.gc) {
+      globalThis.gc();
+    }
+  };
+
+  collect();
+
+  const before = process.memoryUsage().heapUsed;
+  const retained = fun();
+
+  collect();
+
+  const megabytes = (process.memoryUsage().heapUsed - before) / 1024 / 1024;
+
+  console.log(`Heap retained: ${megabytes.toFixed(1)} MB`);
+
+  return retained;
+}
+
 export function benchmark(fun) {
   const WARMUP_ITERATIONS = 100;
   const ITERATIONS = 1_000;

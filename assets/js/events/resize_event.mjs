@@ -6,7 +6,7 @@ export default class ResizeEvent {
   // The DOM resize event is not cancelable, so preventDefault would be a no-op.
   static isDefaultAllowed = true;
 
-  static buildOperationParam(event) {
+  static buildEventParam(event) {
     // The payload carries only the data the event itself provides. An element resize arrives as a
     // ResizeObserverEntry (identified by borderBoxSize), which snapshots the element's box sizes at
     // resize time, so those are forwarded. A window resize arrives as the DOM resize event, which

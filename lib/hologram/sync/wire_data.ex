@@ -11,9 +11,11 @@ defmodule Hologram.Sync.WireData do
   # small, and the client reads them with JSON.parse rather than evaluating them.
   #
   # A value the client may not have is spelled by ITS KEY BEING ABSENT, and so is a relationship
-  # the query did not ask for. The three cases cannot be confused, which is what makes absence
-  # safe to read: an attribute is always there (null when it is unset), a server-only attribute
-  # never is, and a relationship is there exactly when the window includes it.
+  # the query did not ask for. The cases cannot be confused, which is what makes absence safe to
+  # read: an attribute is always there (null when it is unset), a server-only attribute never is,
+  # a to-many relationship is there exactly when the window includes it (as the target ids - the
+  # rows travel once each, as their own deltas), and a to-one never is, because its reference
+  # field already carries the id.
   #
   # Server-only attributes are dropped by what the MODEL DECLARES, never by finding a sentinel in
   # the row: a row read through the trusted tier holds the real value, and one written moments ago
@@ -38,9 +40,9 @@ defmodule Hologram.Sync.WireData do
   @doc """
   Returns the given entity row as a frame carries it.
 
-  An included relationship travels as the rows it holds - a list for a to-many, one row or null
-  for a to-one - each of them written the same way, so a server-only value stays hidden however
-  deep it sits.
+  An included to-many relationship travels as the ids of the rows it holds - the fact, never the
+  rows, which travel once each as their own deltas. A to-one adds nothing beside its reference
+  field, which already carries the id.
   """
   @spec row(struct) :: map
   def row(%entity_type{} = entity) do
@@ -63,7 +65,7 @@ defmodule Hologram.Sync.WireData do
   defp encode_field({name, value}, model) do
     cond do
       MapSet.member?(model.server_only, name) -> []
-      Map.has_key?(model.relationships, name) -> [{name, embed(value)}]
+      Map.has_key?(model.relationships, name) -> relationship_field(name, value)
       true -> [{name, Codec.encode_json(value, Map.get(model.attribute_types, name, :uuid))}]
     end
   end
@@ -80,19 +82,19 @@ defmodule Hologram.Sync.WireData do
     |> Map.new()
   end
 
-  defp embed(nil), do: nil
+  defp relationship_field(name, targets) when is_list(targets) do
+    [{name, Enum.map(targets, & &1.id)}]
+  end
 
-  defp embed(rows) when is_list(rows), do: Enum.map(rows, &row/1)
+  defp relationship_field(_name, _target), do: []
 
-  defp embed(row), do: row(row)
+  defp relationships(entity_type) do
+    Map.new(entity_type.__relationships__(), fn {name, type, _opts} -> {name, type} end)
+  end
 
   defp server_only(entity_type) do
     entity_type
     |> Entity.server_only_attribute_names()
     |> MapSet.new()
-  end
-
-  defp relationships(entity_type) do
-    Map.new(entity_type.__relationships__(), fn {name, type, _opts} -> {name, type} end)
   end
 end

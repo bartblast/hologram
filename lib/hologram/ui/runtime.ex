@@ -32,12 +32,15 @@ defmodule Hologram.UI.Runtime do
             const Type = deps.Type;
             
             return {
+              actorUserId: $ACTOR_USER_ID_JS_PLACEHOLDER,
               componentRegistry: $COMPONENT_REGISTRY_JS_PLACEHOLDER,
               pageModule: $PAGE_MODULE_JS_PLACEHOLDER,
               pageParams: $PAGE_PARAMS_JS_PLACEHOLDER,
               selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER,
               subReceiptAdds: $SUB_RECEIPT_ADDS_JS_PLACEHOLDER,
-              subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER
+              subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER,
+              syncCounts: $SYNC_COUNTS_JS_PLACEHOLDER,
+              syncRows: $SYNC_ROWS_JS_PLACEHOLDER
             };
           };
         {/raw}

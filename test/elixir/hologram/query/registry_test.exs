@@ -8,6 +8,7 @@ defmodule Hologram.Query.RegistryTest do
   alias Hologram.Query.Window
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module5
 
   describe "build/1" do
     test "builds entries with the term, its param shape, and the window it downloads" do
@@ -47,6 +48,32 @@ defmodule Hologram.Query.RegistryTest do
     end
   end
 
+  describe "entity_types/1" do
+    test "returns the type a term reads" do
+      term = Query.normalize(Module2)
+
+      assert entity_types(term) == MapSet.new([Module2])
+    end
+
+    test "returns the types a term includes alongside its own" do
+      term =
+        Module3
+        |> include(:a)
+        |> Query.normalize()
+
+      assert entity_types(term) == MapSet.new([Module2, Module3])
+    end
+
+    test "walks includes to any depth" do
+      term =
+        Module5
+        |> include(:a, &include(&1, :b))
+        |> Query.normalize()
+
+      assert entity_types(term) == MapSet.new([Module2, Module3, Module5])
+    end
+  end
+
   describe "id/1" do
     test "changes with the term" do
       first_term = Query.normalize(Module2)
@@ -64,50 +91,6 @@ defmodule Hologram.Query.RegistryTest do
 
       assert id(term) == id(term)
       assert id(term) =~ ~r/^[0-9a-f]{32}$/
-    end
-  end
-
-  describe "ordered_string_pairs/1" do
-    test "collects pairs ordered on string attributes" do
-      term =
-        Module2
-        |> order_by(:c)
-        |> Query.normalize()
-
-      assert ordered_string_pairs([term]) == MapSet.new([{Module2, :c}])
-    end
-
-    test "deduplicates pairs across terms" do
-      term_1 =
-        Module2
-        |> order_by(:c)
-        |> Query.normalize()
-
-      term_2 =
-        Module2
-        |> filter(a: true)
-        |> order_by(:c)
-        |> Query.normalize()
-
-      assert ordered_string_pairs([term_1, term_2]) == MapSet.new([{Module2, :c}])
-    end
-
-    test "skips natively-ordered attribute types" do
-      term =
-        Module2
-        |> order_by(:b)
-        |> Query.normalize()
-
-      assert ordered_string_pairs([term]) == MapSet.new()
-    end
-
-    test "walks include sub-terms" do
-      term =
-        Module3
-        |> include(:a, fn sub_query -> order_by(sub_query, :c) end)
-        |> Query.normalize()
-
-      assert ordered_string_pairs([term]) == MapSet.new([{Module2, :c}])
     end
   end
 
@@ -187,6 +170,50 @@ defmodule Hologram.Query.RegistryTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         param_shape(term)
       end
+    end
+  end
+
+  describe "sort_key_attributes/1" do
+    test "collects pairs ordered on string attributes" do
+      term =
+        Module2
+        |> order_by(:c)
+        |> Query.normalize()
+
+      assert sort_key_attributes([term]) == MapSet.new([{Module2, :c}])
+    end
+
+    test "deduplicates pairs across terms" do
+      term_1 =
+        Module2
+        |> order_by(:c)
+        |> Query.normalize()
+
+      term_2 =
+        Module2
+        |> filter(a: true)
+        |> order_by(:c)
+        |> Query.normalize()
+
+      assert sort_key_attributes([term_1, term_2]) == MapSet.new([{Module2, :c}])
+    end
+
+    test "skips natively-ordered attribute types" do
+      term =
+        Module2
+        |> order_by(:b)
+        |> Query.normalize()
+
+      assert sort_key_attributes([term]) == MapSet.new()
+    end
+
+    test "walks include sub-terms" do
+      term =
+        Module3
+        |> include(:a, fn sub_query -> order_by(sub_query, :c) end)
+        |> Query.normalize()
+
+      assert sort_key_attributes([term]) == MapSet.new([{Module2, :c}])
     end
   end
 end

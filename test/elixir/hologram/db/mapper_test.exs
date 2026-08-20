@@ -191,7 +191,7 @@ defmodule Hologram.DB.MapperTest do
       assert columns(Module2, MapSet.new([{Module3, :c}])) == columns(Module2)
     end
 
-    test "derives sort-key companion columns for ordered pairs naming the entity" do
+    test "derives sort-key companion columns for attributes naming the entity" do
       companion =
         Module2
         |> columns(MapSet.new([{Module2, :c}]))
@@ -312,7 +312,7 @@ defmodule Hologram.DB.MapperTest do
              }
     end
 
-    test "carries sort-key companions for the given ordered pairs" do
+    test "carries sort-key companions for the given attributes" do
       mapping = derive!([Module2], MapSet.new([{Module2, :c}]))
 
       assert List.last(mapping[Module2].columns).source == {:sort_key, :c}
@@ -465,10 +465,11 @@ defmodule Hologram.DB.MapperTest do
   describe "derive_from_model!/2" do
     test "derives the same mapping as derive!/2" do
       entity_types = Reflection.list_entities()
-      ordered_pairs = MapSet.new([{Module2, :c}])
+      sort_key_attributes = MapSet.new([{Module2, :c}])
       model = Model.from_modules(entity_types, Reflection.list_roles())
 
-      assert derive_from_model!(model, ordered_pairs) == derive!(entity_types, ordered_pairs)
+      assert derive_from_model!(model, sort_key_attributes) ==
+               derive!(entity_types, sort_key_attributes)
     end
 
     test "derives without consulting any module" do

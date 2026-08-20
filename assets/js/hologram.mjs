@@ -7,6 +7,7 @@ import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
 import Debouncer from "./debouncer.mjs";
+import Deltas from "./deltas.mjs";
 import Deserializer from "./deserializer.mjs";
 import ERTS from "./erts.mjs";
 import EventListenerRegistry from "./event_listener_registry.mjs";
@@ -18,8 +19,9 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import JsInterop from "./js_interop.mjs";
+import LocalDatabase from "./local_database.mjs";
 import MemoryStorage from "./memory_storage.mjs";
-import Operation from "./operation.mjs";
+import Dispatch from "./dispatch.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
 import Serializer from "./serializer.mjs";
@@ -55,6 +57,7 @@ import ManuallyPortedElixirFunctionClauseError from "./elixir/function_clause_er
 import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
 import ManuallyPortedElixirHologramEntity from "./elixir/hologram/entity.mjs";
 import ManuallyPortedElixirHologramJS from "./elixir/hologram/js.mjs";
+import ManuallyPortedElixirHologramQuery from "./elixir/hologram/query.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
 import ManuallyPortedElixirIO from "./elixir/io.mjs";
 import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
@@ -304,7 +307,7 @@ export default class Hologram {
   static handleUiEvent(
     event,
     eventType,
-    operationSpecDom,
+    dispatchSpecDom,
     defaultTarget,
     allowDefault = false,
     stopPropagation = false,
@@ -312,7 +315,7 @@ export default class Hologram {
   ) {
     // The guard runs before preventDefault and stopPropagation, so a disabled binding leaves
     // native browser behavior fully untouched.
-    if (Operation.isDisabled(operationSpecDom)) {
+    if (Dispatch.isDisabled(dispatchSpecDom)) {
       return null;
     }
 
@@ -339,7 +342,7 @@ export default class Hologram {
       event.stopPropagation?.();
     }
 
-    const eventParam = eventImpl.buildOperationParam(event);
+    const eventParam = eventImpl.buildEventParam(event);
     const eventTarget = event.target;
 
     // The dispatch below can run later than the event that caused it - a debounce or a throttle
@@ -348,41 +351,41 @@ export default class Hologram {
     const epoch = $.domEpoch;
 
     return () => {
-      const operation = Operation.fromSpecDom(
-        operationSpecDom,
+      const dispatch = Dispatch.fromSpecDom(
+        dispatchSpecDom,
         defaultTarget,
         eventParam,
       );
 
-      if (Operation.isAction(operation)) {
-        switch (Hologram.#getActionName(operation)) {
+      if (Dispatch.isAction(dispatch)) {
+        switch (Hologram.#getActionName(dispatch)) {
           case "__load_prefetched_page__":
             return Hologram.executeLoadPrefetchedPageAction(
-              operation,
+              dispatch,
               eventTarget,
             );
 
           case "__prefetch_page__":
-            return Hologram.executePrefetchPageAction(operation, eventTarget);
+            return Hologram.executePrefetchPageAction(dispatch, eventTarget);
 
           default: {
             const delay = Erlang_Maps["get/3"](
               Type.atom("delay"),
-              operation,
+              dispatch,
               Type.integer(0),
             );
 
             // Settling directly keeps an undelayed dispatch synchronous on a stable page, which
             // is what lets a raising action reach the "error" event the feature tests read.
             if (delay.value === 0n) {
-              return Hologram.#settleAction(operation, epoch);
+              return Hologram.#settleAction(dispatch, epoch);
             } else {
-              return Hologram.scheduleAction(operation, epoch);
+              return Hologram.scheduleAction(dispatch, epoch);
             }
           }
         }
       } else {
-        Client.sendCommand(operation);
+        Client.sendCommand(dispatch);
       }
     };
   }
@@ -650,6 +653,69 @@ export default class Hologram {
       "generate_id/0",
       "public",
       ManuallyPortedElixirHologramEntity["generate_id/0"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "count/1",
+      "public",
+      ManuallyPortedElixirHologramQuery["count/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "filter/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["filter/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "include/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["include/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "include/3",
+      "public",
+      ManuallyPortedElixirHologramQuery["include/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "limit/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["limit/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "normalize/1",
+      "public",
+      ManuallyPortedElixirHologramQuery["normalize/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "offset/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["offset/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "one/1",
+      "public",
+      ManuallyPortedElixirHologramQuery["one/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query",
+      "order_by/2",
+      "public",
+      ManuallyPortedElixirHologramQuery["order_by/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -1002,10 +1068,10 @@ export default class Hologram {
   }
 
   // Deps: [:maps.get/2]
-  static #getToParam(operation) {
+  static #getToParam(dispatch) {
     return Erlang_Maps["get/2"](
       Type.atom("to"),
-      Erlang_Maps["get/2"](Type.atom("params"), operation),
+      Erlang_Maps["get/2"](Type.atom("params"), dispatch),
     );
   }
 
@@ -1171,6 +1237,23 @@ export default class Hologram {
     Hologram.#pageParams = mountData.pageParams;
 
     ComponentRegistry.populate(mountData.componentRegistry);
+
+    // Before the first render, so that a prop reading a query answers from the database rather
+    // than from nothing - the rows the server read to render this page are the rows those
+    // queries need, and they go in through the same ingest the stream uses. Every page visit
+    // carries again, which is how navigation needs no server for what it already has.
+    //
+    // A bundle built before any of this existed carries neither field, and a build with no data
+    // model carries no rows - both leave the database as it was.
+    if (mountData.syncRows) {
+      LocalDatabase.actorUserId = mountData.actorUserId;
+      Deltas.apply(mountData.syncRows, {insertOnly: true});
+
+      // A count has no rows behind it, so the rows cannot carry one - the numbers this render
+      // answered with travel beside them, and each page visit replaces them the way it replaces
+      // what its own props read.
+      LocalDatabase.syncCounts = mountData.syncCounts ?? {};
+    }
 
     return mountData;
   }

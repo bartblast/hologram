@@ -16,6 +16,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
+  alias Hologram.Test.Fixtures.Template.Renderer.Module104
   alias Hologram.Test.Fixtures.Template.Renderer.Module11
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
@@ -2090,6 +2091,29 @@ defmodule Hologram.Template.RendererTest do
       assert registry["layout"].struct.state.observed_cid == "layout"
     end
 
+    # A token is a JavaScript expression and means nothing outside a script, so one that reaches
+    # the markup through what someone typed stays the text it is. Substituting there would put a
+    # value into an attribute along with the quotes that end it.
+    test "leaves a placeholder the markup carries as text and in an attribute alone" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module104,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      {html, tree, _component_registry, _server_struct} =
+        render_page(Module104, %{label: "$PAGE_PARAMS_JS_PLACEHOLDER"}, @server, @opts)
+
+      assert String.contains?(
+               html,
+               ~s(<div title="$PAGE_PARAMS_JS_PLACEHOLDER">$PAGE_PARAMS_JS_PLACEHOLDER</div>)
+             )
+
+      # And the two projections say the same thing, which is what lets a navigating client adopt
+      # the served document rather than rebuild it.
+      assert print_dom(tree) == html
+    end
+
     test "returns the tree the HTML is printed from" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
@@ -2126,6 +2150,27 @@ defmodule Hologram.Template.RendererTest do
       refute String.contains?(script_text, "$COMPONENT_REGISTRY_JS_PLACEHOLDER")
       refute String.contains?(script_text, "$PAGE_PARAMS_JS_PLACEHOLDER")
       assert String.contains?(script_text, "selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER")
+    end
+
+    # The mount data goes into a script element as source, and a param comes from the URL - so a
+    # param spelling a closing tag would end that element and put what follows it into the
+    # document as markup. The escape leaves the string the page carries unchanged.
+    test "carries a param that spells a closing tag without ending the script" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      {html, _tree, _component_registry, _server_struct} =
+        render_page(Module48, %{probe: "</script><script>alert(1)</script>"}, @server, @opts)
+
+      refute String.contains?(html, "</script><script>alert(1)")
+
+      assert String.contains?(
+               html,
+               ~S|Type.bitstring("\u{3C}/script>\u{3C}script>alert(1)\u{3C}/script>")|
+             )
     end
   end
 
@@ -2344,18 +2389,16 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
-  describe "interpolate_js_in_tree/3" do
+  describe "interpolate_js_in_tree/2" do
     test "substitutes the placeholder inside a script element's text" do
       tree =
         {:element, "script", [],
          [{:text, "window.registry = $COMPONENT_REGISTRY_JS_PLACEHOLDER;"}]}
 
       result =
-        Renderer.interpolate_js_in_tree(
-          tree,
-          "$COMPONENT_REGISTRY_JS_PLACEHOLDER",
-          "Type.map([])"
-        )
+        Renderer.interpolate_js_in_tree(tree, %{
+          "$COMPONENT_REGISTRY_JS_PLACEHOLDER" => "Type.map([])"
+        })
 
       assert result == {:element, "script", [], [{:text, "window.registry = Type.map([]);"}]}
     end
@@ -2366,7 +2409,7 @@ defmodule Hologram.Template.RendererTest do
          [{:text, "$PAGE_PARAMS_JS_PLACEHOLDER, $PAGE_PARAMS_JS_PLACEHOLDER"}]}
 
       result =
-        Renderer.interpolate_js_in_tree(tree, "$PAGE_PARAMS_JS_PLACEHOLDER", "Type.map([])")
+        Renderer.interpolate_js_in_tree(tree, %{"$PAGE_PARAMS_JS_PLACEHOLDER" => "Type.map([])"})
 
       assert result == {:element, "script", [], [{:text, "Type.map([]), Type.map([])"}]}
     end
@@ -2380,7 +2423,9 @@ defmodule Hologram.Template.RendererTest do
          ]}
 
       result =
-        Renderer.interpolate_js_in_tree(tree, "$PAGE_MODULE_JS_PLACEHOLDER", ~s/Type.atom("abc")/)
+        Renderer.interpolate_js_in_tree(tree, %{
+          "$PAGE_MODULE_JS_PLACEHOLDER" => ~s/Type.atom("abc")/
+        })
 
       assert result ==
                {:element, "html", [],
@@ -2397,7 +2442,7 @@ defmodule Hologram.Template.RendererTest do
       ]
 
       result =
-        Renderer.interpolate_js_in_tree(tree, "$SELF_ECHOES_JS_PLACEHOLDER", "Type.list([])")
+        Renderer.interpolate_js_in_tree(tree, %{"$SELF_ECHOES_JS_PLACEHOLDER" => "Type.list([])"})
 
       assert result == [
                {:element, "script", [], [{:text, "Type.list([])"}]},
@@ -2409,88 +2454,49 @@ defmodule Hologram.Template.RendererTest do
       tree = {:element, "div", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
 
       result =
-        Renderer.interpolate_js_in_tree(tree, "$SELF_ECHOES_JS_PLACEHOLDER", "Type.list([])")
+        Renderer.interpolate_js_in_tree(tree, %{"$SELF_ECHOES_JS_PLACEHOLDER" => "Type.list([])"})
 
       assert result == {:element, "div", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
+    end
+
+    # A token the map does not answer for belongs to whoever interpolates next, so it has to
+    # survive this pass exactly as it was.
+    test "leaves a placeholder the map does not answer for alone" do
+      tree = {:element, "script", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
+
+      result =
+        Renderer.interpolate_js_in_tree(tree, %{"$PAGE_MODULE_JS_PLACEHOLDER" => "Type.nil()"})
+
+      assert result == {:element, "script", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
+    end
+
+    # The values these carry hold whatever a URL, a database or a component's state put there.
+    # Read as a placeholder in turn, a value naming another token would have that token's
+    # JavaScript inserted inside the string it travels in, whose quotes end that string.
+    test "leaves a placeholder carried by an inserted value unsubstituted" do
+      tree = {:element, "script", [], [{:text, "p = $PAGE_PARAMS_JS_PLACEHOLDER;"}]}
+
+      result =
+        Renderer.interpolate_js_in_tree(tree, %{
+          "$PAGE_MODULE_JS_PLACEHOLDER" => ~s/Type.atom("abc")/,
+          "$PAGE_PARAMS_JS_PLACEHOLDER" => ~s/Type.bitstring("$PAGE_MODULE_JS_PLACEHOLDER")/
+        })
+
+      # The `$` is spelled as an escape, so the string still reads as the token and no later
+      # pass can act on it.
+      assert result ==
+               {:element, "script", [],
+                [{:text, ~S/p = Type.bitstring("\u0024PAGE_MODULE_JS_PLACEHOLDER");/}]}
     end
 
     test "leaves attribute values untouched" do
       tree = {:element, "script", [{"data-info", [text: "$SELF_ECHOES_JS_PLACEHOLDER"]}], []}
 
       result =
-        Renderer.interpolate_js_in_tree(tree, "$SELF_ECHOES_JS_PLACEHOLDER", "Type.list([])")
+        Renderer.interpolate_js_in_tree(tree, %{"$SELF_ECHOES_JS_PLACEHOLDER" => "Type.list([])"})
 
       assert result ==
                {:element, "script", [{"data-info", [text: "$SELF_ECHOES_JS_PLACEHOLDER"]}], []}
-    end
-  end
-
-  describe "interpolate_self_echoes_js/2" do
-    test "substitutes the placeholder with the encoded list of actions" do
-      html = ~s'before selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER after'
-
-      actions = [
-        %Hologram.Component.Action{
-          name: :my_action,
-          params: %{text: "hi"},
-          target: "page"
-        }
-      ]
-
-      result = Renderer.interpolate_self_echoes_js(html, actions)
-
-      assert result ==
-               ~s'before selfEchoes: Type.list([Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action")], [Type.atom("params"), Type.map([[Type.atom("text"), Type.bitstring("hi")]])], [Type.atom("target"), Type.bitstring("page")]])]) after'
-    end
-
-    test "substitutes the placeholder with an empty list when no actions are provided" do
-      html = ~s'before selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER after'
-
-      result = Renderer.interpolate_self_echoes_js(html, [])
-
-      assert result == ~s'before selfEchoes: Type.list([]) after'
-    end
-  end
-
-  describe "interpolate_sub_receipt_adds_js/2" do
-    test "substitutes the placeholder with the encoded list of subscription receipts" do
-      html = ~s'before subReceiptAdds: $SUB_RECEIPT_ADDS_JS_PLACEHOLDER after'
-
-      sub_receipt_adds = [{:room_a, "page", "signed-token"}]
-
-      result = Renderer.interpolate_sub_receipt_adds_js(html, sub_receipt_adds)
-
-      assert result ==
-               ~s'before subReceiptAdds: Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page"), Type.bitstring("signed-token")])]) after'
-    end
-
-    test "substitutes the placeholder with an empty list when no receipts are provided" do
-      html = ~s'before subReceiptAdds: $SUB_RECEIPT_ADDS_JS_PLACEHOLDER after'
-
-      result = Renderer.interpolate_sub_receipt_adds_js(html, [])
-
-      assert result == ~s'before subReceiptAdds: Type.list([]) after'
-    end
-  end
-
-  describe "interpolate_sub_receipt_drops_js/2" do
-    test "substitutes the placeholder with the encoded list of subscription drops" do
-      html = ~s'before subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER after'
-
-      sub_receipt_drops = [{:room_a, "page"}]
-
-      result = Renderer.interpolate_sub_receipt_drops_js(html, sub_receipt_drops)
-
-      assert result ==
-               ~s'before subReceiptDrops: Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])]) after'
-    end
-
-    test "substitutes the placeholder with an empty list when no drops are provided" do
-      html = ~s'before subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER after'
-
-      result = Renderer.interpolate_sub_receipt_drops_js(html, [])
-
-      assert result == ~s'before subReceiptDrops: Type.list([]) after'
     end
   end
 

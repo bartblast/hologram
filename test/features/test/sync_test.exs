@@ -8,7 +8,6 @@ defmodule HologramFeatureTests.SyncTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
-  alias Hologram.Sync.Evaluators
   alias Hologram.Test.SyncClient
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
@@ -21,13 +20,8 @@ defmodule HologramFeatureTests.SyncTest do
   # Every entity table truncates, not only the documents: the client's pot is app-wide, so a row
   # left in ANY synced table by an earlier test file would arrive in this client's initial fill
   # and make "the first deltas frame" mean different things on different runs.
-  #
-  # The truncation must find no evaluator alive: TRUNCATE bypasses the write funnel, so no effect
-  # reaches the log and nothing tells a running evaluator the rows are gone - it would keep
-  # serving its pre-truncate round to every client of this test. Waiting for the drain is what
-  # makes each test's first frame mean this test's rows.
   setup do
-    wait_for_evaluators_to_drain()
+    await_evaluator_drain()
 
     tables =
       Enum.map_join([Document, Folder, Review, Product, RoleGrant, User], ", ", fn entity_type ->
@@ -87,20 +81,6 @@ defmodule HologramFeatureTests.SyncTest do
     client
   end
 
-  defp wait_for_evaluators_to_drain(attempts_left \\ 2_000) do
-    cond do
-      Evaluators.live() == [] ->
-        :ok
-
-      attempts_left == 0 ->
-        flunk("evaluators from an earlier test never drained")
-
-      true ->
-        Process.sleep(1)
-        wait_for_evaluators_to_drain(attempts_left - 1)
-    end
-  end
-
   # The place the frame says the client has reached, which it hands back on reconnect. Read out of
   # the frame rather than built here: what it is made of is the server's business.
   defp cursor_of(data) do
@@ -126,7 +106,7 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas_carrying(connect(), ~s["title":"seeded_before_connect"])
 
-    assert data =~ ~s["op":"put_entity"]
+    assert data =~ ~s["put_entity":]
   end
 
   feature "says the store is complete for the page and then for the app", %{session: _session} do
@@ -151,7 +131,40 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas_carrying(client, ~s["title":"after_patch"])
 
-    assert data =~ ~s["op":"patch_entity"]
+    assert data =~ ~s["patch_entity":]
+  end
+
+  # The defect this spec pins: membership must cover the window's whole REACH, so a row no window
+  # roots - the folder is reachable only through the document window's include - still receives
+  # its own patches. Rooted-everywhere fixtures kept the hole green for a whole step.
+  feature "patches a row reached only through an include", %{session: _session} do
+    folder =
+      Folder
+      |> Entity.new(name: "folder_before_patch", public: true)
+      |> create()
+
+    Document
+    |> Entity.new(folder_id: folder.id, public: true, title: "reaches_the_folder")
+    |> create()
+
+    client = drain_initial_sync(connect())
+
+    update(Folder, folder.id, %{name: "folder_after_patch"})
+
+    {data, _client} = await_deltas_carrying(client, ~s["name":"folder_after_patch"])
+
+    # Read out of the frame rather than matched against its text: what else shares the round is
+    # not this test's business. A round reports every member of the window's reach, so the
+    # document that reaches this folder can be grouped beside it - and being grouped FIRST, since
+    # the types are keyed by module name, would break a match that expects to find the folder
+    # right after the op.
+    folder_rows =
+      data
+      |> Jason.decode!()
+      |> get_in(["deltas", "patch_entity", "HologramFeatureTests.Entities.Folder"])
+
+    assert [%{"id" => patched_id, "name" => "folder_after_patch"}] = folder_rows
+    assert patched_id == folder.id
   end
 
   feature "delivers a row created while the client watches, whole", %{session: _session} do
@@ -163,7 +176,7 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas_carrying(client, ~s["title":"created_while_watching"])
 
-    assert data =~ ~s["op":"put_entity"]
+    assert data =~ ~s["put_entity":]
   end
 
   feature "tells the client a deleted row is no longer its to hold", %{session: _session} do
@@ -176,9 +189,17 @@ defmodule HologramFeatureTests.SyncTest do
 
     delete(Document, document.id)
 
-    {data, _client} = await_deltas_carrying(client, ~s["op":"unsync_entity"])
+    {data, _client} = await_deltas_carrying(client, ~s["unsync_entity":])
 
-    assert data =~ ~s["id":"#{document.id}"]
+    # An unsync travels as the bare id in its type's list, so the id alone is the whole delta -
+    # read out of the frame rather than matched against its text, which a delta of any shape at
+    # all would satisfy as long as the id appeared somewhere in it.
+    unsynced_ids =
+      data
+      |> Jason.decode!()
+      |> get_in(["deltas", "unsync_entity", "HologramFeatureTests.Entities.Document"])
+
+    assert unsynced_ids == [document.id]
   end
 
   feature "keeps a server-only value out of the frame its row travels in", %{session: _session} do
@@ -245,7 +266,7 @@ defmodule HologramFeatureTests.SyncTest do
     {data, _refilled_client} =
       await_deltas_carrying(resyncing_client, ~s["title":"sent_again_after_resync"])
 
-    assert data =~ ~s["op":"put_entity"]
+    assert data =~ ~s["put_entity":]
   end
 
   feature "sends an anonymous client the rows anyone may read, and no others", %{

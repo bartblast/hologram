@@ -3,6 +3,7 @@ defmodule Hologram.DB.QueryCache do
 
   use GenServer
 
+  alias Hologram.Auth
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.DB
   alias Hologram.DB.Connection
@@ -173,16 +174,16 @@ defmodule Hologram.DB.QueryCache do
     end
   end
 
-  # The registered queries' ordered pairs enrich the mapping with sort-key
+  # The registered queries' sort-key attributes enrich the mapping with sort-key
   # companions - the cache owns this derivation because extraction needs no
   # mapping and the cache boots right after the database. With no pairs the boot
   # mapping stands - a reconciliation-managed database drops orphaned companions
   # on the next model reconciliation, which targets the plain mapping, while a
   # migration-managed one drops them here, the one convergence that reaches them.
   defp ensure_mapping(terms) do
-    ordered_pairs = Registry.ordered_string_pairs(terms)
+    sort_key_attributes = Registry.sort_key_attributes(terms)
 
-    if MapSet.size(ordered_pairs) == 0 do
+    if MapSet.size(sort_key_attributes) == 0 do
       mapping = DB.mapping()
 
       if migrations_managed?() do
@@ -191,7 +192,7 @@ defmodule Hologram.DB.QueryCache do
 
       mapping
     else
-      mapping = Mapper.derive!(Reflection.list_entities(), ordered_pairs)
+      mapping = Mapper.derive!(Reflection.list_entities(), sort_key_attributes)
       :persistent_term.put(DB.mapping_key(), mapping)
 
       ops = converge_artifacts(mapping)
@@ -267,11 +268,32 @@ defmodule Hologram.DB.QueryCache do
       end)
       |> Map.new()
 
-    windows = Map.new(entries, fn {_id, entry} -> {entry.window_id, entry.window} end)
+    windows =
+      entries
+      |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
+      |> put_grants_window()
 
     data = %{entries: entries, prop_params: prop_params, windows: windows}
 
     :persistent_term.put(impl().persistent_term_key(), data)
+  end
+
+  # Registered whenever the app HAS a grant store, because this is a lookup table: what decides
+  # whether any client subscribes is the BUILD, which knows whether a page can check permissions
+  # locally. An entry nothing asks for costs one map key, where a missing entry would answer
+  # :no_window to a client the build did tell to ask.
+  #
+  # An app designating no user entity type has no grant store - the grant entity joins the data
+  # model only with one - so there is no table to evaluate the window against and nothing to
+  # register.
+  defp put_grants_window(windows) do
+    if Reflection.user_entity() do
+      window = Auth.grants_window()
+
+      Map.put_new(windows, Registry.id(window), window)
+    else
+      windows
+    end
   end
 
   defp qualified_table(table) do

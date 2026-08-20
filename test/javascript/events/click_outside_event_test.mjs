@@ -8,7 +8,7 @@ import PointerEvent from "../../../assets/js/events/pointer_event.mjs";
 defineRuntimeGlobals();
 
 describe("ClickOutsideEvent", () => {
-  it("buildOperationParam()", () => {
+  it("buildEventParam()", () => {
     const event = {
       clientX: 10,
       clientY: 20,
@@ -24,8 +24,8 @@ describe("ClickOutsideEvent", () => {
     };
 
     assert.deepStrictEqual(
-      ClickOutsideEvent.buildOperationParam(event),
-      PointerEvent.buildOperationParam(event),
+      ClickOutsideEvent.buildEventParam(event),
+      PointerEvent.buildEventParam(event),
     );
   });
 

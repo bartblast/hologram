@@ -10,8 +10,8 @@ export default class ClickEvent {
   // prevent_default.
   static isDefaultAllowed = true;
 
-  static buildOperationParam(event) {
-    return PointerEvent.buildOperationParam(event);
+  static buildEventParam(event) {
+    return PointerEvent.buildEventParam(event);
   }
 
   // A modified click (alt, ctrl, meta, or shift) asks for the browser's native action - open in a

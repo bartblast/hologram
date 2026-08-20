@@ -65,6 +65,21 @@ defmodule Hologram.Compiler.QueryExtractor do
   the capture points at one) - a position no clause binds as a plain variable
   yields nil. Zero-arity captures and modules without prop declarations yield no
   entries.
+
+  One position takes ONE name across every clause. The name is what says which
+  prop feeds the argument, and the value is chosen before clause dispatch happens,
+  so two clauses naming a position differently pose a question nothing can answer.
+  Clauses that do not use a position leave it a literal or an underscored name and
+  cost nothing.
+
+  Raises Hologram.CompileError when a position carries more than one distinct
+  name.
+
+  The names are read from compiled beams rather than recorded by the prop macro
+  into the prop's own opts, because a remote capture's names are unreadable while
+  the consuming component compiles: a target module compiling in the same batch
+  exists only in memory, and its beam - the only carrier of its clauses - is
+  written when the batch ends.
   """
   @spec extract_prop_params(module) :: keyword(list(atom | nil))
   def extract_prop_params(module) do
@@ -82,6 +97,35 @@ defmodule Hologram.Compiler.QueryExtractor do
   @spec extract_queries(list(module)) :: list(%{atom => any})
   def extract_queries(modules) do
     Enum.flat_map(modules, &extract_module_queries/1)
+  end
+
+  @doc """
+  Validates that every parameterized from_query capture on the given module's prop
+  declarations binds only the module's declared reactive slots - today, the props it
+  is given, which is every declared prop except the ones from_query itself fills. A
+  builder's argument names bind the like-named slots of the consuming component, so a
+  shared builder is validated against each consumer's own slots.
+
+  Raises Hologram.CompileError when a capture argument names no declared slot, when it
+  names a from_query prop of the same component, or when an argument position is named
+  by no clause of the capture's target. Modules without parameterized captures pass
+  vacuously.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/query_extractor/validate_slot_bindings!_1/README.md
+  """
+  @spec validate_slot_bindings!(module) :: :ok
+  def validate_slot_bindings!(module) do
+    case extract_prop_params(module) do
+      [] ->
+        :ok
+
+      prop_params ->
+        names = %{queries: query_prop_names(module), slots: declared_slot_names(module)}
+
+        Enum.each(prop_params, fn {prop_name, param_names} ->
+          Enum.each(param_names, &validate_slot_binding!(module, prop_name, &1, names))
+        end)
+    end
   end
 
   # A closure evaluates with choices :none - a fork inside would restart the
@@ -189,6 +233,26 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp contains_symbol?(_other), do: false
+
+  # The set a builder argument may bind - the component's declared reactive slots, which today
+  # means the props it is GIVEN and nothing else. Declared state and derived values extend this
+  # set later without reshaping the check.
+  #
+  # A prop that from_query fills is not one of them: it is what a query PRODUCED, not something
+  # the component was handed. Binding one would make a query's answer depend on another query's,
+  # which nothing here orders - the injector runs them in declaration order, so the same two
+  # declarations resolve or raise depending on which was written first.
+  defp declared_slot_names(module) do
+    module.__props__()
+    |> Enum.reject(fn {_name, _type, opts} -> opts[:from_query] end)
+    |> Enum.map(fn {name, _type, _opts} -> name end)
+  end
+
+  defp query_prop_names(module) do
+    module.__props__()
+    |> Enum.filter(fn {_name, _type, opts} -> opts[:from_query] end)
+    |> Enum.map(fn {name, _type, _opts} -> name end)
+  end
 
   defp evaluate!(%IR.AnonymousFunctionType{arity: arity, clauses: [clause]}, state, context) do
     {anonymous_closure!(arity, clause, state.env, context), state}
@@ -465,10 +529,30 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
-  defp merged_param_names(clauses, arity) do
+  # A position named by some clauses and left a literal by others merges to the one name - that is
+  # what this is for, and it is how a `def q(nil)` clause sits beside a `def q(min_b)` one. Two
+  # clauses naming it DIFFERENTLY is the shape that cannot merge, since the caller must pick a
+  # prop's value before any clause is chosen.
+  defp merged_param_names(module, prop_name, clauses, arity) do
     Enum.map(0..(arity - 1), fn index ->
-      Enum.find_value(clauses, &param_name(&1, index))
+      clauses
+      |> Enum.map(&param_name(&1, index))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+      |> merged_param_name!(module, prop_name, index)
     end)
+  end
+
+  defp merged_param_name!([], _module, _prop_name, _index), do: nil
+
+  defp merged_param_name!([name], _module, _prop_name, _index), do: name
+
+  defp merged_param_name!(names, module, prop_name, index) do
+    spelled = Enum.map_join(names, ", ", &inspect/1)
+
+    raise Hologram.CompileError,
+      message:
+        "query capture for prop #{inspect(prop_name)} in #{inspect(module)} names argument #{index + 1} differently across its clauses (#{spelled}) - one argument position binds one prop, and which prop it is has to be known before any clause is chosen, so every clause must name it alike. Rename them to the prop this argument binds, leave the position a literal or an underscored name in the clauses that do not use it, or bind through an adapter naming it once: from_query: fn #{hd(names)} -> your_query(#{hd(names)}) end"
   end
 
   defp module_funs(module) do
@@ -496,7 +580,7 @@ defmodule Hologram.Compiler.QueryExtractor do
       {_target_module, clauses} = resolve_capture_clauses!(module, name, capture)
       arity = Function.info(capture)[:arity]
 
-      [{name, merged_param_names(clauses, arity)}]
+      [{name, merged_param_names(module, name, clauses, arity)}]
     else
       _absent_zero_arity_or_non_capture -> []
     end
@@ -594,5 +678,28 @@ defmodule Hologram.Compiler.QueryExtractor do
     raise Hologram.CompileError,
       message:
         "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} branches inside an anonymous function - not extractable yet"
+  end
+
+  defp validate_slot_binding!(module, prop_name, nil, _slot_names) do
+    raise Hologram.CompileError,
+      message:
+        "from_query capture for prop #{inspect(prop_name)} in #{inspect(module)} has an argument position no clause names - it cannot bind a prop"
+  end
+
+  defp validate_slot_binding!(module, prop_name, param_name, names) do
+    cond do
+      param_name in names.slots ->
+        :ok
+
+      param_name in names.queries ->
+        raise Hologram.CompileError,
+          message:
+            "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(param_name)}, which is a from_query prop of the same component - a query argument binds a value the component is GIVEN, never one another query produced"
+
+      true ->
+        raise Hologram.CompileError,
+          message:
+            "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(param_name)} - no like-named prop is declared"
+    end
   end
 end

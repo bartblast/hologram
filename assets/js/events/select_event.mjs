@@ -6,7 +6,7 @@ export default class SelectEvent {
   // The DOM select event is not cancelable, so preventDefault would be a no-op.
   static isDefaultAllowed = true;
 
-  static buildOperationParam(event) {
+  static buildEventParam(event) {
     const value = event.target.value.substring(
       event.target.selectionStart,
       event.target.selectionEnd,

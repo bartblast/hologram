@@ -6,13 +6,18 @@ import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Debouncer from "./debouncer.mjs";
 import EventListeners from "./event_listeners.mjs";
+import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
+import LocalDatabase from "./local_database.mjs";
+import ManuallyPortedElixirHologramQuery from "./elixir/hologram/query.mjs";
+import Model from "./model.mjs";
 import Once from "./once.mjs";
+import QueryKernel from "./query_kernel.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -466,6 +471,77 @@ export default class Renderer {
 
   // Based on cast_props/2
   // Deps: [:maps.from_list/1]
+  // A result node becomes the entity struct a template can read, its includes boxed with it.
+  // The node carries the row and what was included of it, and the TERM says what each of those
+  // is - a node has no type of its own.
+  static #boxNode(term, node) {
+    const includes = {};
+
+    for (const [name, subTerm] of Object.entries(term.include)) {
+      includes[name] = Renderer.#boxIncluded(subTerm, node.includes[name]);
+    }
+
+    return Model.box(term.entity, node.row, includes);
+  }
+
+  // A to-many include is a list of nodes, a to-one is one node or nothing at all - an absent
+  // to-one is nil, which is what the relationship not being there means.
+  static #boxIncluded(subTerm, included) {
+    if (Array.isArray(included)) {
+      return Type.list(
+        included.map((subNode) => Renderer.#boxNode(subTerm, subNode)),
+      );
+    }
+
+    return included === null
+      ? Type.nil()
+      : Renderer.#boxNode(subTerm, included);
+  }
+
+  // What the kernel evaluated to, in the form a template reads: a count is a number, a
+  // single-result query is one struct or nil, and everything else is a list.
+  static #boxResult(term, result) {
+    if (term.cardinality === "count") {
+      return Type.integer(result);
+    }
+
+    if (term.cardinality === "one") {
+      return result === null ? Type.nil() : Renderer.#boxNode(term, result);
+    }
+
+    return Type.list(result.map((node) => Renderer.#boxNode(term, node)));
+  }
+
+  // What the render that handed this page over counted, for as long as this client's own database
+  // cannot count for itself.
+  //
+  // A count has no rows behind it, so carrying rows cannot answer one: until the fill is complete
+  // for the rows it counts, counting locally would count a pot that is still filling and report a
+  // number climbing towards the truth. The marker says when that stops - the page's own scope for
+  // the page this client connected on, whose rows the server declares complete first, and the
+  // whole pot's for any page reached since, whose rows are only promised at "all".
+  //
+  // The key names the component, the prop and the arguments the builder was called with - which
+  // is what tells two instances of one component apart, and what both tiers can spell alike.
+  static #carriedCount(module, propName, args, term) {
+    if (term.cardinality !== "count") {
+      return null;
+    }
+
+    const scope =
+      module === GlobalRegistry.get("connectPageModule") ? "page" : "all";
+
+    if (LocalDatabase.isSynced(scope)) {
+      return null;
+    }
+
+    const key = `${module}/${propName.value}/${args
+      .map((arg) => Interpreter.inspect(arg))
+      .join(",")}`;
+
+    return LocalDatabase.syncCounts[key] ?? null;
+  }
+
   static #castProps(propsDom, moduleProxy) {
     const propsTuples = Renderer.#filterAllowedProps(
       Renderer.#expandPropSpreads(propsDom),
@@ -492,7 +568,7 @@ export default class Renderer {
         return;
       }
 
-      const operationSpecDom = attrDom.data[1];
+      const dispatchSpecDom = attrDom.data[1];
       const once = $.#onceFromModifiers(attrDom.data[2]);
 
       const handler = (event) => {
@@ -503,7 +579,7 @@ export default class Renderer {
         const dispatch = Hologram.handleUiEvent(
           event,
           "click_outside",
-          operationSpecDom,
+          dispatchSpecDom,
           defaultTarget,
         );
 
@@ -960,9 +1036,19 @@ export default class Renderer {
 
   // Based on filter_allowed_props/2
   // Takes an array of prop tuples, as returned by #expandPropSpreads().
+  //
+  // A from_query prop is not a prop a template may set, the way a from_context one is not: both
+  // are resolved from a source of their own. Today the query stage overwrites whatever a template
+  // passed anyway, so refusing it here changes no resolved value - it is the admission rule that
+  // is kept identical to the server's, and it stops being redundant the moment a query prop can
+  // answer from somewhere other than a fresh run.
   static #filterAllowedProps(propDoms, moduleProxy) {
     const registeredPropNames = Renderer.#getPropDefinitions(moduleProxy)
-      .data.filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
+      .data.filter(
+        (prop) =>
+          Renderer.#contextKey(prop.data[2]) === null &&
+          Renderer.#fromQueryCapture(prop.data[2]) === null,
+      )
       .map((prop) => $.toBitstring(prop.data[0]));
 
     const allowedPropNames = registeredPropNames.concat(Type.bitstring("cid"));
@@ -972,6 +1058,54 @@ export default class Renderer {
         Interpreter.isStrictlyEqual(name, propDom.data[0]),
       ),
     );
+  }
+
+  // Based on from_query_arg!/4
+  static #fromQueryArg(module, propName, paramName, props) {
+    if (paramName === null) {
+      Interpreter.raiseArgumentError(
+        `from_query capture for prop ${Interpreter.inspect(propName)} in ${module} has an argument position no clause names - it cannot bind a prop`,
+      );
+    }
+
+    const name = Type.atom(paramName);
+    const entry = props.data[Type.encodeMapKey(name)];
+
+    if (!entry) {
+      Interpreter.raiseArgumentError(
+        `from_query for prop ${Interpreter.inspect(propName)} in ${module} binds argument ${Interpreter.inspect(name)} - no like-named prop is set`,
+      );
+    }
+
+    return entry[1];
+  }
+
+  // Based on from_query_args!/4
+  //
+  // A capture takes its arguments from the like-named props, and which names those are is what
+  // the build baked: an encoded function carries no argument names of its own. A zero-arity
+  // capture asks for nothing, which is why it needs no baked entry.
+  static #fromQueryArgs(module, propName, capture, props) {
+    if (capture.arity === 0) {
+      return [];
+    }
+
+    const paramNames =
+      globalThis.Hologram.sync?.propParams?.[module]?.[propName.value];
+
+    if (!paramNames) {
+      Interpreter.raiseArgumentError(
+        `no registered params for from_query prop ${Interpreter.inspect(propName)} in ${module} - the query cache holds no entry for it`,
+      );
+    }
+
+    return paramNames.map((paramName) =>
+      Renderer.#fromQueryArg(module, propName, paramName, props),
+    );
+  }
+
+  static #fromQueryCapture(opts) {
+    return Interpreter.accessKeywordListElement(opts, Type.atom("from_query"));
   }
 
   static #getPropDefinitions(moduleProxy) {
@@ -1044,6 +1178,67 @@ export default class Renderer {
     );
 
     return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
+  }
+
+  // Based on run_prop_query!/4
+  //
+  // The builder is ordinary transpiled code piping the ported query stages, so calling it yields
+  // the plain term the kernel evaluates - normalized first, exactly as the server normalizes
+  // before running, so the client answers the same query the same way.
+  //
+  // The result is boxed here and nowhere else: rows live plain, and this is the boundary where
+  // one becomes something a template can read.
+  static #runPropQuery(alias, propName, capture, props) {
+    const module = Interpreter.moduleExName(alias);
+    const args = Renderer.#fromQueryArgs(module, propName, capture, props);
+
+    const term = ManuallyPortedElixirHologramQuery["normalize/1"](
+      Interpreter.callAnonymousFunction(capture, args),
+    );
+
+    const carried = Renderer.#carriedCount(module, propName, args, term);
+
+    if (carried !== null) {
+      return Type.integer(carried);
+    }
+
+    const result = QueryKernel.run(term, {
+      actorUserId: LocalDatabase.actorUserId,
+    });
+
+    return Renderer.#boxResult(term, result);
+  }
+
+  // Based on inject_props_from_query/2
+  //
+  // The last prop source, as on the server: a parameterized capture binds like-named props, and
+  // template values, context and defaults are what supply them - so they must all be in before
+  // this runs. Each resolved query prop joins them, which is what lets a later one bind it.
+  // Every query reads its arguments from the props the component was GIVEN, never from the
+  // accumulator - so what one query answers can never reach another's arguments, and the order
+  // these run in cannot change what any of them returns. The build refuses such a binding
+  // outright; this is the same rule holding by construction rather than by check.
+  static #injectPropsFromQuery(props, moduleProxy, alias) {
+    return Renderer.#getPropDefinitions(moduleProxy).data.reduce(
+      (acc, prop) => {
+        const capture = Renderer.#fromQueryCapture(prop.data[2]);
+
+        if (capture === null) {
+          return acc;
+        }
+
+        const propName = prop.data[0];
+
+        // Optimized (mutates map)
+        acc.data[Type.encodeMapKey(propName)] = [
+          propName,
+          Renderer.#runPropQuery(alias, propName, capture, props),
+        ];
+
+        return acc;
+      },
+      Utils.shallowCloneObject(props),
+    );
   }
 
   // Based on invalid_dynamic_tag_value_message/1
@@ -1399,6 +1594,7 @@ export default class Renderer {
     );
 
     props = Renderer.#injectDefaultPropValues(props, moduleProxy);
+    props = Renderer.#injectPropsFromQuery(props, moduleProxy, dom.data[1]);
 
     if (Renderer.#hasCidProp(props)) {
       return Renderer.#renderStatefulComponent(

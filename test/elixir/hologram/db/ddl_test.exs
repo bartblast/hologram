@@ -3,6 +3,27 @@ defmodule Hologram.DB.DDLTest do
 
   import Hologram.DB.DDL
 
+  describe "built_index_check_statement/1" do
+    test "counts the valid indexes carrying the name" do
+      expected =
+        normalize_newlines("""
+        SELECT COUNT(*)
+        FROM pg_catalog.pg_index i
+        JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'hologram_data' AND c.relname = 'task_project_id_$idx' AND i.indisvalid = TRUE\
+        """)
+
+      assert normalize_newlines(built_index_check_statement("task_project_id_$idx")) == expected
+    end
+
+    test "escapes a quote in the index name" do
+      statement = normalize_newlines(built_index_check_statement("od'd_$idx"))
+
+      assert statement =~ ~s(c.relname = 'od''d_$idx')
+    end
+  end
+
   describe "cast_check_statement/4" do
     test "counts rows with fractional parts for float8 to int8" do
       assert cast_check_statement("task", "score", "float8", "int8") ==

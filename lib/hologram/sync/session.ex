@@ -72,8 +72,7 @@ defmodule Hologram.Sync.Session do
       pending: MapSet.new(),
       places: %{},
       resuming: gap != nil,
-      touched: %{},
-      types: %{}
+      touched: %{}
     }
 
     {:ok, state, {:continue, :subscribe}}
@@ -138,8 +137,14 @@ defmodule Hologram.Sync.Session do
         state
 
       result ->
-        held = Map.get(state.held, window_id, MapSet.new())
-        deltas = Diff.deltas(result, held, state.actor_user_id, transactions)
+        held = Map.get(state.held, window_id, %{})
+
+        held_ids =
+          held
+          |> Map.keys()
+          |> MapSet.new()
+
+        deltas = Diff.deltas(result, held_ids, state.actor_user_id, transactions)
 
         state
         |> send_deltas(window_id, deltas)
@@ -150,12 +155,13 @@ defmodule Hologram.Sync.Session do
 
   # A row is dropped only once it has left every window this client holds - one window losing it
   # while another still carries it is not news, and telling the client to drop it would take the
-  # row out from under the query that still wants it.
+  # row out from under the query that still wants it. What a window holds is the whole of its
+  # REACH: a row carried only through an include counts the same as a root.
   defp left_the_pot(state, window_id, vanished) do
     others = Map.delete(state.held, window_id)
 
     Enum.reject(vanished, fn id ->
-      Enum.any?(others, fn {_window_id, ids} -> MapSet.member?(ids, id) end)
+      Enum.any?(others, fn {_window_id, held} -> Map.has_key?(held, id) end)
     end)
   end
 
@@ -290,13 +296,15 @@ defmodule Hologram.Sync.Session do
     %{state | places: places}
   end
 
+  # Each id is held under its type, because a row that later leaves is no longer there to name
+  # its own - the arrival is the one moment the type is in hand, so it is kept from there.
   defp remember(state, window_id, held, deltas) do
-    appeared_ids = MapSet.new(deltas.appeared, & &1.id)
+    arrived = Map.new(deltas.appeared, &{&1.id, &1.__struct__})
 
     window_held =
       held
-      |> MapSet.union(appeared_ids)
-      |> MapSet.difference(MapSet.new(deltas.vanished))
+      |> Map.merge(arrived)
+      |> Map.drop(deltas.vanished)
 
     %{state | held: Map.put(state.held, window_id, window_held)}
   end
@@ -328,22 +336,20 @@ defmodule Hologram.Sync.Session do
   end
 
   defp tell(state, window_id, deltas) do
+    held = Map.get(state.held, window_id, %{})
     unsynced = left_the_pot(state, window_id, deltas.vanished)
 
     news = %{
       appeared: deltas.appeared,
       edges: deltas.edges,
       patched: deltas.patched,
-      unsynced: unsynced
+      unsynced: Enum.map(unsynced, &{&1, Map.fetch!(held, &1)})
     }
 
     news
     |> split_news()
     |> Enum.each(fn part ->
-      send(
-        state.client,
-        {:sync_deltas, cursor(state), Frame.deltas(part, state.types[window_id])}
-      )
+      send(state.client, {:sync_deltas, cursor(state), Frame.deltas(part)})
     end)
 
     state
@@ -393,24 +399,14 @@ defmodule Hologram.Sync.Session do
 
         mark_filled(unconstrained, window_id)
 
-      {:ok, evaluator, version, term} ->
+      {:ok, evaluator, version, _term} ->
         # Watched from here on: an evaluator that stops is the end of a window's rounds, and a
         # session not told would hold that window pending for as long as the client stayed - never
         # announcing a scope, never sending a marker, with nothing the client could do about it.
         Process.monitor(evaluator)
 
-        state
-        |> remember_type(window_id, term)
-        |> first_round(window_id, version)
+        first_round(state, window_id, version)
     end
-  end
-
-  # A row that left is named by the type of the window it left, since it is no longer among the
-  # rows to be asked - so the type is kept from the term when the window is taken up. The term is
-  # the one the subscription answered with rather than a fresh look at the cache: a live reload
-  # can drop a window between two reads, and the second would then have no type to keep.
-  defp remember_type(state, window_id, term) do
-    %{state | types: Map.put(state.types, window_id, term.entity)}
   end
 
   defp first_round(state, window_id, 0) do

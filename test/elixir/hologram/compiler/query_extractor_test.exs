@@ -29,9 +29,14 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9
+  alias Hologram.Test.Fixtures.Component.Module10, as: Component10
   alias Hologram.Test.Fixtures.Component.Module11, as: Component11
   alias Hologram.Test.Fixtures.Component.Module12, as: Component12
   alias Hologram.Test.Fixtures.Component.Module14, as: Component14
+  alias Hologram.Test.Fixtures.Component.Module22, as: Component22
+  alias Hologram.Test.Fixtures.Component.Module23, as: Component23
+  alias Hologram.Test.Fixtures.Component.Module25, as: Component25
+  alias Hologram.Test.Fixtures.Component.Module27, as: Component27
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
 
@@ -322,6 +327,15 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     test "yields no entries for zero-arity captures" do
       assert extract_prop_params(Module1) == []
     end
+
+    test "raises when clauses name one argument position differently" do
+      expected_msg =
+        "query capture for prop :entities in Hologram.Test.Fixtures.Component.Module25 names argument 1 differently across its clauses (:min_b, :max_b) - one argument position binds one prop, and which prop it is has to be known before any clause is chosen, so every clause must name it alike. Rename them to the prop this argument binds, leave the position a literal or an underscored name in the clauses that do not use it, or bind through an adapter naming it once: from_query: fn min_b -> your_query(min_b) end"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_prop_params(Component25)
+      end
+    end
   end
 
   describe "extract_queries/1" do
@@ -338,6 +352,61 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Query.normalize()
 
       assert extract_queries([Module1, Entity2, Module4]) == [module_1_term, module_4_term]
+    end
+  end
+
+  describe "validate_slot_bindings!/1" do
+    test "passes a capture binding declared props" do
+      assert validate_slot_bindings!(Component22) == :ok
+    end
+
+    test "passes a module without prop declarations" do
+      assert validate_slot_bindings!(Entity2) == :ok
+    end
+
+    test "passes a zero-arity capture" do
+      assert validate_slot_bindings!(Component10) == :ok
+    end
+
+    test "raises when a local capture argument binds no declared prop" do
+      expected_msg =
+        "from_query for prop :entities in Hologram.Test.Fixtures.Component.Module11 binds argument :min_b - no like-named prop is declared"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_slot_bindings!(Component11)
+      end
+    end
+
+    # A shared builder's argument names are a cross-module contract - each consumer is validated
+    # against its own declared slots.
+    test "raises when a remote capture argument binds no declared prop" do
+      expected_msg =
+        "from_query for prop :entities in Hologram.Test.Fixtures.Component.Module14 binds argument :min_b - no like-named prop is declared"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_slot_bindings!(Component14)
+      end
+    end
+
+    # Slots are what a component is GIVEN. A query's answer is not that, and binding one would
+    # make a query depend on another query with nothing ordering the two - the injector runs them
+    # in declaration order, so the same pair resolves or raises by which was written first.
+    test "raises when a capture argument binds a from_query prop of the same component" do
+      expected_msg =
+        "from_query for prop :derived in Hologram.Test.Fixtures.Component.Module27 binds argument :entities, which is a from_query prop of the same component - a query argument binds a value the component is GIVEN, never one another query produced"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_slot_bindings!(Component27)
+      end
+    end
+
+    test "raises when an argument position is named by no clause" do
+      expected_msg =
+        "from_query capture for prop :entities in Hologram.Test.Fixtures.Component.Module23 has an argument position no clause names - it cannot bind a prop"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_slot_bindings!(Component23)
+      end
     end
   end
 end

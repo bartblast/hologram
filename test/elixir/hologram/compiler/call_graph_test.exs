@@ -1758,8 +1758,19 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "list_runtime_mfas/2" do
+    # The graph the BUNDLE is derived from, which is the one the compile task feeds this: a
+    # manually ported MFA is removed before the runtime set is listed, so its Elixir body - and
+    # everything that body reaches - is not what ships. Listing from the full graph instead would
+    # measure a build that never happens: a template calling `can?`, for instance, would drag the
+    # whole server-side permission subtree (and its Postgrex and calendar types) into a set that
+    # in truth carries the JS port.
     setup %{full_call_graph: call_graph} do
-      [runtime_mfas: list_runtime_mfas(call_graph, Reflection.list_pages())]
+      runtime_call_graph =
+        call_graph
+        |> clone()
+        |> remove_manually_ported_mfas()
+
+      [runtime_mfas: list_runtime_mfas(runtime_call_graph, Reflection.list_pages())]
     end
 
     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{
@@ -1821,20 +1832,22 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {Hex.Registry.Server, :versions, 2} in result
     end
 
+    # The positive artifact is a String.Chars implementation rather than an Inspect one: the
+    # runtime inspects through the JS port (`Kernel.inspect/1,2` is manually ported), so no
+    # Inspect implementation is bundled at all - verified against a built runtime bundle, which
+    # carries String.Chars.Integer and no Inspect.Integer. The Inspect refutes stay as the guard
+    # for a build where that changes.
     test "excludes Hex implementations for Inspect and String.Chars protocols", %{
       runtime_mfas: result
     } do
-      assert {Inspect.Integer, :__impl__, 1} in result
-      assert {Inspect.Integer, :inspect, 2} in result
-
-      refute {Inspect.Hex.Solver.PackageRange, :__impl__, 1} in result
-      refute {Inspect.Hex.Solver.PackageRange, :inspect, 2} in result
-
       assert {String.Chars.Integer, :__impl__, 1} in result
       assert {String.Chars.Integer, :to_string, 1} in result
 
       refute {String.Chars.Hex.Solver.PackageRange, :__impl__, 1} in result
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
+
+      refute {Inspect.Hex.Solver.PackageRange, :__impl__, 1} in result
+      refute {Inspect.Hex.Solver.PackageRange, :inspect, 2} in result
     end
 
     test "excludes protocol implementations whose concrete type is not runtime reachable", %{

@@ -8,9 +8,9 @@ import Type from "../../../assets/js/type.mjs";
 defineRuntimeGlobals();
 
 describe("ScrollEvent", () => {
-  it("buildOperationParam()", () => {
+  it("buildEventParam()", () => {
     const event = {target: {scrollLeft: 12, scrollTop: 34}};
-    const result = ScrollEvent.buildOperationParam(event);
+    const result = ScrollEvent.buildEventParam(event);
 
     assert.deepStrictEqual(
       result,

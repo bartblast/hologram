@@ -164,10 +164,15 @@ defmodule Hologram.DB.QueryRunner do
 
   defp decode_embedded_value(value, :date), do: Date.from_iso8601!(value)
 
+  # JSON writes a fraction without its trailing zeros, so an instant arriving this way carries
+  # whatever precision its digits imply, where the same instant read from the column carries all
+  # six. Two structs of one instant that compare unequal is a difference an application meets as
+  # a bug - the same row read two ways answering differently - so what arrives here is
+  # normalized the way the column path already normalizes it.
   defp decode_embedded_value(value, :datetime) do
     {:ok, datetime, _offset} = DateTime.from_iso8601(value)
 
-    datetime
+    Codec.encode(datetime, :datetime)
   end
 
   defp decode_embedded_value(value, :enum), do: Codec.decode_enum_label(value)

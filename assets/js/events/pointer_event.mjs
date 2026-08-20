@@ -10,8 +10,8 @@ export default class PointerEvent {
   static isDefaultAllowed = true;
 
   // TODO: add more fields specific to PointerEvent
-  static buildOperationParam(event) {
-    const mouseEventDetails = MouseEvent.buildOperationParam(event);
+  static buildEventParam(event) {
+    const mouseEventDetails = MouseEvent.buildEventParam(event);
 
     const pointerEventDetails = Type.map([
       [

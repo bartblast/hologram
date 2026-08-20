@@ -12,8 +12,8 @@ describe("InputEvent", () => {
     target: {tagName: "INPUT", type: "text", value: "abc"},
   };
 
-  it("buildOperationParam()", () => {
-    const result = InputEvent.buildOperationParam(event);
+  it("buildEventParam()", () => {
+    const result = InputEvent.buildEventParam(event);
 
     assert.deepStrictEqual(
       result,

@@ -10,11 +10,8 @@ defineRuntimeGlobals();
 describe("TransitionEvent", () => {
   const event = {};
 
-  it("buildOperationParam()", () => {
-    assert.deepStrictEqual(
-      TransitionEvent.buildOperationParam(event),
-      Type.map(),
-    );
+  it("buildEventParam()", () => {
+    assert.deepStrictEqual(TransitionEvent.buildEventParam(event), Type.map());
   });
 
   it("isEventIgnored()", () => {

@@ -412,6 +412,41 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert [%Module2{c: "banana"}, %Module2{b: 7, c: "cherry"}] = related_entities
     end
 
+    # An embedded row travels as JSON, which writes a fraction without its trailing zeros, while
+    # the same row read from its own columns carries all six digits. Left alone, one instant
+    # would decode into two structs that compare unequal, and an application reading a row two
+    # ways would be told they are different rows.
+    test "decodes an embedded datetime the way the column path decodes it" do
+      {target, _second, _third} = create_module_2_entities()
+      source = create_module_3_entity()
+
+      :ok = add_relationship(Module3, source.id, :a, target.id)
+
+      stamp = ~U[2026-08-16 12:00:00.457870Z]
+
+      {:ok, _result} =
+        Connection.query(
+          ~s(UPDATE "hologram_data".#{Mapper.quote_identifier(Mapper.table_name(Module2))} SET "created_at" = $1 WHERE "id" = $2),
+          [stamp, Codec.encode(target.id, :uuid)]
+        )
+
+      embedding_term =
+        Module3
+        |> include(:a)
+        |> Query.normalize()
+
+      direct_term =
+        Module2
+        |> filter(id: target.id)
+        |> one()
+        |> Query.normalize()
+
+      assert [%Module3{a: [embedded]}] = run(embedding_term, @mapping)
+
+      assert embedded.created_at == run(direct_term, @mapping).created_at
+      assert embedded.created_at == stamp
+    end
+
     test "decodes a to-one include as a nested entity struct" do
       source = create_module_3_entity()
 

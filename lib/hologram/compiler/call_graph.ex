@@ -361,8 +361,6 @@ defmodule Hologram.Compiler.CallGraph do
     {Code, :ensure_loaded, 1},
     {Exception, :format_stacktrace, 1},
     {FunctionClauseError, :message, 1},
-    # TODO: the port raises - replace it with the client-side check evaluating compiled policy
-    # rules against synced grant tuples.
     {Hologram.Auth, :can?, 3},
     {Hologram.Entity, :generate_id, 0},
     {Hologram.JS, :call, 4},
@@ -375,6 +373,18 @@ defmodule Hologram.Compiler.CallGraph do
     {Hologram.JS, :new, 3},
     {Hologram.JS, :set, 4},
     {Hologram.JS, :typeof, 2},
+    # The query stages build the PLAIN term the client's kernel evaluates, and validate against
+    # the model baked into the bundle rather than against entity reflection, which no client
+    # carries. Keeping the transpiled originals out of the bundle is what makes that possible.
+    {Hologram.Query, :count, 1},
+    {Hologram.Query, :filter, 2},
+    {Hologram.Query, :include, 2},
+    {Hologram.Query, :include, 3},
+    {Hologram.Query, :limit, 2},
+    {Hologram.Query, :normalize, 1},
+    {Hologram.Query, :offset, 2},
+    {Hologram.Query, :one, 1},
+    {Hologram.Query, :order_by, 2},
     {Hologram.Router.Helpers, :asset_path, 1},
     {IO, :inspect, 1},
     {IO, :inspect, 2},

@@ -8,7 +8,7 @@ import Type from "../../../assets/js/type.mjs";
 defineRuntimeGlobals();
 
 describe("ResizeEvent", () => {
-  describe("buildOperationParam()", () => {
+  describe("buildEventParam()", () => {
     it("builds an element payload from the observer entry's box sizes", () => {
       const event = {
         borderBoxSize: [{blockSize: 200, inlineSize: 300}],
@@ -16,7 +16,7 @@ describe("ResizeEvent", () => {
         devicePixelContentBoxSize: [{blockSize: 380, inlineSize: 580}],
       };
 
-      const result = ResizeEvent.buildOperationParam(event);
+      const result = ResizeEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -52,7 +52,7 @@ describe("ResizeEvent", () => {
         contentBoxSize: [{blockSize: 190, inlineSize: 290}],
       };
 
-      const result = ResizeEvent.buildOperationParam(event);
+      const result = ResizeEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -80,7 +80,7 @@ describe("ResizeEvent", () => {
       // The DOM resize event carries no size data of its own.
       const event = {target: window};
 
-      const result = ResizeEvent.buildOperationParam(event);
+      const result = ResizeEvent.buildEventParam(event);
 
       assert.deepStrictEqual(result, Type.map());
     });

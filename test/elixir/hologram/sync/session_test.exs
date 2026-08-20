@@ -15,8 +15,10 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Session
   alias Hologram.Sync.WireData
+  alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
 
   use_module_stub :query_cache
@@ -25,6 +27,7 @@ defmodule Hologram.Sync.SessionTest do
   setup :set_mox_global
 
   @board_window "w_board"
+  @include_window "w_include"
   @other_page MyApp.SettingsPage
   @other_window "w_other"
   @page MyApp.BoardPage
@@ -868,6 +871,100 @@ defmodule Hologram.Sync.SessionTest do
     end
   end
 
+  describe "handle :round - the pot over reach" do
+    setup do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        prop_params: %{},
+        windows: %{
+          @board_window => Query.normalize(Module2),
+          @include_window => include_window_term()
+        }
+      })
+
+      :ok
+    end
+
+    test "keeps a child the client still holds through another window's reach" do
+      child = create("held two ways")
+      source = include_source(child)
+      windows(%{@page => [@board_window, @include_window]})
+      hold_windows([@board_window, @include_window])
+
+      start_session!([])
+      assert_receive {:sync_deltas, _board_cursor, _board_fill}
+      assert_receive {:sync_deltas, _include_cursor, _include_fill}
+      assert_receive {:sync_synced, :all}
+
+      # The child leaves the include window's reach without leaving the database - the board
+      # window still roots it, so the client keeps the row and is told nothing.
+      DB.delete_relationship(Module3, source.id, :a, child.id)
+      Evaluator.round(@include_window, [])
+
+      refute_receive {:sync_deltas, _cursor, _deltas}, 100
+    end
+
+    test "drops a child once it has left every reach holding it" do
+      child = create("held two ways")
+      source = include_source(child)
+      windows(%{@page => [@board_window, @include_window]})
+      hold_windows([@board_window, @include_window])
+
+      start_session!([])
+      assert_receive {:sync_deltas, _board_cursor, _board_fill}
+      assert_receive {:sync_deltas, _include_cursor, _include_fill}
+      assert_receive {:sync_synced, :all}
+
+      DB.delete_relationship(Module3, source.id, :a, child.id)
+      Evaluator.round(@include_window, [])
+      refute_receive {:sync_deltas, _cursor, _include_deltas}, 100
+
+      DB.delete(Module2, child.id)
+      Evaluator.round(@board_window, [])
+
+      assert_receive {:sync_deltas, _cursor, deltas}
+      assert [%{id: unsynced_id, op: :unsync_entity}] = deltas
+      assert unsynced_id == child.id
+    end
+
+    test "names a dropped child by its own type, not the window's root type" do
+      child = create("reached only through the include")
+      source = include_source(child)
+      windows(%{@page => [@include_window]})
+      hold_windows([@include_window])
+
+      start_session!([])
+      assert_receive {:sync_deltas, _fill_cursor, _fill}
+      assert_receive {:sync_synced, :all}
+
+      DB.delete_relationship(Module3, source.id, :a, child.id)
+      Evaluator.round(@include_window, [])
+
+      assert_receive {:sync_deltas, _cursor, deltas}
+
+      assert deltas == [
+               %{
+                 id: child.id,
+                 op: :unsync_entity,
+                 type: "Hologram.Test.Fixtures.Entity.Module2"
+               }
+             ]
+    end
+
+    test "replays a gap touching a row held only through reach" do
+      child = create("moved while away")
+      include_source(child)
+      windows(%{@page => [@include_window]})
+      hold_windows([@include_window])
+
+      start_session!(gap: [gap_effect(child.id)])
+
+      assert_receive {:sync_deltas, _cursor, deltas}
+      assert [%{data: data, op: :put_entity}] = deltas
+      assert data.id == child.id
+    end
+  end
+
   defp silence do
     receive do
       {:"$gen_call", from, {:subscribe, _subscriber}} ->
@@ -887,6 +984,30 @@ defmodule Hologram.Sync.SessionTest do
 
         forward(test_pid)
     end
+  end
+
+  # A row of the include window's reach without being any window's root - what the child of the
+  # reach tests is held through.
+  defp include_source(child) do
+    required =
+      Module1
+      |> Entity.new()
+      |> DB.create()
+
+    source =
+      Module3
+      |> Entity.new(c_id: required.id)
+      |> DB.create()
+
+    DB.add_relationship(Module3, source.id, :a, child.id)
+
+    source
+  end
+
+  defp include_window_term do
+    Module3
+    |> Query.include(:a)
+    |> Query.normalize()
   end
 
   defp other_window_term do

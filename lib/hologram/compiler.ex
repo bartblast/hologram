@@ -1,6 +1,8 @@
 defmodule Hologram.Compiler do
   @moduledoc false
 
+  alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.MapUtils
   alias Hologram.Commons.PathUtils
@@ -13,7 +15,10 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.QueryExtractor
+  alias Hologram.DB.Codec
+  alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.Policy
   alias Hologram.Query.Registry
   alias Hologram.Query.Window
   alias Hologram.Reflection
@@ -110,16 +115,68 @@ defmodule Hologram.Compiler do
 
   A page reaching no query at all has no windows, and answers with an empty list rather than
   being left out.
+
+  Pages listed in `permission_checking_pages` also download the grants window: what a client
+  evaluates permissions against is grant rows, so a page that checks them on the client needs
+  them held like any other rows it reads. The list is derived apart, from the call graph BEFORE
+  manually ported MFAs are removed - see `pages_checking_permissions/2`.
   """
-  @spec build_page_windows(list(module), CallGraph.t()) :: %{module => list(String.t())}
-  def build_page_windows(page_modules, call_graph) do
+  @spec build_page_windows(list(module), CallGraph.t(), list(module)) ::
+          %{module => list(String.t())}
+  def build_page_windows(page_modules, call_graph, permission_checking_pages \\ []) do
     graph = CallGraph.get_graph(call_graph)
     templatables = page_modules ++ Reflection.list_components()
     analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
 
     Map.new(page_modules, fn page_module ->
-      {page_module, page_window_ids(page_module, call_graph, analysis)}
+      window_ids = page_window_ids(page_module, call_graph, analysis)
+
+      # Deduplicated because the grants window is derivable by an ordinary query: the grant entity
+      # is an entity type like any other, so a page listing grants and checking permissions reaches
+      # one window by two routes - and a list naming it twice is subscribed to twice, monitored
+      # twice, and rounded twice for one set of rows.
+      window_ids =
+        if page_module in permission_checking_pages do
+          [grants_window_id() | window_ids]
+          |> Enum.uniq()
+          |> Enum.sort()
+        else
+          window_ids
+        end
+
+      {page_module, window_ids}
     end)
+  end
+
+  @doc """
+  Returns the given pages that can check permissions on the CLIENT - the ones whose bundled code
+  reaches `Hologram.Auth.can?/3`.
+
+  Takes the call graph BEFORE manually ported MFAs are removed: `can?/3` is one of them, so the
+  graph the bundles are derived from no longer holds the vertex to ask about. Reachability is
+  read through the same page walk the bundles use, so what registers the grants window is what
+  actually ships - a `can?` reached only from command handlers, which run on the server, does
+  not.
+
+  An app that designates no user entity type has no grant store at all - the framework's grant
+  entity joins the data model only with one - so no page checks permissions against anything and
+  the answer is empty whatever the call graph says.
+  """
+  @spec pages_checking_permissions(list(module), CallGraph.t()) :: list(module)
+  def pages_checking_permissions(page_modules, call_graph) do
+    if Reflection.user_entity() do
+      graph = CallGraph.get_graph(call_graph)
+      templatables = page_modules ++ Reflection.list_components()
+      analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+
+      Enum.filter(page_modules, fn page_module ->
+        call_graph
+        |> CallGraph.list_page_mfas(page_module, analysis)
+        |> Enum.member?({Hologram.Auth, :can?, 3})
+      end)
+    else
+      []
+    end
   end
 
   @doc """
@@ -325,9 +382,27 @@ defmodule Hologram.Compiler do
   @doc """
   Builds Hologram runtime JavaScript source code.
   """
-  @spec build_runtime_js(list(mfa), PLT.t(), MapSet.t(mfa), keyword(String.t()), T.file_path()) ::
-          String.t()
-  def build_runtime_js(runtime_mfas, ir_plt, async_mfas, app_versions, js_dir) do
+  @spec build_runtime_js(
+          list(mfa),
+          PLT.t(),
+          MapSet.t(mfa),
+          keyword(String.t()),
+          %{
+            entity_types: MapSet.t(module),
+            permission_checking?: boolean,
+            sort_key_attributes: MapSet.t({module, atom}),
+            prop_params: %{module => keyword(list(atom))}
+          },
+          T.file_path()
+        ) :: String.t()
+  def build_runtime_js(
+        runtime_mfas,
+        ir_plt,
+        async_mfas,
+        app_versions,
+        sync_constants,
+        js_dir
+      ) do
     erlang_function_defs =
       runtime_mfas
       |> render_erlang_function_defs(Path.join(js_dir, "erlang"))
@@ -366,7 +441,7 @@ defmodule Hologram.Compiler do
 
     globalThis.Hologram.config = #{render_client_config()};
 
-    #{render_sync_constants()}
+    #{render_sync_constants(sync_constants)}
 
     ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
@@ -523,11 +598,24 @@ defmodule Hologram.Compiler do
           PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
+          %{
+            entity_types: MapSet.t(module),
+            permission_checking?: boolean,
+            sort_key_attributes: MapSet.t({module, atom}),
+            prop_params: %{module => keyword(list(atom))}
+          },
           T.opts()
         ) :: T.file_path()
-  def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, app_versions, opts) do
+  def create_runtime_entry_file(
+        runtime_mfas,
+        ir_plt,
+        async_mfas,
+        app_versions,
+        sync_constants,
+        opts
+      ) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, async_mfas, app_versions, opts[:js_dir])
+    |> build_runtime_js(ir_plt, async_mfas, app_versions, sync_constants, opts[:js_dir])
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
@@ -689,6 +777,78 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns what the client's data layer is compiled with, derived from the queries the given
+  pages reach.
+
+  `:entity_types` are the types a client can ever hold - every window's own type and everything
+  it includes. Nothing else can reach a client's database, so nothing else is worth telling it
+  about.
+
+  `:sort_key_attributes` are the {entity type, attribute name} pairs those queries order by on
+  :string attributes - the attributes whose sort keys the client computes at ingest, derived from
+  the same registered queries the server derives its companion columns from.
+
+  `:prop_params` are the ordered argument names of every parameterized from_query capture those
+  components declare, keyed by component and prop. A capture travels in the bundle and is called
+  there, but the names its arguments were written with do not survive encoding - and those names
+  are what each argument binds by.
+
+  When any of the given pages checks permissions on the client (`permission_checking?`), the
+  grant type joins the entity types: those clients hold grant rows, and a row of a type the model
+  does not name cannot be read back at all. No query names that type - the grants window is
+  registered rather than extracted - so it is added here rather than derived.
+
+  Every entity type declaring a policy joins them too: a check's argument is whatever a template
+  passes - a constructed struct as often as a queried row, `can?(user, :create, %Task{})` being
+  the ordinary spelling of a create check - so which types get checked is not derivable from the
+  queries. Shipping every policied type's rules is what lets the client answer every check the
+  way the server would. What is left out is exactly the types declaring no policy, which is what
+  lets the client read an ABSENT entry as the server's own default deny.
+  """
+  @spec build_sync_constants(list(module), CallGraph.t(), boolean) :: %{
+          entity_types: MapSet.t(module),
+          permission_checking?: boolean,
+          prop_params: %{module => keyword(list(atom))},
+          sort_key_attributes: MapSet.t({module, atom})
+        }
+  def build_sync_constants(page_modules, call_graph, permission_checking? \\ false) do
+    graph = CallGraph.get_graph(call_graph)
+    templatables = page_modules ++ Reflection.list_components()
+    analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+
+    component_modules =
+      page_modules
+      |> Enum.flat_map(&page_component_modules(&1, call_graph, analysis))
+      |> Enum.uniq()
+
+    terms = Enum.flat_map(component_modules, &QueryExtractor.extract_module_queries/1)
+
+    queried_entity_types =
+      Enum.reduce(terms, MapSet.new(), fn term, types ->
+        MapSet.union(types, Registry.entity_types(term))
+      end)
+
+    entity_types =
+      if permission_checking? do
+        queried_entity_types
+        |> MapSet.put(RoleGrant)
+        |> MapSet.union(policied_entity_types())
+      else
+        queried_entity_types
+      end
+
+    # The flag is carried rather than recovered from the type set: a component query reading grant
+    # rows puts the type there too, and a build that bakes every policy because someone LISTED
+    # grants would hand each client the whole authorization model to read for nothing.
+    %{
+      entity_types: entity_types,
+      permission_checking?: permission_checking?,
+      prop_params: prop_params(component_modules),
+      sort_key_attributes: Registry.sort_key_attributes(terms)
+    }
+  end
+
+  @doc """
   Given a module digests diff, updates the IR persistent lookup table (PLT)
   by deleting entries for modules that have been removed,
   rebuilding the IR of modules that have been edited,
@@ -770,6 +930,26 @@ defmodule Hologram.Compiler do
             "page '#{module_name}' doesn't have a layout module specified (use the layout/1 macro to fix it)"
       end
     end)
+  end
+
+  @doc """
+  Validates the from_query slot bindings of every component reachable from the given
+  page modules - a parameterized builder's argument names must bind like-named
+  declared slots (today, declared props) on the consuming component.
+
+  Raises Hologram.CompileError when a capture argument names no declared slot, or
+  when an argument position is named by no clause of the capture's target.
+  """
+  @spec validate_slot_bindings!(list(module), CallGraph.t()) :: :ok
+  def validate_slot_bindings!(page_modules, call_graph) do
+    graph = CallGraph.get_graph(call_graph)
+    templatables = page_modules ++ Reflection.list_components()
+    analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+
+    page_modules
+    |> Enum.flat_map(&page_component_modules(&1, call_graph, analysis))
+    |> Enum.uniq()
+    |> Enum.each(&QueryExtractor.validate_slot_bindings!/1)
   end
 
   defp create_entry_file(js, entry_name, tmp_dir) do
@@ -874,18 +1054,45 @@ defmodule Hologram.Compiler do
     end
   end
 
-  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
-  # when resolve_beam_source/2 goes (see the removal note there).
-  defp page_window_ids(page_module, call_graph, analysis) do
+  defp page_component_modules(page_module, call_graph, analysis) do
     call_graph
     |> CallGraph.list_page_mfas(page_module, analysis)
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
     |> Enum.filter(&Reflection.component?/1)
+  end
+
+  defp page_query_terms(page_module, call_graph, analysis) do
+    page_module
+    |> page_component_modules(call_graph, analysis)
     |> Enum.flat_map(&QueryExtractor.extract_module_queries/1)
+  end
+
+  # A component declaring no parameterized capture is left out rather than carried as an empty
+  # entry - the client reads a missing entry the same way, as nothing to bind.
+  defp prop_params(component_modules) do
+    component_modules
+    |> Enum.map(&{&1, QueryExtractor.extract_prop_params(&1)})
+    |> Enum.reject(fn {_module, params} -> params == [] end)
+    |> Map.new()
+  end
+
+  # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
+  # when resolve_beam_source/2 goes (see the removal note there).
+  defp page_window_ids(page_module, call_graph, analysis) do
+    page_module
+    |> page_query_terms(call_graph, analysis)
     |> Enum.map(&window_id/1)
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  # RoleGrant's policy is framework-supplied rather than declared, so its empty __policies__ does
+  # not exclude it - it joins by name beside this set.
+  defp policied_entity_types do
+    Reflection.list_entities()
+    |> Enum.filter(&(&1.__policies__() != []))
+    |> MapSet.new()
   end
 
   defp rebuild_ir_plt_entry!(ir_plt, module, umbrella?) do
@@ -939,21 +1146,317 @@ defmodule Hologram.Compiler do
     ~s/{errorOverlay: #{Hologram.client_error_overlay?()}, stacktraces: #{Hologram.client_stacktraces?()}}/
   end
 
+  # What a client needs to read its own rows: a value's type is not recoverable from the value
+  # itself - a date, an enum and a uuid all arrive as strings - so reading one back means knowing
+  # the attribute it belongs to, which is what this says.
+  #
+  # It rides with the bundle rather than with the entity modules, for two reasons. A module says
+  # this through functions nothing calls statically, so nothing keeps them: the caller names them
+  # on a module it is handed, an edge no call graph can see. And a module travels in its PAGE's
+  # bundle, while the database holds every type the app syncs - a row of a type the current page
+  # never mentions still has to be read.
+  #
+  # Server-only attributes are named here, values and all: what the client holds of one is the
+  # knowledge that it exists and is not for it, which is what lets a read of that field say so
+  # rather than answer nil.
+  defp render_entity_model(entity_types, sort_key_attributes, permission_checking?) do
+    entity_types
+    |> Enum.map(
+      &{Codec.encode_enum_value(&1),
+       render_entity_model_entry(&1, sort_key_attributes, permission_checking?)}
+    )
+    |> render_json_object()
+  end
+
+  defp render_entity_model_entry(entity_type, sort_key_attributes, permission_checking?) do
+    attributes =
+      entity_type.__attributes__()
+      |> Enum.concat(entity_type.__system_attributes__())
+      |> Enum.map(fn {name, type, _opts} -> {Atom.to_string(name), Jason.encode!(type)} end)
+      |> render_json_object()
+
+    server_only =
+      entity_type
+      |> Entity.server_only_attribute_names()
+      |> Enum.sort()
+      |> Jason.encode!()
+
+    render_json_object([
+      {"attributes", attributes},
+      {"policy", render_policy(entity_type, permission_checking?)},
+      {"relationships", render_relationships(entity_type)},
+      {"resourceType", render_resource_type(entity_type)},
+      {"serverOnly", server_only},
+      {"sortKeys", render_sort_keys(entity_type, sort_key_attributes)}
+    ])
+  end
+
+  # Keys are written in sorted order rather than the order a map hands them over in - that one
+  # follows the atom table, which follows what the build happened to load first, and the bundle
+  # this text ends up in is addressed by its content.
+  defp render_json_object(members) do
+    members
+    |> Enum.sort_by(fn {key, _value} -> key end)
+    |> Enum.map_join(",", fn {key, value} -> ~s/#{Jason.encode!(key)}:#{value}/ end)
+    |> then(&"{#{&1}}")
+  end
+
+  # A to-many is spelled apart from a to-one because they are read apart: a to-many is assembled
+  # from the relationship facts, a to-one is followed through the reference field the row carries.
+  defp render_relationships(entity_type) do
+    entity_type.__relationships__()
+    |> Enum.map(fn {name, target, _opts} ->
+      {Atom.to_string(name), render_relationship(target)}
+    end)
+    |> render_json_object()
+  end
+
+  defp render_relationship(target) when is_list(target) do
+    render_relationship_entry(hd(target), true)
+  end
+
+  defp render_relationship(target), do: render_relationship_entry(target, false)
+
+  defp render_relationship_entry(target, to_many?) do
+    type =
+      target
+      |> Codec.encode_enum_value()
+      |> Jason.encode!()
+
+    render_json_object([{"toMany", Jason.encode!(to_many?)}, {"type", type}])
+  end
+
+  # Which of a type's :string attributes are ordered by somewhere in this build, and so need a
+  # sort key derived when a row of it lands. It rides in the type's own entry rather than in a
+  # list of its own: the ingest path already reads the entry to decode the row, the two are keyed
+  # the same way, and every type named here is one the model names anyway.
+  #
+  # A query-derived answer inside a declaration-derived entry is not a mixture: which TYPES are
+  # here is query-derived already - a type no query reaches is left out of the model entirely.
+  defp render_sort_keys(entity_type, sort_key_attributes) do
+    sort_key_attributes
+    |> Enum.filter(fn {type, _attribute} -> type == entity_type end)
+    |> Enum.map(fn {_type, attribute} -> Atom.to_string(attribute) end)
+    |> Enum.sort()
+    |> Jason.encode!()
+  end
+
+  # The rules a client evaluates permissions by, spelled the way the rows it evaluates them
+  # against are spelled: a predicate value travels as the wire spells it, so a date compares with
+  # a date rather than with the way Elixir happens to print one.
+  #
+  # It rides in the type's own model entry rather than in a map of its own, for the reason sort
+  # keys do: both are keyed by entity type, the ingest and read paths already fetch the entry,
+  # and every type named here is one the model names anyway.
+  #
+  # A build whose clients check nothing carries an empty policy per type - not the rules with
+  # nobody to read them. An empty policy grants nothing, which is what a client that cannot check
+  # should answer.
+  defp render_policy(_entity_type, false = _permission_checking?) do
+    render_json_object([])
+  end
+
+  defp render_policy(entity_type, _permission_checking?) do
+    entity_type
+    |> Policy.build()
+    |> Enum.map(fn {operation, rules} ->
+      {Atom.to_string(operation), render_policy_rules(entity_type, rules)}
+    end)
+    |> render_json_object()
+  end
+
+  defp render_policy_rules(entity_type, rules) do
+    rules
+    |> Enum.map_join(",", &render_policy_rule(entity_type, &1))
+    |> then(&"[#{&1}]")
+  end
+
+  defp render_policy_rule(entity_type, rule) do
+    render_json_object([
+      {"predicates", render_policy_predicates(entity_type, rule.predicates)},
+      {"to", render_policy_references(entity_type, rule.to)},
+      {"via", Jason.encode!(rule.via)}
+    ])
+  end
+
+  # Triples, the same shape the client's query filters take - name, operator, value - so one
+  # reader spells both.
+  defp render_policy_predicates(entity_type, predicates) do
+    predicates
+    |> Enum.map_join(",", fn {name, operator, value} ->
+      name_js =
+        name
+        |> Atom.to_string()
+        |> Jason.encode!()
+
+      operator_js =
+        operator
+        |> Atom.to_string()
+        |> Jason.encode!()
+
+      ~s/[#{name_js},#{operator_js},#{render_policy_value(entity_type, name, value)}]/
+    end)
+    |> then(&"[#{&1}]")
+  end
+
+  # The acting user's own id, named rather than carried: the client binds it at evaluation the
+  # way the kernel binds an actor leaf in a query.
+  defp render_policy_value(_entity_type, _name, {:actor}) do
+    render_json_object([{"actor", "true"}])
+  end
+
+  defp render_policy_value(entity_type, name, values) when is_list(values) do
+    values
+    |> Enum.map_join(",", &render_policy_value(entity_type, name, &1))
+    |> then(&"[#{&1}]")
+  end
+
+  defp render_policy_value(entity_type, name, value) do
+    value
+    |> Codec.encode_json(policy_attribute_type(entity_type, name))
+    |> Jason.encode!()
+  end
+
+  # A grant reference names WHERE a role must be held: on the entity itself, on its whole type,
+  # on a related entity, on the resource a grant row names, or nowhere at all (a global role).
+  defp render_policy_references(_entity_type, nil), do: "null"
+
+  defp render_policy_references(entity_type, references) do
+    references
+    |> Enum.map_join(",", &render_policy_reference(entity_type, &1))
+    |> then(&"[#{&1}]")
+  end
+
+  defp render_policy_reference(_entity_type, {:own, role_names}) do
+    render_policy_reference_entry("own", [render_policy_roles(role_names)])
+  end
+
+  defp render_policy_reference(_entity_type, {:global, role_modules}) do
+    render_policy_reference_entry("global", [render_policy_roles(role_modules)])
+  end
+
+  defp render_policy_reference(entity_type, {:rel, relationship_name, role_names}) do
+    name_js =
+      relationship_name
+      |> Atom.to_string()
+      |> Jason.encode!()
+
+    {_name, target_type, _opts} =
+      List.keyfind(entity_type.__relationships__(), relationship_name, 0)
+
+    render_policy_reference_entry("rel", [
+      name_js,
+      render_resource_type(target_type),
+      render_policy_roles(role_names)
+    ])
+  end
+
+  defp render_policy_reference(_entity_type, {kind, target_type, role_names}) do
+    render_policy_reference_entry(Atom.to_string(kind), [
+      render_resource_type(target_type),
+      render_policy_roles(role_names)
+    ])
+  end
+
+  defp render_policy_reference_entry(kind, members) do
+    [Jason.encode!(kind) | members]
+    |> Enum.join(",")
+    |> then(&"[#{&1}]")
+  end
+
+  defp render_policy_roles(role_names) do
+    role_names
+    |> Enum.map_join(",", fn role_name ->
+      role_name
+      |> Codec.encode_enum_value()
+      |> Jason.encode!()
+    end)
+    |> then(&"[#{&1}]")
+  end
+
+  # The name a grant row spells this type by - what its resource_type column holds. A reference
+  # carries it rather than the module name so that matching a row is a comparison rather than a
+  # lookup, and so that a reference may name a type the client never syncs: a role held on an
+  # admin-only type can gate a synced type's rules, and the model would have nothing to look up.
+  defp render_resource_type(entity_type) do
+    entity_type
+    |> RoleGrant.resource_type()
+    |> Codec.encode_enum_value()
+    |> Jason.encode!()
+  end
+
+  # A name matching no attribute definition is a to-one reference field, and every one of those
+  # carries an entity id - the fallback the query stages make.
+  defp policy_attribute_type(entity_type, name) do
+    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+
+    case List.keyfind(definitions, name, 0) do
+      {_name, type, _opts} -> type
+      nil -> :uuid
+    end
+  end
+
+  # What each argument of a parameterized builder binds by: its authored name. The capture itself
+  # travels in the bundle and is called there, but an encoded function carries no argument names -
+  # the encoder names capture parameters positionally ($1, $2) - so the names ride here, in the
+  # order the arguments are passed in.
+  #
+  # They ride as a build constant rather than inside the prop's own opts, where they would have
+  # transpiled with __props__/0, because they cannot be known while the component compiles: a
+  # remote capture's names live in the target module's clauses, and when both modules compile in
+  # one batch the target exists only in memory - Code.ensure_compiled waits for it, but its beam
+  # is written when the batch ends, so there is no binary to read the clause names from (probed:
+  # :code.get_object_code answers :error mid-batch, and the path :code.which names does not exist
+  # yet). Deriving after the whole project compiles is what keeps local, inline and remote
+  # captures uniform - and mirrors the server, which derives the same names into the query cache
+  # rather than into the declarations.
+  defp render_prop_params(prop_params) do
+    prop_params
+    |> Enum.map(fn {module, params} ->
+      {Codec.encode_enum_value(module), render_module_prop_params(params)}
+    end)
+    |> render_json_object()
+  end
+
+  defp render_module_prop_params(params) do
+    params
+    |> Enum.map(fn {prop_name, param_names} ->
+      {Atom.to_string(prop_name), Jason.encode!(param_names)}
+    end)
+    |> render_json_object()
+  end
+
   # What the bundle was built against, said by the bundle itself. It has to be baked in rather
   # than handed over at page render: the check these answer is whether a client's JAVASCRIPT is
   # stale, and a value the current server puts in the page would always agree with the current
   # server.
   #
-  # A build declaring no entity types says NOTHING here, and a client whose bundle carries no such
-  # constants does not ask to sync. It has no database - the application tree gates the whole data
-  # layer on exactly that - so the question has no useful answer, and the fields would ride on
-  # every connect to earn a refusal. The server refuses one anyway, for the stale bundle that asks
-  # after a deploy.
-  defp render_sync_constants do
+  # NULL means the APPLICATION declares no entity type - `Reflection.list_entities() == []`, the
+  # same predicate `application.ex` gates the database children on and `Handshake.check/1` refuses
+  # sync by. The three answer alike on purpose: the bundle claims a data layer exactly when the
+  # server has one. Null rather than nothing, so a client reads one unambiguous value instead of
+  # probing for a missing global - and rather than `{}`, which is truthy, so every "does this
+  # bundle sync?" check would pass on a bundle that never syncs.
+  #
+  # This is NOT the same as the build's own `:entity_types` being empty, which says only that no
+  # page reaches a query and no page checks permissions on the client. Such an app HAS a database
+  # and will answer a greeting, so its bundle keeps saying so: the client greets, its session
+  # opens with no windows, and its model is empty because nothing syncs yet - not because nothing
+  # can.
+  defp render_sync_constants(sync_constants) do
     if Reflection.list_entities() == [] do
-      ""
+      ~s/globalThis.Hologram.sync = null;/
     else
-      ~s/globalThis.Hologram.sync = {modelHash: "#{Model.hash()}", protocolVersion: #{Frame.protocol_version()}};/
+      model =
+        render_entity_model(
+          sync_constants.entity_types,
+          sync_constants.sort_key_attributes,
+          sync_constants.permission_checking?
+        )
+
+      params = render_prop_params(sync_constants.prop_params)
+
+      ~s/globalThis.Hologram.sync = {model: #{model}, modelHash: "#{Model.hash()}", propParams: #{params}, protocolVersion: #{Frame.protocol_version()}};/
     end
   end
 
@@ -1076,6 +1579,10 @@ defmodule Hologram.Compiler do
     if beam_path != :non_existing do
       beam_path
     end
+  end
+
+  defp grants_window_id do
+    Registry.id(Auth.grants_window())
   end
 
   defp window_id(term) do

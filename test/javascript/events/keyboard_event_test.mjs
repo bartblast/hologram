@@ -8,7 +8,7 @@ import Type from "../../../assets/js/type.mjs";
 defineRuntimeGlobals();
 
 describe("KeyboardEvent", () => {
-  it("buildOperationParam()", () => {
+  it("buildEventParam()", () => {
     const event = {
       altKey: false,
       code: "KeyK",
@@ -19,7 +19,7 @@ describe("KeyboardEvent", () => {
       shiftKey: true,
     };
 
-    const result = KeyboardEvent.buildOperationParam(event);
+    const result = KeyboardEvent.buildEventParam(event);
 
     assert.deepStrictEqual(
       result,

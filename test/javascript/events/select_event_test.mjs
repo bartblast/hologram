@@ -12,8 +12,8 @@ describe("SelectEvent", () => {
     target: {selectionEnd: 15, selectionStart: 6, value: "Hologram 1 Hologram"},
   };
 
-  it("buildOperationParam()", () => {
-    const result = SelectEvent.buildOperationParam(event);
+  it("buildEventParam()", () => {
+    const result = SelectEvent.buildEventParam(event);
 
     assert.deepStrictEqual(
       result,

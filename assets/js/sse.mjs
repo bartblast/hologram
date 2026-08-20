@@ -2,9 +2,11 @@
 
 import App from "./app.mjs";
 import ComponentRegistry from "./component_registry.mjs";
+import Deltas from "./deltas.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
+import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
@@ -33,7 +35,14 @@ export default class Sse {
 
   static eventSource = null;
   static reconnectAttempts = 0;
+  static renderScheduled = false;
   static stabilityTimer = null;
+
+  // The place in the log this client has been brought up to, kept across reconnects rather than
+  // with the stream that delivered it: the listeners are registered again on every new stream,
+  // and a place held with them would be dropped exactly when the client needs it to say what it
+  // already has. What it is made of is the server's business - it is kept and handed back.
+  static syncCursor = null;
 
   // What the client tells the server so it can be kept up to date: the wire format this bundle
   // speaks, the model it was built against, and the page it is on. The first two are baked into
@@ -49,11 +58,27 @@ export default class Sse {
       return {};
     }
 
-    return {
+    const pageModuleName = Interpreter.moduleExName(pageModule);
+
+    // The page this client greeted with - the one whose rows the server declares complete at the
+    // "page" scope, which is a narrower promise than "all" and arrives sooner. Navigation moves
+    // the current page and leaves this one behind, since only what the connect asked for is
+    // covered by that scope.
+    GlobalRegistry.set("connectPageModule", pageModuleName);
+
+    const greeting = {
       model_hash: sync.modelHash,
-      page: Interpreter.moduleExName(pageModule),
+      page: pageModuleName,
       protocol_version: sync.protocolVersion,
     };
+
+    // A client arriving for the first time has no place to name, and asks for everything it may
+    // see. One coming back names where it got to, and is told only what moved since.
+    if ($.syncCursor !== null) {
+      greeting.cursor = $.syncCursor;
+    }
+
+    return greeting;
   }
 
   // Exponential backoff with ±RECONNECT_JITTER noise. Mirrors the established
@@ -167,6 +192,74 @@ export default class Sse {
         App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
       });
 
+      // The four sync kinds carry JSON rather than the JavaScript every other kind on this
+      // stream is written in - a delta holds the values a database stores, and spelling those as
+      // source costs ten times the bytes on the payload a whole-app fill is mostly made of.
+      $.eventSource.addEventListener("sync_deltas", (event) => {
+        const frame = JSON.parse(event.data);
+
+        Deltas.apply(frame.deltas);
+
+        // Mid-fill the server hands over no place, because a client holding part of a pot could
+        // not honour the claim one makes. Keeping the last place it DID name is what lets a
+        // client cut off mid-fill come back asking for everything again rather than for the
+        // little that changed since.
+        if (frame.cursor !== null) {
+          $.syncCursor = frame.cursor;
+        }
+
+        $.scheduleRender();
+      });
+
+      // A notice rather than an order, and saying so is the whole of what the client does with
+      // it. Restarting the page would throw away what the person was doing to fix a mismatch
+      // they did not cause - and it is not where this is going: the server learns to serve a
+      // client built against an older model through lens chains, so a bundle behind the server
+      // becomes a thing to adapt to rather than to correct. Until then such a client keeps the
+      // stream it has, and its database stops filling - no session was started for it, so no
+      // completeness marker arrives and everything that waits on one keeps waiting.
+      $.eventSource.addEventListener("sync_reload", (event) => {
+        const frame = JSON.parse(event.data);
+
+        Logger.debug(`Hologram: bundle behind the server (${frame.reason})`);
+
+        // TODO: nothing reads this yet - an app surfaces it as its own "a new version is
+        // available" notice, and a feature helper asserts it the way `sseConnected?` is
+        // asserted.
+        GlobalRegistry.set("syncStaleReason", frame.reason);
+      });
+
+      // What follows is the whole of what this client may see rather than what changed in it, so
+      // what it holds now is no part of the answer and goes.
+      //
+      // The place goes with the rows, because it described them: a client cut off before the
+      // refill lands would otherwise come back naming a place it no longer holds anything from,
+      // and be told what moved since instead of what it may see - an empty store, filled with a
+      // few deltas, calling itself complete. The refill's frames name no place while it runs, so
+      // the next one to arrive is one this client can honour.
+      //
+      // Nothing is repainted here on purpose: the refill's own frames schedule that, and the
+      // marker ending the refill schedules one even when the refill is empty - which is what
+      // takes rows the client may no longer see off the screen in the case that produced them.
+      $.eventSource.addEventListener("sync_resync", (event) => {
+        const frame = JSON.parse(event.data);
+
+        Logger.debug(`Hologram: sync starting over (${frame.reason})`);
+        LocalDatabase.reset();
+        $.syncCursor = null;
+      });
+
+      $.eventSource.addEventListener("synced", (event) => {
+        const frame = JSON.parse(event.data);
+
+        LocalDatabase.markSynced(frame.scope);
+
+        // What a query answers can change the moment a scope is complete - a count that was
+        // reading the server's number starts counting rows - so the marker is a reason to
+        // render like any frame is.
+        $.scheduleRender();
+      });
+
       $.eventSource.onopen = () => {
         GlobalRegistry.set("sseConnected?", true);
 
@@ -197,6 +290,35 @@ export default class Sse {
       Logger.debug(`SSE handshake error: ${error}`);
       $.scheduleReconnect();
     }
+  }
+
+  // One render per animation frame, however many frames arrive in between: a fill lands as a
+  // burst, and a repaint per frame would be work nobody sees.
+  //
+  // Scheduled rather than run here, always. Rendering reconciles, attaching listeners as it
+  // goes, and an action dispatched by one of those renders again - a repaint started from inside
+  // this handler would be a repaint started from inside a repaint.
+  static scheduleRender() {
+    if ($.renderScheduled) {
+      return;
+    }
+
+    $.renderScheduled = true;
+
+    window.requestAnimationFrame(() => {
+      $.renderScheduled = false;
+
+      // Frames keep arriving through a navigation, and between the destination's markup going up
+      // and its mount there is a page on screen that the registry cannot yet answer for. A render
+      // there would draw the page being LEFT over the destination's virtual document - the same
+      // window in which an action is held rather than run. Nothing is lost by standing down: the
+      // mount renders when it closes the transition.
+      if (Hologram.domEpoch !== Hologram.registryEpoch) {
+        return;
+      }
+
+      Hologram.render();
+    });
   }
 
   // Bump the failure counter and re-run the handshake protocol from scratch
