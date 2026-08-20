@@ -1090,7 +1090,12 @@ defmodule Hologram.CompilerTest do
 
   describe "list_component_usages/1" do
     test "collects plain and nested usages, in template order" do
-      assert Module28 |> IR.for_module() |> list_component_usages() == [
+      usages =
+        Module28
+        |> IR.for_module()
+        |> list_component_usages()
+
+      assert usages == [
                {Module27, [{"a", {:ok, "1"}}, {"b", :unknown}], false},
                {Module27, [{"a", {:ok, "2"}}], false},
                {Module27, [{"b", {:ok, "3"}}], false}
@@ -1098,24 +1103,44 @@ defmodule Hologram.CompilerTest do
     end
 
     test "reports the value of a prop written as a literal expression" do
-      assert Module38 |> IR.for_module() |> list_component_usages() == [
+      usages =
+        Module38
+        |> IR.for_module()
+        |> list_component_usages()
+
+      assert usages == [
                {Module37, [{"size", {:ok, :small}}, {"label", {:ok, "abc"}}, {"free", :unknown}],
                 false}
              ]
     end
 
     test "flags a usage carrying a spread" do
-      assert Module29 |> IR.for_module() |> list_component_usages() == [
+      usages =
+        Module29
+        |> IR.for_module()
+        |> list_component_usages()
+
+      assert usages == [
                {Module27, [{"a", {:ok, "1"}}], true}
              ]
     end
 
     test "skips dynamic tags" do
-      assert Module30 |> IR.for_module() |> list_component_usages() == []
+      usages =
+        Module30
+        |> IR.for_module()
+        |> list_component_usages()
+
+      assert usages == []
     end
 
     test "returns an empty list for a module without component usages" do
-      assert Module27 |> IR.for_module() |> list_component_usages() == []
+      usages =
+        Module27
+        |> IR.for_module()
+        |> list_component_usages()
+
+      assert usages == []
     end
   end
 
@@ -1472,7 +1497,7 @@ defmodule Hologram.CompilerTest do
 
   describe "validate_prop_usages/2" do
     test "doesn't raise when every required prop is written at the usage" do
-      plt = PLT.start() |> PLT.put(Module32, IR.for_module(Module32))
+      plt = PLT.put(PLT.start(), Module32, IR.for_module(Module32))
 
       assert validate_prop_usages([Module32], plt) == :ok
     end
@@ -1486,7 +1511,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.start() |> PLT.put(Module32, ir)
+      plt = PLT.put(PLT.start(), Module32, ir)
 
       expected_msg =
         "component Hologram.Test.Fixtures.Compiler.Module31 is missing required prop " <>
@@ -1498,13 +1523,13 @@ defmodule Hologram.CompilerTest do
     end
 
     test "doesn't raise when the usage carries a spread" do
-      plt = PLT.start() |> PLT.put(Module34, IR.for_module(Module34))
+      plt = PLT.put(PLT.start(), Module34, IR.for_module(Module34))
 
       assert validate_prop_usages([Module34], plt) == :ok
     end
 
     test "doesn't raise when the required prop is sourced from context" do
-      plt = PLT.start() |> PLT.put(Module36, IR.for_module(Module36))
+      plt = PLT.put(PLT.start(), Module36, IR.for_module(Module36))
 
       assert validate_prop_usages([Module36], plt) == :ok
     end
@@ -1514,7 +1539,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "doesn't raise when a written value is in the prop's :values list" do
-      plt = PLT.start() |> PLT.put(Module38, IR.for_module(Module38))
+      plt = PLT.put(PLT.start(), Module38, IR.for_module(Module38))
 
       assert validate_prop_usages([Module38], plt) == :ok
     end
@@ -1526,7 +1551,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.start() |> PLT.put(Module38, ir)
+      plt = PLT.put(PLT.start(), Module38, ir)
 
       expected_msg =
         ~s/prop "size" of component Hologram.Test.Fixtures.Compiler.Module37 must be one of / <>
@@ -1545,7 +1570,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.start() |> PLT.put(Module38, ir)
+      plt = PLT.put(PLT.start(), Module38, ir)
 
       expected_msg =
         ~s/prop "label" of component Hologram.Test.Fixtures.Compiler.Module37 must be one of / <>
@@ -1564,7 +1589,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.start() |> PLT.put(Module38, ir)
+      plt = PLT.put(PLT.start(), Module38, ir)
 
       expected_msg =
         ~s/prop "size" of component Hologram.Test.Fixtures.Compiler.Module37 must be one of / <>
@@ -1583,7 +1608,7 @@ defmodule Hologram.CompilerTest do
           %Context{}
         )
 
-      plt = PLT.start() |> PLT.put(Module38, ir)
+      plt = PLT.put(PLT.start(), Module38, ir)
 
       assert validate_prop_usages([Module38], plt) == :ok
     end
