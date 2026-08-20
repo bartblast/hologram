@@ -53,7 +53,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 ## Components
 
 - Components use `use Hologram.Component`. **Not** `use Phoenix.Component` or `use Phoenix.LiveComponent`.
-- Define props with `prop :name, :type` or `prop :name, :type, opt: value`.
+- Define props with `prop :name, :type` or `prop :name, :type, default: value`.
 - Available prop types: `:any`, `:atom`, `:boolean`, `:bitstring`, `:float`, `:function`, `:integer`, `:list`, `:map`, `:pid`, `:port`, `:reference`, `:string`, `:tuple`.
 - Prop options are `default:`, `from_context:`, `required:` and `values:`. Any other option is a compile error, so a typo like `defualt:` fails the build instead of being ignored.
 - Source props from context: `prop :user, :map, from_context: :current_user`.
