@@ -101,6 +101,24 @@ defmodule Hologram.Query.RegistryTest do
       assert placeholder_shape(term) == %{bound: :integer}
     end
 
+    test "collects no type for a triple keyed by a placeholder" do
+      term = %{
+        Query.normalize(Module2)
+        | filter: [{{:placeholder, :field}, :==, {:placeholder, :value}}]
+      }
+
+      assert placeholder_shape(term) == %{}
+    end
+
+    test "collects no type for a membership list under a placeholder key" do
+      term = %{
+        Query.normalize(Module2)
+        | filter: [{{:placeholder, :field}, :in, [1, {:placeholder, :value}]}]
+      }
+
+      assert placeholder_shape(term) == %{}
+    end
+
     test "collects placeholders from nested includes" do
       base_term =
         Module3
@@ -156,6 +174,18 @@ defmodule Hologram.Query.RegistryTest do
         |> Query.normalize()
 
       assert placeholder_shape(term) == %{}
+    end
+
+    test "keeps a placeholder's real type when it also stands under a placeholder key" do
+      term = %{
+        Query.normalize(Module2)
+        | filter: [
+            {:b, :==, {:placeholder, :value}},
+            {{:placeholder, :field}, :==, {:placeholder, :value}}
+          ]
+      }
+
+      assert placeholder_shape(term) == %{value: :integer}
     end
 
     test "raises on conflicting placeholder types" do

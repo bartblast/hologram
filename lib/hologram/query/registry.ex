@@ -118,6 +118,13 @@ defmodule Hologram.Query.Registry do
     |> Enum.reduce(acc_with_own_attributes, &collect_sort_key_attributes/2)
   end
 
+  # A triple keyed by a placeholder contributes no shape: the attribute is unknown, so its type is
+  # unknown with it, and attribute_type/2's :uuid fallback (which exists for reference fields) would
+  # otherwise record a lie - and collide with the same placeholder's real type elsewhere, refusing a
+  # legitimate query. The same reason Hologram.Query.Window drops such a predicate.
+  defp collect_placeholder({{:placeholder, _key_name}, _operator, _value}, _entity_type, acc),
+    do: acc
+
   defp collect_placeholder({name, operator, {:placeholder, placeholder_name}}, entity_type, acc) do
     base_type = attribute_type(entity_type, name)
     type = if operator in [:in, :not_in], do: {:list, base_type}, else: base_type
