@@ -22,7 +22,7 @@ defmodule Hologram.ComponentTest do
   end
 
   test "__props__/0" do
-    assert Module4.__props__() == [{:a, :string, []}, {:b, :integer, [opt_1: 111, opt_2: 222]}]
+    assert Module4.__props__() == [{:a, :string, []}, {:b, :integer, [default: 222]}]
   end
 
   test "colocated_template_path/1" do
@@ -103,6 +103,73 @@ defmodule Hologram.ComponentTest do
 
     test "invalid template path" do
       refute maybe_register_colocated_template_markup("/my_invalid_template_path.holo")
+    end
+  end
+
+  describe "prop/3" do
+    test "accepts the supported options" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.SupportedPropOpts do
+          use Hologram.Component
+
+          prop :a, :string
+          prop :b, :string, default: "abc"
+          prop :c, :string, from_context: :my_context_key
+          prop :d, :string, required: true
+          prop :e, :string, values: ["abc", "xyz"]
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__props__() == [
+               {:a, :string, []},
+               {:b, :string, [default: "abc"]},
+               {:c, :string, [from_context: :my_context_key]},
+               {:d, :string, [required: true]},
+               {:e, :string, [values: ["abc", "xyz"]]}
+             ]
+    end
+
+    test "raises when an option is not supported" do
+      expected_error_msg =
+        ~s/invalid option :some_option for prop "b" in Hologram.Test.Fixtures.Component.UnsupportedPropOpt, expected one of: :default, :from_context, :required, :values/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.UnsupportedPropOpt do
+          use Hologram.Component
+
+          prop :b, :string, some_option: "abc"
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "doesn't raise when the options are not a literal keyword list" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.NonLiteralPropOpts do
+          use Hologram.Component
+
+          @my_opts [default: "abc"]
+
+          prop :a, :string, @my_opts
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__props__() == [{:a, :string, [default: "abc"]}]
     end
   end
 

@@ -62,6 +62,8 @@ defmodule Hologram.Component do
 
   @optional_callbacks [action: 3, command: 3, init: 2]
 
+  @prop_opt_keys [:default, :from_context, :required, :values]
+
   @doc false
   @spec __helper_imports__() :: keyword
   def __helper_imports__ do
@@ -218,6 +220,8 @@ defmodule Hologram.Component do
   """
   @spec prop(atom, atom, T.opts()) :: Macro.t()
   defmacro prop(name, type, opts \\ []) do
+    validate_prop_opts!(opts, name, __CALLER__.module)
+
     quote do
       Module.put_attribute(__MODULE__, :__props__, {unquote(name), unquote(type), unquote(opts)})
     end
@@ -454,4 +458,26 @@ defmodule Hologram.Component do
   defp normalize_except({_kind, _id} = identity), do: [identity]
 
   defp normalize_except(list) when is_list(list), do: list
+
+  # Options reach the macro as AST, so only literal keys can be checked - which is every declaration
+  # written as a literal keyword list, even when the values themselves aren't literals
+  # (default: some_var parses as [{:default, {:some_var, _, nil}}]). An opts argument that isn't a
+  # literal list, or an entry that isn't a literal key/value pair, can't be inspected here and is
+  # passed through unchecked.
+  defp validate_prop_opts!(opts, name, module) when is_list(opts) and is_atom(name) do
+    Enum.each(opts, fn
+      {key, _value} when is_atom(key) ->
+        if key not in @prop_opt_keys do
+          raise Hologram.CompileError,
+            message:
+              ~s/invalid option #{inspect(key)} for prop "#{name}" in #{inspect(module)}, / <>
+                "expected one of: " <> Enum.map_join(@prop_opt_keys, ", ", &inspect/1)
+        end
+
+      _entry ->
+        :ok
+    end)
+  end
+
+  defp validate_prop_opts!(_opts, _name, _module), do: :ok
 end
