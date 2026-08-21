@@ -445,7 +445,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture6 - operator :>= requires a numeric or temporal attribute - attribute :parent_id in Hologram.Policy.ValidatorTest.InlinePolicyFixture6 has type :uuid"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture6 - operator :>= requires a numeric, temporal or enum attribute - attribute :parent_id in Hologram.Policy.ValidatorTest.InlinePolicyFixture6 has type :uuid"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture6])

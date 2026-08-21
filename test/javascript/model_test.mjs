@@ -37,6 +37,7 @@ describe("Model", () => {
             updated_at: "datetime",
             weight: "float",
           },
+          enumValues: {status: ["open", "done"]},
           relationships: {
             project: {toMany: false, type: "MyApp.Project"},
             tags: {toMany: true, type: "MyApp.Tag"},
@@ -344,6 +345,14 @@ describe("Model", () => {
         toMany: true,
         type: "MyApp.Tag",
       });
+    });
+
+    // In the order the declaration spells them rather than sorted: that order is what an enum
+    // attribute is ordered by, so the list is the answer rather than a set of labels.
+    it("returns the declared values of an enum attribute", () => {
+      const entry = Model.entry(TASK);
+
+      assert.deepEqual(entry.enumValues, {status: ["open", "done"]});
     });
 
     it("returns the names the client may not have as a set", () => {

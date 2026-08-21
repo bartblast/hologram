@@ -46,6 +46,7 @@ describe("Elixir_Hologram_Auth", () => {
       priority: null,
       public: false,
       released_on: null,
+      status: null,
       ...overrides,
     });
 
@@ -69,7 +70,9 @@ describe("Elixir_Hologram_Auth", () => {
             priority: "integer",
             public: "boolean",
             released_on: "date",
+            status: "enum",
           },
+          enumValues: {status: ["draft", "review", "published"]},
           policy: policy,
           relationships: {folder: {toMany: false, type: FOLDER}},
           resourceType: "documents",
@@ -334,6 +337,30 @@ describe("Elixir_Hologram_Auth", () => {
           entity,
         ),
         Type.boolean(true),
+      );
+    });
+
+    // Declared order, not label order: "published" is the LAST declared value of
+    // ["draft", "review", "published"] while it sorts before "review" as a string, so a label
+    // comparison would answer the other way.
+    it("orders enum values by their declared position", () => {
+      const rules = [rule({predicates: [["status", ">=", "review"]]})];
+
+      assert.deepStrictEqual(
+        reads(rules, document({status: "published"})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({status: "draft"})),
+        Type.boolean(false),
+      );
+    });
+
+    it("never matches an enum comparison against an unset value", () => {
+      assert.deepStrictEqual(
+        reads([rule({predicates: [["status", ">=", "draft"]]})], document()),
+        Type.boolean(false),
       );
     });
 

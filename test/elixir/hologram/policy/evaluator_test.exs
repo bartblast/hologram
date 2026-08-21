@@ -4,6 +4,7 @@ defmodule Hologram.Policy.EvaluatorTest do
   import Hologram.Policy.Evaluator
 
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module17
   alias Hologram.Test.Fixtures.Policy.Module1
 
   defp deny(_requirement, _entity, _actor_user_id), do: false
@@ -166,6 +167,33 @@ defmodule Hologram.Policy.EvaluatorTest do
       assert rule_matches?(
                rule(predicates: [{:released_on, :<, ~D[2027-01-01]}]),
                entity,
+               nil,
+               &deny/3
+             )
+    end
+
+    # Declared order, not atom order: :high is the LAST declared value of [:low, :medium, :high]
+    # while it is the FIRST alphabetically, so a term comparison would answer the other way.
+    test "orders enum values by their declared position" do
+      assert rule_matches?(
+               rule(predicates: [{:priority, :>=, :medium}]),
+               %Module17{priority: :high},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:priority, :>=, :medium}]),
+               %Module17{priority: :low},
+               nil,
+               &deny/3
+             )
+    end
+
+    test "never matches an enum comparison against an unset value" do
+      refute rule_matches?(
+               rule(predicates: [{:priority, :>=, :low}]),
+               %Module17{},
                nil,
                &deny/3
              )

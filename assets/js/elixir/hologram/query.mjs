@@ -19,7 +19,7 @@ import Type from "../../type.mjs";
 
 const EQUALITY_OPERATORS = ["!=", "=="];
 const MEMBERSHIP_OPERATORS = ["in", "not_in"];
-const ORDERABLE_TYPES = ["date", "datetime", "float", "integer"];
+const ORDERABLE_TYPES = ["date", "datetime", "enum", "float", "integer"];
 const ORDERING_OPERATORS = ["<", "<=", ">", ">="];
 
 // The names an attribute may be ordered or read by - declared and system alike, sorted, the way
@@ -49,9 +49,11 @@ function orderEntries(spec, entityType) {
   );
 }
 
+// Every attribute type is an ordering key, enums included: an enum orders by the position of its
+// value in the declared list, which the kernel reads from the model.
 function orderEntry(entry, entityType) {
   if (Type.isAtom(entry)) {
-    validateOrderedAttribute(entry, entityType);
+    validateAttributeName(entry, entityType, "ordered");
 
     return [entry.value, "asc"];
   }
@@ -63,7 +65,7 @@ function orderEntry(entry, entityType) {
   ) {
     const [name, direction] = entry.data;
 
-    validateOrderedAttribute(name, entityType);
+    validateAttributeName(name, entityType, "ordered");
 
     if (!Type.isAtom(direction) || !["asc", "desc"].includes(direction.value)) {
       Interpreter.raiseArgumentError(
@@ -147,6 +149,17 @@ function includeSpecEntry(term, entry) {
   Interpreter.raiseArgumentError(
     `invalid include spec entry ${Interpreter.inspect(entry)} - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair`,
   );
+}
+
+// A label beginning with an uppercase letter names a module, which is the rule the model reads
+// row values by - boxed back that way, the interpreter spells the list exactly as Elixir's own
+// inspect spells the declared one.
+function inspectEnumValues(values) {
+  const atoms = values.map((label) =>
+    label[0] >= "A" && label[0] <= "Z" ? Type.alias(label) : Type.atom(label),
+  );
+
+  return Interpreter.inspect(Type.list(atoms));
 }
 
 function isActor(value) {
@@ -323,6 +336,7 @@ function operatorTriples(name, tuple, entityType) {
   if (ORDERING_OPERATORS.includes(operator)) {
     validateOrderableAttribute(name, entityType, operator);
     validateScalarOperand(name, operator, operand, true);
+    validateEnumOperand(name, operand, entityType);
 
     return [
       [
@@ -556,6 +570,23 @@ function validateFilteredName(name, entityType) {
   );
 }
 
+// A comparison operand on an enum is one of the values it declares, refused where it is written
+// rather than where it is run: the database refuses an undeclared label too, but only once the
+// statement reaches it, and by then nothing can name the values there were to choose from.
+function validateEnumOperand(name, operand, entityType) {
+  if (attributeType(entityType, name.value) !== "enum") {
+    return;
+  }
+
+  const values = Model.entry(entityType).enumValues[name.value];
+
+  if (!values.includes(Model.unbox(operand, "enum"))) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(operand)} is not a value of attribute ${Interpreter.inspect(name)} in ${entityType} - the values are ${inspectEnumValues(values)}`,
+    );
+  }
+}
+
 function validateMembershipList(operand, name, operator) {
   if (!Type.isList(operand)) {
     Interpreter.raiseArgumentError(
@@ -602,12 +633,13 @@ function validateMembershipRange(range, name, entityType) {
 
 // The types an ordering line can be drawn through: strings are excluded because byte order is
 // the same on both tiers but wrong for people, and the key that fixes that belongs to ordering.
+// An enum is admitted, because the list it declares is its order on every tier.
 function validateOrderableAttribute(name, entityType, operator) {
   const type = attributeType(entityType, name.value);
 
   if (!ORDERABLE_TYPES.includes(type)) {
     Interpreter.raiseArgumentError(
-      `operator :${operator} requires a numeric or temporal attribute - attribute ${Interpreter.inspect(name)} in ${entityType} has type :${type}`,
+      `operator :${operator} requires a numeric, temporal or enum attribute - attribute ${Interpreter.inspect(name)} in ${entityType} has type :${type}`,
     );
   }
 }
@@ -681,18 +713,6 @@ function validateSubTerm(subTerm, name, target, kind) {
   if (includeDepth(subTerm) > 1) {
     Interpreter.raiseArgumentError(
       `including ${Interpreter.inspect(name)} exceeds the traversal depth limit of 2 levels`,
-    );
-  }
-}
-
-// The two tiers disagree on what order enum values are in - the database orders them by
-// declaration, this side would order them by their labels - so neither orders by them.
-function validateOrderedAttribute(name, entityType) {
-  validateAttributeName(name, entityType, "ordered");
-
-  if (attributeType(entityType, name.value) === "enum") {
-    Interpreter.raiseArgumentError(
-      `ordering by enum attributes is not supported - attribute ${Interpreter.inspect(name)} in ${entityType} has type :enum`,
     );
   }
 }

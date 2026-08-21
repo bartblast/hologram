@@ -30,7 +30,15 @@ function actorGated(rule) {
 
 // Every value compares as the wire spells it - dates and datetimes as their strings, whose
 // character order IS their instant order - so one comparison serves every type.
-function compare(left, right) {
+//
+// An enum is the exception: its labels say nothing about its order, so the two are compared by
+// their positions in the list the type declares - the order the database holds the type in and
+// the order a query compares it by, so a rule and the filter mirroring it admit the same rows.
+function compare(left, right, ranks = null) {
+  if (ranks) {
+    return compare(ranks.get(left), ranks.get(right));
+  }
+
   if (left === right) {
     return "eq";
   }
@@ -58,7 +66,7 @@ function grantRows() {
   return Object.values(LocalDatabase.getTable(GRANT_TYPE));
 }
 
-function holds(fieldValue, operator, value) {
+function holds(fieldValue, operator, value, ranks) {
   if (operator === "==") {
     return equal(fieldValue, value);
   }
@@ -83,16 +91,16 @@ function holds(fieldValue, operator, value) {
 
   switch (operator) {
     case "<":
-      return compare(fieldValue, value) === "lt";
+      return compare(fieldValue, value, ranks) === "lt";
 
     case "<=":
-      return compare(fieldValue, value) !== "gt";
+      return compare(fieldValue, value, ranks) !== "gt";
 
     case ">":
-      return compare(fieldValue, value) === "gt";
+      return compare(fieldValue, value, ranks) === "gt";
 
     default:
-      return compare(fieldValue, value) !== "lt";
+      return compare(fieldValue, value, ranks) !== "lt";
   }
 }
 
@@ -115,12 +123,25 @@ function entityValue(entityType, entity, name) {
   return entry ? Model.unbox(entry[1], attributeType) : null;
 }
 
+// What an enum predicate compares by, or null for an attribute of any other type - a name
+// matching no attribute definition is a reference field, which carries an entity id.
+function enumRanks(entityType, name) {
+  const entry = Model.entry(entityType);
+
+  if (entry.attributes[name] !== "enum") {
+    return null;
+  }
+
+  return new Map(entry.enumValues[name].map((label, index) => [label, index]));
+}
+
 function predicatesHold(entityType, entity, predicates, actorUserId) {
   return predicates.every(([name, operator, value]) =>
     holds(
       entityValue(entityType, entity, name),
       operator,
       isActorValue(value) ? actorUserId : value,
+      enumRanks(entityType, name),
     ),
   );
 }

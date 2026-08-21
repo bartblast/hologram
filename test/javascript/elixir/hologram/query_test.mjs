@@ -88,6 +88,7 @@ describe("Elixir_Hologram_Query", () => {
             status: "enum",
             title: "string",
           },
+          enumValues: {status: ["open", "blocked", "done"]},
           relationships: {},
           serverOnly: [],
           sortKeys: [],
@@ -248,6 +249,15 @@ describe("Elixir_Hologram_Query", () => {
       ]);
     });
 
+    // The declared `values:` list is the order, so a comparison reads it - `{:>, :open}` means
+    // every value declared after :open.
+    it("builds an ordering triple for an enum attribute", () => {
+      const value = Type.tuple([Type.atom(">"), Type.atom("open")]);
+      const query = filter(task, predicates([["status", value]]));
+
+      assert.deepStrictEqual(query.filter, [["status", ">", "open"]]);
+    });
+
     it("filters by the reference field of a to-one relationship", () => {
       const query = filter(
         Type.alias(PROJECT),
@@ -355,7 +365,17 @@ describe("Elixir_Hologram_Query", () => {
       assert.throw(
         () => filter(task, predicates([["title", value]])),
         HologramBoxedError,
-        "operator :> requires a numeric or temporal attribute - attribute :title in MyApp.Task has type :string",
+        "operator :> requires a numeric, temporal or enum attribute - attribute :title in MyApp.Task has type :string",
+      );
+    });
+
+    it("raises on a comparison against a value the enum does not declare", () => {
+      const value = Type.tuple([Type.atom(">"), Type.atom("archived")]);
+
+      assert.throw(
+        () => filter(task, predicates([["status", value]])),
+        HologramBoxedError,
+        ":archived is not a value of attribute :status in MyApp.Task - the values are [:open, :blocked, :done]",
       );
     });
 
@@ -981,6 +1001,14 @@ describe("Elixir_Hologram_Query", () => {
       ]);
     });
 
+    // The declared `values:` list is the order, so nothing about an enum keeps it from being an
+    // ordering key - both executors sort by a value's position in that list.
+    it("orders by an enum attribute", () => {
+      assert.deepStrictEqual(orderBy(task, Type.atom("status")).orderBy, [
+        ["status", "asc"],
+      ]);
+    });
+
     it("raises on a non-atom spec", () => {
       assert.throw(
         () => orderBy(task, Type.integer(123)),
@@ -1014,15 +1042,6 @@ describe("Elixir_Hologram_Query", () => {
         () => orderBy(Type.alias(PROJECT), Type.atom("tasks")),
         HologramBoxedError,
         ":tasks is a relationship in MyApp.Project - only attributes can be ordered",
-      );
-    });
-
-    // The two tiers disagree on what order enum values are in, so neither orders by them.
-    it("raises on an enum attribute", () => {
-      assert.throw(
-        () => orderBy(task, Type.atom("status")),
-        HologramBoxedError,
-        "ordering by enum attributes is not supported - attribute :status in MyApp.Task has type :enum",
       );
     });
 

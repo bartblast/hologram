@@ -1159,6 +1159,10 @@ defmodule Hologram.Compiler do
   # Server-only attributes are named here, values and all: what the client holds of one is the
   # knowledge that it exists and is not for it, which is what lets a read of that field say so
   # rather than answer nil.
+  #
+  # An enum attribute's declared value list travels too, spelled the way the rows spell their
+  # values: the order a list declares IS the type's order, and ordering by an enum attribute
+  # sorts by a value's position in it - which the client can only follow if it is told the list.
   defp render_entity_model(entity_types, sort_key_attributes, permission_checking?) do
     entity_types
     |> Enum.map(
@@ -1183,12 +1187,31 @@ defmodule Hologram.Compiler do
 
     render_json_object([
       {"attributes", attributes},
+      {"enumValues", render_enum_values(entity_type)},
       {"policy", render_policy(entity_type, permission_checking?)},
       {"relationships", render_relationships(entity_type)},
       {"resourceType", render_resource_type(entity_type)},
       {"serverOnly", server_only},
       {"sortKeys", render_sort_keys(entity_type, sort_key_attributes)}
     ])
+  end
+
+  # A type with no enum attributes carries an empty object rather than nothing at all, the way a
+  # type nothing orders by carries an empty sort-key list - the reader fetches the field without
+  # asking whether it is there.
+  defp render_enum_values(entity_type) do
+    entity_type.__attributes__()
+    |> Enum.filter(fn {_name, type, _opts} -> type == :enum end)
+    |> Enum.map(fn {name, _type, opts} ->
+      values =
+        opts
+        |> Keyword.fetch!(:values)
+        |> Enum.map(&Codec.encode(&1, :enum))
+        |> Jason.encode!()
+
+      {Atom.to_string(name), values}
+    end)
+    |> render_json_object()
   end
 
   # Keys are written in sorted order rather than the order a map hands them over in - that one

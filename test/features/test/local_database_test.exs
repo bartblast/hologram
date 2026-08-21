@@ -9,6 +9,7 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   alias Hologram.Entity
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
+  alias HologramFeatureTests.Entities.Ticket
   alias HologramFeatureTests.Queries.Page2
 
   # The inversion the sync tests were waiting for: those assert what the SERVER says on the wire,
@@ -22,7 +23,7 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
     await_evaluator_drain()
 
     tables =
-      Enum.map_join([Product, Review], ", ", fn entity_type ->
+      Enum.map_join([Product, Review, Ticket], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 
@@ -127,6 +128,70 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
 
     session
     |> assert_text(css("#live_products"), ~r/^daffodil,dolphin,dragon$/)
+    |> assert_same_page_load()
+  end
+
+  # The first paint is the server's, out of Postgres, and what is read here is after hydration,
+  # out of the client's own database - so one assertion covers both executors agreeing.
+  feature "orders rows by an enum in its declared order", %{session: session} do
+    Ticket
+    |> Entity.new(priority: :medium, title: "a")
+    |> create()
+
+    Ticket
+    |> Entity.new(priority: :high, title: "b")
+    |> create()
+
+    Ticket
+    |> Entity.new(priority: :low, title: "c")
+    |> create()
+
+    session
+    |> visit(Page2)
+    |> assert_text(css("#tickets"), ~r/^c,a,b$/)
+  end
+
+  feature "filters rows at or above a declared enum value", %{session: session} do
+    Ticket
+    |> Entity.new(priority: :low, title: "a")
+    |> create()
+
+    Ticket
+    |> Entity.new(priority: :medium, title: "b")
+    |> create()
+
+    Ticket
+    |> Entity.new(priority: :high, title: "c")
+    |> create()
+
+    session
+    |> visit(Page2)
+    |> assert_text(css("#urgent_tickets"), ~r/^b,c$/)
+  end
+
+  # Two rows, and their priorities stay pairwise distinct across the update - so the order is
+  # decided by the enum alone. A third row would force two of them onto one value, and the
+  # implicit id tiebreaker cannot settle that: an id's sub-millisecond bits are random, so rows
+  # created in the same millisecond order unpredictably.
+  feature "re-files a row whose enum value changed", %{session: session} do
+    ticket_a =
+      Ticket
+      |> Entity.new(priority: :low, title: "a")
+      |> create()
+
+    Ticket
+    |> Entity.new(priority: :medium, title: "b")
+    |> create()
+
+    session
+    |> visit(Page2)
+    |> assert_text(css("#tickets"), ~r/^a,b$/)
+    |> mark_this_page_load()
+
+    update(Ticket, ticket_a.id, priority: :high)
+
+    session
+    |> assert_text(css("#tickets"), ~r/^b,a$/)
     |> assert_same_page_load()
   end
 end

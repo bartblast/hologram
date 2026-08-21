@@ -227,6 +227,14 @@ defmodule Hologram.QueryTest do
       assert query.filter == [{:created_at, :>, ~U[2026-01-01 12:00:00Z]}]
     end
 
+    # The declared `values:` list is the order, so a comparison reads it - `{:>, :x}` means every
+    # value declared after :x.
+    test "builds an ordering triple for an enum attribute" do
+      query = filter(Module4, c: {:>, :x})
+
+      assert query.filter == [{:c, :>, :x}]
+    end
+
     test "builds an ordering triple for an integer attribute" do
       query = filter(Module2, b: {:>=, 3})
 
@@ -273,6 +281,15 @@ defmodule Hologram.QueryTest do
       query = filter(Module2, b: nil)
 
       assert query.filter == [{:b, :==, nil}]
+    end
+
+    test "raises on a comparison against a value the enum does not declare" do
+      expected_msg =
+        ":z is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module4 - the values are [:x, :y]"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module4, c: {:>, :z})
+      end
     end
 
     test "raises on a descending range" do
@@ -346,7 +363,7 @@ defmodule Hologram.QueryTest do
 
     test "raises on a placeholder ordering comparison on a string attribute" do
       expected_msg =
-        "operator :>= requires a numeric or temporal attribute - attribute :c in Hologram.Test.Fixtures.Entity.Module2 has type :string"
+        "operator :>= requires a numeric, temporal or enum attribute - attribute :c in Hologram.Test.Fixtures.Entity.Module2 has type :string"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, c: {:>=, %Placeholder{name: :min}})
@@ -373,7 +390,7 @@ defmodule Hologram.QueryTest do
 
     test "raises on an ordering comparison on a to-one reference field" do
       expected_msg =
-        "operator :>= requires a numeric or temporal attribute - attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 has type :uuid"
+        "operator :>= requires a numeric, temporal or enum attribute - attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 has type :uuid"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module3, c_id: {:>=, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"})
@@ -475,25 +492,16 @@ defmodule Hologram.QueryTest do
 
     test "raises on an ordering comparison on a string attribute" do
       expected_msg =
-        "operator :>= requires a numeric or temporal attribute - attribute :c in Hologram.Test.Fixtures.Entity.Module2 has type :string"
+        "operator :>= requires a numeric, temporal or enum attribute - attribute :c in Hologram.Test.Fixtures.Entity.Module2 has type :string"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, c: {:>=, "x"})
       end
     end
 
-    test "raises on an ordering comparison on an enum attribute" do
-      expected_msg =
-        "operator :> requires a numeric or temporal attribute - attribute :c in Hologram.Test.Fixtures.Entity.Module4 has type :enum"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        filter(Module4, c: {:>, :x})
-      end
-    end
-
     test "raises on an ordering comparison on the id attribute" do
       expected_msg =
-        "operator :< requires a numeric or temporal attribute - attribute :id in Hologram.Test.Fixtures.Entity.Module2 has type :uuid"
+        "operator :< requires a numeric, temporal or enum attribute - attribute :id in Hologram.Test.Fixtures.Entity.Module2 has type :uuid"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, id: {:<, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"})
@@ -1043,6 +1051,14 @@ defmodule Hologram.QueryTest do
       assert query.order_by == [{:created_at, :asc}]
     end
 
+    # The declared `values:` list is the order, so nothing about an enum keeps it from being an
+    # ordering key - both executors sort by a value's position in that list.
+    test "orders by an enum attribute" do
+      query = order_by(Module4, :c)
+
+      assert query.order_by == [{:c, :asc}]
+    end
+
     test "replaces prior ordering" do
       query =
         Module2
@@ -1066,15 +1082,6 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         order_by(Module3, :c)
-      end
-    end
-
-    test "raises on an enum attribute" do
-      expected_msg =
-        "ordering by enum attributes is not supported - attribute :c in Hologram.Test.Fixtures.Entity.Module4 has type :enum"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        order_by(Module4, :c)
       end
     end
 

@@ -15,11 +15,12 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.Query.Placeholder
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module17
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module5
 
-  @entity_types [Module1, Module10, Module2, Module3, Module5]
+  @entity_types [Module1, Module10, Module17, Module2, Module3, Module5]
 
   @mapping Mapper.derive!(@entity_types)
 
@@ -92,6 +93,12 @@ defmodule Hologram.Query.InterpreterTest do
     |> create()
   end
 
+  defp module_17(attributes) do
+    Module17
+    |> Entity.new(attributes)
+    |> create()
+  end
+
   # Ids are time-ordered but not strictly so within a millisecond, and a query with no order of
   # its own falls back to them - so what a MATCHING test asserts is which rows came back, not
   # the order the tiebreaker happened to put them in.
@@ -112,6 +119,14 @@ defmodule Hologram.Query.InterpreterTest do
     |> titles()
     |> Enum.sort()
   end
+
+  defp matched_module_17_labels(rows) do
+    rows
+    |> module_17_labels()
+    |> Enum.sort()
+  end
+
+  defp module_17_labels(rows), do: Enum.map(rows, & &1.label)
 
   defp names(rows), do: Enum.map(rows, & &1.username)
 
@@ -303,6 +318,95 @@ defmodule Hologram.Query.InterpreterTest do
         |> Query.normalize()
 
       assert names(run(term, database())) == ["ada", "bob", "Ödön", "Zoe"]
+    end
+  end
+
+  describe "run/3 - ordering enums" do
+    setup do
+      %{
+        first: module_17(priority: :medium, label: "a"),
+        second: module_17(priority: :high, label: "b"),
+        third: module_17(priority: :low, label: "c"),
+        fourth: module_17(label: "d")
+      }
+    end
+
+    # Declared, alphabetical and reverse-alphabetical are three different sequences for these
+    # values, so an order that matches the declared one matches it on purpose.
+    test "orders by the declared position, not the label" do
+      assert module_17_labels(agreed(order_by(Module17, :priority))) == ["c", "a", "b", "d"]
+    end
+
+    test "orders by the declared position descending" do
+      query = order_by(Module17, [{:priority, :desc}])
+
+      assert module_17_labels(agreed(query)) == ["d", "b", "a", "c"]
+    end
+
+    test "settles a tie on an enum by the next key" do
+      module_17(priority: :medium, label: "e")
+      module_17(priority: :medium, label: "f")
+
+      query = order_by(Module17, [:priority, :label])
+
+      assert module_17_labels(agreed(query)) == ["c", "a", "e", "f", "b", "d"]
+    end
+  end
+
+  describe "run/3 - comparing enums" do
+    setup do
+      %{
+        first: module_17(priority: :medium, label: "a"),
+        second: module_17(priority: :high, label: "b"),
+        third: module_17(priority: :low, label: "c"),
+        fourth: module_17(label: "d")
+      }
+    end
+
+    # Declared order, not label order: :high is the LAST declared value, so a label comparison
+    # would drop it here and keep :low, which is what makes this discriminate.
+    test "matches values at or after a declared value" do
+      query = filter(Module17, priority: {:>=, :medium})
+
+      assert matched_module_17_labels(agreed(query)) == ["a", "b"]
+    end
+
+    test "matches values before a declared value" do
+      query = filter(Module17, priority: {:<, :medium})
+
+      assert matched_module_17_labels(agreed(query)) == ["c"]
+    end
+
+    test "passes over an unset enum" do
+      query = filter(Module17, priority: {:>=, :low})
+
+      assert matched_module_17_labels(agreed(query)) == ["a", "b", "c"]
+    end
+
+    test "compares a declared value bound to a placeholder" do
+      query = filter(Module17, priority: {:>=, %Placeholder{name: :min}})
+
+      assert matched_module_17_labels(agreed(query, bindings: %{min: :medium})) == ["a", "b"]
+    end
+
+    # The database executor refuses the binding before it builds a statement, so an undeclared
+    # label never reaches Postgres there - and the interpreter refuses it in the same words.
+    test "refuses a placeholder bound to a value the enum does not declare, as the database does" do
+      term =
+        Module17
+        |> filter(priority: {:>=, %Placeholder{name: :min}})
+        |> Query.normalize()
+
+      expected_msg =
+        "invalid value :urgent for placeholder :min - expected one of [:low, :medium, :high]"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        QueryRunner.run(term, @mapping, %{min: :urgent})
+      end
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, database(), bindings: %{min: :urgent})
+      end
     end
   end
 
