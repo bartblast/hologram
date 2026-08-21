@@ -62,7 +62,7 @@ defmodule Hologram.Query.Interpreter do
 
   defp arrange(rows, term) do
     rows
-    |> sort(term.order_by)
+    |> sort(term.order_by, term.entity)
     |> bound(term)
   end
 
@@ -89,18 +89,18 @@ defmodule Hologram.Query.Interpreter do
 
   # Missing values are placed the way the database places them - last when ascending, first when
   # descending - so a page reading its own rows shows them where the server put them.
-  defp compare_keys(nil, nil, _direction), do: :eq
+  defp compare_keys(nil, nil, _direction, _ranks), do: :eq
 
-  defp compare_keys(nil, _right, :asc), do: :gt
+  defp compare_keys(nil, _right, :asc, _ranks), do: :gt
 
-  defp compare_keys(_left, nil, :asc), do: :lt
+  defp compare_keys(_left, nil, :asc, _ranks), do: :lt
 
-  defp compare_keys(nil, _right, :desc), do: :lt
+  defp compare_keys(nil, _right, :desc, _ranks), do: :lt
 
-  defp compare_keys(_left, nil, :desc), do: :gt
+  defp compare_keys(_left, nil, :desc, _ranks), do: :gt
 
-  defp compare_keys(left, right, direction) do
-    result = compare_ordering_values(left, right)
+  defp compare_keys(left, right, direction, ranks) do
+    result = compare_ordering_values(left, right, ranks)
 
     if direction == :desc do
       flip(result)
@@ -120,6 +120,16 @@ defmodule Hologram.Query.Interpreter do
   end
 
   defp compare_ordering_values(left, right), do: compare_values(left, right)
+
+  defp compare_ordering_values(left, right, nil), do: compare_ordering_values(left, right)
+
+  # An enum value orders by its position in the declared list, which is the order the database
+  # holds the type in - so what compares is the pair of positions rather than the labels. A value
+  # the list does not hold is a bug surfacing rather than a case to place: the database refuses
+  # to store one, and the lookup raises on it here.
+  defp compare_ordering_values(left, right, ranks) do
+    compare_values(Map.fetch!(ranks, left), Map.fetch!(ranks, right))
+  end
 
   # A relationship the query asked for is filled from the rest of the database - a to-one by
   # following the id its row carries, a to-many by reading the pairs. What it did not ask for
@@ -156,6 +166,25 @@ defmodule Hologram.Query.Interpreter do
     |> Enum.filter(&(not is_nil(&1) and matches?(&1, sub_term.filter, opts)))
     |> arrange(sub_term)
     |> Enum.map(&embed(&1, sub_term, database, opts))
+  end
+
+  # What an enum ordering key compares by: each declared value against its position in the list
+  # the entity declares, built once per sort and only for the keys that need it. A key of any
+  # other type is absent, and its comparison is the ordinary one.
+  defp enum_ranks(entity_type, order_by) do
+    names = Enum.map(order_by, fn {name, _direction} -> name end)
+
+    entity_type.__attributes__()
+    |> Enum.filter(fn {name, type, _opts} -> type == :enum and name in names end)
+    |> Map.new(fn {name, _type, opts} ->
+      ranks =
+        opts
+        |> Keyword.fetch!(:values)
+        |> Enum.with_index()
+        |> Map.new()
+
+      {name, ranks}
+    end)
   end
 
   defp equal?(%Date{} = left, %Date{} = right), do: Date.compare(left, right) == :eq
@@ -226,17 +255,22 @@ defmodule Hologram.Query.Interpreter do
 
   defp satisfies?(:>=, value, operand), do: compare_values(value, operand) in [:eq, :gt]
 
-  defp sort(rows, order_by) do
-    Enum.sort(rows, &precedes?(&1, &2, order_by))
+  defp sort(rows, order_by, entity_type) do
+    ranks = enum_ranks(entity_type, order_by)
+
+    Enum.sort(rows, &precedes?(&1, &2, order_by, ranks))
   end
 
   # Every key of the order is spent before two rows are called equal, and the last of them is
   # always the id, so no two rows ever are.
-  defp precedes?(_left, _right, []), do: false
+  defp precedes?(_left, _right, [], _ranks), do: false
 
-  defp precedes?(left, right, [{name, direction} | rest]) do
-    case compare_keys(Map.fetch!(left, name), Map.fetch!(right, name), direction) do
-      :eq -> precedes?(left, right, rest)
+  defp precedes?(left, right, [{name, direction} | rest], ranks) do
+    left_value = Map.fetch!(left, name)
+    right_value = Map.fetch!(right, name)
+
+    case compare_keys(left_value, right_value, direction, Map.get(ranks, name)) do
+      :eq -> precedes?(left, right, rest, ranks)
       :lt -> true
       :gt -> false
     end

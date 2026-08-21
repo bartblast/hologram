@@ -15,11 +15,12 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.Query.Placeholder
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module17
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module5
 
-  @entity_types [Module1, Module10, Module2, Module3, Module5]
+  @entity_types [Module1, Module10, Module17, Module2, Module3, Module5]
 
   @mapping Mapper.derive!(@entity_types)
 
@@ -92,6 +93,12 @@ defmodule Hologram.Query.InterpreterTest do
     |> create()
   end
 
+  defp module_17(attributes) do
+    Module17
+    |> Entity.new(attributes)
+    |> create()
+  end
+
   # Ids are time-ordered but not strictly so within a millisecond, and a query with no order of
   # its own falls back to them - so what a MATCHING test asserts is which rows came back, not
   # the order the tiebreaker happened to put them in.
@@ -112,6 +119,8 @@ defmodule Hologram.Query.InterpreterTest do
     |> titles()
     |> Enum.sort()
   end
+
+  defp module_17_titles(rows), do: Enum.map(rows, & &1.title)
 
   defp names(rows), do: Enum.map(rows, & &1.username)
 
@@ -303,6 +312,38 @@ defmodule Hologram.Query.InterpreterTest do
         |> Query.normalize()
 
       assert names(run(term, database())) == ["ada", "bob", "Ödön", "Zoe"]
+    end
+  end
+
+  describe "run/3 - ordering enums" do
+    setup do
+      %{
+        first: module_17(priority: :medium, title: "a"),
+        second: module_17(priority: :high, title: "b"),
+        third: module_17(priority: :low, title: "c"),
+        fourth: module_17(title: "d")
+      }
+    end
+
+    # Declared, alphabetical and reverse-alphabetical are three different sequences for these
+    # values, so an order that matches the declared one matches it on purpose.
+    test "orders by the declared position, not the label" do
+      assert module_17_titles(agreed(order_by(Module17, :priority))) == ["c", "a", "b", "d"]
+    end
+
+    test "orders by the declared position descending" do
+      query = order_by(Module17, [{:priority, :desc}])
+
+      assert module_17_titles(agreed(query)) == ["d", "b", "a", "c"]
+    end
+
+    test "settles a tie on an enum by the next key" do
+      module_17(priority: :medium, title: "e")
+      module_17(priority: :medium, title: "f")
+
+      query = order_by(Module17, [:priority, :title])
+
+      assert module_17_titles(agreed(query)) == ["c", "a", "e", "f", "b", "d"]
     end
   end
 
