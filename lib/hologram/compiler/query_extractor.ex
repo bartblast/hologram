@@ -239,7 +239,8 @@ defmodule Hologram.Compiler.QueryExtractor do
               [
                 message: stage_error_message(function, arg_values, error, context),
                 file: source_file(context.current_module),
-                line: context.line
+                line: context.line,
+                stack: context.stack
               ],
               __STACKTRACE__
   end
@@ -330,7 +331,11 @@ defmodule Hologram.Compiler.QueryExtractor do
   # the exception instead - the file of the module being walked, and the line last reached in it.
   @spec compile_error!(String.t(), map) :: no_return
   defp compile_error!(message, context) do
-    compile_error!(message, context.current_module, context.line)
+    raise Hologram.CompileError,
+      message: message,
+      file: source_file(context.current_module),
+      line: context.line,
+      stack: context.stack
   end
 
   defp compile_error!(message, module, line) do
@@ -658,6 +663,13 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp first_placeholder_name(_other), do: nil
 
+  # An Elixir stacktrace entry, which is what a frame has to BE rather than resemble: it renders
+  # through Exception.format_stacktrace_entry/1 and the live-reload overlay reads it by the same
+  # shape it reads the compiler's own frames by.
+  defp frame(module, function, arity, line) do
+    {module, function, arity, [file: source_file(module), line: line]}
+  end
+
   # TODO: an argument named vars will bind the full assigns bag once that
   # convention lands - until then the name is reserved.
   defp head_binding!(module, prop_name, %IR.Variable{name: :vars}, line) do
@@ -711,9 +723,13 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp interpret_call!(module, function, arg_values, state, context) do
     arity = length(arg_values)
-    frame = {module, function, arity}
+    mfa = {module, function, arity}
 
-    if frame in context.stack do
+    # The MFA alone, never the whole frame: a frame carries the line the walk last reached inside
+    # that function, so one helper called from two lines would otherwise read as two functions.
+    if mfa in Enum.map(context.stack, fn {frame_module, frame_function, frame_arity, _location} ->
+         {frame_module, frame_function, frame_arity}
+       end) do
       compile_error!(
         "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} recursively calls #{inspect(module)}.#{function}/#{arity} - recursive helpers are not extractable",
         context
@@ -732,7 +748,14 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     clause = Enum.at(clauses, choice)
     call_env = call_env!(clause.params, arg_values, %{}, context)
-    new_context = %{context | current_module: module, stack: [frame | context.stack]}
+    # The line starts unknown in the function being entered - the caller's line belongs to the
+    # caller's frame, and pairing it with the callee's file would name a line in the wrong module.
+    new_context = %{
+      context
+      | current_module: module,
+        line: nil,
+        stack: [frame(module, function, arity, nil) | context.stack]
+    }
 
     {value, state_after_body} =
       evaluate!(clause.body, %{state_after_choice | env: call_env}, new_context)
@@ -801,7 +824,9 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp prop_params(module, {name, _type, opts}) do
     with {:ok, capture} <- Keyword.fetch(opts, :from_query),
          true <- is_function(capture) and not is_function(capture, 0) do
-      {_target_module, clauses} = resolve_capture_clauses!(module, name, capture)
+      {_target_module, _fun_name, _arity, clauses} =
+        resolve_capture_clauses!(module, name, capture)
+
       arity = Function.info(capture)[:arity]
 
       [{name, merged_placeholder_names(module, name, clauses, arity)}]
@@ -834,15 +859,19 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp prop_query!(module, prop_name, capture, entity_types) when is_function(capture) do
-    {target_module, clauses} = resolve_capture_clauses!(module, prop_name, capture)
+    {target_module, fun_name, arity, clauses} =
+      resolve_capture_clauses!(module, prop_name, capture)
 
+    # The capture's own frame opens the stack, so a refusal in its body has a path to show even
+    # when it called nothing - the innermost frame is always the function being walked, which is
+    # what makes the whole list read as a stacktrace rather than a list of callers.
     context = %{
       current_module: target_module,
       entity_types: entity_types,
       line: nil,
       prop_module: module,
       prop_name: prop_name,
-      stack: []
+      stack: [frame(target_module, fun_name, arity, nil)]
     }
 
     terms =
@@ -885,7 +914,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     case List.keyfind(funs, {fun_name, arity}, 0) do
       {_fun_key, {_visibility, clauses}} ->
-        {target_module, clauses}
+        {target_module, fun_name, arity, clauses}
 
       nil ->
         compile_error!(
@@ -934,7 +963,16 @@ defmodule Hologram.Compiler.QueryExtractor do
   # missing here and there, and the nearest enclosing line still locates the refusal.
   defp with_line(context, nil), do: context
 
-  defp with_line(context, line), do: %{context | line: line}
+  defp with_line(context, line) do
+    %{context | line: line, stack: relocated_stack(context.stack, line)}
+  end
+
+  # The head frame is the function the walk is inside, so its line moves with the walk - that is
+  # what makes a caller's frame name the line it called FROM rather than the line it started at.
+  # There is always one: the capture's own frame opens the stack before its body is walked.
+  defp relocated_stack([{module, function, arity, _location} | rest_frames], line) do
+    [frame(module, function, arity, line) | rest_frames]
+  end
 
   defp take_choice!(%{choices: [choice | rest]} = state, _clause_count, _context) do
     {choice, %{state | choices: rest}}

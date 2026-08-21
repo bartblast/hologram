@@ -25,14 +25,26 @@ defmodule Hologram.CompileError do
   defp frames(%__MODULE__{stack: stack}) when stack in [nil, []], do: ""
 
   defp frames(%__MODULE__{stack: stack}) do
-    "\n" <> Enum.map_join(stack, "\n", &("    " <> Exception.format_stacktrace_entry(&1)))
+    "\n" <>
+      Enum.map_join(stack, "\n", &("    " <> Exception.format_stacktrace_entry(located(&1))))
+  end
+
+  # Every path this renders is relative, the frames like the prefix - a frame is built from what a
+  # module records as its source, which is absolute, and an absolute path names the machine it was
+  # built on rather than the project. A frame whose file is unknown renders as the function alone.
+  defp located({module, function, arity, location}) do
+    case Keyword.fetch(location, :file) do
+      {:ok, nil} -> {module, function, arity, Keyword.delete(location, :file)}
+      {:ok, file} -> {module, function, arity, Keyword.put(location, :file, relative(file))}
+      :error -> {module, function, arity, location}
+    end
   end
 
   defp location(%__MODULE__{file: nil}), do: ""
 
-  defp location(%__MODULE__{file: file, line: nil}), do: "#{Path.relative_to_cwd(file)}: "
+  defp location(%__MODULE__{file: file, line: nil}), do: "#{relative(file)}: "
 
-  defp location(%__MODULE__{file: file, line: line}) do
-    "#{Path.relative_to_cwd(file)}:#{line}: "
-  end
+  defp location(%__MODULE__{file: file, line: line}), do: "#{relative(file)}:#{line}: "
+
+  defp relative(file), do: Path.relative_to_cwd(file)
 end
