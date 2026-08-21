@@ -27,7 +27,7 @@ defmodule Hologram.Query do
   @directions [:asc, :desc]
   @equality_operators [:!=, :==]
   @membership_operators [:in, :not_in]
-  @orderable_types [:date, :datetime, :float, :integer]
+  @orderable_types [:date, :datetime, :enum, :float, :integer]
   @ordering_operators [:<, :<=, :>, :>=]
 
   @doc """
@@ -67,9 +67,12 @@ defmodule Hologram.Query do
   triples, appended in the given order. A query term is a plain-data description of a
   query - building it never executes anything.
 
-  Ordering comparisons require a numeric or temporal attribute (date, datetime, float,
-  integer) and a non-nil operand - SQL comparisons with NULL never match, so a nil
-  operand would mean different things on the two execution tiers.
+  Ordering comparisons require a numeric, temporal or enum attribute (date, datetime,
+  enum, float, integer) and a non-nil operand - SQL comparisons with NULL never match,
+  so a nil operand would mean different things on the two execution tiers. A comparison
+  on an enum attribute reads the declared `values:` order, so `{:>=, :medium}` on
+  `[:low, :medium, :high]` means medium or high, and the operand must be one of the
+  declared values.
 
   An integer Range value (`3..10`, bare or as `{:in, range}`) is shorthand for the
   inclusive bounds - it expands into a `>=` triple and a `<=` triple. Ranges require
@@ -402,12 +405,16 @@ defmodule Hologram.Query do
     |> Enum.sort()
   end
 
+  defp attribute_definition(entity_type, name) do
+    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+
+    Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end)
+  end
+
   # Names reach type lookups already validated, so a name matching no attribute definition
   # is a to-one reference field - every reference column carries the entity id type.
   defp attribute_type(entity_type, name) do
-    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
-
-    case Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end) do
+    case attribute_definition(entity_type, name) do
       {_name, type, _opts} -> type
       nil -> :uuid
     end
@@ -613,6 +620,8 @@ defmodule Hologram.Query do
         message:
           "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect(name)}"
     end
+
+    validate_enum_operand!(name, operand, entity_type)
 
     {name, operator, operand}
   end
@@ -836,6 +845,25 @@ defmodule Hologram.Query do
     end
   end
 
+  # A comparison operand on an enum is one of the values it declares, refused where it is written
+  # rather than where it is run: the database refuses an undeclared label too, but only once the
+  # statement reaches it, and by then nothing can name the values there were to choose from.
+  defp validate_enum_operand!(name, operand, entity_type) do
+    case attribute_definition(entity_type, name) do
+      {_name, :enum, opts} ->
+        values = Keyword.fetch!(opts, :values)
+
+        if operand not in values do
+          raise ArgumentError,
+            message:
+              "#{inspect(operand)} is not a value of attribute #{inspect(name)} in #{inspect(entity_type)} - the values are #{inspect(values)}"
+        end
+
+      _other ->
+        :ok
+    end
+  end
+
   defp validate_membership_list!(values, name, _operator) when is_list(values) do
     if values == [] do
       raise ArgumentError,
@@ -892,7 +920,7 @@ defmodule Hologram.Query do
     if type not in @orderable_types do
       raise ArgumentError,
         message:
-          "operator #{inspect(operator)} requires a numeric or temporal attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
+          "operator #{inspect(operator)} requires a numeric, temporal or enum attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
     end
   end
 
