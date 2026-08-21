@@ -138,7 +138,14 @@ defmodule Hologram.DB.QueryCache do
 
   defp populate do
     modules = impl().component_modules()
-    module_queries = Enum.map(modules, &{&1, QueryExtractor.extract_module_queries(&1)})
+
+    # Read once for the whole component pass. The extractor forks a placeholder entity over
+    # this list and re-enters the capture's body once per candidate, so an extraction left to read
+    # it for itself reads it once per variant, on every boot.
+    entity_types = Reflection.list_entities()
+
+    module_queries =
+      Enum.map(modules, &{&1, QueryExtractor.extract_module_queries(&1, entity_types)})
 
     Enum.each(module_queries, &validate_readable_queries!/1)
     Enum.each(module_queries, &validate_client_evaluable_queries!/1)
