@@ -21,6 +21,13 @@ build_ascii = fn byte_count ->
   |> binary_part(0, byte_count)
 end
 
+# Built here rather than inside a scenario, so what is timed is encoding and nothing else.
+ascii_10_kb = build_ascii.(10_000)
+ascii_80_kb = build_ascii.(80_000)
+ascii_160_kb = build_ascii.(160_000)
+ascii_320_kb = build_ascii.(320_000)
+ascii_640_kb = build_ascii.(640_000)
+
 # Not truncated to an exact size - cutting a multi-byte char in half would make the binary
 # invalid and send it down the other path.
 non_ascii = String.duplicate("日本語のテキスト ładne ", 8_000)
@@ -29,11 +36,11 @@ not_text = String.duplicate(<<0xFF, 0xFE>>, 100_000)
 
 Benchee.run(
   %{
-    "10 KB of text" => fn -> Encoder.encode_term!(build_ascii.(10_000)) end,
-    "80 KB of text" => fn -> Encoder.encode_term!(build_ascii.(80_000)) end,
-    "160 KB of text" => fn -> Encoder.encode_term!(build_ascii.(160_000)) end,
-    "320 KB of text" => fn -> Encoder.encode_term!(build_ascii.(320_000)) end,
-    "640 KB of text" => fn -> Encoder.encode_term!(build_ascii.(640_000)) end,
+    "10 KB of text" => fn -> Encoder.encode_term!(ascii_10_kb) end,
+    "80 KB of text" => fn -> Encoder.encode_term!(ascii_80_kb) end,
+    "160 KB of text" => fn -> Encoder.encode_term!(ascii_160_kb) end,
+    "320 KB of text" => fn -> Encoder.encode_term!(ascii_320_kb) end,
+    "640 KB of text" => fn -> Encoder.encode_term!(ascii_640_kb) end,
     "256 KB of non-ASCII text" => fn -> Encoder.encode_term!(non_ascii) end,
     "200 KB binary that is not text" => fn -> Encoder.encode_term!(not_text) end
   },
