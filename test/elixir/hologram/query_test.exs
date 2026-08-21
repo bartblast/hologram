@@ -1043,6 +1043,14 @@ defmodule Hologram.QueryTest do
       assert query.order_by == [{:created_at, :asc}]
     end
 
+    # The declared `values:` list is the order, so nothing about an enum keeps it from being an
+    # ordering key - both executors sort by a value's position in that list.
+    test "orders by an enum attribute" do
+      query = order_by(Module4, :c)
+
+      assert query.order_by == [{:c, :asc}]
+    end
+
     test "replaces prior ordering" do
       query =
         Module2
@@ -1066,15 +1074,6 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         order_by(Module3, :c)
-      end
-    end
-
-    test "raises on an enum attribute" do
-      expected_msg =
-        "ordering by enum attributes is not supported - attribute :c in Hologram.Test.Fixtures.Entity.Module4 has type :enum"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        order_by(Module4, :c)
       end
     end
 

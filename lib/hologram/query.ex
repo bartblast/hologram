@@ -291,13 +291,12 @@ defmodule Hologram.Query do
   than adding to it. Precedence is positional, so an ordering states itself in one place
   or not at all.
 
-  Ordering by enum attributes is not supported - the two execution tiers disagree on
-  enum order (PostgreSQL uses declaration order, the client would use term order).
+  An enum attribute orders by the position of its values in the declared `values:` list -
+  `[:low, :medium, :high]` sorts low, medium, high, on both execution tiers.
 
   Raises ArgumentError when the query is neither an entity type module nor a query
   term, when the spec is neither an attribute name nor a list, when an entry names a
-  relationship or an unknown attribute or an enum attribute, or when a direction is
-  neither :asc nor :desc.
+  relationship or an unknown attribute, or when a direction is neither :asc nor :desc.
   """
   @spec order_by(module | %{atom => any}, atom | list) :: %{atom => any}
   def order_by(query, spec) do
@@ -565,7 +564,7 @@ defmodule Hologram.Query do
   end
 
   defp order_entry!({name, direction}, entity_type) when is_atom(name) do
-    validate_ordered_attribute!(name, entity_type)
+    validate_attribute_name!(name, entity_type, "ordered")
 
     {name, order_direction!(direction, name)}
   end
@@ -581,7 +580,7 @@ defmodule Hologram.Query do
   end
 
   defp order_entry!(name, entity_type) when is_atom(name) do
-    validate_ordered_attribute!(name, entity_type)
+    validate_attribute_name!(name, entity_type, "ordered")
 
     {name, :asc}
   end
@@ -894,16 +893,6 @@ defmodule Hologram.Query do
       raise ArgumentError,
         message:
           "operator #{inspect(operator)} requires a numeric or temporal attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
-    end
-  end
-
-  defp validate_ordered_attribute!(name, entity_type) do
-    validate_attribute_name!(name, entity_type, "ordered")
-
-    if attribute_type(entity_type, name) == :enum do
-      raise ArgumentError,
-        message:
-          "ordering by enum attributes is not supported - attribute #{inspect(name)} in #{inspect(entity_type)} has type :enum"
     end
   end
 
