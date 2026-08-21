@@ -134,13 +134,11 @@ describe("Renderer from_query props", () => {
           attributes: {id: "uuid", name: "string"},
           relationships: {tasks: {toMany: true, type: TASK}},
           serverOnly: [],
-          sortKeys: [],
         },
         [TASK]: {
           attributes: {done: "boolean", id: "uuid", title: "string"},
           relationships: {project: {toMany: false, type: PROJECT}},
           serverOnly: [],
-          sortKeys: ["title"],
         },
       },
       propParams: {},

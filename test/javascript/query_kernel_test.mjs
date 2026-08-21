@@ -239,7 +239,6 @@ describe("QueryKernel", () => {
               tasks: {toMany: true, type: TASK},
             },
             serverOnly: [],
-            sortKeys: [],
           },
           [TASK]: {
             attributes: {
@@ -251,14 +250,12 @@ describe("QueryKernel", () => {
             enumValues: {priority: ["low", "medium", "high"]},
             relationships: {owner: {toMany: false, type: USER}},
             serverOnly: [],
-            sortKeys: ["title"],
           },
           [USER]: {
             attributes: {email: "string", id: "uuid"},
             enumValues: {},
             relationships: {},
             serverOnly: [],
-            sortKeys: [],
           },
         },
       };
@@ -701,7 +698,6 @@ describe("QueryKernel", () => {
             enumValues: {priority: ["low", "medium", "high"]},
             relationships: {},
             serverOnly: [],
-            sortKeys: [],
           },
         },
       };

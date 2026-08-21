@@ -77,7 +77,6 @@ describe("Elixir_Hologram_Auth", () => {
           relationships: {folder: {toMany: false, type: FOLDER}},
           resourceType: "documents",
           serverOnly: [],
-          sortKeys: [],
         },
         [FOLDER]: {
           attributes: {id: "uuid", archived: "boolean"},
@@ -85,7 +84,6 @@ describe("Elixir_Hologram_Auth", () => {
           relationships: {},
           resourceType: "folders",
           serverOnly: [],
-          sortKeys: [],
         },
         // USER has no entry of its own, and that is what a real build looks like: the model
         // carries a type when a QUERY reaches it, and the grants window is a bare RoleGrant
@@ -102,7 +100,6 @@ describe("Elixir_Hologram_Auth", () => {
           relationships: {user: {toMany: false, type: USER}},
           resourceType: "hologram_role_grant",
           serverOnly: [],
-          sortKeys: [],
         },
       },
     };

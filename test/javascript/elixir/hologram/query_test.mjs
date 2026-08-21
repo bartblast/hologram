@@ -76,7 +76,6 @@ describe("Elixir_Hologram_Query", () => {
             tasks: {toMany: true, type: TASK},
           },
           serverOnly: [],
-          sortKeys: [],
         },
         [TASK]: {
           attributes: {
@@ -91,7 +90,6 @@ describe("Elixir_Hologram_Query", () => {
           enumValues: {status: ["open", "blocked", "done"]},
           relationships: {},
           serverOnly: [],
-          sortKeys: [],
         },
         [USER]: {
           attributes: {email: "string", id: "uuid"},
@@ -100,7 +98,6 @@ describe("Elixir_Hologram_Query", () => {
             projects: {toMany: true, type: PROJECT},
           },
           serverOnly: [],
-          sortKeys: [],
         },
       },
     };

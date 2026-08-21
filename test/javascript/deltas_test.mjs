@@ -23,7 +23,6 @@ describe("Deltas", () => {
             tasks: {toMany: true, type: TASK},
           },
           serverOnly: [],
-          sortKeys: [],
         },
         [TASK]: {
           attributes: {
@@ -34,7 +33,6 @@ describe("Deltas", () => {
           },
           relationships: {},
           serverOnly: [],
-          sortKeys: ["title"],
         },
       },
     };
