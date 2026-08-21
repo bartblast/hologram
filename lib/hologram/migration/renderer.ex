@@ -91,11 +91,13 @@ defmodule Hologram.Migration.Renderer do
     {:relationship, op.to}
   end
 
+  # A companion follows its attribute through a rename as a RENAME COLUMN - a key does not
+  # depend on the attribute's name, so the rows keep theirs.
+  defp corresponding_source({:sort_key, name}, %{op: :rename_attribute, from: name} = op) do
+    {:sort_key, op.to}
+  end
+
   defp corresponding_source(source, _op), do: source
-
-  defp declared?(%{source: {kind, _name}}) when kind in [:attribute, :relationship], do: true
-
-  defp declared?(_column), do: false
 
   defp entity_after(entity_type, %{op: :rename_entity, from: entity_type} = op), do: op.to
 
@@ -174,14 +176,14 @@ defmodule Hologram.Migration.Renderer do
     pk_ops =
       name_op(:rename_constraint, table, pre_entity.pk_constraint, post_entity.pk_constraint)
 
-    # Only declared columns pair by source: the system ones share the :system source and
-    # carry fixed names, so they never take part in a rename.
+    # Declared columns and their sort-key companions pair by source: the system ones share
+    # the :system source and carry fixed names, so they never take part in a rename.
     column_ops =
       Enum.flat_map(pre_entity.columns, fn pre_column ->
         source = corresponding_source(pre_column.source, op)
         post_column = Enum.find(post_entity.columns, &(&1.source == source))
 
-        if declared?(pre_column) and post_column do
+        if paired?(pre_column) and post_column do
           column_renames(pre_column, post_column, table)
         else
           []
@@ -198,6 +200,11 @@ defmodule Hologram.Migration.Renderer do
 
     table_ops ++ pk_ops ++ column_ops ++ join_table_ops
   end
+
+  defp paired?(%{source: {kind, _name}}) when kind in [:attribute, :relationship, :sort_key],
+    do: true
+
+  defp paired?(_column), do: false
 
   defp column_renames(pre_column, post_column, table) do
     name_op(:rename_column, table, pre_column.name, post_column.name) ++

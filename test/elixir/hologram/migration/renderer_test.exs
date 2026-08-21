@@ -310,6 +310,19 @@ defmodule Hologram.Migration.RendererTest do
              ]
     end
 
+    test "renames the sort-key companion with its string attribute" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [%{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :name, line: 3}]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{op: :rename_column, table: "my_app_task", from: "title", to: "name"},
+               %{op: :rename_column, table: "my_app_task", from: "title_$sort", to: "name_$sort"}
+             ]
+    end
+
     test "renders an attribute rename as its column, enum type following" do
       pre =
         model(%{

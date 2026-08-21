@@ -500,6 +500,40 @@ defmodule Hologram.MigratorTest do
       assert task_rows(~s("code", "code_$sort")) == [["10", "10"], ["9", "9"]]
     end
 
+    test "renames a companion with its attribute and passes the drift check" do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            type: :string,
+            opts: [],
+            line: 4
+          }
+        ])
+
+      model = apply_pending([create], Model.empty(), @context)
+
+      insert_task_rows([~s('Zoe')], "title")
+
+      # The key is seeded as a write through the entity path would leave it - what the
+      # rename must carry over is an existing key, not a refilled one.
+      {:ok, _result} =
+        Connection.query(~s(UPDATE "hologram_data"."my_app_task" SET "title_$sort" = 'zoe'))
+
+      rename =
+        migration("20260813142237", [
+          %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :name, line: 3}
+        ])
+
+      post_model = apply_pending([rename], model, @context)
+
+      assert task_rows(~s("name", "name_$sort")) == [["Zoe", "zoe"]]
+      assert check_drift!(Mapper.derive_from_model!(post_model)) == :ok
+    end
+
     test "leaves the earlier files applied when a later one refuses" do
       create =
         migration("20260813091522", [
