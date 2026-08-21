@@ -27,7 +27,7 @@ defmodule Hologram.Query do
   @directions [:asc, :desc]
   @equality_operators [:!=, :==]
   @membership_operators [:in, :not_in]
-  @orderable_types [:date, :datetime, :enum, :float, :integer]
+  @orderable_types [:date, :datetime, :enum, :float, :integer, :string]
   @ordering_operators [:<, :<=, :>, :>=]
 
   @doc """
@@ -67,12 +67,15 @@ defmodule Hologram.Query do
   triples, appended in the given order. A query term is a plain-data description of a
   query - building it never executes anything.
 
-  Ordering comparisons require a numeric, temporal or enum attribute (date, datetime,
-  enum, float, integer) and a non-nil operand - SQL comparisons with NULL never match,
-  so a nil operand would mean different things on the two execution tiers. A comparison
-  on an enum attribute reads the declared `values:` order, so `{:>=, :medium}` on
-  `[:low, :medium, :high]` means medium or high, and the operand must be one of the
-  declared values.
+  Ordering comparisons require an orderable attribute - every type but boolean and uuid -
+  and a non-nil operand - SQL comparisons with NULL never match, so a nil operand would
+  mean different things on the two execution tiers. A comparison on an enum attribute
+  reads the declared `values:` order, so `{:>=, :medium}` on `[:low, :medium, :high]`
+  means medium or high, and the operand must be one of the declared values. A comparison
+  on a string attribute reads the order `order_by` sorts it in - case and diacritics fold
+  the way they do in the list - and a bound names a position in that list, spelled the way
+  the list spells it: `{:>=, "M"}` reaches `M`, `m`, `Mango`, while `{:>=, "m"}` starts at
+  `m`.
 
   An integer Range value (`3..10`, bare or as `{:in, range}`) is shorthand for the
   inclusive bounds - it expands into a `>=` triple and a `<=` triple. Ranges require
@@ -920,7 +923,7 @@ defmodule Hologram.Query do
     if type not in @orderable_types do
       raise ArgumentError,
         message:
-          "operator #{inspect(operator)} requires a numeric, temporal or enum attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
+          "operator #{inspect(operator)} requires an orderable attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}, and boolean and uuid attributes have no order to compare by"
     end
   end
 
