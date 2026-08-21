@@ -73,7 +73,7 @@ defmodule HologramFeatureTests.QueriesTest do
 
     session
     |> visit(Page3)
-    |> assert_text(css("#dynamic_string_order"), "apple,Łódź,Zebra")
+    |> assert_text(css("#dynamic_string_order"), ~r/^apple,Łódź,Zebra$/)
   end
 
   feature "renders from_query prop results in practical order", %{session: session} do
