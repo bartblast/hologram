@@ -41,6 +41,7 @@ defmodule Hologram.CompileErrorTest do
       expected_msg =
         normalize_newlines("""
         the query builds no window
+
             MyApp.TaskList.entities_query/1\
         """)
 
@@ -58,6 +59,7 @@ defmodule Hologram.CompileErrorTest do
       expected_msg =
         normalize_newlines("""
         lib/my_app/task_list.ex:20: the query builds no window
+
             lib/my_app/task_list.ex:20: MyApp.TaskList.bounds/0\
         """)
 
@@ -78,6 +80,7 @@ defmodule Hologram.CompileErrorTest do
       expected_msg =
         normalize_newlines("""
         lib/my_app/task_list.ex:20: the query builds no window
+
             lib/my_app/task_list.ex:20: MyApp.TaskList.bounds/0
             lib/my_app/task_list.ex:17: MyApp.TaskList.entities_query/1\
         """)

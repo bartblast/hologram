@@ -329,6 +329,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_43.ex:22: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module43 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at
+
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_43.ex:22: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module43.narrow/1
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_43.ex:18: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module43.entities_query/1\
         """)
@@ -342,6 +343,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_24.ex:20: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module24 calls undefined function Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19.missing_helper/1
+
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_24.ex:20: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module24.entities_query/1\
         """)
 
@@ -354,6 +356,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_40.ex:17: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module40 passes an argument to include/2 in a position the build cannot enumerate - the rows to download cannot be worked out without its value
+
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_40.ex:17: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module40.entities_query/1\
         """)
 
@@ -366,6 +369,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_42.ex:20: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module42 reads field :limit off 5, which is not a map
+
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_42.ex:20: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module42.entities_query/1\
         """)
 
@@ -378,6 +382,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_41.ex:20: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module41 reads field :mising off a value that has no such field - known fields: :limit
+
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_41.ex:20: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module41.entities_query/1\
         """)
 
@@ -456,6 +461,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_44.ex:23: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module44 recursively calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module44.narrow/1 - recursive helpers are not extractable
+
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_44.ex:23: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module44.widen/1
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_44.ex:21: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module44.narrow/1
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_44.ex:18: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module44.entities_query/1\
@@ -470,6 +476,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_21.ex:16: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module21 recursively calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module21.entities_query/1 - recursive helpers are not extractable
+
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_21.ex:16: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module21.entities_query/1\
         """)
 
@@ -482,6 +489,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_30.ex:17: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module30 passes an argument to filter/2 in a position the build cannot enumerate - the rows to download cannot be worked out without its value
+
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_30.ex:17: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module30.entities_query/1\
         """)
 
@@ -494,6 +502,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_31.ex:18: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module31 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at
+
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_31.ex:18: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module31.entities_query/1\
         """)
 
@@ -506,6 +515,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_msg =
         normalize_newlines("""
         test/elixir/support/fixtures/compiler/query_extractor/module_22.ex:17: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module22 branches inside an anonymous function - not extractable yet
+
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_22.ex:17: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module22.entities_query/1\
         """)
 

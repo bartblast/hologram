@@ -22,10 +22,12 @@ defmodule Hologram.CompileError do
     location(error) <> message <> frames(error)
   end
 
+  # A blank line sets the path apart from the message, which runs long - a build refusal explains
+  # itself in a sentence or two, and the frames below it are a different kind of reading.
   defp frames(%__MODULE__{stack: stack}) when stack in [nil, []], do: ""
 
   defp frames(%__MODULE__{stack: stack}) do
-    "\n" <>
+    "\n\n" <>
       Enum.map_join(stack, "\n", &("    " <> Exception.format_stacktrace_entry(located(&1))))
   end
 
