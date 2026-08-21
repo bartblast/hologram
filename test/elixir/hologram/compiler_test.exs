@@ -819,7 +819,8 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
-                 ~s/"updated_at":"datetime"},"policy":{},"relationships":{},/ <>
+                 ~s/"updated_at":"datetime"},"enumValues":{"c":["x","y"]},"policy":{},/ <>
+                 ~s/"relationships":{},/ <>
                  ~s/"resourceType":"test_fixtures_entity_module4","serverOnly":[],"sortKeys":[]}}/
              )
     end
@@ -1000,6 +1001,19 @@ defmodule Hologram.CompilerTest do
       js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
 
       assert String.contains?(js, ~s/"serverOnly":[],"sortKeys":[]}}/)
+    end
+
+    # A type holding no enum attribute carries an empty map rather than nothing at all - the
+    # reader fetches the field without asking whether it is there.
+    test "injects an empty enum-value map for a type with no enum attributes", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
+
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], sync_constants, @js_dir)
+
+      assert String.contains?(js, ~s/"enumValues":{},"policy"/)
     end
 
     # A capture travels in the bundle and is called there, but an encoded function carries no
