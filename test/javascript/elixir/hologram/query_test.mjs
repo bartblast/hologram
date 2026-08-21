@@ -255,6 +255,15 @@ describe("Elixir_Hologram_Query", () => {
       assert.deepStrictEqual(query.filter, [["status", ">", "open"]]);
     });
 
+    // The derived sort key is the order, so a comparison reads it the way `order_by` does - a
+    // bound names a position in the list the attribute sorts into.
+    it("builds an ordering triple for a string attribute", () => {
+      const value = Type.tuple([Type.atom(">"), Type.bitstring("a")]);
+      const query = filter(task, predicates([["title", value]]));
+
+      assert.deepStrictEqual(query.filter, [["title", ">", "a"]]);
+    });
+
     it("filters by the reference field of a to-one relationship", () => {
       const query = filter(
         Type.alias(PROJECT),
@@ -354,15 +363,13 @@ describe("Elixir_Hologram_Query", () => {
       );
     });
 
-    // Byte order is the same on both tiers but wrong for people, and the key that fixes that
-    // belongs to ordering rather than to comparison.
-    it("raises on an ordering comparison over a string", () => {
-      const value = Type.tuple([Type.atom(">"), Type.bitstring("a")]);
+    it("raises on an ordering comparison over the id attribute", () => {
+      const value = Type.tuple([Type.atom("<"), Type.bitstring("t1")]);
 
       assert.throw(
-        () => filter(task, predicates([["title", value]])),
+        () => filter(task, predicates([["id", value]])),
         HologramBoxedError,
-        "operator :> requires a numeric, temporal or enum attribute - attribute :title in MyApp.Task has type :string",
+        "operator :< requires an orderable attribute - attribute :id in MyApp.Task has type :uuid, and boolean and uuid attributes have no order to compare by",
       );
     });
 
