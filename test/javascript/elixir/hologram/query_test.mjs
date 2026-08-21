@@ -981,6 +981,14 @@ describe("Elixir_Hologram_Query", () => {
       ]);
     });
 
+    // The declared `values:` list is the order, so nothing about an enum keeps it from being an
+    // ordering key - both executors sort by a value's position in that list.
+    it("orders by an enum attribute", () => {
+      assert.deepStrictEqual(orderBy(task, Type.atom("status")).orderBy, [
+        ["status", "asc"],
+      ]);
+    });
+
     it("raises on a non-atom spec", () => {
       assert.throw(
         () => orderBy(task, Type.integer(123)),
@@ -1014,15 +1022,6 @@ describe("Elixir_Hologram_Query", () => {
         () => orderBy(Type.alias(PROJECT), Type.atom("tasks")),
         HologramBoxedError,
         ":tasks is a relationship in MyApp.Project - only attributes can be ordered",
-      );
-    });
-
-    // The two tiers disagree on what order enum values are in, so neither orders by them.
-    it("raises on an enum attribute", () => {
-      assert.throw(
-        () => orderBy(task, Type.atom("status")),
-        HologramBoxedError,
-        "ordering by enum attributes is not supported - attribute :status in MyApp.Task has type :enum",
       );
     });
 

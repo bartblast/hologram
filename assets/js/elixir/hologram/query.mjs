@@ -49,9 +49,11 @@ function orderEntries(spec, entityType) {
   );
 }
 
+// Every attribute type is an ordering key, enums included: an enum orders by the position of its
+// value in the declared list, which the kernel reads from the model.
 function orderEntry(entry, entityType) {
   if (Type.isAtom(entry)) {
-    validateOrderedAttribute(entry, entityType);
+    validateAttributeName(entry, entityType, "ordered");
 
     return [entry.value, "asc"];
   }
@@ -63,7 +65,7 @@ function orderEntry(entry, entityType) {
   ) {
     const [name, direction] = entry.data;
 
-    validateOrderedAttribute(name, entityType);
+    validateAttributeName(name, entityType, "ordered");
 
     if (!Type.isAtom(direction) || !["asc", "desc"].includes(direction.value)) {
       Interpreter.raiseArgumentError(
@@ -681,18 +683,6 @@ function validateSubTerm(subTerm, name, target, kind) {
   if (includeDepth(subTerm) > 1) {
     Interpreter.raiseArgumentError(
       `including ${Interpreter.inspect(name)} exceeds the traversal depth limit of 2 levels`,
-    );
-  }
-}
-
-// The two tiers disagree on what order enum values are in - the database orders them by
-// declaration, this side would order them by their labels - so neither orders by them.
-function validateOrderedAttribute(name, entityType) {
-  validateAttributeName(name, entityType, "ordered");
-
-  if (attributeType(entityType, name.value) === "enum") {
-    Interpreter.raiseArgumentError(
-      `ordering by enum attributes is not supported - attribute ${Interpreter.inspect(name)} in ${entityType} has type :enum`,
     );
   }
 }
