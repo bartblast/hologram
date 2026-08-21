@@ -67,11 +67,16 @@ defmodule Hologram.Compiler.QueryExtractor do
   sub-builder), or when no candidate survives - a prop with no window would read
   rows nothing ever fills. Zero-arity captures are free of these limits - they
   evaluate concretely at build time.
+
+  The entity types are the fork's candidate set for a placeholder in an entity
+  position. They are taken as an argument so that a build computes them once and
+  passes the one list to every extraction, rather than every fork reading them -
+  the default sweeps the build's apps, for one-off calls.
   """
-  @spec extract_module_queries(module) :: list(%{atom => any})
-  def extract_module_queries(module) do
+  @spec extract_module_queries(module, list(module)) :: list(%{atom => any})
+  def extract_module_queries(module, entity_types \\ Reflection.list_entities()) do
     if Reflection.has_function?(module, :__props__, 0) do
-      Enum.flat_map(module.__props__(), &prop_queries!(module, &1))
+      Enum.flat_map(module.__props__(), &prop_queries!(module, &1, entity_types))
     else
       []
     end
@@ -111,11 +116,11 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   @doc """
   Extracts the registered query terms declared by the given modules - the
-  concatenated extract_module_queries/1 results in module order.
+  concatenated extract_module_queries/2 results in module order.
   """
-  @spec extract_queries(list(module)) :: list(%{atom => any})
-  def extract_queries(modules) do
-    Enum.flat_map(modules, &extract_module_queries/1)
+  @spec extract_queries(list(module), list(module)) :: list(%{atom => any})
+  def extract_queries(modules, entity_types \\ Reflection.list_entities()) do
+    Enum.flat_map(modules, &extract_module_queries(&1, entity_types))
   end
 
   @doc """
@@ -180,7 +185,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   # One position per pass, recursing until none is left - a query whose entity AND include name both
   # arrive at run time forks twice, over the product of the two candidate sets.
   defp apply_query_stage!(function, arg_values, state, context) do
-    case forked_position(function, arg_values) do
+    case forked_position(function, arg_values, context) do
       nil ->
         {apply_authored_stage!(function, arg_values, context), state}
 
@@ -200,18 +205,22 @@ defmodule Hologram.Compiler.QueryExtractor do
   # An entity declaring no relationship yields no candidates, so there is nothing to fork over and
   # the call falls through to the stage, which refuses the placeholder - located when the developer
   # named that entity, pruned when a fork chose it.
-  defp forked_position(_function, [%Placeholder{} | _rest_args]) do
-    {0, Reflection.list_entities()}
+  #
+  # The entity set arrives in the context, computed once by whoever drives the build - the fork
+  # re-enters the body once per candidate, so anything computed at this point would run once per
+  # variant, and listing the build's entity types sweeps every app's ebin directory.
+  defp forked_position(_function, [%Placeholder{} | _rest_args], context) do
+    {0, context.entity_types}
   end
 
-  defp forked_position(:include, [query | [%Placeholder{} | _rest_args]]) do
+  defp forked_position(:include, [query | [%Placeholder{} | _rest_args]], _context) do
     case relationship_names(query) do
       [] -> nil
       names -> {1, names}
     end
   end
 
-  defp forked_position(_function, _arg_values), do: nil
+  defp forked_position(_function, _arg_values, _context), do: nil
 
   defp relationship_names(%{entity: entity_type}), do: relationship_names(entity_type)
 
@@ -758,22 +767,23 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
-  defp prop_queries!(module, {name, _type, opts}) do
+  defp prop_queries!(module, {name, _type, opts}, entity_types) do
     case Keyword.fetch(opts, :from_query) do
-      {:ok, capture} -> prop_query!(module, name, capture)
+      {:ok, capture} -> prop_query!(module, name, capture, entity_types)
       :error -> []
     end
   end
 
-  defp prop_query!(_module, _prop_name, capture) when is_function(capture, 0) do
+  defp prop_query!(_module, _prop_name, capture, _entity_types) when is_function(capture, 0) do
     [Query.normalize(capture.())]
   end
 
-  defp prop_query!(module, prop_name, capture) when is_function(capture) do
+  defp prop_query!(module, prop_name, capture, entity_types) when is_function(capture) do
     {target_module, clauses} = resolve_capture_clauses!(module, prop_name, capture)
 
     context = %{
       current_module: target_module,
+      entity_types: entity_types,
       prop_module: module,
       prop_name: prop_name,
       stack: []
@@ -798,7 +808,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     terms
   end
 
-  defp prop_query!(module, prop_name, value) do
+  defp prop_query!(module, prop_name, value, _entity_types) do
     raise Hologram.CompileError,
       message:
         "from_query for prop #{inspect(prop_name)} in #{inspect(module)} must be a function capture, got: #{inspect(value)}"
