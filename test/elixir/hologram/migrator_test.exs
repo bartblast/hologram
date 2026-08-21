@@ -774,6 +774,7 @@ defmodule Hologram.MigratorTest do
         normalize_newlines("""
         schema drift detected - the database does not match the model:
           * column "title_$sort" on table "my_app_task" declared by the model is missing
+          * index "my_app_task_title_$sort_$idx" declared by the model is missing
         hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
         """)
 

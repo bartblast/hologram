@@ -32,7 +32,7 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
-                 fk_index: nil,
+                 index: nil,
                  source: :system
                },
                %{
@@ -45,7 +45,7 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
-                 fk_index: nil,
+                 index: nil,
                  source: :system
                },
                %{
@@ -58,7 +58,7 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
-                 fk_index: nil,
+                 index: nil,
                  source: :system
                }
              ]
@@ -81,7 +81,7 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
-                 fk_index: nil,
+                 index: nil,
                  source: {:attribute, :a}
                },
                %{
@@ -94,7 +94,7 @@ defmodule Hologram.DB.MapperTest do
                  null: true,
                  references: nil,
                  fk_constraint: nil,
-                 fk_index: nil,
+                 index: nil,
                  source: {:attribute, :b}
                },
                %{
@@ -107,7 +107,7 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
-                 fk_index: nil,
+                 index: nil,
                  source: {:attribute, :c}
                }
              ]
@@ -159,7 +159,7 @@ defmodule Hologram.DB.MapperTest do
                null: true,
                references: nil,
                fk_constraint: nil,
-               fk_index: nil,
+               index: nil,
                source: {:attribute, :external_id}
              }
     end
@@ -204,7 +204,7 @@ defmodule Hologram.DB.MapperTest do
                null: true,
                references: nil,
                fk_constraint: nil,
-               fk_index: nil,
+               index: "test_fixtures_entity_module2_c_$sort_$idx",
                source: {:sort_key, :c}
              }
     end
@@ -236,7 +236,7 @@ defmodule Hologram.DB.MapperTest do
                  null: true,
                  references: "test_fixtures_entity_module2",
                  fk_constraint: "test_fixtures_entity_module3_b_id_$fk",
-                 fk_index: "test_fixtures_entity_module3_b_id_$idx",
+                 index: "test_fixtures_entity_module3_b_id_$idx",
                  source: {:relationship, :b}
                },
                %{
@@ -249,7 +249,7 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: "test_fixtures_entity_module1",
                  fk_constraint: "test_fixtures_entity_module3_c_id_$fk",
-                 fk_index: "test_fixtures_entity_module3_c_id_$idx",
+                 index: "test_fixtures_entity_module3_c_id_$idx",
                  source: {:relationship, :c}
                }
              ]
@@ -273,7 +273,7 @@ defmodule Hologram.DB.MapperTest do
         relationship :quite_long_relationship_name, Module1
       end
 
-      assert column(InlineEntityFixture18, "quite_long_relationship_name_id").fk_index ==
+      assert column(InlineEntityFixture18, "quite_long_relationship_name_id").index ==
                "db_mapper_test_inline_entity_fixture18_quite_long_rela_90ec8e14"
     end
 

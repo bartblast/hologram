@@ -485,7 +485,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         null: false,
         references: nil,
         fk_constraint: nil,
-        fk_index: nil,
+        index: nil,
         source: {:attribute, :z}
       }
 
@@ -654,7 +654,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         null: false,
         references: nil,
         fk_constraint: nil,
-        fk_index: nil,
+        index: nil,
         source: {:attribute, :z}
       }
 

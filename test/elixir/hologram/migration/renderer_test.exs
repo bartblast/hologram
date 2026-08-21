@@ -113,6 +113,7 @@ defmodule Hologram.Migration.RendererTest do
       result = render(ops, pre)
 
       assert result.transactional == [
+               %{op: :drop_index, index: "my_app_task_legacy_$sort_$idx"},
                %{op: :drop_column, table: "my_app_task", column: "legacy"},
                %{op: :drop_column, table: "my_app_task", column: "legacy_$sort"}
              ]
@@ -319,7 +320,12 @@ defmodule Hologram.Migration.RendererTest do
 
       assert result.transactional == [
                %{op: :rename_column, table: "my_app_task", from: "title", to: "name"},
-               %{op: :rename_column, table: "my_app_task", from: "title_$sort", to: "name_$sort"}
+               %{op: :rename_column, table: "my_app_task", from: "title_$sort", to: "name_$sort"},
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_title_$sort_$idx",
+                 to: "my_app_task_name_$sort_$idx"
+               }
              ]
     end
 

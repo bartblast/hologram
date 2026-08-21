@@ -209,7 +209,7 @@ defmodule Hologram.Migration.Renderer do
   defp column_renames(pre_column, post_column, table) do
     name_op(:rename_column, table, pre_column.name, post_column.name) ++
       name_op(:rename_constraint, table, pre_column.fk_constraint, post_column.fk_constraint) ++
-      name_op(:rename_index, nil, pre_column.fk_index, post_column.fk_index) ++
+      name_op(:rename_index, nil, pre_column.index, post_column.index) ++
       enum_type_renames(pre_column, post_column)
   end
 

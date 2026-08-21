@@ -24,9 +24,11 @@ defmodule Hologram.DB.Mapper do
   semantics owned by the write path, never a DB DEFAULT), :null (true only for optional
   declarations), :references (the referenced table name for to-one relationship columns,
   nil otherwise), :fk_constraint (the derived `<table>_<column>_$fk` constraint name for
-  reference columns, nil otherwise), :fk_index (the derived `<table>_<column>_$idx` index
-  name for reference columns, nil otherwise - PostgreSQL never indexes FK columns
-  automatically), and :source (:system, or the declaration the column is derived from).
+  reference columns, nil otherwise), :index (the derived index name for the columns that
+  carry one - `<table>_<column>_$idx` on a to-one reference, which PostgreSQL never indexes
+  automatically, and `<table>_<attribute>_$sort_$idx` on a sort-key companion, so an ordering
+  or a comparison on the attribute is served from the key rather than from a sort - nil
+  otherwise), and :source (:system, or the declaration the column is derived from).
   To-many relationships derive no columns - they live in join tables.
 
   Each :string attribute derives a nullable `<attribute>_$sort` companion column (source
@@ -266,7 +268,7 @@ defmodule Hologram.DB.Mapper do
           null: Keyword.get(opts, :optional) == true,
           references: nil,
           fk_constraint: nil,
-          fk_index: nil,
+          index: nil,
           source: {:attribute, name}
         }
       end)
@@ -285,7 +287,7 @@ defmodule Hologram.DB.Mapper do
           null: Keyword.get(opts, :optional) == true,
           references: table_name(target),
           fk_constraint: fit_identifier("#{table_name}_#{name}_id_$fk"),
-          fk_index: fit_identifier("#{table_name}_#{name}_id_$idx"),
+          index: fit_identifier("#{table_name}_#{name}_id_$idx"),
           source: {:relationship, name}
         }
       end)
@@ -388,7 +390,7 @@ defmodule Hologram.DB.Mapper do
       null: false,
       references: nil,
       fk_constraint: nil,
-      fk_index: nil,
+      index: nil,
       source: :system
     }
   end
@@ -477,6 +479,14 @@ defmodule Hologram.DB.Mapper do
     |> Enum.map(fn {name, target, _opts} -> {name, target} end)
   end
 
+  # The companion's index holds the KEY alone. A btree entry is capped at 2704 bytes and the key
+  # at 64, while the raw column is unbounded - a composite over both would refuse the writes the
+  # column itself accepts, which is why PostgreSQL's own advice for long text is an index over a
+  # bounded prefix. The key IS that prefix, stored as a column. The raw column does tie-work only:
+  # the planner serves a bound as a range over the key with the pair rechecked on what it returns,
+  # and the ordering as an incremental sort within each equal-key group. It rides the column so
+  # that creation, rename and drop follow the column through the machinery the reference index
+  # already uses.
   defp sort_key_columns(table_name, attributes) do
     attributes
     |> Enum.filter(fn {_name, type, _opts} -> type == :string end)
@@ -492,7 +502,7 @@ defmodule Hologram.DB.Mapper do
         null: true,
         references: nil,
         fk_constraint: nil,
-        fk_index: nil,
+        index: fit_identifier("#{table_name}_#{name}_$sort_$idx"),
         source: {:sort_key, name}
       }
     end)
@@ -530,7 +540,7 @@ defmodule Hologram.DB.Mapper do
         null: false,
         references: nil,
         fk_constraint: nil,
-        fk_index: nil,
+        index: nil,
         source: :system
       }
     end)

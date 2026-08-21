@@ -264,13 +264,12 @@ defmodule Hologram.DB.Schema do
          }}
       end)
 
-    fk_indexes =
-      Map.new(
-        reference_columns,
-        &{&1.fk_index, %{columns: [&1.name], nulls_distinct: true, unique: false}}
-      )
+    column_indexes =
+      entity_mapping.columns
+      |> Enum.filter(& &1.index)
+      |> Map.new(&{&1.index, %{columns: [&1.name], nulls_distinct: true, unique: false}})
 
-    indexes = Map.merge(fk_indexes, entity_mapping.indexes)
+    indexes = Map.merge(column_indexes, entity_mapping.indexes)
 
     {entity_mapping.table,
      %{
