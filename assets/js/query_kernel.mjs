@@ -63,7 +63,10 @@ export default class QueryKernel {
   }
 
   static #arrange(rows, term) {
-    return QueryKernel.#bound(QueryKernel.#sort(rows, term.orderBy), term);
+    return QueryKernel.#bound(
+      QueryKernel.#sort(rows, term.orderBy, term.entity),
+      term,
+    );
   }
 
   static #bound(rows, term) {
@@ -84,7 +87,7 @@ export default class QueryKernel {
 
   // Missing values are placed the way the database places them - last when ascending, first when
   // descending - so a page reading its own rows shows them where the server put them.
-  static #compareKeys(left, right, name, direction) {
+  static #compareKeys(left, right, name, direction, ranks) {
     const leftValue = left[name] ?? null;
     const rightValue = right[name] ?? null;
 
@@ -98,14 +101,20 @@ export default class QueryKernel {
       return leftValue === null ? nullsLast : -nullsLast;
     }
 
-    const result = QueryKernel.#compareValues(left, right, name);
+    const result = QueryKernel.#compareValues(left, right, name, ranks);
 
     return direction === "desc" ? -result : result;
   }
 
-  static #compareRows(left, right, orderBy) {
+  static #compareRows(left, right, orderBy, ranks) {
     for (const [name, direction] of orderBy) {
-      const result = QueryKernel.#compareKeys(left, right, name, direction);
+      const result = QueryKernel.#compareKeys(
+        left,
+        right,
+        name,
+        direction,
+        ranks[name],
+      );
 
       if (result !== 0) {
         return result;
@@ -119,7 +128,18 @@ export default class QueryKernel {
   // pair of columns the database orders it by - the key carries the practical order, and the
   // value behind it settles what the key cannot, since the key is a bounded prefix of it. An
   // attribute no query orders by carries no key, and is compared as it is.
-  static #compareValues(left, right, name) {
+  //
+  // An enum is the one type compared by neither: it orders by its value's position in the
+  // declared list, which is the order the database holds the type in, so what compares is the
+  // pair of positions rather than the labels.
+  static #compareValues(left, right, name, ranks) {
+    if (ranks) {
+      return QueryKernel.#compare(
+        ranks.get(left[name]),
+        ranks.get(right[name]),
+      );
+    }
+
     const sortName = `${name}_sort`;
 
     if (sortName in left) {
@@ -131,6 +151,24 @@ export default class QueryKernel {
     }
 
     return QueryKernel.#compare(left[name], right[name]);
+  }
+
+  // What an enum ordering key compares by: each declared value against its position in the list
+  // the type declares, built once per sort and only for the keys that need it. A key of any
+  // other type is absent, and its comparison is the ordinary one.
+  static #enumRanks(entityType, orderBy) {
+    const entry = Model.entry(entityType);
+    const ranks = {};
+
+    for (const [name] of orderBy) {
+      if (entry.attributes[name] === "enum") {
+        ranks[name] = new Map(
+          entry.enumValues[name].map((label, index) => [label, index]),
+        );
+      }
+    }
+
+    return ranks;
   }
 
   // A relationship the query asked for is filled from the rest of the database - a to-one by
@@ -226,9 +264,11 @@ export default class QueryKernel {
 
   // Every key of the order is spent before two rows are called equal, and the last of them is
   // always the id, so no two rows ever are.
-  static #sort(rows, orderBy) {
+  static #sort(rows, orderBy, entityType) {
+    const ranks = QueryKernel.#enumRanks(entityType, orderBy);
+
     return [...rows].sort((left, right) =>
-      QueryKernel.#compareRows(left, right, orderBy),
+      QueryKernel.#compareRows(left, right, orderBy, ranks),
     );
   }
 

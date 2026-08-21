@@ -233,6 +233,7 @@ describe("QueryKernel", () => {
         model: {
           [PROJECT]: {
             attributes: {id: "uuid", name: "string"},
+            enumValues: {},
             relationships: {
               owner: {toMany: false, type: USER},
               tasks: {toMany: true, type: TASK},
@@ -241,13 +242,20 @@ describe("QueryKernel", () => {
             sortKeys: [],
           },
           [TASK]: {
-            attributes: {id: "uuid", position: "integer", title: "string"},
+            attributes: {
+              id: "uuid",
+              position: "integer",
+              priority: "enum",
+              title: "string",
+            },
+            enumValues: {priority: ["low", "medium", "high"]},
             relationships: {owner: {toMany: false, type: USER}},
             serverOnly: [],
             sortKeys: ["title"],
           },
           [USER]: {
             attributes: {email: "string", id: "uuid"},
+            enumValues: {},
             relationships: {},
             serverOnly: [],
             sortKeys: [],
@@ -392,6 +400,72 @@ describe("QueryKernel", () => {
         });
 
         assert.deepEqual(titles(QueryKernel.run(ordered)), ["Zoe", "zoe"]);
+      });
+    });
+
+    describe("ordering enums", () => {
+      beforeEach(() => {
+        LocalDatabase.reset();
+        LocalDatabase.putRow(TASK, {id: "t1", priority: "medium", title: "a"});
+        LocalDatabase.putRow(TASK, {id: "t2", priority: "high", title: "b"});
+        LocalDatabase.putRow(TASK, {id: "t3", priority: "low", title: "c"});
+        LocalDatabase.putRow(TASK, {id: "t4", title: "d"});
+      });
+
+      // Declared, alphabetical and reverse-alphabetical are three different sequences for these
+      // values, so an order that matches the declared one matches it on purpose.
+      it("orders by the declared position, not the label", () => {
+        const ordered = term({
+          orderBy: [
+            ["priority", "asc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), [
+          "c",
+          "a",
+          "b",
+          "d",
+        ]);
+      });
+
+      it("orders by the declared position descending", () => {
+        const ordered = term({
+          orderBy: [
+            ["priority", "desc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), [
+          "d",
+          "b",
+          "a",
+          "c",
+        ]);
+      });
+
+      it("settles a tie on an enum by the next key", () => {
+        LocalDatabase.putRow(TASK, {id: "t5", priority: "medium", title: "e"});
+        LocalDatabase.putRow(TASK, {id: "t6", priority: "medium", title: "f"});
+
+        const ordered = term({
+          orderBy: [
+            ["priority", "asc"],
+            ["title", "asc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), [
+          "c",
+          "a",
+          "e",
+          "f",
+          "b",
+          "d",
+        ]);
       });
     });
 
