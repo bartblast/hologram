@@ -531,6 +531,14 @@ defmodule Hologram.QueryTest do
     end
   end
 
+  describe "filterable_names/1" do
+    # Module3 declares no attributes, a to-one :b and :c, and a to-many :a - so the answer is the
+    # system attributes plus one reference field per to-one relationship, and nothing for :a.
+    test "returns the attributes, the system attributes and the to-one reference fields" do
+      assert filterable_names(Module3) == [:b_id, :c_id, :created_at, :id, :updated_at]
+    end
+  end
+
   describe "include/3" do
     test "accepts a sub-builder as a spec value" do
       query = include(Module3, a: &filter(&1, a: true))
