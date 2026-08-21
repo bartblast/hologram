@@ -23,13 +23,16 @@ describe("Deltas", () => {
             tasks: {toMany: true, type: TASK},
           },
           serverOnly: [],
-          sortKeys: [],
         },
         [TASK]: {
-          attributes: {done: "boolean", id: "uuid", title: "string"},
+          attributes: {
+            done: "boolean",
+            id: "uuid",
+            note: "string",
+            title: "string",
+          },
           relationships: {},
           serverOnly: [],
-          sortKeys: ["title"],
         },
       },
     };
@@ -74,6 +77,7 @@ describe("Deltas", () => {
       assert.deepEqual(LocalDatabase.getRow(PROJECT, "p1"), {
         id: "p1",
         name: "Website",
+        name_sort: "website",
       });
     });
 
@@ -94,7 +98,7 @@ describe("Deltas", () => {
       );
     });
 
-    it("computes the sort key of an attribute the build orders by", () => {
+    it("computes the sort key of a string attribute", () => {
       Deltas.apply({
         put_entity: {[TASK]: [{done: false, id: "t1", title: "Łódź"}]},
       });
@@ -102,12 +106,26 @@ describe("Deltas", () => {
       assert.equal(LocalDatabase.getRow(TASK, "t1").title_sort, "lodz");
     });
 
-    it("computes no sort key for an attribute the build never orders by", () => {
+    it("computes a sort key for every string attribute", () => {
       Deltas.apply({
-        put_entity: {[PROJECT]: [{id: "p1", name: "Website"}]},
+        put_entity: {
+          [TASK]: [{done: false, id: "t1", note: "Ödön", title: "Łódź"}],
+        },
       });
 
-      assert.isUndefined(LocalDatabase.getRow(PROJECT, "p1").name_sort);
+      const row = LocalDatabase.getRow(TASK, "t1");
+
+      assert.equal(row.note_sort, "odon");
+      assert.equal(row.title_sort, "lodz");
+    });
+
+    it("computes no sort key for an attribute of another type", () => {
+      Deltas.apply({
+        put_entity: {[TASK]: [{done: false, id: "t1", title: "Łódź"}]},
+      });
+
+      assert.isUndefined(LocalDatabase.getRow(TASK, "t1").done_sort);
+      assert.isUndefined(LocalDatabase.getRow(TASK, "t1").id_sort);
     });
 
     it("computes a null sort key for an unset value", () => {

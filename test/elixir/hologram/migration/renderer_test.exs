@@ -44,7 +44,14 @@ defmodule Hologram.Migration.RendererTest do
       task_table =
         Enum.find(result.transactional, &(&1.op == :create_table and &1.table == "my_app_task"))
 
-      assert Map.keys(task_table.columns) == ["created_at", "id", "title", "updated_at"]
+      assert Map.keys(task_table.columns) == [
+               "created_at",
+               "id",
+               "title",
+               "title_$sort",
+               "updated_at"
+             ]
+
       assert task_table.primary_key.constraint == "my_app_task_$pk"
 
       assert result.post_model ==
@@ -95,7 +102,7 @@ defmodule Hologram.Migration.RendererTest do
                model(%{MyApp.Task => %{attributes: [{:priority, :integer, []}]}})
     end
 
-    test "renders a deleted attribute as its column drop" do
+    test "renders a deleted attribute as its column drop, the sort-key companion following" do
       pre =
         model(%{
           MyApp.Task => %{attributes: [{:legacy, :string, []}, {:title, :string, []}]}
@@ -105,10 +112,11 @@ defmodule Hologram.Migration.RendererTest do
 
       result = render(ops, pre)
 
-      assert [drop_column] = result.transactional
-      assert drop_column.op == :drop_column
-      assert drop_column.table == "my_app_task"
-      assert drop_column.column == "legacy"
+      assert result.transactional == [
+               %{op: :drop_index, index: "my_app_task_legacy_$sort_$idx"},
+               %{op: :drop_column, table: "my_app_task", column: "legacy"},
+               %{op: :drop_column, table: "my_app_task", column: "legacy_$sort"}
+             ]
     end
 
     test "renders a deleted entity as its table drop" do
@@ -299,6 +307,24 @@ defmodule Hologram.Migration.RendererTest do
                  enum_type: "hologram_role_grant_resource_type_$enum",
                  from: "my_app_draft",
                  to: "my_app_sketch"
+               }
+             ]
+    end
+
+    test "renames the sort-key companion with its string attribute" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [%{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :name, line: 3}]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{op: :rename_column, table: "my_app_task", from: "title", to: "name"},
+               %{op: :rename_column, table: "my_app_task", from: "title_$sort", to: "name_$sort"},
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_title_$sort_$idx",
+                 to: "my_app_task_name_$sort_$idx"
                }
              ]
     end
@@ -558,10 +584,12 @@ defmodule Hologram.Migration.RendererTest do
       assert Enum.at(kinds, 0) == :rename_table
       assert List.last(kinds) == :add_column
 
-      add_column = List.last(result.transactional)
+      add_columns = Enum.filter(result.transactional, &(&1.op == :add_column))
 
-      assert add_column.table == "my_app_sketch"
-      assert add_column.column == "summary"
+      assert Enum.map(add_columns, &{&1.table, &1.column}) == [
+               {"my_app_sketch", "summary"},
+               {"my_app_sketch", "summary_$sort"}
+             ]
     end
 
     test "renders an attribute type change as its column alteration" do

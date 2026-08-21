@@ -190,6 +190,58 @@ defmodule Hologram.Policy.EvaluatorTest do
              )
     end
 
+    # A rule and the filter mirroring it have to admit the same rows, so a string compares here the
+    # way a query compares it - by its derived key, then by the value behind it.
+    test "compares a string attribute by its sort key" do
+      assert rule_matches?(
+               rule(predicates: [{:username, :>=, "m"}]),
+               %Module10{count: 1, username: "Mango"},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:username, :>=, "m"}]),
+               %Module10{count: 1, username: "Łódź"},
+               nil,
+               &deny/3
+             )
+    end
+
+    test "settles a string bound that shares a key by the value itself" do
+      assert rule_matches?(
+               rule(predicates: [{:username, :>, "Zebra"}]),
+               %Module10{count: 1, username: "zebra"},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:username, :>, "Zebra"}]),
+               %Module10{count: 1, username: "Zebra"},
+               nil,
+               &deny/3
+             )
+    end
+
+    # The key folds case and diacritics, and `==` must not: what a bound reaches and what a value
+    # equals are two different questions.
+    test "keeps string equality exact" do
+      assert rule_matches?(
+               rule(predicates: [{:username, :==, "Zebra"}]),
+               %Module10{count: 1, username: "Zebra"},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:username, :==, "Zebra"}]),
+               %Module10{count: 1, username: "zebra"},
+               nil,
+               &deny/3
+             )
+    end
+
     test "never matches an enum comparison against an unset value" do
       refute rule_matches?(
                rule(predicates: [{:priority, :>=, :low}]),

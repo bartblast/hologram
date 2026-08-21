@@ -3,6 +3,7 @@
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Model from "./model.mjs";
+import SortKey from "./sort_key.mjs";
 
 // The kernel the client answers its own queries with: the locked operator set evaluated over
 // the rows as the wire spells them - plain values, dates and datetimes and enums and uuids as
@@ -216,6 +217,11 @@ export default class QueryKernel {
     return filter.every(([name, operator, operand]) => {
       const ranksForKey = ranks[name];
       const value = QueryKernel.#resolve(operand, context, ranksForKey);
+      const sortName = `${name}_sort`;
+
+      // A row filed by ingest carries the key beside every string attribute, so the presence of
+      // the field is what says "this is a string" - no model lookup.
+      const pair = sortName in row ? [row[sortName], row[name] ?? null] : null;
 
       return value === QueryKernel.#NO_ACTOR
         ? false
@@ -224,6 +230,7 @@ export default class QueryKernel {
             row[name] ?? null,
             value,
             ranksForKey,
+            pair,
           );
     });
   }
@@ -324,7 +331,7 @@ export default class QueryKernel {
   // Null is a value like any other to the equality family - an unset attribute is unequal to a
   // set one, and a list may name it - while an ordering line has no place to put one, so a
   // comparison passes over what is not there.
-  static #satisfies(operator, value, operand, ranksForKey) {
+  static #satisfies(operator, value, operand, ranksForKey, pair = null) {
     switch (operator) {
       case "!=":
         return value !== operand;
@@ -343,25 +350,47 @@ export default class QueryKernel {
       return false;
     }
 
-    // An enum compares by the pair of positions its declared list gives the two labels, the way
-    // the ordering does - so what sorts after a value compares greater than it.
-    const [left, right] = ranksForKey
-      ? [ranksForKey.get(value), ranksForKey.get(operand)]
-      : [value, operand];
+    const result = QueryKernel.#compareOrderingValues(
+      value,
+      operand,
+      ranksForKey,
+      pair,
+    );
 
     switch (operator) {
       case "<":
-        return left < right;
+        return result < 0;
 
       case "<=":
-        return left <= right;
+        return result <= 0;
 
       case ">":
-        return left > right;
+        return result > 0;
 
       case ">=":
-        return left >= right;
+        return result >= 0;
     }
+  }
+
+  // An enum compares by the pair of positions its declared list gives the two labels, and a string
+  // by the pair its ordering sorts by - the key carries the order, and the value behind it settles
+  // what the key cannot, since the key is a bounded prefix of it. Either way what sorts after a
+  // value compares greater than it, which is what makes a bound a position in the list.
+  static #compareOrderingValues(value, operand, ranksForKey, pair) {
+    if (ranksForKey) {
+      return QueryKernel.#compare(
+        ranksForKey.get(value),
+        ranksForKey.get(operand),
+      );
+    }
+
+    if (pair === null) {
+      return QueryKernel.#compare(value, operand);
+    }
+
+    const keyResult = QueryKernel.#compare(pair[0], SortKey.compute(operand));
+
+    return keyResult === 0 ? QueryKernel.#compare(pair[1], operand) : keyResult;
   }
 
   // A binding on an enum attribute is one of the values that attribute declares, refused in the

@@ -24,26 +24,29 @@ defmodule Hologram.DB.Mapper do
   semantics owned by the write path, never a DB DEFAULT), :null (true only for optional
   declarations), :references (the referenced table name for to-one relationship columns,
   nil otherwise), :fk_constraint (the derived `<table>_<column>_$fk` constraint name for
-  reference columns, nil otherwise), :fk_index (the derived `<table>_<column>_$idx` index
-  name for reference columns, nil otherwise - PostgreSQL never indexes FK columns
-  automatically), and :source (:system, or the declaration the column is derived from).
+  reference columns, nil otherwise), :index (the derived index name for the columns that
+  carry one - `<table>_<column>_$idx` on a to-one reference, which PostgreSQL never indexes
+  automatically, and `<table>_<attribute>_$sort_$idx` on a sort-key companion, so an ordering
+  or a comparison on the attribute is served from the key rather than from a sort - nil
+  otherwise), and :source (:system, or the declaration the column is derived from).
   To-many relationships derive no columns - they live in join tables.
 
-  Each {entity type, attribute name} pair in sort_key_attributes naming this entity derives a
-  nullable `<attribute>_$sort` companion column (source `{:sort_key, name}`) holding the
-  attribute's derived sort key. Without them no companions derive.
+  Each :string attribute derives a nullable `<attribute>_$sort` companion column (source
+  `{:sort_key, name}`) holding the attribute's derived sort key - the order both executors
+  sort and compare the attribute by. It is a column like any other the mapping derives:
+  migrations create, rename and drop it with its attribute.
 
   Raises Hologram.CompileError when two declarations derive the same column name (an attribute
   named x_id collides with a to-one relationship named x).
   """
-  @spec columns(module, MapSet.t()) :: list(%{atom => any})
-  def columns(entity_type, sort_key_attributes \\ MapSet.new()) do
+  @spec columns(module) :: list(%{atom => any})
+  def columns(entity_type) do
     entry = %{
       attributes: entity_type.__attributes__(),
       relationships: entity_type.__relationships__()
     }
 
-    columns_from_entry(entity_type, entry, sort_key_attributes)
+    columns_from_entry(entity_type, entry)
   end
 
   @doc """
@@ -54,30 +57,29 @@ defmodule Hologram.DB.Mapper do
   tables and enum types, whose single-underscore seams can merge to the same name across
   entities) - and returns a map from entity type module to its mapping: :table (the table
   name), :pk_constraint (the derived `<table>_$pk` constraint name), :columns (as returned
-  by columns/2, sort-key companions included for the given attributes), and :join_tables
-  (as returned by join_tables/1).
+  by columns/1), and :join_tables (as returned by join_tables/1).
   """
-  @spec derive!(list(module), MapSet.t()) :: %{module => %{atom => any}}
-  def derive!(entity_types, sort_key_attributes \\ MapSet.new()) do
+  @spec derive!(list(module)) :: %{module => %{atom => any}}
+  def derive!(entity_types) do
     # The collision check is a pure function of the module atoms - running it before
     # reflection keeps its readable error ahead of any missing-module crash.
     validate_table_names!(entity_types)
 
     entity_types
     |> Model.from_modules(Reflection.list_roles())
-    |> derive_from_model!(sort_key_attributes)
+    |> derive_from_model!()
   end
 
   @doc """
   Derives the complete physical name mapping for the given model term.
 
-  Same checks and result shape as derive!/2, plus the role grant store, whose entry is
+  Same checks and result shape as derive!/1, plus the role grant store, whose entry is
   derived from the term rather than declared. The term form derives without consulting
   any module, so a mapping is obtainable for entity types that no longer exist as code
   (a replayed migration history names them as plain module atoms).
   """
-  @spec derive_from_model!(%{atom => any}, MapSet.t()) :: %{module => %{atom => any}}
-  def derive_from_model!(model, sort_key_attributes \\ MapSet.new()) do
+  @spec derive_from_model!(%{atom => any}) :: %{module => %{atom => any}}
+  def derive_from_model!(model) do
     entities = put_role_grant(model)
 
     entities
@@ -94,7 +96,7 @@ defmodule Hologram.DB.Mapper do
          %{
            table: table_name,
            pk_constraint: fit_identifier("#{table_name}_$pk"),
-           columns: columns_from_entry(entity_type, entry, sort_key_attributes),
+           columns: columns_from_entry(entity_type, entry),
            indexes: entity_indexes(entity_type),
            join_tables: join_tables_from_entry(entity_type, entry)
          }}
@@ -251,7 +253,7 @@ defmodule Hologram.DB.Mapper do
 
   defp collation(_type), do: nil
 
-  defp columns_from_entry(entity_type, entry, sort_key_attributes) do
+  defp columns_from_entry(entity_type, entry) do
     table_name = table_name(entity_type)
 
     attribute_columns =
@@ -266,7 +268,7 @@ defmodule Hologram.DB.Mapper do
           null: Keyword.get(opts, :optional) == true,
           references: nil,
           fk_constraint: nil,
-          fk_index: nil,
+          index: nil,
           source: {:attribute, name}
         }
       end)
@@ -285,12 +287,12 @@ defmodule Hologram.DB.Mapper do
           null: Keyword.get(opts, :optional) == true,
           references: table_name(target),
           fk_constraint: fit_identifier("#{table_name}_#{name}_id_$fk"),
-          fk_index: fit_identifier("#{table_name}_#{name}_id_$idx"),
+          index: fit_identifier("#{table_name}_#{name}_id_$idx"),
           source: {:relationship, name}
         }
       end)
 
-    sort_columns = sort_key_columns(entity_type, table_name, sort_key_attributes)
+    sort_columns = sort_key_columns(table_name, entry.attributes)
 
     columns =
       [id_column() | attribute_columns] ++ to_one_columns ++ timestamp_columns() ++ sort_columns
@@ -388,7 +390,7 @@ defmodule Hologram.DB.Mapper do
       null: false,
       references: nil,
       fk_constraint: nil,
-      fk_index: nil,
+      index: nil,
       source: :system
     }
   end
@@ -477,11 +479,19 @@ defmodule Hologram.DB.Mapper do
     |> Enum.map(fn {name, target, _opts} -> {name, target} end)
   end
 
-  defp sort_key_columns(entity_type, table_name, sort_key_attributes) do
-    sort_key_attributes
-    |> Enum.filter(fn {pair_entity, _name} -> pair_entity == entity_type end)
+  # The companion's index holds the KEY alone. A btree entry is capped at 2704 bytes and the key
+  # at 64, while the raw column is unbounded - a composite over both would refuse the writes the
+  # column itself accepts, which is why PostgreSQL's own advice for long text is an index over a
+  # bounded prefix. The key IS that prefix, stored as a column. The raw column does tie-work only:
+  # the planner serves a bound as a range over the key with the pair rechecked on what it returns,
+  # and the ordering as an incremental sort within each equal-key group. It rides the column so
+  # that creation, rename and drop follow the column through the machinery the reference index
+  # already uses.
+  defp sort_key_columns(table_name, attributes) do
+    attributes
+    |> Enum.filter(fn {_name, type, _opts} -> type == :string end)
     |> Enum.sort()
-    |> Enum.map(fn {_entity, name} ->
+    |> Enum.map(fn {name, _type, _opts} ->
       %{
         name: fit_identifier("#{name}_$sort"),
         type: :string,
@@ -492,7 +502,7 @@ defmodule Hologram.DB.Mapper do
         null: true,
         references: nil,
         fk_constraint: nil,
-        fk_index: nil,
+        index: fit_identifier("#{table_name}_#{name}_$sort_$idx"),
         source: {:sort_key, name}
       }
     end)
@@ -530,7 +540,7 @@ defmodule Hologram.DB.Mapper do
         null: false,
         references: nil,
         fk_constraint: nil,
-        fk_index: nil,
+        index: nil,
         source: :system
       }
     end)

@@ -20,7 +20,6 @@ export function defineModel() {
         attributes: {id: "uuid", name: "string"},
         relationships: {tasks: {toMany: true, type: TASK}},
         serverOnly: [],
-        sortKeys: [],
       },
       [TASK]: {
         attributes: {
@@ -36,7 +35,6 @@ export function defineModel() {
         },
         relationships: {project: {toMany: false, type: PROJECT}},
         serverOnly: ["internal_notes"],
-        sortKeys: ["title"],
       },
     },
   };

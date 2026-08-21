@@ -111,6 +111,12 @@ defmodule Hologram.QueryTest do
       assert query.filter == [{:b, :>=, {:placeholder, :min}}]
     end
 
+    test "accepts a placeholder sentinel in an ordering operator tuple on a string attribute" do
+      query = filter(Module2, c: {:>=, %Placeholder{name: :min}})
+
+      assert query.filter == [{:c, :>=, {:placeholder, :min}}]
+    end
+
     test "accepts an explicit equality operator tuple" do
       query = filter(Module2, a: {:==, true})
 
@@ -241,6 +247,14 @@ defmodule Hologram.QueryTest do
       assert query.filter == [{:b, :>=, 3}]
     end
 
+    # The derived sort key is the order, so a comparison reads it the way `order_by` does - a
+    # bound names a position in the list the attribute sorts into.
+    test "builds an ordering triple for a string attribute" do
+      query = filter(Module2, c: {:>=, "x"})
+
+      assert query.filter == [{:c, :>=, "x"}]
+    end
+
     test "builds conjunction triples from a list of operator tuples" do
       query = filter(Module2, b: [{:>=, 3}, {:<, 10}])
 
@@ -361,15 +375,6 @@ defmodule Hologram.QueryTest do
       end
     end
 
-    test "raises on a placeholder ordering comparison on a string attribute" do
-      expected_msg =
-        "operator :>= requires a numeric, temporal or enum attribute - attribute :c in Hologram.Test.Fixtures.Entity.Module2 has type :string"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        filter(Module2, c: {:>=, %Placeholder{name: :min}})
-      end
-    end
-
     test "raises on a predicate naming a to-one relationship" do
       expected_msg =
         ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered - filter its reference via :c_id"
@@ -390,7 +395,7 @@ defmodule Hologram.QueryTest do
 
     test "raises on an ordering comparison on a to-one reference field" do
       expected_msg =
-        "operator :>= requires a numeric, temporal or enum attribute - attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 has type :uuid"
+        "operator :>= requires an orderable attribute - attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 has type :uuid, and boolean and uuid attributes have no order to compare by"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module3, c_id: {:>=, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"})
@@ -490,18 +495,9 @@ defmodule Hologram.QueryTest do
       end
     end
 
-    test "raises on an ordering comparison on a string attribute" do
-      expected_msg =
-        "operator :>= requires a numeric, temporal or enum attribute - attribute :c in Hologram.Test.Fixtures.Entity.Module2 has type :string"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        filter(Module2, c: {:>=, "x"})
-      end
-    end
-
     test "raises on an ordering comparison on the id attribute" do
       expected_msg =
-        "operator :< requires a numeric, temporal or enum attribute - attribute :id in Hologram.Test.Fixtures.Entity.Module2 has type :uuid"
+        "operator :< requires an orderable attribute - attribute :id in Hologram.Test.Fixtures.Entity.Module2 has type :uuid, and boolean and uuid attributes have no order to compare by"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, id: {:<, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"})

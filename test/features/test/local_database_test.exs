@@ -194,4 +194,45 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
     |> assert_text(css("#tickets"), ~r/^b,a$/)
     |> assert_same_page_load()
   end
+
+  # The first paint is the server's and what is read afterwards is the hydrated client's, so one
+  # assertion covers both executors: "Łódź" and "apple" fold below the bound, the rest at or above
+  # it, and the order they come back in is the order the bound was placed against.
+  feature "filters rows by a string bound in the order they sort", %{session: session} do
+    Enum.each(["apple", "Łódź", "Mango", "Ödön", "Zebra"], fn name ->
+      Product
+      |> Entity.new(name: name)
+      |> create()
+    end)
+
+    session
+    |> visit(Page2)
+    |> assert_text(css("#products_from_m"), ~r/^Mango,Ödön,Zebra$/)
+  end
+
+  feature "re-files a row whose value crosses a string bound", %{session: session} do
+    apple =
+      Product
+      |> Entity.new(name: "apple")
+      |> create()
+
+    Product
+    |> Entity.new(name: "Mango")
+    |> create()
+
+    Product
+    |> Entity.new(name: "Zebra")
+    |> create()
+
+    session
+    |> visit(Page2)
+    |> assert_text(css("#products_from_m"), ~r/^Mango,Zebra$/)
+    |> mark_this_page_load()
+
+    update(Product, apple.id, name: "mulberry")
+
+    session
+    |> assert_text(css("#products_from_m"), ~r/^Mango,mulberry,Zebra$/)
+    |> assert_same_page_load()
+  end
 end

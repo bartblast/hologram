@@ -4,6 +4,7 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.QueryCompiler
+  alias Hologram.DB.SortKey
   alias Hologram.Entity.Validator
   alias Hologram.Policy
 
@@ -226,6 +227,11 @@ defmodule Hologram.DB.QueryRunner do
         Codec.encode(value, type)
     end)
   end
+
+  # The key slot of a string comparison carries the bound's key, computed here from the same
+  # value the raw slot carries - so the pair the statement compares is folded the way the
+  # column's own pair is.
+  defp encode_param!(value, _name, :sort_key), do: SortKey.compute(value)
 
   defp encode_param!(value, _name, type), do: Codec.encode(value, type)
 

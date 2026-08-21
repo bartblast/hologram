@@ -688,7 +688,6 @@ describe("Sse", () => {
             attributes: {id: "uuid", title: "string"},
             relationships: {},
             serverOnly: [],
-            sortKeys: [],
           },
         },
         modelHash: "a3f9c2",

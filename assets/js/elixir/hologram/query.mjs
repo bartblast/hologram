@@ -19,7 +19,14 @@ import Type from "../../type.mjs";
 
 const EQUALITY_OPERATORS = ["!=", "=="];
 const MEMBERSHIP_OPERATORS = ["in", "not_in"];
-const ORDERABLE_TYPES = ["date", "datetime", "enum", "float", "integer"];
+const ORDERABLE_TYPES = [
+  "date",
+  "datetime",
+  "enum",
+  "float",
+  "integer",
+  "string",
+];
 const ORDERING_OPERATORS = ["<", "<=", ">", ">="];
 
 // The names an attribute may be ordered or read by - declared and system alike, sorted, the way
@@ -631,15 +638,15 @@ function validateMembershipRange(range, name, entityType) {
   }
 }
 
-// The types an ordering line can be drawn through: strings are excluded because byte order is
-// the same on both tiers but wrong for people, and the key that fixes that belongs to ordering.
-// An enum is admitted, because the list it declares is its order on every tier.
+// The types an ordering line can be drawn through: every type but boolean and uuid has an order
+// to compare by. An enum's is the list it declares, on every tier. A string's is the same derived
+// key its ordering uses, which the kernel reads off the row.
 function validateOrderableAttribute(name, entityType, operator) {
   const type = attributeType(entityType, name.value);
 
   if (!ORDERABLE_TYPES.includes(type)) {
     Interpreter.raiseArgumentError(
-      `operator :${operator} requires a numeric, temporal or enum attribute - attribute ${Interpreter.inspect(name)} in ${entityType} has type :${type}`,
+      `operator :${operator} requires an orderable attribute - attribute ${Interpreter.inspect(name)} in ${entityType} has type :${type}, and boolean and uuid attributes have no order to compare by`,
     );
   }
 }

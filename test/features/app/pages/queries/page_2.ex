@@ -3,6 +3,7 @@ defmodule HologramFeatureTests.Queries.Page2 do
 
   alias HologramFeatureTests.Components.Queries.Component2
   alias HologramFeatureTests.Components.Queries.Component7
+  alias HologramFeatureTests.Components.Queries.Component9
 
   route "/queries/2"
 
@@ -12,6 +13,7 @@ defmodule HologramFeatureTests.Queries.Page2 do
     ~HOLO"""
     <Component2 />
     <Component7 cid="component_7" />
+    <Component9 cid="component_9" />
     """
   end
 end

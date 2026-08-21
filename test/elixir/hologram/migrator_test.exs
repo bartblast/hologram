@@ -42,6 +42,20 @@ defmodule Hologram.MigratorTest do
     {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
   end
 
+  defp insert_task_rows(values, column) do
+    values
+    |> Enum.with_index(1)
+    |> Enum.each(fn {value, index} ->
+      statement = """
+      INSERT INTO "hologram_data"."my_app_task" ("id", "#{column}", "created_at", "updated_at")
+      VALUES ('00000000-0000-0000-0000-00000000000#{index}', #{value},
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+      """
+
+      {:ok, _result} = Connection.query(statement)
+    end)
+  end
+
   defp migration(version, ops) do
     %{version: version, path: "#{version}.exs", ops: ops}
   end
@@ -60,6 +74,15 @@ defmodule Hologram.MigratorTest do
     {:ok, %{rows: rows}} = Connection.query(statement, [table])
 
     Enum.map(rows, fn [name] -> name end)
+  end
+
+  defp task_rows(columns) do
+    statement =
+      ~s(SELECT #{columns} FROM "hologram_data"."my_app_task" ORDER BY #{columns})
+
+    {:ok, %{rows: rows}} = Connection.query(statement)
+
+    rows
   end
 
   setup do
@@ -110,6 +133,7 @@ defmodule Hologram.MigratorTest do
                "id",
                "priority",
                "title",
+               "title_$sort",
                "updated_at"
              ]
 
@@ -237,9 +261,9 @@ defmodule Hologram.MigratorTest do
           %{
             op: :add_attribute,
             entity: MyApp.Task,
-            name: :state,
-            type: :string,
-            opts: [default: "new"],
+            name: :priority,
+            type: :integer,
+            opts: [default: 1],
             line: 3
           }
         ])
@@ -247,9 +271,9 @@ defmodule Hologram.MigratorTest do
       apply_pending([defaulted], model, @context)
 
       {:ok, %{rows: rows}} =
-        Connection.query(~s(SELECT "state" FROM "hologram_data"."my_app_task"))
+        Connection.query(~s(SELECT "priority" FROM "hologram_data"."my_app_task"))
 
-      assert rows == [["new"]]
+      assert rows == [[1]]
     end
 
     test "keeps another entity type's grants when a shared role name is renamed" do
@@ -405,6 +429,40 @@ defmodule Hologram.MigratorTest do
 
       assert Introspection.schema() == schema_after_first
       assert applied_versions() == MapSet.new(["20260813091522"])
+    end
+
+    test "renames a companion with its attribute and passes the drift check" do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            type: :string,
+            opts: [],
+            line: 4
+          }
+        ])
+
+      model = apply_pending([create], Model.empty(), @context)
+
+      insert_task_rows([~s('Zoe')], "title")
+
+      # The key is seeded as a write through the entity path would leave it - what the
+      # rename must carry over is an existing key, not a refilled one.
+      {:ok, _result} =
+        Connection.query(~s(UPDATE "hologram_data"."my_app_task" SET "title_$sort" = 'zoe'))
+
+      rename =
+        migration("20260813142237", [
+          %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :name, line: 3}
+        ])
+
+      post_model = apply_pending([rename], model, @context)
+
+      assert task_rows(~s("name", "name_$sort")) == [["Zoe", "zoe"]]
+      assert check_drift!(Mapper.derive_from_model!(post_model)) == :ok
     end
 
     test "leaves the earlier files applied when a later one refuses" do
@@ -677,15 +735,6 @@ defmodule Hologram.MigratorTest do
       assert check_drift!(mapping) == :ok
     end
 
-    test "passes over the query-derived companions", %{mapping: mapping} do
-      add_column =
-        ~s{ALTER TABLE "hologram_data"."my_app_task" ADD COLUMN "title_$sort" text}
-
-      {:ok, _result} = Connection.query(add_column)
-
-      assert check_drift!(mapping) == :ok
-    end
-
     test "refuses a hand-added object", %{mapping: mapping} do
       create_index =
         ~s{CREATE INDEX "task_title_hotfix" ON "hologram_data"."my_app_task" ("title")}
@@ -710,6 +759,22 @@ defmodule Hologram.MigratorTest do
         normalize_newlines("""
         schema drift detected - the database does not match the model:
           * column "title" on table "my_app_task" declared by the model is missing
+        hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
+        """)
+
+      assert_error RuntimeError, expected_msg, fn -> check_drift!(mapping) end
+    end
+
+    test "refuses a missing sort-key companion", %{mapping: mapping} do
+      drop_column = ~s{ALTER TABLE "hologram_data"."my_app_task" DROP COLUMN "title_$sort"}
+
+      {:ok, _result} = Connection.query(drop_column)
+
+      expected_msg =
+        normalize_newlines("""
+        schema drift detected - the database does not match the model:
+          * column "title_$sort" on table "my_app_task" declared by the model is missing
+          * index "my_app_task_title_$sort_$idx" declared by the model is missing
         hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
         """)
 
@@ -811,71 +876,6 @@ defmodule Hologram.MigratorTest do
     end
   end
 
-  describe "reconcile_artifacts/1" do
-    setup do
-      ensure_managed!(@context)
-
-      migrations = [
-        migration("20260813091522", [
-          %{op: :create_entity, entity: MyApp.Task, line: 3},
-          %{
-            op: :add_attribute,
-            entity: MyApp.Task,
-            name: :title,
-            type: :string,
-            opts: [],
-            line: 4
-          }
-        ])
-      ]
-
-      model = apply_pending(migrations, Model.empty(), @context)
-      sort_key_attributes = MapSet.new([{MyApp.Task, :title}])
-
-      [
-        enriched_mapping: Mapper.derive_from_model!(model, sort_key_attributes),
-        plain_mapping: Mapper.derive_from_model!(model)
-      ]
-    end
-
-    test "adds the missing companions and returns the applied ops", %{
-      enriched_mapping: enriched_mapping
-    } do
-      ops = reconcile_artifacts(enriched_mapping)
-
-      assert [%{op: :add_column, table: "my_app_task", column: "title_$sort"}] = ops
-      assert "title_$sort" in table_columns("my_app_task")
-    end
-
-    test "no-ops on a converged database", %{enriched_mapping: enriched_mapping} do
-      reconcile_artifacts(enriched_mapping)
-
-      assert reconcile_artifacts(enriched_mapping) == []
-    end
-
-    test "drops the orphaned companions", %{
-      enriched_mapping: enriched_mapping,
-      plain_mapping: plain_mapping
-    } do
-      reconcile_artifacts(enriched_mapping)
-
-      ops = reconcile_artifacts(plain_mapping)
-
-      assert [%{op: :drop_column, table: "my_app_task", column: "title_$sort"}] = ops
-      refute "title_$sort" in table_columns("my_app_task")
-    end
-
-    test "leaves non-artifact drift untouched", %{enriched_mapping: enriched_mapping} do
-      drop_column = ~s(ALTER TABLE "hologram_data"."my_app_task" DROP COLUMN "title")
-      {:ok, _result} = Connection.query(drop_column)
-
-      ops = reconcile_artifacts(enriched_mapping)
-
-      assert [%{op: :add_column, column: "title_$sort"}] = ops
-      refute "title" in table_columns("my_app_task")
-    end
-  end
-
   describe "repair_indexes/1" do
     setup do
       ensure_managed!(@context)
@@ -958,6 +958,7 @@ defmodule Hologram.MigratorTest do
                "id",
                "priority",
                "title",
+               "title_$sort",
                "updated_at"
              ]
 

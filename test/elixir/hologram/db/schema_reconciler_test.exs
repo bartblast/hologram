@@ -38,6 +38,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     last_reconciled_at: ~U[2026-07-20 12:30:00.000000Z]
   }
 
+  @module2_table ~s("hologram_data"."test_fixtures_entity_module2")
+
   @not_managed_msg "the configured database contains Hologram schemas but no " <>
                      "managed-database marker - it is not managed by schema " <>
                      "reconciliation - drop the \"hologram_system\" and " <>
@@ -63,6 +65,31 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   # exactly the entity types the test names (its user references would otherwise point
   # at a table outside the mapping). Tests converging the store itself use
   # reconcile_context_with_grant_store/1.
+  defp insert_module2_rows(c_values) do
+    c_values
+    |> Enum.with_index(1)
+    |> Enum.each(fn {c_value, index} ->
+      statement = """
+      INSERT INTO "hologram_data"."test_fixtures_entity_module2"
+        ("id", "a", "b", "c", "created_at", "updated_at")
+      VALUES ('00000000-0000-0000-0000-00000000000#{index}', TRUE, NULL, '#{c_value}',
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+      """
+
+      {:ok, _result} = Connection.query(statement)
+    end)
+  end
+
+  defp module2_sort_pairs do
+    select_statement =
+      ~s(SELECT "c", "c_$sort" FROM "hologram_data"."test_fixtures_entity_module2" ) <>
+        ~s(ORDER BY "c_$sort")
+
+    {:ok, %{rows: rows}} = Connection.query(select_statement)
+
+    rows
+  end
+
   defp reconcile_context(entity_types) do
     mapping =
       entity_types
@@ -83,6 +110,35 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         column -> column
       end)
     end)
+  end
+
+  describe "backfill_sort_keys!/2" do
+    setup do
+      drop_hologram_schemas()
+      reconcile(reconcile_context([Module2]))
+
+      :ok
+    end
+
+    test "fills the companion an add-column op names" do
+      insert_module2_rows(["Łódź"])
+      {:ok, _result} = Connection.query(~s(UPDATE #{@module2_table} SET "c_$sort" = NULL))
+
+      op = %{op: :add_column, table: "test_fixtures_entity_module2", column: "c_$sort"}
+
+      assert backfill_sort_keys!([op], reconcile_context([Module2]).mapping) == :ok
+      assert module2_sort_pairs() == [["Łódź", "lodz"]]
+    end
+
+    test "passes over an op adding a column that is no companion" do
+      insert_module2_rows(["Łódź"])
+      {:ok, _result} = Connection.query(~s(UPDATE #{@module2_table} SET "c_$sort" = NULL))
+
+      op = %{op: :add_column, table: "test_fixtures_entity_module2", column: "c"}
+
+      assert backfill_sort_keys!([op], reconcile_context([Module2]).mapping) == :ok
+      assert module2_sort_pairs() == [["Łódź", nil]]
+    end
   end
 
   describe "create_system_tables/0" do
@@ -429,7 +485,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         null: false,
         references: nil,
         fk_constraint: nil,
-        fk_index: nil,
+        index: nil,
         source: {:attribute, :z}
       }
 
@@ -447,6 +503,37 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       assert rows == [[7]]
       assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "fills the sort-key companion of a column it adds" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_rows(["Zürich", "apple"])
+      {:ok, _result} = Connection.query(~s(ALTER TABLE #{@module2_table} DROP COLUMN "c_$sort"))
+
+      context = reconcile_context([Module2])
+
+      reconcile(context)
+
+      assert module2_sort_pairs() == [["apple", "apple"], ["Zürich", "zurich"]]
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "fills a companion whose source is cast to text in the same run" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_rows(["10", "9"])
+
+      {:ok, _result} = Connection.query(~s(ALTER TABLE #{@module2_table} DROP COLUMN "c_$sort"))
+
+      {:ok, _result} =
+        Connection.query(
+          ~s(ALTER TABLE #{@module2_table} ALTER COLUMN "c" TYPE int8 USING "c"::int8)
+        )
+
+      context = reconcile_context([Module2])
+
+      reconcile(context)
+
+      assert module2_sort_pairs() == [["10", "10"], ["9", "9"]]
     end
 
     test "logs each destructive action after the run" do
@@ -567,7 +654,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         null: false,
         references: nil,
         fk_constraint: nil,
-        fk_index: nil,
+        index: nil,
         source: {:attribute, :z}
       }
 

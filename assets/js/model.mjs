@@ -75,7 +75,6 @@ export default class Model {
       relationships: baked.relationships,
       resourceType: baked.resourceType,
       serverOnly: new Set(baked.serverOnly),
-      sortKeys: baked.sortKeys,
     };
 
     Model.#entries[type] = entry;

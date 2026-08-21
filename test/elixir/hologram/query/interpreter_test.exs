@@ -294,30 +294,19 @@ defmodule Hologram.Query.InterpreterTest do
       assert names(agreed(order_by(Module10, [{:priority, :desc}]))) == ["cleo", "bob", "ada"]
     end
 
-    # Lowercase ASCII only: the sort key of such a value IS the value, so both tiers agree
-    # without the companion column this environment's schema does not carry. What the key does
-    # to case and diacritics is asserted below, against the interpreter alone.
     test "orders strings" do
       assert names(agreed(order_by(Module10, :username))) == ["ada", "bob", "cleo"]
     end
   end
 
   describe "run/3 - ordering strings by their sort keys" do
-    # The database orders a string by a companion column holding exactly this derived value, so
-    # what is asserted here is the same order it would produce for a schema that carries one -
-    # this test environment's does not, which is why the interpreter answers alone.
     test "orders by the derived key rather than by the bytes" do
       module_10(count: 1, username: "Zoe")
       module_10(count: 2, username: "ada")
       module_10(count: 3, username: "Ödön")
       module_10(count: 4, username: "bob")
 
-      term =
-        Module10
-        |> order_by(:username)
-        |> Query.normalize()
-
-      assert names(run(term, database())) == ["ada", "bob", "Ödön", "Zoe"]
+      assert names(agreed(order_by(Module10, :username))) == ["ada", "bob", "Ödön", "Zoe"]
     end
   end
 
@@ -407,6 +396,39 @@ defmodule Hologram.Query.InterpreterTest do
       assert_error ArgumentError, expected_msg, fn ->
         run(term, database(), bindings: %{min: :urgent})
       end
+    end
+  end
+
+  # A bound is a position in the list `order_by` renders, so what sorts at or after it is what the
+  # comparison matches - the key carries the order and the value settles the ties.
+  describe "run/3 - comparing strings" do
+    setup do
+      Enum.each(["Zürich", "Łódź", "apple", "Mango", "Zebra", "zebra"], &module_2/1)
+
+      :ok
+    end
+
+    test "matches values at or after a bound by their key" do
+      assert matched_titles(agreed(filter(Module2, c: {:>=, "m"}))) == [
+               "Mango",
+               "Zebra",
+               "Zürich",
+               "zebra"
+             ]
+    end
+
+    test "matches values before a bound by their key" do
+      assert matched_titles(agreed(filter(Module2, c: {:<, "m"}))) == ["apple", "Łódź"]
+    end
+
+    test "settles a bound that shares a key by the value itself" do
+      assert matched_titles(agreed(filter(Module2, c: {:>, "Zebra"}))) == ["Zürich", "zebra"]
+    end
+
+    test "passes over an unset string" do
+      module_10(count: 1)
+
+      assert names(agreed(filter(Module10, username: {:>=, "a"}))) == []
     end
   end
 

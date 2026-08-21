@@ -146,7 +146,16 @@ defmodule Hologram.Migration.AtomicityTest do
 
         # The op that would have succeeded never ran: the refusal covers the file, not the
         # op that earned it.
-        assert task_columns() == ["amount", "created_at", "id", "title", "updated_at"]
+        assert task_columns() == [
+                 "amount",
+                 "amount_$sort",
+                 "created_at",
+                 "id",
+                 "title",
+                 "title_$sort",
+                 "updated_at"
+               ]
+
         assert applied_versions() == MapSet.new(["20260813091522"])
         assert task_rows() == [["first", "10"], [nil, "20"]]
       end)
@@ -189,10 +198,13 @@ defmodule Hologram.Migration.AtomicityTest do
 
         assert task_columns() == [
                  "amount",
+                 "amount_$sort",
                  "created_at",
                  "id",
                  "note",
+                 "note_$sort",
                  "title",
+                 "title_$sort",
                  "updated_at"
                ]
 

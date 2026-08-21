@@ -6,8 +6,10 @@ defmodule Hologram.DB.SchemaReconciler do
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
   alias Hologram.DB.Introspection
+  alias Hologram.DB.Mapper
   alias Hologram.DB.Preflight
   alias Hologram.DB.Schema
+  alias Hologram.DB.SortKey
 
   # Fixed application-defined key for pg_advisory_xact_lock - serializes concurrent
   # reconciliations from multiple VMs against one database (the second waits, then
@@ -118,6 +120,18 @@ defmodule Hologram.DB.SchemaReconciler do
   ]
 
   @doc """
+  Fills every sort-key companion column the given ops add, from the companion's source
+  column, one row at a time in the caller's transaction - the key of a nil value is nil.
+  Ops adding no companion are passed over. Returns :ok.
+  """
+  @spec backfill_sort_keys!(list(%{atom => any}), %{module => %{atom => any}}) :: :ok
+  def backfill_sort_keys!(ops, mapping) do
+    ops
+    |> Enum.filter(&match?(%{op: :add_column}, &1))
+    |> Enum.each(&backfill_op!(&1, mapping))
+  end
+
+  @doc """
   Creates the control-plane bookkeeping tables in the hologram_system schema.
   """
   @spec create_system_tables() :: :ok
@@ -216,6 +230,12 @@ defmodule Hologram.DB.SchemaReconciler do
         Preflight.run!(ops, actual, context.mapping)
 
         apply_ops(ops, context.mapping)
+
+        # A companion this run adds is filled AFTER every op has applied, not at its own
+        # add: the diff applies add_column before alter_column, so a source column being
+        # cast to text in the same run still holds its old type when its companion lands.
+        backfill_sort_keys!(ops, context.mapping)
+
         update_registry(ops)
         write_marker(marker_from_context(context))
 
@@ -342,6 +362,46 @@ defmodule Hologram.DB.SchemaReconciler do
 
   defp apply_ops(ops, mapping) do
     Enum.each(ops, &apply_op(&1, mapping))
+  end
+
+  # The row locks serialize the fill against concurrent entity updates - a live-reload
+  # fill runs while the endpoint serves, and an update slipping between the read and the
+  # companion write would get its fresh companion value overwritten from the stale read.
+  # sobelow_skip ["SQL.Query"]
+  defp backfill_sort_key!(table, companion_name, source_name) do
+    select_sql =
+      ~s(SELECT "id", #{Mapper.quote_identifier(source_name)} FROM #{qualified_table(table)} FOR UPDATE)
+
+    update_sql =
+      ~s(UPDATE #{qualified_table(table)} SET #{Mapper.quote_identifier(companion_name)} = $1 WHERE "id" = $2)
+
+    {:ok, %{rows: rows}} = Connection.query(select_sql, [])
+
+    Enum.each(rows, fn
+      [_id, nil] ->
+        :ok
+
+      [id, value] ->
+        {:ok, _result} = Connection.query(update_sql, [SortKey.compute(value), id])
+    end)
+  end
+
+  defp backfill_op!(op, mapping) do
+    {_entity_type, entity_mapping} =
+      Enum.find(mapping, fn {_entity_type, table_mapping} -> table_mapping.table == op.table end)
+
+    column = Enum.find(entity_mapping.columns, &(&1.name == op.column))
+
+    case column do
+      %{source: {:sort_key, attribute_name}} ->
+        source_column =
+          Enum.find(entity_mapping.columns, &(&1.source == {:attribute, attribute_name}))
+
+        backfill_sort_key!(entity_mapping.table, column.name, source_column.name)
+
+      _other_column ->
+        :ok
+    end
   end
 
   defp check_alien!(%{op: :drop_column} = op, registry) do
@@ -523,6 +583,10 @@ defmodule Hologram.DB.SchemaReconciler do
             "marker - it is not managed by schema reconciliation - drop the " <>
             ~s("hologram_system" and "hologram_data" schemas or point the config ) <>
             "at another database"
+  end
+
+  defp qualified_table(table) do
+    ~s("hologram_data".#{Mapper.quote_identifier(table)})
   end
 
   defp record_op(%{op: :add_column} = op), do: register(:column, op.table, op.column)

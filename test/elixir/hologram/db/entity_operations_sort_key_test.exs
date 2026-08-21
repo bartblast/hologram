@@ -3,36 +3,11 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
 
   import Hologram.DB.EntityOperations, only: [create: 1, get: 2, update: 3]
 
-  alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
-  alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module7
-
-  setup do
-    add_companion_column!("test_fixtures_entity_module2")
-    add_companion_column!("test_fixtures_entity_module7")
-
-    original_mapping = DB.mapping()
-    sort_key_attributes = MapSet.new([{Module2, :c}, {Module7, :c}])
-    mapping = Mapper.derive!([Module2, Module7], sort_key_attributes)
-
-    :persistent_term.put(DB.mapping_key(), Map.merge(original_mapping, mapping))
-
-    on_exit(fn -> :persistent_term.put(DB.mapping_key(), original_mapping) end)
-
-    :ok
-  end
-
-  defp add_companion_column!(table) do
-    sql = ~s(ALTER TABLE "hologram_data"."#{table}" ADD COLUMN "c_$sort" text COLLATE "C")
-
-    {:ok, _result} = Connection.query(sql, [])
-
-    :ok
-  end
 
   defp companion_value(table, id) do
     sql = ~s(SELECT "c_$sort" FROM "hologram_data"."#{table}" WHERE "id" = $1)

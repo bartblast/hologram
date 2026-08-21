@@ -56,6 +56,26 @@ defmodule HologramFeatureTests.QueriesTest do
     |> assert_text(css("#dynamic_order"), "aa,cc,bb")
   end
 
+  # The ordering key arrives as a prop, so the build cannot know which attribute it names - what
+  # puts these rows in practical order is the key every string attribute carries, not a companion
+  # registered for this query.
+  feature "orders rows by a dynamic string key in practical order", %{session: session} do
+    product =
+      Product
+      |> Entity.new(name: "Widget")
+      |> create()
+
+    Enum.each(["Zebra", "apple", "Łódź"], fn body ->
+      Review
+      |> Entity.new(body: body, product_id: product.id, rating: 3)
+      |> create()
+    end)
+
+    session
+    |> visit(Page3)
+    |> assert_text(css("#dynamic_string_order"), ~r/^apple,Łódź,Zebra$/)
+  end
+
   feature "renders from_query prop results in practical order", %{session: session} do
     Product
     |> Entity.new(name: "Zürich")

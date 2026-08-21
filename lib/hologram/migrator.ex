@@ -113,16 +113,10 @@ defmodule Hologram.Migrator do
   declares hand-dropped. One rule, no classifying - hologram_data is model-managed
   everywhere, and the wrong-database cases never reach this check (the marker refused
   them).
-
-  The query-derived artifacts are the one carve-out: they follow the registered queries,
-  not the model, and ride no migration - their ops are skipped rather than reported.
   """
   @spec check_drift!(%{module => %{atom => any}}) :: :ok
   def check_drift!(mapping) do
-    drift_ops =
-      Introspection.schema()
-      |> Schema.diff(Schema.from_mapping(mapping))
-      |> Enum.reject(&artifact_op?(&1, mapping))
+    drift_ops = Schema.diff(Introspection.schema(), Schema.from_mapping(mapping))
 
     if drift_ops != [] do
       lines = Enum.map_join(drift_ops, "\n", &"  * #{describe_difference(&1)}")
@@ -233,36 +227,6 @@ defmodule Hologram.Migrator do
   @spec pending(list(%{atom => any}), MapSet.t()) :: list(%{atom => any})
   def pending(migrations, applied_versions) do
     Enum.reject(migrations, &(&1.version in applied_versions))
-  end
-
-  @doc """
-  Converges the connected database's query-derived artifacts - the `_$sort` companion
-  columns of the registered queries - to the given mapping, and returns the applied ops.
-
-  The artifact set changes with every app build, independently of the model, so it rides
-  no migration: the enriched mapping is the target, missing companions are added and
-  orphaned ones dropped, and everything else in the diff is left alone. The backfill of
-  an added companion is the caller's, reading the returned ops. The marker and the
-  applied-migrations record stay untouched.
-  """
-  @spec reconcile_artifacts(%{module => %{atom => any}}) :: list(%{atom => any})
-  def reconcile_artifacts(mapping) do
-    {:ok, ops} =
-      Connection.transaction(fn ->
-        {:ok, _result} =
-          Connection.query("SELECT pg_advisory_xact_lock($1)", [@advisory_lock_key])
-
-        ops =
-          Introspection.schema()
-          |> Schema.diff(Schema.from_mapping(mapping))
-          |> Enum.filter(&artifact_op?(&1, mapping))
-
-        Enum.each(ops, &apply_op(&1, mapping))
-
-        ops
-      end)
-
-    ops
   end
 
   @doc """
@@ -440,6 +404,11 @@ defmodule Hologram.Migrator do
     Preflight.run!(render.transactional, actual, mapping)
     Enum.each(render.transactional, &apply_op(&1, mapping))
 
+    # A companion this file adds is filled AFTER every op has applied, not at its own add:
+    # the diff applies add_column before alter_column, so a source column being cast to
+    # text in the same file still holds its old type when its companion lands.
+    SchemaReconciler.backfill_sort_keys!(render.transactional, mapping)
+
     # The tail's checks run here, against the columns the statements above just created
     # and before anything commits: a file whose index cannot be built does not apply at
     # all, rather than committing and failing afterwards.
@@ -449,22 +418,6 @@ defmodule Hologram.Migrator do
 
     :applied
   end
-
-  # The query-derived artifacts are outside the model's jurisdiction: check_drift!/1
-  # skips them and reconcile_artifacts/1 converges them. An added companion is
-  # recognized by its derivation source in the mapping - a dropped orphan is absent
-  # from the mapping, so its `_$sort` suffix decides, and only sort companions carry it.
-  # TODO: query-derived indexes cannot partition by suffix - `_$idx` is shared with the
-  # model's foreign-key indexes - extend the source-based split when they arrive.
-  defp artifact_op?(%{op: :add_column} = op, mapping) do
-    match?(%{source: {:sort_key, _name}}, mapping_column(mapping, op.table, op.column))
-  end
-
-  defp artifact_op?(%{op: :drop_column} = op, _mapping) do
-    String.ends_with?(op.column, "_$sort")
-  end
-
-  defp artifact_op?(_op, _mapping), do: false
 
   defp changes_phrase([_one]), do: "change has"
 
@@ -649,15 +602,6 @@ defmodule Hologram.Migrator do
     Enum.map(rows, fn [index] -> index end)
   end
 
-  defp mapping_column(mapping, table, column_name) do
-    entity_mapping =
-      mapping
-      |> Map.values()
-      |> Enum.find(&(&1.table == table))
-
-    entity_mapping && Enum.find(entity_mapping.columns, &(&1.name == column_name))
-  end
-
   defp raise_not_managed! do
     raise "the configured database contains Hologram schemas but no managed-database " <>
             "marker - it is not managed by migrations - drop the " <>
@@ -762,9 +706,6 @@ defmodule Hologram.Migrator do
 
     repair_indexes(mapping)
 
-    # The query-derived companions are not converged here - they follow the registered
-    # queries, which are not known until the query cache boots, and the drift check
-    # skips their ops rather than reporting them.
     check_drift!(mapping)
 
     :ok
