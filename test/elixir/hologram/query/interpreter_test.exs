@@ -120,13 +120,13 @@ defmodule Hologram.Query.InterpreterTest do
     |> Enum.sort()
   end
 
-  defp matched_module_17_titles(rows) do
+  defp matched_module_17_labels(rows) do
     rows
-    |> module_17_titles()
+    |> module_17_labels()
     |> Enum.sort()
   end
 
-  defp module_17_titles(rows), do: Enum.map(rows, & &1.title)
+  defp module_17_labels(rows), do: Enum.map(rows, & &1.label)
 
   defp names(rows), do: Enum.map(rows, & &1.username)
 
@@ -324,42 +324,42 @@ defmodule Hologram.Query.InterpreterTest do
   describe "run/3 - ordering enums" do
     setup do
       %{
-        first: module_17(priority: :medium, title: "a"),
-        second: module_17(priority: :high, title: "b"),
-        third: module_17(priority: :low, title: "c"),
-        fourth: module_17(title: "d")
+        first: module_17(priority: :medium, label: "a"),
+        second: module_17(priority: :high, label: "b"),
+        third: module_17(priority: :low, label: "c"),
+        fourth: module_17(label: "d")
       }
     end
 
     # Declared, alphabetical and reverse-alphabetical are three different sequences for these
     # values, so an order that matches the declared one matches it on purpose.
     test "orders by the declared position, not the label" do
-      assert module_17_titles(agreed(order_by(Module17, :priority))) == ["c", "a", "b", "d"]
+      assert module_17_labels(agreed(order_by(Module17, :priority))) == ["c", "a", "b", "d"]
     end
 
     test "orders by the declared position descending" do
       query = order_by(Module17, [{:priority, :desc}])
 
-      assert module_17_titles(agreed(query)) == ["d", "b", "a", "c"]
+      assert module_17_labels(agreed(query)) == ["d", "b", "a", "c"]
     end
 
     test "settles a tie on an enum by the next key" do
-      module_17(priority: :medium, title: "e")
-      module_17(priority: :medium, title: "f")
+      module_17(priority: :medium, label: "e")
+      module_17(priority: :medium, label: "f")
 
-      query = order_by(Module17, [:priority, :title])
+      query = order_by(Module17, [:priority, :label])
 
-      assert module_17_titles(agreed(query)) == ["c", "a", "e", "f", "b", "d"]
+      assert module_17_labels(agreed(query)) == ["c", "a", "e", "f", "b", "d"]
     end
   end
 
   describe "run/3 - comparing enums" do
     setup do
       %{
-        first: module_17(priority: :medium, title: "a"),
-        second: module_17(priority: :high, title: "b"),
-        third: module_17(priority: :low, title: "c"),
-        fourth: module_17(title: "d")
+        first: module_17(priority: :medium, label: "a"),
+        second: module_17(priority: :high, label: "b"),
+        third: module_17(priority: :low, label: "c"),
+        fourth: module_17(label: "d")
       }
     end
 
@@ -368,25 +368,25 @@ defmodule Hologram.Query.InterpreterTest do
     test "matches values at or after a declared value" do
       query = filter(Module17, priority: {:>=, :medium})
 
-      assert matched_module_17_titles(agreed(query)) == ["a", "b"]
+      assert matched_module_17_labels(agreed(query)) == ["a", "b"]
     end
 
     test "matches values before a declared value" do
       query = filter(Module17, priority: {:<, :medium})
 
-      assert matched_module_17_titles(agreed(query)) == ["c"]
+      assert matched_module_17_labels(agreed(query)) == ["c"]
     end
 
     test "passes over an unset enum" do
       query = filter(Module17, priority: {:>=, :low})
 
-      assert matched_module_17_titles(agreed(query)) == ["a", "b", "c"]
+      assert matched_module_17_labels(agreed(query)) == ["a", "b", "c"]
     end
 
     test "compares a declared value bound to a placeholder" do
       query = filter(Module17, priority: {:>=, %Placeholder{name: :min}})
 
-      assert matched_module_17_titles(agreed(query, bindings: %{min: :medium})) == ["a", "b"]
+      assert matched_module_17_labels(agreed(query, bindings: %{min: :medium})) == ["a", "b"]
     end
 
     # The database executor refuses the binding before it builds a statement, so an undeclared
