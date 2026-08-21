@@ -390,7 +390,6 @@ defmodule Hologram.Compiler do
           %{
             entity_types: MapSet.t(module),
             permission_checking?: boolean,
-            sort_key_attributes: MapSet.t({module, atom}),
             prop_params: %{module => keyword(list(atom))}
           },
           T.file_path()
@@ -601,7 +600,6 @@ defmodule Hologram.Compiler do
           %{
             entity_types: MapSet.t(module),
             permission_checking?: boolean,
-            sort_key_attributes: MapSet.t({module, atom}),
             prop_params: %{module => keyword(list(atom))}
           },
           T.opts()
@@ -808,10 +806,6 @@ defmodule Hologram.Compiler do
   it includes. Nothing else can reach a client's database, so nothing else is worth telling it
   about.
 
-  `:sort_key_attributes` are the {entity type, attribute name} pairs those queries order by on
-  :string attributes - the attributes whose sort keys the client computes at ingest, derived from
-  the same registered queries the server derives its companion columns from.
-
   `:prop_params` are the ordered argument names of every parameterized from_query capture those
   components declare, keyed by component and prop. A capture travels in the bundle and is called
   there, but the names its arguments were written with do not survive encoding - and those names
@@ -832,8 +826,7 @@ defmodule Hologram.Compiler do
   @spec build_sync_constants(list(module), CallGraph.t(), boolean) :: %{
           entity_types: MapSet.t(module),
           permission_checking?: boolean,
-          prop_params: %{module => keyword(list(atom))},
-          sort_key_attributes: MapSet.t({module, atom})
+          prop_params: %{module => keyword(list(atom))}
         }
   def build_sync_constants(page_modules, call_graph, permission_checking? \\ false) do
     graph = CallGraph.get_graph(call_graph)
@@ -867,8 +860,7 @@ defmodule Hologram.Compiler do
     %{
       entity_types: entity_types,
       permission_checking?: permission_checking?,
-      prop_params: prop_params(component_modules),
-      sort_key_attributes: Registry.sort_key_attributes(terms)
+      prop_params: prop_params(component_modules)
     }
   end
 
@@ -1388,16 +1380,15 @@ defmodule Hologram.Compiler do
   # An enum attribute's declared value list travels too, spelled the way the rows spell their
   # values: the order a list declares IS the type's order, and ordering by an enum attribute
   # sorts by a value's position in it - which the client can only follow if it is told the list.
-  defp render_entity_model(entity_types, sort_key_attributes, permission_checking?) do
+  defp render_entity_model(entity_types, permission_checking?) do
     entity_types
     |> Enum.map(
-      &{Codec.encode_enum_value(&1),
-       render_entity_model_entry(&1, sort_key_attributes, permission_checking?)}
+      &{Codec.encode_enum_value(&1), render_entity_model_entry(&1, permission_checking?)}
     )
     |> render_json_object()
   end
 
-  defp render_entity_model_entry(entity_type, sort_key_attributes, permission_checking?) do
+  defp render_entity_model_entry(entity_type, permission_checking?) do
     attributes =
       entity_type.__attributes__()
       |> Enum.concat(entity_type.__system_attributes__())
@@ -1416,14 +1407,12 @@ defmodule Hologram.Compiler do
       {"policy", render_policy(entity_type, permission_checking?)},
       {"relationships", render_relationships(entity_type)},
       {"resourceType", render_resource_type(entity_type)},
-      {"serverOnly", server_only},
-      {"sortKeys", render_sort_keys(entity_type, sort_key_attributes)}
+      {"serverOnly", server_only}
     ])
   end
 
-  # A type with no enum attributes carries an empty object rather than nothing at all, the way a
-  # type nothing orders by carries an empty sort-key list - the reader fetches the field without
-  # asking whether it is there.
+  # A type with no enum attributes carries an empty object rather than nothing at all - the reader
+  # fetches the field without asking whether it is there.
   defp render_enum_values(entity_type) do
     entity_type.__attributes__()
     |> Enum.filter(fn {_name, type, _opts} -> type == :enum end)
@@ -1474,28 +1463,13 @@ defmodule Hologram.Compiler do
     render_json_object([{"toMany", Jason.encode!(to_many?)}, {"type", type}])
   end
 
-  # Which of a type's :string attributes are ordered by somewhere in this build, and so need a
-  # sort key derived when a row of it lands. It rides in the type's own entry rather than in a
-  # list of its own: the ingest path already reads the entry to decode the row, the two are keyed
-  # the same way, and every type named here is one the model names anyway.
-  #
-  # A query-derived answer inside a declaration-derived entry is not a mixture: which TYPES are
-  # here is query-derived already - a type no query reaches is left out of the model entirely.
-  defp render_sort_keys(entity_type, sort_key_attributes) do
-    sort_key_attributes
-    |> Enum.filter(fn {type, _attribute} -> type == entity_type end)
-    |> Enum.map(fn {_type, attribute} -> Atom.to_string(attribute) end)
-    |> Enum.sort()
-    |> Jason.encode!()
-  end
-
   # The rules a client evaluates permissions by, spelled the way the rows it evaluates them
   # against are spelled: a predicate value travels as the wire spells it, so a date compares with
   # a date rather than with the way Elixir happens to print one.
   #
-  # It rides in the type's own model entry rather than in a map of its own, for the reason sort
-  # keys do: both are keyed by entity type, the ingest and read paths already fetch the entry,
-  # and every type named here is one the model names anyway.
+  # It rides in the type's own model entry rather than in a map of its own: it is keyed by entity
+  # type, the ingest and read paths already fetch the entry, and every type named here is one the
+  # model names anyway.
   #
   # A build whose clients check nothing carries an empty policy per type - not the rules with
   # nobody to read them. An empty policy grants nothing, which is what a client that cannot check
@@ -1696,11 +1670,7 @@ defmodule Hologram.Compiler do
       ~s/globalThis.Hologram.sync = null;/
     else
       model =
-        render_entity_model(
-          sync_constants.entity_types,
-          sync_constants.sort_key_attributes,
-          sync_constants.permission_checking?
-        )
+        render_entity_model(sync_constants.entity_types, sync_constants.permission_checking?)
 
       params = render_prop_params(sync_constants.prop_params)
 
