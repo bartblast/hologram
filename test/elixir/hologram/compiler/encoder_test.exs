@@ -3113,6 +3113,27 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == ~s/Type.bitstring("\\v")/
     end
 
+    test "null (non-printable) char" do
+      # <<0>>
+      ir = %IR.StringType{value: <<0>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\u{0}")/
+    end
+
+    test "escape (printable) char" do
+      # "\e"
+      ir = %IR.StringType{value: "\e"}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\e")/
+    end
+
+    test "delete (printable) char" do
+      # <<127>>
+      ir = %IR.StringType{value: <<127>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\d")/
+    end
+
     test "line seperator char" do
       # <<8_232::utf8>>
       ir = %IR.StringType{value: <<8_232::utf8>>}
@@ -3142,6 +3163,48 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == ~s/Type.bitstring("\\u{85}\\u{86}\\u{87}")/
     end
 
+    test "last non-printable char before the printable Unicode range" do
+      # <<0x9F::utf8>> (equivalent to <<194, 159>>)
+      ir = %IR.StringType{value: <<0x9F::utf8>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\u{9F}")/
+    end
+
+    test "first printable char after the non-printable Unicode range" do
+      # <<0xA0::utf8>> (equivalent to <<194, 160>>)
+      ir = %IR.StringType{value: <<0xA0::utf8>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\u00A0")/
+    end
+
+    test "last printable char before the noncharacters" do
+      # <<0xFFFD::utf8>>
+      ir = %IR.StringType{value: <<0xFFFD::utf8>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\uFFFD")/
+    end
+
+    test "noncharacter U+FFFE" do
+      # <<0xFFFE::utf8>>
+      ir = %IR.StringType{value: <<0xFFFE::utf8>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\u{FFFE}")/
+    end
+
+    test "noncharacter U+FFFF" do
+      # <<0xFFFF::utf8>>
+      ir = %IR.StringType{value: <<0xFFFF::utf8>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\u{FFFF}")/
+    end
+
+    test "printable char above the BMP" do
+      # "\u{1F600}"
+      ir = %IR.StringType{value: <<0x1F600::utf8>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\u{1F600}")/
+    end
+
     test "single-byte char outside of the standard ASCII range" do
       ir = %IR.StringType{value: <<240>>}
 
@@ -3165,6 +3228,15 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == ~s/Type.bitstring("abc\\n全息图\\t\\u{85}\\u{86}\\u{87}")/
+    end
+
+    test "long string" do
+      # 25 KB, mixing plain chars with escapes so the result is assembled from many parts
+      ir = %IR.StringType{value: String.duplicate("ab\"c\n", 5_000)}
+
+      expected = ~s/Type.bitstring("/ <> String.duplicate(~S|ab\"c\n|, 5_000) <> ~s/")/
+
+      assert encode_ir(ir) == expected
     end
   end
 
