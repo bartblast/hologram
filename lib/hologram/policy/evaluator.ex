@@ -6,6 +6,8 @@ defmodule Hologram.Policy.Evaluator do
   # function the caller injects - they need the grant store and the related rows, which
   # this module deliberately knows nothing about.
 
+  alias Hologram.DB.SortKey
+
   @ordering_operators [:<, :<=, :>, :>=]
 
   @doc """
@@ -56,11 +58,27 @@ defmodule Hologram.Policy.Evaluator do
 
   defp compare(%DateTime{} = left, %DateTime{} = right), do: DateTime.compare(left, right)
 
+  # A policy compares a string the way a query does - by the key derived from it, then by the
+  # value behind it - so a rule and the filter mirroring it admit the same rows. The key is a
+  # bounded prefix, which is what leaves the value something to settle.
+  defp compare(left, right) when is_binary(left) and is_binary(right) do
+    case plain_compare(SortKey.compute(left), SortKey.compute(right)) do
+      :eq -> plain_compare(left, right)
+      result -> result
+    end
+  end
+
   defp compare(left, right) when left < right, do: :lt
 
   defp compare(left, right) when left > right, do: :gt
 
   defp compare(_left, _right), do: :eq
+
+  defp plain_compare(left, right) when left < right, do: :lt
+
+  defp plain_compare(left, right) when left > right, do: :gt
+
+  defp plain_compare(_left, _right), do: :eq
 
   # An enum value compares by its position in the list the entity declares, which is the order
   # the database holds the type in and the order a query compares it by - so a rule and the
