@@ -2213,7 +2213,7 @@ defmodule Hologram.CompilerTest do
         )
 
       expected_msg =
-        "from_query for prop :entities in Hologram.Test.Fixtures.Component.Module11 binds argument :min_b - no like-named prop is declared"
+        "test/elixir/support/fixtures/component/module_11.ex: from_query for prop :entities in Hologram.Test.Fixtures.Component.Module11 binds argument :min_b - no like-named prop is declared"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_slot_bindings!([PageModule7], patched_call_graph)
