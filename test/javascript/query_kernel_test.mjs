@@ -675,6 +675,79 @@ describe("QueryKernel", () => {
     });
   });
 
+  // Mirrors the interpreter's "run/3 - comparing enums" describe case for case. The rows hold
+  // labels the way the wire spells them, and the type is named so the kernel reads the declared
+  // list off the model - which is what makes :high come after :medium rather than before it.
+  describe("matches() - comparing enums", () => {
+    const TICKET = "MyApp.Ticket";
+
+    const tickets = {
+      a: {id: "t1", priority: "medium", title: "a"},
+      b: {id: "t2", priority: "high", title: "b"},
+      c: {id: "t3", priority: "low", title: "c"},
+      d: {id: "t4", priority: null, title: "d"},
+    };
+
+    const titlesMatching = (filter, context) =>
+      Object.values(tickets)
+        .filter((row) => matches(row, filter, context, TICKET))
+        .map((row) => row.title);
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TICKET]: {
+            attributes: {id: "uuid", priority: "enum", title: "string"},
+            enumValues: {priority: ["low", "medium", "high"]},
+            relationships: {},
+            serverOnly: [],
+            sortKeys: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    it("matches values at or after a declared value", () => {
+      assert.deepEqual(titlesMatching([["priority", ">=", "medium"]]), [
+        "a",
+        "b",
+      ]);
+    });
+
+    it("matches values before a declared value", () => {
+      assert.deepEqual(titlesMatching([["priority", "<", "medium"]]), ["c"]);
+    });
+
+    it("passes over an unset enum", () => {
+      assert.deepEqual(titlesMatching([["priority", ">=", "low"]]), [
+        "a",
+        "b",
+        "c",
+      ]);
+    });
+
+    it("compares a declared value bound to a placeholder", () => {
+      const filter = [["priority", ">=", {placeholder: "min"}]];
+
+      assert.deepEqual(titlesMatching(filter, {bindings: {min: "medium"}}), [
+        "a",
+        "b",
+      ]);
+    });
+
+    it("refuses a placeholder bound to a value the enum does not declare, as the reference does", () => {
+      const filter = [["priority", ">=", {placeholder: "min"}]];
+
+      assert.throw(
+        () => titlesMatching(filter, {bindings: {min: "urgent"}}),
+        HologramRuntimeError,
+        "invalid value :urgent for placeholder :min - expected one of [:low, :medium, :high]",
+      );
+    });
+  });
+
   describe("matches() - the acting user", () => {
     it("matches against who is asking", () => {
       const filter = [["id", "==", {actor: true}]];
