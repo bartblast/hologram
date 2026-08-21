@@ -88,6 +88,7 @@ describe("Elixir_Hologram_Query", () => {
             status: "enum",
             title: "string",
           },
+          enumValues: {status: ["open", "blocked", "done"]},
           relationships: {},
           serverOnly: [],
           sortKeys: [],
@@ -248,6 +249,15 @@ describe("Elixir_Hologram_Query", () => {
       ]);
     });
 
+    // The declared `values:` list is the order, so a comparison reads it - `{:>, :open}` means
+    // every value declared after :open.
+    it("builds an ordering triple for an enum attribute", () => {
+      const value = Type.tuple([Type.atom(">"), Type.atom("open")]);
+      const query = filter(task, predicates([["status", value]]));
+
+      assert.deepStrictEqual(query.filter, [["status", ">", "open"]]);
+    });
+
     it("filters by the reference field of a to-one relationship", () => {
       const query = filter(
         Type.alias(PROJECT),
@@ -355,7 +365,17 @@ describe("Elixir_Hologram_Query", () => {
       assert.throw(
         () => filter(task, predicates([["title", value]])),
         HologramBoxedError,
-        "operator :> requires a numeric or temporal attribute - attribute :title in MyApp.Task has type :string",
+        "operator :> requires a numeric, temporal or enum attribute - attribute :title in MyApp.Task has type :string",
+      );
+    });
+
+    it("raises on a comparison against a value the enum does not declare", () => {
+      const value = Type.tuple([Type.atom(">"), Type.atom("archived")]);
+
+      assert.throw(
+        () => filter(task, predicates([["status", value]])),
+        HologramBoxedError,
+        ":archived is not a value of attribute :status in MyApp.Task - the values are [:open, :blocked, :done]",
       );
     });
 
