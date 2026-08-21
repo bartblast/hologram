@@ -819,6 +819,42 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.ends_with?(sql, ~s( ORDER BY "b" DESC, "c_$sort" ASC, "c" ASC, "id" ASC))
     end
 
+    # A bound is a position in the list the attribute sorts into, so it compares by the same pair
+    # ORDER BY sorts by - the key carries the order, the value settles what the key cannot.
+    test "compiles a string comparison through the sort-key companion" do
+      mapping = Mapper.derive!([Module2])
+      term = %{Query.normalize(Module2) | filter: [{:c, :>=, "Zoe"}]}
+
+      assert %{params: [{:value, "zoe"}, {:value, "Zoe"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(sql, ~s|WHERE ("c_$sort", "c") >= ($1, $2)|)
+    end
+
+    test "binds a placeholder compared against a string as a key slot and a value slot" do
+      mapping = Mapper.derive!([Module2])
+      term = %{Query.normalize(Module2) | filter: [{:c, :>=, {:placeholder, :min}}]}
+
+      assert %{
+               params: [{:placeholder, :min, :sort_key}, {:placeholder, :min, :string}],
+               sql: sql
+             } = compile(term, mapping)
+
+      assert String.contains?(sql, ~s|WHERE ("c_$sort", "c") >= ($1, $2)|)
+    end
+
+    test "compares a string inside an include through the include's companion" do
+      mapping = Mapper.derive!([Module1, Module2, Module3])
+
+      term =
+        Module3
+        |> include(:a, fn related_query -> filter(related_query, c: {:>=, "Zoe"}) end)
+        |> Query.normalize()
+
+      assert %{params: [{:value, "zoe"}, {:value, "Zoe"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(sql, ~s|AND ("c_$sort", "c") >= ($1, $2)|)
+    end
+
     test "compiles string ordering through the sort-key companion" do
       mapping = Mapper.derive!([Module2])
 

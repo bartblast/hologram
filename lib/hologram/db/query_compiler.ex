@@ -4,6 +4,7 @@ defmodule Hologram.DB.QueryCompiler do
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
+  alias Hologram.DB.SortKey
   alias Hologram.Policy
 
   @data_schema "hologram_data"
@@ -255,11 +256,27 @@ defmodule Hologram.DB.QueryCompiler do
     {null_inclusive(condition_sql, column), new_params}
   end
 
+  # A string compares by the pair its ordering sorts by - the key carries the order and the value
+  # settles what the key cannot - so a bound is a position in the list the attribute sorts into,
+  # and the comparison agrees with ORDER BY by construction. Every other type compares by its
+  # column alone.
   defp condition({name, operator, value}, entity_mapping, reversed_params) do
     column = fetch_column!(entity_mapping, name)
-    {placeholder, new_params} = bind_slot(value, column, reversed_params)
 
-    {"#{Mapper.quote_identifier(column.name)} #{operator} #{placeholder}", new_params}
+    case companion_column(entity_mapping, name) do
+      nil ->
+        {placeholder, new_params} = bind_slot(value, column, reversed_params)
+
+        {"#{Mapper.quote_identifier(column.name)} #{operator} #{placeholder}", new_params}
+
+      companion ->
+        {key_slot, raw_slot, new_params} = sort_key_slots(value, reversed_params)
+
+        quoted_pair =
+          "(#{Mapper.quote_identifier(companion.name)}, #{Mapper.quote_identifier(column.name)})"
+
+        {"#{quoted_pair} #{operator} (#{key_slot}, #{raw_slot})", new_params}
+    end
   end
 
   defp relationship_target(entity_type, relationship_name) do
@@ -520,6 +537,33 @@ defmodule Hologram.DB.QueryCompiler do
     end)
   end
 
+  # The bound binds twice: once folded the way the column's key is, once raw. The key slot is
+  # pushed first, so the pair reads left to right in the statement.
+  defp sort_key_slots({:placeholder, placeholder_name}, reversed_params) do
+    {key_slot, params_with_key} =
+      bind_placeholder_slot(placeholder_name, :sort_key, reversed_params)
+
+    {raw_slot, new_params} = bind_placeholder_slot(placeholder_name, :string, params_with_key)
+
+    {key_slot, raw_slot, new_params}
+  end
+
+  defp sort_key_slots(literal, reversed_params) do
+    encoded_value = Codec.encode(literal, :string)
+
+    {key_slot, params_with_key} =
+      bind_slot_value(SortKey.compute(encoded_value), reversed_params)
+
+    {raw_slot, new_params} = bind_slot_value(encoded_value, params_with_key)
+
+    {key_slot, raw_slot, new_params}
+  end
+
+  defp bind_placeholder_slot(placeholder_name, type, reversed_params) do
+    {"$#{length(reversed_params) + 1}",
+     [{:placeholder, placeholder_name, type} | reversed_params]}
+  end
+
   defp direction_sql(:asc), do: "ASC"
   defp direction_sql(:desc), do: "DESC"
 
@@ -675,11 +719,13 @@ defmodule Hologram.DB.QueryCompiler do
     " ORDER BY " <> rendered_entries
   end
 
+  defp companion_column(entity_mapping, name) do
+    Enum.find(entity_mapping.columns, &(&1.source == {:sort_key, name}))
+  end
+
   defp order_column_names(entity_mapping, name) do
     column = fetch_column!(entity_mapping, name)
-
-    companion =
-      Enum.find(entity_mapping.columns, &(&1.source == {:sort_key, name}))
+    companion = companion_column(entity_mapping, name)
 
     if companion do
       [companion.name, column.name]
