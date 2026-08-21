@@ -58,18 +58,6 @@ defmodule Hologram.Query.Registry do
   end
 
   @doc """
-  Returns the set of {entity type, attribute name} pairs the given normalized
-  query terms order by on :string attributes - the attributes whose practical
-  ordering needs a derived sort key, held by the server as a companion column and
-  computed by the client at ingest. Includes are walked recursively. Attributes of
-  other types order natively and yield nothing.
-  """
-  @spec sort_key_attributes(list(%{atom => any})) :: MapSet.t()
-  def sort_key_attributes(terms) do
-    Enum.reduce(terms, MapSet.new(), &collect_sort_key_attributes/2)
-  end
-
-  @doc """
   Derives the placeholder shape of the given normalized query term - a map from placeholder name
   to the logical type the placeholder binds as.
 
@@ -101,21 +89,6 @@ defmodule Hologram.Query.Registry do
     term.include
     |> Map.values()
     |> Enum.reduce(MapSet.put(acc, term.entity), &collect_entity_types/2)
-  end
-
-  defp collect_sort_key_attributes(term, acc) do
-    acc_with_own_attributes =
-      Enum.reduce(term.order_by, acc, fn {attribute_name, _direction}, inner_acc ->
-        if attribute_type(term.entity, attribute_name) == :string do
-          MapSet.put(inner_acc, {term.entity, attribute_name})
-        else
-          inner_acc
-        end
-      end)
-
-    term.include
-    |> Map.values()
-    |> Enum.reduce(acc_with_own_attributes, &collect_sort_key_attributes/2)
   end
 
   # A triple keyed by a placeholder contributes no shape: the attribute is unknown, so its type is
