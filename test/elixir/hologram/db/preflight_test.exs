@@ -128,6 +128,25 @@ defmodule Hologram.DB.PreflightTest do
       assert run!(ops, actual, mapping(nil)) == :ok
     end
 
+    # The value is not removed, it is carried to a new label - so counting the rows holding it
+    # would refuse the very rename doing the carrying. Asserted without a database on purpose:
+    # the table IS in the schema, so a check that ran would reach for a connection and raise.
+    test "skips the removed-value check for a value an unscoped remap carries" do
+      ops = [
+        %{
+          op: :rebuild_enum_type,
+          enum_type: "task_status_$enum",
+          values: ["b", "c"],
+          columns: [{"task", "status"}],
+          remap: [%{from: "a", to: "c", scope: nil}]
+        }
+      ]
+
+      actual = %{tables: %{"task" => %{}}, enum_types: %{"task_status_$enum" => ["a", "b"]}}
+
+      assert run!(ops, actual, mapping(nil)) == :ok
+    end
+
     test "raises on a cast with no supported conversion" do
       ops = [alter_column_op("uuid", "int8")]
 

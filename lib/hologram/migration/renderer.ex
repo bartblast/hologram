@@ -114,7 +114,8 @@ defmodule Hologram.Migration.Renderer do
   # (the value IS the table name), and an enum value rename moves one of the attribute's
   # own type. Rows follow the label in every case - no rewrite.
   defp enum_value_ops(%{op: :rename_entity} = op, pre_mapping, post_mapping) do
-    rename_enum_value_ops(
+    relabel_ops(
+      pre_mapping,
       post_mapping,
       :resource_type,
       Map.fetch!(pre_mapping, op.from).table,
@@ -137,21 +138,22 @@ defmodule Hologram.Migration.Renderer do
   # another by resource_type, not by the enum value, which is deduplicated across the
   # model. So renaming one entity's role relabels every type's grants unless the rows are
   # remapped within that resource_type - and the value has to survive for the others.
-  defp enum_value_ops(%{op: :rename_role, entity: entity_type} = op, _pre_mapping, post_mapping) do
+  defp enum_value_ops(%{op: :rename_role, entity: entity_type} = op, pre_mapping, post_mapping) do
     from = Codec.encode(op.from, :enum)
     to = Codec.encode(op.to, :enum)
 
     if from in role_values(post_mapping) do
       scoped_role_rebuild_ops(post_mapping, entity_type, from, to)
     else
-      rename_enum_value_ops(post_mapping, :role, from, to)
+      relabel_ops(pre_mapping, post_mapping, :role, from, to)
     end
   end
 
   # A global role's value is its module name, which no entity role can collide with, so
   # renaming one always moves a value nothing else holds.
-  defp enum_value_ops(%{op: :rename_role} = op, _pre_mapping, post_mapping) do
-    rename_enum_value_ops(
+  defp enum_value_ops(%{op: :rename_role} = op, pre_mapping, post_mapping) do
+    relabel_ops(
+      pre_mapping,
       post_mapping,
       :role,
       Codec.encode(op.from, :enum),
@@ -252,6 +254,42 @@ defmodule Hologram.Migration.Renderer do
   end
 
   defp put_backfill(op, _backfills), do: op
+
+  # Both of the grant store's enums derive their values SORTED, and PostgreSQL orders a type by
+  # the POSITION of a value rather than by its label - while ALTER TYPE ... RENAME VALUE moves the
+  # label and leaves the position alone. So a rename whose new label sorts elsewhere leaves the
+  # database holding the right values in the wrong order, which the drift check refuses on the
+  # next boot - after the file has committed, so nothing revisits it and no generated migration
+  # can repair it. Such a rename is rendered as a type REBUILD instead, carrying the rows over
+  # with an unscoped remap: the value is a table name or a global role's module name, which
+  # nothing else holds, so every row holding it is a row that follows the rename.
+  #
+  # The cheap in-place rename is kept for the case it is correct for - a new label that sorts
+  # where the old one sat - because a rebuild rewrites the column.
+  defp relabel_ops(pre_mapping, post_mapping, attribute, from, to) do
+    if Map.has_key?(pre_mapping, RoleGrant) and Map.has_key?(post_mapping, RoleGrant) do
+      pre_column = role_grant_column(Map.fetch!(pre_mapping, RoleGrant), attribute)
+      post_entry = Map.fetch!(post_mapping, RoleGrant)
+      post_column = role_grant_column(post_entry, attribute)
+      renamed_in_place = Enum.map(pre_column.enum_values, &if(&1 == from, do: to, else: &1))
+
+      if renamed_in_place == post_column.enum_values do
+        rename_enum_value_ops(post_mapping, attribute, from, to)
+      else
+        [
+          %{
+            op: :rebuild_enum_type,
+            enum_type: post_column.sql_type,
+            values: post_column.enum_values,
+            columns: [{post_entry.table, post_column.name}],
+            remap: [%{from: from, to: to, scope: nil}]
+          }
+        ]
+      end
+    else
+      rename_enum_value_ops(post_mapping, attribute, from, to)
+    end
+  end
 
   defp role_values(mapping) do
     case Map.fetch(mapping, RoleGrant) do

@@ -18,6 +18,28 @@ defmodule Hologram.DB.DDL do
 
   @data_schema "hologram_data"
 
+  # float8's magnitude bounds. A value between them converts - one outside overflows at the
+  # top or underflows to zero at the bottom, and PostgreSQL refuses both.
+  @float8_max_magnitude "1.7976931348623157e308"
+
+  @float8_min_magnitude "4.9406564584124654e-324"
+
+  # The longest text the range comparison will parse. It casts through numeric, which
+  # refuses past 131072 integer or 16383 fractional digits - while the widest float8
+  # written out in full decimal is about 1080 characters, the smallest denormal. Any limit
+  # between the two can only refuse values no float8 could hold, and can never let the
+  # comparison raise; 2000 is that policy choice.
+  @float8_text_length_limit 2000
+
+  # int8's bounds, and the first value above them. int8's max is not representable as a
+  # float8 - it rounds UP to 2^63 - so a float8 comparison has to refuse from 2^63
+  # inclusive, while a numeric comparison can use the max itself.
+  @int8_max "9223372036854775807"
+
+  @int8_min "-9223372036854775808"
+
+  @int8_overflow_bound "9223372036854775808"
+
   # Casts that always succeed with no data loss (anything to text is handled separately -
   # text is the universal sink, derived enum types included).
   @safe_casts [{"date", "timestamptz"}, {"int8", "float8"}]
@@ -26,37 +48,89 @@ defmodule Hologram.DB.DDL do
   Returns the pre-flight check statement for a data-dependent cast - a query counting
   the rows whose values cannot follow the type change from the given type to the given
   type. Only defined for type pairs classified :data_dependent by cast_class/2.
+
+  Total in one direction, which is the property the applier's promise rests on: every row
+  a statement passes converts without error. A statement may still refuse a row the cast
+  would have taken - each mirrors PostgreSQL's rules rather than calling them, and every
+  approximation errs towards refusing. Rows the cast would ROUND rather than refuse are
+  counted too, since a conversion that silently loses data is not one to apply unasked.
   """
   @spec cast_check_statement(String.t(), String.t(), String.t(), String.t()) :: String.t()
+  # A fraction is data the cast would round away, and the range is data it refuses
+  # outright. NaN and the infinities need no branch of their own: PostgreSQL orders NaN
+  # above every number and the infinities beyond both bounds, so the comparisons catch all
+  # three - which they must, because NaN equals its own trunc and the fraction test alone
+  # would let it through.
   def cast_check_statement(table, column, "float8", "int8") do
     quoted_column = Mapper.quote_identifier(column)
 
-    count_statement(table, "#{quoted_column} <> trunc(#{quoted_column})")
+    count_statement(
+      table,
+      "#{quoted_column} <> trunc(#{quoted_column}) " <>
+        "OR #{quoted_column} >= #{@int8_overflow_bound}::float8 " <>
+        "OR #{quoted_column} < #{@int8_min}::float8"
+    )
   end
 
   # Mirrors PostgreSQL's float8 input rules: surrounding whitespace, optional exponent,
-  # bare-dot forms (5. and .5), and the case-insensitive specials NaN/Infinity/inf.
-  # Conservative approximation - exotic platform-dependent forms (hex floats) are still
-  # flagged, with the error's ways out covering them.
-  # TODO: replace with pg_input_is_valid once the minimum supported PostgreSQL version is 16.
+  # bare-dot forms (5. and .5), and the case-insensitive specials NaN/Infinity/inf. Syntax
+  # is half of what the cast enforces - float8 also has a RANGE at both ends, so a value
+  # that reads as a number can still overflow it ('1e400') or underflow to zero ('1e-400').
+  #
+  # The guards ahead of the range comparison keep it from raising on input numeric itself
+  # cannot hold: a mantissa longer than the length limit, or an exponent of four digits or
+  # more, which reaches numeric's ceiling from a short string. Zero is answered before
+  # both, because any exponent is legal on it.
+  #
+  # Conservative approximation, always towards refusing - hex floats, values within a
+  # rounding step of the extremes, and a padded mantissa past the length limit are refused
+  # although PostgreSQL would take them. The error's ways out cover them.
+  # TODO: replace the syntax and range branches with pg_input_is_valid(<column>, 'float8')
+  # once the minimum supported PostgreSQL version is 16 - it decides both in one call. The
+  # zero and specials branches stay: validity is not the whole question, range is.
   def cast_check_statement(table, column, "text", "float8") do
     quoted_column = Mapper.quote_identifier(column)
 
     numeric_regex = "'^\\s*[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?\\s*$'"
     special_regex = "'^\\s*[+-]?(inf(inity)?|nan)\\s*$'"
+    zero_regex = "'^\\s*[+-]?(0+(\\.0*)?|\\.0+)([eE][+-]?[0-9]+)?\\s*$'"
+    long_exponent_regex = "'[eE][+-]?[0-9]{4,}\\s*$'"
+    magnitude = "abs(#{quoted_column}::numeric)"
 
     count_statement(
       table,
-      "NOT (#{quoted_column} ~ #{numeric_regex} OR #{quoted_column} ~* #{special_regex})"
+      "CASE WHEN #{quoted_column} ~* #{special_regex} THEN false " <>
+        "WHEN NOT (#{quoted_column} ~ #{numeric_regex}) THEN true " <>
+        "WHEN #{quoted_column} ~ #{zero_regex} THEN false " <>
+        "WHEN length(#{quoted_column}) > #{@float8_text_length_limit} THEN true " <>
+        "WHEN #{quoted_column} ~ #{long_exponent_regex} THEN true " <>
+        "ELSE #{magnitude} > #{@float8_max_magnitude} " <>
+        "OR #{magnitude} < #{@float8_min_magnitude} END"
     )
   end
 
-  # Mirrors PostgreSQL's int8 input rules: surrounding whitespace is accepted.
-  # TODO: replace with pg_input_is_valid once the minimum supported PostgreSQL version is 16.
+  # Mirrors PostgreSQL's int8 input rules: surrounding whitespace is accepted. int8 also
+  # has a RANGE, so reading as an integer is not enough - '99999999999999999999' is all
+  # digits and overflows. The digit-count branch is exact rather than approximate: past
+  # leading zeros, twenty SIGNIFICANT digits is already one more than int8's nineteen, so
+  # it refuses only what the range would, and it keeps the comparison below from meeting a
+  # digit string longer than numeric can hold. The leading [1-9] is what makes "significant"
+  # true - without it the trailing count can backtrack into the zeros it just skipped, and
+  # a zero-padded small number reads as a long one.
+  # TODO: replace the syntax and range branches with pg_input_is_valid(<column>, 'int8')
+  # once the minimum supported PostgreSQL version is 16 - it decides both in one call.
   def cast_check_statement(table, column, "text", "int8") do
     quoted_column = Mapper.quote_identifier(column)
 
-    count_statement(table, "NOT (#{quoted_column} ~ '^\\s*[+-]?[0-9]+\\s*$')")
+    syntax_regex = "'^\\s*[+-]?[0-9]+\\s*$'"
+    long_regex = "'^\\s*[+-]?0*[1-9][0-9]{19,}\\s*$'"
+
+    count_statement(
+      table,
+      "CASE WHEN NOT (#{quoted_column} ~ #{syntax_regex}) THEN true " <>
+        "WHEN #{quoted_column} ~ #{long_regex} THEN true " <>
+        "ELSE #{quoted_column}::numeric NOT BETWEEN #{@int8_min} AND #{@int8_max} END"
+    )
   end
 
   def cast_check_statement(table, column, "timestamptz", "date") do
