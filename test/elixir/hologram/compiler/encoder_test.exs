@@ -4547,7 +4547,11 @@ defmodule Hologram.Compiler.EncoderTest do
 
   # The escaping rules, written out as a plain walk. Deliberately not the implementation's
   # shape - this is what the implementation is checked against.
-  defp reference_escape(str), do: str |> reference_escape_parts() |> IO.iodata_to_binary()
+  defp reference_escape(str) do
+    str
+    |> reference_escape_parts()
+    |> IO.iodata_to_binary()
+  end
 
   defp reference_escape_parts(<<0, rest::binary>>), do: ["\\u{0}" | reference_escape_parts(rest)]
   defp reference_escape_parts("\n" <> rest), do: ["\\n" | reference_escape_parts(rest)]
