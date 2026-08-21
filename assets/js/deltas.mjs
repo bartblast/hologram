@@ -128,10 +128,18 @@ export default class Deltas {
     }
   }
 
-  // Which attributes need a key is compile-time true - the model names the ones this build's own
-  // queries order by - and the key itself is derived, so it is computed here rather than sent.
+  // Which attributes need a key is a fact about the TYPE - every string attribute is ordered and
+  // compared by its key on both tiers - so it is read from the entry's attribute types rather than
+  // listed, and the key itself is derived, so it is computed here rather than sent. A server-only
+  // string's value never arrives, and its key is null like any unset value's.
   static #computeSortKeys(type, attributes) {
-    for (const name of Model.entry(type).sortKeys) {
+    for (const [name, attributeType] of Object.entries(
+      Model.entry(type).attributes,
+    )) {
+      if (attributeType !== "string") {
+        continue;
+      }
+
       const value = attributes[name];
 
       attributes[`${name}_sort`] =
