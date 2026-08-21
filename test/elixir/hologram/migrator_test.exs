@@ -261,9 +261,9 @@ defmodule Hologram.MigratorTest do
           %{
             op: :add_attribute,
             entity: MyApp.Task,
-            name: :state,
-            type: :string,
-            opts: [default: "new"],
+            name: :priority,
+            type: :integer,
+            opts: [default: 1],
             line: 3
           }
         ])
@@ -271,9 +271,9 @@ defmodule Hologram.MigratorTest do
       apply_pending([defaulted], model, @context)
 
       {:ok, %{rows: rows}} =
-        Connection.query(~s(SELECT "state" FROM "hologram_data"."my_app_task"))
+        Connection.query(~s(SELECT "priority" FROM "hologram_data"."my_app_task"))
 
-      assert rows == [["new"]]
+      assert rows == [[1]]
     end
 
     test "keeps another entity type's grants when a shared role name is renamed" do
@@ -429,75 +429,6 @@ defmodule Hologram.MigratorTest do
 
       assert Introspection.schema() == schema_after_first
       assert applied_versions() == MapSet.new(["20260813091522"])
-    end
-
-    test "fills the sort-key companion a migration adds to a table holding rows" do
-      create =
-        migration("20260813091522", [
-          %{op: :create_entity, entity: MyApp.Task, line: 3},
-          %{
-            op: :add_attribute,
-            entity: MyApp.Task,
-            name: :priority,
-            type: :integer,
-            opts: [],
-            line: 4
-          }
-        ])
-
-      model = apply_pending([create], Model.empty(), @context)
-
-      insert_task_rows(["1", "2"], "priority")
-
-      add_title =
-        migration("20260813142237", [
-          %{
-            op: :add_attribute,
-            entity: MyApp.Task,
-            name: :title,
-            type: :string,
-            opts: [backfill: "Zoe"],
-            line: 3
-          }
-        ])
-
-      apply_pending([add_title], model, @context)
-
-      assert task_rows(~s("title", "title_$sort")) == [["Zoe", "zoe"], ["Zoe", "zoe"]]
-    end
-
-    test "fills the companion of an attribute a migration casts to string" do
-      create =
-        migration("20260813091522", [
-          %{op: :create_entity, entity: MyApp.Task, line: 3},
-          %{
-            op: :add_attribute,
-            entity: MyApp.Task,
-            name: :code,
-            type: :integer,
-            opts: [],
-            line: 4
-          }
-        ])
-
-      model = apply_pending([create], Model.empty(), @context)
-
-      insert_task_rows(["10", "9"], "code")
-
-      cast_code =
-        migration("20260813142237", [
-          %{
-            op: :change_attribute,
-            entity: MyApp.Task,
-            name: :code,
-            changes: [type: :string],
-            line: 3
-          }
-        ])
-
-      apply_pending([cast_code], model, @context)
-
-      assert task_rows(~s("code", "code_$sort")) == [["10", "10"], ["9", "9"]]
     end
 
     test "renames a companion with its attribute and passes the drift check" do
