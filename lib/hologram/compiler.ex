@@ -128,8 +128,13 @@ defmodule Hologram.Compiler do
     templatables = page_modules ++ Reflection.list_components()
     analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
 
+    # Swept once here and handed to every extraction below. The extractor forks a placeholder
+    # entity over this list and re-enters the capture's body once per candidate, so a fork left to
+    # read it for itself reads it once per variant.
+    all_entity_types = Reflection.list_entities()
+
     Map.new(page_modules, fn page_module ->
-      window_ids = page_window_ids(page_module, call_graph, analysis)
+      window_ids = page_window_ids(page_module, call_graph, analysis, all_entity_types)
 
       # Deduplicated because the grants window is derivable by an ordinary query: the grant entity
       # is an entity type like any other, so a page listing grants and checking permissions reaches
@@ -838,7 +843,15 @@ defmodule Hologram.Compiler do
       |> Enum.flat_map(&page_component_modules(&1, call_graph, analysis))
       |> Enum.uniq()
 
-    terms = Enum.flat_map(component_modules, &QueryExtractor.extract_module_queries/1)
+    # One sweep for both the extraction below and the policied set: the extractor forks over this
+    # list once per variant if it reads it itself, and policied_entity_types/1 filters the same one.
+    all_entity_types = Reflection.list_entities()
+
+    terms =
+      Enum.flat_map(
+        component_modules,
+        &QueryExtractor.extract_module_queries(&1, all_entity_types)
+      )
 
     queried_entity_types =
       Enum.reduce(terms, MapSet.new(), fn term, types ->
@@ -849,7 +862,7 @@ defmodule Hologram.Compiler do
       if permission_checking? do
         queried_entity_types
         |> MapSet.put(RoleGrant)
-        |> MapSet.union(policied_entity_types())
+        |> MapSet.union(policied_entity_types(all_entity_types))
       else
         queried_entity_types
       end
@@ -1179,10 +1192,10 @@ defmodule Hologram.Compiler do
     |> Enum.filter(&Reflection.component?/1)
   end
 
-  defp page_query_terms(page_module, call_graph, analysis) do
+  defp page_query_terms(page_module, call_graph, analysis, all_entity_types) do
     page_module
     |> page_component_modules(call_graph, analysis)
-    |> Enum.flat_map(&QueryExtractor.extract_module_queries/1)
+    |> Enum.flat_map(&QueryExtractor.extract_module_queries(&1, all_entity_types))
   end
 
   # A component declaring no parameterized capture is left out rather than carried as an empty
@@ -1296,9 +1309,9 @@ defmodule Hologram.Compiler do
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
-  defp page_window_ids(page_module, call_graph, analysis) do
+  defp page_window_ids(page_module, call_graph, analysis, all_entity_types) do
     page_module
-    |> page_query_terms(call_graph, analysis)
+    |> page_query_terms(call_graph, analysis, all_entity_types)
     |> Enum.map(&window_id/1)
     |> Enum.uniq()
     |> Enum.sort()
@@ -1306,8 +1319,8 @@ defmodule Hologram.Compiler do
 
   # RoleGrant's policy is framework-supplied rather than declared, so its empty __policies__ does
   # not exclude it - it joins by name beside this set.
-  defp policied_entity_types do
-    Reflection.list_entities()
+  defp policied_entity_types(all_entity_types) do
+    all_entity_types
     |> Enum.filter(&(&1.__policies__() != []))
     |> MapSet.new()
   end
