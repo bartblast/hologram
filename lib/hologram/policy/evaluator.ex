@@ -62,32 +62,65 @@ defmodule Hologram.Policy.Evaluator do
 
   defp compare(_left, _right), do: :eq
 
+  # An enum value compares by its position in the list the entity declares, which is the order
+  # the database holds the type in and the order a query compares it by - so a rule and the
+  # filter mirroring it admit the same rows. A value the list does not hold is a bug surfacing
+  # rather than a case to place.
+  defp compare(left, right, nil), do: compare(left, right)
+
+  defp compare(left, right, ranks) do
+    compare(Map.fetch!(ranks, left), Map.fetch!(ranks, right))
+  end
+
+  # What an enum predicate compares by, or nil for an attribute of any other type - a name
+  # matching no attribute definition is a reference field, which carries an entity id.
+  defp enum_ranks(entity_type, name) do
+    case List.keyfind(entity_type.__attributes__(), name, 0) do
+      {_name, :enum, opts} ->
+        opts
+        |> Keyword.fetch!(:values)
+        |> Enum.with_index()
+        |> Map.new()
+
+      _other ->
+        nil
+    end
+  end
+
   defp equal?(left, right), do: compare(left, right) == :eq
 
-  defp holds?(field_value, :==, value), do: equal?(field_value, value)
+  defp holds?(field_value, :==, value, _ranks), do: equal?(field_value, value)
 
-  defp holds?(field_value, :!=, value), do: not equal?(field_value, value)
+  defp holds?(field_value, :!=, value, _ranks), do: not equal?(field_value, value)
 
-  defp holds?(field_value, :in, values), do: Enum.any?(values, &equal?(field_value, &1))
+  defp holds?(field_value, :in, values, _ranks) do
+    Enum.any?(values, &equal?(field_value, &1))
+  end
 
-  defp holds?(field_value, :not_in, values), do: not Enum.any?(values, &equal?(field_value, &1))
+  defp holds?(field_value, :not_in, values, _ranks) do
+    not Enum.any?(values, &equal?(field_value, &1))
+  end
 
-  defp holds?(nil, operator, _value) when operator in @ordering_operators, do: false
+  defp holds?(nil, operator, _value, _ranks) when operator in @ordering_operators, do: false
 
-  defp holds?(_field_value, operator, nil) when operator in @ordering_operators, do: false
+  defp holds?(_field_value, operator, nil, _ranks) when operator in @ordering_operators do
+    false
+  end
 
-  defp holds?(field_value, :<, value), do: compare(field_value, value) == :lt
+  defp holds?(field_value, :<, value, ranks), do: compare(field_value, value, ranks) == :lt
 
-  defp holds?(field_value, :<=, value), do: compare(field_value, value) != :gt
+  defp holds?(field_value, :<=, value, ranks), do: compare(field_value, value, ranks) != :gt
 
-  defp holds?(field_value, :>, value), do: compare(field_value, value) == :gt
+  defp holds?(field_value, :>, value, ranks), do: compare(field_value, value, ranks) == :gt
 
-  defp holds?(field_value, :>=, value), do: compare(field_value, value) != :lt
+  defp holds?(field_value, :>=, value, ranks), do: compare(field_value, value, ranks) != :lt
 
   defp predicate_holds?({name, operator, value}, entity, actor_user_id) do
+    ranks = enum_ranks(entity.__struct__, name)
+
     entity
     |> Map.fetch!(name)
-    |> holds?(operator, resolve_value(value, actor_user_id))
+    |> holds?(operator, resolve_value(value, actor_user_id), ranks)
   end
 
   defp predicates_hold?(predicates, entity, actor_user_id) do
