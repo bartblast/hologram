@@ -6,12 +6,7 @@ defmodule Hologram.DB.QueryCache do
   alias Hologram.Auth
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.DB
-  alias Hologram.DB.Connection
-  alias Hologram.DB.Mapper
-  alias Hologram.DB.SchemaReconciler
-  alias Hologram.DB.SortKey
   alias Hologram.Entity
-  alias Hologram.Migrator
   alias Hologram.Policy
   alias Hologram.Query.Registry
   alias Hologram.Reflection
@@ -114,40 +109,6 @@ defmodule Hologram.DB.QueryCache do
     :ok
   end
 
-  # The transaction and row locks serialize the backfill against concurrent
-  # entity updates - a live-reload backfill runs while the endpoint serves, and
-  # an update slipping between the read and the companion write would get its
-  # fresh companion value overwritten from the stale source read.
-  # sobelow_skip ["SQL.Query"]
-  defp backfill_column!(table, companion_name, source_name) do
-    select_sql =
-      ~s(SELECT "id", #{Mapper.quote_identifier(source_name)} FROM #{qualified_table(table)} FOR UPDATE)
-
-    update_sql =
-      ~s(UPDATE #{qualified_table(table)} SET #{Mapper.quote_identifier(companion_name)} = $1 WHERE "id" = $2)
-
-    {:ok, :ok} =
-      Connection.transaction(fn ->
-        {:ok, %{rows: rows}} = Connection.query(select_sql, [])
-
-        Enum.each(rows, fn
-          [_id, nil] ->
-            :ok
-
-          [id, value] ->
-            {:ok, _result} = Connection.query(update_sql, [SortKey.compute(value), id])
-        end)
-      end)
-
-    :ok
-  end
-
-  defp backfill_sort_keys!(ops, mapping) do
-    ops
-    |> Enum.filter(&match?(%{op: :add_column}, &1))
-    |> Enum.each(&maybe_backfill_op!(&1, mapping))
-  end
-
   defp dead_include_message(module, dead_entity_types) do
     "the registered query in #{inspect(module)} includes #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny leaves the embed empty in every row. Add allow lines, or drop the include."
   end
@@ -159,46 +120,6 @@ defmodule Hologram.DB.QueryCache do
   defp declare_verb([_single_entity_type]), do: "declares"
 
   defp declare_verb(_entity_types), do: "declare"
-
-  # A reconciliation-managed database converges wholesale from the enriched mapping. A
-  # migration-managed one takes model changes only through its migration history - the
-  # query-derived companions are the one part that rides no migration, so only they
-  # converge here.
-  defp converge_artifacts(mapping) do
-    if migrations_managed?() do
-      Migrator.reconcile_artifacts(mapping)
-    else
-      SchemaReconciler.reconcile(DB.reconciliation_context()).ops
-    end
-  end
-
-  # The registered queries' sort-key attributes enrich the mapping with sort-key
-  # companions - the cache owns this derivation because extraction needs no
-  # mapping and the cache boots right after the database. With no pairs the boot
-  # mapping stands - a reconciliation-managed database drops orphaned companions
-  # on the next model reconciliation, which targets the plain mapping, while a
-  # migration-managed one drops them here, the one convergence that reaches them.
-  defp ensure_mapping(terms) do
-    sort_key_attributes = Registry.sort_key_attributes(terms)
-
-    if MapSet.size(sort_key_attributes) == 0 do
-      mapping = DB.mapping()
-
-      if migrations_managed?() do
-        Migrator.reconcile_artifacts(mapping)
-      end
-
-      mapping
-    else
-      mapping = Mapper.derive!(Reflection.list_entities())
-      :persistent_term.put(DB.mapping_key(), mapping)
-
-      ops = converge_artifacts(mapping)
-      backfill_sort_keys!(ops, mapping)
-
-      mapping
-    end
-  end
 
   defp impl do
     Application.get_env(:hologram, :query_cache_impl, __MODULE__)
@@ -215,31 +136,6 @@ defmodule Hologram.DB.QueryCache do
     Enum.map_join(entity_types, ", ", &inspect/1)
   end
 
-  defp maybe_backfill_op!(op, mapping) do
-    {_entity_type, entity_mapping} =
-      Enum.find(mapping, fn {_entity_type, table_mapping} -> table_mapping.table == op.table end)
-
-    column = Enum.find(entity_mapping.columns, &(&1.name == op.column))
-
-    case column do
-      %{source: {:sort_key, attribute_name}} ->
-        source_column =
-          Enum.find(entity_mapping.columns, &(&1.source == {:attribute, attribute_name}))
-
-        backfill_column!(entity_mapping.table, column.name, source_column.name)
-
-      _other_column ->
-        :ok
-    end
-  end
-
-  # The environment selects the schema mechanism, the same rule the database boots by -
-  # asking the database instead would mean reading the marker of a database that
-  # reconciliation has not created yet, which is exactly the state this runs in.
-  defp migrations_managed? do
-    Hologram.env() not in [:dev, :test]
-  end
-
   defp populate do
     modules = impl().component_modules()
     module_queries = Enum.map(modules, &{&1, QueryExtractor.extract_module_queries(&1)})
@@ -248,10 +144,6 @@ defmodule Hologram.DB.QueryCache do
     Enum.each(module_queries, &validate_client_evaluable_queries!/1)
 
     terms = Enum.flat_map(module_queries, fn {_module, module_terms} -> module_terms end)
-
-    # Called for what it DOES, not what it returns: it publishes the sort-key mapping and converges
-    # the companion artifacts the registered queries need.
-    ensure_mapping(terms)
 
     entries = Registry.build(terms)
 
@@ -290,10 +182,6 @@ defmodule Hologram.DB.QueryCache do
     else
       windows
     end
-  end
-
-  defp qualified_table(table) do
-    ~s("hologram_data".#{Mapper.quote_identifier(table)})
   end
 
   defp queried_entity_types(term) do

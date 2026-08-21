@@ -103,8 +103,8 @@ defmodule Hologram.DB do
   the query registry is never involved. A term containing placeholder leaves raises
   ArgumentError: placeholders exist only in compiler-registered queries.
 
-  A :string ordering falls back to byte order when the attribute has no sort-key
-  companion column - companions are derived from registered query orderings.
+  A :string ordering reads the attribute's sort-key companion column, which every
+  :string attribute derives.
   """
   @spec run(module | %{atom => any}) :: list(struct) | struct | integer | nil
   def run(query) do
@@ -251,10 +251,9 @@ defmodule Hologram.DB do
 
   @impl Supervisor
   def init(opts) do
-    # The query cache re-derives the mapping with the registered queries'
-    # sort-key companions right after boot - this plain derivation stands until
-    # then, and is the reconciliation target that drops orphaned companions
-    # when queries disappear.
+    # The mapping derived here is the one every consumer reads for the lifetime of the
+    # runtime - companions included, since they derive from the declarations like every
+    # other column.
     mapping = Mapper.derive!(Reflection.list_entities())
     :persistent_term.put(@mapping_key, mapping)
 
