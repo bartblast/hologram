@@ -744,6 +744,63 @@ describe("QueryKernel", () => {
     });
   });
 
+  // Mirrors the reference's "run/3 - comparing strings" case for case: a bound is a position in
+  // the list `order_by` renders, and the key beside the value is what puts it there.
+  describe("matches() - comparing strings", () => {
+    const rows = [
+      {id: "t1", title: "Zürich", title_sort: "zurich"},
+      {id: "t2", title: "Łódź", title_sort: "lodz"},
+      {id: "t3", title: "apple", title_sort: "apple"},
+      {id: "t4", title: "Mango", title_sort: "mango"},
+      {id: "t5", title: "Zebra", title_sort: "zebra"},
+      {id: "t6", title: "zebra", title_sort: "zebra"},
+    ];
+
+    const titlesMatching = (filter) =>
+      rows
+        .filter((row) => matches(row, filter))
+        .map((row) => row.title)
+        .sort();
+
+    it("matches values at or after a bound by their key", () => {
+      assert.deepStrictEqual(titlesMatching([["title", ">=", "m"]]), [
+        "Mango",
+        "Zebra",
+        "Zürich",
+        "zebra",
+      ]);
+    });
+
+    it("matches values before a bound by their key", () => {
+      assert.deepStrictEqual(titlesMatching([["title", "<", "m"]]), [
+        "apple",
+        "Łódź",
+      ]);
+    });
+
+    it("settles a bound that shares a key by the value itself", () => {
+      assert.deepStrictEqual(titlesMatching([["title", ">", "Zebra"]]), [
+        "Zürich",
+        "zebra",
+      ]);
+    });
+
+    it("passes over an unset string", () => {
+      const row = {id: "t7", title: null, title_sort: null};
+
+      assert.isFalse(matches(row, [["title", ">=", "a"]]));
+    });
+
+    // No key beside the value means the attribute is not a string, so the comparison is the
+    // ordinary one - an integer never grows a companion.
+    it("compares a value carrying no key raw", () => {
+      const row = {id: "t8", position: 7};
+
+      assert.isTrue(matches(row, [["position", ">=", 3]]));
+      assert.isFalse(matches(row, [["position", ">=", 9]]));
+    });
+  });
+
   describe("matches() - the acting user", () => {
     it("matches against who is asking", () => {
       const filter = [["id", "==", {actor: true}]];
