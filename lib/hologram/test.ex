@@ -1,5 +1,7 @@
 defmodule Hologram.Test do
   alias Hologram.Auth
+  alias Hologram.DB
+  alias Hologram.DB.SchemaReconciler
 
   @doc """
   Runs the rest of the calling process as the given user and returns that user unchanged,
@@ -47,14 +49,15 @@ defmodule Hologram.Test do
   @doc """
   Starts Hologram for feature/browser tests.
 
-  Runs the Hologram compiler and restarts the application with the full
-  supervisor tree. Call this in your `test_helper.exs` before running
-  tests that need Hologram pages served in the browser.
+  Runs the Hologram compiler, restarts the application with the full supervisor
+  tree, and converges the database schema to the app's model. Call this in your
+  `test_helper.exs` before running tests that need Hologram pages served in the
+  browser.
 
       # test_helper.exs
       Hologram.Test.setup()
   """
-  @spec setup() :: {:ok, [atom()]} | {:error, {atom(), term()}}
+  @spec setup() :: :ok
   def setup do
     System.put_env("HOLOGRAM_START", "1")
 
@@ -62,7 +65,22 @@ defmodule Hologram.Test do
     Mix.Tasks.Compile.Hologram.run(force?: true)
 
     Application.stop(:hologram)
-    Application.ensure_all_started(:hologram)
+    {:ok, _started} = Application.ensure_all_started(:hologram)
+
+    converge_schema()
+  end
+
+  # The test env starts the pool and nothing else - dev converges at boot and every other env
+  # applies the migration history, while a test app's schema is its helper's to manage. The
+  # database bootstrap drops the layout before this runs, so a run converges from scratch, and
+  # this is the only thing that puts it back. A no-op when the app declares no entities, which
+  # leaves the database unstarted.
+  defp converge_schema do
+    if Process.whereis(DB) do
+      SchemaReconciler.reconcile(DB.reconciliation_context())
+    end
+
+    :ok
   end
 
   # An unset actor is a legal state, and a bare nil asks for it deliberately - but a user struct
