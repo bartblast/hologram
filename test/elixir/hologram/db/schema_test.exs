@@ -693,6 +693,7 @@ defmodule Hologram.DB.SchemaTest do
                "a" => %{type: "boolean", collation: nil, null: false},
                "b" => %{type: "int8", collation: nil, null: true},
                "c" => %{type: "text", collation: "C", null: false},
+               "c_$sort" => %{type: "text", collation: "C", null: true},
                "created_at" => %{type: "timestamptz", collation: nil, null: false},
                "updated_at" => %{type: "timestamptz", collation: nil, null: false}
              }

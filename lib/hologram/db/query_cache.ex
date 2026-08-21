@@ -190,7 +190,7 @@ defmodule Hologram.DB.QueryCache do
 
       mapping
     else
-      mapping = Mapper.derive!(Reflection.list_entities(), sort_key_attributes)
+      mapping = Mapper.derive!(Reflection.list_entities())
       :persistent_term.put(DB.mapping_key(), mapping)
 
       ops = converge_artifacts(mapping)

@@ -8,6 +8,7 @@ defmodule Hologram.DB.MapperTest do
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -18,7 +19,7 @@ defmodule Hologram.DB.MapperTest do
     |> Enum.find(&(&1.name == name))
   end
 
-  describe "columns/2" do
+  describe "columns/1" do
     test "derives only system columns for entity type with no declarations" do
       assert columns(Module1) == [
                %{
@@ -187,14 +188,10 @@ defmodule Hologram.DB.MapperTest do
       assert column(Module4, "a").enum_values == nil
     end
 
-    test "derives no sort-key companions for pairs naming other entities" do
-      assert columns(Module2, MapSet.new([{Module3, :c}])) == columns(Module2)
-    end
-
-    test "derives sort-key companion columns for attributes naming the entity" do
+    test "derives a sort-key companion column for every string attribute" do
       companion =
         Module2
-        |> columns(MapSet.new([{Module2, :c}]))
+        |> columns()
         |> List.last()
 
       assert companion == %{
@@ -210,6 +207,16 @@ defmodule Hologram.DB.MapperTest do
                fk_index: nil,
                source: {:sort_key, :c}
              }
+    end
+
+    test "derives the companions in attribute-name order, server-only attributes included" do
+      sources =
+        Module15
+        |> columns()
+        |> Enum.take(-3)
+        |> Enum.map(& &1.source)
+
+      assert sources == [{:sort_key, :label}, {:sort_key, :secret_note}, {:sort_key, :token}]
     end
 
     test "derives to-one relationship reference columns and excludes to-many relationships" do
@@ -294,7 +301,7 @@ defmodule Hologram.DB.MapperTest do
     end
   end
 
-  describe "derive!/2" do
+  describe "derive!/1" do
     test "derives the role grant unique index comparing nulls as values" do
       mapping =
         derive!([
@@ -312,8 +319,8 @@ defmodule Hologram.DB.MapperTest do
              }
     end
 
-    test "carries sort-key companions for the given attributes" do
-      mapping = derive!([Module2], MapSet.new([{Module2, :c}]))
+    test "carries a sort-key companion for every string attribute" do
+      mapping = derive!([Module2])
 
       assert List.last(mapping[Module2].columns).source == {:sort_key, :c}
     end
@@ -462,14 +469,12 @@ defmodule Hologram.DB.MapperTest do
     end
   end
 
-  describe "derive_from_model!/2" do
-    test "derives the same mapping as derive!/2" do
+  describe "derive_from_model!/1" do
+    test "derives the same mapping as derive!/1" do
       entity_types = Reflection.list_entities()
-      sort_key_attributes = MapSet.new([{Module2, :c}])
       model = Model.from_modules(entity_types, Reflection.list_roles())
 
-      assert derive_from_model!(model, sort_key_attributes) ==
-               derive!(entity_types, sort_key_attributes)
+      assert derive_from_model!(model) == derive!(entity_types)
     end
 
     test "derives without consulting any module" do

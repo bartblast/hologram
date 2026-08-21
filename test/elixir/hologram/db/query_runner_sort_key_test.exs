@@ -14,20 +14,6 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
 
-  setup do
-    add_sort_key_column()
-    :ok
-  end
-
-  defp add_sort_key_column do
-    sql =
-      ~s(ALTER TABLE "hologram_data"."test_fixtures_entity_module2" ADD COLUMN "c_$sort" text COLLATE "C")
-
-    {:ok, _result} = Connection.query(sql, [])
-
-    :ok
-  end
-
   defp backfill_sort_keys do
     select_sql = ~s(SELECT "id", "c" FROM "hologram_data"."test_fixtures_entity_module2")
 
@@ -44,7 +30,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
   end
 
   defp companion_mapping do
-    Mapper.derive!([Module1, Module2, Module3], MapSet.new([{Module2, :c}]))
+    Mapper.derive!([Module1, Module2, Module3])
   end
 
   describe "run/3" do

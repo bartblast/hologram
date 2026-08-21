@@ -43,7 +43,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [{:value, true}, {:value, 123}],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at" ) <>
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "c_$sort" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
                    ~s(WHERE "a" = $1 AND "b" = $2 ORDER BY "id" ASC)
              }
@@ -63,13 +63,20 @@ defmodule Hologram.DB.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [{:value, true}], sql: sql} = compile(term, mapping)
-      assert String.contains?(sql, ~s( AND "a" = $1 ORDER BY "c" ASC, "id" ASC LIMIT 5))
-      assert String.contains?(sql, ~s|ORDER BY "i1"."c" ASC, "i1"."id" ASC), '[]'::jsonb|)
+
+      assert String.contains?(
+               sql,
+               ~s( AND "a" = $1 ORDER BY "c_$sort" ASC, "c" ASC, "id" ASC LIMIT 5)
+             )
+
+      assert String.contains?(
+               sql,
+               ~s|ORDER BY "i1"."c_$sort" ASC, "i1"."c" ASC, "i1"."id" ASC), '[]'::jsonb|
+             )
     end
 
     test "applies the sort-key companion to a to-many include ordering" do
-      sort_key_attributes = MapSet.new([{Module2, :c}])
-      mapping = Mapper.derive!([Module1, Module2, Module3], sort_key_attributes)
+      mapping = Mapper.derive!([Module1, Module2, Module3])
 
       term =
         Module3
@@ -160,7 +167,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping, %{operation: :read, rules: rules}) == %{
                params: [{:value, true}, {:value, "text_1"}],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at" ) <>
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "c_$sort" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
                    ~s(WHERE "a" = $1 AND "c" = $2 ORDER BY "id" ASC)
              }
@@ -703,7 +710,8 @@ defmodule Hologram.DB.QueryCompilerTest do
       expected_fragment =
         ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
           ~s|'id', "i1"."id", 'a', "i1"."a", 'b', "i1"."b", 'c', "i1"."c", | <>
-          ~s|'created_at', "i1"."created_at", 'updated_at', "i1"."updated_at"| <>
+          ~s|'created_at', "i1"."created_at", 'updated_at', "i1"."updated_at", | <>
+          ~s|'c_$sort', "i1"."c_$sort"| <>
           ~s|) ORDER BY "i1"."id" ASC), '[]'::jsonb) | <>
           ~s|FROM (SELECT "t1".* | <>
           ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "t1" | <>
@@ -808,12 +816,11 @@ defmodule Hologram.DB.QueryCompilerTest do
         |> Query.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s( ORDER BY "b" DESC, "c" ASC, "id" ASC))
+      assert String.ends_with?(sql, ~s( ORDER BY "b" DESC, "c_$sort" ASC, "c" ASC, "id" ASC))
     end
 
     test "compiles string ordering through the sort-key companion" do
-      sort_key_attributes = MapSet.new([{Module2, :c}])
-      mapping = Mapper.derive!([Module2], sort_key_attributes)
+      mapping = Mapper.derive!([Module2])
 
       term =
         Module2
@@ -878,7 +885,8 @@ defmodule Hologram.DB.QueryCompilerTest do
       expected_fragment =
         ~s|, 'b', (SELECT jsonb_build_object(| <>
           ~s|'id', "i2"."id", 'a', "i2"."a", 'b', "i2"."b", 'c', "i2"."c", | <>
-          ~s|'created_at', "i2"."created_at", 'updated_at', "i2"."updated_at"| <>
+          ~s|'created_at', "i2"."created_at", 'updated_at', "i2"."updated_at", | <>
+          ~s|'c_$sort', "i2"."c_$sort"| <>
           ~s|) FROM "hologram_data"."test_fixtures_entity_module2" AS "i2" | <>
           ~s|WHERE "i2"."id" = "i1"."b_id")|
 
@@ -930,7 +938,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at" FROM "hologram_data"."test_fixtures_entity_module2" ORDER BY "id" ASC)
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "c_$sort" FROM "hologram_data"."test_fixtures_entity_module2" ORDER BY "id" ASC)
              }
     end
 

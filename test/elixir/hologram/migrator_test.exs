@@ -110,6 +110,7 @@ defmodule Hologram.MigratorTest do
                "id",
                "priority",
                "title",
+               "title_$sort",
                "updated_at"
              ]
 
@@ -678,10 +679,9 @@ defmodule Hologram.MigratorTest do
     end
 
     test "passes over the query-derived companions", %{mapping: mapping} do
-      add_column =
-        ~s{ALTER TABLE "hologram_data"."my_app_task" ADD COLUMN "title_$sort" text}
+      drop_column = ~s{ALTER TABLE "hologram_data"."my_app_task" DROP COLUMN "title_$sort"}
 
-      {:ok, _result} = Connection.query(add_column)
+      {:ok, _result} = Connection.query(drop_column)
 
       assert check_drift!(mapping) == :ok
     end
@@ -830,46 +830,45 @@ defmodule Hologram.MigratorTest do
       ]
 
       model = apply_pending(migrations, Model.empty(), @context)
-      sort_key_attributes = MapSet.new([{MyApp.Task, :title}])
 
-      [
-        enriched_mapping: Mapper.derive_from_model!(model, sort_key_attributes),
-        plain_mapping: Mapper.derive_from_model!(model)
-      ]
+      [mapping: Mapper.derive_from_model!(model)]
     end
 
-    test "adds the missing companions and returns the applied ops", %{
-      enriched_mapping: enriched_mapping
-    } do
-      ops = reconcile_artifacts(enriched_mapping)
+    test "adds the missing companions and returns the applied ops", %{mapping: mapping} do
+      drop_column = ~s(ALTER TABLE "hologram_data"."my_app_task" DROP COLUMN "title_$sort")
+      {:ok, _result} = Connection.query(drop_column)
+
+      ops = reconcile_artifacts(mapping)
 
       assert [%{op: :add_column, table: "my_app_task", column: "title_$sort"}] = ops
       assert "title_$sort" in table_columns("my_app_task")
     end
 
-    test "no-ops on a converged database", %{enriched_mapping: enriched_mapping} do
-      reconcile_artifacts(enriched_mapping)
+    test "no-ops on a converged database", %{mapping: mapping} do
+      reconcile_artifacts(mapping)
 
-      assert reconcile_artifacts(enriched_mapping) == []
+      assert reconcile_artifacts(mapping) == []
     end
 
-    test "drops the orphaned companions", %{
-      enriched_mapping: enriched_mapping,
-      plain_mapping: plain_mapping
-    } do
-      reconcile_artifacts(enriched_mapping)
+    test "drops the orphaned companions", %{mapping: mapping} do
+      add_column =
+        ~s(ALTER TABLE "hologram_data"."my_app_task" ADD COLUMN "stale_$sort" text COLLATE "C")
 
-      ops = reconcile_artifacts(plain_mapping)
+      {:ok, _result} = Connection.query(add_column)
 
-      assert [%{op: :drop_column, table: "my_app_task", column: "title_$sort"}] = ops
-      refute "title_$sort" in table_columns("my_app_task")
+      ops = reconcile_artifacts(mapping)
+
+      assert [%{op: :drop_column, table: "my_app_task", column: "stale_$sort"}] = ops
+      refute "stale_$sort" in table_columns("my_app_task")
     end
 
-    test "leaves non-artifact drift untouched", %{enriched_mapping: enriched_mapping} do
-      drop_column = ~s(ALTER TABLE "hologram_data"."my_app_task" DROP COLUMN "title")
-      {:ok, _result} = Connection.query(drop_column)
+    test "leaves non-artifact drift untouched", %{mapping: mapping} do
+      drop_columns =
+        ~s(ALTER TABLE "hologram_data"."my_app_task" DROP COLUMN "title", DROP COLUMN "title_$sort")
 
-      ops = reconcile_artifacts(enriched_mapping)
+      {:ok, _result} = Connection.query(drop_columns)
+
+      ops = reconcile_artifacts(mapping)
 
       assert [%{op: :add_column, column: "title_$sort"}] = ops
       refute "title" in table_columns("my_app_task")
@@ -958,6 +957,7 @@ defmodule Hologram.MigratorTest do
                "id",
                "priority",
                "title",
+               "title_$sort",
                "updated_at"
              ]
 
