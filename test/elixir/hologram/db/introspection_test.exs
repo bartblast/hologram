@@ -26,6 +26,7 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_entity_module15",
                "test_fixtures_entity_module16",
                "test_fixtures_entity_module16_secrets_$join",
+               "test_fixtures_entity_module17",
                "test_fixtures_entity_module2",
                "test_fixtures_entity_module3",
                "test_fixtures_entity_module3_a_$join",
@@ -230,6 +231,7 @@ defmodule Hologram.DB.IntrospectionTest do
                  "test_fixtures_entity_module14",
                  "test_fixtures_entity_module15",
                  "test_fixtures_entity_module16",
+                 "test_fixtures_entity_module17",
                  "test_fixtures_entity_module2",
                  "test_fixtures_entity_module3",
                  "test_fixtures_entity_module4",
@@ -252,6 +254,7 @@ defmodule Hologram.DB.IntrospectionTest do
                  "owner",
                  "viewer"
                ],
+               "test_fixtures_entity_module17_priority_$enum" => ["low", "medium", "high"],
                "test_fixtures_entity_module4_c_$enum" => ["x", "y"]
              }
     end
