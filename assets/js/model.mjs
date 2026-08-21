@@ -15,6 +15,10 @@ import Type from "./type.mjs";
 // A value's type is not recoverable from the value itself, since a date, an enum and a uuid all
 // arrive as strings, so reading one back means knowing the attribute it belongs to. That is what
 // the build bakes into the bundle constants, for every type this client can hold.
+//
+// An enum attribute's declared values ride in the entry for the same reason, in the order the
+// declaration spells them: that order is the type's order, so sorting rows by an enum attribute
+// is a comparison of positions in this list rather than of the labels themselves.
 export default class Model {
   static #entries = {};
 
@@ -66,6 +70,7 @@ export default class Model {
 
     entry = {
       attributes: baked.attributes,
+      enumValues: baked.enumValues,
       policy: baked.policy,
       relationships: baked.relationships,
       resourceType: baked.resourceType,
