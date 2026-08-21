@@ -159,6 +159,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       Compiler.validate_page_modules(page_modules)
 
+      # Runs here rather than in each module's own compilation: every module is compiled by now, so
+      # a used component's __props__/0 is simply callable, with no compile-time dependency on it and
+      # no deadlock when a component renders itself.
+      Compiler.validate_prop_usages(page_modules ++ Reflection.list_components(), ir_plt)
+
       # A builder's argument names bind the consuming component's like-named declared slots, and
       # a remote capture makes those names a cross-module contract - so a renamed argument fails
       # the build here, every reachable consumer at once, rather than one render at a time.

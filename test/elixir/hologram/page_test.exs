@@ -32,7 +32,7 @@ defmodule Hologram.PageTest do
   end
 
   test "__params__/0" do
-    assert Module7.__params__() == [{:a, :string, []}, {:b, :integer, [opt_1: 111, opt_2: 222]}]
+    assert Module7.__params__() == [{:a, :string, []}, {:b, :integer, []}]
   end
 
   test "__route__/0" do
@@ -64,7 +64,9 @@ defmodule Hologram.PageTest do
       random_string = random_string()
 
       assert_raise Hologram.ParamError,
-                   ~s/can't cast param "a" with value "#{random_string}" to atom, because it's not an already existing atom/,
+                   ~s/can't cast param "a" with value "#{random_string}" to atom / <>
+                     ~s/in page "Hologram.Test.Fixtures.Page.Module6", / <>
+                     "because it's not an already existing atom",
                    fn ->
                      cast_params(%{a: random_string}, Module6)
                    end
@@ -79,7 +81,11 @@ defmodule Hologram.PageTest do
     end
 
     test "invalid string representation of float value" do
-      assert_raise Hologram.ParamError, ~s/can't cast param "b" with value "abc" to float/, fn ->
+      expected_msg =
+        ~s/can't cast param "b" with value "abc" to float / <>
+          ~s/in page "Hologram.Test.Fixtures.Page.Module6"/
+
+      assert_raise Hologram.ParamError, expected_msg, fn ->
         cast_params(%{b: "abc"}, Module6)
       end
     end
@@ -93,11 +99,23 @@ defmodule Hologram.PageTest do
     end
 
     test "invalid string representation of integer value" do
-      assert_raise Hologram.ParamError,
-                   ~s/can't cast param "c" with value "abc" to integer/,
-                   fn ->
-                     cast_params(%{c: "abc"}, Module6)
-                   end
+      expected_msg =
+        ~s/can't cast param "c" with value "abc" to integer / <>
+          ~s/in page "Hologram.Test.Fixtures.Page.Module6"/
+
+      assert_raise Hologram.ParamError, expected_msg, fn ->
+        cast_params(%{c: "abc"}, Module6)
+      end
+    end
+
+    test "value of invalid type for a string param" do
+      expected_msg =
+        ~s/can't cast param "d" with value 123 to string / <>
+          ~s/in page "Hologram.Test.Fixtures.Page.Module6", because it's of invalid type/
+
+      assert_raise Hologram.ParamError, expected_msg, fn ->
+        cast_params(%{d: 123}, Module6)
+      end
     end
 
     test "multiple params" do
@@ -130,6 +148,78 @@ defmodule Hologram.PageTest do
     test "overridden" do
       assert Module2.init(:params_dummy, build_component_struct(), build_server_struct()) ==
                {%Component{state: %{overriden: true}}, %Server{}}
+    end
+  end
+
+  describe "param/3" do
+    test "raises when any option is given" do
+      expected_error_msg =
+        ~s/params don't support options yet, got :default for param "b" in Hologram.Test.Fixtures.Page.ParamOpt/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.ParamOpt do
+          use Hologram.Page
+
+          param :b, :integer, default: 1
+
+          route "/hologram-test-fixtures-page-param-opt/:b"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when the options are a literal that is not a list" do
+      expected_error_msg =
+        ~s/the options for param "b" in Hologram.Test.Fixtures.Page.NonListParamOpts / <>
+          "must be a keyword list, got: :default"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.NonListParamOpts do
+          use Hologram.Page
+
+          param :b, :integer, :default
+
+          route "/hologram-test-fixtures-page-non-list-param-opts/:b"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "doesn't raise when the options are not a literal keyword list" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.NonLiteralParamOpts do
+          use Hologram.Page
+
+          @my_opts []
+
+          param :b, :integer, @my_opts
+
+          route "/hologram-test-fixtures-page-non-literal-param-opts/:b"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__params__() == [{:b, :integer, []}]
     end
   end
 

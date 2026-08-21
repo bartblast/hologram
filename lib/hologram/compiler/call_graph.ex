@@ -467,6 +467,11 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :put, 3}
     ],
     renderer_class: [
+      # The renderer raises this by name - Interpreter.raiseError takes the alias as a string, so no
+      # module atom appears in client-reachable code for the compiler to follow. Without this the
+      # struct reaches the client but its module doesn't, and deriving the message fails with
+      # UndefinedFunctionError instead of naming the prop that broke its contract.
+      {Hologram.PropError, :message, 1},
       {String.Chars, :to_string, 1},
       {:erlang, :binary_to_atom, 1},
       {:lists, :flatten, 1},

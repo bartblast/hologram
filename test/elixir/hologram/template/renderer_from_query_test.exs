@@ -25,10 +25,10 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module101
   alias Hologram.Test.Fixtures.Template.Renderer.Module102
   alias Hologram.Test.Fixtures.Template.Renderer.Module103
-  alias Hologram.Test.Fixtures.Template.Renderer.Module89
-  alias Hologram.Test.Fixtures.Template.Renderer.Module90
-  alias Hologram.Test.Fixtures.Template.Renderer.Module91
-  alias Hologram.Test.Fixtures.Template.Renderer.Module92
+  alias Hologram.Test.Fixtures.Template.Renderer.Module105
+  alias Hologram.Test.Fixtures.Template.Renderer.Module106
+  alias Hologram.Test.Fixtures.Template.Renderer.Module107
+  alias Hologram.Test.Fixtures.Template.Renderer.Module108
   alias Hologram.Test.Fixtures.Template.Renderer.Module93
   alias Hologram.Test.Fixtures.Template.Renderer.Module95
   alias Hologram.Test.Fixtures.Template.Renderer.Module97
@@ -46,7 +46,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     setup_query_cache(QueryCacheStub, false)
 
     stub(QueryCacheMock, :component_modules, fn ->
-      [Module97, Module89, Module90, Module92, Module95]
+      [Module97, Module105, Module106, Module108, Module95]
     end)
 
     QueryCache.init(nil)
@@ -78,7 +78,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   test "injects a parameterized from_query prop bound to a like-named prop" do
     create_entities()
 
-    node = {:component, Module89, [{"min_b", [expression: {5}]}], []}
+    node = {:component, Module105, [{"min_b", [expression: {5}]}], []}
 
     assert {"entities = cherry", %{}, @server} = render_dom(node, @env, @server)
   end
@@ -102,10 +102,10 @@ defmodule Hologram.Template.RendererFromQueryTest do
   test "raises when a like-named prop is missing" do
     create_entities()
 
-    node = {:component, Module90, [], []}
+    node = {:component, Module106, [], []}
 
     expected_msg =
-      "from_query for prop :entities in Hologram.Test.Fixtures.Template.Renderer.Module90 binds argument :missing_prop - no like-named prop is set"
+      "from_query for prop :entities in Hologram.Test.Fixtures.Template.Renderer.Module106 binds argument :missing_prop - no like-named prop is set"
 
     assert_error ArgumentError, expected_msg, fn ->
       render_dom(node, @env, @server)
@@ -141,7 +141,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
       setup_asset_manifest_cache(AssetManifestCacheStub)
       setup_page_digest_registry(PageDigestRegistryStub)
 
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module91, :dummy_module_91_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module107, :dummy_module_107_digest)
 
       public_entity =
         PolicyEntity
@@ -167,14 +167,14 @@ defmodule Hologram.Template.RendererFromQueryTest do
       Auth.grant_role(user, private_entity, :viewer)
 
       {html, _tree, _component_registry, _server_struct} =
-        render_page(Module91, %{}, %Server{user_id: user.id}, @page_opts)
+        render_page(Module107, %{}, %Server{user_id: user.id}, @page_opts)
 
       assert String.contains?(html, "entities = 1,2")
     end
 
     test "renders only unconditionally visible rows for an anonymous session" do
       {html, _tree, _component_registry, _server_struct} =
-        render_page(Module91, %{}, %Server{}, @page_opts)
+        render_page(Module107, %{}, %Server{}, @page_opts)
 
       assert String.contains?(html, "entities = 1")
       refute String.contains?(html, "entities = 1,2")

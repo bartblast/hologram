@@ -62,6 +62,8 @@ defmodule Hologram.Component do
 
   @optional_callbacks [action: 3, command: 3, init: 2]
 
+  @prop_opt_keys [:default, :from_context, :from_query, :required, :values]
+
   @doc false
   @spec __helper_imports__() :: keyword
   def __helper_imports__ do
@@ -234,6 +236,8 @@ defmodule Hologram.Component do
   """
   @spec prop(atom, atom, T.opts()) :: Macro.t()
   defmacro prop(name, type, opts \\ []) do
+    validate_prop_opts!(opts, name, __CALLER__.module)
+
     {opts, shim} = rewrite_from_query_value(opts, name, __CALLER__)
 
     accumulate_prop =
@@ -630,5 +634,171 @@ defmodule Hologram.Component do
       end
 
     List.keyreplace(opts, :from_query, 0, {:from_query, shim_capture})
+  end
+
+  defp validate_prop_opt_entry!({key, _value}, name, module) when is_atom(key) do
+    if key not in @prop_opt_keys do
+      raise Hologram.CompileError,
+        message:
+          ~s/invalid option #{inspect(key)} for prop "#{name}" in #{inspect(module)}, / <>
+            "expected one of: " <> Enum.map_join(@prop_opt_keys, ", ", &inspect/1)
+    end
+  end
+
+  # An entry that is a literal but not a {atom, value} pair can only be a mistake - a string key, a
+  # bare atom in a list - so it is rejected rather than stored. One that isn't a literal is an
+  # expression whose shape is unknown until it runs, and is deferred.
+  defp validate_prop_opt_entry!(entry, name, module) do
+    if Macro.quoted_literal?(entry) do
+      raise Hologram.CompileError,
+        message:
+          ~s/invalid option #{Macro.to_string(entry)} for prop "#{name}" in #{inspect(module)}, / <>
+            "options must be given as a keyword list"
+    end
+
+    :ok
+  end
+
+  # Options reach the macro as AST, so only literal keys and literal option values can be checked -
+  # which is every declaration written as a literal keyword list, even when some values aren't
+  # literals (default: some_var parses as [{:default, {:some_var, _, nil}}]). An option value that
+  # isn't a literal can't be inspected here and is passed through unchecked.
+  defp validate_prop_opts!(opts, name, module) when is_list(opts) and is_atom(name) do
+    Enum.each(opts, &validate_prop_opt_entry!(&1, name, module))
+
+    validate_prop_required_opt!(opts, name, module)
+    validate_prop_values_opt!(opts, name, module)
+    validate_prop_required_default_conflict!(opts, name, module)
+    validate_prop_default_in_values!(opts, name, module)
+  end
+
+  # A literal that isn't a list can't become one at runtime, so it is rejected here. Anything else
+  # is an expression - a module attribute, a variable - and only says what it is once it runs.
+  defp validate_prop_opts!(opts, name, module) when is_atom(name) do
+    if Macro.quoted_literal?(opts) do
+      raise Hologram.CompileError,
+        message:
+          ~s/the options for prop "#{name}" in #{inspect(module)} must be a keyword list, got: / <>
+            Macro.to_string(opts)
+    end
+
+    :ok
+  end
+
+  defp validate_prop_opts!(_opts, _name, _module), do: :ok
+
+  # Both options sit in the same declaration, so a default outside its own :values list is decidable
+  # right here rather than on every render. Any literal is compared, composites included; a value
+  # built by an expression - self(), a function call, a variable - is not knowable here and is left
+  # to the render-time check.
+  #
+  # The comparison is made on evaluated terms rather than on AST, because one term can have more
+  # than one AST form: %{a: 1, b: 2} and %{b: 2, a: 1} are the same map written two ways, and
+  # comparing their AST would reject a default that is in fact allowed. Evaluating is safe here -
+  # Macro.quoted_literal?/1 has already established there is nothing to run.
+  defp validate_prop_default_in_values!(opts, name, module) do
+    with {:values, values_ast} when is_list(values_ast) <- List.keyfind(opts, :values, 0),
+         {:default, default_ast} <- List.keyfind(opts, :default, 0),
+         {:ok, values} <- literal_term(values_ast),
+         {:ok, default} <- literal_term(default_ast),
+         true <- default not in values do
+      raise Hologram.CompileError,
+        message:
+          ~s/the :default value #{inspect(default)} for prop "#{name}" in #{inspect(module)} / <>
+            "is not one of #{inspect(values)}"
+    else
+      _fallback -> :ok
+    end
+  end
+
+  # Literal AST is converted to its term here rather than evaluated. Code.eval_quoted/1 would be
+  # simpler but is a code-execution surface, and Macro.quoted_literal?/1 - the guard that would
+  # justify it - is true for a struct literal, whose evaluation calls the struct's __struct__/1 on a
+  # module that may not be compiled yet while this macro runs. Struct and binary-construction
+  # literals therefore resolve to :unknown and are left to the render-time check.
+  defp literal_term({:{}, _meta, items}) do
+    with {:ok, terms} <- literal_terms(items), do: {:ok, List.to_tuple(terms)}
+  end
+
+  defp literal_term({:%{}, _meta, pairs}) do
+    {key_asts, value_asts} = Enum.unzip(pairs)
+
+    with {:ok, keys} <- literal_terms(key_asts),
+         {:ok, values} <- literal_terms(value_asts) do
+      map =
+        keys
+        |> Enum.zip(values)
+        |> Map.new()
+
+      {:ok, map}
+    end
+  end
+
+  defp literal_term({left_ast, right_ast}) do
+    with {:ok, [left, right]} <- literal_terms([left_ast, right_ast]), do: {:ok, {left, right}}
+  end
+
+  defp literal_term(ast) when is_list(ast), do: literal_terms(ast)
+
+  defp literal_term(ast) when is_atom(ast) or is_binary(ast) or is_number(ast), do: {:ok, ast}
+
+  defp literal_term(_ast), do: :unknown
+
+  # One unresolvable part makes the whole composite unresolvable.
+  defp literal_terms(asts) do
+    result =
+      Enum.reduce_while(asts, {:ok, []}, fn ast, {:ok, acc} ->
+        case literal_term(ast) do
+          {:ok, term} -> {:cont, {:ok, [term | acc]}}
+          :unknown -> {:halt, :unknown}
+        end
+      end)
+
+    case result do
+      {:ok, reversed_terms} -> {:ok, Enum.reverse(reversed_terms)}
+      :unknown -> :unknown
+    end
+  end
+
+  # A default makes the prop impossible to miss, so required: true next to one could never fire -
+  # the declaration would contradict itself. required with from_context stays allowed: a
+  # context-sourced prop genuinely can be missing, and required then means the context must have
+  # supplied it.
+  defp validate_prop_required_default_conflict!(opts, name, module) do
+    if List.keyfind(opts, :required, 0) == {:required, true} && List.keyfind(opts, :default, 0) do
+      raise Hologram.CompileError,
+        message:
+          ~s/prop "#{name}" in #{inspect(module)} can't be both required and have a default value/
+    end
+  end
+
+  defp validate_prop_required_opt!(opts, name, module) do
+    case List.keyfind(opts, :required, 0) do
+      {:required, value} when not is_boolean(value) ->
+        if Macro.quoted_literal?(value) do
+          raise Hologram.CompileError,
+            message:
+              ~s/the :required option for prop "#{name}" in #{inspect(module)} / <>
+                "must be a boolean, got: #{Macro.to_string(value)}"
+        end
+
+      _other ->
+        :ok
+    end
+  end
+
+  defp validate_prop_values_opt!(opts, name, module) do
+    case List.keyfind(opts, :values, 0) do
+      {:values, value} when not is_list(value) ->
+        if Macro.quoted_literal?(value) do
+          raise Hologram.CompileError,
+            message:
+              ~s/the :values option for prop "#{name}" in #{inspect(module)} / <>
+                "must be a list, got: #{Macro.to_string(value)}"
+        end
+
+      _other ->
+        :ok
+    end
   end
 end

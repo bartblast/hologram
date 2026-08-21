@@ -48,12 +48,19 @@ defmodule Hologram.Template.Renderer do
   defmodule Env do
     @moduledoc false
 
-    defstruct context: %{}, node_type: nil, slots: [], tag_name: nil
+    defstruct context: %{},
+              node_type: nil,
+              parent_module: nil,
+              slots: [],
+              slots_parent_module: nil,
+              tag_name: nil
 
     @type t :: %__MODULE__{
             context: %{(atom | {any, atom}) => any},
             node_type: :attribute | :element | :property | :public_comment | nil,
+            parent_module: module | nil,
             slots: keyword(DOM.t()),
+            slots_parent_module: module | nil,
             tag_name: String.t() | nil
           }
   end
@@ -329,11 +336,26 @@ defmodule Hologram.Template.Renderer do
       |> inject_props_from_context(module, env.context)
       |> inject_default_prop_values(module)
       |> inject_props_from_query(module)
+      |> validate_props(module, env.parent_module)
 
     if has_cid_prop?(props) do
-      render_stateful_component(module, props, expanded_children_dom, env.context, server_struct)
+      render_stateful_component(
+        module,
+        props,
+        expanded_children_dom,
+        env.context,
+        server_struct,
+        env.parent_module
+      )
     else
-      render_template(module, props, expanded_children_dom, env.context, server_struct)
+      render_template(
+        module,
+        props,
+        expanded_children_dom,
+        env.context,
+        server_struct,
+        env.parent_module
+      )
     end
   end
 
@@ -365,7 +387,14 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render_tree({:element, "slot", _attrs_dom, []}, %Env{} = env, server_struct) do
-    render_tree(env.slots[:default], %Env{env | slots: []}, server_struct)
+    # Slot content was written in the template that supplied it, not in the one holding the <slot />,
+    # so a component in it belongs to the supplier. Without this a page's whole template would be
+    # attributed to its layout, since a page's DOM is the layout's slot content.
+    render_tree(
+      env.slots[:default],
+      %Env{env | slots: [], parent_module: env.slots_parent_module},
+      server_struct
+    )
   end
 
   # The <window> and <document> tags bind events to the window or document on the client. They have
@@ -917,6 +946,13 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
+  # Naming the template the component was rendered from is what turns the error into something
+  # actionable - a component used in thirty places says nothing on its own. A top-level render has
+  # no parent, and then the message simply ends after the prop.
+  defp rendered_from(nil), do: ""
+
+  defp rendered_from(module), do: ~s/, rendered from "#{Reflection.module_name(module)}"/
+
   defp render_page_inside_layout(
          page_module,
          params,
@@ -933,10 +969,21 @@ defmodule Hologram.Template.Renderer do
     layout_props_dom = build_layout_props_dom(page_module, page_state)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
 
-    render_tree(layout_node, %Env{context: page_emitted_context}, server_struct)
+    render_tree(
+      layout_node,
+      %Env{context: page_emitted_context, parent_module: page_module},
+      server_struct
+    )
   end
 
-  defp render_stateful_component(module, props, children_dom, context, server_struct) do
+  defp render_stateful_component(
+         module,
+         props,
+         children_dom,
+         context,
+         server_struct,
+         parent_module
+       ) do
     server_struct = %{server_struct | cid: props.cid}
     {component_struct, mutated_server_struct} = init_component(module, props, server_struct)
 
@@ -944,7 +991,14 @@ defmodule Hologram.Template.Renderer do
     merged_context = Map.merge(context, component_struct.emitted_context)
 
     {tree, children_component_registry, final_server_struct} =
-      render_template(module, vars, children_dom, merged_context, mutated_server_struct)
+      render_template(
+        module,
+        vars,
+        children_dom,
+        merged_context,
+        mutated_server_struct,
+        parent_module
+      )
 
     component_registry =
       Map.put(children_component_registry, vars.cid, %{module: module, struct: component_struct})
@@ -952,10 +1006,19 @@ defmodule Hologram.Template.Renderer do
     {tree, component_registry, final_server_struct}
   end
 
-  defp render_template(module, vars, children_dom, context, server_struct) do
+  # parent_module is the module whose template holds this usage - it owns the slot content passed in,
+  # while the template about to be rendered owns everything written inside it.
+  defp render_template(module, vars, children_dom, context, server_struct, parent_module) do
+    env = %Env{
+      context: context,
+      parent_module: module,
+      slots: [default: children_dom],
+      slots_parent_module: parent_module
+    }
+
     vars
     |> module.template().()
-    |> render_tree(%Env{context: context, slots: [default: children_dom]}, server_struct)
+    |> render_tree(env, server_struct)
   end
 
   # WARNING: must match the client renderer's #renderAttribute normalization: an empty value list
@@ -1031,6 +1094,41 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp spread_entries(value), do: raise_invalid_spread_value(value)
+
+  # Runs last in the props pipeline, so the map it sees is exactly what the component's template
+  # will see - defaults filled and context injected. The compiler already rejects a required prop
+  # missing from a usage it can decide; what reaches here is what it can't: spreads, dynamic tags
+  # and props sourced from context. Mirrored by #validateProps in renderer.mjs.
+  defp validate_props(props, module, parent_module) do
+    Enum.each(module.__props__(), fn {name, _type, opts} ->
+      validate_prop(props, name, opts, module, parent_module)
+    end)
+
+    props
+  end
+
+  # The compiler judges a value written in a template and a default written in a declaration, so what
+  # is left here is what only exists once the page runs: a value from context, or one arriving
+  # through a spread.
+  defp validate_prop(props, name, opts, module, parent_module) do
+    cond do
+      opts[:required] && !Map.has_key?(props, name) ->
+        raise Hologram.PropError,
+          message:
+            ~s/component "#{Reflection.module_name(module)}" is missing required prop "#{name}"/ <>
+              rendered_from(parent_module)
+
+      opts[:values] && Map.has_key?(props, name) && props[name] not in opts[:values] ->
+        raise Hologram.PropError,
+          message:
+            ~s/prop "#{name}" of component "#{Reflection.module_name(module)}" must be one of / <>
+              "#{inspect(opts[:values])}, got: #{inspect(props[name])}" <>
+              rendered_from(parent_module)
+
+      true ->
+        :ok
+    end
+  end
 
   # Event bindings require compile-time modifier parsing and listener collection, so they can be
   # written only as literal attributes. Silently not binding an intended event would be worse than
