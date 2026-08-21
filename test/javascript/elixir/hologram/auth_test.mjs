@@ -47,6 +47,7 @@ describe("Elixir_Hologram_Auth", () => {
       public: false,
       released_on: null,
       status: null,
+      title: null,
       ...overrides,
     });
 
@@ -71,6 +72,7 @@ describe("Elixir_Hologram_Auth", () => {
             public: "boolean",
             released_on: "date",
             status: "enum",
+            title: "string",
           },
           enumValues: {status: ["draft", "review", "published"]},
           policy: policy,
@@ -350,6 +352,52 @@ describe("Elixir_Hologram_Auth", () => {
 
       assert.deepStrictEqual(
         reads(rules, document({status: "draft"})),
+        Type.boolean(false),
+      );
+    });
+
+    // A rule and the filter mirroring it have to admit the same rows, so a string compares here
+    // the way a query compares it - by its derived key, then by the value behind it.
+    it("compares a string attribute by its sort key", () => {
+      const rules = [rule({predicates: [["title", ">=", "m"]]})];
+
+      assert.deepStrictEqual(
+        reads(rules, document({title: "Mango"})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({title: "Łódź"})),
+        Type.boolean(false),
+      );
+    });
+
+    it("settles a string bound that shares a key by the value itself", () => {
+      const rules = [rule({predicates: [["title", ">", "Zebra"]]})];
+
+      assert.deepStrictEqual(
+        reads(rules, document({title: "zebra"})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({title: "Zebra"})),
+        Type.boolean(false),
+      );
+    });
+
+    // The key folds case and diacritics, and `==` must not: what a bound reaches and what a
+    // value equals are two different questions.
+    it("keeps string equality exact", () => {
+      const rules = [rule({predicates: [["title", "==", "Zebra"]]})];
+
+      assert.deepStrictEqual(
+        reads(rules, document({title: "Zebra"})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({title: "zebra"})),
         Type.boolean(false),
       );
     });

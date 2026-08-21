@@ -3,6 +3,7 @@
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
+import SortKey from "../../sort_key.mjs";
 import Type from "../../type.mjs";
 
 // Whether the acting user may do something, answered here rather than asked of the server.
@@ -29,16 +30,31 @@ function actorGated(rule) {
 }
 
 // Every value compares as the wire spells it - dates and datetimes as their strings, whose
-// character order IS their instant order - so one comparison serves every type.
+// character order IS their instant order - so one comparison serves most types.
 //
-// An enum is the exception: its labels say nothing about its order, so the two are compared by
-// their positions in the list the type declares - the order the database holds the type in and
-// the order a query compares it by, so a rule and the filter mirroring it admit the same rows.
-function compare(left, right, ranks = null) {
+// Two are the exceptions, and both for the same reason: a rule and the filter mirroring it have
+// to admit the same rows. An enum's labels say nothing about its order, so the two compare by
+// their positions in the list the type declares. A string compares by the key derived from it and
+// then by the value behind it, which is the pair its ordering sorts by - the key is a bounded
+// prefix, which is what leaves the value something to settle.
+//
+// Which of the two applies is decided by the DECLARED type rather than by the runtime one: on the
+// wire a date is a string too, and the reference never folds one, because there it is a struct.
+function compare(left, right, ranks = null, foldsKey = false) {
   if (ranks) {
-    return compare(ranks.get(left), ranks.get(right));
+    return plainCompare(ranks.get(left), ranks.get(right));
   }
 
+  if (!foldsKey) {
+    return plainCompare(left, right);
+  }
+
+  const keyResult = plainCompare(SortKey.compute(left), SortKey.compute(right));
+
+  return keyResult === "eq" ? plainCompare(left, right) : keyResult;
+}
+
+function plainCompare(left, right) {
   if (left === right) {
     return "eq";
   }
@@ -66,7 +82,7 @@ function grantRows() {
   return Object.values(LocalDatabase.getTable(GRANT_TYPE));
 }
 
-function holds(fieldValue, operator, value, ranks) {
+function holds(fieldValue, operator, value, ranks, foldsKey = false) {
   if (operator === "==") {
     return equal(fieldValue, value);
   }
@@ -91,16 +107,16 @@ function holds(fieldValue, operator, value, ranks) {
 
   switch (operator) {
     case "<":
-      return compare(fieldValue, value, ranks) === "lt";
+      return compare(fieldValue, value, ranks, foldsKey) === "lt";
 
     case "<=":
-      return compare(fieldValue, value, ranks) !== "gt";
+      return compare(fieldValue, value, ranks, foldsKey) !== "gt";
 
     case ">":
-      return compare(fieldValue, value, ranks) === "gt";
+      return compare(fieldValue, value, ranks, foldsKey) === "gt";
 
     default:
-      return compare(fieldValue, value, ranks) !== "lt";
+      return compare(fieldValue, value, ranks, foldsKey) !== "lt";
   }
 }
 
@@ -142,6 +158,7 @@ function predicatesHold(entityType, entity, predicates, actorUserId) {
       operator,
       isActorValue(value) ? actorUserId : value,
       enumRanks(entityType, name),
+      Model.entry(entityType).attributes[name] === "string",
     ),
   );
 }

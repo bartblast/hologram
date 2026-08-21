@@ -224,6 +224,24 @@ defmodule Hologram.Policy.EvaluatorTest do
              )
     end
 
+    # The key folds case and diacritics, and `==` must not: what a bound reaches and what a value
+    # equals are two different questions.
+    test "keeps string equality exact" do
+      assert rule_matches?(
+               rule(predicates: [{:username, :==, "Zebra"}]),
+               %Module10{count: 1, username: "Zebra"},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:username, :==, "Zebra"}]),
+               %Module10{count: 1, username: "zebra"},
+               nil,
+               &deny/3
+             )
+    end
+
     test "never matches an enum comparison against an unset value" do
       refute rule_matches?(
                rule(predicates: [{:priority, :>=, :low}]),
