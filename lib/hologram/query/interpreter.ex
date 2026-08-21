@@ -33,10 +33,12 @@ defmodule Hologram.Query.Interpreter do
   """
   @spec run(%{atom => any}, %{atom => any}, keyword) :: list(struct) | struct | integer | nil
   def run(term, database, opts \\ []) do
+    ranks = predicate_ranks(term)
+
     rows =
       database
       |> table(term.entity)
-      |> Enum.filter(&matches?(&1, term.filter, opts))
+      |> Enum.filter(&matches?(&1, term.filter, opts, ranks))
 
     case term.cardinality do
       # A count counts what the query evaluates to, so the bounds apply before it is taken -
@@ -160,20 +162,20 @@ defmodule Hologram.Query.Interpreter do
   defp embedded_value(row, name, :to_many, sub_term, database, opts) do
     target_ids = Map.get(database.facts, {row.__struct__, name, row.id}, [])
     targets = table(database, sub_term.entity)
+    ranks = predicate_ranks(sub_term)
 
     target_ids
     |> Enum.map(fn target_id -> Enum.find(targets, &(&1.id == target_id)) end)
-    |> Enum.filter(&(not is_nil(&1) and matches?(&1, sub_term.filter, opts)))
+    |> Enum.filter(&(not is_nil(&1) and matches?(&1, sub_term.filter, opts, ranks)))
     |> arrange(sub_term)
     |> Enum.map(&embed(&1, sub_term, database, opts))
   end
 
-  # What an enum ordering key compares by: each declared value against its position in the list
-  # the entity declares, built once per sort and only for the keys that need it. A key of any
-  # other type is absent, and its comparison is the ordinary one.
-  defp enum_ranks(entity_type, order_by) do
-    names = Enum.map(order_by, fn {name, _direction} -> name end)
-
+  # What an enum compares by: each declared value against its position in the list the entity
+  # declares, built once per run and only for the names that need it - the ordering keys and the
+  # filtered attributes alike. A name of any other type is absent, and its comparison is the
+  # ordinary one.
+  defp enum_ranks(entity_type, names) do
     entity_type.__attributes__()
     |> Enum.filter(fn {name, type, _opts} -> type == :enum and name in names end)
     |> Map.new(fn {name, _type, opts} ->
@@ -201,62 +203,87 @@ defmodule Hologram.Query.Interpreter do
 
   defp flip(:lt), do: :gt
 
-  defp matches?(row, filter, opts) do
-    Enum.all?(filter, &matches_predicate?(row, &1, opts))
+  defp matches?(row, filter, opts, ranks) do
+    Enum.all?(filter, &matches_predicate?(row, &1, opts, ranks))
   end
 
-  defp matches_predicate?(row, {name, operator, operand}, opts) do
-    case resolve(operand, opts) do
+  defp matches_predicate?(row, {name, operator, operand}, opts, ranks) do
+    ranks_for_key = Map.get(ranks, name)
+
+    case resolve(operand, opts, ranks_for_key) do
       # The acting user is nobody, so a predicate asking about them is asking about nobody -
       # which no row answers, the way an actor-referencing statement is elided for a visitor
       # rather than run against a null.
       :no_actor -> false
-      value -> satisfies?(operator, Map.fetch!(row, name), value)
+      value -> satisfies?(operator, Map.fetch!(row, name), value, ranks_for_key)
     end
   end
 
-  defp resolve({:actor}, opts) do
+  # The ranks a term's own predicates compare by, keyed by the attribute each names.
+  defp predicate_ranks(term) do
+    names = Enum.map(term.filter, fn {name, _operator, _operand} -> name end)
+
+    enum_ranks(term.entity, names)
+  end
+
+  defp resolve({:actor}, opts, _ranks_for_key) do
     Keyword.get(opts, :actor_user_id) || :no_actor
   end
 
-  defp resolve({:placeholder, name}, opts) do
+  defp resolve({:placeholder, name}, opts, ranks_for_key) do
     bindings = Keyword.get(opts, :bindings, %{})
 
     case Map.fetch(bindings, name) do
-      :error -> raise ArgumentError, message: "missing value for placeholder #{inspect(name)}"
-      {:ok, value} -> validate_binding!(value, name)
+      :error ->
+        raise ArgumentError, message: "missing value for placeholder #{inspect(name)}"
+
+      {:ok, value} ->
+        value
+        |> validate_binding!(name)
+        |> validate_declared_value!(name, ranks_for_key)
     end
   end
 
-  defp resolve(operand, opts) when is_list(operand) do
-    Enum.map(operand, &resolve(&1, opts))
+  defp resolve(operand, opts, ranks_for_key) when is_list(operand) do
+    Enum.map(operand, &resolve(&1, opts, ranks_for_key))
   end
 
-  defp resolve(operand, _opts), do: operand
+  defp resolve(operand, _opts, _ranks_for_key), do: operand
 
   # Nil is a value like any other to the equality family - an unset attribute is unequal to a
   # set one, and a list may name it - while an ordering line has no place to put one, so a
   # comparison passes over what is not there.
-  defp satisfies?(:!=, value, operand), do: not equal?(value, operand)
+  defp satisfies?(:!=, value, operand, _ranks), do: not equal?(value, operand)
 
-  defp satisfies?(:==, value, operand), do: equal?(value, operand)
+  defp satisfies?(:==, value, operand, _ranks), do: equal?(value, operand)
 
-  defp satisfies?(:in, value, operands), do: Enum.any?(operands, &equal?(value, &1))
+  defp satisfies?(:in, value, operands, _ranks), do: Enum.any?(operands, &equal?(value, &1))
 
-  defp satisfies?(:not_in, value, operands), do: not Enum.any?(operands, &equal?(value, &1))
+  defp satisfies?(:not_in, value, operands, _ranks) do
+    not Enum.any?(operands, &equal?(value, &1))
+  end
 
-  defp satisfies?(_operator, nil, _operand), do: false
+  defp satisfies?(_operator, nil, _operand, _ranks), do: false
 
-  defp satisfies?(:<, value, operand), do: compare_values(value, operand) == :lt
+  defp satisfies?(:<, value, operand, ranks) do
+    compare_ordering_values(value, operand, ranks) == :lt
+  end
 
-  defp satisfies?(:<=, value, operand), do: compare_values(value, operand) in [:eq, :lt]
+  defp satisfies?(:<=, value, operand, ranks) do
+    compare_ordering_values(value, operand, ranks) in [:eq, :lt]
+  end
 
-  defp satisfies?(:>, value, operand), do: compare_values(value, operand) == :gt
+  defp satisfies?(:>, value, operand, ranks) do
+    compare_ordering_values(value, operand, ranks) == :gt
+  end
 
-  defp satisfies?(:>=, value, operand), do: compare_values(value, operand) in [:eq, :gt]
+  defp satisfies?(:>=, value, operand, ranks) do
+    compare_ordering_values(value, operand, ranks) in [:eq, :gt]
+  end
 
   defp sort(rows, order_by, entity_type) do
-    ranks = enum_ranks(entity_type, order_by)
+    names = Enum.map(order_by, fn {name, _direction} -> name end)
+    ranks = enum_ranks(entity_type, names)
 
     Enum.sort(rows, &precedes?(&1, &2, order_by, ranks))
   end
@@ -298,6 +325,32 @@ defmodule Hologram.Query.Interpreter do
   defp take(rows, nil), do: rows
 
   defp take(rows, limit), do: Enum.take(rows, limit)
+
+  # The values the rank map holds, back in the order the entity declares them - the cold path of
+  # a refusal, so the sort costs nothing anything else pays for.
+  defp declared_values(ranks_for_key) do
+    ranks_for_key
+    |> Enum.sort_by(fn {_value, index} -> index end)
+    |> Enum.map(fn {value, _index} -> value end)
+  end
+
+  # A binding on an enum attribute is one of the values that attribute declares, refused in the
+  # words the database executor refuses it in - QueryRunner validates every binding against the
+  # attribute before a statement is built, so an undeclared label never reaches Postgres on that
+  # tier either. A list bound as a whole is left to the runner alone.
+  defp validate_declared_value!(value, _name, nil), do: value
+
+  defp validate_declared_value!(values, _name, _ranks_for_key) when is_list(values), do: values
+
+  defp validate_declared_value!(value, name, ranks_for_key) do
+    if Map.has_key?(ranks_for_key, value) do
+      value
+    else
+      raise ArgumentError,
+        message:
+          "invalid value #{inspect(value)} for placeholder #{inspect(name)} - expected one of #{inspect(declared_values(ranks_for_key))}"
+    end
+  end
 
   # A binding carries no nil anywhere, which is what the database refuses it for - and identity
   # with the database covers what each REFUSES, not only what each answers. A predicate about the
