@@ -456,7 +456,37 @@ defmodule Hologram.Migration.GeneratorTest do
         add_enum_value :status, :doing, after: :todo
         rename_enum_value :status, :done, :completed
         delete_enum_value :status, :draft
+        # The declared order of :status changed - queries ordering by it sort rows differently now.
+        # No value changes: every row keeps what it holds, and the column is rebuilt to apply the order.
         reorder_enum_values :status, [:todo, :doing, :completed]
+      end
+      """
+
+      assert render(plan) == normalize_newlines(expected)
+    end
+
+    # A reorder reads as a refactor and is not one - the declared order is what ordering by the
+    # attribute follows - so the draft says what changed, and what did not.
+    test "warns above a reorder, saying no value changes" do
+      plan = %{
+        ops: [
+          %{
+            op: :reorder_enum_values,
+            entity: MyApp.Task,
+            attribute: :priority,
+            values: [:high, :low, :medium]
+          }
+        ],
+        questions: []
+      }
+
+      expected = """
+      use Hologram.Migration
+
+      change_entity MyApp.Task do
+        # The declared order of :priority changed - queries ordering by it sort rows differently now.
+        # No value changes: every row keeps what it holds, and the column is rebuilt to apply the order.
+        reorder_enum_values :priority, [:high, :low, :medium]
       end
       """
 

@@ -367,8 +367,21 @@ defmodule Hologram.Migration.Generator do
     render_call("rename_role", [op.from, op.to], [])
   end
 
+  # The one op that reads as a refactor and is not one: the declared order of an enum is what
+  # ordering by that attribute follows, so a tidied list changes what existing queries return.
+  # The reassurance rides with the warning because the rebuild sounds worse than it is - the
+  # cast round-trips every label through text, so no row can change or fail it.
   defp render_op(%{op: :reorder_enum_values} = op) do
-    render_call("reorder_enum_values", [op.attribute, op.values], [])
+    call = render_call("reorder_enum_values", [op.attribute, op.values], [])
+
+    Enum.join(
+      [
+        "# The declared order of #{inspect(op.attribute)} changed - queries ordering by it sort rows differently now.",
+        "# No value changes: every row keeps what it holds, and the column is rebuilt to apply the order.",
+        call
+      ],
+      "\n"
+    )
   end
 
   defp render_opts([]), do: ""
