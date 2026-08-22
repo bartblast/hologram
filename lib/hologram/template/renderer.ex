@@ -209,22 +209,41 @@ defmodule Hologram.Template.Renderer do
   # (it would be possible to pass page state as layout props this way).
   @doc """
   Renders the given page as its two projections: the HTML a document load is served, and the
-  evaluated tree the same render is described by as data. Both carry the same interpolated
-  runtime JS, and both leave the Realtime placeholders for the caller to substitute.
+  evaluated tree the same render is described by as data.
+
+  Only the HTML has the mount data interpolated into it, since a cold document has no channel for
+  that state but the markup it is sent. The tree keeps the placeholders verbatim and the mount
+  data is returned beside it, for a caller that carries the two as separate fields. Both
+  projections leave the Realtime placeholders for the caller to substitute.
 
   ## Examples
 
       iex> render_page(MyPage, %{param: "value"}, %Server{}, initial_page?: true)
-      {
-        "<div>full page content including layout</div>",
-        [{:element, "div", [{"$key", [text: "k2xq91:0"]}], [{:text, "full page content including layout"}]}],
-        %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}},
-        %Server{session: %{user_id: 123}}
+      %{
+        component_registry: %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}},
+        html: "<div>full page content including layout</div>",
+        mount_data: %{
+          asset_manifest: "{...}",
+          component_registry: "Type.map([...])",
+          page_module: "Type.atom(...)",
+          page_params: "Type.map([...])"
+        },
+        server_struct: %Server{session: %{user_id: 123}},
+        tree: [{:element, "div", [{"$key", [text: "k2xq91:0"]}], [{:text, "full page content including layout"}]}]
       }
   """
-  @spec render_page(module, %{atom => any}, Server.t(), T.opts()) ::
-          {String.t(), tree, %{String.t() => %{module: module, struct: Component.t()}},
-           Server.t()}
+  @spec render_page(module, %{atom => any}, Server.t(), T.opts()) :: %{
+          component_registry: %{String.t() => %{module: module, struct: Component.t()}},
+          html: String.t(),
+          mount_data: %{
+            asset_manifest: String.t(),
+            component_registry: String.t(),
+            page_module: String.t(),
+            page_params: String.t()
+          },
+          server_struct: Server.t(),
+          tree: tree
+        }
   def render_page(page_module, params, server_struct, opts) do
     initial_page? = opts[:initial_page?] || false
 
@@ -285,18 +304,17 @@ defmodule Hologram.Template.Renderer do
       |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", mount_data_js.page_module)
       |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", mount_data_js.page_params)
 
-    tree_with_interpolated_js =
-      initial_tree
-      |> interpolate_js_in_tree("$ASSET_MANIFEST_JS_PLACEHOLDER", mount_data_js.asset_manifest)
-      |> interpolate_js_in_tree(
-        "$COMPONENT_REGISTRY_JS_PLACEHOLDER",
-        mount_data_js.component_registry
-      )
-      |> interpolate_js_in_tree("$PAGE_MODULE_JS_PLACEHOLDER", mount_data_js.page_module)
-      |> interpolate_js_in_tree("$PAGE_PARAMS_JS_PLACEHOLDER", mount_data_js.page_params)
-
-    {html_with_interpolated_js, tree_with_interpolated_js, component_registry_with_page_struct,
-     final_server_struct}
+    # The tree keeps its placeholders. A navigation carries the mount data beside the tree rather
+    # than inside it, so nothing on that path ever substitutes them - and folding the state into a
+    # script element's text would only mean escaping encoder output into the tree's encoding and
+    # unescaping it again on arrival.
+    %{
+      component_registry: component_registry_with_page_struct,
+      html: html_with_interpolated_js,
+      mount_data: mount_data_js,
+      server_struct: final_server_struct,
+      tree: initial_tree
+    }
   end
 
   @doc """

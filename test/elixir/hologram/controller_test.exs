@@ -2476,7 +2476,12 @@ defmodule Hologram.ControllerTest do
 
       assert tree_json =~ "Module5 page"
       assert tree_json =~ "selfEchoes: Type.list([])"
-      refute tree_json =~ "JS_PLACEHOLDER"
+
+      # Only the Realtime placeholders, which is what this test is about. The mount data ones are
+      # left in the tree on purpose now - the renderer hands that state back separately.
+      refute tree_json =~ "SELF_ECHOES_JS_PLACEHOLDER"
+      refute tree_json =~ "SUB_RECEIPT_ADDS_JS_PLACEHOLDER"
+      refute tree_json =~ "SUB_RECEIPT_DROPS_JS_PLACEHOLDER"
     end
 
     test "marks a page payload as page data" do

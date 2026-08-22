@@ -759,8 +759,12 @@ defmodule Hologram.Controller do
       {:terminal, decorate_conn(conn, server_struct, middleware_server_struct),
        middleware_server_struct}
     else
-      {rendered_html, rendered_tree, component_registry, rendered_server_struct} =
-        Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
+      %{
+        component_registry: component_registry,
+        html: rendered_html,
+        server_struct: rendered_server_struct,
+        tree: rendered_tree
+      } = Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
 
       # Transition subscriptions before flushing broadcasts so a registry failure
       # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
