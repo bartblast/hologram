@@ -90,10 +90,12 @@ defmodule Hologram.Compiler.QueryExtractor do
   rows nothing ever fills. Zero-arity captures are free of these limits - they
   evaluate concretely at build time.
 
-  The entity types are the fork's candidate set for a placeholder in an entity
+  The entity types are the replay's candidate set for a placeholder in an entity
   position. They are taken as an argument so that a build computes them once and
-  passes the one list to every extraction, rather than every fork reading them -
-  the default sweeps the build's apps, for one-off calls.
+  passes the one list to every extraction, rather than every extraction reading
+  them - the default sweeps the build's apps, for one-off calls.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/query_extractor/extract_module_queries_2/README.md
   """
   @spec extract_module_queries(module, list(module)) :: list(%{atom => any})
   def extract_module_queries(module, entity_types \\ Reflection.list_entities()) do
