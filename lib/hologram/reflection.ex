@@ -15,7 +15,7 @@ defmodule Hologram.Reflection do
 
   @page_windows_plt_dump_file_name "page_windows.plt"
 
-  @query_cache_plt_dump_file_name "query_cache.plt"
+  @queries_plt_dump_file_name "queries.plt"
 
   @doc """
   Determines whether the given term is an alias.
@@ -659,11 +659,11 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Returns the file name of the dump of the query cache PLT.
+  Returns the file name of the dump of the registered queries PLT.
   """
-  @spec query_cache_plt_dump_file_name() :: String.t()
-  def query_cache_plt_dump_file_name do
-    @query_cache_plt_dump_file_name
+  @spec queries_plt_dump_file_name() :: String.t()
+  def queries_plt_dump_file_name do
+    @queries_plt_dump_file_name
   end
 
   @doc """

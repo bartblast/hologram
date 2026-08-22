@@ -780,8 +780,8 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "query_cache_plt_dump_file_name/0" do
-    assert query_cache_plt_dump_file_name() == "query_cache.plt"
+  test "queries_plt_dump_file_name/0" do
+    assert queries_plt_dump_file_name() == "queries.plt"
   end
 
   describe "relative_source_path/1" do
