@@ -2462,7 +2462,7 @@ defmodule Hologram.ControllerTest do
       assert tree_json =~ "param_bbb = 222"
     end
 
-    test "carries the render as a tree with the Realtime JS interpolated" do
+    test "carries the render as a tree holding no mount data script" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
 
       conn =
@@ -2475,13 +2475,11 @@ defmodule Hologram.ControllerTest do
       tree_json = Jason.encode!(response["tree"])
 
       assert tree_json =~ "Module5 page"
-      assert tree_json =~ "selfEchoes: Type.list([])"
 
-      # Only the Realtime placeholders, which is what this test is about. The mount data ones are
-      # left in the tree on purpose now - the renderer hands that state back separately.
-      refute tree_json =~ "SELF_ECHOES_JS_PLACEHOLDER"
-      refute tree_json =~ "SUB_RECEIPT_ADDS_JS_PLACEHOLDER"
-      refute tree_json =~ "SUB_RECEIPT_DROPS_JS_PLACEHOLDER"
+      # The state travels beside the tree, so the script that would have carried it is not
+      # rendered on this path at all - which is also why no placeholder can survive into it.
+      refute tree_json =~ "pageMountData"
+      refute tree_json =~ "JS_PLACEHOLDER"
     end
 
     test "marks a page payload as page data" do
