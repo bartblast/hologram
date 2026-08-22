@@ -48,6 +48,44 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
+  Encodes an evaluated tree as a JSON-encodable term, for a client that renders the page itself.
+
+  The tree is a render the server already performed: it holds only elements, text, comments and
+  the doctype, with every expression resolved. That is a closed vocabulary with no Elixir
+  semantics in it, so it needs neither `Hologram.Compiler.Encoder` nor the boxed terms that
+  encoder produces - a nested array says the same thing, and the client gets it already parsed
+  out of the response body.
+
+  A node's shape is what tells the client what it is, so nothing carries a constructor name it
+  does not need. An element is `[tag_name, attributes, children]` and is the only node of length
+  three. Attributes are one flat run of alternating names and values, with `nil` for an attribute
+  that has no value. Text is a bare string. A comment is `["c", children]` and a doctype
+  `["d", content]`, both of length two.
+
+  Unlike `print_dom/1` this is not a markup projection, so nothing is escaped and nothing is
+  dropped: `$key` travels, because it is what carries element identity across a navigation, and a
+  void element keeps the children the tree gave it.
+
+  The result is always a list, even for a single node or for a tag that rendered nothing, so the
+  client never has to tell a node apart from a list of them.
+
+  For why this shape and not one of the other 111 measured, see:
+  docs/navigation_payload_wire_format.md
+
+  ## Examples
+
+      iex> tree = {:element, "div", [{"class", [text: "big"]}], [{:text, "Hologram"}]}
+      iex> encode_tree(tree)
+      [["div", ["class", "big"], ["Hologram"]]]
+  """
+  @spec encode_tree(tree) :: [term]
+  def encode_tree(tree) do
+    tree
+    |> List.wrap()
+    |> Enum.map(&encode_node/1)
+  end
+
+  @doc """
   Substitutes the given placeholder with the given JavaScript source inside every script
   element's text across the given tree.
 
@@ -428,6 +466,28 @@ defmodule Hologram.Template.Renderer do
   # HTML attribute names are dash-separated, while Elixir identifiers can't contain dashes, so each
   # name segment converts to the convention of the namespace it lands in. Nesting composes the
   # segments with hyphens, e.g. %{data: %{user_id: 1}} becomes "data-user-id".
+  # A flat run of alternating names and values rather than a pair per attribute: the run allocates
+  # one array where pairs allocate one per attribute, and it is the cheapest source for the
+  # attribute object the client builds out of it.
+  defp encode_attributes(attributes) do
+    Enum.flat_map(attributes, fn
+      {name, [text: value]} -> [name, value]
+      {name, []} -> [name, nil]
+    end)
+  end
+
+  defp encode_node({:doctype, content}), do: ["d", content]
+
+  defp encode_node({:element, tag_name, attributes, children}) do
+    [tag_name, encode_attributes(attributes), Enum.map(children, &encode_node/1)]
+  end
+
+  defp encode_node({:public_comment, children}) do
+    ["c", Enum.map(children, &encode_node/1)]
+  end
+
+  defp encode_node({:text, text}), do: text
+
   defp compose_attribute_name(key, name_prefix) do
     segment =
       key

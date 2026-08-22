@@ -2322,6 +2322,123 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "encode_tree/1" do
+    test "text node" do
+      tree = {:text, "abc < xyz"}
+
+      assert encode_tree(tree) == ["abc < xyz"]
+    end
+
+    test "doctype node" do
+      tree = {:doctype, "html"}
+
+      assert encode_tree(tree) == [["d", "html"]]
+    end
+
+    test "element node, without attributes or children" do
+      tree = {:element, "div", [], []}
+
+      assert encode_tree(tree) == [["div", [], []]]
+    end
+
+    test "element node, with attribute" do
+      # <div class="big"></div>
+      tree = {:element, "div", [{"class", [text: "big"]}], []}
+
+      assert encode_tree(tree) == [["div", ["class", "big"], []]]
+    end
+
+    test "element node, with boolean attribute" do
+      # <input disabled />
+      tree = {:element, "input", [{"disabled", []}], []}
+
+      assert encode_tree(tree) == [["input", ["disabled", nil], []]]
+    end
+
+    test "element node, with multiple attributes" do
+      # <div class="big" hidden id="abc"></div>
+      tree =
+        {:element, "div", [{"class", [text: "big"]}, {"hidden", []}, {"id", [text: "abc"]}], []}
+
+      assert encode_tree(tree) == [["div", ["class", "big", "hidden", nil, "id", "abc"], []]]
+    end
+
+    test "element node, with element key" do
+      # The $key attribute travels, unlike in the HTML projection: it is what carries element
+      # identity across a navigation.
+      tree = {:element, "div", [{"$key", [text: "k1:0"]}], []}
+
+      assert encode_tree(tree) == [["div", ["$key", "k1:0"], []]]
+    end
+
+    test "element node, with children" do
+      # <div>abc<span></span></div>
+      tree = {:element, "div", [], [{:text, "abc"}, {:element, "span", [], []}]}
+
+      assert encode_tree(tree) == [["div", [], ["abc", ["span", [], []]]]]
+    end
+
+    test "element node, nested" do
+      # <div><span><b>abc</b></span></div>
+      tree =
+        {:element, "div", [], [{:element, "span", [], [{:element, "b", [], [{:text, "abc"}]}]}]}
+
+      assert encode_tree(tree) == [["div", [], [["span", [], [["b", [], ["abc"]]]]]]]
+    end
+
+    test "element node, void with children" do
+      # A void element keeps the children the tree gave it, unlike in the HTML projection.
+      tree = {:element, "br", [], [{:text, "abc"}]}
+
+      assert encode_tree(tree) == [["br", [], ["abc"]]]
+    end
+
+    test "public comment node" do
+      # <!--abc-->
+      tree = {:public_comment, [{:text, "abc"}]}
+
+      assert encode_tree(tree) == [["c", ["abc"]]]
+    end
+
+    test "public comment node, with multiple children" do
+      # <!--abc<div></div>-->
+      tree = {:public_comment, [{:text, "abc"}, {:element, "div", [], []}]}
+
+      assert encode_tree(tree) == [["c", ["abc", ["div", [], []]]]]
+    end
+
+    test "node list" do
+      tree = [{:text, "abc"}, {:element, "div", [], []}, {:doctype, "html"}]
+
+      assert encode_tree(tree) == ["abc", ["div", [], []], ["d", "html"]]
+    end
+
+    test "empty node list" do
+      assert encode_tree([]) == []
+    end
+
+    test "single node is wrapped in a list" do
+      # The result is always a list, so the client never has to tell a node apart from a list.
+      assert encode_tree({:text, "abc"}) == ["abc"]
+    end
+
+    test "nil tree" do
+      # A <window> or <document> tag renders to no node at all.
+      assert encode_tree(nil) == []
+    end
+
+    test "result survives JSON encoding" do
+      tree = [
+        {:doctype, "html"},
+        {:element, "div", [{"class", [text: "big"]}, {"hidden", []}],
+         [{:text, "abc"}, {:public_comment, [{:text, " x "}]}]}
+      ]
+
+      assert tree |> encode_tree() |> JSON.encode!() ==
+               ~s([["d","html"],["div",["class","big","hidden",null],["abc",["c",[" x "]]]]])
+    end
+  end
+
   describe "interpolate_js_in_tree/3" do
     test "substitutes the placeholder inside a script element's text" do
       tree =
