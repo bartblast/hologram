@@ -130,20 +130,6 @@ defmodule Hologram.Query do
   end
 
   @doc """
-  Returns the names a filter predicate may address on the given entity type, sorted -
-  its attributes, the system attributes, and the `<name>_id` reference field of each
-  to-one relationship.
-
-  A name outside this list is refused by `filter/2` before anything about its operand
-  is checked. A to-many relationship contributes nothing: it has no reference field on
-  this side, and a relationship name is not filterable itself.
-  """
-  @spec filterable_names(module) :: list(atom)
-  def filterable_names(entity_type) do
-    Enum.sort(attribute_names(entity_type) ++ reference_field_names(entity_type))
-  end
-
-  @doc """
   Adds relationship traversals to the given query's include map and returns the
   resulting query term.
 
@@ -470,6 +456,10 @@ defmodule Hologram.Query do
   defp placeholder_operand(values) when is_list(values), do: normalize_membership_values(values)
 
   defp placeholder_operand(value), do: value
+
+  defp filterable_names(entity_type) do
+    Enum.sort(attribute_names(entity_type) ++ reference_field_names(entity_type))
+  end
 
   defp equality_triple!(name, operator, operand) do
     if is_list(operand) or is_tuple(operand) or is_struct(operand, Range) do
