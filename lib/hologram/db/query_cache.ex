@@ -3,18 +3,14 @@ defmodule Hologram.DB.QueryCache do
 
   use GenServer
 
-  alias Hologram.Auth
-  alias Hologram.Compiler.QueryExtractor
+  alias Hologram.Commons.SerializationUtils
   alias Hologram.DB
-  alias Hologram.Entity
-  alias Hologram.Policy
-  alias Hologram.Query.Registry
   alias Hologram.Reflection
 
   @doc """
-  Returns the modules swept for registered queries.
+  Returns the path of the dump file the registered queries are read from.
   """
-  @callback component_modules() :: list(module)
+  @callback dump_path() :: String.t()
 
   @doc """
   Returns the key of the persistent term used by the query cache registered process.
@@ -36,11 +32,11 @@ defmodule Hologram.DB.QueryCache do
   end
 
   @doc """
-  Returns the modules swept for registered queries - all component modules in the project.
+  Returns the implementation of the path of the dump file the registered queries are read from.
   """
-  @spec component_modules() :: list(module)
-  def component_modules do
-    Reflection.list_components()
+  @spec dump_path() :: String.t()
+  def dump_path do
+    Path.join([Reflection.build_dir(), Reflection.queries_plt_dump_file_name()])
   end
 
   @doc """
@@ -91,14 +87,10 @@ defmodule Hologram.DB.QueryCache do
   end
 
   @doc """
-  Rebuilds the query cache from the current component modules and mapping - the
-  live-reload path after a dev code change. A no-op when the database is not
-  running (no entities declared at boot). Returns :ok.
-
-  Raises Hologram.CompileError when a registered query reads an entity type
-  declaring no allow lines - default deny makes it statically dead, returning
-  no rows when it is the query's root and no embedded row when it is an
-  include target.
+  Re-reads the query cache from the compiler's dump - the live-reload path after
+  a dev code change, where the recompile that precedes it has rewritten the dump.
+  A no-op when the database is not running (no entities declared at boot).
+  Returns :ok.
   """
   @spec reload() :: :ok
   def reload do
@@ -109,165 +101,19 @@ defmodule Hologram.DB.QueryCache do
     :ok
   end
 
-  defp dead_include_message(module, dead_entity_types) do
-    "the registered query in #{inspect(module)} includes #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny leaves the embed empty in every row. Add allow lines, or drop the include."
-  end
-
-  defp dead_root_message(module, dead_entity_types) do
-    "the registered query in #{inspect(module)} reads #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny returns no rows to any session. Add allow lines, or drop the query."
-  end
-
-  defp declare_verb([_single_entity_type]), do: "declares"
-
-  defp declare_verb(_entity_types), do: "declare"
-
   defp impl do
     Application.get_env(:hologram, :query_cache_impl, __MODULE__)
   end
 
-  defp included_entity_types(term) do
-    term.include
-    |> Map.values()
-    |> Enum.flat_map(&queried_entity_types/1)
-    |> Enum.uniq()
-  end
-
-  defp listing(entity_types) do
-    Enum.map_join(entity_types, ", ", &inspect/1)
-  end
-
+  # Read rather than rebuilt: the build already collected every component's registered queries and
+  # validated them, so a boot that repeated the work would pay for it again and could only reach
+  # the same answer - or fail, long after the build that should have.
   defp populate do
-    modules = impl().component_modules()
-    module_queries = Enum.map(modules, &{&1, QueryExtractor.extract_module_queries(&1)})
-
-    Enum.each(module_queries, &validate_readable_queries!/1)
-    Enum.each(module_queries, &validate_client_evaluable_queries!/1)
-
-    terms = Enum.flat_map(module_queries, fn {_module, module_terms} -> module_terms end)
-
-    entries = Registry.build(terms)
-
-    prop_params =
-      modules
-      |> Enum.flat_map(fn module ->
-        module
-        |> QueryExtractor.extract_prop_params()
-        |> Enum.map(fn {prop_name, param_names} -> {{module, prop_name}, param_names} end)
-      end)
-      |> Map.new()
-
-    windows =
-      entries
-      |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
-      |> put_grants_window()
-
-    data = %{entries: entries, prop_params: prop_params, windows: windows}
+    data =
+      impl().dump_path()
+      |> File.read!()
+      |> SerializationUtils.deserialize(true)
 
     :persistent_term.put(impl().persistent_term_key(), data)
-  end
-
-  # Registered whenever the app HAS a grant store, because this is a lookup table: what decides
-  # whether any client subscribes is the BUILD, which knows whether a page can check permissions
-  # locally. An entry nothing asks for costs one map key, where a missing entry would answer
-  # :no_window to a client the build did tell to ask.
-  #
-  # An app designating no user entity type has no grant store - the grant entity joins the data
-  # model only with one - so there is no table to evaluate the window against and nothing to
-  # register.
-  defp put_grants_window(windows) do
-    if Reflection.user_entity() do
-      window = Auth.grants_window()
-
-      Map.put_new(windows, Registry.id(window), window)
-    else
-      windows
-    end
-  end
-
-  defp queried_entity_types(term) do
-    nested_types =
-      term.include
-      |> Map.values()
-      |> Enum.flat_map(&queried_entity_types/1)
-
-    Enum.uniq([term.entity | nested_types])
-  end
-
-  defp server_only_listing(references) do
-    Enum.map_join(references, ", ", fn {entity_type, names} ->
-      "#{inspect(entity_type)} #{Enum.map_join(names, ", ", &inspect/1)}"
-    end)
-  end
-
-  defp server_only_query_message(module, references) do
-    "the registered query in #{inspect(module)} filters or orders on server_only attributes (#{server_only_listing(references)}) - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API."
-  end
-
-  # Pairs each term entity with the server-only attributes its own filter and order_by name,
-  # walking include sub-terms so a reference nested under an include is reached too.
-  defp server_only_references(term) do
-    server_only_names = Entity.server_only_attribute_names(term.entity)
-    filter_names = Enum.map(term.filter, fn {name, _operator, _value} -> name end)
-    order_by_names = Enum.map(term.order_by, fn {name, _direction} -> name end)
-
-    referenced_names =
-      (filter_names ++ order_by_names)
-      |> Enum.filter(&(&1 in server_only_names))
-      |> Enum.uniq()
-      |> Enum.sort()
-
-    nested_references =
-      term.include
-      |> Map.values()
-      |> Enum.flat_map(&server_only_references/1)
-
-    if referenced_names == [] do
-      nested_references
-    else
-      [{term.entity, referenced_names} | nested_references]
-    end
-  end
-
-  # A registered query is provisioned to the client, which evaluates it locally over rows that
-  # never carry a server-only value - so it must not reference one.
-  defp validate_client_evaluable_queries!({module, module_terms}) do
-    Enum.each(module_terms, fn term ->
-      case server_only_references(term) do
-        [] ->
-          :ok
-
-        references ->
-          raise Hologram.CompileError, message: server_only_query_message(module, references)
-      end
-    end)
-  end
-
-  defp validate_readable_includes!(module, term) do
-    dead_entity_types =
-      term
-      |> included_entity_types()
-      |> Policy.dead_entity_types()
-
-    if dead_entity_types != [] do
-      raise Hologram.CompileError, message: dead_include_message(module, dead_entity_types)
-    end
-
-    :ok
-  end
-
-  # A registered query naming an entity type with no allow lines is statically dead: the policied
-  # read path composes default deny into every statement it reaches. The root and an include target
-  # fail differently, so they are checked and reported apart - and a dead root is reported alone,
-  # because a query returning no rows produces no embeds to be empty either.
-  defp validate_readable_queries!({module, module_terms}) do
-    Enum.each(module_terms, fn term ->
-      case Policy.dead_entity_types([term.entity]) do
-        [] ->
-          validate_readable_includes!(module, term)
-
-        dead_entity_types ->
-          raise Hologram.CompileError, message: dead_root_message(module, dead_entity_types)
-      end
-    end)
   end
 end

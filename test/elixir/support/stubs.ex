@@ -10,6 +10,7 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.ProcessUtils
+  alias Hologram.Compiler
   alias Hologram.DB.QueryCache
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
@@ -88,9 +89,33 @@ defmodule Hologram.Test.Stubs do
 
     :persistent_term.erase(stub.persistent_term_key())
 
+    dump_query_cache(stub, [
+      Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1,
+      Hologram.Test.Fixtures.Component.Module11
+    ])
+
     if start_link do
       QueryCache.start_link([])
     end
+
+    :ok
+  end
+
+  @doc """
+  Writes the query cache dump the given stub reads, holding the registered queries of the given
+  component modules - the compile task's artifact, built the same way but for a chosen set.
+  """
+  @spec dump_query_cache(module, list(module)) :: :ok
+  def dump_query_cache(stub, component_modules) do
+    dump_path = stub.dump_path()
+
+    File.rm(dump_path)
+
+    queries = Compiler.build_queries(component_modules, Reflection.list_entities())
+
+    PLT.start()
+    |> PLT.put(Map.to_list(queries))
+    |> PLT.dump(dump_path)
 
     :ok
   end
@@ -205,11 +230,15 @@ defmodule Hologram.Test.Stubs do
       defmodule alias!(unquote(random_module).QueryCacheStub) do
         @behaviour QueryCache
 
-        def component_modules do
-          [
-            Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1,
-            Hologram.Test.Fixtures.Component.Module11
-          ]
+        def dump_path do
+          Path.join([
+            Reflection.tmp_dir(),
+            "tests",
+            "stubs",
+            "query_cache",
+            "dump_path_0",
+            "#{unquote(random_string())}.plt"
+          ])
         end
 
         def persistent_term_key, do: unquote(random_atom())

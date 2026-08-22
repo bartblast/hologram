@@ -1,11 +1,12 @@
 defmodule Hologram.DB.Supervisor do
   @moduledoc false
 
-  # The database, the query cache and sync form a restart-ordered unit: the cache's
-  # entries are built from modules the database's mapping must already describe, so
-  # rest_for_one restarts the cache whenever the database restarts. Sync comes last
-  # for the same reason: what its evaluators hold was read through that connection,
-  # and the windows they run come from the cache behind them.
+  # The database, the query cache and sync form a restart-ordered unit. The cache reads the
+  # build's dump rather than deriving anything from the mapping, but its entries still describe
+  # the model the database serves, so rest_for_one restarts it whenever the database restarts and
+  # nothing is left answering for a model that has gone. Sync comes last because what its
+  # evaluators hold was read through that connection, and the windows they run come from the
+  # cache behind them.
 
   use Supervisor
 

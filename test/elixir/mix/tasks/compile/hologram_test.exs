@@ -37,6 +37,35 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   @num_pages Enum.count(Reflection.list_pages())
 
+  # This project's components include the ones the extractor and the validators exist to REFUSE -
+  # a capture that recurses, one that reads a field off an integer, a query on a type declaring no
+  # allow lines. A real app has none, so the task sweeps every component there and the build fails
+  # on the first mistake, which is the point. Here they are filtered by ASKING the builder rather
+  # than by listing modules, so a negative fixture added later joins the filter instead of breaking
+  # this suite.
+  defp buildable_component_modules do
+    entity_types = Reflection.list_entities()
+
+    Enum.filter(Reflection.list_components(), fn module ->
+      not declares_query_prop?(module) or buildable_queries?(module, entity_types)
+    end)
+  end
+
+  defp buildable_queries?(module, entity_types) do
+    Compiler.build_queries([module], entity_types)
+    true
+  rescue
+    Hologram.CompileError -> false
+  end
+
+  # Only a component declaring a from_query prop can be refused - one without produces no terms,
+  # so neither the extractor nor the two validations have anything to object to. Asking the cheap
+  # question first keeps this out of the suite's timing.
+  defp declares_query_prop?(module) do
+    Reflection.has_function?(module, :__props__, 0) and
+      Enum.any?(module.__props__(), fn {_name, _type, opts} -> opts[:from_query] end)
+  end
+
   defp count_plt_processes do
     Enum.count(Process.list(), fn pid ->
       case Process.info(pid, :dictionary) do
@@ -122,6 +151,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test_page_bundles(opts)
     test_page_digest_plt(opts)
     test_page_windows_plt(opts)
+    test_queries_plt(opts)
     test_runtime_bundle(opts)
   end
 
@@ -228,6 +258,35 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert window_id =~ ~r/^[0-9a-f]{32}$/
   end
 
+  defp test_queries_plt(opts) do
+    queries_plt_dump_path = Path.join(opts[:build_dir], Reflection.queries_plt_dump_file_name())
+
+    assert File.exists?(queries_plt_dump_path)
+
+    queries_plt = PLT.start()
+    PLT.load(queries_plt, queries_plt_dump_path)
+    queries = PLT.get_all(queries_plt)
+
+    query_cache_keys =
+      queries
+      |> Map.keys()
+      |> Enum.sort()
+
+    assert query_cache_keys == [:entries, :prop_params, :windows]
+
+    # The two artifacts have to name one window between them: the page windows say which windows a
+    # page downloads, and this is where such an id resolves back to the term that fills it.
+    page_windows_plt = PLT.start()
+
+    PLT.load(
+      page_windows_plt,
+      Path.join(opts[:build_dir], Reflection.page_windows_plt_dump_file_name())
+    )
+
+    assert [window_id] = PLT.get!(page_windows_plt, PageModule8)
+    assert Map.has_key?(queries.windows, window_id)
+  end
+
   defp test_runtime_bundle(opts) do
     num_runtime_bundles =
       opts[:static_dir]
@@ -290,6 +349,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     opts = [
       assets_dir: @assets_dir,
       build_dir: @build_dir,
+      component_modules: buildable_component_modules(),
       esbuild_bin_path: Path.join([test_node_modules_path, ".bin", "esbuild"]),
       js_dir: Path.join(@lib_assets_dir, "js"),
       node_modules_path: test_node_modules_path,

@@ -128,8 +128,13 @@ defmodule Hologram.Compiler do
     templatables = page_modules ++ Reflection.list_components()
     analysis = CallGraph.server_callback_analysis_by_templatable(graph, templatables)
 
+    # Swept once here and handed to every extraction below. The extractor forks a placeholder
+    # entity over this list and re-enters the capture's body once per candidate, so a fork left to
+    # read it for itself reads it once per variant.
+    all_entity_types = Reflection.list_entities()
+
     Map.new(page_modules, fn page_module ->
-      window_ids = page_window_ids(page_module, call_graph, analysis)
+      window_ids = page_window_ids(page_module, call_graph, analysis, all_entity_types)
 
       # Deduplicated because the grants window is derivable by an ordinary query: the grant entity
       # is an entity type like any other, so a page listing grants and checking permissions reaches
@@ -190,7 +195,7 @@ defmodule Hologram.Compiler do
   @doc """
   Builds the call graph of all modules in the given IR PLT.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_call_graph_1/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_call_graph_1/README.md
   """
   @spec build_call_graph(PLT.t()) :: CallGraph.t()
   def build_call_graph(ir_plt) do
@@ -207,7 +212,7 @@ defmodule Hologram.Compiler do
   @doc """
   Builds IR persistent lookup table (PLT) of all modules in the project.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_ir_plt_1/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_ir_plt_0/README.md
   """
   @spec build_ir_plt(T.opts()) :: PLT.t()
   # credo:disable-for-lines:26 Credo.Check.Refactor.Nesting
@@ -245,7 +250,7 @@ defmodule Hologram.Compiler do
   @doc """
   Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_module_digest_plt!_1/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_module_digest_plt!_0/README.md
   """
   @spec build_module_digest_plt!(T.opts()) :: PLT.t()
   def build_module_digest_plt!(opts \\ []) do
@@ -293,6 +298,58 @@ defmodule Hologram.Compiler do
   def build_page_windows_plt(page_windows, opts) do
     plt = PLT.start(items: Map.to_list(page_windows), supervisor: opts[:supervisor])
     dump_path = Path.join([opts[:build_dir], Reflection.page_windows_plt_dump_file_name()])
+
+    {plt, dump_path}
+  end
+
+  @doc """
+  Collects the registered queries of the given component modules and derives what a running
+  Hologram app holds for them: the registry entries keyed by query content id, the argument names
+  of every parameterized capture keyed by `{module, prop name}`, and the term behind each window
+  keyed by window id.
+
+  The component modules are every component of the build rather than the ones pages reach, because
+  what reads the result is the renderer and the sync layer, which answer for any component that
+  renders.
+
+  Raises Hologram.CompileError when a registered query reads an entity type declaring no allow
+  lines - default deny makes it statically dead, returning no rows when it is the query's root and
+  no embedded row when it is an include target - and when a registered query filters or orders on
+  a server-only attribute, which the client never holds and so could never evaluate locally.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_2/README.md
+  """
+  @spec build_queries(list(module), list(module)) :: %{
+          entries: %{String.t() => %{atom => any}},
+          prop_params: %{{module, atom} => list(atom | nil)},
+          windows: %{String.t() => %{atom => any}}
+        }
+  def build_queries(component_modules, entity_types) do
+    module_queries =
+      Enum.map(component_modules, &{&1, QueryExtractor.extract_module_queries(&1, entity_types)})
+
+    Enum.each(module_queries, &validate_readable_queries!/1)
+    Enum.each(module_queries, &validate_client_evaluable_queries!/1)
+
+    terms = Enum.flat_map(module_queries, fn {_module, module_terms} -> module_terms end)
+    entries = Registry.build(terms)
+
+    windows =
+      entries
+      |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
+      |> put_grants_window()
+
+    %{entries: entries, prop_params: prop_params_index(component_modules), windows: windows}
+  end
+
+  @doc """
+  Builds the registered queries PLT, whose items are the entries, prop params and windows a
+  running app reads, and returns it with the path to dump it at.
+  """
+  @spec build_queries_plt(%{atom => any}, T.opts()) :: {PLT.t(), T.file_path()}
+  def build_queries_plt(queries, opts) do
+    plt = PLT.start(items: Map.to_list(queries), supervisor: opts[:supervisor])
+    dump_path = Path.join([opts[:build_dir], Reflection.queries_plt_dump_file_name()])
 
     {plt, dump_path}
   end
@@ -459,7 +516,7 @@ defmodule Hologram.Compiler do
   Includes the source maps of the output files.
   The output files' and source maps' file names contain hex digest.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/bundle_2/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/bundle_2/README.md
   """
   @spec bundle(list({term, T.file_path(), String.t()}), T.opts()) :: list(map)
   def bundle(entry_files_info, opts) do
@@ -620,7 +677,7 @@ defmodule Hologram.Compiler do
   @doc """
   Compares two module digest PLTs and returns the added, removed, and edited modules lists.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/diff_module_digest_plts_2/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/diff_module_digest_plts_2/README.md
   """
   @spec diff_module_digest_plts(PLT.t(), PLT.t()) :: %{
           added_modules: list(module),
@@ -734,7 +791,7 @@ defmodule Hologram.Compiler do
   @doc """
   Installs JavaScript deps if package.json has changed or if the deps haven't been installed yet.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_install_js_deps_2/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/maybe_install_js_deps_2/README.md
   """
   @spec maybe_install_js_deps(T.file_path(), T.file_path()) :: :ok | nil
   def maybe_install_js_deps(assets_dir, build_dir) do
@@ -756,7 +813,7 @@ defmodule Hologram.Compiler do
   @doc """
   Loads call graph from a dump file if the file exists or creates an empty call graph.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_call_graph_1/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/maybe_load_call_graph_1/README.md
   """
   @spec maybe_load_call_graph(T.file_path(), T.opts()) :: {CallGraph.t(), String.t()}
   def maybe_load_call_graph(build_dir, opts \\ []) do
@@ -770,7 +827,7 @@ defmodule Hologram.Compiler do
   @doc """
   Loads IR PLT from a dump file if the file exists or creates an empty PLT.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_ir_plt_1/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/maybe_load_ir_plt_1/README.md
   """
   @spec maybe_load_ir_plt(T.file_path()) :: {PLT.t(), String.t()}
   def maybe_load_ir_plt(build_dir) do
@@ -784,7 +841,7 @@ defmodule Hologram.Compiler do
   @doc """
   Loads module digest PLT from a dump file if the file exists or creates an empty PLT.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_module_digest_plt_1/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/maybe_load_module_digest_plt_1/README.md
   """
   @spec maybe_load_module_digest_plt(T.file_path(), T.opts()) :: {PLT.t(), String.t()}
   def maybe_load_module_digest_plt(build_dir, opts \\ []) do
@@ -838,7 +895,15 @@ defmodule Hologram.Compiler do
       |> Enum.flat_map(&page_component_modules(&1, call_graph, analysis))
       |> Enum.uniq()
 
-    terms = Enum.flat_map(component_modules, &QueryExtractor.extract_module_queries/1)
+    # One sweep for both the extraction below and the policied set: the extractor forks over this
+    # list once per variant if it reads it itself, and policied_entity_types/1 filters the same one.
+    all_entity_types = Reflection.list_entities()
+
+    terms =
+      Enum.flat_map(
+        component_modules,
+        &QueryExtractor.extract_module_queries(&1, all_entity_types)
+      )
 
     queried_entity_types =
       Enum.reduce(terms, MapSet.new(), fn term, types ->
@@ -849,7 +914,7 @@ defmodule Hologram.Compiler do
       if permission_checking? do
         queried_entity_types
         |> MapSet.put(RoleGrant)
-        |> MapSet.union(policied_entity_types())
+        |> MapSet.union(policied_entity_types(all_entity_types))
       else
         queried_entity_types
       end
@@ -925,7 +990,7 @@ defmodule Hologram.Compiler do
   @doc """
   Raises a compilation error if any page module lacks a specified route or layout.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/validate_page_modules_1/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/validate_page_modules_1/README.md
   """
   @spec validate_page_modules(list(module)) :: :ok
   def validate_page_modules(page_modules) do
@@ -1179,10 +1244,10 @@ defmodule Hologram.Compiler do
     |> Enum.filter(&Reflection.component?/1)
   end
 
-  defp page_query_terms(page_module, call_graph, analysis) do
+  defp page_query_terms(page_module, call_graph, analysis, all_entity_types) do
     page_module
     |> page_component_modules(call_graph, analysis)
-    |> Enum.flat_map(&QueryExtractor.extract_module_queries/1)
+    |> Enum.flat_map(&QueryExtractor.extract_module_queries(&1, all_entity_types))
   end
 
   # A component declaring no parameterized capture is left out rather than carried as an empty
@@ -1191,6 +1256,18 @@ defmodule Hologram.Compiler do
     component_modules
     |> Enum.map(&{&1, QueryExtractor.extract_prop_params(&1)})
     |> Enum.reject(fn {_module, params} -> params == [] end)
+    |> Map.new()
+  end
+
+  # The same params `prop_params/1` collects for the bundle, keyed by the pair a renderer asks
+  # about rather than by module - the bundle ships one entry per component and reads it whole,
+  # while a render looks up one prop of one component at a time.
+  defp prop_params_index(component_modules) do
+    component_modules
+    |> prop_params()
+    |> Enum.flat_map(fn {module, params} ->
+      Enum.map(params, fn {prop_name, param_names} -> {{module, prop_name}, param_names} end)
+    end)
     |> Map.new()
   end
 
@@ -1296,9 +1373,9 @@ defmodule Hologram.Compiler do
 
   # TODO: Drop the umbrella? param and resolve the beam path with :code.which/1
   # when resolve_beam_source/2 goes (see the removal note there).
-  defp page_window_ids(page_module, call_graph, analysis) do
+  defp page_window_ids(page_module, call_graph, analysis, all_entity_types) do
     page_module
-    |> page_query_terms(call_graph, analysis)
+    |> page_query_terms(call_graph, analysis, all_entity_types)
     |> Enum.map(&window_id/1)
     |> Enum.uniq()
     |> Enum.sort()
@@ -1306,8 +1383,8 @@ defmodule Hologram.Compiler do
 
   # RoleGrant's policy is framework-supplied rather than declared, so its empty __policies__ does
   # not exclude it - it joins by name beside this set.
-  defp policied_entity_types do
-    Reflection.list_entities()
+  defp policied_entity_types(all_entity_types) do
+    all_entity_types
     |> Enum.filter(&(&1.__policies__() != []))
     |> MapSet.new()
   end
@@ -1797,6 +1874,134 @@ defmodule Hologram.Compiler do
     if beam_path != :non_existing do
       beam_path
     end
+  end
+
+  defp dead_include_message(module, dead_entity_types) do
+    "the registered query in #{inspect(module)} includes #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny leaves the embed empty in every row. Add allow lines, or drop the include."
+  end
+
+  defp dead_root_message(module, dead_entity_types) do
+    "the registered query in #{inspect(module)} reads #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny returns no rows to any session. Add allow lines, or drop the query."
+  end
+
+  defp declare_verb([_single_entity_type]), do: "declares"
+
+  defp declare_verb(_entity_types), do: "declare"
+
+  defp included_entity_types(term) do
+    term.include
+    |> Map.values()
+    |> Enum.flat_map(&queried_entity_types/1)
+    |> Enum.uniq()
+  end
+
+  defp listing(entity_types) do
+    Enum.map_join(entity_types, ", ", &inspect/1)
+  end
+
+  # Registered whenever the app HAS a grant store, because this is a lookup table: what decides
+  # whether any client subscribes is the BUILD, which knows whether a page can check permissions
+  # locally. An entry nothing asks for costs one map key, where a missing entry would answer
+  # :no_window to a client the build did tell to ask.
+  #
+  # An app designating no user entity type has no grant store - the grant entity joins the data
+  # model only with one - so there is no table to evaluate the window against and nothing to
+  # register.
+  defp put_grants_window(windows) do
+    if Reflection.user_entity() do
+      window = Auth.grants_window()
+
+      Map.put_new(windows, Registry.id(window), window)
+    else
+      windows
+    end
+  end
+
+  defp queried_entity_types(term) do
+    nested_types =
+      term.include
+      |> Map.values()
+      |> Enum.flat_map(&queried_entity_types/1)
+
+    Enum.uniq([term.entity | nested_types])
+  end
+
+  defp server_only_listing(references) do
+    Enum.map_join(references, ", ", fn {entity_type, names} ->
+      "#{inspect(entity_type)} #{Enum.map_join(names, ", ", &inspect/1)}"
+    end)
+  end
+
+  defp server_only_query_message(module, references) do
+    "the registered query in #{inspect(module)} filters or orders on server_only attributes (#{server_only_listing(references)}) - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API."
+  end
+
+  # Pairs each term entity with the server-only attributes its own filter and order_by name,
+  # walking include sub-terms so a reference nested under an include is reached too.
+  defp server_only_references(term) do
+    server_only_names = Entity.server_only_attribute_names(term.entity)
+    filter_names = Enum.map(term.filter, fn {name, _operator, _value} -> name end)
+    order_by_names = Enum.map(term.order_by, fn {name, _direction} -> name end)
+
+    referenced_names =
+      (filter_names ++ order_by_names)
+      |> Enum.filter(&(&1 in server_only_names))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    nested_references =
+      term.include
+      |> Map.values()
+      |> Enum.flat_map(&server_only_references/1)
+
+    if referenced_names == [] do
+      nested_references
+    else
+      [{term.entity, referenced_names} | nested_references]
+    end
+  end
+
+  # A registered query is provisioned to the client, which evaluates it locally over rows that
+  # never carry a server-only value - so it must not reference one.
+  defp validate_client_evaluable_queries!({module, module_terms}) do
+    Enum.each(module_terms, fn term ->
+      case server_only_references(term) do
+        [] ->
+          :ok
+
+        references ->
+          raise Hologram.CompileError, message: server_only_query_message(module, references)
+      end
+    end)
+  end
+
+  defp validate_readable_includes!(module, term) do
+    dead_entity_types =
+      term
+      |> included_entity_types()
+      |> Policy.dead_entity_types()
+
+    if dead_entity_types != [] do
+      raise Hologram.CompileError, message: dead_include_message(module, dead_entity_types)
+    end
+
+    :ok
+  end
+
+  # A registered query naming an entity type with no allow lines is statically dead: the policied
+  # read path composes default deny into every statement it reaches. The root and an include target
+  # fail differently, so they are checked and reported apart - and a dead root is reported alone,
+  # because a query returning no rows produces no embeds to be empty either.
+  defp validate_readable_queries!({module, module_terms}) do
+    Enum.each(module_terms, fn term ->
+      case Policy.dead_entity_types([term.entity]) do
+        [] ->
+          validate_readable_includes!(module, term)
+
+        dead_entity_types ->
+          raise Hologram.CompileError, message: dead_root_message(module, dead_entity_types)
+      end
+    end)
   end
 
   defp grants_window_id do

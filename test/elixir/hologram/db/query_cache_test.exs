@@ -11,13 +11,8 @@ defmodule Hologram.DB.QueryCacheTest do
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Registry
+  alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Component.Module11
-  alias Hologram.Test.Fixtures.Component.Module15
-  alias Hologram.Test.Fixtures.Component.Module16
-  alias Hologram.Test.Fixtures.Component.Module17
-  alias Hologram.Test.Fixtures.Component.Module18
-  alias Hologram.Test.Fixtures.Component.Module19
-  alias Hologram.Test.Fixtures.Component.Module20
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
   use_module_stub :query_cache
@@ -100,80 +95,6 @@ defmodule Hologram.DB.QueryCacheTest do
     assert :persistent_term.get(QueryCacheStub.persistent_term_key()) == expected_data()
   end
 
-  test "init/1 raises for a registered query whose root type declares no allow lines" do
-    stub(QueryCacheMock, :component_modules, fn -> [Module15] end)
-
-    expected_msg =
-      "the registered query in Hologram.Test.Fixtures.Component.Module15 reads " <>
-        "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
-        "default deny returns no rows to any session. Add allow lines, or drop the query."
-
-    assert_error Hologram.CompileError, expected_msg, fn ->
-      init(nil)
-    end
-  end
-
-  test "init/1 raises for a registered query whose include target declares no allow lines" do
-    stub(QueryCacheMock, :component_modules, fn -> [Module16] end)
-
-    expected_msg =
-      "the registered query in Hologram.Test.Fixtures.Component.Module16 includes " <>
-        "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
-        "default deny leaves the embed empty in every row. Add allow lines, or drop the include."
-
-    assert_error Hologram.CompileError, expected_msg, fn ->
-      init(nil)
-    end
-  end
-
-  test "init/1 populates a registered query that reads a type with server-only attributes without referencing them" do
-    stub(QueryCacheMock, :component_modules, fn -> [Module20] end)
-
-    assert init(nil) == {:ok, nil}
-  end
-
-  test "init/1 raises for a registered query filtering on a server-only attribute" do
-    stub(QueryCacheMock, :component_modules, fn -> [Module17] end)
-
-    expected_msg =
-      "the registered query in Hologram.Test.Fixtures.Component.Module17 filters or orders on " <>
-        "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-        "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-        "reference, or read the rows through the trusted backend API."
-
-    assert_error Hologram.CompileError, expected_msg, fn ->
-      init(nil)
-    end
-  end
-
-  test "init/1 raises for a registered query ordering on a server-only attribute" do
-    stub(QueryCacheMock, :component_modules, fn -> [Module18] end)
-
-    expected_msg =
-      "the registered query in Hologram.Test.Fixtures.Component.Module18 filters or orders on " <>
-        "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-        "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-        "reference, or read the rows through the trusted backend API."
-
-    assert_error Hologram.CompileError, expected_msg, fn ->
-      init(nil)
-    end
-  end
-
-  test "init/1 raises for a registered query filtering on a server-only attribute inside an include" do
-    stub(QueryCacheMock, :component_modules, fn -> [Module19] end)
-
-    expected_msg =
-      "the registered query in Hologram.Test.Fixtures.Component.Module19 filters or orders on " <>
-        "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-        "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-        "reference, or read the rows through the trusted backend API."
-
-    assert_error Hologram.CompileError, expected_msg, fn ->
-      init(nil)
-    end
-  end
-
   describe "prop_params/2" do
     test "returns the argument names of a parameterized from_query prop" do
       init(nil)
@@ -214,14 +135,24 @@ defmodule Hologram.DB.QueryCacheTest do
     end
   end
 
-  test "reload/0" do
+  test "reload/0 picks up the queries the build has dumped since" do
     init(nil)
 
     key = QueryCacheStub.persistent_term_key()
-    :persistent_term.put(key, :dummy_value)
+    assert :persistent_term.get(key) == expected_data()
+
+    # What live reload does: the recompile ahead of it rewrites the dump, and this reads it again.
+    dump_query_cache(QueryCacheStub, [Module11])
 
     reload()
 
-    assert :persistent_term.get(key) == expected_data()
+    reloaded = :persistent_term.get(key)
+
+    assert reloaded != expected_data()
+    assert reloaded.prop_params == %{{Module11, :entities} => [:min_b]}
+  end
+
+  test "dump_path/0 reads from the build directory" do
+    assert dump_path() == Path.join([Reflection.build_dir(), "queries.plt"])
   end
 end

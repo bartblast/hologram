@@ -58,7 +58,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   @doc """
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/mix/tasks/compile.hologram/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/mix/tasks/compile.hologram/README.md
   """
   @impl Mix.Task.Compiler
   def run(opts) do
@@ -159,10 +159,16 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       Compiler.validate_page_modules(page_modules)
 
+      # Overridable so this project's own test suite can compile: it holds components the build
+      # must refuse - the extractor's and the validators' negative fixtures - which a real app
+      # never has. Defaulted here rather than in build_default_opts/0 so a run that skips
+      # compilation does not pay the sweep.
+      component_modules = opts[:component_modules] || Reflection.list_components()
+
       # Runs here rather than in each module's own compilation: every module is compiled by now, so
       # a used component's __props__/0 is simply callable, with no compile-time dependency on it and
       # no deadlock when a component renders itself.
-      Compiler.validate_prop_usages(page_modules ++ Reflection.list_components(), ir_plt)
+      Compiler.validate_prop_usages(page_modules ++ component_modules, ir_plt)
 
       # A builder's argument names bind the consuming component's like-named declared slots, and
       # a remote capture makes those names a cross-module contract - so a renamed argument fails
@@ -195,6 +201,15 @@ defmodule Mix.Tasks.Compile.Hologram do
           call_graph_for_runtime,
           permission_checking_pages != []
         )
+
+      # Every component of the build, not the ones pages reach: what reads this is the renderer and
+      # the sync layer, which answer for any component that renders. Built here and loaded at boot,
+      # like the page windows - so the two registered-query validations fail the BUILD rather than
+      # the first boot, and a release starts without running the extractor at all.
+      {queries_plt, queries_plt_dump_path} =
+        component_modules
+        |> Compiler.build_queries(Reflection.list_entities())
+        |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, sup))
 
       runtime_entry_file_path =
         Compiler.create_runtime_entry_file(
@@ -234,6 +249,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       PLT.dump(page_digest_plt, page_digest_plt_dump_path)
       PLT.dump(page_windows_plt, page_windows_plt_dump_path)
+      PLT.dump(queries_plt, queries_plt_dump_path)
       CallGraph.dump(call_graph, call_graph_dump_path)
       PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
 
