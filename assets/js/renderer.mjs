@@ -41,6 +41,22 @@ export default class Renderer {
   // once `.elm` exists. renderPage() resets this.
   static resizeBindings = [];
 
+  // Based on Elixir Renderer.encode_tree/1, which it inverts clause for clause.
+  //
+  // The payload arrives already parsed out of the response body, so this is not a parse: it is
+  // the walk that turns plain JavaScript values into the boxed terms renderDom was built to
+  // consume. A node's shape says what it is - an element is the only node of length 3, a comment
+  // and a doctype are length 2, and text is a bare string.
+  //
+  // TODO: delete this once the vdom renderer walks plain JavaScript literals instead of boxed
+  // terms. It exists only to bridge the wire form to renderDom, and renderDom then walks what it
+  // builds a second time to produce vnodes - two passes and 13.6 MB of boxed terms on the largest
+  // page measured, all of which a reconciler reading the payload directly would skip.
+  // See: docs/navigation_payload_wire_format.md
+  static decodeTree(tree) {
+    return Type.list(tree.map(Renderer.#decodeNode));
+  }
+
   // Based on render_tree/3
   //
   // WARNING: on navigation the server ships this client the same render as an evaluated tree
@@ -161,6 +177,14 @@ export default class Renderer {
   // or the render that follows rebuilds nodes instead of adopting the ones this put on screen.
   // Both go through renderDom and both finalize the document's children the same way, which is
   // what holds the two together.
+  //
+  // TODO: when the vdom renderer is rewritten, the decodeTree/renderDom pair collapses into one
+  // walk. Sharing renderDom is what keeps this equal to renderPage today; a second walker would
+  // have to reproduce every rule renderDom applies to a tree - the boolean attribute rule, the
+  // controlled value/checked staging and its hooks, the three resource-key rules, $key resolving
+  // to the last one, and finalizeChildren settling repeats - and drift in any of them shows up as
+  // a silently rebuilt DOM rather than a failing test.
+  // See: docs/navigation_payload_wire_format.md
   static renderTree(tree) {
     const children = Vdom.finalizeChildren(
       Renderer.renderDom(
@@ -690,6 +714,48 @@ export default class Renderer {
   // Event attributes are exempt, because a tag may carry multiple bindings which share a base name
   // once their modifiers are decomposed at compile time, e.g. both $key_down.enter and
   // $key_down.escape are named "$key_down".
+  // A flat run of alternating names and values, with null for an attribute that has no value.
+  static #decodeAttributes(attributes) {
+    const decoded = new Array(attributes.length / 2);
+
+    for (let i = 0, j = 0; i < attributes.length; i += 2, j += 1) {
+      const value = attributes[i + 1];
+
+      decoded[j] = Type.tuple([
+        Type.bitstring(attributes[i]),
+        value === null
+          ? Type.list([])
+          : Type.keywordList([[Type.atom("text"), Type.bitstring(value)]]),
+      ]);
+    }
+
+    return decoded;
+  }
+
+  static #decodeNode(node) {
+    if (typeof node === "string") {
+      return Type.tuple([Type.atom("text"), Type.bitstring(node)]);
+    }
+
+    if (node.length === 3) {
+      return Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(node[0]),
+        Type.list(Renderer.#decodeAttributes(node[1])),
+        Type.list(node[2].map(Renderer.#decodeNode)),
+      ]);
+    }
+
+    if (node[0] === "c") {
+      return Type.tuple([
+        Type.atom("public_comment"),
+        Type.list(node[1].map(Renderer.#decodeNode)),
+      ]);
+    }
+
+    return Type.tuple([Type.atom("doctype"), Type.bitstring(node[1])]);
+  }
+
   static #dedupeAttributes(attrs) {
     const lastIndexByName = new Map();
 

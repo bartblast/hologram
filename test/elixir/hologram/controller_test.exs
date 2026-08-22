@@ -20,6 +20,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Session
   alias Hologram.Server
+  alias Hologram.Template.Renderer
   alias Hologram.Test.Fixtures.Controller.Module1
   alias Hologram.Test.Fixtures.Controller.Module10
   alias Hologram.Test.Fixtures.Controller.Module11
@@ -465,13 +466,13 @@ defmodule Hologram.ControllerTest do
       assert %{pageDigest: "abcdef1234567890", type: "page"} = build_page_data_payload(fields)
     end
 
-    # Each term lands under its own key: the encoded values are opaque strings, so a pair of them
-    # swapped would be caught here rather than by a client behaving oddly.
-    test "encodes each term under its own key", %{fields: fields} do
+    # Each value lands under its own key, and the two are encoded differently: the page module as
+    # JavaScript the client evaluates, the tree as data it gets already parsed.
+    test "encodes each value under its own key", %{fields: fields} do
       payload = build_page_data_payload(fields)
 
       assert payload.pageModule == Encoder.encode_term!(fields.page_module)
-      assert payload.tree == Encoder.encode_term!(fields.tree)
+      assert payload.tree == Renderer.encode_tree(fields.tree)
     end
 
     # Everything a mount reads rides inside the tree, in the script the server writes into every
@@ -2436,7 +2437,11 @@ defmodule Hologram.ControllerTest do
 
       assert response["type"] == "page"
       assert response["pageDigest"] == "dummy_module_4_digest"
-      assert response["tree"] =~ ~r/^Type\.list\(/
+
+      # The fixture's template is empty and its layout is a bare slot, so the render is empty too.
+      # That the tree arrives as data rather than as source is what matters here; the tests that
+      # follow cover what a non-empty one carries.
+      assert response["tree"] == []
     end
 
     test "casts page params and carries them in the payload" do
@@ -2451,8 +2456,10 @@ defmodule Hologram.ControllerTest do
 
       # The page renders its params, so the tree carrying the render shows them cast: an uncast
       # param would be inspected as a string.
-      assert response["tree"] =~ "param_aaa = 111"
-      assert response["tree"] =~ "param_bbb = 222"
+      tree_json = Jason.encode!(response["tree"])
+
+      assert tree_json =~ "param_aaa = 111"
+      assert tree_json =~ "param_bbb = 222"
     end
 
     test "carries the render as a tree with the Realtime JS interpolated" do
@@ -2465,9 +2472,11 @@ defmodule Hologram.ControllerTest do
 
       response = Jason.decode!(conn.resp_body)
 
-      assert response["tree"] =~ "Module5 page"
-      assert response["tree"] =~ "selfEchoes: Type.list([])"
-      refute response["tree"] =~ "JS_PLACEHOLDER"
+      tree_json = Jason.encode!(response["tree"])
+
+      assert tree_json =~ "Module5 page"
+      assert tree_json =~ "selfEchoes: Type.list([])"
+      refute tree_json =~ "JS_PLACEHOLDER"
     end
 
     test "marks a page payload as page data" do
@@ -2592,8 +2601,10 @@ defmodule Hologram.ControllerTest do
 
       response = Jason.decode!(conn.resp_body)
 
-      assert response["tree"] =~ "hello world"
-      assert response["tree"] =~ "foo/bar"
+      tree_json = Jason.encode!(response["tree"])
+
+      assert tree_json =~ "hello world"
+      assert tree_json =~ "foo/bar"
     end
 
     test "updates Plug.Conn session" do
