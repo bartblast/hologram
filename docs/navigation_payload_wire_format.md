@@ -277,7 +277,7 @@ Kept here because it is the fastest variant measured and the one to reconsider f
 
 The whole tree becomes one preorder array of integers against four dictionaries:
 
-```
+```text
 payload  =  [tags, names, values, texts, tokens]
 tokens   =  nRoots, node*
 
@@ -292,7 +292,7 @@ doctype  =  an element whose tagIdx is the reserved " doctype" code, 0 attrs, 1 
 
 Worked examples, each verified to decode back to the exact input tree:
 
-```
+```text
 {:text, "Hologram"}
   [[],[],[],["Hologram"],[1,-1]]
 
@@ -445,7 +445,7 @@ Sorted by uncompressed size on the erlang page. Sizes in KB, times in ms. The cl
 
 The same node under every variant, envelope included: `[tags, names, values, texts, tree]`.
 
-```
+```text
 full-bare-flat-none               [[],[],[],[],[["element","div",["class","big","$key","k1:0","hidden",null],["Hologram",["public_comment",[" x "]]]]]]
 full-bare-flat-tn                 [["div"],["class","$key","hidden"],[],[],[["element",0,[0,"big",1,"k1:0",2,null],["Hologram",["public_comment",[" x "]]]]]]
 full-bare-flat-tnv                [["div"],["class","$key","hidden"],["big","k1:0"],[],[["element",0,[0,0,1,1,2,-1],["Hologram",["public_comment",[" x "]]]]]]
