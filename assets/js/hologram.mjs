@@ -107,6 +107,12 @@ export default class Hologram {
 
   static #historyId = null;
   static #isInitiated = false;
+
+  // A navigation's mount data, held between #showNewPage and the mount. The two are not always
+  // adjacent: when the destination's code has not loaded yet the mount runs from the bundle's
+  // announcement instead, so the state waits here rather than being passed along.
+  static #mountData = null;
+
   static #pageModule = null;
   static #pageParams = null;
   static #pendingJsInteropActions = [];
@@ -1142,8 +1148,14 @@ export default class Hologram {
   // What the page was mounted with, left behind by the script the server wrote into the page.
   // A navigation reaches it the same way a document load does, by patching in the page the
   // server described, that script included.
+  // A navigation carries the mount data as payload fields, which #showNewPage decodes and holds.
+  // A loaded document has no payload, so it carries the same six values as an inline script that
+  // defines pageMountData - the one channel markup has for structured state.
   static #loadMountData() {
-    const mountData = globalThis.Hologram.pageMountData(Hologram.#deps);
+    const mountData =
+      $.#mountData ?? globalThis.Hologram.pageMountData(Hologram.#deps);
+
+    $.#mountData = null;
 
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
@@ -1354,6 +1366,23 @@ export default class Hologram {
       globalThis.Hologram.pageScriptLoaded = false;
       $.#loadPageBundle($.#pageBundlePath(payload.pageDigest));
     }
+
+    // Readable before the patch, rather than as a side effect of a script the patch inserts and
+    // the browser then runs. The page module is already decoded above, so it is reused.
+    $.#mountData = {
+      componentRegistry: Interpreter.evaluateJavaScriptExpression(
+        payload.componentRegistry,
+      ),
+      pageModule: pageModule,
+      pageParams: Interpreter.evaluateJavaScriptExpression(payload.pageParams),
+      selfEchoes: Interpreter.evaluateJavaScriptExpression(payload.selfEchoes),
+      subReceiptAdds: Interpreter.evaluateJavaScriptExpression(
+        payload.subReceiptAdds,
+      ),
+      subReceiptDrops: Interpreter.evaluateJavaScriptExpression(
+        payload.subReceiptDrops,
+      ),
+    };
 
     // See: docs/navigation_payload_wire_format.md
     const tree = Renderer.decodeTree(payload.tree);

@@ -1372,9 +1372,17 @@ describe("Hologram", () => {
       ),
     ];
 
+    // The mount data the server used to write into an inline script, carried as payload fields.
+    const encodedComponentRegistry = `Type.map([[Type.bitstring("page"), Type.map([[Type.atom("module"), ${encodedModule7}], [Type.atom("struct"), Type.componentStruct({state: Type.map([[Type.atom("count"), Type.integer(7)]])})]])]])`;
+
     const payloadFor = (pageDigest, bodyText = "page content") => ({
+      componentRegistry: encodedComponentRegistry,
       pageDigest: pageDigest,
       pageModule: encodedModule7,
+      pageParams: encodedNoParams,
+      selfEchoes: "Type.list([])",
+      subReceiptAdds: "Type.list([])",
+      subReceiptDrops: "Type.list([])",
       tree: treeFor(pageDigest, bodyText),
       type: "page",
     });
@@ -1485,6 +1493,43 @@ describe("Hologram", () => {
         patchStub = null;
 
         removeBundleScripts();
+      });
+
+      // The point of carrying the state beside the render: it is readable without any script
+      // having run, so it no longer depends on the patch inserting one and the browser executing
+      // it. No mount data script exists in this tree at all.
+      it("makes the page's mount data readable before the patch", async () => {
+        delete globalThis.Hologram.pageMountData;
+        globalThis.Hologram.pageScriptLoaded = true;
+
+        await Hologram.loadNewPage("/target", payloadFor("mount-data"));
+
+        // Nothing defined the carrier, so the mount can only have read the payload.
+        assert.isUndefined(globalThis.Hologram.pageMountData);
+        assert.notInclude(document.head.innerHTML, "pageMountData");
+      });
+
+      // That the mount then consumes it is a feature test's job - the mount is not reachable from
+      // here, since it needs either the destination's code already registered or its bundle to
+      // announce itself. What is provable here is that the payload's fields are decoded during
+      // the swap: a field that cannot be evaluated fails it.
+      it("decodes the payload's mount data during the swap", async () => {
+        globalThis.Hologram.pageScriptLoaded = true;
+
+        const payload = {
+          ...payloadFor("bad-registry"),
+          componentRegistry: "Type.map([[[",
+        };
+
+        let thrown = null;
+
+        try {
+          await Hologram.loadNewPage("/target", payload);
+        } catch (error) {
+          thrown = error;
+        }
+
+        assert.isNotNull(thrown);
       });
 
       // The property the whole feature rests on: what the server described is on screen while the
