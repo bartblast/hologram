@@ -38,6 +38,45 @@ What changes when it lands:
 
 The chosen format is deliberately cheap to leave: the encoder is one function and the decoder is one function.
 
+## Measured results
+
+Measured on the branch, against hologram_website built with `HOLOGRAM_START=1 MIX_ENV=dev`, served on localhost, driven by headless Chrome over CDP with a trusted click on a visible link. Client figures are the best of four runs; they were stable to within 10%.
+
+### Server, both encodings from the same tree
+
+| | erlang | ++/2 |
+|---|---|---|
+| Render | 73.4 ms | 84.4 ms |
+| Boxed terms: encode | 167.6 ms | 115.4 ms |
+| Boxed terms: size | 4,273.1 KB | 3,179.9 KB |
+| Boxed terms: gzipped | 73.3 KB | 56.5 KB |
+| **Wire form: encode** | **9.7 ms** | **9.4 ms** |
+| **Wire form: size** | **1,195.7 KB** | **1,219.2 KB** |
+| **Wire form: gzipped** | **40.4 KB** | **42.5 KB** |
+| Ratio | 17.2x encode, 3.6x size, 1.8x gzipped | 12.3x encode, 2.6x size, 1.3x gzipped |
+
+Both rows come from one process rendering one tree, so this is a like-for-like comparison rather than two checkouts measured apart. The boxed-terms row already has the linear escaping from #1067 merged, so the 17.2x is the tree encoding alone and does not double-count that fix.
+
+Gzip helps more than expected: the design sketch assumed compression would hide most of the difference, but the wire form is 45% smaller than boxed terms even compressed.
+
+### Client, navigating from `/reference/client-runtime/erlang` to `++/2`
+
+| | |
+|---|---|
+| Click to "page rendered in" | 581.6 ms |
+| `POST /hologram/page/<Module>` | 151.6 ms, 41.3 KB on the wire |
+| Hologram's own `page rendered in` | 324 ms |
+
+Against the numbers this branch was opened on: that navigation took **22,363 ms** on the regressed master and **571 ms** before #1027 introduced the tree. It is now **581.6 ms** - a 38x improvement that lands within 2% of the pre-regression figure while still shipping the whole render tree.
+
+### What now dominates the client
+
+`render()` logs "page rendered in", and it wraps `renderPage`, `patchVirtualDocument` and listener reconciliation - the client's own render after the mount. It is not the decode path. At 324 ms of a 581.6 ms navigation it is the largest single cost, and this branch does not touch it.
+
+That answers the question the Method section flags as unmeasured. The reconciliation constant is large: roughly 55% of the navigation. Decode, by contrast, is 1.1 ms for the page being navigated to, and 1.7 ms for the larger of the two. Any further work on navigation cost belongs in the vdom path, not in the wire format.
+
+These figures are dev-mode: unminified bundles with source maps, served from localhost with no network latency. Production numbers will differ, and the transfer column especially so.
+
 ## Background
 
 Today `Hologram.Controller.build_page_data_payload/1` encodes the tree with `Encoder.encode_term!/1`, producing JavaScript source that reconstructs it - `Type.tuple([Type.atom("element"), Type.bitstring("div"), ...])` - which the client hands to `Interpreter.evaluateJavaScriptExpression` before anything is painted.
