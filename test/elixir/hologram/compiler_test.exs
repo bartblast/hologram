@@ -67,7 +67,7 @@ defmodule Hologram.CompilerTest do
     ]
   end
 
-  describe "aggregate_js_imports/1" do
+  describe "aggregate_js_imports/2" do
     test "empty MFAs list" do
       assert aggregate_js_imports([]) == %{imports: [], bindings: %{}}
     end
@@ -162,9 +162,30 @@ defmodule Hologram.CompilerTest do
                }
              }
     end
+
+    test "skips excluded modules" do
+      mfas = [{Module14, :func, 0}, {Module15, :func, 0}]
+
+      assert aggregate_js_imports(mfas, MapSet.new([Module14])) == %{
+               imports: [
+                 %{from: "chart.js", export: "Chart", alias: "$1"}
+               ],
+               bindings: %{
+                 Module15 => %{
+                   "MyChart" => "$1"
+                 }
+               }
+             }
+    end
+
+    test "skips the imports of a module that is excluded" do
+      mfas = [{Module12, :func, 0}]
+
+      assert aggregate_js_imports(mfas, MapSet.new([Module12])) == %{imports: [], bindings: %{}}
+    end
   end
 
-  describe "build_page_js/6" do
+  describe "build_page_js/7" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
         call_graph
@@ -195,6 +216,7 @@ defmodule Hologram.CompilerTest do
           ir_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
+          MapSet.new(),
           @js_dir
         )
 
@@ -219,6 +241,7 @@ defmodule Hologram.CompilerTest do
           ir_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
+          MapSet.new(),
           @js_dir
         )
 
@@ -243,6 +266,7 @@ defmodule Hologram.CompilerTest do
           ir_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
+          MapSet.new(),
           @js_dir
         )
 
@@ -262,6 +286,7 @@ defmodule Hologram.CompilerTest do
           ir_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
+          MapSet.new(),
           @js_dir
         )
 
@@ -290,6 +315,7 @@ defmodule Hologram.CompilerTest do
           ir_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
+          MapSet.new(),
           @js_dir
         )
 
@@ -319,6 +345,7 @@ defmodule Hologram.CompilerTest do
           ir_plt,
           MapSet.new(),
           server_callback_analysis_by_templatable,
+          MapSet.new(),
           @js_dir
         )
 
@@ -334,6 +361,43 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(
                result,
                ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module18": {"alias_1a": $1}, "Hologram.Test.Fixtures.Compiler.Module22": {"alias_2": $2}});'
+             )
+    end
+
+    test "skips the JS imports of the modules the runtime script registers", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+    } do
+      result =
+        build_page_js(
+          Module23,
+          call_graph,
+          ir_plt,
+          MapSet.new(),
+          server_callback_analysis_by_templatable,
+          MapSet.new([Module18]),
+          @js_dir
+        )
+
+      js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+      js_fixture_2_path = Path.join([@fixtures_dir, "compiler", "js_fixture_2.mjs"])
+
+      assert length(Regex.scan(~r/import \{/, result)) == 1
+      assert String.contains?(result, ~s'import { export_2 as $1 } from "#{js_fixture_2_path}";')
+
+      assert String.contains?(
+               result,
+               ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module22": {"alias_2": $1}});'
+             )
+
+      # The excluded module's function defs still belong to this bundle - only its bindings,
+      # and therefore the JavaScript module they come from, are left to the runtime script.
+      refute String.contains?(result, js_fixture_1_path)
+
+      assert String.contains?(
+               result,
+               ~s/Interpreter.defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module18"/
              )
     end
   end
@@ -830,14 +894,14 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  test "create_page_entry_files/5", %{
+  test "create_page_entry_files/6", %{
     call_graph: call_graph,
     ir_plt: ir_plt,
     runtime_mfas: runtime_mfas
   } do
     opts = [
       js_dir: @js_dir,
-      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_5"])
+      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_6"])
     ]
 
     clean_dir(opts[:tmp_dir])
@@ -854,6 +918,7 @@ defmodule Hologram.CompilerTest do
         page_modules,
         call_graph_without_runtime_mfas,
         ir_plt,
+        MapSet.new(),
         MapSet.new(),
         opts
       )
@@ -1105,6 +1170,26 @@ defmodule Hologram.CompilerTest do
 
       package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       refute File.exists?(package_json_digest_path)
+    end
+  end
+
+  describe "list_js_import_modules/1" do
+    test "returns the modules that declare JS imports" do
+      mfas = [{Module12, :func, 0}, {Enum, :map, 2}, {Module14, :func, 0}]
+
+      assert list_js_import_modules(mfas) == [Module12, Module14]
+    end
+
+    test "filters out Erlang modules, modules without JS imports and duplicates" do
+      mfas = [
+        {:erlang, :+, 2},
+        {Enum, :map, 2},
+        {Module13, :func, 0},
+        {Module12, :func, 0},
+        {Module12, :func_2, 0}
+      ]
+
+      assert list_js_import_modules(mfas) == [Module12]
     end
   end
 
