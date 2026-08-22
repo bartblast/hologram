@@ -470,7 +470,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown attribute option" do
       expected_msg =
-        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :format, :in, :length, :max, :max_length, :min, :min_length, :optional, :server_only, :values"
+        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :format, :in, :length, :max, :max_length, :min, :min_length, :optional, :server_only, :unique, :values"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture10 do
@@ -1132,6 +1132,26 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture85.__attributes__() == [{:title, :string, [server_only: false]}]
     end
 
+    test "accepts a unique attribute" do
+      defmodule InlineEntityFixture88 do
+        use Hologram.Entity
+
+        attribute :slug, :string, unique: true
+      end
+
+      assert InlineEntityFixture88.__attributes__() == [{:slug, :string, [unique: true]}]
+    end
+
+    test "accepts a disabled unique option" do
+      defmodule InlineEntityFixture89 do
+        use Hologram.Entity
+
+        attribute :title, :string, unique: false
+      end
+
+      assert InlineEntityFixture89.__attributes__() == [{:title, :string, [unique: false]}]
+    end
+
     test "rejects non-boolean optional option" do
       expected_msg =
         "invalid optional option :yes for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture9 - the optional option must be true or false"
@@ -1154,6 +1174,19 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           attribute :token, :string, server_only: "yes"
+        end
+      end
+    end
+
+    test "rejects non-boolean unique option" do
+      expected_msg =
+        "invalid unique option \"yes\" for attribute :slug in Hologram.Entity.ValidatorTest.InlineEntityFixture90 - the unique option must be true or false"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture90 do
+          use Hologram.Entity
+
+          attribute :slug, :string, unique: "yes"
         end
       end
     end
