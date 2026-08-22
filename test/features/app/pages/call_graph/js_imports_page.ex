@@ -13,6 +13,7 @@ defmodule HologramFeatureTests.CallGraph.JsImportsPage do
   def template do
     ~HOLO"""
     <JsImportComponent cid="js_import_component" />
+    <p>Suffix: <strong id="suffix">{JsImportComponent.suffix()}</strong></p>
     """
   end
 
