@@ -45,9 +45,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   setup do
     setup_query_cache(QueryCacheStub, false)
 
-    stub(QueryCacheMock, :component_modules, fn ->
-      [Module97, Module105, Module106, Module108, Module95]
-    end)
+    dump_query_cache(QueryCacheStub, [Module97, Module105, Module106, Module108, Module95])
 
     QueryCache.init(nil)
 
@@ -193,7 +191,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module100, :dummy_module_100_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module102, :dummy_module_102_digest)
 
-      stub(QueryCacheMock, :component_modules, fn -> [Module98, Module95, Module101] end)
+      dump_query_cache(QueryCacheStub, [Module98, Module95, Module101])
       QueryCache.init(nil)
 
       :ok
@@ -328,7 +326,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module99, :dummy_module_99_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module102, :dummy_module_102_digest)
 
-      stub(QueryCacheMock, :component_modules, fn -> [Module101, Module98] end)
+      dump_query_cache(QueryCacheStub, [Module101, Module98])
       QueryCache.init(nil)
 
       :ok
@@ -389,7 +387,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module103, :dummy_module_103_digest)
 
-      stub(QueryCacheMock, :component_modules, fn -> [] end)
+      dump_query_cache(QueryCacheStub, [])
       QueryCache.init(nil)
 
       :ok

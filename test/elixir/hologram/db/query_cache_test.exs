@@ -11,6 +11,7 @@ defmodule Hologram.DB.QueryCacheTest do
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Registry
+  alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Component.Module11
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
@@ -134,14 +135,24 @@ defmodule Hologram.DB.QueryCacheTest do
     end
   end
 
-  test "reload/0" do
+  test "reload/0 picks up the queries the build has dumped since" do
     init(nil)
 
     key = QueryCacheStub.persistent_term_key()
-    :persistent_term.put(key, :dummy_value)
+    assert :persistent_term.get(key) == expected_data()
+
+    # What live reload does: the recompile ahead of it rewrites the dump, and this reads it again.
+    dump_query_cache(QueryCacheStub, [Module11])
 
     reload()
 
-    assert :persistent_term.get(key) == expected_data()
+    reloaded = :persistent_term.get(key)
+
+    assert reloaded != expected_data()
+    assert reloaded.prop_params == %{{Module11, :entities} => [:min_b]}
+  end
+
+  test "dump_path/0 reads from the build directory" do
+    assert dump_path() == Path.join([Reflection.build_dir(), "queries.plt"])
   end
 end

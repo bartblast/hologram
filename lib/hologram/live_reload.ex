@@ -205,8 +205,9 @@ defmodule Hologram.LiveReload do
 
   # Data-layer reload failures surface like compilation errors - logged loudly
   # and broadcast to connected clients. The query cache reloads here rather than
-  # with the runtime registries because it can fail on developer input (invalid
-  # query builders raise at extraction, and companion reconciliation runs DDL).
+  # with the runtime registries because it sits behind the database: companion
+  # reconciliation runs DDL, and a recompile that refused a query builder fails
+  # before this runs at all, leaving the previous dump in place to reload.
   defp reload_database do
     DB.reload()
     QueryCache.reload()

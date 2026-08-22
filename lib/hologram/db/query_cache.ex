@@ -3,14 +3,14 @@ defmodule Hologram.DB.QueryCache do
 
   use GenServer
 
-  alias Hologram.Compiler
+  alias Hologram.Commons.SerializationUtils
   alias Hologram.DB
   alias Hologram.Reflection
 
   @doc """
-  Returns the modules swept for registered queries.
+  Returns the path of the dump file the registered queries are read from.
   """
-  @callback component_modules() :: list(module)
+  @callback dump_path() :: String.t()
 
   @doc """
   Returns the key of the persistent term used by the query cache registered process.
@@ -32,11 +32,11 @@ defmodule Hologram.DB.QueryCache do
   end
 
   @doc """
-  Returns the modules swept for registered queries - all component modules in the project.
+  Returns the implementation of the path of the dump file the registered queries are read from.
   """
-  @spec component_modules() :: list(module)
-  def component_modules do
-    Reflection.list_components()
+  @spec dump_path() :: String.t()
+  def dump_path do
+    Path.join([Reflection.build_dir(), Reflection.queries_plt_dump_file_name()])
   end
 
   @doc """
@@ -87,14 +87,10 @@ defmodule Hologram.DB.QueryCache do
   end
 
   @doc """
-  Rebuilds the query cache from the current component modules and mapping - the
-  live-reload path after a dev code change. A no-op when the database is not
-  running (no entities declared at boot). Returns :ok.
-
-  Raises Hologram.CompileError when a registered query reads an entity type
-  declaring no allow lines - default deny makes it statically dead, returning
-  no rows when it is the query's root and no embedded row when it is an
-  include target.
+  Re-reads the query cache from the compiler's dump - the live-reload path after
+  a dev code change, where the recompile that precedes it has rewritten the dump.
+  A no-op when the database is not running (no entities declared at boot).
+  Returns :ok.
   """
   @spec reload() :: :ok
   def reload do
@@ -109,10 +105,14 @@ defmodule Hologram.DB.QueryCache do
     Application.get_env(:hologram, :query_cache_impl, __MODULE__)
   end
 
-  # TODO: read the compiler's dump instead of asking it to build - the build already does this
-  # work once, and repeating it here costs every boot and every live reload what a file read costs.
+  # Read rather than rebuilt: the build already collected every component's registered queries and
+  # validated them, so a boot that repeated the work would pay for it again and could only reach
+  # the same answer - or fail, long after the build that should have.
   defp populate do
-    data = Compiler.build_queries(impl().component_modules(), Reflection.list_entities())
+    data =
+      impl().dump_path()
+      |> File.read!()
+      |> SerializationUtils.deserialize(true)
 
     :persistent_term.put(impl().persistent_term_key(), data)
   end
