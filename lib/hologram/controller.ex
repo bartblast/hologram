@@ -129,6 +129,8 @@ defmodule Hologram.Controller do
     }
   end
 
+  # The wire format for the tree, and the 112 alternatives it was measured against.
+  # See: docs/navigation_payload_wire_format.md
   def build_page_data_payload(%{
         page_digest: page_digest,
         page_module: page_module,

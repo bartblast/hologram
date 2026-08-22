@@ -4,6 +4,40 @@ A client-side navigation is answered with the page's evaluated tree. The tree is
 
 Related: issue #1068.
 
+## Chosen format
+
+`untagged` `bare` `flat` `none`. An element is `[tag, attributes, children]` and always has length 3. Attributes are one flat name/value run, with `null` for a boolean. A text node is a bare string. A comment is `["c", children]` and a doctype `["d", content]`. Nothing is interned.
+
+```json
+["div",["class","big","$key","k1:0","hidden",null],["Hologram",["c",[" x "]]]]
+```
+
+| | erlang | ++/2 |
+|---|---|---|
+| Size | 1,195.8 KB | 1,219.2 KB |
+| Gzipped | 40.4 KB | 42.5 KB |
+| Encode | 12.7 ms | 8.0 ms |
+| Parse | 3.3 ms | 2.2 ms |
+| Decode | 1.7 ms | 1.1 ms |
+
+Against 4,273 KB and 124 ms on the erlang page today.
+
+It is not the fastest variant measured. It was chosen because the client-side consumer is about to change and this format assumes the least about it.
+
+## TODO: revisit this format when the reconciler is rewritten
+
+The reconciler is planned to stop using boxed terms and walk a tree of plain JavaScript literals instead. **That change invalidates the decode half of every measurement here, and the format should be re-chosen against the new consumer rather than carried forward by default.**
+
+What changes when it lands:
+
+- **The decode step can go to zero.** Today the client parses JSON and then walks it to build boxed terms. If the parsed JSON is already what the reconciler walks, that second pass disappears, and the variant to want is the one whose parsed form *is* the target rather than the one that is cheapest to convert.
+- **The object-attribute family becomes eligible.** All 12 of those variants are excluded here for losing duplicate attribute names and attribute order. But `Renderer.#renderAttributesAndProps` already collapses attributes into a plain object (`const attrs = {}`) and filters out `$`-prefixed names, so a consumer that wants an object discards exactly what the wire form would have dropped. Confirm attribute ordering is harmless for adoption before relying on this: `JSON.encode!/1` sorts map keys, so a payload's insertion order differs from a client-side render's.
+- **The flat token stream becomes attractive again.** It is the fastest thing measured, and it loses here mainly because a cursor-based integer reader is precisely the code a reconciler rewrite would throw away. Its grammar and worked examples are kept below for that reason.
+- **Interning changes value.** Most of what interning saves today is boxed-term construction, which goes away on its own. What remains is wire size, where interning tags and names helps and interning attribute values hurts.
+- **Re-measure with the new target.** The ranking here scores each variant on parse plus the cost of reaching boxed terms. Re-run it scoring parse plus the cost of reaching whatever the new reconciler walks, which is zero for some variants.
+
+The chosen format is deliberately cheap to leave: the encoder is one function and the decoder is one function.
+
 ## Background
 
 Today `Hologram.Controller.build_page_data_payload/1` encodes the tree with `Encoder.encode_term!/1`, producing JavaScript source that reconstructs it - `Type.tuple([Type.atom("element"), Type.bitstring("div"), ...])` - which the client hands to `Interpreter.evaluateJavaScriptExpression` before anything is painted.
@@ -67,7 +101,7 @@ The design space factorises into four independent choices. Each fragment below i
 | `tn` | tag names and attribute names |
 | `tnv` | tag names, attribute names and attribute values |
 
-One shape sits outside the grid. `stream` flattens the whole tree into a single preorder array of integers against four dictionaries: an element is `tagIdx, nAttrs, (nameIdx, valIdx)*, nChildren, children...`, a text node is a single negative integer, and comment and doctype are reserved tag codes. It is the ceiling rather than a point in the cross-product.
+One shape sits outside the grid: `stream`, described below. It is the ceiling rather than a point in the cross-product.
 
 ## Method
 
@@ -78,6 +112,14 @@ The client column is `JSON.parse` plus decode timed end to end. On a few rows it
 Every variant's decoded output was fingerprinted and compared against the reference. 100 of 112 reproduce the tree exactly on both pages.
 
 The envelope is always `[tags, names, values, texts, tree]`, with empty arrays where a variant does not intern, so the rows compare like for like. The 10 bytes that costs are within the noise of every measurement here.
+
+### What is not measured
+
+Nothing downstream of the decode. `renderDom`, `Vdom.finalizeChildren` and `patchVirtualDocument` are all outside the timed region.
+
+That is defensible for ranking these variants and no further: all 100 valid variants decode to deep-equal boxed terms, so `renderTree` receives identical input whichever is chosen and everything after it is the same work. It is a constant, and constants do not reorder a ranking.
+
+But the constant is unmeasured and may be large. If reconciliation costs tens of milliseconds, the differences ranked here are a small share of the navigation, and effort is better spent on the vdom path than on the wire format. The 124 ms quoted above is `evaluateJavaScriptExpression` alone - the part this branch deletes - not what happens after it.
 
 ## Marginal effect of each axis
 
@@ -110,9 +152,47 @@ Attribute values are 39% of the erlang payload and there are only 838 distinct o
 | Attribute values | 838 | 15,832 | 464.2 KB | 45.2 KB | 1,470 | 11,782 | 461.3 KB | 80.5 KB |
 | Text | 1,604 | 19,210 | 468.6 KB | 196.0 KB | 1,362 | 10,395 | 569.2 KB | 443.3 KB |
 
+## Is there a variant that wins on every axis?
+
+No. Scoring the 100 valid variants on gzipped size, encode time, client time and uncompressed size, 17 are Pareto-optimal and each axis is won by a different one.
+
+| Axis | Winner | Value |
+|------|--------|-------|
+| Gzipped, both pages | `untagged-bare-pairs-tn` | 81.9 KB |
+| Encode, both pages | `untagged-interned-flat-none` | 17.3 ms |
+| Parse + decode, both pages | `stream` | 4.4 ms |
+| Uncompressed, both pages | `untagged-interned-flatcount-tnv` | 1,198.1 KB |
+
+Two of those four axes do not deserve a vote.
+
+**Encode is noise.** The four-axis frontier spans 17.3 to 26.6 ms of encode, but encode was best-of-five within a single run and the same variant was observed at 7.0 and 12.5 ms across two runs - about an 11 ms band once both pages are summed. The noise is wider than the spread. Dropping it takes the frontier from 17 to 9.
+
+**Memory is not independent.** All valid variants decode to identical boxed terms, so retained heap is the same except for string sharing. Measured with `node --expose-gc` on the erlang page:
+
+| | source | after parse | after decode | retained |
+|---|---|---|---|---|
+| not interned | 1.2 MB | +3.9 MB | +13.6 MB | 17.4 MB |
+| interned | 0.5 MB | +2.3 MB | +10.0 MB | 12.3 MB |
+
+The parsed part tracks uncompressed size; the boxed part differs only because interning lets one bitstring object serve every occurrence of a repeated string. So memory is uncompressed size plus whether you intern, both of which are already columns. Dropping it takes the frontier to 7.
+
+What is left is a single monotone trade-off between wire size and client time.
+
+| Variant | Gzipped, both pages | Parse + decode, both pages | Uncompressed, both pages |
+|---------|---------------------|----------------------------|--------------------------|
+| `stream` | 88.3 | 4.4 | 1,200.6 |
+| `untagged-interned-flat-tnv` | 88.2 | 6.0 | 1,198.1 |
+| `untagged-bare-flatcount-tnv` | 85.2 | 6.4 | 1,544.8 |
+| `untagged-bare-flatcount-tn` | 82.1 | 7.5 | 2,239.3 |
+| `tag-bare-flatcount-tn` | 81.9 | 7.8 | 2,297.2 |
+| `tag-bare-flat-tn` | 81.9 | 8.1 | 2,297.2 |
+| `untagged-bare-pairs-tn` | 81.9 | 8.3 | 2,293.2 |
+
+End to end that is 6.4 KB of extra transfer against 3.9 ms of saved client work, which breaks even at about 13 Mbps. Above that the interned end wins; below it the plain end does. There is no third consideration.
+
 ## Findings
 
-### Attributes as an object cannot work
+### Attributes as an object cannot reproduce the tree
 
 All 12 combinations that key attributes by name fail to reproduce the tree, on both pages, for two independent reasons.
 
@@ -120,37 +200,92 @@ Duplicate attribute names survive into the tree. `dedupe_attributes/1` is only r
 
 Attribute order is also lost. `JSON.encode!/1` sorts map keys, so the example above encodes as `{"$key":"k1:0","class":"big","hidden":null}` with `$key` ahead of `class`.
 
+This rules the form out for a consumer that must reconstruct the tree. It does not rule it out for a consumer that collapses attributes into an object anyway - see the TODO above.
+
 ### Array count predicts parse time, byte count does not
 
 `flat` and `flatcount` are byte-for-byte identical on both pages - `flat`'s two brackets around the attribute run cost exactly what `flatcount`'s count digits cost - yet `flatcount` parses faster: 2.9 ms against 3.3 ms. Identical bytes, different parse time. The difference is one array per element, 9,617 of them on the erlang page, which `flatcount` inlines away.
 
 The same effect explains `pairs`. It allocates one two-element array per attribute - 15,832 on that page - and parses at 3.7 ms against `flat`'s 3.3 ms for 2.5% more bytes. Averaged across the whole matrix the three attribute forms parse at 4.3, 3.7 and 2.8 ms. Array count predicts parse time; uncompressed size does not.
 
-### Interning trades wire size for memory
+### Interning trades wire size for memory, and hurts gzip
 
 Interning values and text takes the erlang payload from 1,195.8 KB to 496.6 KB and cuts retained heap from 17.4 MB to 12.3 MB. But it deletes exactly the redundancy gzip was already exploiting for free: on `++/2` the gzipped payload goes up, from 42.5 KB to 48.7 KB.
 
-Note also where the heap is. Of the 17.4 MB retained by the non-interned form, 13.6 MB is the boxed terms themselves rather than the strings, so no dictionary reaches most of it. Retained heap measured with `node --expose-gc`.
+Interning tags and names only (`tn`) is the best of both on the wire, since those dictionaries cost a few hundred bytes and remove tens of kilobytes. It is interning attribute *values* that destroys compressibility.
 
 ### The spread stops mattering early
 
-Uncompressed size across all 112 variants ranges from 496.6 KB to 2,052.8 KB; gzipped it ranges from 38.9 KB to 49.0 KB. But once elements are untagged and text is not wrapped, every remaining option costs between 2.4 and 5.4 ms of parse and decode on the erlang page, against 124 ms today. The whole dictionary tier buys about 3.0 ms out of a navigation that will be roughly 250 ms once the tree stops being boxed terms.
+Uncompressed size across all 112 variants ranges from 496.6 KB to 2,052.8 KB; gzipped it ranges from 38.9 KB to 49.0 KB. But once elements are untagged and text is not wrapped, every remaining option costs between 4.4 and 9.1 ms of parse and decode across both pages, against 124 ms today for the erlang page alone.
 
-## Recommendation
+## Why this format, given the reconciler is about to change
 
-DECIDE-1 is still open; this is what the matrix argues for.
+`untagged` `bare` `flat` `none` is not the fastest variant here. `stream` is, at 4.4 ms against 8.4 ms. Four reasons the safer one was taken:
 
-`untagged` `bare` `pairs` `none`: 1,226.7 KB, and 3.7 ms of parse plus 1.7 ms of decode, against 4,273 KB and 124 ms today.
+**It assumes nothing about the consumer.** It reproduces the tree exactly, so it serves a consumer that rebuilds boxed terms and one that walks plain literals equally well.
 
-It gives up 730.1 KB and 2.1 ms to the interned variants and takes back the property that outlives them. `[["class","big"],["hidden"]]` is the same structure as the Elixir `[{"class", [text: "big"]}, {"hidden", []}]` it comes from, so the encoder's clauses, its tests, and the mirrored tests on the client read as one specification of the same vocabulary. An element is the only node of length 3, a comment and a doctype are length 2, and a text node is a bare string - that arity contract is what the decoder dispatches on, and it is stated in a comment on both sides.
+**No dictionary.** Every value in the parsed JSON is immediately usable. A dictionary forces an index-resolution step that has to fit a design that does not exist yet.
 
-`untagged` `bare` `flat` `none` is the next step if bytes win the argument, and costs nothing structural: identical size to `flatcount`, no length prefix to step past, element arity still fixed at 3.
+**Fixed arity.** `flatcount` is 0.4 ms faster at identical size, but it makes node length vary with attribute count, entangling the vocabulary with the dispatch. "An element is length 3" is worth that.
 
-The dictionary tier is worth revisiting only if peak memory on low-end devices becomes the constraint, and even then it addresses under a third of the heap.
+**It is the cheapest source for the shape the consumer most likely wants.** If the reconciler builds `{class: "big"}` - which `Renderer.#renderAttributesAndProps` already does - a flat run fills it with `for (i += 2) obj[a[i]] = a[i + 1]`, allocating nothing per attribute. `pairs` would allocate 15,832 two-element arrays only to discard them.
+
+It also beats `stream` on the wire: 82.9 KB gzipped against 88.3 KB, so below about 13 Mbps it is the faster choice end to end anyway.
+
+## The flat token stream
+
+Kept here because it is the fastest variant measured and the one to reconsider first when the reconciler changes.
+
+The whole tree becomes one preorder array of integers against four dictionaries:
+
+```
+payload  =  [tags, names, values, texts, tokens]
+tokens   =  nRoots, node*
+
+node     =  text | element
+text     =  a negative integer n, meaning texts[-1 - n]
+element  =  tagIdx, nAttrs, (nameIdx, valIdx) * nAttrs, nChildren, node * nChildren
+            valIdx of -1 means a boolean attribute
+
+comment  =  an element whose tagIdx is the reserved " comment" code, always 0 attrs
+doctype  =  an element whose tagIdx is the reserved " doctype" code, 0 attrs, 1 text child
+```
+
+Worked examples, each verified to decode back to the exact input tree:
+
+```
+{:text, "Hologram"}
+  [[],[],[],["Hologram"],[1,-1]]
+
+<br>
+  [["br"],[],[],[],[1,0,0,0]]
+
+<p class="lead">Hi</p>
+  [["p"],["class"],["lead"],["Hi"],[1,0,1,0,0,1,-1]]
+
+<input disabled>
+  [["input"],["disabled"],[],[],[1,0,1,0,-1,0]]
+
+<div class="big" $key="k1:0" hidden>Hologram<!-- x --></div>
+  [["div"," comment"],["class","$key","hidden"],["big","k1:0"],["Hologram"," x "],
+   [1,0,3,0,0,1,1,2,-1,2,-1,1,0,1,-2]]
+
+<ul><li class="row">a</li><li class="row">a</li></ul>
+  [["ul","li"],["class"],["row"],["a"],[1,0,0,2,1,1,0,0,1,-1,1,1,0,0,1,-1]]
+
+<!DOCTYPE html><html><body>hi</body></html>
+  [[" doctype","html","body"],[],[],["html","hi"],[2,0,0,1,-1,1,0,1,2,0,1,-2]]
+```
+
+Reading the canonical one: `1` root; `0` is tags[0] = `div`; `3` attributes; `0,0` is names[0]=`class` with values[0]=`big`; `1,1` is `$key`=`k1:0`; `2,-1` is `hidden` as a boolean; `2` children; `-1` is texts[0]=`Hologram`; `1,0,1` is the comment with no attributes and one child; `-2` is texts[1]=` x `.
+
+The second `li` in the list example costs six integers and repeats no string at all. That is both why it parses fastest and why it gzips worst.
+
+One defect to fix before adopting it: the reserved codes are dictionary entries named `" comment"` and `" doctype"`. A leading space cannot come from a template, but `render_tree/3`'s `dynamic_tag` clause accepts any binary at runtime, so a computed tag name of exactly `" comment"` would collide. Reserve negative codes instead - comment `-1`, doctype `-2`, text `code <= -3` - for the same parse cost and no collision.
 
 ## Appendix A: all 112 variants
 
-Sorted by uncompressed size on the erlang page. Sizes in KB, times in ms.
+Sorted by uncompressed size on the erlang page. Sizes in KB, times in ms. The client column carries allocation noise; see Method.
 
 | Variant | erlang size | erlang gzip | encode | parse | client | ++/2 size | ++/2 gzip | ++/2 client | |
 |---------|-------------|-------------|--------|-------|--------|-----------|-----------|-------------|---|
@@ -216,12 +351,12 @@ Sorted by uncompressed size on the erlang page. Sizes in KB, times in ms.
 | `full-bare-flatcount-tn` | 1,186.4 | 40.3 | 15.0 | 2.8 | 4.6 | 1,197.7 | 42.1 | 3.1 |  |
 | `full-bare-flat-tn` | 1,186.4 | 40.3 | 13.2 | 3.0 | 5.1 | 1,197.7 | 42.1 | 3.3 |  |
 | `untagged-bare-flatcount-none` | 1,195.8 | 40.5 | 11.7 | 2.9 | 4.8 | 1,219.2 | 42.6 | 3.2 |  |
-| `untagged-bare-flat-none` | 1,195.8 | 40.4 | 12.7 | 3.3 | 5.2 | 1,219.2 | 42.5 | 3.3 |  |
+| `untagged-bare-flat-none` | 1,195.8 | 40.4 | 12.7 | 3.3 | 5.2 | 1,219.2 | 42.5 | 3.3 | **chosen** |
 | `untagged-bare-object-none` | 1,195.8 | 40.5 | 12.2 | - | - | 1,219.2 | 42.6 | - | lossy |
 | `untagged-wrapped-flatcount-tn` | 1,205.0 | 40.4 | 21.7 | 3.6 | 5.7 | 1,207.7 | 42.3 | 3.6 |  |
 | `untagged-wrapped-flat-tn` | 1,205.0 | 40.4 | 14.9 | 3.7 | 6.1 | 1,207.7 | 42.2 | 3.7 |  |
 | `full-bare-pairs-tn` | 1,217.3 | 40.6 | 15.6 | 3.5 | 5.4 | 1,220.7 | 42.8 | 3.6 |  |
-| `untagged-bare-pairs-none` | 1,226.7 | 40.7 | 12.8 | 3.7 | 8.2 | 1,242.2 | 43.0 | 3.7 | **pick** |
+| `untagged-bare-pairs-none` | 1,226.7 | 40.7 | 12.8 | 3.7 | 8.2 | 1,242.2 | 43.0 | 3.7 |  |
 | `tag-bare-flatcount-none` | 1,233.3 | 40.8 | 18.4 | 3.2 | 5.1 | 1,239.6 | 43.0 | 3.3 |  |
 | `tag-bare-flat-none` | 1,233.3 | 40.8 | 12.7 | 3.5 | 5.3 | 1,239.6 | 43.0 | 3.4 |  |
 | `tag-bare-object-none` | 1,233.3 | 40.9 | 12.3 | - | - | 1,239.6 | 42.6 | - | lossy |

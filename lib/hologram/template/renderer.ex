@@ -28,6 +28,9 @@ defmodule Hologram.Template.Renderer do
   @typedoc """
   A rendered template as data: expressions evaluated, components flattened into the nodes their
   templates render, and slots expanded. `nil` is the tree of a tag that renders no node at all.
+
+  For how this vocabulary is put on the wire for a client-side navigation, and the alternatives it
+  was measured against, see: docs/navigation_payload_wire_format.md
   """
   @type tree :: tree_node | [tree_node] | nil
 

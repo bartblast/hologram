@@ -161,6 +161,8 @@ export default class Renderer {
   // or the render that follows rebuilds nodes instead of adopting the ones this put on screen.
   // Both go through renderDom and both finalize the document's children the same way, which is
   // what holds the two together.
+  //
+  // See: docs/navigation_payload_wire_format.md
   static renderTree(tree) {
     const children = Vdom.finalizeChildren(
       Renderer.renderDom(
