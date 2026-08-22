@@ -1356,7 +1356,7 @@ export default class Hologram {
     }
 
     // See: docs/navigation_payload_wire_format.md
-    const tree = Interpreter.evaluateJavaScriptExpression(payload.tree);
+    const tree = Renderer.decodeTree(payload.tree);
     const newVirtualDocument = Renderer.renderTree(tree);
 
     $.#dropPageBundleScript(newVirtualDocument, payload.pageDigest);
