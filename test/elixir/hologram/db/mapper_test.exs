@@ -9,6 +9,7 @@ defmodule Hologram.DB.MapperTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module15
+  alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -319,6 +320,29 @@ defmodule Hologram.DB.MapperTest do
              }
     end
 
+    test "derives a unique index per unique attribute" do
+      mapping = derive!([Module19])
+
+      assert mapping[Module19].indexes == %{
+               "test_fixtures_entity_module19_code_$uidx" => %{
+                 columns: ["code"],
+                 nulls_distinct: true,
+                 unique: true
+               },
+               "test_fixtures_entity_module19_slug_$uidx" => %{
+                 columns: ["slug"],
+                 nulls_distinct: true,
+                 unique: true
+               }
+             }
+    end
+
+    test "derives no index for an attribute that is not unique" do
+      mapping = derive!([Module2])
+
+      assert mapping[Module2].indexes == %{}
+    end
+
     test "carries a sort-key companion for every string attribute" do
       mapping = derive!([Module2])
 
@@ -475,6 +499,30 @@ defmodule Hologram.DB.MapperTest do
       model = Model.from_modules(entity_types, Reflection.list_roles())
 
       assert derive_from_model!(model) == derive!(entity_types)
+    end
+
+    test "derives a unique index from a term's attribute options" do
+      model = %{
+        entities: %{
+          Nonexistent.Ghost => %{
+            attributes: [{:name, :string, [unique: true]}],
+            relationships: [],
+            roles: []
+          }
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      mapping = derive_from_model!(model)
+
+      assert mapping[Nonexistent.Ghost].indexes == %{
+               "nonexistent_ghost_name_$uidx" => %{
+                 columns: ["name"],
+                 nulls_distinct: true,
+                 unique: true
+               }
+             }
     end
 
     test "derives without consulting any module" do
