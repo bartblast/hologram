@@ -780,6 +780,10 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  test "query_cache_plt_dump_file_name/0" do
+    assert query_cache_plt_dump_file_name() == "query_cache.plt"
+  end
+
   describe "relative_source_path/1" do
     test "project module" do
       assert relative_source_path(Hologram.Reflection) == "lib/hologram/reflection.ex"
