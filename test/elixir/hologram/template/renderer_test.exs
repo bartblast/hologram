@@ -2068,42 +2068,75 @@ defmodule Hologram.Template.RendererTest do
       assert registry["layout"].struct.state.observed_cid == "layout"
     end
 
-    test "returns the tree the HTML is printed from" do
+    test "returns the tree the HTML is printed from, once the mount data is put back" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
         Module48,
         "102790adb6c3b1956db310be523a7693"
       )
 
-      {html, tree, _component_registry, _server_struct} =
+      %{html: html, mount_data: mount_data, tree: tree} =
         render_page(Module48, @params, @server, @opts)
 
-      assert print_dom(tree) == html
+      # The two projections are the same render. They differ only in that the HTML has the mount
+      # data inlined, so putting it back into the printed tree must reproduce the HTML exactly.
+      printed =
+        tree
+        |> print_dom()
+        |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", mount_data.asset_manifest)
+        |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", mount_data.component_registry)
+        |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", mount_data.page_module)
+        |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", mount_data.page_params)
+
+      assert printed == html
     end
 
-    test "interpolates the runtime JS into the tree's scripts, leaving the Realtime placeholders" do
+    test "leaves every placeholder in the tree's scripts, mount data included" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
         Module48,
         "102790adb6c3b1956db310be523a7693"
       )
 
-      {_html, tree, _component_registry, _server_struct} =
-        render_page(Module48, @params, @server, @opts)
+      %{tree: tree} = render_page(Module48, @params, @server, @opts)
 
       script_text =
         tree
         |> collect_script_texts()
         |> Enum.join()
 
-      assert String.contains?(
-               script_text,
-               ~s/pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")/
-             )
-
-      refute String.contains?(script_text, "$COMPONENT_REGISTRY_JS_PLACEHOLDER")
-      refute String.contains?(script_text, "$PAGE_PARAMS_JS_PLACEHOLDER")
+      assert String.contains?(script_text, "$ASSET_MANIFEST_JS_PLACEHOLDER")
+      assert String.contains?(script_text, "$COMPONENT_REGISTRY_JS_PLACEHOLDER")
+      assert String.contains?(script_text, "$PAGE_MODULE_JS_PLACEHOLDER")
+      assert String.contains?(script_text, "$PAGE_PARAMS_JS_PLACEHOLDER")
       assert String.contains?(script_text, "selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER")
+
+      refute String.contains?(
+               script_text,
+               ~s/Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")/
+             )
+    end
+
+    test "returns the mount data the HTML projection interpolates" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      %{html: html, mount_data: mount_data} = render_page(Module48, @params, @server, @opts)
+
+      assert mount_data.page_module ==
+               ~s/Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")/
+
+      assert mount_data.page_params == "Type.map([])"
+      assert String.starts_with?(mount_data.component_registry, "Type.map([")
+
+      # Each value is what the HTML carries, which is what makes it safe to send beside the tree
+      # instead of inside it.
+      for value <- Map.values(mount_data) do
+        assert String.contains?(html, value)
+      end
     end
   end
 
@@ -2441,87 +2474,6 @@ defmodule Hologram.Template.RendererTest do
 
       assert encoded ==
                ~s([["d","html"],["div",["class","big","hidden",null],["abc",["c",[" x "]]]]])
-    end
-  end
-
-  describe "interpolate_js_in_tree/3" do
-    test "substitutes the placeholder inside a script element's text" do
-      tree =
-        {:element, "script", [],
-         [{:text, "window.registry = $COMPONENT_REGISTRY_JS_PLACEHOLDER;"}]}
-
-      result =
-        Renderer.interpolate_js_in_tree(
-          tree,
-          "$COMPONENT_REGISTRY_JS_PLACEHOLDER",
-          "Type.map([])"
-        )
-
-      assert result == {:element, "script", [], [{:text, "window.registry = Type.map([]);"}]}
-    end
-
-    test "substitutes every occurrence of the placeholder" do
-      tree =
-        {:element, "script", [],
-         [{:text, "$PAGE_PARAMS_JS_PLACEHOLDER, $PAGE_PARAMS_JS_PLACEHOLDER"}]}
-
-      result =
-        Renderer.interpolate_js_in_tree(tree, "$PAGE_PARAMS_JS_PLACEHOLDER", "Type.map([])")
-
-      assert result == {:element, "script", [], [{:text, "Type.map([]), Type.map([])"}]}
-    end
-
-    test "reaches a script element nested inside other elements" do
-      tree =
-        {:element, "html", [],
-         [
-           {:element, "head", [],
-            [{:element, "script", [], [{:text, "$PAGE_MODULE_JS_PLACEHOLDER"}]}]}
-         ]}
-
-      result =
-        Renderer.interpolate_js_in_tree(tree, "$PAGE_MODULE_JS_PLACEHOLDER", ~s/Type.atom("abc")/)
-
-      assert result ==
-               {:element, "html", [],
-                [
-                  {:element, "head", [],
-                   [{:element, "script", [], [{:text, ~s/Type.atom("abc")/}]}]}
-                ]}
-    end
-
-    test "reaches every script element in a node list" do
-      tree = [
-        {:element, "script", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]},
-        {:element, "script", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
-      ]
-
-      result =
-        Renderer.interpolate_js_in_tree(tree, "$SELF_ECHOES_JS_PLACEHOLDER", "Type.list([])")
-
-      assert result == [
-               {:element, "script", [], [{:text, "Type.list([])"}]},
-               {:element, "script", [], [{:text, "Type.list([])"}]}
-             ]
-    end
-
-    test "leaves text outside a script element untouched" do
-      tree = {:element, "div", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
-
-      result =
-        Renderer.interpolate_js_in_tree(tree, "$SELF_ECHOES_JS_PLACEHOLDER", "Type.list([])")
-
-      assert result == {:element, "div", [], [{:text, "$SELF_ECHOES_JS_PLACEHOLDER"}]}
-    end
-
-    test "leaves attribute values untouched" do
-      tree = {:element, "script", [{"data-info", [text: "$SELF_ECHOES_JS_PLACEHOLDER"]}], []}
-
-      result =
-        Renderer.interpolate_js_in_tree(tree, "$SELF_ECHOES_JS_PLACEHOLDER", "Type.list([])")
-
-      assert result ==
-               {:element, "script", [{"data-info", [text: "$SELF_ECHOES_JS_PLACEHOLDER"]}], []}
     end
   end
 
@@ -2903,7 +2855,7 @@ defmodule Hologram.Template.RendererTest do
   # The tree projection is covered by its own tests - these tests assert the projections the
   # pre-tree render returned, unchanged.
   defp render_page_without_tree(page_module, params, server_struct, opts) do
-    {html, _tree, component_registry, mutated_server_struct} =
+    %{component_registry: component_registry, html: html, server_struct: mutated_server_struct} =
       render_page(page_module, params, server_struct, opts)
 
     {html, component_registry, mutated_server_struct}

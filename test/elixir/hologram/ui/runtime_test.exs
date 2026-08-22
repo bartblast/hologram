@@ -77,6 +77,9 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "hologram/page")
   end
 
+  # This is the navigation case. The mount data reaches the client as its own payload fields, so
+  # the script that would carry it is not rendered - only the page bundle is, and the client drops
+  # that one itself.
   test "not initial page, page not mounted", %{context: initial_context} do
     context =
       initial_context
@@ -90,7 +93,7 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")
-    assert String.contains?(markup, "globalThis.Hologram.pageMountData")
+    refute String.contains?(markup, "globalThis.Hologram.pageMountData")
     refute String.contains?(markup, "hologram/runtime")
     assert String.contains?(markup, "hologram/page")
   end
