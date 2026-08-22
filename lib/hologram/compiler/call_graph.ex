@@ -774,7 +774,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Returns a clone of the given call graph.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/clone_1/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/clone_1/README.md
   """
   @spec clone(t, T.opts()) :: t
   def clone(call_graph, opts \\ []) do
@@ -788,7 +788,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Serializes the call graph and writes it to a file.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/dump_2/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/dump_2/README.md
   """
   @spec dump(t, String.t()) :: t
   def dump(call_graph, path) do
@@ -1057,7 +1057,7 @@ defmodule Hologram.Compiler.CallGraph do
   rebuilding the graph paths of modules that have been edited,
   and adding the graph paths of modules that have been added.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/patch_3/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/patch_3/README.md
   """
   @spec patch(t, PLT.t(), map) :: t
   def patch(call_graph, ir_plt, diff) do
@@ -1173,7 +1173,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Removes call graph vertices for Elixir functions ported manually.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/remove_manually_ported_mfas_1/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/remove_manually_ported_mfas_1/README.md
   """
   @spec remove_manually_ported_mfas(t) :: t
   def remove_manually_ported_mfas(call_graph) do
@@ -1186,7 +1186,7 @@ defmodule Hologram.Compiler.CallGraph do
   remove_vertices/2 is slow on very large graphs, and in such cases
   it's faster to rebuild the call graph this way.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/remove_runtime_mfas!_2/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/remove_runtime_mfas!_2/README.md
   """
   @spec remove_runtime_mfas!(t, [mfa]) :: t
   def remove_runtime_mfas!(%{pid: pid} = call_graph, runtime_mfas) do
@@ -1233,7 +1233,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Removes the vertices from the call graph.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/remove_vertices_2/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/remove_vertices_2/README.md
   """
   @spec remove_vertices(t, [vertex]) :: t
   def remove_vertices(%{pid: pid} = call_graph, vertices) do

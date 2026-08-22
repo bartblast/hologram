@@ -58,7 +58,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   @doc """
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/mix/tasks/compile.hologram/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/mix/tasks/compile.hologram/README.md
   """
   @impl Mix.Task.Compiler
   def run(opts) do

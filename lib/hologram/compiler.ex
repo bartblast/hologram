@@ -195,7 +195,7 @@ defmodule Hologram.Compiler do
   @doc """
   Builds the call graph of all modules in the given IR PLT.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_call_graph_1/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_call_graph_1/README.md
   """
   @spec build_call_graph(PLT.t()) :: CallGraph.t()
   def build_call_graph(ir_plt) do
@@ -212,7 +212,7 @@ defmodule Hologram.Compiler do
   @doc """
   Builds IR persistent lookup table (PLT) of all modules in the project.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_ir_plt_1/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_ir_plt_0/README.md
   """
   @spec build_ir_plt(T.opts()) :: PLT.t()
   # credo:disable-for-lines:26 Credo.Check.Refactor.Nesting
@@ -250,7 +250,7 @@ defmodule Hologram.Compiler do
   @doc """
   Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_module_digest_plt!_1/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_module_digest_plt!_0/README.md
   """
   @spec build_module_digest_plt!(T.opts()) :: PLT.t()
   def build_module_digest_plt!(opts \\ []) do
@@ -464,7 +464,7 @@ defmodule Hologram.Compiler do
   Includes the source maps of the output files.
   The output files' and source maps' file names contain hex digest.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/bundle_2/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/bundle_2/README.md
   """
   @spec bundle(list({term, T.file_path(), String.t()}), T.opts()) :: list(map)
   def bundle(entry_files_info, opts) do
@@ -625,7 +625,7 @@ defmodule Hologram.Compiler do
   @doc """
   Compares two module digest PLTs and returns the added, removed, and edited modules lists.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/diff_module_digest_plts_2/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/diff_module_digest_plts_2/README.md
   """
   @spec diff_module_digest_plts(PLT.t(), PLT.t()) :: %{
           added_modules: list(module),
@@ -739,7 +739,7 @@ defmodule Hologram.Compiler do
   @doc """
   Installs JavaScript deps if package.json has changed or if the deps haven't been installed yet.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_install_js_deps_2/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/maybe_install_js_deps_2/README.md
   """
   @spec maybe_install_js_deps(T.file_path(), T.file_path()) :: :ok | nil
   def maybe_install_js_deps(assets_dir, build_dir) do
@@ -761,7 +761,7 @@ defmodule Hologram.Compiler do
   @doc """
   Loads call graph from a dump file if the file exists or creates an empty call graph.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_call_graph_1/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/maybe_load_call_graph_1/README.md
   """
   @spec maybe_load_call_graph(T.file_path(), T.opts()) :: {CallGraph.t(), String.t()}
   def maybe_load_call_graph(build_dir, opts \\ []) do
@@ -775,7 +775,7 @@ defmodule Hologram.Compiler do
   @doc """
   Loads IR PLT from a dump file if the file exists or creates an empty PLT.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_ir_plt_1/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/maybe_load_ir_plt_1/README.md
   """
   @spec maybe_load_ir_plt(T.file_path()) :: {PLT.t(), String.t()}
   def maybe_load_ir_plt(build_dir) do
@@ -789,7 +789,7 @@ defmodule Hologram.Compiler do
   @doc """
   Loads module digest PLT from a dump file if the file exists or creates an empty PLT.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_module_digest_plt_1/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/maybe_load_module_digest_plt_1/README.md
   """
   @spec maybe_load_module_digest_plt(T.file_path(), T.opts()) :: {PLT.t(), String.t()}
   def maybe_load_module_digest_plt(build_dir, opts \\ []) do
@@ -938,7 +938,7 @@ defmodule Hologram.Compiler do
   @doc """
   Raises a compilation error if any page module lacks a specified route or layout.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/validate_page_modules_1/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/validate_page_modules_1/README.md
   """
   @spec validate_page_modules(list(module)) :: :ok
   def validate_page_modules(page_modules) do
