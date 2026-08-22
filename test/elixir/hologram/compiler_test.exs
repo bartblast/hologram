@@ -15,13 +15,19 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.IR
   alias Hologram.Entity.Model
   alias Hologram.Query
+  alias Hologram.Query.Placeholder
   alias Hologram.Query.Registry
   alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Sync.Frame
 
   alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
+  alias Hologram.Test.Fixtures.Component.Module15, as: ComponentModule15
   alias Hologram.Test.Fixtures.Component.Module16, as: ComponentModule16
+  alias Hologram.Test.Fixtures.Component.Module17, as: ComponentModule17
+  alias Hologram.Test.Fixtures.Component.Module18, as: ComponentModule18
+  alias Hologram.Test.Fixtures.Component.Module19, as: ComponentModule19
+  alias Hologram.Test.Fixtures.Component.Module20, as: ComponentModule20
   alias Hologram.Test.Fixtures.Component.Module24, as: ComponentModule24
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
@@ -64,6 +70,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module40
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1, as: QueryExtractorModule1
 
   @root_dir Reflection.root_dir()
   @assets_dir Path.join(@root_dir, "assets")
@@ -491,6 +498,141 @@ defmodule Hologram.CompilerTest do
       pages = pages_checking_permissions(Reflection.list_pages(), call_graph)
 
       refute PageModule7 in pages
+    end
+  end
+
+  describe "build_queries/2" do
+    setup do
+      [entity_types: Reflection.list_entities()]
+    end
+
+    test "collects the entries, prop params and windows of the given components", %{
+      entity_types: entity_types
+    } do
+      queries = build_queries([QueryExtractorModule1, ComponentModule11], entity_types)
+
+      module_1_term =
+        Entity2
+        |> filter(a: true)
+        |> order_by(:c)
+        |> Query.normalize()
+
+      module_11_term =
+        Entity2
+        |> filter(b: {:>=, %Placeholder{name: :min_b}})
+        |> Query.normalize()
+
+      expected_entries = Registry.build([module_1_term, module_11_term])
+
+      assert queries.entries == expected_entries
+      assert queries.prop_params == %{{ComponentModule11, :entities} => [:min_b]}
+    end
+
+    # The grants window rides with every build's windows, whether or not a page subscribes to it -
+    # the build decides who asks, this is only where an id resolves back to a term.
+    test "registers the grants window beside the windows the queries download", %{
+      entity_types: entity_types
+    } do
+      queries = build_queries([QueryExtractorModule1], entity_types)
+      grants_window = Auth.grants_window()
+
+      assert queries.windows[Registry.id(grants_window)] == grants_window
+    end
+
+    test "leaves out a component declaring no parameterized capture", %{
+      entity_types: entity_types
+    } do
+      queries = build_queries([QueryExtractorModule1], entity_types)
+
+      assert queries.prop_params == %{}
+    end
+
+    test "collects a registered query reading a type with server-only attributes it does not reference",
+         %{entity_types: entity_types} do
+      queries = build_queries([ComponentModule20], entity_types)
+
+      assert map_size(queries.entries) == 1
+    end
+
+    test "raises for a registered query whose root type declares no allow lines", %{
+      entity_types: entity_types
+    } do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module15 reads " <>
+          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
+          "default deny returns no rows to any session. Add allow lines, or drop the query."
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries([ComponentModule15], entity_types)
+      end
+    end
+
+    test "raises for a registered query whose include target declares no allow lines", %{
+      entity_types: entity_types
+    } do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module16 includes " <>
+          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
+          "default deny leaves the embed empty in every row. Add allow lines, or drop the include."
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries([ComponentModule16], entity_types)
+      end
+    end
+
+    test "raises for a registered query filtering on a server-only attribute", %{
+      entity_types: entity_types
+    } do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module17 filters or orders on " <>
+          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
+          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
+          "reference, or read the rows through the trusted backend API."
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries([ComponentModule17], entity_types)
+      end
+    end
+
+    test "raises for a registered query ordering on a server-only attribute", %{
+      entity_types: entity_types
+    } do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module18 filters or orders on " <>
+          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
+          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
+          "reference, or read the rows through the trusted backend API."
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries([ComponentModule18], entity_types)
+      end
+    end
+
+    test "raises for a registered query filtering on a server-only attribute inside an include",
+         %{
+           entity_types: entity_types
+         } do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module19 filters or orders on " <>
+          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
+          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
+          "reference, or read the rows through the trusted backend API."
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries([ComponentModule19], entity_types)
+      end
+    end
+  end
+
+  describe "build_queries_plt/2" do
+    test "holds the entries, prop params and windows, and dumps beside the other build artifacts" do
+      queries = build_queries([ComponentModule11], Reflection.list_entities())
+      opts = [build_dir: "/my_build_dir"]
+
+      {plt, dump_path} = build_queries_plt(queries, opts)
+
+      assert PLT.get_all(plt) == queries
+      assert dump_path == "/my_build_dir/queries.plt"
     end
   end
 
