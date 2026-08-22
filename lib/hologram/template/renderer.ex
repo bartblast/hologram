@@ -267,25 +267,33 @@ defmodule Hologram.Template.Renderer do
     # `server.broadcasts`, which is a `Hologram.Realtime` concern - keeping the
     # renderer Realtime-agnostic means the controller does the final
     # substitution after `Realtime.get_self_echoes/1`.
-    asset_manifest_js = AssetManifestCache.get_manifest_js()
-    component_registry_js = Encoder.encode_term!(component_registry_with_page_struct)
-    page_module_js = Encoder.encode_term!(page_module)
-    page_params_js = Encoder.encode_term!(params)
+    # The four values a mount reads. They are grouped rather than kept as separate locals because
+    # they travel together: both projections interpolate the same four, and the navigation payload
+    # carries the same four beside the tree.
+    mount_data_js = %{
+      asset_manifest: AssetManifestCache.get_manifest_js(),
+      component_registry: Encoder.encode_term!(component_registry_with_page_struct),
+      page_module: Encoder.encode_term!(page_module),
+      page_params: Encoder.encode_term!(params)
+    }
 
     html_with_interpolated_js =
       initial_tree
       |> print_dom()
-      |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
-      |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
-      |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
-      |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
+      |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", mount_data_js.asset_manifest)
+      |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", mount_data_js.component_registry)
+      |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", mount_data_js.page_module)
+      |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", mount_data_js.page_params)
 
     tree_with_interpolated_js =
       initial_tree
-      |> interpolate_js_in_tree("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
-      |> interpolate_js_in_tree("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
-      |> interpolate_js_in_tree("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
-      |> interpolate_js_in_tree("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
+      |> interpolate_js_in_tree("$ASSET_MANIFEST_JS_PLACEHOLDER", mount_data_js.asset_manifest)
+      |> interpolate_js_in_tree(
+        "$COMPONENT_REGISTRY_JS_PLACEHOLDER",
+        mount_data_js.component_registry
+      )
+      |> interpolate_js_in_tree("$PAGE_MODULE_JS_PLACEHOLDER", mount_data_js.page_module)
+      |> interpolate_js_in_tree("$PAGE_PARAMS_JS_PLACEHOLDER", mount_data_js.page_params)
 
     {html_with_interpolated_js, tree_with_interpolated_js, component_registry_with_page_struct,
      final_server_struct}
