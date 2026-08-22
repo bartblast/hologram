@@ -391,7 +391,7 @@ defmodule Hologram.Reflection do
   def list_entities do
     list_elixir_modules()
     |> Enum.filter(&entity?/1)
-    |> include_role_grant_when_designated()
+    |> reject_role_grant_without_user_entity()
   end
 
   @doc """
@@ -402,7 +402,7 @@ defmodule Hologram.Reflection do
     apps
     |> list_elixir_modules()
     |> Enum.filter(&entity?/1)
-    |> include_role_grant_when_designated()
+    |> reject_role_grant_without_user_entity()
   end
 
   @doc """
@@ -844,16 +844,6 @@ defmodule Hologram.Reflection do
     end
   end
 
-  # The check runs over the entity types already swept, never through user_entity/0 -
-  # that function lists entity types itself, which would recurse.
-  defp include_role_grant_when_designated(entity_types) do
-    if Enum.any?(entity_types, &user_entity?/1) do
-      entity_types
-    else
-      entity_types -- [Hologram.Auth.RoleGrant]
-    end
-  end
-
   defp include_app_elixir_modules(app, modules) do
     # Get modules from Application.spec (faster, but may miss newly compiled modules)
     spec_modules =
@@ -931,5 +921,19 @@ defmodule Hologram.Reflection do
     |> Enum.find_value(fn {key, value} ->
       if value && phoenix_endpoint?(key), do: key
     end)
+  end
+
+  # RoleGrant declares itself an entity type, so the sweep always finds it - what is in question
+  # is whether it STAYS. It does only when the project designates a user entity, without which
+  # there is nothing for its grants to point at.
+  #
+  # The check runs over the entity types already swept, never through user_entity/0 - that
+  # function lists entity types itself, which would recurse.
+  defp reject_role_grant_without_user_entity(entity_types) do
+    if Enum.any?(entity_types, &user_entity?/1) do
+      entity_types
+    else
+      List.delete(entity_types, Hologram.Auth.RoleGrant)
+    end
   end
 end
