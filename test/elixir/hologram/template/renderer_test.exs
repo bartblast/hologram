@@ -2434,7 +2434,12 @@ defmodule Hologram.Template.RendererTest do
          [{:text, "abc"}, {:public_comment, [{:text, " x "}]}]}
       ]
 
-      assert tree |> encode_tree() |> JSON.encode!() ==
+      encoded =
+        tree
+        |> encode_tree()
+        |> JSON.encode!()
+
+      assert encoded ==
                ~s([["d","html"],["div",["class","big","hidden",null],["abc",["c",[" x "]]]]])
     end
   end
