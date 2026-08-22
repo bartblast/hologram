@@ -22,6 +22,25 @@ defmodule Hologram.Compiler.Encoder do
   # with the opaque `MapSet.t()` in the spec.
   @dialyzer {:no_opaque, {:encode_term!, 1}}
 
+  # The only characters a term's text cannot carry into the JavaScript this module emits.
+  # Everything else - tabs, other control chars, non-printable and astral Unicode - is legal
+  # inside a string literal and inside a script element, and travels as itself.
+  #
+  #   \\   would eat the character after it
+  #   "    would close the literal
+  #   \n   and \r are not allowed inside a literal at all
+  #   NUL  is rewritten to U+FFFD by the HTML parser inside script data
+  #   <    so that "</script" can never form in a page's inline script
+  #
+  # Bytes that are not valid UTF-8 have to go too, since a document carrying them has to be
+  # valid UTF-8. They are absent here because a pattern cannot name them - see escape_bytes/1.
+  @escapable_chars [<<0>>, "\n", "\r", "\"", "<", "\\"]
+
+  # A compiled pattern holds a reference, which no module attribute can carry, and compiling one
+  # costs more than escaping a short atom. So it is built once and kept where every process can
+  # read it.
+  @escapable_chars_pattern_key {__MODULE__, :escapable_chars_pattern}
+
   @doc """
   Encodes Elixir or Erlang alias as JavaScript class name.
 
@@ -1091,75 +1110,73 @@ defmodule Hologram.Compiler.Encoder do
     encode_as_string(name, false) <> "_#{version}"
   end
 
-  defp escape_non_printable_and_special_chars(str)
+  defp escapable_chars_pattern do
+    case :persistent_term.get(@escapable_chars_pattern_key, nil) do
+      nil ->
+        pattern = :binary.compile_pattern(@escapable_chars)
+        :persistent_term.put(@escapable_chars_pattern_key, pattern)
+        pattern
 
-  defp escape_non_printable_and_special_chars("\\" <> rest) do
-    "\\\\" <> escape_non_printable_and_special_chars(rest)
+      pattern ->
+        pattern
+    end
   end
 
-  defp escape_non_printable_and_special_chars("\"" <> rest) do
-    "\\\"" <> escape_non_printable_and_special_chars(rest)
+  # Walks a binary that is not text, so that a byte which is not valid UTF-8 can be named. The
+  # escapable chars are matched first, since this path answers for the whole binary.
+  defp escape_bytes(str), do: escape_bytes(str, [])
+
+  defp escape_bytes(<<0, rest::binary>>, acc), do: escape_bytes(rest, ["\\u{0}" | acc])
+  defp escape_bytes("\n" <> rest, acc), do: escape_bytes(rest, ["\\n" | acc])
+  defp escape_bytes("\r" <> rest, acc), do: escape_bytes(rest, ["\\r" | acc])
+  defp escape_bytes("\"" <> rest, acc), do: escape_bytes(rest, ["\\\"" | acc])
+  defp escape_bytes("<" <> rest, acc), do: escape_bytes(rest, ["\\u{3C}" | acc])
+  defp escape_bytes("\\" <> rest, acc), do: escape_bytes(rest, ["\\\\" | acc])
+
+  defp escape_bytes(<<char::utf8, rest::binary>>, acc) do
+    escape_bytes(rest, [<<char::utf8>> | acc])
   end
 
-  defp escape_non_printable_and_special_chars("\a" <> rest) do
-    "\\x07" <> escape_non_printable_and_special_chars(rest)
+  defp escape_bytes(<<byte::integer, rest::binary>>, acc) do
+    # No need to pad with 0, because every byte below 16 is valid UTF-8 and matched above.
+    escape_bytes(rest, ["\\x#{Integer.to_string(byte, 16)}" | acc])
   end
 
-  defp escape_non_printable_and_special_chars("\b" <> rest) do
-    "\\b" <> escape_non_printable_and_special_chars(rest)
+  defp escape_bytes("", acc), do: Enum.reverse(acc)
+
+  defp escape_char(0), do: "\\u{0}"
+  defp escape_char(?\n), do: "\\n"
+  defp escape_char(?\r), do: "\\r"
+  defp escape_char(?"), do: "\\\""
+  defp escape_char(?<), do: "\\u{3C}"
+  defp escape_char(?\\), do: "\\\\"
+
+  # Every escapable char is one byte, so a match is always one byte wide.
+  defp escape_matches(str, position, [], acc) do
+    Enum.reverse([binary_part(str, position, byte_size(str) - position) | acc])
   end
 
-  defp escape_non_printable_and_special_chars("\f" <> rest) do
-    "\\f" <> escape_non_printable_and_special_chars(rest)
+  defp escape_matches(str, position, [{index, _length} | rest], acc) do
+    run = binary_part(str, position, index - position)
+    escaped = escape_char(:binary.at(str, index))
+
+    escape_matches(str, index + 1, rest, [escaped, run | acc])
   end
 
-  defp escape_non_printable_and_special_chars("\n" <> rest) do
-    "\\n" <> escape_non_printable_and_special_chars(rest)
-  end
-
-  defp escape_non_printable_and_special_chars("\r" <> rest) do
-    "\\r" <> escape_non_printable_and_special_chars(rest)
-  end
-
-  defp escape_non_printable_and_special_chars("\t" <> rest) do
-    "\\t" <> escape_non_printable_and_special_chars(rest)
-  end
-
-  defp escape_non_printable_and_special_chars("\v" <> rest) do
-    "\\v" <> escape_non_printable_and_special_chars(rest)
-  end
-
-  # Line separator character (LS)
-  # (JavaScript editors have problems with this char)
-  defp escape_non_printable_and_special_chars(<<8_232::utf8>> <> rest) do
-    "\\u{2028}" <> escape_non_printable_and_special_chars(rest)
-  end
-
-  # Paragraph separator character (PS)
-  # (JavaScript editors have problems with this char)
-  defp escape_non_printable_and_special_chars(<<8_233::utf8>> <> rest) do
-    "\\u{2029}" <> escape_non_printable_and_special_chars(rest)
-  end
-
-  defp escape_non_printable_and_special_chars(<<code::utf8, rest::binary>>) do
-    char = <<code::utf8>>
-
-    escaped_char =
-      if String.printable?(char) do
-        char
+  # Copies the stretches between the chars that have to be escaped rather than rebuilding the
+  # text character by character: one native scan, and each stretch is a sub-binary that is never
+  # copied until the result is assembled. Linear in the length of the text, where growing the
+  # result with `<>` on the way out of a per-character recursion was quadratic.
+  defp escape_non_printable_and_special_chars(str) do
+    iodata =
+      if String.valid?(str) do
+        escape_matches(str, 0, :binary.matches(str, escapable_chars_pattern()), [])
       else
-        "\\u{#{Integer.to_string(code, 16)}}"
+        escape_bytes(str)
       end
 
-    escaped_char <> escape_non_printable_and_special_chars(rest)
+    IO.iodata_to_binary(iodata)
   end
-
-  defp escape_non_printable_and_special_chars(<<char::integer, rest::binary>>) do
-    # No need to pad with 0, because chars smaller that 16 will be encoded differently
-    "\\x#{Integer.to_string(char, 16)}" <> escape_non_printable_and_special_chars(rest)
-  end
-
-  defp escape_non_printable_and_special_chars(""), do: ""
 
   defp has_async_call?(clauses, context) do
     MapSet.size(context.async_mfas) > 0 and
