@@ -45,9 +45,20 @@ Benchee.run(
     runtime_entry_file_path =
       Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, app_versions, opts)
 
+    runtime_js_binding_modules =
+      runtime_mfas
+      |> Compiler.list_js_import_modules()
+      |> MapSet.new()
+
     page_entry_files_info =
       Reflection.list_pages()
-      |> Compiler.create_page_entry_files(call_graph_for_pages, ir_plt, async_mfas, opts)
+      |> Compiler.create_page_entry_files(
+        call_graph_for_pages,
+        ir_plt,
+        async_mfas,
+        runtime_js_binding_modules,
+        opts
+      )
       |> Enum.map(fn {entry_name, entry_file_path} ->
         {entry_name, entry_file_path, "page"}
       end)
