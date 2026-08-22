@@ -316,6 +316,8 @@ defmodule Hologram.Compiler do
   lines - default deny makes it statically dead, returning no rows when it is the query's root and
   no embedded row when it is an include target - and when a registered query filters or orders on
   a server-only attribute, which the client never holds and so could never evaluate locally.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_2/README.md
   """
   @spec build_queries(list(module), list(module)) :: %{
           entries: %{String.t() => %{atom => any}},
