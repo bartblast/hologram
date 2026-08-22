@@ -18,9 +18,11 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module14
   alias Hologram.Test.Fixtures.Compiler.Module15
   alias Hologram.Test.Fixtures.Compiler.Module17
+  alias Hologram.Test.Fixtures.Compiler.Module18
   alias Hologram.Test.Fixtures.Compiler.Module19
   alias Hologram.Test.Fixtures.Compiler.Module2
   alias Hologram.Test.Fixtures.Compiler.Module21
+  alias Hologram.Test.Fixtures.Compiler.Module22
   alias Hologram.Test.Fixtures.Compiler.Module23
   alias Hologram.Test.Fixtures.Compiler.Module24
   alias Hologram.Test.Fixtures.Compiler.Module25
@@ -584,6 +586,33 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(
                js,
                "globalThis.Hologram.config = {errorOverlay: false, stacktraces: true};"
+             )
+    end
+
+    test "no JS imports", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+      js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), [], @js_dir)
+
+      refute String.contains?(js, "import {")
+      refute String.contains?(js, "registerJsBindings")
+    end
+
+    test "JS imports of the modules it bundles", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+      mfas = runtime_mfas ++ [{Module18, :my_fun, 0}, {Module22, :my_fun, 0}]
+
+      js = build_runtime_js(mfas, ir_plt, MapSet.new(), [], @js_dir)
+
+      js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+      js_fixture_2_path = Path.join([@fixtures_dir, "compiler", "js_fixture_2.mjs"])
+
+      assert length(Regex.scan(~r/import \{/, js)) == 2
+      assert String.contains?(js, ~s'import { export_1a as $1 } from "#{js_fixture_1_path}";')
+      assert String.contains?(js, ~s'import { export_2 as $2 } from "#{js_fixture_2_path}";')
+
+      assert length(Regex.scan(~r/registerJsBindings/, js)) == 1
+
+      assert String.contains?(
+               js,
+               ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module18": {"alias_1a": $1}, "Hologram.Test.Fixtures.Compiler.Module22": {"alias_2": $2}});'
              )
     end
   end
