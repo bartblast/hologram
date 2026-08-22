@@ -104,8 +104,11 @@ defmodule Hologram.Controller do
   which decides whether this client has the page's code already, and the digest naming the bundle
   to fetch when it does not.
 
-  Terms are encoded the way a command's response encodes them, as JavaScript the client evaluates,
-  since that is the form its runtime already reads.
+  The page module is encoded the way a command's response encodes terms, as JavaScript the client
+  evaluates, since that is the form its runtime already reads. The tree is not: it holds only
+  elements, text, comments and the doctype, which is a closed vocabulary with no Elixir semantics
+  in it, so it rides as a nested JSON value the client gets already parsed rather than as source
+  it has to evaluate first.
 
   A redirect is a payload of its own, since a client-side navigation cannot be answered with a real
   one: a `fetch` following redirects consumes the 302 invisibly, and one set to leave it alone gets
@@ -139,7 +142,7 @@ defmodule Hologram.Controller do
     %{
       pageDigest: page_digest,
       pageModule: Encoder.encode_term!(page_module),
-      tree: Encoder.encode_term!(tree),
+      tree: Renderer.encode_tree(tree),
       type: "page"
     }
   end
