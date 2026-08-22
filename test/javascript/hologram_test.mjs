@@ -1349,29 +1349,33 @@ describe("Hologram", () => {
       type: "redirect",
     });
 
-    const encodedText = (str) =>
-      `Type.tuple([Type.atom("text"), Type.bitstring("${str}")])`;
+    // The wire form: an element is [tagName, attributes, children], attributes are a flat
+    // name/value run, and text is a bare string.
+    const wireElement = (tagName, attributes = [], children = []) => [
+      tagName,
+      attributes,
+      children,
+    ];
 
-    const encodedElement = (tagName, children = "") =>
-      `Type.tuple([Type.atom("element"), Type.bitstring("${tagName}"), Type.list([]), Type.list([${children}])])`;
-
-    const encodedBundleScript = (pageDigest) =>
-      `Type.tuple([Type.atom("element"), Type.bitstring("script"), Type.list([Type.tuple([Type.bitstring("src"), Type.keywordList([[Type.atom("text"), Type.bitstring("/hologram/page-${pageDigest}.js")]])])]), Type.list([])])`;
+    const wireBundleScript = (pageDigest) =>
+      wireElement("script", ["src", `/hologram/page-${pageDigest}.js`]);
 
     // What the server sends: the whole document, the page's own bundle script included.
-    const encodedTreeFor = (pageDigest, bodyText) =>
-      `Type.list([${encodedElement(
+    const treeFor = (pageDigest, bodyText) => [
+      wireElement(
         "html",
-        `${encodedElement("head", encodedBundleScript(pageDigest))},${encodedElement(
-          "body",
-          encodedText(bodyText),
-        )}`,
-      )}])`;
+        [],
+        [
+          wireElement("head", [], [wireBundleScript(pageDigest)]),
+          wireElement("body", [], [bodyText]),
+        ],
+      ),
+    ];
 
     const payloadFor = (pageDigest, bodyText = "page content") => ({
       pageDigest: pageDigest,
       pageModule: encodedModule7,
-      tree: encodedTreeFor(pageDigest, bodyText),
+      tree: treeFor(pageDigest, bodyText),
       type: "page",
     });
 
@@ -1385,9 +1389,7 @@ describe("Hologram", () => {
     const seedCurrentPage = () => {
       Hologram.virtualDocument = Vdom.mirror(
         Renderer.renderTree(
-          Interpreter.evaluateJavaScriptExpression(
-            encodedTreeFor("current", "current page content"),
-          ),
+          Renderer.decodeTree(treeFor("current", "current page content")),
         ),
         document.documentElement,
       );

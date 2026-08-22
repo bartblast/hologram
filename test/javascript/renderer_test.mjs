@@ -9283,6 +9283,214 @@ describe("Renderer", () => {
     });
   });
 
+  describe("decodeTree()", () => {
+    const text = (str) => Type.tuple([Type.atom("text"), Type.bitstring(str)]);
+
+    const attribute = (name, value) =>
+      Type.tuple([
+        Type.bitstring(name),
+        Type.keywordList([[Type.atom("text"), Type.bitstring(value)]]),
+      ]);
+
+    const booleanAttribute = (name) =>
+      Type.tuple([Type.bitstring(name), Type.list([])]);
+
+    const element = (tagName, attributes = [], children = []) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attributes),
+        Type.list(children),
+      ]);
+
+    // Mirrors the cases in the Elixir encode_tree/1 tests, one for one.
+
+    it("text node", () => {
+      assert.deepStrictEqual(
+        Renderer.decodeTree(["abc < xyz"]),
+        Type.list([text("abc < xyz")]),
+      );
+    });
+
+    it("doctype node", () => {
+      assert.deepStrictEqual(
+        Renderer.decodeTree([["d", "html"]]),
+        Type.list([Type.tuple([Type.atom("doctype"), Type.bitstring("html")])]),
+      );
+    });
+
+    it("element node, without attributes or children", () => {
+      assert.deepStrictEqual(
+        Renderer.decodeTree([["div", [], []]]),
+        Type.list([element("div")]),
+      );
+    });
+
+    it("element node, with attribute", () => {
+      assert.deepStrictEqual(
+        Renderer.decodeTree([["div", ["class", "big"], []]]),
+        Type.list([element("div", [attribute("class", "big")])]),
+      );
+    });
+
+    it("element node, with boolean attribute", () => {
+      assert.deepStrictEqual(
+        Renderer.decodeTree([["input", ["disabled", null], []]]),
+        Type.list([element("input", [booleanAttribute("disabled")])]),
+      );
+    });
+
+    it("element node, with multiple attributes", () => {
+      const result = Renderer.decodeTree([
+        ["div", ["class", "big", "hidden", null, "id", "abc"], []],
+      ]);
+
+      const expected = Type.list([
+        element("div", [
+          attribute("class", "big"),
+          booleanAttribute("hidden"),
+          attribute("id", "abc"),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("element node, with element key", () => {
+      assert.deepStrictEqual(
+        Renderer.decodeTree([["div", ["$key", "k1:0"], []]]),
+        Type.list([element("div", [attribute("$key", "k1:0")])]),
+      );
+    });
+
+    it("element node, with children", () => {
+      const result = Renderer.decodeTree([
+        ["div", [], ["abc", ["span", [], []]]],
+      ]);
+
+      const expected = Type.list([
+        element("div", [], [text("abc"), element("span")]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("element node, nested", () => {
+      const result = Renderer.decodeTree([
+        ["div", [], [["span", [], [["b", [], ["abc"]]]]]],
+      ]);
+
+      const expected = Type.list([
+        element(
+          "div",
+          [],
+          [element("span", [], [element("b", [], [text("abc")])])],
+        ),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("public comment node", () => {
+      assert.deepStrictEqual(
+        Renderer.decodeTree([["c", ["abc"]]]),
+        Type.list([
+          Type.tuple([Type.atom("public_comment"), Type.list([text("abc")])]),
+        ]),
+      );
+    });
+
+    it("public comment node, with multiple children", () => {
+      const result = Renderer.decodeTree([["c", ["abc", ["div", [], []]]]]);
+
+      const expected = Type.list([
+        Type.tuple([
+          Type.atom("public_comment"),
+          Type.list([text("abc"), element("div")]),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("node list", () => {
+      const result = Renderer.decodeTree([
+        "abc",
+        ["div", [], []],
+        ["d", "html"],
+      ]);
+
+      const expected = Type.list([
+        text("abc"),
+        element("div"),
+        Type.tuple([Type.atom("doctype"), Type.bitstring("html")]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty node list", () => {
+      assert.deepStrictEqual(Renderer.decodeTree([]), Type.list([]));
+    });
+
+    // The guard that lets renderTree's WARNING keep holding: a decoded wire form and the boxed
+    // tree it came from must render to the same vnodes, or a navigation rebuilds what it should
+    // have adopted.
+    it("renders to the vnodes the equivalent boxed tree renders to", () => {
+      const wire = [
+        ["d", "html"],
+        [
+          "html",
+          [],
+          [
+            ["head", [], []],
+            [
+              "body",
+              ["class", "page"],
+              [
+                ["div", ["$key", "k1:0", "hidden", null], ["abc"]],
+                ["c", ["a comment"]],
+              ],
+            ],
+          ],
+        ],
+      ];
+
+      const boxed = Type.list([
+        Type.tuple([Type.atom("doctype"), Type.bitstring("html")]),
+        element(
+          "html",
+          [],
+          [
+            element("head"),
+            element(
+              "body",
+              [attribute("class", "page")],
+              [
+                element(
+                  "div",
+                  [attribute("$key", "k1:0"), booleanAttribute("hidden")],
+                  [text("abc")],
+                ),
+                Type.tuple([
+                  Type.atom("public_comment"),
+                  Type.list([text("a comment")]),
+                ]),
+              ],
+            ),
+          ],
+        ),
+      ]);
+
+      assert.deepStrictEqual(Renderer.decodeTree(wire), boxed);
+
+      assert.deepStrictEqual(
+        Renderer.renderTree(Renderer.decodeTree(wire)),
+        Renderer.renderTree(boxed),
+      );
+    });
+  });
+
   describe("renderTree()", () => {
     const text = (str) => Type.tuple([Type.atom("text"), Type.bitstring(str)]);
 
