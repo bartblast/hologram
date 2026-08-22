@@ -14,37 +14,39 @@ defmodule Hologram.Migrator do
   alias Hologram.Migration.Renderer
   alias Hologram.Reflection
 
-  # Fixed application-defined key for pg_advisory_xact_lock - serializes the appliers of
-  # a deploy, whichever node gets there first. The value is frozen forever: a different
-  # key breaks mutual exclusion across Hologram versions, so it must survive any code
-  # move or rename. Provenance (for uniqueness, not for re-derivation): first 8 bytes of
-  # md5("hologram_migrations") as a signed int64.
-  @advisory_lock_key -335_777_576_117_788_795
-
-  # A key of its own, and the separation is what keeps a deploy from deadlocking itself. A
-  # concurrent index build cannot run inside a transaction, so it holds a SESSION lock - while
-  # every applier waits for its lock INSIDE one. Share one key between them and a node building
-  # an index leaves the others sitting in open transactions waiting for it, which is the one
-  # thing a concurrent build cannot outlast: it waits for every transaction that could see the
-  # table, so it waits for them, and they wait for it. Frozen forever for the same reason as the
-  # key above. Provenance (for uniqueness, not for re-derivation): first 8 bytes of
-  # md5("hologram_index_repair") as a signed int64.
+  # Fixed application-defined key for the migration lock - serializes the whole boot
+  # procedure of a deploy, whichever node gets there first. The value is frozen forever: a
+  # different key breaks mutual exclusion across Hologram versions, so it must survive any
+  # code move or rename. Provenance (for uniqueness, not for re-derivation): first 8 bytes
+  # of md5("hologram_migrations") as a signed int64.
   #
-  # EVERY concurrent index build in this module runs under this key - the repair path and the
-  # applier's tail alike. Two concurrent builds on one relation deadlock each other directly
-  # (each waits on the other's virtual transaction), so a builder this key does not cover is a
-  # deadlock on every deploy where two nodes reach their builds together.
+  # EVERY statement that changes the schema runs under this key, on the one session that
+  # holds it: the guard, each file's transaction, each tail's concurrent index build, and
+  # the index repair. A schema change this key does not cover is a deadlock on every deploy
+  # where two nodes reach it together - a concurrent build waits for every transaction that
+  # could see its table, and a schema change inside a transaction is exactly that.
   #
   # Taken ONLY with pg_try_advisory_lock, never pg_advisory_lock: a session queued on the
-  # blocking form holds a virtual transaction for as long as it waits, and a concurrent build
-  # waits on every virtual transaction that could see the table - so a queued waiter and the
-  # builder it waits for deadlock. A loser polls instead.
-  @index_advisory_lock_key 6_059_159_047_318_510_073
+  # blocking form holds a snapshot and a virtual transaction for as long as it waits, and a
+  # concurrent build waits for exactly those - so a queued waiter and the builder it waits
+  # for deadlock. A loser polls instead, and each poll is a millisecond statement that opens
+  # and closes between the build's waits, jamming nothing. Session-scoped rather than
+  # transactional because a concurrent build cannot run inside a transaction at all, and
+  # because it frees with its session, so a node that dies mid-procedure strands nobody.
+  #
+  # It covers the PROCEDURE rather than a file: a node holds off even its cheap
+  # already-applied skips until it holds the key. At boot that costs nothing measurable -
+  # the builds it would otherwise wait for are the same wait - and it is what keeps the rule
+  # one sentence instead of a map of which phase runs under which key.
+  #
+  # Hologram.Migration.ShadowVerifier is the one caller outside this coverage, on purpose:
+  # it applies to a throwaway database of its own, one verification at a time under a key of
+  # its own, with no second session to exclude.
+  @advisory_lock_key -335_777_576_117_788_795
 
-  # How often a node that missed the index lock looks again. A politeness knob, not a
-  # correctness bound - the loop exits by the work being done or by the freed lock, never
-  # by a deadline.
-  @index_repair_poll_interval_ms 1_000
+  # How often a node that missed the migration lock looks again. A politeness knob, not a
+  # correctness bound - the loop exits by winning the lock, never by a deadline.
+  @migration_lock_poll_interval_ms 1_000
 
   @managed_by "migrations"
 
@@ -67,10 +69,11 @@ defmodule Hologram.Migrator do
   A file's statements and its bookkeeping row commit together, so the record can never
   disagree with the schema, and a failure leaves the earlier files applied - every
   inter-file state is a reviewed historical model state, which makes file boundaries the
-  right transaction boundaries. An advisory lock serializes the appliers of a deploy: the
-  first node does the work, the rest wait, re-read the bookkeeping inside their own
-  transaction, and find the file already applied. Index builds that cannot run inside a
-  transaction follow after the commit.
+  right transaction boundaries. The migration lock is the caller's to hold, and it serializes
+  the appliers of a deploy: the first node does the work, the rest wait for the lock, then
+  re-read the bookkeeping inside their own transaction and find each file already applied.
+  Index builds that cannot run inside a transaction follow after the commit, under that same
+  held lock.
 
   The managed-object registry is deliberately left alone - it is schema reconciliation's
   record of what it created, and a migration-managed database has no use for it.
@@ -203,16 +206,14 @@ defmodule Hologram.Migrator do
   or a database managed by schema reconciliation - dev's mechanism, which never shares a
   database with production.
 
-  The advisory lock the appliers share is taken first, because a virgin database is the
-  one state every node of a deploy resolves the same way: without it they all read "no
-  schemas" and all run CREATE SCHEMA, and the losers of that race fail their boot. Held
-  until the caller's transaction ends, so the claim is complete before the next node
-  looks - which then finds the marker and returns :managed.
+  The migration lock is the caller's to hold - run/3 takes it before this runs and keeps it
+  for the whole procedure. That exclusion is what makes a virgin database safe, since it is
+  the one state every node of a deploy resolves the same way: without it they all read "no
+  schemas" and all run CREATE SCHEMA, and the losers of that race fail their boot. The next
+  node looks only once the claim has committed, and finds the marker.
   """
   @spec ensure_managed!(%{atom => any}) :: :claimed | :managed
   def ensure_managed!(context) do
-    {:ok, _result} = Connection.query("SELECT pg_advisory_xact_lock($1)", [@advisory_lock_key])
-
     case hologram_schemas() do
       [] -> claim(context)
       ["hologram_data", "hologram_system"] -> check_marker!(context)
@@ -265,30 +266,21 @@ defmodule Hologram.Migrator do
   behind a state nothing can reach on its own. Everything else the drift check still
   refuses.
 
-  The work runs on a connection of its own, guarded by a session-scoped advisory lock: a
-  concurrent build cannot run inside a transaction, and nodes building the same index at
-  the same moment deadlock each other.
+  Runs under the migration lock the caller holds, on that lock's own session: a concurrent
+  build cannot run inside a transaction, and two nodes building the same index at the same
+  moment deadlock each other. Holding the lock across it is also what tells in-progress work
+  apart from abandoned work - a build registers its index invalid from the moment it starts,
+  so a node able to see another's mid-flight build would read it as broken and rebuild it.
 
-  The lock is TRIED, never waited on. A concurrent build waits for every open transaction
-  that could see the table, and a node queued on the lock is exactly that - its blocked
-  SELECT holds a virtual transaction for as long as it queues - so a polite waiter and the
-  builder deadlock each other, each holding what the other needs. A node that misses the
-  lock polls the catalog instead: each check is a millisecond statement that opens and
-  closes between the build's waits, jamming nothing. It leaves when the work is done, or
-  acquires the lock and does the work itself when the holder dies - a session lock frees
-  with its session, so a crashed builder cannot strand the fleet, and the half-built index
-  it leaves reads as invalid and is rebuilt by whoever takes over.
-
-  That lock is NOT the one the appliers share. An applier waits for its lock inside a
-  transaction, so one key for both would hand the builder-versus-waiter deadlock to every
-  deploy rather than to unlucky timing.
+  A node that dies here strands nobody: the lock frees with its session, and the half-built
+  index it leaves reads as invalid and is rebuilt by whoever takes the lock next.
   """
   @spec repair_indexes(%{module => %{atom => any}}) :: :ok
   def repair_indexes(mapping) do
     if invalid_indexes() == [] and missing_indexes(mapping) == [] do
       :ok
     else
-      with_index_build_connection(fn -> rebuild_and_create_indexes(mapping) end)
+      rebuild_and_create_indexes(mapping)
     end
   end
 
@@ -323,14 +315,14 @@ defmodule Hologram.Migrator do
     end)
   end
 
+  # The re-read inside the transaction stays, and is not redundant with the lock: the lock
+  # keeps two nodes from applying at once, and this is what tells a node that WAITED for it
+  # that the file it was about to apply is already there.
   defp apply_migration(migration, model, context) do
     render = Renderer.render(migration.ops, model)
 
     {:ok, status} =
       Connection.transaction(fn ->
-        {:ok, _result} =
-          Connection.query("SELECT pg_advisory_xact_lock($1)", [@advisory_lock_key])
-
         if migration.version in applied_versions() do
           :skipped
         else
@@ -345,13 +337,12 @@ defmodule Hologram.Migrator do
     render.post_model
   end
 
-  # Acquired by polling, never by queuing - see @index_advisory_lock_key. The work behind the
-  # lock is ours to do, so unlike the repair path's loser there is no done-by-someone-else exit:
-  # the loop ends by winning the lock.
-  defp acquire_index_build_lock do
-    unless try_index_advisory_lock?() do
-      Process.sleep(@index_repair_poll_interval_ms)
-      acquire_index_build_lock()
+  # Acquired by polling, never by queuing - see @advisory_lock_key. The work behind the lock
+  # is ours to do, so there is no done-by-someone-else exit: the loop ends by winning it.
+  defp acquire_migration_lock do
+    unless try_migration_lock?() do
+      Process.sleep(@migration_lock_poll_interval_ms)
+      acquire_migration_lock()
     end
   end
 
@@ -557,24 +548,13 @@ defmodule Hologram.Migrator do
     end
   end
 
-  # A tail op is a concurrent index build, so it is a BUILDER and runs like the other one: on a
-  # session of its own (the pool can put the lock and the statement on different connections),
-  # under the builder lock. Unlocked, another node that finds the chain applied reaches its
-  # repair while this build is mid-flight, reads the half-built index as broken, and REINDEXes
-  # it - two concurrent builds on one relation, waiting on each other's virtual transactions.
-  # The lock is also what tells that node in-progress apart from abandoned: it polls until this
-  # session is done and then finds nothing to repair.
+  # Runs on the migration lock's session, which by now holds no open transaction - the file
+  # committed above - which is what a concurrent build needs. The lock is already held and has
+  # to be: unlocked, a node applying the NEXT file deadlocks against this build outright, and a
+  # node reaching its own repair reads this half-built index as broken and REINDEXes it, which
+  # is two concurrent builds on one relation waiting on each other's virtual transactions.
   defp execute_tail_ops(tail) do
-    with_index_build_connection(fn ->
-      acquire_index_build_lock()
-
-      try do
-        Enum.each(tail, &execute_tail_op/1)
-      after
-        {:ok, _result} =
-          Connection.query("SELECT pg_advisory_unlock($1)", [@index_advisory_lock_key])
-      end
-    end)
+    Enum.each(tail, &execute_tail_op/1)
   end
 
   defp fill_column(table, column, encoded_value) do
@@ -635,42 +615,13 @@ defmodule Hologram.Migrator do
   end
 
   defp rebuild_and_create_indexes(mapping) do
-    if try_index_advisory_lock?() do
-      try do
-        Enum.each(invalid_indexes(), &rebuild_index/1)
+    Enum.each(invalid_indexes(), &rebuild_index/1)
 
-        mapping
-        |> missing_indexes()
-        |> Enum.each(&create_index_concurrently/1)
-      after
-        {:ok, _result} =
-          Connection.query("SELECT pg_advisory_unlock($1)", [@index_advisory_lock_key])
-      end
+    mapping
+    |> missing_indexes()
+    |> Enum.each(&create_index_concurrently/1)
 
-      :ok
-    else
-      await_index_repair(mapping)
-    end
-  end
-
-  # Another node holds the lock and is doing this work. Polling the catalog is the one way to
-  # wait that cannot jam it - and re-trying the lock each round is what takes over when the
-  # holder dies, since a session lock frees with its session.
-  defp await_index_repair(mapping) do
-    Process.sleep(@index_repair_poll_interval_ms)
-
-    if invalid_indexes() == [] and missing_indexes(mapping) == [] do
-      :ok
-    else
-      rebuild_and_create_indexes(mapping)
-    end
-  end
-
-  defp try_index_advisory_lock? do
-    {:ok, %{rows: [[acquired?]]}} =
-      Connection.query("SELECT pg_try_advisory_lock($1)", [@index_advisory_lock_key])
-
-    acquired?
+    :ok
   end
 
   defp rebuild_index(index) do
@@ -686,36 +637,52 @@ defmodule Hologram.Migrator do
     }
   end
 
+  # The not-covered check is pure, so it runs BEFORE the lock is taken: a deploy whose model
+  # never became migrations refuses without first making the fleet queue for the privilege.
+  # Everything after it touches the schema and runs on the locked session.
   defp run_migrations(migrations, current_model, context) do
     check_covered!(migrations, current_model)
 
-    {:ok, _status} = Connection.transaction(fn -> ensure_managed!(context) end)
+    with_migration_connection(fn ->
+      acquire_migration_lock()
 
-    applied = applied_versions()
+      {:ok, _status} = Connection.transaction(fn -> ensure_managed!(context) end)
 
-    pre_model =
+      applied = applied_versions()
+
+      pre_model =
+        migrations
+        |> Enum.filter(&(&1.version in applied))
+        |> Enum.reduce(Model.empty(), &Model.fold(&2, &1.ops))
+
       migrations
-      |> Enum.filter(&(&1.version in applied))
-      |> Enum.reduce(Model.empty(), &Model.fold(&2, &1.ops))
+      |> pending(applied)
+      |> apply_pending(pre_model, context)
 
-    migrations
-    |> pending(applied)
-    |> apply_pending(pre_model, context)
+      mapping = Mapper.derive_from_model!(current_model)
 
-    mapping = Mapper.derive_from_model!(current_model)
+      repair_indexes(mapping)
 
-    repair_indexes(mapping)
-
-    check_drift!(mapping)
+      check_drift!(mapping)
+    end)
 
     :ok
   end
 
-  # Opened against the database currently connected rather than the configured one:
-  # they are the same at boot, and following the caller keeps the builds honest wherever
-  # else the applier is pointed. A session of its own, because the builder lock is
-  # session-scoped and the pool can put the lock and the build on different connections.
-  defp with_index_build_connection(fun) do
+  defp try_migration_lock? do
+    {:ok, %{rows: [[acquired?]]}} =
+      Connection.query("SELECT pg_try_advisory_lock($1)", [@advisory_lock_key])
+
+    acquired?
+  end
+
+  # Opened against the database currently connected rather than the configured one: they are
+  # the same at boot, and following the caller keeps the procedure honest wherever else the
+  # applier is pointed. A session of its own, because the migration lock is session-scoped and
+  # the pool would put the lock and the work on different connections. Stopping it is what
+  # releases the lock, which is why no unlock statement appears anywhere - a node that dies
+  # mid-procedure frees it exactly the same way.
+  defp with_migration_connection(fun) do
     {:ok, %{rows: [[database]]}} = Connection.query("SELECT current_database()")
     connection_opts = Config.connection_opts(database: database)
     {:ok, connection_pid} = Postgrex.start_link(connection_opts)

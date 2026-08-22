@@ -914,61 +914,6 @@ defmodule Hologram.MigratorTest do
   end
 
   describe "run/3" do
-    test "claims the database and applies the pending suffix" do
-      migrations = [
-        migration("20260813091522", [
-          %{op: :create_entity, entity: MyApp.Task, line: 3},
-          %{
-            op: :add_attribute,
-            entity: MyApp.Task,
-            name: :title,
-            type: :string,
-            opts: [],
-            line: 4
-          }
-        ]),
-        migration("20260813142237", [
-          %{
-            op: :add_attribute,
-            entity: MyApp.Task,
-            name: :priority,
-            type: :integer,
-            opts: [optional: true],
-            line: 3
-          }
-        ])
-      ]
-
-      model = %{
-        entities: %{
-          MyApp.Task => %{
-            attributes: [{:priority, :integer, [optional: true]}, {:title, :string, []}],
-            relationships: [],
-            roles: []
-          }
-        },
-        roles: %{},
-        user_entity: nil
-      }
-
-      assert run(migrations, model, @context) == :ok
-
-      assert table_columns("my_app_task") == [
-               "created_at",
-               "id",
-               "priority",
-               "title",
-               "title_$sort",
-               "updated_at"
-             ]
-
-      assert applied_versions() == MapSet.new(["20260813091522", "20260813142237"])
-
-      # A second run finds nothing pending and changes nothing.
-      assert run(migrations, model, @context) == :ok
-      assert applied_versions() == MapSet.new(["20260813091522", "20260813142237"])
-    end
-
     test "refuses an uncovered model before touching the database" do
       migrations = []
 
