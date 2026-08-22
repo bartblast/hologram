@@ -47,6 +47,11 @@ defmodule Hologram.Template.Renderer do
           }
   end
 
+  # TODO: revisit this shape when the vdom renderer and the template format are rewritten. It was
+  # chosen for a client that rebuilds boxed terms from it; a client that walks plain JavaScript
+  # literals wants a different one, and the object-attribute forms ruled out here become eligible
+  # once the consumer collapses attributes by name anyway.
+  # See: docs/navigation_payload_wire_format.md
   @doc """
   Encodes an evaluated tree as a JSON-encodable term, for a client that renders the page itself.
 
