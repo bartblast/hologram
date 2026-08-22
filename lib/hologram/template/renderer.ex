@@ -280,15 +280,15 @@ defmodule Hologram.Template.Renderer do
         %{module: page_module, struct: page_component_struct_with_emitted_context_after_rendering}
       )
 
-    # `$SELF_ECHOES_JS_PLACEHOLDER` is intentionally left in both projections
-    # for the caller to substitute via `interpolate_self_echoes_js/2` or
-    # `interpolate_js_in_tree/3`. The value depends on the post-render
-    # `server.broadcasts`, which is a `Hologram.Realtime` concern - keeping the
-    # renderer Realtime-agnostic means the controller does the final
-    # substitution after `Realtime.get_self_echoes/1`.
-    # The four values a mount reads. They are grouped rather than kept as separate locals because
-    # they travel together: both projections interpolate the same four, and the navigation payload
-    # carries the same four beside the tree.
+    # `$SELF_ECHOES_JS_PLACEHOLDER` is intentionally left unsubstituted. Its value depends on the
+    # post-render `server.broadcasts`, which is a `Hologram.Realtime` concern - keeping the renderer
+    # Realtime-agnostic means the controller supplies it after `Realtime.get_self_echoes/1`, into
+    # the HTML through `interpolate_self_echoes_js/2` and into the navigation payload as a field.
+
+    # The values a mount reads, grouped because they travel together. The HTML projection inlines
+    # all four, since a loaded document has no other channel for them. A navigation carries three of
+    # them as payload fields instead - not the asset manifest, which is a global the initial
+    # document sets once and a navigation therefore already has.
     mount_data_js = %{
       asset_manifest: AssetManifestCache.get_manifest_js(),
       component_registry: Encoder.encode_term!(component_registry_with_page_struct),
