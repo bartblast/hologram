@@ -512,8 +512,10 @@ defmodule Hologram.ControllerTest do
     test "leaves the asset manifest out", %{fields: fields} do
       payload = build_page_data_payload(fields)
 
+      encoded = Jason.encode!(payload)
+
       refute Map.has_key?(payload, :assetManifest)
-      refute payload |> Jason.encode!() |> String.contains?("runtime-1234")
+      refute String.contains?(encoded, "runtime-1234")
     end
 
     test "survives the JSON encoding it is sent over", %{fields: fields} do
@@ -544,7 +546,12 @@ defmodule Hologram.ControllerTest do
     test "a redirect carries none of the page fields" do
       payload = build_page_data_payload({:redirect, "/my-target", Module1, %{key: "value"}})
 
-      assert payload |> Map.keys() |> Enum.sort() == [:pageModule, :pageParams, :to, :type]
+      keys =
+        payload
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert keys == [:pageModule, :pageParams, :to, :type]
     end
 
     # A target no page owns is the client's cue to hand it to the browser, so it carries nothing to

@@ -91,37 +91,6 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
-  Substitutes the given placeholder with the given JavaScript source inside every script
-  element's text across the given tree.
-
-  Placeholders are JavaScript expressions, meaningful only where JavaScript lives, so text
-  outside a script element is left alone - a placeholder string occurring in user-visible
-  content stays literal.
-  """
-  @spec interpolate_js_in_tree(tree, String.t(), String.t()) :: tree
-  def interpolate_js_in_tree(tree, placeholder, js)
-
-  def interpolate_js_in_tree({:element, "script", attributes, children}, placeholder, js) do
-    interpolated_children =
-      Enum.map(children, fn
-        {:text, text} -> {:text, String.replace(text, placeholder, js)}
-        child -> interpolate_js_in_tree(child, placeholder, js)
-      end)
-
-    {:element, "script", attributes, interpolated_children}
-  end
-
-  def interpolate_js_in_tree({:element, tag_name, attributes, children}, placeholder, js) do
-    {:element, tag_name, attributes, interpolate_js_in_tree(children, placeholder, js)}
-  end
-
-  def interpolate_js_in_tree(nodes, placeholder, js) when is_list(nodes) do
-    Enum.map(nodes, &interpolate_js_in_tree(&1, placeholder, js))
-  end
-
-  def interpolate_js_in_tree(node, _placeholder, _js), do: node
-
-  @doc """
   Substitutes the `$SELF_ECHOES_JS_PLACEHOLDER` token in the given HTML with
   the encoded list of actions supplied by the caller.
   """
