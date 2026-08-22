@@ -56,6 +56,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Component.Module25, as: Component25
   alias Hologram.Test.Fixtures.Component.Module27, as: Component27
   alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
+  alias Hologram.Test.Fixtures.Entity.Module18, as: Entity18
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
@@ -103,6 +104,16 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       terms = extract_module_queries(Module39)
 
       assert Enum.map(terms, &{&1.entity, Map.keys(&1.include)}) == [{Entity13, [:parent]}]
+    end
+
+    test "drops a candidate a later stage cannot satisfy rather than failing the build" do
+      # Entity18 declares title and no relationships, so it survives the filter and has nothing for
+      # the include to travel over - which used to fail the whole build rather than drop it.
+      assert %{entity: Entity18} = filter(Entity18, title: "x")
+
+      terms = extract_module_queries(Module39)
+
+      assert Enum.map(terms, & &1.entity) == [Entity13]
     end
 
     test "extracts every entity type admitting a query whose entity is an argument" do
@@ -354,11 +365,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
     test "raises on an include name argument the target has no relationship for" do
       expected_msg =
-        normalize_newlines("""
-        test/elixir/support/fixtures/compiler/query_extractor/module_40.ex:17: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module40 passes an argument to include/2 in a position the build cannot enumerate - the rows to download cannot be worked out without its value
-
-            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_40.ex:17: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module40.entities_query/1\
-        """)
+        "test/elixir/support/fixtures/compiler/query_extractor/module_40.ex:17: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module40 includes a relationship of Hologram.Test.Fixtures.Entity.Module4, which declares none - a prop with no window would read rows nothing ever fills"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module40)
@@ -393,7 +400,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
     test "raises on a capture no entity type admits" do
       expected_msg =
-        "test/elixir/support/fixtures/compiler/query_extractor/module_35.ex:16: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module35 builds no query that any entity type of the build admits - a prop with no window would read rows nothing ever fills"
+        "test/elixir/support/fixtures/compiler/query_extractor/module_35.ex:17: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module35 builds no query that any entity type of the build admits - it filters on :no_entity_declares_this - a prop with no window would read rows nothing ever fills"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_module_queries(Module35)

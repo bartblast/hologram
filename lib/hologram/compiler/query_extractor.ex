@@ -17,6 +17,25 @@ defmodule Hologram.Compiler.QueryExtractor do
   @fork_signal :hologram_query_extractor_fork
   @prune_signal :hologram_query_extractor_prune
 
+  defmodule SymbolicQuery do
+    @moduledoc false
+
+    # A query the build cannot execute yet, because a position the WINDOW is derived from - the
+    # entity that says which table to download, an include name that says which relationship
+    # travels with it - is an argument. Nothing is built while the capture is walked: each stage
+    # asked of it is recorded, and the record is replayed through Hologram.Query once the
+    # candidates are known. So the developer's code runs once, and only the recorded stages -
+    # a short list of data - are replayed per candidate.
+    #
+    # `base` is what the stages apply to: a placeholder, standing for every entity type of the
+    # build, or a concrete entity type or query term when only an include name is unknown. Stages
+    # are held newest-first and reversed at replay, each carrying the line it was written on - a
+    # record that admits nothing is refused after the walk, where only the stages still say where.
+    defstruct [:base, stages: []]
+
+    @type t :: %__MODULE__{base: struct | module | map, stages: list({atom, list, integer | nil})}
+  end
+
   @doc """
   Extracts the registered query terms declared by the given module - the normalized
   terms of every `from_query:` capture on the module's prop declarations.
@@ -49,13 +68,16 @@ defmodule Hologram.Compiler.QueryExtractor do
   position `Hologram.Query.Window` drops or empties takes one as a leaf: a filter
   attribute or value, an ordering key or direction, a view bound. A position the
   window is DERIVED from cannot - the entity says which table to download, an
-  include name says which relationship travels with it - so those FORK instead,
-  one variant per candidate of a finite set (every entity type of the build, or the
-  target's declared relationships). A candidate the query itself refuses is pruned,
-  which is what narrows the set: `filter(entity.type, done: false)` keeps precisely
-  the types declaring a boolean `done`. Everything a pruned candidate caused is
-  pruned with it, however deep, so a sub-builder refusing a speculated relationship
-  kills that variant rather than the build.
+  include name says which relationship travels with it - so a query holding one is
+  not built while the capture is walked at all: the stages asked of it are RECORDED,
+  and the record is replayed through the builder once per candidate of a finite set
+  (every entity type of the build, or the query's entity's declared relationships),
+  keeping the variants the builder admits. The developer's code is walked once, and
+  only the recorded stages are replayed. What narrows the set is the builder's own
+  validation, whatever stage refuses: `filter(entity.type, done: false)` keeps
+  precisely the types declaring a boolean `done`, and a candidate a LATER stage
+  cannot satisfy - a sub-builder refusing the relationship a replay chose, an entity
+  declaring no relationship to include - is dropped rather than failing the build.
 
   Raises Hologram.CompileError when a from_query value is not a function capture,
   when a capture argument is destructured instead of a plain name, when a capture
@@ -176,52 +198,41 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   # The query position decides WHICH TABLE the window downloads, so unlike a value it cannot stay a
-  # placeholder. The candidates are finite - every entity type of the build - so the evaluation
-  # FORKS over them, exactly as it forks a case clause, and each variant becomes its own window.
+  # placeholder. Rather than choosing a candidate here and re-walking the developer's code once per
+  # choice, the stage is RECORDED against the placeholder and replayed later over a finite set -
+  # every entity type of the build - each surviving replay becoming its own window.
   #
-  # What narrows the set is the query itself: a variant the stage refuses (an attribute that type
-  # does not declare, an operand of the wrong type) is PRUNED, so `filter(entity.type, done: false)`
-  # keeps precisely the types declaring a boolean `done`. No separate narrowing rule exists, and
-  # none should - Hologram.Query's own validation is the satisfiability check.
-  # One position per pass, recursing until none is left - a query whose entity AND include name both
-  # arrive at run time forks twice, over the product of the two candidate sets.
+  # What narrows the set is the query itself: a candidate the builder refuses (an attribute that
+  # type does not declare, an operand of the wrong type) is dropped at replay, so
+  # `filter(entity.type, done: false)` keeps precisely the types declaring a boolean `done`. No
+  # separate narrowing rule exists, and none should - Hologram.Query's own validation is the
+  # satisfiability check, and the replay ASKS it rather than reproducing it.
+  #
+  # A stage whose query is a placeholder starts a record rather than a query, and every stage
+  # asked of that record joins it. One record covers a query whose entity AND include name both
+  # arrive at run time - the replay expands both, over the product of the two candidate sets.
+  defp apply_query_stage!(function, [%Placeholder{} = base | rest_args], state, context) do
+    {%SymbolicQuery{base: base, stages: [{function, rest_args, context.line}]}, state}
+  end
+
+  defp apply_query_stage!(function, [%SymbolicQuery{} = query | rest_args], state, context) do
+    {%{query | stages: [{function, rest_args, context.line} | query.stages]}, state}
+  end
+
+  # An include name is the other position the window is derived from, so a query that is otherwise
+  # concrete becomes a record here too - its candidates are its own entity's relationships.
+  defp apply_query_stage!(
+         :include,
+         [query | [%Placeholder{} | _rest] = rest_args],
+         state,
+         context
+       ) do
+    {%SymbolicQuery{base: query, stages: [{:include, rest_args, context.line}]}, state}
+  end
+
   defp apply_query_stage!(function, arg_values, state, context) do
-    case forked_position(function, arg_values, context) do
-      nil ->
-        {apply_authored_stage!(function, arg_values, context), state}
-
-      {index, candidates} ->
-        {choice, state_after_choice} = take_choice!(state, length(candidates), context)
-
-        substituted_args = List.replace_at(arg_values, index, Enum.at(candidates, choice))
-
-        apply_speculated_stage!(function, substituted_args, state_after_choice, context)
-    end
+    {apply_authored_stage!(function, arg_values, context), state}
   end
-
-  # The two positions a placeholder cannot stay in, because the window is derived from them: the
-  # entity says which table to download, an include name says which relationship travels with it.
-  # Both have a finite candidate set, so both fork rather than refuse.
-  #
-  # An entity declaring no relationship yields no candidates, so there is nothing to fork over and
-  # the call falls through to the stage, which refuses the placeholder - located when the developer
-  # named that entity, pruned when a fork chose it.
-  #
-  # The entity set arrives in the context, computed once by whoever drives the build - the fork
-  # re-enters the body once per candidate, so anything computed at this point would run once per
-  # variant, and listing the build's entity types sweeps every app's ebin directory.
-  defp forked_position(_function, [%Placeholder{} | _rest_args], context) do
-    {0, context.entity_types}
-  end
-
-  defp forked_position(:include, [query | [%Placeholder{} | _rest_args]], _context) do
-    case relationship_names(query) do
-      [] -> nil
-      names -> {1, names}
-    end
-  end
-
-  defp forked_position(_function, _arg_values, _context), do: nil
 
   defp relationship_names(%{entity: entity_type}), do: relationship_names(entity_type)
 
@@ -243,21 +254,6 @@ defmodule Hologram.Compiler.QueryExtractor do
                 stack: context.stack
               ],
               __STACKTRACE__
-  end
-
-  # A stage the BUILD speculated, never the developer. Its refusal says the candidate is wrong, not
-  # that the query is - so the variant dies and the others carry on.
-  #
-  # The rescue wraps the whole substituted call, so EVERYTHING a candidate makes happen is
-  # speculative however deep it runs: a sub-builder refusing the relationship the fork chose is the
-  # fork's problem, not the developer's. A builder with no fork in it never reaches here, which is
-  # what keeps an authored mistake loud - apply_authored_stage!/3 reraises it with the prop's name.
-  # A fork signal is a throw rather than an exception, so it passes through untouched.
-  defp apply_speculated_stage!(function, arg_values, state, context) do
-    apply_query_stage!(function, arg_values, state, context)
-  rescue
-    ArgumentError -> throw(@prune_signal)
-    Hologram.CompileError -> throw(@prune_signal)
   end
 
   # A cover-compiled module (coverage runs) is loaded from instrumented code,
@@ -375,6 +371,9 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp contains_placeholder?(%Placeholder{}), do: true
 
+  # A record is as unknown as the placeholder it stands on - a native call must never receive one.
+  defp contains_placeholder?(%SymbolicQuery{}), do: true
+
   defp contains_placeholder?(list) when is_list(list) do
     Enum.any?(list, &contains_placeholder?/1)
   end
@@ -470,9 +469,17 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     case left_value do
       # The name is built from source-level field names, so the set is bounded by the code itself.
-      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-      %Placeholder{name: name} -> {%Placeholder{name: :"#{name}.#{field}"}, state_after_field}
-      value -> {concrete_field!(value, field, context), state_after_field}
+      %Placeholder{name: name} ->
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        {%Placeholder{name: :"#{name}.#{field}"}, state_after_field}
+
+      # The record's own shape is not known until it is replayed, so a read off one is unknowable
+      # too - named for the argument it derives from, like every other value the build cannot see.
+      %SymbolicQuery{} = query ->
+        {%Placeholder{name: first_placeholder_name(query)}, state_after_field}
+
+      value ->
+        {concrete_field!(value, field, context), state_after_field}
     end
   end
 
@@ -645,6 +652,10 @@ defmodule Hologram.Compiler.QueryExtractor do
   # is FOR is saying which argument the value came from when a term is read.
   defp first_placeholder_name(%Placeholder{name: name}), do: name
 
+  defp first_placeholder_name(%SymbolicQuery{base: base, stages: stages}) do
+    first_placeholder_name(base) || first_placeholder_name(Enum.map(stages, &elem(&1, 1)))
+  end
+
   defp first_placeholder_name(list) when is_list(list) do
     Enum.find_value(list, &first_placeholder_name/1)
   end
@@ -774,6 +785,77 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
+  # What the developer asked for, read off the record rather than off the candidates' refusals: the
+  # first candidate of a build is a framework entity type, so quoting ITS refusal would answer a
+  # question about the developer's model with the grant store's columns.
+  defp no_window_refusal(module, prop_name, variants) do
+    prefix = "query capture for prop #{inspect(prop_name)} in #{inspect(module)}"
+    tail = "a prop with no window would read rows nothing ever fills"
+
+    case Enum.find_value(variants, &relationshipless_include/1) do
+      nil ->
+        {clause, line} = asked_for(variants)
+
+        {"#{prefix} builds no query that any entity type of the build admits#{clause} - #{tail}",
+         line}
+
+      {entity_type, line} ->
+        {"#{prefix} includes a relationship of #{inspect(entity_type)}, which declares none - #{tail}",
+         line}
+    end
+  end
+
+  defp asked_for(variants) do
+    case Enum.find_value(variants, &filtered_names/1) do
+      nil -> {"", nil}
+      {names, line} -> {" - it filters on #{Enum.map_join(names, ", ", &inspect/1)}", line}
+    end
+  end
+
+  defp filtered_names(%SymbolicQuery{stages: stages}) do
+    stages
+    |> Enum.reverse()
+    |> Enum.find_value(&filter_stage_names/1)
+  end
+
+  defp filtered_names(_variant), do: nil
+
+  defp filter_stage_names({:filter, [predicates], line}) when is_list(predicates) do
+    case for {name, _value} <- predicates, is_atom(name), do: name do
+      [] -> nil
+      names -> {names, line}
+    end
+  end
+
+  defp filter_stage_names(_stage), do: nil
+
+  # An include name the build cannot enumerate is not an unknowable position - its candidate set is
+  # simply empty, which only the entity it was asked of can explain.
+  defp relationshipless_include(%SymbolicQuery{base: %Placeholder{}}), do: nil
+
+  defp relationshipless_include(%SymbolicQuery{base: base, stages: stages}) do
+    if relationship_names(base) == [] do
+      empty_include_refusal(base, stages)
+    end
+  end
+
+  defp relationshipless_include(_variant), do: nil
+
+  defp empty_include_refusal(base, stages) do
+    case Enum.find_value(stages, &include_placeholder_line/1) do
+      nil -> nil
+      line -> {entity_type(base), line}
+    end
+  end
+
+  defp include_placeholder_line({:include, [%Placeholder{} | _rest_args], line}), do: line
+
+  defp include_placeholder_line(_stage), do: nil
+
+  defp entity_type(%{entity: entity_type}), do: entity_type
+
+  defp entity_type(entity_type) when is_atom(entity_type), do: entity_type
+
   # A position named by some clauses and left a literal by others merges to the one name - that is
   # what this is for, and it is how a `def q(nil)` clause sits beside a `def q(min_b)` one. Two
   # clauses naming it DIFFERENTLY is the shape that cannot merge, since the caller must pick a
@@ -874,22 +956,23 @@ defmodule Hologram.Compiler.QueryExtractor do
       stack: [frame(target_module, fun_name, arity, nil)]
     }
 
-    terms =
-      clauses
-      |> Enum.flat_map(fn clause ->
+    variants =
+      Enum.flat_map(clauses, fn clause ->
         env = head_env!(module, prop_name, clause)
 
         evaluate_variants!(clause.body, env, context, [])
       end)
+
+    terms =
+      variants
+      |> Enum.flat_map(&resolve(&1, entity_types))
       |> Enum.map(&Query.normalize/1)
       |> Enum.uniq()
 
     if terms == [] do
-      compile_error!(
-        "query capture for prop #{inspect(prop_name)} in #{inspect(module)} builds no query that any entity type of the build admits - a prop with no window would read rows nothing ever fills",
-        target_module,
-        hd(clauses).line
-      )
+      {message, line} = no_window_refusal(module, prop_name, variants)
+
+      compile_error!(message, target_module, line || hd(clauses).line)
     end
 
     terms
@@ -902,6 +985,42 @@ defmodule Hologram.Compiler.QueryExtractor do
       nil
     )
   end
+
+  # Every stage runs inside the rescue, and the rescue covers the whole continuation - so a
+  # candidate refused by a LATER stage drops out here rather than failing the build, however deep
+  # the refusal happens. A sub-builder refusing the relationship a replay chose is the replay's
+  # problem, not the developer's, which is what apply_authored_stage!/3 keeps loud for a query the
+  # developer wrote concretely.
+  defp replay([], query), do: [query]
+
+  defp replay([{:include, [%Placeholder{} | rest_args], _line} | rest_stages], query) do
+    query
+    |> relationship_names()
+    |> Enum.flat_map(&replay_stage(rest_stages, query, :include, [&1 | rest_args]))
+  end
+
+  defp replay([{function, args, _line} | rest_stages], query) do
+    replay_stage(rest_stages, query, function, args)
+  end
+
+  defp replay_stage(rest_stages, query, function, args) do
+    replay(rest_stages, apply(Query, function, [query | args]))
+  rescue
+    ArgumentError -> []
+    Hologram.CompileError -> []
+  end
+
+  # A record becomes the queries it admits: over every entity type of the build when the entity
+  # itself is unknown, over the one it already names when only an include name is.
+  defp resolve(%SymbolicQuery{base: %Placeholder{}, stages: stages}, entity_types) do
+    Enum.flat_map(entity_types, &replay(Enum.reverse(stages), &1))
+  end
+
+  defp resolve(%SymbolicQuery{base: base, stages: stages}, _entity_types) do
+    replay(Enum.reverse(stages), base)
+  end
+
+  defp resolve(term, _entity_types), do: [term]
 
   defp resolve_capture_clauses!(prop_module, prop_name, capture) do
     capture_info = Function.info(capture)
