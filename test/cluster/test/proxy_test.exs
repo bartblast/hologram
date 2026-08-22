@@ -52,7 +52,7 @@ defmodule HologramClusterTests.ProxyTest do
   @stub_port_1 4021
   @stub_port_2 4022
 
-  setup do
+  setup_all do
     for port <- [@stub_port_1, @stub_port_2] do
       # Stub listener names form a bounded set (one per stub port), so runtime atom
       # creation is safe here.
@@ -63,6 +63,17 @@ defmodule HologramClusterTests.ProxyTest do
     end
 
     start_supervised!({Proxy, upstreams: [@stub_port_1, @stub_port_2]})
+
+    :ok
+  end
+
+  # What a fresh proxy gave each test, given back without a rebind: an empty log and the
+  # full upstream set. Policies and the round-robin counter carry over, and nothing here
+  # reads either - a policy is selected by the token its own test minted, and the one
+  # alternation test asserts the SET of two upstreams, not which came first.
+  setup do
+    clear_log()
+    put_upstreams([@stub_port_1, @stub_port_2])
 
     :ok
   end
