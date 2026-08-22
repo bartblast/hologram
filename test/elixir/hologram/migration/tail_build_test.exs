@@ -1,20 +1,24 @@
 defmodule Hologram.Migration.TailBuildTest do
   # The applier's TAIL: the index builds a migration file cannot carry inside its own
-  # transaction, because the table already holds rows and PostgreSQL forbids a concurrent
-  # build in a transaction. They run after the file commits, which puts them outside every
-  # guarantee the file itself has.
+  # transaction, because PostgreSQL forbids a concurrent build in a transaction. They run
+  # after the file commits, which puts them outside every guarantee the file itself has.
   #
-  # They run under the builder lock, and that is the whole of what this pins. Without it,
-  # a node that finds the chain applied reaches its own repair while this build is still in
-  # flight, reads the half-built index as broken - a concurrent build registers its index
-  # invalid from the moment it starts - and rebuilds it. Two concurrent builds on one
-  # relation, each waiting on the other's virtual transaction. The lock is also the only
-  # signal that tells in-progress work apart from abandoned work.
+  # What this pins is where the tail now sits. It used to be the ONLY gated part of the
+  # procedure - the files applied under a key of their own and released it at each commit,
+  # and the tail then took a second key of its own to build under. That gap between the two
+  # was issue #1077: another node took the applier key the moment a file committed and ran
+  # the next file's ALTER TABLE straight into the build this one had just started.
   #
-  # The fix shipped with no test of its own (step 07, entry 47), naming this tier as where
-  # it becomes testable: the sandbox cannot run a concurrent build at all, and the cluster
-  # suite reaches the race only when two peers happen to arrive together - which it did
-  # twice, both times after days of looking like a flake.
+  # One key covers the whole procedure now, so the gate is not around the tail but around
+  # everything: a node that cannot have the key has not claimed the database, has not applied
+  # a file, and has not begun a build. The tail rides inside that, on the session already
+  # holding the key, which by then has no open transaction - which is exactly what a
+  # concurrent build needs.
+  #
+  # Entry 47's fix shipped with no test of its own, naming this tier as where it becomes
+  # testable: the sandbox cannot run a concurrent build at all, and the cluster suite reaches
+  # the race only when two peers happen to arrive together - which it did twice, both times
+  # after days of looking like a flake.
   #
   # async: false - every test of the tier opens raw sessions beside its scratch connection,
   # several in the contention suites, so the tier's modules run one at a time to keep the
@@ -36,37 +40,36 @@ defmodule Hologram.Migration.TailBuildTest do
   # file, which is what sends this build to the tail rather than into the transaction.
   @index "my_app_task_author_id_$idx"
 
-  # The value of Hologram.Migrator's @index_advisory_lock_key, hardcoded for the same
-  # reason as in the contention suite: the key is frozen, so a test that followed a change
-  # to it would hide what it exists to catch.
-  @index_lock_key 6_059_159_047_318_510_073
+  # The value of Hologram.Migrator's @advisory_lock_key, hardcoded for the same reason as in
+  # the contention suite: the key is frozen, so a test that followed a change to it would
+  # hide what it exists to catch.
+  @migration_lock_key -335_777_576_117_788_795
 
-  # Hologram.Migrator's @index_repair_poll_interval_ms - the cadence the tail retries at.
+  # Hologram.Migrator's @migration_lock_poll_interval_ms - the cadence a waiting node retries
+  # at.
   @poll_interval_ms 1_000
 
-  defp await_version_recorded(session, version) do
-    # The file commits within milliseconds of the applier starting. This loop guards
-    # against a hung test rather than tuning anything, so reaching its end is a failure.
-    await_version_recorded(session, version, 200)
+  defp applied_versions_of(session) do
+    statement = ~s{SELECT "version" FROM "hologram_system"."migration" ORDER BY "version"}
+
+    %{rows: rows} = Postgrex.query!(session, statement, [])
+
+    Enum.map(rows, fn [version] -> version end)
   end
 
-  defp await_version_recorded(_session, version, 0) do
-    flunk("migration #{version} was never recorded")
-  end
+  # Whether the database has been claimed at all. The system tables do not exist until the
+  # guard creates them, so this is the earliest observable step of the whole procedure - and
+  # therefore what proves a waiting node has not started rather than merely not finished.
+  defp hologram_schema_count(session) do
+    statement = """
+    SELECT COUNT(*)
+    FROM pg_catalog.pg_namespace
+    WHERE "nspname" IN ('hologram_data', 'hologram_system')
+    """
 
-  defp await_version_recorded(session, version, attempts_left) do
-    statement = ~s{SELECT COUNT(*) FROM "hologram_system"."migration" WHERE "version" = $1}
+    %{rows: [[count]]} = Postgrex.query!(session, statement, [])
 
-    # The system tables do not exist until the applier claims the database, so an error
-    # here means "not yet" rather than a failure.
-    case Postgrex.query(session, statement, [version]) do
-      {:ok, %{rows: [[1]]}} ->
-        :ok
-
-      _not_yet ->
-        Process.sleep(25)
-        await_version_recorded(session, version, attempts_left - 1)
-    end
+    count
   end
 
   defp index_validity(session) do
@@ -119,7 +122,7 @@ defmodule Hologram.Migration.TailBuildTest do
   end
 
   describe "run/3" do
-    test "waits for the builder lock before building the tail's index", %{
+    test "waits for the migration lock before applying anything", %{
       chain: chain,
       full_model: full_model,
       observer: observer,
@@ -127,9 +130,9 @@ defmodule Hologram.Migration.TailBuildTest do
     } do
       holder = start_supervised!({Postgrex, scratch_opts}, id: :holder)
 
-      # Another node is building something. This one must not build alongside it.
+      # Another node is somewhere inside its own procedure. This one must not start.
       assert %{rows: [[true]]} =
-               Postgrex.query!(holder, "SELECT pg_try_advisory_lock($1)", [@index_lock_key])
+               Postgrex.query!(holder, "SELECT pg_try_advisory_lock($1)", [@migration_lock_key])
 
       applier =
         Task.async(fn ->
@@ -138,27 +141,29 @@ defmodule Hologram.Migration.TailBuildTest do
           route(session, fn -> run(chain, full_model, @context) end)
         end)
 
-      # The file itself is done - it committed, and its version is recorded. Everything
-      # after this point is the tail.
-      await_version_recorded(observer, "20260813142237")
-
       Process.sleep(2 * @poll_interval_ms)
 
-      # The deploy is held here, and that is correct: the index is the last thing it owes,
-      # and it may not build while another node might be building the same one. Before the
-      # tail took this lock, the build ran the moment the file committed - so both of these
-      # assertions are the fix, stated.
-      assert Task.yield(applier, 0) == nil
+      # Not started, rather than merely not finished: the database is still virgin. Before
+      # the one key this assertion would have failed on its first line - the files applied
+      # immediately under a key of their own, and only the tail's build waited.
+      assert hologram_schema_count(observer) == 0
       assert index_validity(observer) == :absent
+      assert Task.yield(applier, 0) == nil
 
-      Postgrex.query!(holder, "SELECT pg_advisory_unlock($1)", [@index_lock_key])
+      Postgrex.query!(holder, "SELECT pg_advisory_unlock($1)", [@migration_lock_key])
 
       assert Task.await(applier, 30_000) == :ok
+
+      # The whole procedure ran once it had the key, tail included: both files recorded, and
+      # the index the second file could not build inside its transaction is there and VALID.
+      # Valid, not merely present - a concurrent build that fails partway leaves its index in
+      # the catalog serving no query while every write maintains it.
+      assert applied_versions_of(observer) == ["20260813091522", "20260813142237"]
       assert index_validity(observer) == true
 
-      # The tail let the lock go, so the next node is not stranded behind a finished build.
+      # And it let the key go, so the next node is not stranded behind a finished deploy.
       assert %{rows: [[true]]} =
-               Postgrex.query!(observer, "SELECT pg_try_advisory_lock($1)", [@index_lock_key])
+               Postgrex.query!(observer, "SELECT pg_try_advisory_lock($1)", [@migration_lock_key])
     end
   end
 end
