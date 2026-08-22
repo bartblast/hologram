@@ -382,6 +382,8 @@ defmodule Hologram.Reflection do
 
   The framework's role grant store joins the data model only when an entity type is designated
   as the user entity - without one there is nothing for its grants to point at.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/reflection/list_entities_0/README.md
   """
   @spec list_entities() :: list(module)
   def list_entities do
