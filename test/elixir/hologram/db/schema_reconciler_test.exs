@@ -781,7 +781,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       user =
         Module14
         |> Entity.new(email: "reconciler_1@example.com")
-        |> DB.create()
+        |> DB.create!()
 
       Auth.grant_role(user, Role.Module1)
 

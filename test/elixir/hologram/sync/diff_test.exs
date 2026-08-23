@@ -33,19 +33,19 @@ defmodule Hologram.Sync.DiffTest do
   defp row(title) do
     Module2
     |> Entity.new(a: true, c: title)
-    |> DB.create()
+    |> DB.create!()
   end
 
   defp source_with_targets(targets) do
     required =
       Module1
       |> Entity.new()
-      |> DB.create()
+      |> DB.create!()
 
     source =
       Module3
       |> Entity.new(c_id: required.id)
-      |> DB.create()
+      |> DB.create!()
 
     Enum.each(targets, &DB.add_relationship(Module3, source.id, :a, &1.id))
 
@@ -163,17 +163,17 @@ defmodule Hologram.Sync.DiffTest do
       author =
         Module14
         |> Entity.new(email: "author@example.com")
-        |> DB.create()
+        |> DB.create!()
 
       child =
         PolicyModule1
         |> Entity.new(author_id: author.id, public: true)
-        |> DB.create()
+        |> DB.create!()
 
       parent =
         PolicyModule3
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       round_parent = %{parent | children: [%{child | author: author}]}
       held = MapSet.new([parent.id, child.id, author.id])
@@ -265,12 +265,12 @@ defmodule Hologram.Sync.DiffTest do
       user =
         Module14
         |> Entity.new(email: "edge_reader@example.com")
-        |> DB.create()
+        |> DB.create!()
 
       hidden =
         PolicyModule1
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       events = edge_events(hidden.id, :add_relationship, "a", Entity.generate_id())
 
@@ -288,12 +288,12 @@ defmodule Hologram.Sync.DiffTest do
       hidden =
         PolicyModule1
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       parent =
         PolicyModule3
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       round_parent = %{parent | children: [hidden]}
 
@@ -408,7 +408,7 @@ defmodule Hologram.Sync.DiffTest do
       user =
         Module14
         |> Entity.new(email: "reader@example.com")
-        |> DB.create()
+        |> DB.create!()
 
       %{user: user}
     end
@@ -417,7 +417,7 @@ defmodule Hologram.Sync.DiffTest do
       hidden =
         PolicyModule1
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       refute Auth.can?(user.id, :read, hidden)
 
@@ -430,12 +430,12 @@ defmodule Hologram.Sync.DiffTest do
       hidden =
         PolicyModule1
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       parent =
         PolicyModule3
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       round_parent = %{parent | children: [hidden]}
 
@@ -452,19 +452,19 @@ defmodule Hologram.Sync.DiffTest do
       public_child =
         PolicyModule1
         |> Entity.new(public: true)
-        |> DB.create()
+        |> DB.create!()
 
       gated_child =
         PolicyModule1
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       Auth.grant_role(user, gated_child, :viewer)
 
       parent =
         PolicyModule3
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       round = result([%{parent | children: [public_child, gated_child]}])
 
@@ -482,7 +482,7 @@ defmodule Hologram.Sync.DiffTest do
       readable =
         PolicyModule1
         |> Entity.new(public: true)
-        |> DB.create()
+        |> DB.create!()
 
       deltas = deltas(result([readable]), MapSet.new(), user.id, [])
 
@@ -493,7 +493,7 @@ defmodule Hologram.Sync.DiffTest do
       hidden =
         PolicyModule1
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       deltas = deltas(result([hidden]), MapSet.new([hidden.id]), user.id, [])
 
@@ -505,12 +505,12 @@ defmodule Hologram.Sync.DiffTest do
       public_row =
         PolicyModule1
         |> Entity.new(priority: 1, public: true)
-        |> DB.create()
+        |> DB.create!()
 
       granted_row =
         PolicyModule1
         |> Entity.new(priority: 2)
-        |> DB.create()
+        |> DB.create!()
 
       # What makes the two clients differ: `allow :read, to: [:viewer, ...]` opens the non-public
       # row to whoever holds the role on it, and nothing opens it to whoever holds none.

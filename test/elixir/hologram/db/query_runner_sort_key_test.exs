@@ -36,9 +36,10 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
 
   defp create_module2_rows(values) do
     Enum.each(values, fn value ->
-      Module2
-      |> Entity.new(a: true, c: value)
-      |> create()
+      {:ok, _entity} =
+        Module2
+        |> Entity.new(a: true, c: value)
+        |> create()
     end)
   end
 
@@ -50,17 +51,20 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
 
   describe "run/3" do
     test "orders string attributes practically through sort-key companions" do
-      Module2
-      |> Entity.new(a: true, c: "Zürich")
-      |> create()
+      {:ok, _entity} =
+        Module2
+        |> Entity.new(a: true, c: "Zürich")
+        |> create()
 
-      Module2
-      |> Entity.new(a: true, c: "Łódź")
-      |> create()
+      {:ok, _entity} =
+        Module2
+        |> Entity.new(a: true, c: "Łódź")
+        |> create()
 
-      Module2
-      |> Entity.new(a: true, c: "apple")
-      |> create()
+      {:ok, _entity} =
+        Module2
+        |> Entity.new(a: true, c: "apple")
+        |> create()
 
       backfill_sort_keys()
 
@@ -73,17 +77,17 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
     end
 
     test "skips sort-key companions when decoding embedded entities" do
-      related =
+      {:ok, related} =
         Module2
         |> Entity.new(a: true, c: "banana")
         |> create()
 
-      target =
+      {:ok, target} =
         Module1
         |> Entity.new()
         |> create()
 
-      source =
+      {:ok, source} =
         Module3
         |> Entity.new(c_id: target.id)
         |> create()
@@ -99,9 +103,10 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
     end
 
     test "skips sort-key companions when decoding entities" do
-      Module2
-      |> Entity.new(a: true, c: "banana")
-      |> create()
+      {:ok, _entity} =
+        Module2
+        |> Entity.new(a: true, c: "banana")
+        |> create()
 
       term =
         Module2

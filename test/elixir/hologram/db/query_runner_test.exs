@@ -40,17 +40,17 @@ defmodule Hologram.DB.QueryRunnerTest do
                   ])
 
   defp create_module_2_entities do
-    first =
+    {:ok, first} =
       Module2
       |> Entity.new(a: true, c: "banana")
       |> create()
 
-    second =
+    {:ok, second} =
       Module2
       |> Entity.new(a: false, c: "apple")
       |> create()
 
-    third =
+    {:ok, third} =
       Module2
       |> Entity.new(a: true, b: 7, c: "cherry")
       |> create()
@@ -59,14 +59,17 @@ defmodule Hologram.DB.QueryRunnerTest do
   end
 
   defp create_module_3_entity do
-    target =
+    {:ok, target} =
       Module1
       |> Entity.new()
       |> create()
 
-    Module3
-    |> Entity.new(c_id: target.id)
-    |> create()
+    {:ok, entity} =
+      Module3
+      |> Entity.new(c_id: target.id)
+      |> create()
+
+    entity
   end
 
   describe "run_policied/4" do
@@ -98,20 +101,20 @@ defmodule Hologram.DB.QueryRunnerTest do
     defp create_policy_child(parent, public) do
       PolicyModule1
       |> Entity.new(parent_id: parent.id, public: public)
-      |> DB.create()
+      |> DB.create!()
     end
 
     defp create_policy_entity(public) do
       PolicyModule1
       |> Entity.new(public: public)
-      |> DB.create()
+      |> DB.create!()
     end
 
     defp create_policy_container(children) do
       container =
         PolicyModule3
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       Enum.each(children, &add_relationship(PolicyModule3, container.id, :children, &1.id))
 
@@ -121,13 +124,13 @@ defmodule Hologram.DB.QueryRunnerTest do
     defp create_policy_parent do
       PolicyModule2
       |> Entity.new()
-      |> DB.create()
+      |> DB.create!()
     end
 
     defp create_policy_user(email) do
       Module14
       |> Entity.new(email: email)
-      |> DB.create()
+      |> DB.create!()
     end
 
     defp included_children(actor_user_id) do
@@ -199,7 +202,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       entity =
         PolicyModule2
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       insert_global_grant(user.id, Role.Module1)
 
@@ -246,20 +249,20 @@ defmodule Hologram.DB.QueryRunnerTest do
       public_match =
         PolicyModule1
         |> Entity.new(priority: 5, public: true)
-        |> DB.create()
+        |> DB.create!()
 
       granted_match =
         PolicyModule1
         |> Entity.new(priority: 5)
-        |> DB.create()
+        |> DB.create!()
 
       PolicyModule1
       |> Entity.new(priority: 5)
-      |> DB.create()
+      |> DB.create!()
 
       PolicyModule1
       |> Entity.new(priority: 9, public: true)
-      |> DB.create()
+      |> DB.create!()
 
       Auth.grant_role(user, granted_match, :viewer)
 
@@ -363,9 +366,10 @@ defmodule Hologram.DB.QueryRunnerTest do
     # only, and an out-of-constraint value is a query matching nothing, not an
     # invalid query.
     test "binds placeholder values violating declared constraint options" do
-      Module10
-      |> Entity.new(count: 5)
-      |> create()
+      {:ok, _entity} =
+        Module10
+        |> Entity.new(count: 5)
+        |> create()
 
       mapping = Mapper.derive!([Module10])
       term = %{Query.normalize(Module10) | filter: [{:count, :==, {:placeholder, :count}}]}
@@ -468,11 +472,11 @@ defmodule Hologram.DB.QueryRunnerTest do
       parent =
         PolicyModule2
         |> Entity.new()
-        |> DB.create()
+        |> DB.create!()
 
       PolicyModule1
       |> Entity.new(parent_id: parent.id, public: true)
-      |> DB.create()
+      |> DB.create!()
 
       term =
         PolicyModule1
@@ -506,17 +510,17 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
 
     test "filters and orders a to-many include whose target names columns like the join table" do
-      source =
+      {:ok, source} =
         Module9
         |> Entity.new()
         |> create()
 
-      first_target =
+      {:ok, first_target} =
         Module8
         |> Entity.new(source_id: 5)
         |> create()
 
-      second_target =
+      {:ok, second_target} =
         Module8
         |> Entity.new(source_id: 1)
         |> create()

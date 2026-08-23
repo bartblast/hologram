@@ -88,15 +88,21 @@ defmodule Hologram.Query.InterpreterTest do
   end
 
   defp module_10(attributes) do
-    Module10
-    |> Entity.new(attributes)
-    |> create()
+    {:ok, entity} =
+      Module10
+      |> Entity.new(attributes)
+      |> create()
+
+    entity
   end
 
   defp module_17(attributes) do
-    Module17
-    |> Entity.new(attributes)
-    |> create()
+    {:ok, entity} =
+      Module17
+      |> Entity.new(attributes)
+      |> create()
+
+    entity
   end
 
   # Ids are time-ordered but not strictly so within a millisecond, and a query with no order of
@@ -109,9 +115,12 @@ defmodule Hologram.Query.InterpreterTest do
   end
 
   defp module_2(title) do
-    Module2
-    |> Entity.new(a: true, c: title)
-    |> create()
+    {:ok, entity} =
+      Module2
+      |> Entity.new(a: true, c: title)
+      |> create()
+
+    entity
   end
 
   defp matched_titles(rows) do
@@ -636,14 +645,14 @@ defmodule Hologram.Query.InterpreterTest do
 
   describe "run/3 - includes" do
     setup do
-      required =
+      {:ok, required} =
         Module1
         |> Entity.new()
         |> create()
 
       target = module_2("the to-one target")
 
-      source =
+      {:ok, source} =
         Module3
         |> Entity.new(b_id: target.id, c_id: required.id)
         |> create()
@@ -658,9 +667,15 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "fills a to-one relationship holding nothing with nothing" do
-      Module3
-      |> Entity.new(c_id: create(Entity.new(Module1)).id)
-      |> create()
+      {:ok, required} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, _entity} =
+        Module3
+        |> Entity.new(c_id: required.id)
+        |> create()
 
       rows = agreed(include(Module3, :b))
 
@@ -692,9 +707,14 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "reads only the pairs of its own source", %{source: source} do
-      other_source =
+      {:ok, required} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, other_source} =
         Module3
-        |> Entity.new(c_id: create(Entity.new(Module1)).id)
+        |> Entity.new(c_id: required.id)
         |> create()
 
       mine = module_2("mine")
@@ -741,9 +761,10 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "fills what an include includes, two levels down", %{required: required, source: source} do
-      Module5
-      |> Entity.new(a_id: source.id)
-      |> create()
+      {:ok, _entity} =
+        Module5
+        |> Entity.new(a_id: source.id)
+        |> create()
 
       query = include(Module5, :a, &include(&1, :c))
 
@@ -756,9 +777,10 @@ defmodule Hologram.Query.InterpreterTest do
     test "reads the table of its own entity type and no other" do
       module_10(count: 1, username: "ada")
 
-      Module2
-      |> Entity.new(a: true, c: "not a Module10 row")
-      |> create()
+      {:ok, _entity} =
+        Module2
+        |> Entity.new(a: true, c: "not a Module10 row")
+        |> create()
 
       assert names(agreed(Module10)) == ["ada"]
     end

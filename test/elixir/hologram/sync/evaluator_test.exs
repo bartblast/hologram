@@ -26,7 +26,7 @@ defmodule Hologram.Sync.EvaluatorTest do
   defp create(title) do
     Module2
     |> Entity.new(a: true, c: title)
-    |> DB.create()
+    |> DB.create!()
   end
 
   # The evaluator reads from its own process, which the sandbox owner must let in - otherwise it

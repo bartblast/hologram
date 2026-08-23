@@ -47,7 +47,7 @@ defmodule Hologram.ControllerCommandActorTest do
   defp create_user(email) do
     Module14
     |> Entity.new(email: email)
-    |> DB.create()
+    |> DB.create!()
   end
 
   defp entity_count do
@@ -149,7 +149,7 @@ defmodule Hologram.ControllerCommandActorTest do
     resource =
       Module1
       |> Entity.new()
-      |> DB.create()
+      |> DB.create!()
 
     Auth.grant_role(owner, resource, :owner)
 

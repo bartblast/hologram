@@ -257,11 +257,16 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records the creator's grants after the entity they are granted on" do
-      {:ok, user} = create(Entity.new(Module14, email: "creator@example.com"))
+      {:ok, user} =
+        Module14
+        |> Entity.new(email: "creator@example.com")
+        |> create()
 
       {:ok, created_entity} =
         Context.with_actor(user.id, fn ->
-          create(Entity.new(PolicyModule1))
+          PolicyModule1
+          |> Entity.new()
+          |> create()
         end)
 
       effects = outbox_effects()
@@ -400,15 +405,26 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "grants every creator role of the entity type to the acting user" do
-      {:ok, user} = create(Entity.new(Module14, email: "user_3@example.com"))
+      {:ok, user} =
+        Module14
+        |> Entity.new(email: "user_3@example.com")
+        |> create()
 
-      {:ok, resource} = Context.with_actor(user.id, fn -> create(Entity.new(PolicyModule1)) end)
+      {:ok, resource} =
+        Context.with_actor(user.id, fn ->
+          PolicyModule1
+          |> Entity.new()
+          |> create()
+        end)
 
       assert granted_roles(user.id, resource.id) == ["maintainer", "owner"]
     end
 
     test "grants nothing outside an actor context" do
-      {:ok, resource} = create(Entity.new(PolicyModule1))
+      {:ok, resource} =
+        PolicyModule1
+        |> Entity.new()
+        |> create()
 
       select_sql =
         ~s|SELECT count(*) FROM "hologram_data"."hologram_role_grant" WHERE "resource_id" = $1|
@@ -420,9 +436,17 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "grants nothing for an entity type declaring no creator role" do
-      {:ok, user} = create(Entity.new(Module14, email: "user_4@example.com"))
+      {:ok, user} =
+        Module14
+        |> Entity.new(email: "user_4@example.com")
+        |> create()
 
-      {:ok, resource} = Context.with_actor(user.id, fn -> create(Entity.new(Module1)) end)
+      {:ok, resource} =
+        Context.with_actor(user.id, fn ->
+          Module1
+          |> Entity.new()
+          |> create()
+        end)
 
       assert granted_roles(user.id, resource.id) == []
     end
@@ -459,14 +483,21 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "inserts the entity when no conflicting row exists" do
-      {:ok, user} = create(Entity.new(Module14, email: "user_1@example.com"))
+      {:ok, user} =
+        Module14
+        |> Entity.new(email: "user_1@example.com")
+        |> create()
 
       assert create_if_absent(role_grant(user, :owner)) == :ok
       assert count_role_grants(user.id) == 1
     end
 
     test "keeps the existing row when a unique index conflicts" do
-      {:ok, user} = create(Entity.new(Module14, email: "user_2@example.com"))
+      {:ok, user} =
+        Module14
+        |> Entity.new(email: "user_2@example.com")
+        |> create()
+
       first_grant = role_grant(user, :owner)
 
       create_if_absent(first_grant)
@@ -481,7 +512,11 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records the insert as an effect" do
-      {:ok, user} = create(Entity.new(Module14, email: "user_3@example.com"))
+      {:ok, user} =
+        Module14
+        |> Entity.new(email: "user_3@example.com")
+        |> create()
+
       grant = role_grant(user, :owner)
 
       create_if_absent(grant)
@@ -493,7 +528,10 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records nothing when a conflicting row keeps the insert from happening" do
-      {:ok, user} = create(Entity.new(Module14, email: "user_4@example.com"))
+      {:ok, user} =
+        Module14
+        |> Entity.new(email: "user_4@example.com")
+        |> create()
 
       create_if_absent(role_grant(user, :owner))
       effects_after_first = outbox_effects()
