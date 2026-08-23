@@ -270,6 +270,32 @@ defmodule Hologram.DBTest do
       assert update!(Module19, entity.id, slug: "after") == :ok
     end
 
+    test "raises a write error naming every change violation" do
+      {:ok, entity} =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      expected_msg =
+        normalize_newlines("""
+        cannot update Hologram.Test.Fixtures.Entity.Module2 "#{entity.id}":
+          * attribute :b must be of type :integer, got: "nope"\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        update!(Module2, entity.id, b: "nope")
+      end
+
+      error =
+        try do
+          update!(Module2, entity.id, b: "nope")
+        rescue
+          error in Hologram.WriteError -> error
+        end
+
+      assert error.reason == %{b: [type: :integer]}
+    end
+
     test "raises a write error when the new value is taken" do
       {:ok, first} =
         Module19

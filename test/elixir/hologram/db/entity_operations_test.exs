@@ -951,6 +951,44 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert Enum.map(outbox_effects(), & &1.op) == ["put_entity", "put_entity"]
     end
 
+    test "returns every change violation without writing" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      assert update(Module2, created_entity.id, %{b: "nope", c: nil}) ==
+               {:error, %{b: [type: :integer], c: [:required]}}
+
+      assert get(Module2, created_entity.id).c == "some text"
+    end
+
+    test "returns declared constraint option violations" do
+      {:ok, created_entity} =
+        Module10
+        |> Entity.new(count: 5)
+        |> create()
+
+      assert update(Module10, created_entity.id, %{count: 0}) == {:error, %{count: [min: 1]}}
+    end
+
+    test "returns reference change violations" do
+      {:ok, required_target} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, created_entity} =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      assert update(Module3, created_entity.id, %{c_id: nil}) == {:error, %{c_id: [:required]}}
+
+      assert update(Module3, created_entity.id, %{c_id: "garbage"}) ==
+               {:error, %{c_id: [type: :uuid]}}
+    end
+
     test "raises when changes name anything but declared attributes and to-one relationships" do
       {:ok, created_entity} =
         Module2
@@ -994,73 +1032,6 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         update(Module2, nonexistent_id, %{c: "some text"})
-      end
-    end
-
-    test "raises naming every change violation before touching the database" do
-      {:ok, created_entity} =
-        Module2
-        |> Entity.new(a: true, c: "some text")
-        |> create()
-
-      expected_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module2:
-          * attribute :b must be of type :integer, got: "nope"
-          * attribute :c is required\
-        """)
-
-      assert_error ArgumentError, expected_msg, fn ->
-        update(Module2, created_entity.id, %{b: "nope", c: nil})
-      end
-    end
-
-    test "raises on declared constraint option violations" do
-      {:ok, created_entity} =
-        Module10
-        |> Entity.new(count: 5)
-        |> create()
-
-      expected_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module10:
-          * attribute :count must be at least 1, got: 0\
-        """)
-
-      assert_error ArgumentError, expected_msg, fn ->
-        update(Module10, created_entity.id, %{count: 0})
-      end
-    end
-
-    test "raises on reference change violations" do
-      {:ok, required_target} =
-        Module1
-        |> Entity.new()
-        |> create()
-
-      {:ok, created_entity} =
-        Module3
-        |> Entity.new(c_id: required_target.id)
-        |> create()
-
-      expected_nil_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module3:
-          * reference :c_id is required\
-        """)
-
-      assert_error ArgumentError, expected_nil_msg, fn ->
-        update(Module3, created_entity.id, %{c_id: nil})
-      end
-
-      expected_invalid_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module3:
-          * reference :c_id must be a valid entity id, got: "garbage"\
-        """)
-
-      assert_error ArgumentError, expected_invalid_msg, fn ->
-        update(Module3, created_entity.id, %{c_id: "garbage"})
       end
     end
   end

@@ -183,7 +183,8 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   @doc false
-  @spec update(module, String.t(), map | keyword) :: :ok | {:error, %{atom => list(atom)}}
+  @spec update(module, String.t(), map | keyword) ::
+          :ok | {:error, %{atom => list(atom | {atom, any})}}
   # sobelow_skip ["SQL.Query"]
   def update(entity_type, id, changes) do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
@@ -193,59 +194,60 @@ defmodule Hologram.DB.EntityOperations do
       |> Enum.reject(&(&1.source == :system or match?({:sort_key, _name}, &1.source)))
       |> Map.new(&{field_name(&1), &1})
 
-    sorted_changes =
-      changes
-      |> Map.new()
-      |> Enum.sort()
+    changes_map = Map.new(changes)
+    sorted_changes = Enum.sort(changes_map)
 
     validate_changes!(entity_type, sorted_changes, columns_by_field)
-    validate_change_values!(entity_type, sorted_changes)
 
-    change_entries =
-      Enum.map(sorted_changes, fn {name, value} ->
-        column = columns_by_field[name]
+    # Values are judged before the statement is built, and their violations travel back
+    # untouched - nothing is written for changes the declarations already refuse.
+    with :ok <- Entity.validate(entity_type, changes_map) do
+      change_entries =
+        Enum.map(sorted_changes, fn {name, value} ->
+          column = columns_by_field[name]
 
-        {column, Codec.encode(value, column.type)}
-      end)
+          {column, Codec.encode(value, column.type)}
+        end)
 
-    set_entries = change_entries ++ companion_entries(columns, sorted_changes)
+      set_entries = change_entries ++ companion_entries(columns, sorted_changes)
 
-    set_list =
-      set_entries
-      |> Enum.with_index(1)
-      |> Enum.map_join(", ", fn {{column, _value}, index} ->
-        "#{Mapper.quote_identifier(column.name)} = $#{index}"
-      end)
+      set_list =
+        set_entries
+        |> Enum.with_index(1)
+        |> Enum.map_join(", ", fn {{column, _value}, index} ->
+          "#{Mapper.quote_identifier(column.name)} = $#{index}"
+        end)
 
-    updated_at_placeholder = length(set_entries) + 1
-    id_placeholder = length(set_entries) + 2
+      updated_at_placeholder = length(set_entries) + 1
+      id_placeholder = length(set_entries) + 2
 
-    statement =
-      ~s|UPDATE #{qualified_table(table)} SET #{set_list}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder}|
+      statement =
+        ~s|UPDATE #{qualified_table(table)} SET #{set_list}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder}|
 
-    changed_values = Enum.map(set_entries, fn {_column, value} -> value end)
+      changed_values = Enum.map(set_entries, fn {_column, value} -> value end)
 
-    updated_at = DateTime.utc_now(:microsecond)
-    encoded_updated_at = Codec.encode(updated_at, :datetime)
-    encoded_id = Codec.encode(id, :uuid)
+      updated_at = DateTime.utc_now(:microsecond)
+      encoded_updated_at = Codec.encode(updated_at, :datetime)
+      encoded_id = Codec.encode(id, :uuid)
 
-    params = changed_values ++ [encoded_updated_at, encoded_id]
+      params = changed_values ++ [encoded_updated_at, encoded_id]
 
-    # The stamp travels with the changes: every update moves updated_at, and a client holding
-    # the row holds that too. The sort-key companions do not - they are derived from the values
-    # beside them, and a reader recomputes them rather than being told.
-    data =
-      sorted_changes
-      |> Map.new()
-      |> Map.put(:updated_at, updated_at)
+      # The stamp travels with the changes: every update moves updated_at, and a client holding
+      # the row holds that too. The sort-key companions do not - they are derived from the values
+      # beside them, and a reader recomputes them rather than being told.
+      data = Map.put(changes_map, :updated_at, updated_at)
 
-    # The transaction's reason is the violations map, the way create/1's is - a duplicate rolls
-    # the update back rather than raising.
-    case Connection.transaction(fn ->
-           run_update!(statement, params, entity_type, id, data)
-         end) do
-      {:ok, _appended} -> :ok
-      {:error, violations} -> {:error, violations}
+      # The transaction's reason is the violations map, the way create/1's is - a duplicate rolls
+      # the update back rather than raising.
+      transaction_result =
+        Connection.transaction(fn ->
+          run_update!(statement, params, entity_type, id, data)
+        end)
+
+      case transaction_result do
+        {:ok, _appended} -> :ok
+        {:error, violations} -> {:error, violations}
+      end
     end
   end
 
@@ -476,18 +478,6 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   defp unique_violations(_entity_type, _error), do: nil
-
-  defp validate_change_values!(entity_type, sorted_changes) do
-    changes_map = Map.new(sorted_changes)
-
-    case Validator.validate_changes(entity_type, changes_map) do
-      :ok ->
-        :ok
-
-      {:error, errors} ->
-        raise ArgumentError, Validator.error_message(entity_type, changes_map, errors)
-    end
-  end
 
   defp validate_changes!(entity_type, sorted_changes, columns_by_field) do
     if sorted_changes == [] do

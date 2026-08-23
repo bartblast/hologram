@@ -185,16 +185,18 @@ defmodule Hologram.DB do
   name, system attributes included, raises ArgumentError - as do empty changes and an
   id that names no entity.
 
-  Returns :ok, or {:error, violations} when a changed unique attribute's new value is already
-  held by another row - violations is the map Entity.validate/2 returns, the attribute name to
-  [:unique]. A row's own current value never conflicts with itself. A write reports the first
-  violated database constraint only. Any other constraint violation raises.
+  Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
+  changed field that broke its declaration: the declared constraints its value breaks (type,
+  enum values, the required-nil rule, the constraint options), and :unique for a changed
+  unique attribute whose new value another row already holds. A row's own current value never
+  conflicts with itself. Values are judged before any SQL runs, and a write is attempted only
+  once they pass. A write reports the first violated database constraint only.
 
-  Changed attribute values are validated against the entity type's declarations before
-  any SQL runs - type, enum values, the required-nil rule, and the declared constraint
-  options - raising one ArgumentError that lists every violation.
+  The misuses named above raise rather than returning, as does a constraint violation the
+  mapping does not explain.
   """
-  @spec update(module, String.t(), map | keyword) :: :ok | {:error, %{atom => list(atom)}}
+  @spec update(module, String.t(), map | keyword) ::
+          :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity_type, id, changes) do
     Validator.validate_writable!(entity_type)
 
