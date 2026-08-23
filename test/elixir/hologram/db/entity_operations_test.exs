@@ -361,6 +361,19 @@ defmodule Hologram.DB.EntityOperationsTest do
                {:error, %{code: [:unique], slug: [type: :string]}}
     end
 
+    # PostgreSQL abandons the statement at the first constraint it refuses, so the second taken
+    # value is never its to report - it is asked about after the write, the way it would be had
+    # the values failed and no write been attempted at all.
+    test "reports a second taken unique value the write did not reach" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: "both_code", slug: "both_slug")
+        |> create()
+
+      assert create(Entity.new(Module19, code: "both_code", slug: "both_slug")) ==
+               {:error, %{code: [:unique], slug: [:unique]}}
+    end
+
     # A value that is not even the right type cannot be compared against what other rows hold,
     # so the field keeps the violation it earned and nothing is asked about it.
     test "skips the advisory check for a field carrying its own violation" do
@@ -997,6 +1010,21 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert update(Module19, second.id, %{code: first.code, slug: 123}) ==
                {:error, %{code: [:unique], slug: [type: :string]}}
+    end
+
+    test "reports a second taken unique value the write did not reach" do
+      {:ok, first} =
+        Module19
+        |> Entity.new(code: "upd_both_code", slug: "upd_both_slug")
+        |> create()
+
+      {:ok, second} =
+        Module19
+        |> Entity.new(code: "upd_other_code", slug: "upd_other_slug")
+        |> create()
+
+      assert update(Module19, second.id, %{code: first.code, slug: first.slug}) ==
+               {:error, %{code: [:unique], slug: [:unique]}}
     end
 
     # The unique index excludes the row from its own comparison, and so does the advisory
