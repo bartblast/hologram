@@ -278,22 +278,44 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "returns the violation when a unique attribute's value is taken" do
-      {:ok, _entity} = create(Entity.new(Module19, slug: "x"))
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(slug: "x")
+        |> create()
 
-      assert create(Entity.new(Module19, slug: "x")) == {:error, %{slug: [:unique]}}
+      result =
+        Module19
+        |> Entity.new(slug: "x")
+        |> create()
+
+      assert result == {:error, %{slug: [:unique]}}
     end
 
     # Uniqueness is over the values an attribute holds, and nil is the absence of one.
     test "admits any number of nils in an optional unique attribute" do
-      assert {:ok, _first} = create(Entity.new(Module19, code: nil, slug: "a"))
-      assert {:ok, _second} = create(Entity.new(Module19, code: nil, slug: "b"))
+      assert {:ok, _first} =
+               Module19
+               |> Entity.new(code: nil, slug: "a")
+               |> create()
+
+      assert {:ok, _second} =
+               Module19
+               |> Entity.new(code: nil, slug: "b")
+               |> create()
     end
 
     test "writes nothing and records nothing for a conflicting insert" do
-      {:ok, entity} = create(Entity.new(Module19, slug: "x"))
+      {:ok, entity} =
+        Module19
+        |> Entity.new(slug: "x")
+        |> create()
 
-      assert create(Entity.new(Module19, slug: "x")) == {:error, %{slug: [:unique]}}
+      result =
+        Module19
+        |> Entity.new(slug: "x")
+        |> create()
 
+      assert result == {:error, %{slug: [:unique]}}
       assert Enum.map(outbox_effects(), & &1.entity_id) == [entity.id]
     end
 
@@ -841,14 +863,24 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "returns the violation when the new value is taken" do
-      {:ok, first} = create(Entity.new(Module19, slug: "taken"))
-      {:ok, second} = create(Entity.new(Module19, slug: "free"))
+      {:ok, first} =
+        Module19
+        |> Entity.new(slug: "taken")
+        |> create()
+
+      {:ok, second} =
+        Module19
+        |> Entity.new(slug: "free")
+        |> create()
 
       assert update(Module19, second.id, slug: first.slug) == {:error, %{slug: [:unique]}}
     end
 
     test "updates a unique attribute to a free value" do
-      {:ok, entity} = create(Entity.new(Module19, slug: "before"))
+      {:ok, entity} =
+        Module19
+        |> Entity.new(slug: "before")
+        |> create()
 
       assert update(Module19, entity.id, slug: "after") == :ok
     end
@@ -856,14 +888,24 @@ defmodule Hologram.DB.EntityOperationsTest do
     # A row is not its own duplicate - the index excludes it, and so must a resubmitted form
     # that changed nothing about the unique value.
     test "updates a unique attribute to its own current value" do
-      {:ok, entity} = create(Entity.new(Module19, slug: "unchanged"))
+      {:ok, entity} =
+        Module19
+        |> Entity.new(slug: "unchanged")
+        |> create()
 
       assert update(Module19, entity.id, slug: "unchanged") == :ok
     end
 
     test "records nothing for a conflicting update" do
-      {:ok, first} = create(Entity.new(Module19, slug: "held"))
-      {:ok, second} = create(Entity.new(Module19, slug: "other"))
+      {:ok, first} =
+        Module19
+        |> Entity.new(slug: "held")
+        |> create()
+
+      {:ok, second} =
+        Module19
+        |> Entity.new(slug: "other")
+        |> create()
 
       assert update(Module19, second.id, slug: first.slug) == {:error, %{slug: [:unique]}}
 
