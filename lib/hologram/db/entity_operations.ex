@@ -50,26 +50,34 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   @doc false
-  @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom)}}
+  @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
   def create(entity) do
-    # The transaction's own shape is the contract: its value is the stamped entity, and the
-    # violations a duplicate rolls back with are its reason.
-    Connection.transaction(fn ->
-      {stamped_entity, _result} = insert(entity, "")
+    # Values are judged first, and their violations travel back untouched - no write is
+    # attempted for an entity the declarations already refuse.
+    with :ok <- Entity.validate(entity) do
+      # The transaction's own shape is the contract: its value is the stamped entity, and the
+      # violations a duplicate rolls back with are its reason.
+      Connection.transaction(fn ->
+        {stamped_entity, _result} = insert(entity, "")
 
-      Outbox.append([put_effect(stamped_entity)])
+        Outbox.append([put_effect(stamped_entity)])
 
-      entity
-      |> creator_grants()
-      |> Enum.each(&create_if_absent/1)
+        entity
+        |> creator_grants()
+        |> Enum.each(&create_if_absent/1)
 
-      stamped_entity
-    end)
+        stamped_entity
+      end)
+    end
   end
 
   @doc false
   @spec create_if_absent(struct) :: :ok
   def create_if_absent(entity) do
+    # The framework writes its own grants through this path, so an invalid one is a broken
+    # invariant rather than something a caller can answer - it raises where create/1 returns.
+    validate_entity!(entity.__struct__, entity)
+
     {:ok, :ok} =
       Connection.transaction(fn ->
         {stamped_entity, result} = insert(entity, " ON CONFLICT DO NOTHING")
@@ -369,8 +377,6 @@ defmodule Hologram.DB.EntityOperations do
     entity_type = entity.__struct__
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
-    validate_entity!(entity_type, entity, columns)
-
     now = DateTime.utc_now(:microsecond)
     stamped_entity = %{entity | created_at: now, updated_at: now}
 
@@ -504,7 +510,9 @@ defmodule Hologram.DB.EntityOperations do
     :ok
   end
 
-  defp validate_entity!(entity_type, entity, columns) do
+  defp validate_entity!(entity_type, entity) do
+    %{columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
     field_names =
       columns
       |> Enum.reject(&(&1.source == :system or match?({:sort_key, _name}, &1.source)))

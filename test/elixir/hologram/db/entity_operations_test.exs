@@ -325,6 +325,32 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert Enum.map(outbox_effects(), & &1.entity_id) == [entity.id]
     end
 
+    test "returns every value violation without writing a row" do
+      entity = Entity.new(Module2, b: "nope")
+
+      assert create(entity) == {:error, %{b: [type: :integer], c: [:required]}}
+      assert get(Module2, entity.id) == nil
+      assert outbox_effects() == []
+    end
+
+    test "returns declared constraint option violations" do
+      assert create(Entity.new(Module10, count: 0)) == {:error, %{count: [min: 1]}}
+    end
+
+    # One byte over what the unique index's btree entry carries - refused here, before the insert,
+    # so PostgreSQL never gets to raise program_limit_exceeded for it.
+    test "returns the byte-bound violation for a unique string its index cannot carry" do
+      entity = Entity.new(Module19, slug: String.duplicate("a", 2693))
+
+      assert create(entity) == {:error, %{slug: [max_bytes: 2692]}}
+    end
+
+    test "returns reference violations" do
+      assert create(Entity.new(Module3)) == {:error, %{c_id: [:required]}}
+
+      assert create(Entity.new(Module3, c_id: "garbage")) == {:error, %{c_id: [type: :uuid]}}
+    end
+
     test "raises on constraint violations" do
       entity = Entity.new(Module1)
       {:ok, _entity} = create(entity)
@@ -337,74 +363,6 @@ defmodule Hologram.DB.EntityOperationsTest do
         end
 
       assert error.postgres.code == :unique_violation
-    end
-
-    test "raises naming every validation violation before touching the database" do
-      entity = Entity.new(Module2, b: "nope")
-
-      expected_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module2:
-          * attribute :b must be of type :integer, got: "nope"
-          * attribute :c is required\
-        """)
-
-      assert_error ArgumentError, expected_msg, fn -> create(entity) end
-    end
-
-    test "raises on declared constraint option violations" do
-      entity = Entity.new(Module10, count: 0)
-
-      expected_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module10:
-          * attribute :count must be at least 1, got: 0\
-        """)
-
-      assert_error ArgumentError, expected_msg, fn -> create(entity) end
-    end
-
-    # One byte over what the unique index's btree entry carries - refused here, before the insert,
-    # so PostgreSQL never gets to raise program_limit_exceeded for it.
-    test "raises on a unique string its index cannot carry" do
-      slug = String.duplicate("a", 2693)
-      entity = Entity.new(Module19, slug: slug)
-
-      expected_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module19:
-          * attribute :slug must hold at most 2692 bytes (the most its unique index can carry), got: #{inspect(slug)}\
-        """)
-
-      assert_error ArgumentError, expected_msg, fn -> create(entity) end
-    end
-
-    test "raises on reference violations" do
-      expected_required_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module3:
-          * reference :c_id is required\
-        """)
-
-      assert_error ArgumentError, expected_required_msg, fn ->
-        {:ok, _entity} =
-          Module3
-          |> Entity.new()
-          |> create()
-      end
-
-      expected_invalid_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module3:
-          * reference :c_id must be a valid entity id, got: "garbage"\
-        """)
-
-      assert_error ArgumentError, expected_invalid_msg, fn ->
-        {:ok, _entity} =
-          Module3
-          |> Entity.new(c_id: "garbage")
-          |> create()
-      end
     end
   end
 
@@ -555,6 +513,18 @@ defmodule Hologram.DB.EntityOperationsTest do
       create_if_absent(role_grant(user, :owner))
 
       assert outbox_effects() == effects_after_first
+    end
+
+    test "raises on an invalid entity" do
+      grant = %RoleGrant{id: Entity.generate_id(), role: :owner}
+
+      expected_msg =
+        normalize_newlines("""
+        invalid data for Hologram.Auth.RoleGrant:
+          * reference :user_id is required\
+        """)
+
+      assert_error ArgumentError, expected_msg, fn -> create_if_absent(grant) end
     end
   end
 

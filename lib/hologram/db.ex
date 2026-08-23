@@ -33,16 +33,17 @@ defmodule Hologram.DB do
   Inserts the given entity as a full row - every column is named and bound explicitly -
   stamping created_at and updated_at with the same current UTC timestamp.
 
-  Returns {:ok, entity} with the stamped entity, or {:error, violations} when the value of a
-  unique attribute is already held by another row - violations is the map Entity.validate/1
-  returns, the attribute name to [:unique]. A write reports the first violated database
-  constraint only. Any other constraint violation raises.
+  Returns {:ok, entity} with the stamped entity, or {:error, violations} - the map
+  Entity.validate/1 returns, naming each field that broke its declaration: the declared
+  constraints its value breaks (type, enum values, required presence, the constraint
+  options), and :unique for a unique attribute whose value another row already holds.
+  Values are judged before any SQL runs, and a write is attempted only once they pass.
+  A write reports the first violated database constraint only.
 
-  Attribute values are validated against the entity type's declarations before any SQL
-  runs - type, enum values, required presence, and the declared constraint options -
-  raising one ArgumentError that lists every violation.
+  Misuse raises rather than returning - a role grant, which is written only through
+  grant_role/revoke_role - as does a constraint violation the mapping does not explain.
   """
-  @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom)}}
+  @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
   def create(entity) do
     Validator.validate_writable!(entity.__struct__)
 

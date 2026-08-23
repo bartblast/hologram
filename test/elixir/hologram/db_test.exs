@@ -13,6 +13,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module19
+  alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
 
   describe "init/1" do
@@ -111,6 +112,32 @@ defmodule Hologram.DBTest do
 
       assert entity.created_at
       assert get(Module1, entity.id).id == entity.id
+    end
+
+    test "raises a write error naming every value violation" do
+      expected_msg =
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Entity.Module2:
+          * attribute :b must be of type :integer, got: "nope"
+          * attribute :c is required\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        Module2
+        |> Entity.new(b: "nope")
+        |> create!()
+      end
+
+      error =
+        try do
+          Module2
+          |> Entity.new(b: "nope")
+          |> create!()
+        rescue
+          error in Hologram.WriteError -> error
+        end
+
+      assert error.reason == %{b: [type: :integer], c: [:required]}
     end
 
     # assert_error sees the message and nothing else, so the reason field - what the plain
