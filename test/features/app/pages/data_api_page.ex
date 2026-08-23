@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.DataApiPage do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
+  alias Hologram.WriteConflictError
+  alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
 
@@ -19,9 +21,12 @@ defmodule HologramFeatureTests.DataApiPage do
   def template do
     ~HOLO"""
     <p>
+      <button $click={command: :create_duplicate_account}> Create duplicate account </button>
       <button $click={command: :create_review}> Create review </button>
       <button $click={command: :reject_invalid_review}> Reject invalid review </button>
+      <button $click={command: :raise_on_duplicate_account}> Raise on duplicate account </button>
       <button $click={command: :run_query}> Run query </button>
+      <button $click={command: :update_into_duplicate_account}> Update into duplicate account </button>
       <button $click={command: :validate_changes}> Validate changes </button>
     </p>
     <p>
@@ -34,16 +39,29 @@ defmodule HologramFeatureTests.DataApiPage do
     put_state(component, :result, params.result)
   end
 
+  def command(:create_duplicate_account, _params, server) do
+    Account
+    |> Entity.new(handle: "taken")
+    |> DB.create!()
+
+    result =
+      Account
+      |> Entity.new(handle: "taken")
+      |> DB.create()
+
+    put_action(server, :show_result, result: "duplicate_account_#{inspect(result)}")
+  end
+
   def command(:create_review, _params, server) do
     product =
       Product
       |> Entity.new(name: "create_review_product")
-      |> DB.create()
+      |> DB.create!()
 
     review =
       Review
       |> Entity.new(product_id: product.id, rating: 4)
-      |> DB.create()
+      |> DB.create!()
 
     persisted_review = DB.get(Review, review.id)
 
@@ -54,13 +72,13 @@ defmodule HologramFeatureTests.DataApiPage do
     product =
       Product
       |> Entity.new(name: "reject_invalid_review_product")
-      |> DB.create()
+      |> DB.create!()
 
     result =
       try do
         Review
         |> Entity.new(product_id: product.id, rating: 0)
-        |> DB.create()
+        |> DB.create!()
 
         "rejected_nothing"
       rescue
@@ -70,11 +88,30 @@ defmodule HologramFeatureTests.DataApiPage do
     put_action(server, :show_result, result: result)
   end
 
+  def command(:raise_on_duplicate_account, _params, server) do
+    Account
+    |> Entity.new(handle: "taken")
+    |> DB.create!()
+
+    result =
+      try do
+        Account
+        |> Entity.new(handle: "taken")
+        |> DB.create!()
+
+        "raised_nothing"
+      rescue
+        error in WriteConflictError -> error.message
+      end
+
+    put_action(server, :show_result, result: result)
+  end
+
   def command(:run_query, _params, server) do
     Enum.each(["run_query_banana", "run_query_apple", "run_query_excluded"], fn name ->
       Product
       |> Entity.new(name: name)
-      |> DB.create()
+      |> DB.create!()
     end)
 
     names =
@@ -85,6 +122,21 @@ defmodule HologramFeatureTests.DataApiPage do
       |> Enum.map_join(",", & &1.name)
 
     put_action(server, :show_result, result: names)
+  end
+
+  def command(:update_into_duplicate_account, _params, server) do
+    Account
+    |> Entity.new(handle: "first")
+    |> DB.create!()
+
+    second =
+      Account
+      |> Entity.new(handle: "second")
+      |> DB.create!()
+
+    result = DB.update(Account, second.id, handle: "first")
+
+    put_action(server, :show_result, result: "updated_into_duplicate_#{inspect(result)}")
   end
 
   def command(:validate_changes, _params, server) do

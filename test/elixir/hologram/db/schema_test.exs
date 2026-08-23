@@ -5,6 +5,7 @@ defmodule Hologram.DB.SchemaTest do
 
   alias Hologram.DB.Mapper
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -223,8 +224,8 @@ defmodule Hologram.DB.SchemaTest do
       %{table_definition | foreign_keys: Map.put(table_definition.foreign_keys, column, fk)}
     end
 
-    defp with_index(table_definition, name, columns) do
-      index = %{columns: columns, nulls_distinct: true, unique: false}
+    defp with_index(table_definition, name, columns, unique \\ false) do
+      index = %{columns: columns, nulls_distinct: true, unique: unique}
 
       %{table_definition | indexes: Map.put(table_definition.indexes, name, index)}
     end
@@ -399,6 +400,37 @@ defmodule Hologram.DB.SchemaTest do
                  unique: false
                }
              ]
+    end
+
+    test "emits create_index carrying unique for a target-only unique index" do
+      actual = %{tables: %{"task" => @task_table}, enum_types: %{}}
+
+      target = %{
+        tables: %{"task" => with_index(@task_table, "task_name_$uidx", ["name"], true)},
+        enum_types: %{}
+      }
+
+      assert diff(actual, target) == [
+               %{
+                 op: :create_index,
+                 table: "task",
+                 index: "task_name_$uidx",
+                 columns: ["name"],
+                 nulls_distinct: true,
+                 unique: true
+               }
+             ]
+    end
+
+    test "emits drop_index for an actual-only unique index" do
+      actual = %{
+        tables: %{"task" => with_index(@task_table, "task_name_$uidx", ["name"], true)},
+        enum_types: %{}
+      }
+
+      target = %{tables: %{"task" => @task_table}, enum_types: %{}}
+
+      assert diff(actual, target) == [%{op: :drop_index, index: "task_name_$uidx"}]
     end
 
     test "emits foreign key and index adds for new tables" do
@@ -682,6 +714,33 @@ defmodule Hologram.DB.SchemaTest do
                  }
                },
                enum_types: %{}
+             }
+    end
+
+    test "carries a unique attribute's index beside the sort-key companion's" do
+      indexes = table(Module19, "test_fixtures_entity_module19").indexes
+
+      assert indexes == %{
+               "test_fixtures_entity_module19_code_$uidx" => %{
+                 columns: ["code"],
+                 nulls_distinct: true,
+                 unique: true
+               },
+               "test_fixtures_entity_module19_slug_$uidx" => %{
+                 columns: ["slug"],
+                 nulls_distinct: true,
+                 unique: true
+               },
+               "test_fixtures_entity_module19_code_$sort_$idx" => %{
+                 columns: ["code_$sort"],
+                 nulls_distinct: true,
+                 unique: false
+               },
+               "test_fixtures_entity_module19_slug_$sort_$idx" => %{
+                 columns: ["slug_$sort"],
+                 nulls_distinct: true,
+                 unique: false
+               }
              }
     end
 

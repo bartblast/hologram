@@ -24,11 +24,6 @@ defmodule Hologram.Migration.RefusalTest do
   #     twin in Preflight is not dead code: schema reconciliation folds a model from
   #     MODULES rather than ops, so a required attribute declared on a populated dev
   #     database reaches it there, where the reconciler suite covers it.
-  #   * a unique index meeting duplicate rows - no migration can produce it. The only
-  #     unique index the model derives is the grant store's, born with its own empty table,
-  #     so the check is reachable only by building the op by hand, which the sandboxed
-  #     migrator suite already does. See the TODO there: it becomes a real migration when
-  #     `unique: true` is declarable on an attribute (step 08 owns it).
   #   * a foreign key over orphaned rows - void by construction, since a relationship
   #     column is born together with its foreign key and no op adopts an existing column.
   #
@@ -145,6 +140,35 @@ defmodule Hologram.Migration.RefusalTest do
       expected_msg =
         ~s(1 row in "my_app_task"."amount" cannot convert from text to int8 - ) <>
           "fix the data or remove the attribute and re-add it with the new type"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    # The third row shares an AMOUNT rather than a title, so the ordering task_rows/0
+    # compares by stays total - two rows tying on it would make the before/after
+    # comparison depend on an order the query does not fix.
+    test "refuses a unique index over rows that repeat a value", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn -> insert_task("three", "10", "todo") end)
+
+      refused =
+        migration("20260813142237", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [unique: true],
+            line: 3
+          }
+        ])
+
+      expected_msg =
+        ~s{found 1 duplicate key in "my_app_task" over ("amount") - } <>
+          "a unique index cannot be built while rows repeat a key - " <>
+          "update the rows or drop the unique declaration"
 
       assert_refused(scratch, create, first_model, refused, expected_msg)
     end

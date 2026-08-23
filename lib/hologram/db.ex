@@ -13,6 +13,7 @@ defmodule Hologram.DB do
   alias Hologram.Migrator
   alias Hologram.Query
   alias Hologram.Reflection
+  alias Hologram.WriteConflictError
 
   @mapping_key {__MODULE__, :mapping}
 
@@ -30,18 +31,43 @@ defmodule Hologram.DB do
 
   @doc """
   Inserts the given entity as a full row - every column is named and bound explicitly -
-  stamping created_at and updated_at with the same current UTC timestamp. Returns the
-  stamped entity. Constraint violations raise.
+  stamping created_at and updated_at with the same current UTC timestamp.
+
+  Returns {:ok, entity} with the stamped entity, or {:error, violations} when the value of a
+  unique attribute is already held by another row - violations is the map Entity.validate/1
+  returns, the attribute name to [:unique]. A write reports the first violated database
+  constraint only. Any other constraint violation raises.
 
   Attribute values are validated against the entity type's declarations before any SQL
   runs - type, enum values, required presence, and the declared constraint options -
   raising one ArgumentError that lists every violation.
   """
-  @spec create(struct) :: struct
+  @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom)}}
   def create(entity) do
     Validator.validate_writable!(entity.__struct__)
 
     EntityOperations.create(entity)
+  end
+
+  @doc """
+  Like create/1, returning the stamped entity directly and raising Hologram.WriteConflictError
+  instead of returning {:error, ...}.
+
+  The spelling for seeds, scripts and fixtures, where a conflict is a reason to stop rather than
+  something to answer. Code that acts on a conflict - a command handling a form - takes create/1.
+  """
+  @spec create!(struct) :: struct
+  def create!(entity) do
+    case create(entity) do
+      {:ok, stamped_entity} ->
+        stamped_entity
+
+      {:error, violations} ->
+        raise WriteConflictError,
+          message:
+            "cannot create #{inspect(entity.__struct__)} - #{taken_description(violations, entity)}",
+          reason: violations
+    end
   end
 
   @doc """
@@ -57,6 +83,26 @@ defmodule Hologram.DB do
     Validator.validate_writable!(entity_type)
 
     EntityOperations.delete(entity_type, id)
+  end
+
+  @doc """
+  Like delete/2, raising Hologram.WriteConflictError instead of returning {:error, ...}.
+
+  The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
+  takes delete/2.
+  """
+  @spec delete!(module, String.t()) :: :ok
+  def delete!(entity_type, id) do
+    case delete(entity_type, id) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        raise WriteConflictError,
+          message:
+            "cannot delete #{inspect(entity_type)} #{inspect(id)} - another entity still references it",
+          reason: reason
+    end
   end
 
   @doc """
@@ -131,13 +177,18 @@ defmodule Hologram.DB do
   are keyed by declared attribute and to-one relationship names - a to-one reference is
   set, reassigned, or cleared (nil) through its relationship name. Changing any other
   name, system attributes included, raises ArgumentError - as do empty changes and an
-  id that names no entity. Returns :ok. Constraint violations raise.
+  id that names no entity.
+
+  Returns :ok, or {:error, violations} when a changed unique attribute's new value is already
+  held by another row - violations is the map Entity.validate/2 returns, the attribute name to
+  [:unique]. A row's own current value never conflicts with itself. A write reports the first
+  violated database constraint only. Any other constraint violation raises.
 
   Changed attribute values are validated against the entity type's declarations before
   any SQL runs - type, enum values, the required-nil rule, and the declared constraint
   options - raising one ArgumentError that lists every violation.
   """
-  @spec update(module, String.t(), map | keyword) :: :ok
+  @spec update(module, String.t(), map | keyword) :: :ok | {:error, %{atom => list(atom)}}
   def update(entity_type, id, changes) do
     Validator.validate_writable!(entity_type)
 
@@ -152,6 +203,26 @@ defmodule Hologram.DB do
             "DB.update(#{inspect(entity.__struct__)}, entity.id, attribute: value). " <>
             "Full-row writes from a struct aren't supported: they would overwrite concurrent " <>
             "changes to fields you didn't touch."
+  end
+
+  @doc """
+  Like update/3, raising Hologram.WriteConflictError instead of returning {:error, ...}.
+
+  The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
+  takes update/3.
+  """
+  @spec update!(module, String.t(), map | keyword) :: :ok
+  def update!(entity_type, id, changes) do
+    case update(entity_type, id, changes) do
+      :ok ->
+        :ok
+
+      {:error, violations} ->
+        raise WriteConflictError,
+          message:
+            "cannot update #{inspect(entity_type)} #{inspect(id)} - #{taken_description(violations, Map.new(changes))}",
+          reason: violations
+    end
   end
 
   @doc """
@@ -297,6 +368,16 @@ defmodule Hologram.DB do
       end
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  # Written to describe several fields though a write reports one: PostgreSQL aborts at the
+  # first violated constraint, so the map always holds a single key today.
+  defp taken_description(violations, values) do
+    violations
+    |> Enum.sort()
+    |> Enum.map_join(", ", fn {field, _reasons} ->
+      "#{field} #{inspect(Map.fetch!(values, field))} is already taken"
+    end)
   end
 
   defp assert_no_placeholders!(term) do

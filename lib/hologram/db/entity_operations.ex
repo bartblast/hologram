@@ -50,22 +50,21 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   @doc false
-  @spec create(struct) :: struct
+  @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom)}}
   def create(entity) do
-    {:ok, stamped_entity} =
-      Connection.transaction(fn ->
-        {stamped_entity, _result} = insert(entity, "")
+    # The transaction's own shape is the contract: its value is the stamped entity, and the
+    # violations a duplicate rolls back with are its reason.
+    Connection.transaction(fn ->
+      {stamped_entity, _result} = insert(entity, "")
 
-        Outbox.append([put_effect(stamped_entity)])
+      Outbox.append([put_effect(stamped_entity)])
 
-        entity
-        |> creator_grants()
-        |> Enum.each(&create_if_absent/1)
+      entity
+      |> creator_grants()
+      |> Enum.each(&create_if_absent/1)
 
-        stamped_entity
-      end)
-
-    stamped_entity
+      stamped_entity
+    end)
   end
 
   @doc false
@@ -176,7 +175,7 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   @doc false
-  @spec update(module, String.t(), map | keyword) :: :ok
+  @spec update(module, String.t(), map | keyword) :: :ok | {:error, %{atom => list(atom)}}
   # sobelow_skip ["SQL.Query"]
   def update(entity_type, id, changes) do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
@@ -232,12 +231,14 @@ defmodule Hologram.DB.EntityOperations do
       |> Map.new()
       |> Map.put(:updated_at, updated_at)
 
-    {:ok, :ok} =
-      Connection.transaction(fn ->
-        run_update!(statement, params, entity_type, id, data)
-      end)
-
-    :ok
+    # The transaction's reason is the violations map, the way create/1's is - a duplicate rolls
+    # the update back rather than raising.
+    case Connection.transaction(fn ->
+           run_update!(statement, params, entity_type, id, data)
+         end) do
+      {:ok, _appended} -> :ok
+      {:error, violations} -> {:error, violations}
+    end
   end
 
   defp companion_entries(columns, sorted_changes) do
@@ -373,8 +374,14 @@ defmodule Hologram.DB.EntityOperations do
         "VALUES (#{placeholder_list})#{conflict_clause}"
 
     case Connection.query(statement, encoded_values) do
-      {:ok, result} -> {stamped_entity, result}
-      {:error, error} -> raise error
+      {:ok, result} ->
+        {stamped_entity, result}
+
+      {:error, error} ->
+        case unique_violations(entity_type, error) do
+          nil -> raise error
+          violations -> Connection.rollback(violations)
+        end
     end
   end
 
@@ -423,13 +430,36 @@ defmodule Hologram.DB.EntityOperations do
               "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
 
       {:error, error} ->
-        raise error
+        case unique_violations(entity_type, error) do
+          nil -> raise error
+          violations -> Connection.rollback(violations)
+        end
     end
   end
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
   end
+
+  # A unique index derived from a `unique: true` attribute names that attribute back, so a
+  # duplicate is answered the way a value violation is - by field, in Entity.validate/2's shape.
+  # Any other unique index is not ours to explain and keeps raising: a duplicate primary key is
+  # a framework bug rather than something a caller did, and the grant store's index is over four
+  # columns, so neither matches the single-attribute shape below.
+  defp unique_violations(entity_type, %Postgrex.Error{
+         postgres: %{code: :unique_violation, constraint: constraint}
+       }) do
+    %{columns: columns, indexes: indexes} = Map.fetch!(DB.mapping(), entity_type)
+
+    with %{unique: true, columns: [column_name]} <- indexes[constraint],
+         %{source: {:attribute, name}} <- Enum.find(columns, &(&1.name == column_name)) do
+      %{name => [:unique]}
+    else
+      _no_match -> nil
+    end
+  end
+
+  defp unique_violations(_entity_type, _error), do: nil
 
   defp validate_change_values!(entity_type, sorted_changes) do
     changes_map = Map.new(sorted_changes)

@@ -12,7 +12,7 @@ defmodule Hologram.Test.Fixtures.Controller.Module33 do
   def command(:my_command_creating_entity, _params, server) do
     Module1
     |> Entity.new()
-    |> DB.create()
+    |> DB.create!()
 
     %{server | next_action: nil}
   end

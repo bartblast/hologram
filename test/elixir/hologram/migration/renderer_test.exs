@@ -207,6 +207,50 @@ defmodule Hologram.Migration.RendererTest do
       assert :create_index in op_kinds(result.transactional)
     end
 
+    test "builds a unique index of a table born in the file inside the transaction" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Task, line: 3},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :slug,
+          type: :string,
+          opts: [unique: true],
+          line: 4
+        }
+      ]
+
+      result = render(ops, Model.empty())
+
+      assert result.tail == []
+
+      assert %{index: "my_app_task_slug_$uidx", unique: true} =
+               Enum.find(result.transactional, &(&1.op == :create_index and &1.unique))
+    end
+
+    test "builds a unique index of a table that predates the file in the tail" do
+      pre = model(%{MyApp.Task => %{attributes: [{:slug, :string, []}]}})
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :slug,
+          changes: [unique: true],
+          line: 3
+        }
+      ]
+
+      result = render(ops, pre)
+
+      assert result.transactional == []
+      assert [create_index] = result.tail
+
+      assert create_index.index == "my_app_task_slug_$uidx"
+      assert create_index.unique == true
+      assert create_index.concurrently == true
+    end
+
     test "defers the referencing ops past the objects they name" do
       ops = [
         %{op: :create_entity, entity: MyApp.Task, line: 3},

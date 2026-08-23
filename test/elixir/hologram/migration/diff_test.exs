@@ -414,6 +414,42 @@ defmodule Hologram.Migration.DiffTest do
              }
     end
 
+    test "emits change_attribute when an attribute becomes unique" do
+      replayed = model(%{MyApp.Task => %{attributes: [{:slug, :string, []}]}})
+      current = model(%{MyApp.Task => %{attributes: [{:slug, :string, [unique: true]}]}})
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :change_attribute,
+                   entity: MyApp.Task,
+                   name: :slug,
+                   changes: [unique: true]
+                 }
+               ],
+               questions: []
+             }
+    end
+
+    # The delta spells the removal as the option's neutral value rather than as nil, which is
+    # what makes the replayed model equal the current one - a nil would leave the option set.
+    test "emits change_attribute when an attribute stops being unique" do
+      replayed = model(%{MyApp.Task => %{attributes: [{:slug, :string, [unique: true]}]}})
+      current = model(%{MyApp.Task => %{attributes: [{:slug, :string, []}]}})
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :change_attribute,
+                   entity: MyApp.Task,
+                   name: :slug,
+                   changes: [unique: false]
+                 }
+               ],
+               questions: []
+             }
+    end
+
     test "withholds member additions and deletions into a question" do
       replayed =
         model(%{

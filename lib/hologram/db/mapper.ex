@@ -57,7 +57,9 @@ defmodule Hologram.DB.Mapper do
   tables and enum types, whose single-underscore seams can merge to the same name across
   entities) - and returns a map from entity type module to its mapping: :table (the table
   name), :pk_constraint (the derived `<table>_$pk` constraint name), :columns (as returned
-  by columns/1), and :join_tables (as returned by join_tables/1).
+  by columns/1), :indexes (index name to %{columns:, nulls_distinct:, unique:} - a
+  `<table>_<attribute>_$uidx` entry per `unique: true` attribute, plus the role grant store's
+  framework-owned one), and :join_tables (as returned by join_tables/1).
   """
   @spec derive!(list(module)) :: %{module => %{atom => any}}
   def derive!(entity_types) do
@@ -97,7 +99,7 @@ defmodule Hologram.DB.Mapper do
            table: table_name,
            pk_constraint: fit_identifier("#{table_name}_$pk"),
            columns: columns_from_entry(entity_type, entry),
-           indexes: entity_indexes(entity_type),
+           indexes: entity_indexes(entity_type, entry, table_name),
            join_tables: join_tables_from_entry(entity_type, entry)
          }}
       end)
@@ -321,20 +323,24 @@ defmodule Hologram.DB.Mapper do
     "  * #{hops} -> #{inspect(first_entity_type)}"
   end
 
-  # The role grant store carries the one framework-derived extra index: unique over the
-  # grant fact, with nulls compared as values - resource_type and resource_id nils encode
-  # the type-wide and global grant shapes, so identical rows with nils must still collide.
-  defp entity_indexes(Hologram.Auth.RoleGrant) do
-    %{
-      "hologram_role_grant_$uidx" => %{
-        columns: ["user_id", "resource_type", "resource_id", "role"],
-        nulls_distinct: false,
-        unique: true
-      }
-    }
+  # Nulls stay distinct, so an optional unique attribute admits any number of rows holding
+  # none: uniqueness is over the values an attribute holds, and nil is the absence of one.
+  #
+  # The index is over the raw column, so a string value is bounded by the btree entry limit -
+  # the validator refuses a unique string above it, so the engine never gets to. The sort-key
+  # companion sidesteps the same limit by indexing a bounded key, which a unique index cannot
+  # do: a prefix is not unique.
+  # TODO: a unique index over a hash expression lifts the bound for unbounded strings, once a
+  # declaration needs it - it teaches the whole index chain an expression shape.
+  defp entity_indexes(entity_type, entry, table_name) do
+    entry.attributes
+    |> Enum.filter(fn {_name, _type, opts} -> Keyword.get(opts, :unique) == true end)
+    |> Map.new(fn {name, _type, _opts} ->
+      {fit_identifier("#{table_name}_#{name}_$uidx"),
+       %{columns: [Atom.to_string(name)], nulls_distinct: true, unique: true}}
+    end)
+    |> Map.merge(framework_indexes(entity_type))
   end
-
-  defp entity_indexes(_entity_type), do: %{}
 
   defp enum_values(:enum, opts) do
     opts
@@ -378,6 +384,21 @@ defmodule Hologram.DB.Mapper do
       find_cycles(model, target, new_path, cycles, visited)
     end
   end
+
+  # The role grant store carries the one index no declaration derives: unique over the grant
+  # fact, with nulls compared as values - resource_type and resource_id nils encode the
+  # type-wide and global grant shapes, so identical rows with nils must still collide.
+  defp framework_indexes(Hologram.Auth.RoleGrant) do
+    %{
+      "hologram_role_grant_$uidx" => %{
+        columns: ["user_id", "resource_type", "resource_id", "role"],
+        nulls_distinct: false,
+        unique: true
+      }
+    }
+  end
+
+  defp framework_indexes(_entity_type), do: %{}
 
   defp id_column do
     %{

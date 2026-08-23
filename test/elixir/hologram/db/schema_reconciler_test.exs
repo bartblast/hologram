@@ -17,6 +17,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -101,6 +102,10 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
   defp reconcile_context_with_grant_store(entity_types) do
     Map.put(@context, :mapping, Mapper.derive!(entity_types))
+  end
+
+  defp update_mapping_indexes(context, entity_type, fun) do
+    update_in(context, [:mapping, entity_type, :indexes], fun)
   end
 
   defp update_mapping_column(context, entity_type, column_name, fun) do
@@ -389,6 +394,29 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
     test "converges relationships, join tables, and indexes" do
       context = reconcile_context([Module1, Module2, Module3])
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "converges a unique attribute's index" do
+      context = reconcile_context([Module19])
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "converges an attribute that stops being unique" do
+      reconcile(reconcile_context([Module19]))
+
+      context =
+        [Module19]
+        |> reconcile_context()
+        |> update_mapping_indexes(Module19, fn indexes ->
+          Map.reject(indexes, fn {_name, index} -> index.unique end)
+        end)
 
       reconcile(context)
 
@@ -721,6 +749,31 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         reconcile(context)
       end
     end
+
+    test "raises when adding a unique index over rows that repeat a value" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_rows(["abc", "abc"])
+
+      context =
+        [Module2]
+        |> reconcile_context()
+        |> update_mapping_indexes(Module2, fn indexes ->
+          Map.put(indexes, "test_fixtures_entity_module2_c_$uidx", %{
+            columns: ["c"],
+            nulls_distinct: true,
+            unique: true
+          })
+        end)
+
+      expected_msg =
+        ~s{found 1 duplicate key in "test_fixtures_entity_module2" over ("c") - } <>
+          "a unique index cannot be built while rows repeat a key - " <>
+          "update the rows or drop the unique declaration"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
   end
 
   describe "reconcile/1 for the role grant store" do
@@ -728,7 +781,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       user =
         Module14
         |> Entity.new(email: "reconciler_1@example.com")
-        |> DB.create()
+        |> DB.create!()
 
       Auth.grant_role(user, Role.Module1)
 

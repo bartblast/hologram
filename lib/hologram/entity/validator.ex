@@ -18,6 +18,13 @@ defmodule Hologram.Entity.Validator do
 
   @reserved_names [:created_at, :id, :updated_at]
 
+  # The most bytes a unique string may hold. Its unique index is a btree over the raw column, and
+  # PostgreSQL caps a btree entry at 2704 bytes on its default 8 KB page - minus the 8-byte item
+  # header and the 4-byte varlena header leaves 2692 for the value. Measured rather than derived:
+  # 2692 incompressible bytes always fit, 2693 never do. The engine compresses entries, so a longer
+  # repetitive value would fit - but a rule a developer can hold has to be about length alone.
+  @unique_string_max_bytes 2692
+
   @valid_attribute_opts [
     :default,
     :format,
@@ -29,6 +36,7 @@ defmodule Hologram.Entity.Validator do
     :min_length,
     :optional,
     :server_only,
+    :unique,
     :values
   ]
 
@@ -96,7 +104,7 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the given data map against the given entity type's declared attributes.
   Returns :ok, or {:error, errors} where errors is a name-sorted list of {name, reason} pairs.
-  Reasons: :required (a non-optional attribute is absent or nil), :unknown (an undeclared name), {:type, type} (a value not matching the attribute type), {:values, values} (an enum value outside the declared values), {:min, min} (a value below the declared minimum), {:max, max} (a value above the declared maximum), {:in, range} (an integer value outside the declared range), {:length, length} (a string not matching the declared exact length), {:min_length, min_length} (a string shorter than the declared minimum), {:max_length, max_length} (a string longer than the declared maximum), {:format, format} (a string not matching the declared pattern).
+  Reasons: :required (a non-optional attribute is absent or nil), :unknown (an undeclared name), {:type, type} (a value not matching the attribute type), {:values, values} (an enum value outside the declared values), {:min, min} (a value below the declared minimum), {:max, max} (a value above the declared maximum), {:in, range} (an integer value outside the declared range), {:length, length} (a string not matching the declared exact length), {:min_length, min_length} (a string shorter than the declared minimum), {:max_length, max_length} (a string longer than the declared maximum), {:format, format} (a string not matching the declared pattern), {:max_bytes, max_bytes} (a unique string holding more bytes than its index can carry).
   String lengths count Unicode code points.
   Constraint options are checked only on type-valid values - a type violation suppresses the attribute's constraint checks.
   A non-optional attribute must be present regardless of its declared default - defaults are not applied here.
@@ -408,7 +416,8 @@ defmodule Hologram.Entity.Validator do
     bound_errors(name, value, type, opts) ++
       in_errors(name, value, opts) ++
       length_errors(name, value, opts) ++
-      format_errors(name, value, opts)
+      format_errors(name, value, opts) ++
+      unique_bytes_errors(name, value, type, opts)
   end
 
   defp declared_fields(module) do
@@ -589,9 +598,24 @@ defmodule Hologram.Entity.Validator do
 
   defp requirement_description({:format, format}), do: "must match #{inspect(format)}"
 
+  defp requirement_description({:max_bytes, max_bytes}),
+    do: "must hold at most #{max_bytes} bytes (the most its unique index can carry)"
+
   defp role_extension_edges(roles) do
     Map.new(roles, fn {name, opts} -> {name, List.wrap(Keyword.get(opts, :extends, []))} end)
   end
+
+  # Only a unique string carries the bound - it is its index's, not the type's, and it is checked in
+  # bytes, not code points, because that is what the index stores.
+  defp unique_bytes_errors(name, value, :string, opts) do
+    if Keyword.get(opts, :unique) == true and byte_size(value) > @unique_string_max_bytes do
+      [{name, {:max_bytes, @unique_string_max_bytes}}]
+    else
+      []
+    end
+  end
+
+  defp unique_bytes_errors(_name, _value, _type, _opts), do: []
 
   defp validate_attribute_bounds!(module, name, type, opts) do
     Enum.each([:min, :max], &validate_bound_opt!(module, name, type, opts, &1))
@@ -601,6 +625,7 @@ defmodule Hologram.Entity.Validator do
   defp validate_attribute_default!(module, name, type, opts) do
     case Keyword.fetch(opts, :default) do
       {:ok, value} ->
+        validate_unique_default!(module, name, opts, value)
         validate_default_value!(module, name, type, opts, value)
 
       :error ->
@@ -663,6 +688,7 @@ defmodule Hologram.Entity.Validator do
     validate_known_opts!(module, "attribute", name, opts, @valid_attribute_opts)
     validate_optional_opt!(module, "attribute", name, opts)
     validate_server_only_opt!(module, name, opts)
+    validate_unique_opt!(module, name, opts)
   end
 
   defp validate_attribute_type!(module, name, type) do
@@ -1126,6 +1152,34 @@ defmodule Hologram.Entity.Validator do
       _fetch_result ->
         :ok
     end
+  end
+
+  defp validate_unique_opt!(module, name, opts) do
+    case Keyword.fetch(opts, :unique) do
+      {:ok, value} when not is_boolean(value) ->
+        raise Hologram.CompileError,
+          message:
+            "invalid unique option #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the unique option must be true or false"
+
+      _fetch_result ->
+        :ok
+    end
+  end
+
+  # A default is one value for every row that omits the attribute, so at most one such row could
+  # ever be stored - the rest meet the unique index. Refused where it is written rather than at the
+  # second insert, where nothing points back at the declaration. A nil default is the absence of
+  # one, and nulls stay distinct, so it passes.
+  defp validate_unique_default!(_module, _name, _opts, nil), do: :ok
+
+  defp validate_unique_default!(module, name, opts, value) do
+    if Keyword.get(opts, :unique) == true do
+      raise Hologram.CompileError,
+        message:
+          "invalid default value #{inspect(value)} for unique attribute #{inspect(name)} in #{inspect(module)} - a default is one value for every row that omits the attribute, so a unique attribute can't have one"
+    end
+
+    :ok
   end
 
   defp validate_use_opt_keys!(module, opts) do

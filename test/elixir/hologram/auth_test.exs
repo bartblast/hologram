@@ -17,19 +17,19 @@ defmodule Hologram.AuthTest do
   defp create_user(email) do
     Module14
     |> Entity.new(email: email)
-    |> DB.create()
+    |> DB.create!()
   end
 
   defp create_parent(public \\ false) do
     Module2
     |> Entity.new(public: public)
-    |> DB.create()
+    |> DB.create!()
   end
 
   defp create_resource do
     Module1
     |> Entity.new()
-    |> DB.create()
+    |> DB.create!()
   end
 
   defp grant_id(user_id) do

@@ -144,14 +144,17 @@ defmodule Hologram.Entity.ModelTest do
     end
 
     test "removes attribute options spelled as their neutral values" do
-      model = task_model(%{attributes: [{:priority, :integer, [default: 0, optional: true]}]})
+      model =
+        task_model(%{
+          attributes: [{:priority, :integer, [default: 0, optional: true, unique: true]}]
+        })
 
       ops = [
         %{
           op: :change_attribute,
           entity: MyApp.Task,
           name: :priority,
-          changes: [default: nil, optional: false],
+          changes: [default: nil, optional: false, unique: false],
           line: 3
         }
       ]
@@ -1305,12 +1308,17 @@ defmodule Hologram.Entity.ModelTest do
 
         attribute :a, :integer, optional: false
         attribute :b, :boolean, default: false
+        attribute :c, :string, unique: false
       end
 
       assert from_modules([InlineNeutralOptsFixture]) == %{
                entities: %{
                  InlineNeutralOptsFixture => %{
-                   attributes: [{:a, :integer, []}, {:b, :boolean, [default: false]}],
+                   attributes: [
+                     {:a, :integer, []},
+                     {:b, :boolean, [default: false]},
+                     {:c, :string, []}
+                   ],
                    relationships: [],
                    roles: []
                  }

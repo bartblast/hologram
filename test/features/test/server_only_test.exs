@@ -1,9 +1,8 @@
 defmodule HologramFeatureTests.ServerOnlyTest do
   use HologramFeatureTests.TestCase, async: false
 
-  import Hologram.DB.EntityOperations, only: [create: 1]
-
   alias Hologram.Auth.RoleGrant
+  alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
@@ -32,7 +31,7 @@ defmodule HologramFeatureTests.ServerOnlyTest do
   } do
     Document
     |> Entity.new(api_token: "api_token_5rL9", public: true, title: "public_document")
-    |> create()
+    |> DB.create!()
 
     session
     |> visit(PoliciesPage)

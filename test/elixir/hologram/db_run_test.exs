@@ -11,7 +11,7 @@ defmodule Hologram.DBRunTest do
   defp create_module_2_entity(values) do
     Module2
     |> Entity.new(values)
-    |> DB.create()
+    |> DB.create!()
   end
 
   describe "run/1" do

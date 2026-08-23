@@ -28,7 +28,7 @@ defmodule Hologram.AuthConcurrencyTest do
   defp create_owner(email) do
     Module14
     |> Entity.new(email: email)
-    |> DB.create()
+    |> DB.create!()
   end
 
   # The revokers are started, then released together: without the barrier each one tends to
@@ -83,7 +83,7 @@ defmodule Hologram.AuthConcurrencyTest do
     resource =
       Module1
       |> Entity.new()
-      |> DB.create()
+      |> DB.create!()
 
     Enum.each(owners, &grant_role(&1, resource, :owner))
 

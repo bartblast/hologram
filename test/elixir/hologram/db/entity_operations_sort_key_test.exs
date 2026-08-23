@@ -19,7 +19,7 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
 
   describe "create/1" do
     test "derives a nil companion from a nil attribute value" do
-      entity =
+      {:ok, entity} =
         Module7
         |> Entity.new()
         |> create()
@@ -28,7 +28,7 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
     end
 
     test "derives the sort-key companion from the attribute value" do
-      entity =
+      {:ok, entity} =
         Module2
         |> Entity.new(c: "Łódź")
         |> create()
@@ -39,7 +39,7 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
 
   describe "get/2" do
     test "returns the entity without its sort-key companion" do
-      entity =
+      {:ok, entity} =
         Module2
         |> Entity.new(c: "Łódź")
         |> create()
@@ -50,7 +50,7 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
 
   describe "update/3" do
     test "leaves the companion untouched when the attribute does not change" do
-      entity =
+      {:ok, entity} =
         Module2
         |> Entity.new(c: "Łódź")
         |> create()
@@ -61,7 +61,7 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
     end
 
     test "recomputes the companion when the attribute changes" do
-      entity =
+      {:ok, entity} =
         Module2
         |> Entity.new(c: "Łódź")
         |> create()

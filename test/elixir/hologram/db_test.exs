@@ -12,6 +12,8 @@ defmodule Hologram.DBTest do
   alias Hologram.Entity
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module19
+  alias Hologram.Test.Fixtures.Entity.Module3
 
   describe "init/1" do
     test "starts only the connection pool in test" do
@@ -77,10 +79,67 @@ defmodule Hologram.DBTest do
   end
 
   describe "create/1" do
+    # Both shapes in one test: the first create binds {:ok, _} or the match fails, and the
+    # second pins the violation travelling out through the gateway unchanged.
+    test "returns the unique violation" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(slug: "x")
+        |> create()
+
+      result =
+        Module19
+        |> Entity.new(slug: "x")
+        |> create()
+
+      assert result == {:error, %{slug: [:unique]}}
+    end
+
     test "rejects role grants" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
       assert_error ArgumentError, expected_msg, fn -> create(%RoleGrant{}) end
+    end
+  end
+
+  describe "create!/1" do
+    test "returns the created entity" do
+      entity =
+        Module1
+        |> Entity.new()
+        |> create!()
+
+      assert entity.created_at
+      assert get(Module1, entity.id).id == entity.id
+    end
+
+    # assert_error sees the message and nothing else, so the reason field - what the plain
+    # variant would have returned - is caught and asserted separately.
+    test "raises a write conflict when a unique attribute's value is taken" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(slug: "x")
+        |> create()
+
+      expected_msg =
+        ~s(cannot create Hologram.Test.Fixtures.Entity.Module19 - slug "x" is already taken)
+
+      assert_error Hologram.WriteConflictError, expected_msg, fn ->
+        Module19
+        |> Entity.new(slug: "x")
+        |> create!()
+      end
+
+      error =
+        try do
+          Module19
+          |> Entity.new(slug: "x")
+          |> create!()
+        rescue
+          error in Hologram.WriteConflictError -> error
+        end
+
+      assert error.reason == %{slug: [:unique]}
     end
   end
 
@@ -91,6 +150,48 @@ defmodule Hologram.DBTest do
       assert_error ArgumentError, expected_msg, fn ->
         delete(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
       end
+    end
+  end
+
+  describe "delete!/2" do
+    test "returns :ok" do
+      {:ok, entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      assert delete!(Module1, entity.id) == :ok
+      assert get(Module1, entity.id) == nil
+    end
+
+    test "raises a write conflict when another entity references the row" do
+      {:ok, target} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, _referencing} =
+        Module3
+        |> Entity.new(c_id: target.id)
+        |> create()
+
+      expected_msg =
+        ~s(cannot delete Hologram.Test.Fixtures.Entity.Module1 "#{target.id}" - ) <>
+          "another entity still references it"
+
+      assert_error Hologram.WriteConflictError, expected_msg, fn ->
+        delete!(Module1, target.id)
+      end
+
+      error =
+        try do
+          delete!(Module1, target.id)
+        rescue
+          error in Hologram.WriteConflictError -> error
+        end
+
+      assert error.reason == {:restricted, %{entity_type: Module1, id: target.id}}
+      assert get(Module1, target.id) == target
     end
   end
 
@@ -106,12 +207,66 @@ defmodule Hologram.DBTest do
   end
 
   describe "update/3" do
+    test "returns the unique violation" do
+      {:ok, first} =
+        Module19
+        |> Entity.new(slug: "held")
+        |> create()
+
+      {:ok, second} =
+        Module19
+        |> Entity.new(slug: "other")
+        |> create()
+
+      assert update(Module19, second.id, slug: first.slug) == {:error, %{slug: [:unique]}}
+    end
+
     test "rejects role grants" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
       assert_error ArgumentError, expected_msg, fn ->
         update(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f", role: :owner)
       end
+    end
+  end
+
+  describe "update!/3" do
+    test "returns :ok" do
+      {:ok, entity} =
+        Module19
+        |> Entity.new(slug: "before")
+        |> create()
+
+      assert update!(Module19, entity.id, slug: "after") == :ok
+    end
+
+    test "raises a write conflict when the new value is taken" do
+      {:ok, first} =
+        Module19
+        |> Entity.new(slug: "held")
+        |> create()
+
+      {:ok, second} =
+        Module19
+        |> Entity.new(slug: "other")
+        |> create()
+
+      expected_msg =
+        ~s(cannot update Hologram.Test.Fixtures.Entity.Module19 "#{second.id}" - ) <>
+          ~s(slug "held" is already taken)
+
+      assert_error Hologram.WriteConflictError, expected_msg, fn ->
+        update!(Module19, second.id, slug: first.slug)
+      end
+
+      error =
+        try do
+          update!(Module19, second.id, slug: first.slug)
+        rescue
+          error in Hologram.WriteConflictError -> error
+        end
+
+      assert error.reason == %{slug: [:unique]}
     end
   end
 

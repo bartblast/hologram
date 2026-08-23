@@ -60,7 +60,7 @@ defmodule Hologram.Sync.SessionTest do
   defp create(title) do
     Module2
     |> Entity.new(a: true, c: title)
-    |> DB.create()
+    |> DB.create!()
   end
 
   # One entry of what a returning client missed, in the shape the log reports it - the place
@@ -460,16 +460,16 @@ defmodule Hologram.Sync.SessionTest do
       user =
         Module14
         |> Entity.new(email: "reader@example.com")
-        |> DB.create()
+        |> DB.create!()
 
       readable =
         PolicyModule1
         |> Entity.new(public: true)
-        |> DB.create()
+        |> DB.create!()
 
       PolicyModule1
       |> Entity.new()
-      |> DB.create()
+      |> DB.create!()
 
       windows(%{@page => [@other_window]})
       hold_windows([@other_window])
@@ -485,11 +485,11 @@ defmodule Hologram.Sync.SessionTest do
       readable =
         PolicyModule1
         |> Entity.new(public: true)
-        |> DB.create()
+        |> DB.create!()
 
       PolicyModule1
       |> Entity.new()
-      |> DB.create()
+      |> DB.create!()
 
       windows(%{@page => [@other_window]})
       hold_windows([@other_window])
@@ -992,12 +992,12 @@ defmodule Hologram.Sync.SessionTest do
     required =
       Module1
       |> Entity.new()
-      |> DB.create()
+      |> DB.create!()
 
     source =
       Module3
       |> Entity.new(c_id: required.id)
-      |> DB.create()
+      |> DB.create!()
 
     DB.add_relationship(Module3, source.id, :a, child.id)
 

@@ -5,6 +5,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -86,6 +87,14 @@ defmodule Hologram.Entity.ValidatorTest do
   end
 
   describe "error_message/3" do
+    test "describes a max_bytes violation as the most the unique index carries" do
+      data = %{slug: String.duplicate("a", 2693)}
+      {:error, errors} = validate(Module19, data)
+
+      assert error_message(Module19, data, errors) =~
+               "attribute :slug must hold at most 2692 bytes (the most its unique index can carry), got: "
+    end
+
     test "builds one line per violation naming attribute, expectation, and received value" do
       data = %{count: 0, priority: 9}
       {:error, errors} = validate(Module10, data)
@@ -298,6 +307,31 @@ defmodule Hologram.Entity.ValidatorTest do
       assert Regex.source(format) == "@"
     end
 
+    # The bound is measured, not derived: 2692 incompressible bytes always fit the btree entry
+    # PostgreSQL builds for the unique index, 2693 never do. Byte-for-byte on purpose - a bound
+    # checked one byte off is the kind that passes every test and fails the first real value.
+    test "accepts a unique string holding exactly the most bytes its index carries" do
+      assert validate(Module19, %{slug: String.duplicate("a", 2692)}) == :ok
+    end
+
+    test "reports max_bytes violations for a unique string one byte over" do
+      assert validate(Module19, %{slug: String.duplicate("a", 2693)}) ==
+               {:error, [{:slug, {:max_bytes, 2692}}]}
+    end
+
+    # Bytes, not code points: a 4-byte character counts four times, so 673 of them (2692 bytes)
+    # fit where 674 (2696) do not - while 674 CHARACTERS would pass any code-point bound.
+    test "counts a unique string's bytes rather than its characters" do
+      assert validate(Module19, %{slug: String.duplicate("😀", 673)}) == :ok
+
+      assert validate(Module19, %{slug: String.duplicate("😀", 674)}) ==
+               {:error, [{:slug, {:max_bytes, 2692}}]}
+    end
+
+    test "leaves a string that is not unique unbounded" do
+      assert validate(Module2, %{a: true, c: String.duplicate("a", 5000)}) == :ok
+    end
+
     test "accumulates multiple constraint violations per attribute" do
       assert {:error, [{:handle, {:format, format}}, {:handle, {:min_length, 3}}]} =
                validate(Module10, %{count: 5, handle: "A?"})
@@ -470,7 +504,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown attribute option" do
       expected_msg =
-        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :format, :in, :length, :max, :max_length, :min, :min_length, :optional, :server_only, :values"
+        "unknown option :require for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture10 - valid attribute options are: :default, :format, :in, :length, :max, :max_length, :min, :min_length, :optional, :server_only, :unique, :values"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture10 do
@@ -1132,6 +1166,26 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture85.__attributes__() == [{:title, :string, [server_only: false]}]
     end
 
+    test "accepts a unique attribute" do
+      defmodule InlineEntityFixture88 do
+        use Hologram.Entity
+
+        attribute :slug, :string, unique: true
+      end
+
+      assert InlineEntityFixture88.__attributes__() == [{:slug, :string, [unique: true]}]
+    end
+
+    test "accepts a disabled unique option" do
+      defmodule InlineEntityFixture89 do
+        use Hologram.Entity
+
+        attribute :title, :string, unique: false
+      end
+
+      assert InlineEntityFixture89.__attributes__() == [{:title, :string, [unique: false]}]
+    end
+
     test "rejects non-boolean optional option" do
       expected_msg =
         "invalid optional option :yes for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture9 - the optional option must be true or false"
@@ -1156,6 +1210,45 @@ defmodule Hologram.Entity.ValidatorTest do
           attribute :token, :string, server_only: "yes"
         end
       end
+    end
+
+    test "rejects non-boolean unique option" do
+      expected_msg =
+        "invalid unique option \"yes\" for attribute :slug in Hologram.Entity.ValidatorTest.InlineEntityFixture90 - the unique option must be true or false"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture90 do
+          use Hologram.Entity
+
+          attribute :slug, :string, unique: "yes"
+        end
+      end
+    end
+
+    test "rejects a default on a unique attribute" do
+      expected_msg =
+        "invalid default value \"draft\" for unique attribute :slug in Hologram.Entity.ValidatorTest.InlineEntityFixture91 - a default is one value for every row that omits the attribute, so a unique attribute can't have one"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture91 do
+          use Hologram.Entity
+
+          attribute :slug, :string, default: "draft", unique: true
+        end
+      end
+    end
+
+    # A nil default is the absence of one, and nulls stay distinct - the pairing the refusal above
+    # must not catch, since "unique when present" is what an optional unique attribute declares.
+    test "accepts a nil default on an optional unique attribute" do
+      defmodule InlineEntityFixture92 do
+        use Hologram.Entity
+
+        attribute :slug, :string, default: nil, optional: true, unique: true
+      end
+
+      assert InlineEntityFixture92.__attributes__() ==
+               [{:slug, :string, [default: nil, optional: true, unique: true]}]
     end
 
     test "rejects non-atom attribute name" do

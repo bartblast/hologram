@@ -1,9 +1,8 @@
 defmodule HologramFeatureTests.PoliciesTest do
   use HologramFeatureTests.TestCase, async: false
 
-  import Hologram.DB.EntityOperations, only: [create: 1]
-
   alias Hologram.Auth.RoleGrant
+  alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
@@ -30,11 +29,11 @@ defmodule HologramFeatureTests.PoliciesTest do
   } do
     Document
     |> Entity.new(public: true, title: "public_document")
-    |> create()
+    |> DB.create!()
 
     Document
     |> Entity.new(title: "private_document")
-    |> create()
+    |> DB.create!()
 
     session
     |> visit(PoliciesPage)
@@ -47,20 +46,20 @@ defmodule HologramFeatureTests.PoliciesTest do
     public_folder =
       Folder
       |> Entity.new(name: "shared_folder", public: true)
-      |> create()
+      |> DB.create!()
 
     private_folder =
       Folder
       |> Entity.new(name: "locked_folder")
-      |> create()
+      |> DB.create!()
 
     Document
     |> Entity.new(folder_id: public_folder.id, public: true, title: "filed_document")
-    |> create()
+    |> DB.create!()
 
     Document
     |> Entity.new(folder_id: private_folder.id, public: true, title: "secret_document")
-    |> create()
+    |> DB.create!()
 
     session
     |> visit(PoliciesPage)

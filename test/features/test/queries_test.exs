@@ -1,8 +1,7 @@
 defmodule HologramFeatureTests.QueriesTest do
   use HologramFeatureTests.TestCase, async: false
 
-  import Hologram.DB.EntityOperations, only: [create: 1]
-
+  alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
@@ -63,12 +62,12 @@ defmodule HologramFeatureTests.QueriesTest do
     product =
       Product
       |> Entity.new(name: "Widget")
-      |> create()
+      |> DB.create!()
 
     Enum.each(["Zebra", "apple", "Łódź"], fn body ->
       Review
       |> Entity.new(body: body, product_id: product.id, rating: 3)
-      |> create()
+      |> DB.create!()
     end)
 
     session
@@ -79,15 +78,15 @@ defmodule HologramFeatureTests.QueriesTest do
   feature "renders from_query prop results in practical order", %{session: session} do
     Product
     |> Entity.new(name: "Zürich")
-    |> create()
+    |> DB.create!()
 
     Product
     |> Entity.new(name: "Łódź")
-    |> create()
+    |> DB.create!()
 
     Product
     |> Entity.new(name: "apple")
-    |> create()
+    |> DB.create!()
 
     session
     |> visit(Page1)
@@ -100,24 +99,24 @@ defmodule HologramFeatureTests.QueriesTest do
     alpha =
       Product
       |> Entity.new(name: "alpha")
-      |> create()
+      |> DB.create!()
 
     beta =
       Product
       |> Entity.new(name: "beta")
-      |> create()
+      |> DB.create!()
 
     Review
     |> Entity.new(body: "aa", product_id: alpha.id, rating: 2)
-    |> create()
+    |> DB.create!()
 
     Review
     |> Entity.new(body: "bb", product_id: alpha.id, rating: 5)
-    |> create()
+    |> DB.create!()
 
     Review
     |> Entity.new(body: "cc", product_id: beta.id, rating: 3)
-    |> create()
+    |> DB.create!()
 
     :ok
   end

@@ -27,6 +27,7 @@ defmodule Hologram.Migration.TailBuildTest do
 
   import Hologram.Migrator
 
+  alias Hologram.DB.Connection
   alias Hologram.Entity.Model
 
   @context %{
@@ -72,9 +73,11 @@ defmodule Hologram.Migration.TailBuildTest do
     count
   end
 
-  defp index_validity(session) do
+  # Unique beside valid, because a declaration-derived unique index has two things to prove:
+  # that PostgreSQL enforces it at all, and that its concurrent build finished.
+  defp index_flags(session, index \\ @index) do
     statement = """
-    SELECT i."indisvalid"
+    SELECT i."indisunique", i."indisvalid"
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class ic ON ic.oid = i."indexrelid"
     JOIN pg_catalog.pg_class c ON c.oid = i."indrelid"
@@ -82,10 +85,19 @@ defmodule Hologram.Migration.TailBuildTest do
     WHERE n."nspname" = 'hologram_data' AND ic."relname" = $1
     """
 
-    case Postgrex.query!(session, statement, [@index]) do
-      %{rows: [[valid?]]} -> valid?
+    case Postgrex.query!(session, statement, [index]) do
+      %{rows: [[unique?, valid?]]} -> %{unique: unique?, valid: valid?}
       %{rows: []} -> :absent
     end
+  end
+
+  defp insert_task(slug) do
+    statement = """
+    INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "updated_at")
+    VALUES (gen_random_uuid(), $1, now(), now())
+    """
+
+    {:ok, _result} = Connection.query(statement, [slug])
   end
 
   defp migration(version, ops) do
@@ -122,6 +134,54 @@ defmodule Hologram.Migration.TailBuildTest do
   end
 
   describe "run/3" do
+    # The tail's happy path, over a table that already carries rows - the shape a real deploy
+    # meets. An empty table would prove less: a concurrent build over one finishes between two
+    # statements, so nothing about the build being concurrent would be exercised.
+    test "builds a unique index of a populated table in the tail, valid and enforced", %{
+      observer: observer,
+      scratch: scratch
+    } do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            type: :string,
+            opts: [optional: true],
+            line: 4
+          }
+        ])
+
+      unique =
+        migration("20260813142237", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: true],
+            line: 3
+          }
+        ])
+
+      first_model = Model.fold(Model.empty(), create.ops)
+      full_model = Model.fold(first_model, unique.ops)
+
+      route(scratch, fn ->
+        :ok = run([create], first_model, @context)
+
+        insert_task("alpha")
+        insert_task("beta")
+
+        :ok = run([create, unique], full_model, @context)
+      end)
+
+      assert applied_versions_of(observer) == ["20260813091522", "20260813142237"]
+
+      assert index_flags(observer, "my_app_task_slug_$uidx") == %{unique: true, valid: true}
+    end
+
     test "waits for the migration lock before applying anything", %{
       chain: chain,
       full_model: full_model,
@@ -147,7 +207,7 @@ defmodule Hologram.Migration.TailBuildTest do
       # the one key this assertion would have failed on its first line - the files applied
       # immediately under a key of their own, and only the tail's build waited.
       assert hologram_schema_count(observer) == 0
-      assert index_validity(observer) == :absent
+      assert index_flags(observer) == :absent
       assert Task.yield(applier, 0) == nil
 
       Postgrex.query!(holder, "SELECT pg_advisory_unlock($1)", [@migration_lock_key])
@@ -159,7 +219,7 @@ defmodule Hologram.Migration.TailBuildTest do
       # Valid, not merely present - a concurrent build that fails partway leaves its index in
       # the catalog serving no query while every write maintains it.
       assert applied_versions_of(observer) == ["20260813091522", "20260813142237"]
-      assert index_validity(observer) == true
+      assert index_flags(observer) == %{unique: false, valid: true}
 
       # And it let the key go, so the next node is not stranded behind a finished deploy.
       assert %{rows: [[true]]} =

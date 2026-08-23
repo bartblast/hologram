@@ -28,6 +28,7 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_entity_module16_secrets_$join",
                "test_fixtures_entity_module17",
                "test_fixtures_entity_module18",
+               "test_fixtures_entity_module19",
                "test_fixtures_entity_module2",
                "test_fixtures_entity_module3",
                "test_fixtures_entity_module3_a_$join",
@@ -222,6 +223,33 @@ defmodule Hologram.DB.IntrospectionTest do
              }
     end
 
+    test "introspects a unique attribute's index as unique" do
+      indexes = schema().tables["test_fixtures_entity_module19"].indexes
+
+      assert indexes == %{
+               "test_fixtures_entity_module19_code_$uidx" => %{
+                 columns: ["code"],
+                 nulls_distinct: true,
+                 unique: true
+               },
+               "test_fixtures_entity_module19_slug_$uidx" => %{
+                 columns: ["slug"],
+                 nulls_distinct: true,
+                 unique: true
+               },
+               "test_fixtures_entity_module19_code_$sort_$idx" => %{
+                 columns: ["code_$sort"],
+                 nulls_distinct: true,
+                 unique: false
+               },
+               "test_fixtures_entity_module19_slug_$sort_$idx" => %{
+                 columns: ["slug_$sort"],
+                 nulls_distinct: true,
+                 unique: false
+               }
+             }
+    end
+
     test "introspects enum types with their values" do
       assert schema().enum_types == %{
                "hologram_role_grant_resource_type_$enum" => [
@@ -235,6 +263,7 @@ defmodule Hologram.DB.IntrospectionTest do
                  "test_fixtures_entity_module16",
                  "test_fixtures_entity_module17",
                  "test_fixtures_entity_module18",
+                 "test_fixtures_entity_module19",
                  "test_fixtures_entity_module2",
                  "test_fixtures_entity_module3",
                  "test_fixtures_entity_module4",
