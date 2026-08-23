@@ -187,6 +187,46 @@ defmodule Hologram.DBTest do
     end
   end
 
+  describe "update!/3" do
+    test "returns :ok" do
+      {:ok, entity} =
+        Module19
+        |> Entity.new(slug: "before")
+        |> create()
+
+      assert update!(Module19, entity.id, slug: "after") == :ok
+    end
+
+    test "raises a write conflict when the new value is taken" do
+      {:ok, first} =
+        Module19
+        |> Entity.new(slug: "held")
+        |> create()
+
+      {:ok, second} =
+        Module19
+        |> Entity.new(slug: "other")
+        |> create()
+
+      expected_msg =
+        ~s(cannot update Hologram.Test.Fixtures.Entity.Module19 "#{second.id}" - ) <>
+          ~s(slug "held" is already taken)
+
+      assert_error Hologram.WriteConflictError, expected_msg, fn ->
+        update!(Module19, second.id, slug: first.slug)
+      end
+
+      error =
+        try do
+          update!(Module19, second.id, slug: first.slug)
+        rescue
+          error in Hologram.WriteConflictError -> error
+        end
+
+      assert error.reason == %{slug: [:unique]}
+    end
+  end
+
   describe "update/1" do
     test "raises a teaching error for a struct argument" do
       entity = Entity.new(Module1)

@@ -186,6 +186,26 @@ defmodule Hologram.DB do
   end
 
   @doc """
+  Like update/3, raising Hologram.WriteConflictError instead of returning {:error, ...}.
+
+  The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
+  takes update/3.
+  """
+  @spec update!(module, String.t(), map | keyword) :: :ok
+  def update!(entity_type, id, changes) do
+    case update(entity_type, id, changes) do
+      :ok ->
+        :ok
+
+      {:error, violations} ->
+        raise WriteConflictError,
+          message:
+            "cannot update #{inspect(entity_type)} #{inspect(id)} - #{taken_description(violations, Map.new(changes))}",
+          reason: violations
+    end
+  end
+
+  @doc """
   Returns the physical name mapping derived from the discovered entity type modules.
   The mapping is derived once at boot and cached for the lifetime of the runtime.
   """
