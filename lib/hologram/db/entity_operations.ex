@@ -50,22 +50,21 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   @doc false
-  @spec create(struct) :: struct
+  @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom)}}
   def create(entity) do
-    {:ok, stamped_entity} =
-      Connection.transaction(fn ->
-        {stamped_entity, _result} = insert(entity, "")
+    # The transaction's own shape is the contract: its value is the stamped entity, and the
+    # violations a duplicate rolls back with are its reason.
+    Connection.transaction(fn ->
+      {stamped_entity, _result} = insert(entity, "")
 
-        Outbox.append([put_effect(stamped_entity)])
+      Outbox.append([put_effect(stamped_entity)])
 
-        entity
-        |> creator_grants()
-        |> Enum.each(&create_if_absent/1)
+      entity
+      |> creator_grants()
+      |> Enum.each(&create_if_absent/1)
 
-        stamped_entity
-      end)
-
-    stamped_entity
+      stamped_entity
+    end)
   end
 
   @doc false
@@ -373,8 +372,14 @@ defmodule Hologram.DB.EntityOperations do
         "VALUES (#{placeholder_list})#{conflict_clause}"
 
     case Connection.query(statement, encoded_values) do
-      {:ok, result} -> {stamped_entity, result}
-      {:error, error} -> raise error
+      {:ok, result} ->
+        {stamped_entity, result}
+
+      {:error, error} ->
+        case unique_violations(entity_type, error) do
+          nil -> raise error
+          violations -> Connection.rollback(violations)
+        end
     end
   end
 
@@ -430,6 +435,26 @@ defmodule Hologram.DB.EntityOperations do
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
   end
+
+  # A unique index derived from a `unique: true` attribute names that attribute back, so a
+  # duplicate is answered the way a value violation is - by field, in Entity.validate/2's shape.
+  # Any other unique index is not ours to explain and keeps raising: a duplicate primary key is
+  # a framework bug rather than something a caller did, and the grant store's index is over four
+  # columns, so neither matches the single-attribute shape below.
+  defp unique_violations(entity_type, %Postgrex.Error{
+         postgres: %{code: :unique_violation, constraint: constraint}
+       }) do
+    %{columns: columns, indexes: indexes} = Map.fetch!(DB.mapping(), entity_type)
+
+    with %{unique: true, columns: [column_name]} <- indexes[constraint],
+         %{source: {:attribute, name}} <- Enum.find(columns, &(&1.name == column_name)) do
+      %{name => [:unique]}
+    else
+      _no_match -> nil
+    end
+  end
+
+  defp unique_violations(_entity_type, _error), do: nil
 
   defp validate_change_values!(entity_type, sorted_changes) do
     changes_map = Map.new(sorted_changes)

@@ -11,6 +11,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -59,17 +60,17 @@ defmodule Hologram.DB.EntityOperationsTest do
 
   describe "add_relationship/4" do
     test "adds an edge to the join table" do
-      required_target =
+      {:ok, required_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      source_entity =
+      {:ok, source_entity} =
         Module3
         |> Entity.new(c_id: required_target.id)
         |> create()
 
-      target_entity =
+      {:ok, target_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -80,17 +81,17 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "is idempotent" do
-      required_target =
+      {:ok, required_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      source_entity =
+      {:ok, source_entity} =
         Module3
         |> Entity.new(c_id: required_target.id)
         |> create()
 
-      target_entity =
+      {:ok, target_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -102,17 +103,17 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records the edge it added" do
-      required_target =
+      {:ok, required_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      source_entity =
+      {:ok, source_entity} =
         Module3
         |> Entity.new(c_id: required_target.id)
         |> create()
 
-      target_entity =
+      {:ok, target_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -127,17 +128,17 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records nothing when the edge is already there" do
-      required_target =
+      {:ok, required_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      source_entity =
+      {:ok, source_entity} =
         Module3
         |> Entity.new(c_id: required_target.id)
         |> create()
 
-      target_entity =
+      {:ok, target_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -160,12 +161,12 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "raises when the source or target entity is missing" do
-      required_target =
+      {:ok, required_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      source_entity =
+      {:ok, source_entity} =
         Module3
         |> Entity.new(c_id: required_target.id)
         |> create()
@@ -185,7 +186,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     test "inserts a full row and stamps both timestamps with the same value" do
       entity = Entity.new(Module2, a: true, c: "some text")
 
-      created_entity = create(entity)
+      {:ok, created_entity} = create(entity)
 
       assert %DateTime{} = created_entity.created_at
       assert created_entity.updated_at == created_entity.created_at
@@ -204,7 +205,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       entity = Entity.new(Module4, a: ~D[2026-07-19], b: written_at, d: 1.5)
 
-      created_entity = create(entity)
+      {:ok, created_entity} = create(entity)
 
       select_sql =
         ~s|SELECT "a", "b", "c", "d" FROM "hologram_data"."test_fixtures_entity_module4" WHERE "id" = $1|
@@ -216,14 +217,14 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "writes to-one relationship references into the reference columns" do
-      target_entity =
+      {:ok, target_entity} =
         Module1
         |> Entity.new()
         |> create()
 
       entity = Entity.new(Module3, c_id: target_entity.id)
 
-      created_entity = create(entity)
+      {:ok, created_entity} = create(entity)
 
       select_sql =
         ~s|SELECT "b_id", "c_id" FROM "hologram_data"."test_fixtures_entity_module3" WHERE "id" = $1|
@@ -238,7 +239,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     test "records the insert as an effect carrying the whole entity" do
       entity = Entity.new(Module2, a: true, c: "some text")
 
-      created_entity = create(entity)
+      {:ok, created_entity} = create(entity)
 
       assert [effect] = outbox_effects()
       assert effect.op == "put_entity"
@@ -256,9 +257,9 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records the creator's grants after the entity they are granted on" do
-      user = create(Entity.new(Module14, email: "creator@example.com"))
+      {:ok, user} = create(Entity.new(Module14, email: "creator@example.com"))
 
-      created_entity =
+      {:ok, created_entity} =
         Context.with_actor(user.id, fn ->
           create(Entity.new(PolicyModule1))
         end)
@@ -276,13 +277,33 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert Enum.map(grant_effects, &Map.fetch!(&1.data, "role")) == ["maintainer", "owner"]
     end
 
+    test "returns the violation when a unique attribute's value is taken" do
+      {:ok, _entity} = create(Entity.new(Module19, slug: "x"))
+
+      assert create(Entity.new(Module19, slug: "x")) == {:error, %{slug: [:unique]}}
+    end
+
+    # Uniqueness is over the values an attribute holds, and nil is the absence of one.
+    test "admits any number of nils in an optional unique attribute" do
+      assert {:ok, _first} = create(Entity.new(Module19, code: nil, slug: "a"))
+      assert {:ok, _second} = create(Entity.new(Module19, code: nil, slug: "b"))
+    end
+
+    test "writes nothing and records nothing for a conflicting insert" do
+      {:ok, entity} = create(Entity.new(Module19, slug: "x"))
+
+      assert create(Entity.new(Module19, slug: "x")) == {:error, %{slug: [:unique]}}
+
+      assert Enum.map(outbox_effects(), & &1.entity_id) == [entity.id]
+    end
+
     test "raises on constraint violations" do
       entity = Entity.new(Module1)
-      create(entity)
+      {:ok, _entity} = create(entity)
 
       error =
         try do
-          create(entity)
+          {:ok, _entity} = create(entity)
         rescue
           error in Postgrex.Error -> error
         end
@@ -323,9 +344,10 @@ defmodule Hologram.DB.EntityOperationsTest do
         """)
 
       assert_error ArgumentError, expected_required_msg, fn ->
-        Module3
-        |> Entity.new()
-        |> create()
+        {:ok, _entity} =
+          Module3
+          |> Entity.new()
+          |> create()
       end
 
       expected_invalid_msg =
@@ -335,9 +357,10 @@ defmodule Hologram.DB.EntityOperationsTest do
         """)
 
       assert_error ArgumentError, expected_invalid_msg, fn ->
-        Module3
-        |> Entity.new(c_id: "garbage")
-        |> create()
+        {:ok, _entity} =
+          Module3
+          |> Entity.new(c_id: "garbage")
+          |> create()
       end
     end
   end
@@ -355,15 +378,15 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "grants every creator role of the entity type to the acting user" do
-      user = create(Entity.new(Module14, email: "user_3@example.com"))
+      {:ok, user} = create(Entity.new(Module14, email: "user_3@example.com"))
 
-      resource = Context.with_actor(user.id, fn -> create(Entity.new(PolicyModule1)) end)
+      {:ok, resource} = Context.with_actor(user.id, fn -> create(Entity.new(PolicyModule1)) end)
 
       assert granted_roles(user.id, resource.id) == ["maintainer", "owner"]
     end
 
     test "grants nothing outside an actor context" do
-      resource = create(Entity.new(PolicyModule1))
+      {:ok, resource} = create(Entity.new(PolicyModule1))
 
       select_sql =
         ~s|SELECT count(*) FROM "hologram_data"."hologram_role_grant" WHERE "resource_id" = $1|
@@ -375,9 +398,9 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "grants nothing for an entity type declaring no creator role" do
-      user = create(Entity.new(Module14, email: "user_4@example.com"))
+      {:ok, user} = create(Entity.new(Module14, email: "user_4@example.com"))
 
-      resource = Context.with_actor(user.id, fn -> create(Entity.new(Module1)) end)
+      {:ok, resource} = Context.with_actor(user.id, fn -> create(Entity.new(Module1)) end)
 
       assert granted_roles(user.id, resource.id) == []
     end
@@ -414,14 +437,14 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "inserts the entity when no conflicting row exists" do
-      user = create(Entity.new(Module14, email: "user_1@example.com"))
+      {:ok, user} = create(Entity.new(Module14, email: "user_1@example.com"))
 
       assert create_if_absent(role_grant(user, :owner)) == :ok
       assert count_role_grants(user.id) == 1
     end
 
     test "keeps the existing row when a unique index conflicts" do
-      user = create(Entity.new(Module14, email: "user_2@example.com"))
+      {:ok, user} = create(Entity.new(Module14, email: "user_2@example.com"))
       first_grant = role_grant(user, :owner)
 
       create_if_absent(first_grant)
@@ -436,7 +459,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records the insert as an effect" do
-      user = create(Entity.new(Module14, email: "user_3@example.com"))
+      {:ok, user} = create(Entity.new(Module14, email: "user_3@example.com"))
       grant = role_grant(user, :owner)
 
       create_if_absent(grant)
@@ -448,7 +471,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records nothing when a conflicting row keeps the insert from happening" do
-      user = create(Entity.new(Module14, email: "user_4@example.com"))
+      {:ok, user} = create(Entity.new(Module14, email: "user_4@example.com"))
 
       create_if_absent(role_grant(user, :owner))
       effects_after_first = outbox_effects()
@@ -461,7 +484,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
   describe "delete/2" do
     test "deletes the entity row" do
-      created_entity =
+      {:ok, created_entity} =
         Module1
         |> Entity.new()
         |> create()
@@ -472,17 +495,17 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "deletes own outgoing edges with the row" do
-      required_target =
+      {:ok, required_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      source_entity =
+      {:ok, source_entity} =
         Module3
         |> Entity.new(c_id: required_target.id)
         |> create()
 
-      target_entity =
+      {:ok, target_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -496,7 +519,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records the deletion" do
-      created_entity =
+      {:ok, created_entity} =
         Module1
         |> Entity.new()
         |> create()
@@ -520,14 +543,15 @@ defmodule Hologram.DB.EntityOperationsTest do
 
     # The write and the record of it share a transaction, so a refusal takes both back.
     test "records nothing when the delete is restricted" do
-      target_entity =
+      {:ok, target_entity} =
         Module1
         |> Entity.new()
         |> create()
 
-      Module3
-      |> Entity.new(c_id: target_entity.id)
-      |> create()
+      {:ok, _entity} =
+        Module3
+        |> Entity.new(c_id: target_entity.id)
+        |> create()
 
       effects_before = outbox_effects()
 
@@ -537,12 +561,12 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "restricts when another entity references the entity" do
-      target_entity =
+      {:ok, target_entity} =
         Module1
         |> Entity.new()
         |> create()
 
-      referencing_entity =
+      {:ok, referencing_entity} =
         Module3
         |> Entity.new(c_id: target_entity.id)
         |> create()
@@ -555,17 +579,17 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "restricts when the entity is the target of another entity's edges" do
-      required_target =
+      {:ok, required_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      source_entity =
+      {:ok, source_entity} =
         Module3
         |> Entity.new(c_id: required_target.id)
         |> create()
 
-      target_entity =
+      {:ok, target_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -585,17 +609,17 @@ defmodule Hologram.DB.EntityOperationsTest do
 
   describe "delete_relationship/4" do
     test "deletes an edge from the join table" do
-      required_target =
+      {:ok, required_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      source_entity =
+      {:ok, source_entity} =
         Module3
         |> Entity.new(c_id: required_target.id)
         |> create()
 
-      target_entity =
+      {:ok, target_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -608,17 +632,17 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "deleting an absent edge is a no-op" do
-      required_target =
+      {:ok, required_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      source_entity =
+      {:ok, source_entity} =
         Module3
         |> Entity.new(c_id: required_target.id)
         |> create()
 
-      target_entity =
+      {:ok, target_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -627,17 +651,17 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records the edge it removed" do
-      required_target =
+      {:ok, required_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      source_entity =
+      {:ok, source_entity} =
         Module3
         |> Entity.new(c_id: required_target.id)
         |> create()
 
-      target_entity =
+      {:ok, target_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -653,17 +677,17 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records nothing when the edge was not there" do
-      required_target =
+      {:ok, required_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      source_entity =
+      {:ok, source_entity} =
         Module3
         |> Entity.new(c_id: required_target.id)
         |> create()
 
-      target_entity =
+      {:ok, target_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -689,18 +713,18 @@ defmodule Hologram.DB.EntityOperationsTest do
     test "returns the entity with values decoded back into their logical types" do
       entity = Entity.new(Module4, a: ~D[2026-07-19], b: DateTime.utc_now(:microsecond), d: 1.5)
 
-      created_entity = create(entity)
+      {:ok, created_entity} = create(entity)
 
       assert get(Module4, created_entity.id) == created_entity
     end
 
     test "returns to-one relationship references as target ids" do
-      target_entity =
+      {:ok, target_entity} =
         Module1
         |> Entity.new()
         |> create()
 
-      created_entity =
+      {:ok, created_entity} =
         Module3
         |> Entity.new(c_id: target_entity.id)
         |> create()
@@ -715,7 +739,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
   describe "update/3" do
     test "sets exactly the changed columns and bumps updated_at" do
-      created_entity =
+      {:ok, created_entity} =
         Module2
         |> Entity.new(a: true, b: 1, c: "before")
         |> create()
@@ -734,7 +758,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "records the changed attributes and the stamp they moved" do
-      created_entity =
+      {:ok, created_entity} =
         Module2
         |> Entity.new(a: true, b: 1, c: "before")
         |> create()
@@ -755,7 +779,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "never records the value of a server-only attribute it changed" do
-      created_entity =
+      {:ok, created_entity} =
         Module14
         |> Entity.new(email: "before@example.com")
         |> create()
@@ -786,22 +810,22 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "sets, reassigns and clears to-one references" do
-      first_target =
+      {:ok, first_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      second_target =
+      {:ok, second_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      optional_target =
+      {:ok, optional_target} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
 
-      created_entity =
+      {:ok, created_entity} =
         Module3
         |> Entity.new(c_id: first_target.id)
         |> create()
@@ -817,7 +841,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "raises when changes name anything but declared attributes and to-one relationships" do
-      created_entity =
+      {:ok, created_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -838,7 +862,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "raises when changes are empty" do
-      created_entity =
+      {:ok, created_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -863,7 +887,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "raises naming every change violation before touching the database" do
-      created_entity =
+      {:ok, created_entity} =
         Module2
         |> Entity.new(a: true, c: "some text")
         |> create()
@@ -881,7 +905,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "raises on declared constraint option violations" do
-      created_entity =
+      {:ok, created_entity} =
         Module10
         |> Entity.new(count: 5)
         |> create()
@@ -898,12 +922,12 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
 
     test "raises on reference change violations" do
-      required_target =
+      {:ok, required_target} =
         Module1
         |> Entity.new()
         |> create()
 
-      created_entity =
+      {:ok, created_entity} =
         Module3
         |> Entity.new(c_id: required_target.id)
         |> create()
