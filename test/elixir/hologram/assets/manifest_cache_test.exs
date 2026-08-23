@@ -6,6 +6,7 @@ defmodule Hologram.Assets.ManifestCacheTest do
   import Mox
 
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -37,6 +38,24 @@ defmodule Hologram.Assets.ManifestCacheTest do
     """
 
     assert normalize_newlines(result) == normalize_newlines(expected)
+  end
+
+  # A path is printed into the inline script the manifest is part of, as a string literal. The
+  # registered name holds everything such a literal cannot carry raw - a quote, a backslash, and
+  # a closing script tag, which the HTML parser would read before any JavaScript ran.
+  test "get_manifest_js/0 escapes a path for the script element the manifest is printed into" do
+    static_path = ~S|hostile/quote"backslash\tag</script>.txt|
+    AssetPathRegistry.register(static_path, "/" <> static_path)
+
+    init(nil)
+    result = get_manifest_js()
+
+    refute String.contains?(result, "</script>")
+
+    assert String.contains?(
+             result,
+             ~S|"hostile/quote\"backslash\\tag\u{3C}/script>.txt": "/hostile/quote\"backslash\\tag\u{3C}/script>.txt"|
+           )
   end
 
   test "init/1" do
