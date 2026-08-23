@@ -5,6 +5,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -86,6 +87,14 @@ defmodule Hologram.Entity.ValidatorTest do
   end
 
   describe "error_message/3" do
+    test "describes a max_bytes violation as the most the unique index carries" do
+      data = %{slug: String.duplicate("a", 2693)}
+      {:error, errors} = validate(Module19, data)
+
+      assert error_message(Module19, data, errors) =~
+               "attribute :slug must hold at most 2692 bytes (the most its unique index can carry), got: "
+    end
+
     test "builds one line per violation naming attribute, expectation, and received value" do
       data = %{count: 0, priority: 9}
       {:error, errors} = validate(Module10, data)
@@ -296,6 +305,31 @@ defmodule Hologram.Entity.ValidatorTest do
                validate(Module10, %{count: 5, email: "nope"})
 
       assert Regex.source(format) == "@"
+    end
+
+    # The bound is measured, not derived: 2692 incompressible bytes always fit the btree entry
+    # PostgreSQL builds for the unique index, 2693 never do. Byte-for-byte on purpose - a bound
+    # checked one byte off is the kind that passes every test and fails the first real value.
+    test "accepts a unique string holding exactly the most bytes its index carries" do
+      assert validate(Module19, %{slug: String.duplicate("a", 2692)}) == :ok
+    end
+
+    test "reports max_bytes violations for a unique string one byte over" do
+      assert validate(Module19, %{slug: String.duplicate("a", 2693)}) ==
+               {:error, [{:slug, {:max_bytes, 2692}}]}
+    end
+
+    # Bytes, not code points: a 4-byte character counts four times, so 673 of them (2692 bytes)
+    # fit where 674 (2696) do not - while 674 CHARACTERS would pass any code-point bound.
+    test "counts a unique string's bytes rather than its characters" do
+      assert validate(Module19, %{slug: String.duplicate("😀", 673)}) == :ok
+
+      assert validate(Module19, %{slug: String.duplicate("😀", 674)}) ==
+               {:error, [{:slug, {:max_bytes, 2692}}]}
+    end
+
+    test "leaves a string that is not unique unbounded" do
+      assert validate(Module2, %{a: true, c: String.duplicate("a", 5000)}) == :ok
     end
 
     test "accumulates multiple constraint violations per attribute" do

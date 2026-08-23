@@ -325,6 +325,13 @@ defmodule Hologram.DB.Mapper do
 
   # Nulls stay distinct, so an optional unique attribute admits any number of rows holding
   # none: uniqueness is over the values an attribute holds, and nil is the absence of one.
+  #
+  # The index is over the raw column, so a string value is bounded by the btree entry limit -
+  # the validator refuses a unique string above it, so the engine never gets to. The sort-key
+  # companion sidesteps the same limit by indexing a bounded key, which a unique index cannot
+  # do: a prefix is not unique.
+  # TODO: a unique index over a hash expression lifts the bound for unbounded strings, once a
+  # declaration needs it - it teaches the whole index chain an expression shape.
   defp entity_indexes(entity_type, entry, table_name) do
     entry.attributes
     |> Enum.filter(fn {_name, _type, opts} -> Keyword.get(opts, :unique) == true end)

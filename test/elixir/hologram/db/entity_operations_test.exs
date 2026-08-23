@@ -363,6 +363,21 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert_error ArgumentError, expected_msg, fn -> create(entity) end
     end
 
+    # One byte over what the unique index's btree entry carries - refused here, before the insert,
+    # so PostgreSQL never gets to raise program_limit_exceeded for it.
+    test "raises on a unique string its index cannot carry" do
+      slug = String.duplicate("a", 2693)
+      entity = Entity.new(Module19, slug: slug)
+
+      expected_msg =
+        normalize_newlines("""
+        invalid data for Hologram.Test.Fixtures.Entity.Module19:
+          * attribute :slug must hold at most 2692 bytes (the most its unique index can carry), got: #{inspect(slug)}\
+        """)
+
+      assert_error ArgumentError, expected_msg, fn -> create(entity) end
+    end
+
     test "raises on reference violations" do
       expected_required_msg =
         normalize_newlines("""
