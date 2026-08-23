@@ -13,6 +13,7 @@ defmodule Hologram.DB do
   alias Hologram.Migrator
   alias Hologram.Query
   alias Hologram.Reflection
+  alias Hologram.WriteConflictError
 
   @mapping_key {__MODULE__, :mapping}
 
@@ -46,6 +47,27 @@ defmodule Hologram.DB do
     Validator.validate_writable!(entity.__struct__)
 
     EntityOperations.create(entity)
+  end
+
+  @doc """
+  Like create/1, returning the stamped entity directly and raising Hologram.WriteConflictError
+  instead of returning {:error, ...}.
+
+  The spelling for seeds, scripts and fixtures, where a conflict is a reason to stop rather than
+  something to answer. Code that acts on a conflict - a command handling a form - takes create/1.
+  """
+  @spec create!(struct) :: struct
+  def create!(entity) do
+    case create(entity) do
+      {:ok, stamped_entity} ->
+        stamped_entity
+
+      {:error, violations} ->
+        raise WriteConflictError,
+          message:
+            "cannot create #{inspect(entity.__struct__)} - #{taken_description(violations, entity)}",
+          reason: violations
+    end
   end
 
   @doc """
@@ -306,6 +328,16 @@ defmodule Hologram.DB do
       end
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  # Written to describe several fields though a write reports one: PostgreSQL aborts at the
+  # first violated constraint, so the map always holds a single key today.
+  defp taken_description(violations, values) do
+    violations
+    |> Enum.sort()
+    |> Enum.map_join(", ", fn {field, _reasons} ->
+      "#{field} #{inspect(Map.fetch!(values, field))} is already taken"
+    end)
   end
 
   defp assert_no_placeholders!(term) do

@@ -101,6 +101,47 @@ defmodule Hologram.DBTest do
     end
   end
 
+  describe "create!/1" do
+    test "returns the created entity" do
+      entity =
+        Module1
+        |> Entity.new()
+        |> create!()
+
+      assert entity.created_at
+      assert get(Module1, entity.id).id == entity.id
+    end
+
+    # assert_error sees the message and nothing else, so the reason field - what the plain
+    # variant would have returned - is caught and asserted separately.
+    test "raises a write conflict when a unique attribute's value is taken" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(slug: "x")
+        |> create()
+
+      expected_msg =
+        ~s(cannot create Hologram.Test.Fixtures.Entity.Module19 - slug "x" is already taken)
+
+      assert_error Hologram.WriteConflictError, expected_msg, fn ->
+        Module19
+        |> Entity.new(slug: "x")
+        |> create!()
+      end
+
+      error =
+        try do
+          Module19
+          |> Entity.new(slug: "x")
+          |> create!()
+        rescue
+          error in Hologram.WriteConflictError -> error
+        end
+
+      assert error.reason == %{slug: [:unique]}
+    end
+  end
+
   describe "delete/2" do
     test "rejects role grants" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
