@@ -10,7 +10,6 @@ defmodule Hologram.MigratorTest do
   alias Hologram.DB.DDL
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
-  alias Hologram.DB.Preflight
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Entity.Model
   alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
@@ -540,25 +539,16 @@ defmodule Hologram.MigratorTest do
 
       {:ok, _result} = Connection.query(insert)
 
-      # The unique: attribute option is not declarable yet, so the op the tail would
-      # carry is checked directly - the applier runs the same check over its tail.
-      #
-      # TODO: replace this with a migration once `unique: true` is declarable on an
-      # attribute. The only unique index the model derives today is the grant store's,
-      # born with its own empty table, so no migration file can produce this op against
-      # rows - which is why the op is built by hand here and the check is called rather
-      # than the applier. When the option lands, `change_attribute :slug, unique: true`
-      # over a populated table exercises the same refusal through the real path, and the
-      # applier's whole-file rollback becomes reachable with it (the tail's pre-flight
-      # runs after the file's transactional ops have been applied).
-      unique_index_op = %{
-        op: :create_index,
-        table: "my_app_task",
-        index: "my_app_task_slug_$uidx",
-        columns: ["slug"],
-        nulls_distinct: true,
-        unique: true
-      }
+      refused =
+        migration("20260813091523", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: true],
+            line: 3
+          }
+        ])
 
       expected_msg =
         ~s{found 1 duplicate key in "my_app_task" over ("slug") - } <>
@@ -566,12 +556,10 @@ defmodule Hologram.MigratorTest do
           "update the rows or drop the unique declaration"
 
       assert_error RuntimeError, expected_msg, fn ->
-        Preflight.run!(
-          [unique_index_op],
-          Introspection.schema(),
-          Mapper.derive_from_model!(model)
-        )
+        apply_pending([refused], model, @context)
       end
+
+      assert applied_versions() == MapSet.new(["20260813091522"])
     end
 
     test "leaves a valid index of the same name alone" do
