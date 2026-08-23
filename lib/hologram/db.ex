@@ -13,7 +13,7 @@ defmodule Hologram.DB do
   alias Hologram.Migrator
   alias Hologram.Query
   alias Hologram.Reflection
-  alias Hologram.WriteConflictError
+  alias Hologram.WriteError
 
   @mapping_key {__MODULE__, :mapping}
 
@@ -50,7 +50,7 @@ defmodule Hologram.DB do
   end
 
   @doc """
-  Like create/1, returning the stamped entity directly and raising Hologram.WriteConflictError
+  Like create/1, returning the stamped entity directly and raising Hologram.WriteError
   instead of returning {:error, ...}.
 
   The spelling for seeds, scripts and fixtures, where a conflict is a reason to stop rather than
@@ -63,7 +63,7 @@ defmodule Hologram.DB do
         stamped_entity
 
       {:error, violations} ->
-        raise WriteConflictError,
+        raise WriteError,
           message:
             "cannot create #{inspect(entity.__struct__)} - #{taken_description(violations, entity)}",
           reason: violations
@@ -87,7 +87,7 @@ defmodule Hologram.DB do
   end
 
   @doc """
-  Like delete/2, raising Hologram.WriteConflictError instead of returning {:error, ...}.
+  Like delete/2, raising Hologram.WriteError instead of returning {:error, ...}.
 
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
   takes delete/2.
@@ -99,7 +99,7 @@ defmodule Hologram.DB do
         :ok
 
       {:error, %{referenced_by: referenced_by, relationship: relationship} = reason} ->
-        raise WriteConflictError,
+        raise WriteError,
           message:
             "cannot delete #{inspect(entity_type)} #{inspect(id)} - still referenced by " <>
               "#{inspect(referenced_by)} through #{inspect(relationship)}",
@@ -208,7 +208,7 @@ defmodule Hologram.DB do
   end
 
   @doc """
-  Like update/3, raising Hologram.WriteConflictError instead of returning {:error, ...}.
+  Like update/3, raising Hologram.WriteError instead of returning {:error, ...}.
 
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
   takes update/3.
@@ -220,7 +220,7 @@ defmodule Hologram.DB do
         :ok
 
       {:error, violations} ->
-        raise WriteConflictError,
+        raise WriteError,
           message:
             "cannot update #{inspect(entity_type)} #{inspect(id)} - #{taken_description(violations, Map.new(changes))}",
           reason: violations

@@ -115,7 +115,7 @@ defmodule Hologram.DBTest do
 
     # assert_error sees the message and nothing else, so the reason field - what the plain
     # variant would have returned - is caught and asserted separately.
-    test "raises a write conflict when a unique attribute's value is taken" do
+    test "raises a write error when a unique attribute's value is taken" do
       {:ok, _entity} =
         Module19
         |> Entity.new(slug: "x")
@@ -124,7 +124,7 @@ defmodule Hologram.DBTest do
       expected_msg =
         ~s(cannot create Hologram.Test.Fixtures.Entity.Module19 - slug "x" is already taken)
 
-      assert_error Hologram.WriteConflictError, expected_msg, fn ->
+      assert_error Hologram.WriteError, expected_msg, fn ->
         Module19
         |> Entity.new(slug: "x")
         |> create!()
@@ -136,7 +136,7 @@ defmodule Hologram.DBTest do
           |> Entity.new(slug: "x")
           |> create!()
         rescue
-          error in Hologram.WriteConflictError -> error
+          error in Hologram.WriteError -> error
         end
 
       assert error.reason == %{slug: [:unique]}
@@ -164,7 +164,7 @@ defmodule Hologram.DBTest do
       assert get(Module1, entity.id) == nil
     end
 
-    test "raises a write conflict when another entity references the row" do
+    test "raises a write error when another entity references the row" do
       {:ok, target} =
         Module1
         |> Entity.new()
@@ -179,7 +179,7 @@ defmodule Hologram.DBTest do
         ~s(cannot delete Hologram.Test.Fixtures.Entity.Module1 "#{target.id}" - ) <>
           "still referenced by Hologram.Test.Fixtures.Entity.Module3 through :c"
 
-      assert_error Hologram.WriteConflictError, expected_msg, fn ->
+      assert_error Hologram.WriteError, expected_msg, fn ->
         delete!(Module1, target.id)
       end
 
@@ -187,7 +187,7 @@ defmodule Hologram.DBTest do
         try do
           delete!(Module1, target.id)
         rescue
-          error in Hologram.WriteConflictError -> error
+          error in Hologram.WriteError -> error
         end
 
       assert error.reason == %{referenced_by: Module3, relationship: :c}
@@ -240,7 +240,7 @@ defmodule Hologram.DBTest do
       assert update!(Module19, entity.id, slug: "after") == :ok
     end
 
-    test "raises a write conflict when the new value is taken" do
+    test "raises a write error when the new value is taken" do
       {:ok, first} =
         Module19
         |> Entity.new(slug: "held")
@@ -255,7 +255,7 @@ defmodule Hologram.DBTest do
         ~s(cannot update Hologram.Test.Fixtures.Entity.Module19 "#{second.id}" - ) <>
           ~s(slug "held" is already taken)
 
-      assert_error Hologram.WriteConflictError, expected_msg, fn ->
+      assert_error Hologram.WriteError, expected_msg, fn ->
         update!(Module19, second.id, slug: first.slug)
       end
 
@@ -263,7 +263,7 @@ defmodule Hologram.DBTest do
         try do
           update!(Module19, second.id, slug: first.slug)
         rescue
-          error in Hologram.WriteConflictError -> error
+          error in Hologram.WriteError -> error
         end
 
       assert error.reason == %{slug: [:unique]}
