@@ -1225,6 +1225,32 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects a default on a unique attribute" do
+      expected_msg =
+        "invalid default value \"draft\" for unique attribute :slug in Hologram.Entity.ValidatorTest.InlineEntityFixture91 - a default is one value for every row that omits the attribute, so a unique attribute can't have one"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture91 do
+          use Hologram.Entity
+
+          attribute :slug, :string, default: "draft", unique: true
+        end
+      end
+    end
+
+    # A nil default is the absence of one, and nulls stay distinct - the pairing the refusal above
+    # must not catch, since "unique when present" is what an optional unique attribute declares.
+    test "accepts a nil default on an optional unique attribute" do
+      defmodule InlineEntityFixture92 do
+        use Hologram.Entity
+
+        attribute :slug, :string, default: nil, optional: true, unique: true
+      end
+
+      assert InlineEntityFixture92.__attributes__() ==
+               [{:slug, :string, [default: nil, optional: true, unique: true]}]
+    end
+
     test "rejects non-atom attribute name" do
       expected_msg =
         "invalid name \"title\" used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture15 - declaration names must be atoms"

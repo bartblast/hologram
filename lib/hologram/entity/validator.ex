@@ -625,6 +625,7 @@ defmodule Hologram.Entity.Validator do
   defp validate_attribute_default!(module, name, type, opts) do
     case Keyword.fetch(opts, :default) do
       {:ok, value} ->
+        validate_unique_default!(module, name, opts, value)
         validate_default_value!(module, name, type, opts, value)
 
       :error ->
@@ -1163,6 +1164,22 @@ defmodule Hologram.Entity.Validator do
       _fetch_result ->
         :ok
     end
+  end
+
+  # A default is one value for every row that omits the attribute, so at most one such row could
+  # ever be stored - the rest meet the unique index. Refused where it is written rather than at the
+  # second insert, where nothing points back at the declaration. A nil default is the absence of
+  # one, and nulls stay distinct, so it passes.
+  defp validate_unique_default!(_module, _name, _opts, nil), do: :ok
+
+  defp validate_unique_default!(module, name, opts, value) do
+    if Keyword.get(opts, :unique) == true do
+      raise Hologram.CompileError,
+        message:
+          "invalid default value #{inspect(value)} for unique attribute #{inspect(name)} in #{inspect(module)} - a default is one value for every row that omits the attribute, so a unique attribute can't have one"
+    end
+
+    :ok
   end
 
   defp validate_use_opt_keys!(module, opts) do
