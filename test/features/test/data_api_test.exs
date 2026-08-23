@@ -51,6 +51,18 @@ defmodule HologramFeatureTests.DataApiTest do
     |> assert_text(css("#result"), "updated_into_duplicate_{:error, %{handle: [:unique]}}")
   end
 
+  feature "refuses deleting a row another entity still references, naming the referencer", %{
+    session: session
+  } do
+    session
+    |> visit(DataApiPage)
+    |> click(button("Delete referenced product"))
+    |> assert_text(
+      css("#result"),
+      "deleted_referenced_{:error, %{referenced_by: HologramFeatureTests.Entities.Review, relationship: :product}}"
+    )
+  end
+
   feature "writes an entity and reads it back", %{session: session} do
     session
     |> visit(DataApiPage)
