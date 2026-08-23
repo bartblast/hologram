@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.Events.DebounceTest do
   alias HologramFeatureTests.Events.Debounce.Page1
   alias HologramFeatureTests.Events.Debounce.Page2
   alias HologramFeatureTests.Events.Debounce.Page3
+  alias HologramFeatureTests.Events.Debounce.Page4
 
   feature "debounce coalesces a burst of events that an undebounced binding fires individually",
           %{session: session} do
@@ -59,5 +60,19 @@ defmodule HologramFeatureTests.Events.DebounceTest do
     |> assert_page(Page3)
     |> sleep(3_000)
     |> assert_text(css("#layout_result"), "nil")
+  end
+
+  # Escape removes the editor while the input still has focus, so the browser fires focusout from
+  # inside the removal and the pending debounced dispatch is flushed while the page is halfway
+  # patched. The recorded value says that dispatch was delivered, and the editor being gone says
+  # the render that removed it ran to the end.
+  feature "closing a focused editor delivers its pending debounced dispatch",
+          %{session: session} do
+    session
+    |> visit(Page4)
+    |> fill_in(css("#editor_input"), with: "abc")
+    |> send_keys([:escape])
+    |> assert_text(css("#typed_result"), ~s/"abc"/)
+    |> refute_has(css("#editor_block"))
   end
 end

@@ -170,9 +170,23 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
 
+      # Every page loads the runtime script, so the JS bindings it registers are available
+      # app-wide. A page bundle registering them again would only bundle a second copy of the
+      # imported JavaScript module, which the two would then take turns overwriting.
+      runtime_js_binding_modules =
+        runtime_mfas
+        |> Compiler.list_js_import_modules()
+        |> MapSet.new()
+
       page_entry_files_info =
         page_modules
-        |> Compiler.create_page_entry_files(call_graph_for_pages, ir_plt, async_mfas, opts)
+        |> Compiler.create_page_entry_files(
+          call_graph_for_pages,
+          ir_plt,
+          async_mfas,
+          runtime_js_binding_modules,
+          opts
+        )
         |> Enum.map(fn {entry_name, entry_file_path} ->
           {entry_name, entry_file_path, "page"}
         end)

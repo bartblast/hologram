@@ -25,7 +25,7 @@ defmodule Hologram.UI.Runtime do
       </script>
     {/if}
 
-    {%if !@page_mounted?}
+    {%if @initial_page? && !@page_mounted?}
       <script>
         {%raw}
           globalThis.Hologram.pageMountData = (deps) => {
