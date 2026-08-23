@@ -177,7 +177,7 @@ defmodule Hologram.DBTest do
 
       expected_msg =
         ~s(cannot delete Hologram.Test.Fixtures.Entity.Module1 "#{target.id}" - ) <>
-          "another entity still references it"
+          "still referenced by Hologram.Test.Fixtures.Entity.Module3 through :c"
 
       assert_error Hologram.WriteConflictError, expected_msg, fn ->
         delete!(Module1, target.id)
@@ -190,7 +190,7 @@ defmodule Hologram.DBTest do
           error in Hologram.WriteConflictError -> error
         end
 
-      assert error.reason == {:restricted, %{entity_type: Module1, id: target.id}}
+      assert error.reason == %{referenced_by: Module3, relationship: :c}
       assert get(Module1, target.id) == target
     end
   end

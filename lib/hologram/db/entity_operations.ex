@@ -87,7 +87,7 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   @doc false
-  @spec delete(module, String.t()) :: :ok | {:error, {:restricted, map}}
+  @spec delete(module, String.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity_type, id) do
     %{table: table, join_tables: join_tables} = Map.fetch!(DB.mapping(), entity_type)
 
@@ -99,7 +99,7 @@ defmodule Hologram.DB.EntityOperations do
 
         # The edges the delete took with it are not recorded one by one: a row that is gone
         # takes whatever hung off it, and a reader learning the entity is gone knows that.
-        if delete_entity_row(entity_type, table, id, encoded_id) == 1 do
+        if delete_entity_row(table, encoded_id) == 1 do
           Outbox.append([%{op: :del_entity, entity_type: entity_type, entity_id: id}])
         end
 
@@ -265,17 +265,27 @@ defmodule Hologram.DB.EntityOperations do
   defp compute_sort_key(value), do: SortKey.compute(value)
 
   # Returns how many rows the delete removed - deleting an id nothing holds removes none, and
-  # is not something that happened to tell anyone about.
+  # is not something that happened to tell anyone about. A foreign key that refuses it is named
+  # back to the relationship that derives it, so the caller learns who still needs the row - a
+  # constraint the mapping does not know is not ours and raises.
   # sobelow_skip ["SQL.Query"]
-  defp delete_entity_row(entity_type, table, id, encoded_id) do
+  defp delete_entity_row(table, encoded_id) do
     statement = ~s|DELETE FROM #{qualified_table(table)} WHERE "id" = $1|
 
     case Connection.query(statement, [encoded_id]) do
       {:ok, %Postgrex.Result{num_rows: num_rows}} ->
         num_rows
 
-      {:error, %Postgrex.Error{postgres: %{code: :foreign_key_violation}}} ->
-        Connection.rollback({:restricted, %{entity_type: entity_type, id: id}})
+      {:error,
+       %Postgrex.Error{postgres: %{code: :foreign_key_violation, constraint: constraint}} =
+           error} ->
+        case Mapper.referencing_relationship(DB.mapping(), constraint) do
+          {entity_type, relationship} ->
+            Connection.rollback(%{referenced_by: entity_type, relationship: relationship})
+
+          nil ->
+            raise error
+        end
 
       {:error, error} ->
         raise error

@@ -158,6 +158,22 @@ defmodule Hologram.DB.Mapper do
   end
 
   @doc """
+  Returns the entity type and relationship whose reference the given foreign key constraint
+  enforces - a to-one reference column's `<table>_<relationship>_id_$fk`, or a join table's
+  `<join table>_target_id_$fk` - or nil when no relationship in the given mapping derives it.
+
+  The source side of a join table is never asked for: a row's own outgoing edges are removed
+  with it, so only the target side can refuse a delete.
+  """
+  @spec referencing_relationship(%{module => %{atom => any}}, String.t()) :: {module, atom} | nil
+  def referencing_relationship(mapping, constraint) do
+    Enum.find_value(mapping, fn {entity_type, entry} ->
+      column_reference(entity_type, entry, constraint) ||
+        edge_reference(entity_type, entry, constraint)
+    end)
+  end
+
+  @doc """
   Returns the table name derived from the given entity type module.
 
   The name is the snake_cased module path with the leading segment stripped when it matches
@@ -255,6 +271,13 @@ defmodule Hologram.DB.Mapper do
 
   defp collation(_type), do: nil
 
+  defp column_reference(entity_type, entry, constraint) do
+    case Enum.find(entry.columns, &(&1.fk_constraint == constraint)) do
+      %{source: {:relationship, name}} -> {entity_type, name}
+      nil -> nil
+    end
+  end
+
   defp columns_from_entry(entity_type, entry) do
     table_name = table_name(entity_type)
 
@@ -321,6 +344,13 @@ defmodule Hologram.DB.Mapper do
       end)
 
     "  * #{hops} -> #{inspect(first_entity_type)}"
+  end
+
+  defp edge_reference(entity_type, entry, constraint) do
+    case Enum.find(entry.join_tables, &(&1.target_fk_constraint == constraint)) do
+      %{relationship: name} -> {entity_type, name}
+      nil -> nil
+    end
   end
 
   # Nulls stay distinct, so an optional unique attribute admits any number of rows holding
