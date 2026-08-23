@@ -2298,12 +2298,47 @@ describe("Hologram", () => {
   });
 
   describe("render()", () => {
+    let clock = null;
+
+    const deferredAction1 = Type.actionStruct({
+      name: Type.atom("deferred_action_1"),
+      params: Type.map(),
+      target: cid1,
+    });
+
+    const deferredAction2 = Type.actionStruct({
+      name: Type.atom("deferred_action_2"),
+      params: Type.map(),
+      target: cid1,
+    });
+
     afterEach(() => {
+      clock?.restore();
+      clock = null;
       Hologram.isRendering = false;
       Hologram.virtualDocument = null;
       Renderer.listenerBindings = [];
       sinon.restore();
     });
+
+    // The seam for a dispatch that arrives from inside the patch: a scheduled action whose timer
+    // is fired by hand while the patch stub is on the stack, which is where a focusout flush
+    // reaches the settle rule in a real page.
+    const stubRender = (patchFake) => {
+      clock = sinon.useFakeTimers();
+
+      sinon.stub(Renderer, "renderPage").returns({
+        sel: "html",
+        data: {},
+        children: [],
+      });
+
+      sinon.stub(EventListenerRegistry, "reconcile");
+      sinon.stub(EventListeners, "recheckScrollEdges");
+      sinon.stub(Vdom, "patchVirtualDocument").callsFake(patchFake);
+
+      Hologram.virtualDocument = {sel: "html", data: {}, children: []};
+    };
 
     it("reconciles the global and resolved observer bindings collected during the render", () => {
       const listenerBindings = [
@@ -2424,6 +2459,111 @@ describe("Hologram", () => {
       assert.throws(() => Hologram.render(), Error, "render failed");
 
       assert.isFalse(Hologram.isRendering);
+    });
+
+    // An undelayed dispatch settles synchronously, so one arriving from inside the patch would
+    // otherwise run there and render into the tree the patch is walking.
+    it("holds a dispatch that arrives while it is running, and runs it once it is done", () => {
+      const calls = [];
+
+      sinon
+        .stub(Hologram, "executeAction")
+        .callsFake(() => calls.push("execute action"));
+
+      stubRender(() => {
+        Hologram.scheduleAction(deferredAction1);
+        clock.tick(0);
+        calls.push("finish patch");
+      });
+
+      Hologram.render();
+
+      assert.deepStrictEqual(calls, ["finish patch", "execute action"]);
+    });
+
+    it("runs held dispatches in the order they arrived", () => {
+      const executeActionStub = sinon.stub(Hologram, "executeAction");
+
+      stubRender(() => {
+        Hologram.scheduleAction(deferredAction1);
+        Hologram.scheduleAction(deferredAction2);
+        clock.tick(0);
+      });
+
+      Hologram.render();
+
+      sinon.assert.calledTwice(executeActionStub);
+
+      assert.deepStrictEqual(executeActionStub.getCall(0).args, [
+        deferredAction1,
+        0,
+      ]);
+
+      assert.deepStrictEqual(executeActionStub.getCall(1).args, [
+        deferredAction2,
+        0,
+      ]);
+    });
+
+    // A single focusout flushes every pending slot on the element at once, so a queue of several
+    // is the ordinary case and they have nothing to do with one another - the same bargain the
+    // debouncer makes with the callbacks it flushes.
+    it("delivers every held dispatch when one of them raises, and raises the first error", () => {
+      const executed = [];
+
+      sinon.stub(Hologram, "executeAction").callsFake((action) => {
+        executed.push(action);
+
+        if (action === deferredAction1) {
+          throw new Error("action failed");
+        }
+      });
+
+      stubRender(() => {
+        Hologram.scheduleAction(deferredAction1);
+        Hologram.scheduleAction(deferredAction2);
+        clock.tick(0);
+      });
+
+      assert.throws(() => Hologram.render(), Error, "action failed");
+
+      assert.deepStrictEqual(executed, [deferredAction1, deferredAction2]);
+    });
+
+    // A render that raised left the DOM and the virtual document describing different pages, so
+    // running the queue against that repairs nothing. It waits for a render that finishes.
+    it("keeps a held dispatch when the render raises, and runs it on the next render", () => {
+      const executeActionStub = sinon.stub(Hologram, "executeAction");
+
+      let patchCount = 0;
+
+      stubRender(() => {
+        patchCount += 1;
+
+        if (patchCount === 1) {
+          Hologram.scheduleAction(deferredAction1);
+          clock.tick(0);
+        }
+      });
+
+      let reconcileCount = 0;
+
+      // The reconcile runs after the patch, so the dispatch is already held when this raises.
+      EventListenerRegistry.reconcile.callsFake(() => {
+        reconcileCount += 1;
+
+        if (reconcileCount === 1) {
+          throw new Error("reconcile failed");
+        }
+      });
+
+      assert.throws(() => Hologram.render(), Error, "reconcile failed");
+
+      sinon.assert.notCalled(executeActionStub);
+
+      Hologram.render();
+
+      sinon.assert.calledOnceWithExactly(executeActionStub, deferredAction1, 0);
     });
   });
 

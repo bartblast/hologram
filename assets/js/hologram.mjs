@@ -108,6 +108,9 @@ export default class Hologram {
   // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
   static #deadEpochs = new Set();
 
+  // Actions that arrived while a render was on the stack, waiting for it to finish.
+  static #deferredActions = [];
+
   // Actions belonging to a page that cannot answer for them yet, waiting for its mount.
   static #heldActions = [];
 
@@ -551,6 +554,16 @@ export default class Hologram {
     }
 
     console.log("Hologram: page rendered in", PerformanceTimer.diff(startTime));
+
+    // Drained after the reconcile above rather than straight after the patch: a deferred action
+    // renders, and a render collects the page's <window>/<document> bindings into
+    // Renderer.listenerBindings. Running one earlier would leave this render reconciling the
+    // other render's bindings.
+    //
+    // Reached only when the render finished. A render that raised left the DOM and the virtual
+    // document describing different pages, and running the queue against that repairs nothing -
+    // it waits for the next render that finishes.
+    $.#drainDeferredActions();
   }
 
   static run() {
@@ -871,6 +884,32 @@ export default class Hologram {
     actions.forEach(([actionName, target, params]) => {
       Hologram.dispatchAction(actionName, target, params);
     });
+  }
+
+  // Runs what a render held back, in the order it arrived. Settled rather than executed: a
+  // deferred action never got an answer from the settle rule, so it meets the same rules as any
+  // other, against the page the client is on by the time it runs.
+  //
+  // One action is no reason to drop the rest: a single focusout flushes every pending slot on the
+  // element at once, so a queue of several is the ordinary case, and they have nothing to do with
+  // one another. Every one is delivered and the first error is raised once the queue is empty -
+  // the same bargain the debouncer makes with the callbacks it flushes.
+  static #drainDeferredActions() {
+    let firstError;
+
+    while ($.#deferredActions.length > 0) {
+      const {action, epoch} = $.#deferredActions.shift();
+
+      try {
+        $.#settleAction(action, epoch);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+
+    if (firstError !== undefined) {
+      throw firstError;
+    }
   }
 
   // Takes the page's own bundle out of the document the server described, leaving every other
@@ -1702,6 +1741,13 @@ export default class Hologram {
     // the one being moved to, and it cannot answer until it mounts.
     if ($.domEpoch !== $.registryEpoch) {
       $.#heldActions.push({action: action, epoch: epoch});
+      return;
+    }
+
+    // A render is on the stack, so the DOM it is walking is mid-update and this action's own
+    // render would walk the same tree behind it. It waits, and runs when that render is done.
+    if ($.isRendering) {
+      $.#deferredActions.push({action: action, epoch: epoch});
       return;
     }
 
