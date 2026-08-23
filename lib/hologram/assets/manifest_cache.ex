@@ -3,6 +3,7 @@ defmodule Hologram.Assets.ManifestCache do
 
   use GenServer
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
+  alias Hologram.Compiler.Encoder
 
   @doc """
   Returns the key of the persistent term used by the asset manifest cache registered process.
@@ -51,8 +52,13 @@ defmodule Hologram.Assets.ManifestCache do
     entries_js =
       AssetPathRegistry.get_mapping()
       |> Enum.sort()
+      # Each path is printed into the inline script the manifest is part of, as a string literal,
+      # so it is encoded the way every other value in that script is: a quote or a backslash would
+      # break the literal, a line break would end it, and a `<` could spell the closing tag of the
+      # script element around it. The names come from the static dir, not from a request - this
+      # guards against a file named hostilely, not a hostile request.
       |> Enum.map_join(",\n", fn {static_path, asset_path} ->
-        ~s("#{static_path}": "#{asset_path}")
+        "#{Encoder.encode_as_string(static_path)}: #{Encoder.encode_as_string(asset_path)}"
       end)
 
     """

@@ -39,3 +39,6 @@ hologram_feature_tests-*.tar
 
 # Hologram generated JavaScript bundles.
 /priv/static/hologram/
+
+# Planted by test/test_helper.exs - a static file whose name a script cannot carry raw.
+/priv/static/hostile/
