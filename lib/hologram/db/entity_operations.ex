@@ -175,7 +175,7 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   @doc false
-  @spec update(module, String.t(), map | keyword) :: :ok
+  @spec update(module, String.t(), map | keyword) :: :ok | {:error, %{atom => list(atom)}}
   # sobelow_skip ["SQL.Query"]
   def update(entity_type, id, changes) do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
@@ -231,12 +231,14 @@ defmodule Hologram.DB.EntityOperations do
       |> Map.new()
       |> Map.put(:updated_at, updated_at)
 
-    {:ok, :ok} =
-      Connection.transaction(fn ->
-        run_update!(statement, params, entity_type, id, data)
-      end)
-
-    :ok
+    # The transaction's reason is the violations map, the way create/1's is - a duplicate rolls
+    # the update back rather than raising.
+    case Connection.transaction(fn ->
+           run_update!(statement, params, entity_type, id, data)
+         end) do
+      {:ok, _appended} -> :ok
+      {:error, violations} -> {:error, violations}
+    end
   end
 
   defp companion_entries(columns, sorted_changes) do
@@ -428,7 +430,10 @@ defmodule Hologram.DB.EntityOperations do
               "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
 
       {:error, error} ->
-        raise error
+        case unique_violations(entity_type, error) do
+          nil -> raise error
+          violations -> Connection.rollback(violations)
+        end
     end
   end
 

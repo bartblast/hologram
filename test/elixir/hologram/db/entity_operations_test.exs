@@ -840,6 +840,36 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert get(Module3, created_entity.id).b_id == nil
     end
 
+    test "returns the violation when the new value is taken" do
+      {:ok, first} = create(Entity.new(Module19, slug: "taken"))
+      {:ok, second} = create(Entity.new(Module19, slug: "free"))
+
+      assert update(Module19, second.id, slug: first.slug) == {:error, %{slug: [:unique]}}
+    end
+
+    test "updates a unique attribute to a free value" do
+      {:ok, entity} = create(Entity.new(Module19, slug: "before"))
+
+      assert update(Module19, entity.id, slug: "after") == :ok
+    end
+
+    # A row is not its own duplicate - the index excludes it, and so must a resubmitted form
+    # that changed nothing about the unique value.
+    test "updates a unique attribute to its own current value" do
+      {:ok, entity} = create(Entity.new(Module19, slug: "unchanged"))
+
+      assert update(Module19, entity.id, slug: "unchanged") == :ok
+    end
+
+    test "records nothing for a conflicting update" do
+      {:ok, first} = create(Entity.new(Module19, slug: "held"))
+      {:ok, second} = create(Entity.new(Module19, slug: "other"))
+
+      assert update(Module19, second.id, slug: first.slug) == {:error, %{slug: [:unique]}}
+
+      assert Enum.map(outbox_effects(), & &1.op) == ["put_entity", "put_entity"]
+    end
+
     test "raises when changes name anything but declared attributes and to-one relationships" do
       {:ok, created_entity} =
         Module2
