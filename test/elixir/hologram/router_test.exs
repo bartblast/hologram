@@ -123,7 +123,7 @@ defmodule Hologram.RouterTest do
       assert Plug.Conn.get_resp_header(conn, "hologram-page-data") == ["true"]
       assert response["type"] == "page"
       # The page renders its params, so the tree carrying the render shows them cast.
-      assert response["tree"] =~ "a = 123, b = :xyz"
+      assert Jason.encode!(response["tree"]) =~ "a = 123, b = :xyz"
     end
   end
 

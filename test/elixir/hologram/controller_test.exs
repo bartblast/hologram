@@ -20,6 +20,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Session
   alias Hologram.Server
+  alias Hologram.Template.Renderer
   alias Hologram.Test.Fixtures.Controller.Module1
   alias Hologram.Test.Fixtures.Controller.Module10
   alias Hologram.Test.Fixtures.Controller.Module11
@@ -455,8 +456,19 @@ defmodule Hologram.ControllerTest do
   describe "build_page_data_payload/1" do
     setup do
       fields = %{
+        mount_data: %{
+          actor_user_id: "123",
+          asset_manifest: "{\"/hologram/runtime.js\": \"/hologram/runtime-1234.js\"};",
+          component_registry: ~s/Type.map([[Type.bitstring("page"), Type.map([])]])/,
+          page_module: Encoder.encode_term!(Module1),
+          page_params: ~s/Type.map([])/,
+          sync_counts: ~s/{"posts": 2}/,
+          sync_rows: ~s/{"posts": []}/
+        },
         page_digest: "abcdef1234567890",
-        page_module: Module1,
+        self_echoes: [],
+        sub_receipt_adds: [],
+        sub_receipt_drops: [],
         tree: [{:element, "div", [{"$key", [text: "a1b2c3:0"]}], [{:text, "abc"}]}]
       }
 
@@ -467,22 +479,51 @@ defmodule Hologram.ControllerTest do
       assert %{pageDigest: "abcdef1234567890", type: "page"} = build_page_data_payload(fields)
     end
 
-    # Each term lands under its own key: the encoded values are opaque strings, so a pair of them
-    # swapped would be caught here rather than by a client behaving oddly.
-    test "encodes each term under its own key", %{fields: fields} do
+    # Each value lands under its own key, and they are encoded differently: everything but the tree
+    # as JavaScript the client evaluates, the tree as data it gets already parsed.
+    test "encodes each value under its own key", %{fields: fields} do
       payload = build_page_data_payload(fields)
 
-      assert payload.pageModule == Encoder.encode_term!(fields.page_module)
-      assert payload.tree == Encoder.encode_term!(fields.tree)
+      assert payload.componentRegistry == fields.mount_data.component_registry
+      assert payload.pageModule == fields.mount_data.page_module
+      assert payload.pageParams == fields.mount_data.page_params
+      assert payload.selfEchoes == Encoder.encode_term!(fields.self_echoes)
+      assert payload.subReceiptAdds == Encoder.encode_term!(fields.sub_receipt_adds)
+      assert payload.subReceiptDrops == Encoder.encode_term!(fields.sub_receipt_drops)
+      assert payload.tree == Renderer.encode_tree(fields.tree)
     end
 
-    # Everything a mount reads rides inside the tree, in the script the server writes into every
-    # page it serves, so the payload names only what has to be known before the tree can be used.
-    test "carries nothing beside the tree but what is needed to use it", %{fields: fields} do
+    # Everything a mount reads travels beside the tree rather than inside it, so it is readable
+    # before the render is patched in and never pays the escaping round trip the tree would cost.
+    test "carries what a mount reads beside the tree", %{fields: fields} do
       assert fields
              |> build_page_data_payload()
              |> Map.keys()
-             |> Enum.sort() == [:pageDigest, :pageModule, :tree, :type]
+             |> Enum.sort() == [
+               :actorUserId,
+               :componentRegistry,
+               :pageDigest,
+               :pageModule,
+               :pageParams,
+               :selfEchoes,
+               :subReceiptAdds,
+               :subReceiptDrops,
+               :syncCounts,
+               :syncRows,
+               :tree,
+               :type
+             ]
+    end
+
+    # The asset manifest is a global the initial document sets once, not something a mount reads,
+    # so it has no business on this path even though the renderer hands it back alongside.
+    test "leaves the asset manifest out", %{fields: fields} do
+      payload = build_page_data_payload(fields)
+
+      encoded = Jason.encode!(payload)
+
+      refute Map.has_key?(payload, :assetManifest)
+      refute String.contains?(encoded, "runtime-1234")
     end
 
     test "survives the JSON encoding it is sent over", %{fields: fields} do
@@ -496,6 +537,7 @@ defmodule Hologram.ControllerTest do
       assert decoded["type"] == "page"
       assert decoded["pageDigest"] == "abcdef1234567890"
       assert decoded["tree"] == payload.tree
+      assert decoded["componentRegistry"] == payload.componentRegistry
     end
 
     test "describes a redirect to a page the client can ask for itself" do
@@ -505,6 +547,19 @@ defmodule Hologram.ControllerTest do
       assert payload.to == "/my-target"
       assert payload.pageModule == Encoder.encode_term!(Module1)
       assert payload.pageParams == Encoder.encode_term!(%{key: "value"})
+    end
+
+    # The page clause matches a map and the redirect clauses match tuples, so nothing a page
+    # payload gained can leak into a redirect one.
+    test "a redirect carries none of the page fields" do
+      payload = build_page_data_payload({:redirect, "/my-target", Module1, %{key: "value"}})
+
+      keys =
+        payload
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert keys == [:pageModule, :pageParams, :to, :type]
     end
 
     # A target no page owns is the client's cue to hand it to the browser, so it carries nothing to
@@ -2500,7 +2555,11 @@ defmodule Hologram.ControllerTest do
 
       assert response["type"] == "page"
       assert response["pageDigest"] == "dummy_module_4_digest"
-      assert response["tree"] =~ ~r/^Type\.list\(/
+
+      # The fixture's template is empty and its layout is a bare slot, so the render is empty too.
+      # That the tree arrives as data rather than as source is what matters here; the tests that
+      # follow cover what a non-empty one carries.
+      assert response["tree"] == []
     end
 
     test "casts page params and carries them in the payload" do
@@ -2515,11 +2574,13 @@ defmodule Hologram.ControllerTest do
 
       # The page renders its params, so the tree carrying the render shows them cast: an uncast
       # param would be inspected as a string.
-      assert response["tree"] =~ "param_aaa = 111"
-      assert response["tree"] =~ "param_bbb = 222"
+      tree_json = Jason.encode!(response["tree"])
+
+      assert tree_json =~ "param_aaa = 111"
+      assert tree_json =~ "param_bbb = 222"
     end
 
-    test "carries the render as a tree with the Realtime JS interpolated" do
+    test "carries the render as a tree holding no mount data script" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
 
       conn =
@@ -2529,9 +2590,14 @@ defmodule Hologram.ControllerTest do
 
       response = Jason.decode!(conn.resp_body)
 
-      assert response["tree"] =~ "Module5 page"
-      assert response["tree"] =~ "selfEchoes: Type.list([])"
-      refute response["tree"] =~ "JS_PLACEHOLDER"
+      tree_json = Jason.encode!(response["tree"])
+
+      assert tree_json =~ "Module5 page"
+
+      # The state travels beside the tree, so the script that would have carried it is not
+      # rendered on this path at all - which is also why no placeholder can survive into it.
+      refute tree_json =~ "pageMountData"
+      refute tree_json =~ "JS_PLACEHOLDER"
     end
 
     test "marks a page payload as page data" do
@@ -2656,8 +2722,10 @@ defmodule Hologram.ControllerTest do
 
       response = Jason.decode!(conn.resp_body)
 
-      assert response["tree"] =~ "hello world"
-      assert response["tree"] =~ "foo/bar"
+      tree_json = Jason.encode!(response["tree"])
+
+      assert tree_json =~ "hello world"
+      assert tree_json =~ "foo/bar"
     end
 
     test "updates Plug.Conn session" do

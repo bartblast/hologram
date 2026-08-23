@@ -4,6 +4,7 @@ import {box} from "../../js_interop.mjs";
 
 import Bitstring from "../../bitstring.mjs";
 import ERTS from "../../erts.mjs";
+import HologramInterpreterError from "../../errors/interpreter_error.mjs";
 import Interpreter from "../../interpreter.mjs";
 import Type from "../../type.mjs";
 
@@ -17,6 +18,15 @@ function resolveBinding(term, callerModule) {
 
     if (moduleProxy.__jsBindings__.has(name)) {
       return moduleProxy.__jsBindings__.get(name);
+    }
+
+    // A name that is neither an imported binding nor a global cannot resolve, and returning
+    // undefined here would surface much later as a TypeError in a minified frame that names
+    // neither the module nor the binding.
+    if (!(name in globalThis)) {
+      throw new HologramInterpreterError(
+        `there is no JS binding or global named "${name}" in scope in ${Interpreter.moduleExName(callerModule)} (is a js_import declaration missing?)`,
+      );
     }
 
     return globalThis[name];

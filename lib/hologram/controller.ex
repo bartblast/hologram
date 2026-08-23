@@ -97,16 +97,22 @@ defmodule Hologram.Controller do
   the markup.
 
   Carries the render itself, as an evaluated tree, so the page can be shown before any of its own
-  code has arrived. Everything a mount reads - the component registry, the page params, the
-  realtime bookkeeping - rides inside that tree, in the script the server writes into every page
-  it serves, so a navigated page and a loaded document leave a mount the same thing to read.
+  code has arrived, and everything a mount reads as fields of its own beside it: the component
+  registry, the page module and params, and the realtime bookkeeping.
 
-  What travels beside the tree is what has to be known before it can be used: the page module,
-  which decides whether this client has the page's code already, and the digest naming the bundle
-  to fetch when it does not.
+  A loaded document has only one channel for that state - a script in the markup it is sent - but a
+  navigated page has the payload, so it does not pay for the round trip of escaping encoder output
+  into the tree's own encoding and unescaping it again on arrival. It also means the state is
+  readable before the render is patched in, rather than as a side effect of a script the patch
+  inserts and the browser then runs.
 
-  Terms are encoded the way a command's response encodes them, as JavaScript the client evaluates,
-  since that is the form its runtime already reads.
+  The digest names the bundle to fetch when this client does not have the page's code yet.
+
+  Every value but the tree is encoded the way a command's response encodes terms, as JavaScript the
+  client evaluates, since that is the form its runtime already reads. The tree is not: it holds
+  only elements, text, comments and the doctype, which is a closed vocabulary with no Elixir
+  semantics in it, so it rides as a nested JSON value the client gets already parsed rather than as
+  source it has to evaluate first.
 
   A redirect is a payload of its own, since a client-side navigation cannot be answered with a real
   one: a `fetch` following redirects consumes the 302 invisibly, and one set to leave it alone gets
@@ -130,15 +136,28 @@ defmodule Hologram.Controller do
     }
   end
 
+  # The wire format for the tree, and the 112 alternatives it was measured against.
+  # See: docs/navigation_payload_wire_format.md
   def build_page_data_payload(%{
+        mount_data: mount_data,
         page_digest: page_digest,
-        page_module: page_module,
+        self_echoes: self_echoes,
+        sub_receipt_adds: sub_receipt_adds,
+        sub_receipt_drops: sub_receipt_drops,
         tree: tree
       }) do
     %{
+      actorUserId: mount_data.actor_user_id,
+      componentRegistry: mount_data.component_registry,
       pageDigest: page_digest,
-      pageModule: Encoder.encode_client_term!(page_module),
-      tree: Encoder.encode_client_term!(tree),
+      pageModule: mount_data.page_module,
+      pageParams: mount_data.page_params,
+      selfEchoes: Encoder.encode_client_term!(self_echoes),
+      subReceiptAdds: Encoder.encode_client_term!(sub_receipt_adds),
+      subReceiptDrops: Encoder.encode_client_term!(sub_receipt_drops),
+      syncCounts: mount_data.sync_counts,
+      syncRows: mount_data.sync_rows,
+      tree: Renderer.encode_tree(tree),
       type: "page"
     }
   end
@@ -458,13 +477,22 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       {:rendered, conn, result} ->
-        # Interpolated into the TREE and printed from there, the way the navigation path does it -
-        # substituting into the printed document instead would reach text and attribute values a
-        # page renders from what someone typed, where a token means nothing and an inserted value
-        # brings quotes that end the attribute it lands in.
+        # Interpolated into the TREE and printed from there - substituting into the printed
+        # document instead would reach text and attribute values a page renders from what someone
+        # typed, where a token means nothing and an inserted value brings quotes that end the
+        # attribute it lands in.
+        #
+        # The mount data and the Realtime values go in ONE pass rather than two, so no value can
+        # be read as a token by a later substitution: a page param or a database row holding the
+        # text of another token would otherwise have that token honoured inside it.
+        replacements =
+          result.mount_data
+          |> Renderer.mount_replacements()
+          |> Map.merge(realtime_js(result))
+
         final_html =
           result.tree
-          |> Renderer.interpolate_js_in_tree(realtime_js(result))
+          |> Renderer.interpolate_js_in_tree(replacements)
           |> Renderer.print_dom()
 
         conn
@@ -566,17 +594,18 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       {:rendered, lifecycle_conn, result} ->
-        # The same three values the HTML path substitutes into the served document, substituted
-        # into the tree's scripts, so the tree describes the page completely. Encoded the way that
-        # path encodes them - through the client encoder, which strips server-only attribute
-        # values - since the same page served either way must not say more one way than the other.
-        tree = Renderer.interpolate_js_in_tree(result.tree, realtime_js(result))
-
+        # Everything the HTML path substitutes into the tree it prints travels as payload fields
+        # here. Nothing is interpolated into the tree: the client reads the state from the payload
+        # before it patches, and folding it into a script element's text would only mean escaping
+        # encoder output into the tree's encoding and unescaping it again on arrival.
         payload =
           build_page_data_payload(%{
+            mount_data: result.mount_data,
             page_digest: PageDigestRegistry.lookup(page_module),
-            page_module: page_module,
-            tree: tree
+            self_echoes: result.self_echoes,
+            sub_receipt_adds: result.sub_receipt_adds,
+            sub_receipt_drops: result.sub_receipt_drops,
+            tree: result.tree
           })
 
         lifecycle_conn
@@ -761,8 +790,12 @@ defmodule Hologram.Controller do
       {:terminal, decorate_conn(conn, server_struct, middleware_server_struct),
        middleware_server_struct}
     else
-      {rendered_html, rendered_tree, component_registry, rendered_server_struct} =
-        Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
+      %{
+        component_registry: component_registry,
+        mount_data: mount_data,
+        server_struct: rendered_server_struct,
+        tree: rendered_tree
+      } = Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
 
       # Transition subscriptions before flushing broadcasts so a registry failure
       # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
@@ -782,7 +815,7 @@ defmodule Hologram.Controller do
 
       result = %{
         component_registry: component_registry,
-        html: rendered_html,
+        mount_data: mount_data,
         self_echoes: self_echoes,
         sub_receipt_adds: sub_receipt_adds,
         sub_receipt_drops: sub_receipt_drops,

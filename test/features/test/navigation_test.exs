@@ -178,6 +178,33 @@ defmodule HologramFeatureTests.NavigationTest do
     |> assert_text("Page 2 result A")
   end
 
+  describe "hydration state beside the render" do
+    # A navigated page used to be handed its mount data as a script the patch inserted and the
+    # browser then ran; it now arrives as payload fields. The click is what proves the state got
+    # through: it can only change what is on screen if the component registry was populated, and
+    # the registry is what the mount data carries.
+    #
+    # The document cannot show the difference on its own. A mount data script is transient on both
+    # paths - the page's own render sets page_mounted?, so the patch that follows the mount removes
+    # it - which is why the absence is also asserted where it is deterministic: the tree the
+    # controller sends holds no such script (controller_test.exs), and the component renders none
+    # off the initial page (ui/runtime_test.exs).
+    feature "a navigated page hydrates without a mount data script", %{session: session} do
+      no_mount_data_script =
+        ~s|return [...document.querySelectorAll("script")].every((s) => !s.textContent.includes("pageMountData"));|
+
+      session
+      |> visit(Page1)
+      |> click(link("Page 2 link"))
+      |> assert_page(Page2)
+      |> assert_text("Page 2 title")
+      |> assert_script_result(no_mount_data_script, true)
+      |> click(button("Put page 2 result A"))
+      |> assert_text("Page 2 result A")
+      |> assert_script_result(no_mount_data_script, true)
+    end
+  end
+
   describe "component state management" do
     feature "page reload resets component state", %{session: session} do
       session

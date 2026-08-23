@@ -25,24 +25,21 @@ defmodule Hologram.Compiler do
   alias Hologram.Sync.Frame
 
   @doc """
-  Aggregates JS imports from all Elixir modules referenced by the given MFAs.
+  Aggregates JS imports from all Elixir modules referenced by the given MFAs,
+  skipping the modules whose bindings another bundle already registers.
   Returns a map with:
   - `:imports` — unique imports with generated `$1`, `$2`, ... aliases for JS import statements
   - `:bindings` — per-module map of user alias to generated alias for `__bindings__` on module proxies
   """
-  @spec aggregate_js_imports(list(mfa)) :: %{
+  @spec aggregate_js_imports(list(mfa), MapSet.t(module)) :: %{
           imports: list(%{from: String.t(), export: String.t(), alias: String.t()}),
           bindings: %{module => %{String.t() => String.t()}}
         }
-  def aggregate_js_imports(mfas) do
+  def aggregate_js_imports(mfas, excluded_modules \\ MapSet.new()) do
     modules_with_imports =
       mfas
-      |> filter_elixir_mfas()
-      |> Enum.map(fn {module, _function, _arity} -> module end)
-      |> Enum.uniq()
-      |> Enum.filter(
-        &(Reflection.has_function?(&1, :__js_imports__, 0) and &1.__js_imports__() != [])
-      )
+      |> list_js_import_modules()
+      |> Enum.reject(&MapSet.member?(excluded_modules, &1))
 
     unique_imports =
       modules_with_imports
@@ -357,7 +354,10 @@ defmodule Hologram.Compiler do
   @doc """
   Builds JavaScript code for the given Hologram page.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_6/README.md
+  The modules listed in runtime_js_binding_modules are skipped when the JS imports are aggregated,
+  because the runtime script, which every page loads, already registers their bindings.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_7/README.md
   """
   @spec build_page_js(
           module,
@@ -365,6 +365,7 @@ defmodule Hologram.Compiler do
           PLT.t(),
           MapSet.t(mfa),
           %{module => CallGraph.server_callback_analysis()},
+          MapSet.t(module),
           T.file_path()
         ) :: String.t()
   def build_page_js(
@@ -373,18 +374,18 @@ defmodule Hologram.Compiler do
         ir_plt,
         async_mfas,
         server_callback_analysis_by_templatable,
+        runtime_js_binding_modules,
         js_dir
       ) do
     mfas =
       CallGraph.list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
 
-    %{imports: imports, bindings: bindings} = aggregate_js_imports(mfas)
+    %{imports: imports, bindings: bindings} =
+      aggregate_js_imports(mfas, runtime_js_binding_modules)
 
     import_statements =
       imports
-      |> Enum.map_join("\n", fn %{from: from, export: export, alias: alias} ->
-        ~s'import { #{export} as #{alias} } from "#{from}";'
-      end)
+      |> render_js_import_statements()
       |> render_block()
 
     js_bindings_registration_call =
@@ -459,6 +460,21 @@ defmodule Hologram.Compiler do
         sync_constants,
         js_dir
       ) do
+    %{imports: imports, bindings: bindings} = aggregate_js_imports(runtime_mfas)
+
+    import_statements =
+      imports
+      |> render_js_import_statements()
+      |> render_block()
+
+    # A module bundled into the runtime script registers its JS bindings here, because
+    # remove_runtime_mfas!/2 takes its MFAs out of every page graph, so no page bundle
+    # can register them.
+    js_bindings_registration_call =
+      bindings
+      |> render_js_bindings_registration_call()
+      |> render_block()
+
     erlang_function_defs =
       runtime_mfas
       |> render_erlang_function_defs(Path.join(js_dir, "erlang"))
@@ -491,7 +507,7 @@ defmodule Hologram.Compiler do
     import MemoryStorage from "#{js_dir}/memory_storage.mjs";
     import PerformanceTimer from "#{js_dir}/performance_timer.mjs";
     import Type from "#{js_dir}/type.mjs";
-    import Utils from "#{js_dir}/utils.mjs";
+    import Utils from "#{js_dir}/utils.mjs";#{import_statements}
 
     const startTime = PerformanceTimer.start();
 
@@ -499,7 +515,7 @@ defmodule Hologram.Compiler do
 
     #{render_sync_constants(sync_constants)}
 
-    ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
+    ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
@@ -613,11 +629,24 @@ defmodule Hologram.Compiler do
   @doc """
   Creates page bundle entry file.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_5/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_6/README.md
   """
-  @spec create_page_entry_files(list(module), CallGraph.t(), PLT.t(), MapSet.t(mfa), T.opts()) ::
-          list({module, T.file_path()})
-  def create_page_entry_files(page_modules, call_graph, ir_plt, async_mfas, opts) do
+  @spec create_page_entry_files(
+          list(module),
+          CallGraph.t(),
+          PLT.t(),
+          MapSet.t(mfa),
+          MapSet.t(module),
+          T.opts()
+        ) :: list({module, T.file_path()})
+  def create_page_entry_files(
+        page_modules,
+        call_graph,
+        ir_plt,
+        async_mfas,
+        runtime_js_binding_modules,
+        opts
+      ) do
     graph = CallGraph.get_graph(call_graph)
     templatables = page_modules ++ Reflection.list_components()
 
@@ -635,6 +664,7 @@ defmodule Hologram.Compiler do
           ir_plt,
           async_mfas,
           server_callback_analysis_by_templatable,
+          runtime_js_binding_modules,
           opts[:js_dir]
         )
         |> create_entry_file(entry_name, opts[:tmp_dir])
@@ -786,6 +816,20 @@ defmodule Hologram.Compiler do
     ir
     |> collect_component_usages([])
     |> Enum.reverse()
+  end
+
+  @doc """
+  Lists the Elixir modules referenced by the given MFAs that declare JS imports.
+  """
+  @spec list_js_import_modules(list(mfa)) :: list(module)
+  def list_js_import_modules(mfas) do
+    mfas
+    |> filter_elixir_mfas()
+    |> Enum.map(fn {module, _function, _arity} -> module end)
+    |> Enum.uniq()
+    |> Enum.filter(
+      &(Reflection.has_function?(&1, :__js_imports__, 0) and &1.__js_imports__() != [])
+    )
   end
 
   @doc """
@@ -1848,6 +1892,12 @@ defmodule Hologram.Compiler do
       end)
 
     ~s'Interpreter.registerJsBindings({#{modules_arg}});'
+  end
+
+  defp render_js_import_statements(imports) do
+    Enum.map_join(imports, "\n", fn %{from: from, export: export, alias: alias} ->
+      ~s'import { #{export} as #{alias} } from "#{from}";'
+    end)
   end
 
   # In umbrella projects a module can stay loaded from a consolidated protocol

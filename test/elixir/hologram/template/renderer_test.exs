@@ -1980,8 +1980,8 @@ defmodule Hologram.Template.RendererTest do
     test "interpolate component structs JS with server-only state values replaced by the sentinel" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module96, :dummy_module_96_digest)
 
-      assert {html, _tree, _component_registry, _server_struct} =
-               render_page(Module96, @params, @server, @opts)
+      assert {html, _component_registry, _server_struct} =
+               render_page_without_tree(Module96, @params, @server, @opts)
 
       expected_sentinel =
         ~s/[Type.atom("token"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Entity.ServerOnly")], [Type.atom("attribute"), Type.atom("token")]])]/
@@ -2222,55 +2222,93 @@ defmodule Hologram.Template.RendererTest do
         "102790adb6c3b1956db310be523a7693"
       )
 
-      {html, tree, _component_registry, _server_struct} =
+      %{mount_data: mount_data, tree: tree} =
         render_page(Module104, %{label: "$PAGE_PARAMS_JS_PLACEHOLDER"}, @server, @opts)
 
+      printed =
+        tree
+        |> interpolate_js_in_tree(mount_replacements(mount_data))
+        |> print_dom()
+
       assert String.contains?(
-               html,
+               printed,
                ~s(<div title="$PAGE_PARAMS_JS_PLACEHOLDER">$PAGE_PARAMS_JS_PLACEHOLDER</div>)
              )
-
-      # And the two projections say the same thing, which is what lets a navigating client adopt
-      # the served document rather than rebuild it.
-      assert print_dom(tree) == html
     end
 
-    test "returns the tree the HTML is printed from" do
+    # The tree and the mount data are one render split in two. Putting the data back into the
+    # tree's scripts is what the document path does, so it has to yield a document holding the
+    # values rather than the tokens - the navigating client reaches the same place by reading
+    # the data from the payload instead.
+    test "returns a tree whose scripts take the mount data back" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
         Module48,
         "102790adb6c3b1956db310be523a7693"
       )
 
-      {html, tree, _component_registry, _server_struct} =
-        render_page(Module48, @params, @server, @opts)
+      %{mount_data: mount_data, tree: tree} = render_page(Module48, @params, @server, @opts)
 
-      assert print_dom(tree) == html
+      printed =
+        tree
+        |> interpolate_js_in_tree(mount_replacements(mount_data))
+        |> print_dom()
+
+      refute String.contains?(printed, "$PAGE_MODULE_JS_PLACEHOLDER")
+      assert String.contains?(printed, mount_data.page_module)
     end
 
-    test "interpolates the runtime JS into the tree's scripts, leaving the Realtime placeholders" do
+    test "leaves every placeholder in the tree's scripts, mount data included" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
         Module48,
         "102790adb6c3b1956db310be523a7693"
       )
 
-      {_html, tree, _component_registry, _server_struct} =
-        render_page(Module48, @params, @server, @opts)
+      %{tree: tree} = render_page(Module48, @params, @server, @opts)
 
       script_text =
         tree
         |> collect_script_texts()
         |> Enum.join()
 
-      assert String.contains?(
-               script_text,
-               ~s/pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")/
-             )
-
-      refute String.contains?(script_text, "$COMPONENT_REGISTRY_JS_PLACEHOLDER")
-      refute String.contains?(script_text, "$PAGE_PARAMS_JS_PLACEHOLDER")
+      assert String.contains?(script_text, "$ASSET_MANIFEST_JS_PLACEHOLDER")
+      assert String.contains?(script_text, "$COMPONENT_REGISTRY_JS_PLACEHOLDER")
+      assert String.contains?(script_text, "$PAGE_MODULE_JS_PLACEHOLDER")
+      assert String.contains?(script_text, "$PAGE_PARAMS_JS_PLACEHOLDER")
       assert String.contains?(script_text, "selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER")
+
+      refute String.contains?(
+               script_text,
+               ~s/Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")/
+             )
+    end
+
+    test "returns the mount data the HTML projection interpolates" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      %{mount_data: mount_data, tree: tree} = render_page(Module48, @params, @server, @opts)
+
+      html =
+        tree
+        |> interpolate_js_in_tree(mount_replacements(mount_data))
+        |> print_dom()
+
+      assert mount_data.page_module ==
+               ~s/Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")/
+
+      assert mount_data.page_params == "Type.map([])"
+      assert String.starts_with?(mount_data.component_registry, "Type.map([")
+
+      # Each value is what the HTML carries, which is what makes it safe to send beside the tree
+      # instead of inside it.
+      for value <- Map.values(mount_data) do
+        assert String.contains?(html, value)
+      end
     end
 
     # The mount data goes into a script element as source, and a param comes from the URL - so a
@@ -2283,8 +2321,13 @@ defmodule Hologram.Template.RendererTest do
         "102790adb6c3b1956db310be523a7693"
       )
 
-      {html, _tree, _component_registry, _server_struct} =
-        render_page(Module48, %{probe: "</script><script>alert(1)</script>"}, @server, @opts)
+      {html, _component_registry, _server_struct} =
+        render_page_without_tree(
+          Module48,
+          %{probe: "</script><script>alert(1)</script>"},
+          @server,
+          @opts
+        )
 
       refute String.contains?(html, "</script><script>alert(1)")
 
@@ -2507,6 +2550,128 @@ defmodule Hologram.Template.RendererTest do
                    fn ->
                      stringify_for_interpolation({97, 98, 99})
                    end
+    end
+  end
+
+  describe "encode_tree/1" do
+    test "text node" do
+      tree = {:text, "abc < xyz"}
+
+      assert encode_tree(tree) == ["abc < xyz"]
+    end
+
+    test "doctype node" do
+      tree = {:doctype, "html"}
+
+      assert encode_tree(tree) == [["d", "html"]]
+    end
+
+    test "element node, without attributes or children" do
+      tree = {:element, "div", [], []}
+
+      assert encode_tree(tree) == [["div", [], []]]
+    end
+
+    test "element node, with attribute" do
+      # <div class="big"></div>
+      tree = {:element, "div", [{"class", [text: "big"]}], []}
+
+      assert encode_tree(tree) == [["div", ["class", "big"], []]]
+    end
+
+    test "element node, with boolean attribute" do
+      # <input disabled />
+      tree = {:element, "input", [{"disabled", []}], []}
+
+      assert encode_tree(tree) == [["input", ["disabled", nil], []]]
+    end
+
+    test "element node, with multiple attributes" do
+      # <div class="big" hidden id="abc"></div>
+      tree =
+        {:element, "div", [{"class", [text: "big"]}, {"hidden", []}, {"id", [text: "abc"]}], []}
+
+      assert encode_tree(tree) == [["div", ["class", "big", "hidden", nil, "id", "abc"], []]]
+    end
+
+    test "element node, with element key" do
+      # The $key attribute travels, unlike in the HTML projection: it is what carries element
+      # identity across a navigation.
+      tree = {:element, "div", [{"$key", [text: "k1:0"]}], []}
+
+      assert encode_tree(tree) == [["div", ["$key", "k1:0"], []]]
+    end
+
+    test "element node, with children" do
+      # <div>abc<span></span></div>
+      tree = {:element, "div", [], [{:text, "abc"}, {:element, "span", [], []}]}
+
+      assert encode_tree(tree) == [["div", [], ["abc", ["span", [], []]]]]
+    end
+
+    test "element node, nested" do
+      # <div><span><b>abc</b></span></div>
+      tree =
+        {:element, "div", [], [{:element, "span", [], [{:element, "b", [], [{:text, "abc"}]}]}]}
+
+      assert encode_tree(tree) == [["div", [], [["span", [], [["b", [], ["abc"]]]]]]]
+    end
+
+    test "element node, void with children" do
+      # A void element keeps the children the tree gave it, unlike in the HTML projection.
+      tree = {:element, "br", [], [{:text, "abc"}]}
+
+      assert encode_tree(tree) == [["br", [], ["abc"]]]
+    end
+
+    test "public comment node" do
+      # <!--abc-->
+      tree = {:public_comment, [{:text, "abc"}]}
+
+      assert encode_tree(tree) == [["c", ["abc"]]]
+    end
+
+    test "public comment node, with multiple children" do
+      # <!--abc<div></div>-->
+      tree = {:public_comment, [{:text, "abc"}, {:element, "div", [], []}]}
+
+      assert encode_tree(tree) == [["c", ["abc", ["div", [], []]]]]
+    end
+
+    test "node list" do
+      tree = [{:text, "abc"}, {:element, "div", [], []}, {:doctype, "html"}]
+
+      assert encode_tree(tree) == ["abc", ["div", [], []], ["d", "html"]]
+    end
+
+    test "empty node list" do
+      assert encode_tree([]) == []
+    end
+
+    test "single node is wrapped in a list" do
+      # The result is always a list, so the client never has to tell a node apart from a list.
+      assert encode_tree({:text, "abc"}) == ["abc"]
+    end
+
+    test "nil tree" do
+      # A <window> or <document> tag renders to no node at all.
+      assert encode_tree(nil) == []
+    end
+
+    test "result survives JSON encoding" do
+      tree = [
+        {:doctype, "html"},
+        {:element, "div", [{"class", [text: "big"]}, {"hidden", []}],
+         [{:text, "abc"}, {:public_comment, [{:text, " x "}]}]}
+      ]
+
+      encoded =
+        tree
+        |> encode_tree()
+        |> JSON.encode!()
+
+      assert encoded ==
+               ~s([["d","html"],["div",["class","big","hidden",null],["abc",["c",[" x "]]]]])
     end
   end
 
@@ -2929,9 +3094,20 @@ defmodule Hologram.Template.RendererTest do
 
   # The tree projection is covered by its own tests - these tests assert the projections the
   # pre-tree render returned, unchanged.
+  # The document the HTML path serves: the tree with its mount data put back, printed. The
+  # renderer hands the two out separately, because the navigation path carries them separately.
   defp render_page_without_tree(page_module, params, server_struct, opts) do
-    {html, _tree, component_registry, mutated_server_struct} =
-      render_page(page_module, params, server_struct, opts)
+    %{
+      component_registry: component_registry,
+      mount_data: mount_data,
+      server_struct: mutated_server_struct,
+      tree: tree
+    } = render_page(page_module, params, server_struct, opts)
+
+    html =
+      tree
+      |> interpolate_js_in_tree(mount_replacements(mount_data))
+      |> print_dom()
 
     {html, component_registry, mutated_server_struct}
   end

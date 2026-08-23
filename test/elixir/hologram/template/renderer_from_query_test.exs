@@ -168,15 +168,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       Auth.grant_role(user, private_entity, :viewer)
 
-      {html, _tree, _component_registry, _server_struct} =
-        render_page(Module107, %{}, %Server{user_id: user.id}, @page_opts)
+      html = render_page_html(Module107, %Server{user_id: user.id})
 
       assert String.contains?(html, "entities = 1,2")
     end
 
     test "renders only unconditionally visible rows for an anonymous session" do
-      {html, _tree, _component_registry, _server_struct} =
-        render_page(Module107, %{}, %Server{}, @page_opts)
+      html = render_page_html(Module107)
 
       assert String.contains?(html, "entities = 1")
       refute String.contains?(html, "entities = 1,2")
@@ -210,11 +208,15 @@ defmodule Hologram.Template.RendererFromQueryTest do
       json
     end
 
-    defp render_page_html(page_module, server_struct \\ %Server{}) do
-      {html, _tree, _component_registry, _final_server_struct} =
-        render_page(page_module, %{}, server_struct, @page_opts)
+    # The document the HTML path serves: the tree with its mount data put back, printed. The
+    # renderer hands the two out separately, because the navigation path carries them separately.
+    defp render_page_html(page_module, server_struct \\ %Server{}, params \\ %{}) do
+      %{mount_data: mount_data, tree: tree} =
+        render_page(page_module, params, server_struct, @page_opts)
 
-      html
+      tree
+      |> interpolate_js_in_tree(mount_replacements(mount_data))
+      |> print_dom()
     end
 
     # The rows travel flat, each once, with the to-many naming the ids it holds - the shape a
@@ -349,8 +351,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     end
 
     defp render_counts_page_html do
-      {html, _tree, _component_registry, _final_server_struct} =
-        render_page(Module102, %{}, %Server{}, @page_opts)
+      html = render_page_html(Module102)
 
       html
     end
@@ -399,8 +400,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
     end
 
     defp render_grants_page_html(entity_id, server_struct) do
-      {html, _tree, _component_registry, _final_server_struct} =
-        render_page(Module103, %{entity_id: entity_id}, server_struct, @page_opts)
+      html =
+        render_page_html(Module103, server_struct, %{entity_id: entity_id})
 
       html
     end
@@ -474,8 +475,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
         |> Entity.new(email: "renderer_2@example.com")
         |> DB.create!()
 
-      {html, _tree, _component_registry, _server_struct} =
-        render_page(Module93, %{}, %Server{user_id: user.id}, @page_opts)
+      html = render_page_html(Module93, %Server{user_id: user.id})
 
       assert String.contains?(html, "current user = renderer_2@example.com")
     end
@@ -486,7 +486,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
         |> Entity.new(email: "renderer_5@example.com", password_hash: "hash_9dTf")
         |> DB.create!()
 
-      {_html, _tree, component_registry, _server_struct} =
+      %{component_registry: component_registry} =
         render_page(Module93, %{}, %Server{user_id: user.id}, @page_opts)
 
       context_user = component_registry["page"].struct.emitted_context[{Hologram, :user}]
@@ -496,8 +496,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     end
 
     test "exposes nil for an anonymous session" do
-      {html, _tree, _component_registry, _server_struct} =
-        render_page(Module93, %{}, %Server{}, @page_opts)
+      html = render_page_html(Module93)
 
       assert String.contains?(html, "current user = none")
     end
@@ -505,15 +504,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
     test "exposes nil when no row carries the session user id" do
       dangling_user_id = Entity.generate_id()
 
-      {html, _tree, _component_registry, _server_struct} =
-        render_page(Module93, %{}, %Server{user_id: dangling_user_id}, @page_opts)
+      html = render_page_html(Module93, %Server{user_id: dangling_user_id})
 
       assert String.contains?(html, "current user = none")
     end
 
     test "exposes nil for a session user id that is not a canonical entity id" do
-      {html, _tree, _component_registry, _server_struct} =
-        render_page(Module93, %{}, %Server{user_id: 7}, @page_opts)
+      html = render_page_html(Module93, %Server{user_id: 7})
 
       assert String.contains?(html, "current user = none")
     end
