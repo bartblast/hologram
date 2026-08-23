@@ -283,7 +283,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert Enum.map(grant_effects, &Map.fetch!(&1.data, "role")) == ["maintainer", "owner"]
     end
 
-    test "returns the violation when a unique attribute's value is taken" do
+    test "returns the violation from the write itself when a unique attribute's value is taken" do
       {:ok, _entity} =
         Module19
         |> Entity.new(slug: "x")
@@ -349,6 +349,39 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert create(Entity.new(Module3)) == {:error, %{c_id: [:required]}}
 
       assert create(Entity.new(Module3, c_id: "garbage")) == {:error, %{c_id: [type: :uuid]}}
+    end
+
+    test "reports a value violation and a taken unique value together" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: "taken", slug: "a")
+        |> create()
+
+      assert create(Entity.new(Module19, code: "taken", slug: 123)) ==
+               {:error, %{code: [:unique], slug: [type: :string]}}
+    end
+
+    # A value that is not even the right type cannot be compared against what other rows hold,
+    # so the field keeps the violation it earned and nothing is asked about it.
+    test "skips the advisory check for a field carrying its own violation" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: "held", slug: "b")
+        |> create()
+
+      assert create(Entity.new(Module19, code: 456, slug: 123)) ==
+               {:error, %{code: [type: :string], slug: [type: :string]}}
+    end
+
+    # An optional unique attribute admits any number of nils, so a nil is never taken.
+    test "skips nil values" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: nil, slug: "c")
+        |> create()
+
+      assert create(Entity.new(Module19, code: nil, slug: 123)) ==
+               {:error, %{slug: [type: :string]}}
     end
 
     test "raises on constraint violations" do

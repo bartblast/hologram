@@ -38,7 +38,9 @@ defmodule Hologram.DB do
   constraints its value breaks (type, enum values, required presence, the constraint
   options), and :unique for a unique attribute whose value another row already holds.
   Values are judged before any SQL runs, and a write is attempted only once they pass.
-  A write reports the first violated database constraint only.
+  Uniqueness is reported by the write itself when the values pass, and asked advisorily when
+  they fail - an advisory answer describes the moment it was asked, and a value free then can
+  be taken by the next attempt. A write reports the first violated database constraint only.
 
   Misuse raises rather than returning - a role grant, which is written only through
   grant_role/revoke_role - as does a constraint violation the mapping does not explain.

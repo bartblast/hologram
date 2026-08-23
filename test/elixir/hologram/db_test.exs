@@ -96,6 +96,16 @@ defmodule Hologram.DBTest do
       assert result == {:error, %{slug: [:unique]}}
     end
 
+    test "returns a value violation and a taken unique value in one map" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: "gateway_taken", slug: "gateway_a")
+        |> create()
+
+      assert create(Entity.new(Module19, code: "gateway_taken", slug: 123)) ==
+               {:error, %{code: [:unique], slug: [type: :string]}}
+    end
+
     test "rejects role grants" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
@@ -142,6 +152,24 @@ defmodule Hologram.DBTest do
 
     # assert_error sees the message and nothing else, so the reason field - what the plain
     # variant would have returned - is caught and asserted separately.
+    test "raises naming the taken value beside the value violation" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: "bang_taken", slug: "bang_a")
+        |> create()
+
+      expected_msg =
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Entity.Module19:
+          * attribute :code "bang_taken" is already taken
+          * attribute :slug must be of type :string, got: 123\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        create!(Entity.new(Module19, code: "bang_taken", slug: 123))
+      end
+    end
+
     test "raises a write error when a unique attribute's value is taken" do
       {:ok, _entity} =
         Module19

@@ -52,22 +52,30 @@ defmodule Hologram.DB.EntityOperations do
   @doc false
   @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
   def create(entity) do
-    # Values are judged first, and their violations travel back untouched - no write is
-    # attempted for an entity the declarations already refuse.
-    with :ok <- Entity.validate(entity) do
-      # The transaction's own shape is the contract: its value is the stamped entity, and the
-      # violations a duplicate rolls back with are its reason.
-      Connection.transaction(fn ->
-        {stamped_entity, _result} = insert(entity, "")
+    entity_type = entity.__struct__
 
-        Outbox.append([put_effect(stamped_entity)])
+    # Values are judged first - no write is attempted for an entity the declarations already
+    # refuse, and what the values earned is merged with the uniqueness a query can still see.
+    case Entity.validate(entity) do
+      :ok ->
+        # The transaction's own shape is the contract: its value is the stamped entity, and the
+        # violations a duplicate rolls back with are its reason.
+        Connection.transaction(fn ->
+          {stamped_entity, _result} = insert(entity, "")
 
-        entity
-        |> creator_grants()
-        |> Enum.each(&create_if_absent/1)
+          Outbox.append([put_effect(stamped_entity)])
 
-        stamped_entity
-      end)
+          entity
+          |> creator_grants()
+          |> Enum.each(&create_if_absent/1)
+
+          stamped_entity
+        end)
+
+      {:error, violations} ->
+        values = Map.from_struct(entity)
+
+        {:error, advisory_unique_violations(entity_type, values, entity.id, violations)}
     end
   end
 
@@ -249,6 +257,32 @@ defmodule Hologram.DB.EntityOperations do
         {:error, violations} -> {:error, violations}
       end
     end
+  end
+
+  # A unique attribute is worth asking about only when the value could be compared at all: a
+  # field carrying its own violation is not comparable, and nil never conflicts.
+  defp advisory_candidate?({name, _type, opts}, values, violations) do
+    Keyword.get(opts, :unique) == true and not Map.has_key?(violations, name) and
+      not is_nil(values[name])
+  end
+
+  # Asked only when no write could be attempted - once the values pass, the write itself is the
+  # uniqueness check and its answer is the one that counts. Advisory by nature: what is taken
+  # now may be free by the resubmit, and the resubmit is answered by the write.
+  defp advisory_unique_violations(entity_type, values, id, violations) do
+    %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
+    entity_type.__attributes__()
+    |> Enum.filter(&advisory_candidate?(&1, values, violations))
+    |> Enum.reduce(violations, fn {name, type, _opts}, acc ->
+      column = Enum.find(columns, &(&1.source == {:attribute, name}))
+
+      if unique_value_taken?(table, column.name, values[name], type, id) do
+        Map.put(acc, name, [:unique])
+      else
+        acc
+      end
+    end)
   end
 
   defp companion_entries(columns, sorted_changes) do
@@ -464,6 +498,22 @@ defmodule Hologram.DB.EntityOperations do
   # Any other unique index is not ours to explain and keeps raising: a duplicate primary key is
   # a framework bug rather than something a caller did, and the grant store's index is over four
   # columns, so neither matches the single-attribute shape below.
+  # The row being updated is excluded the way the unique index excludes it, so a resubmitted
+  # form holding a row's own unchanged value is not refused. A create passes an id no row
+  # carries yet, which excludes nothing.
+  # sobelow_skip ["SQL.Query"]
+  defp unique_value_taken?(table, column_name, value, type, id) do
+    statement =
+      ~s|SELECT EXISTS (SELECT 1 FROM #{qualified_table(table)} WHERE #{Mapper.quote_identifier(column_name)} = $1 AND "id" != $2)|
+
+    params = [Codec.encode(value, type), Codec.encode(id, :uuid)]
+
+    case Connection.query(statement, params) do
+      {:ok, %Postgrex.Result{rows: [[taken?]]}} -> taken?
+      {:error, error} -> raise error
+    end
+  end
+
   defp unique_violations(entity_type, %Postgrex.Error{
          postgres: %{code: :unique_violation, constraint: constraint}
        }) do
