@@ -652,6 +652,39 @@ defmodule Hologram.DB.MapperTest do
     end
   end
 
+  describe "referencing_relationship/2" do
+    test "names the entity type and relationship of a to-one reference column" do
+      mapping = derive!([Module1, Module2, Module3])
+      constraint = "test_fixtures_entity_module3_c_id_$fk"
+
+      assert referencing_relationship(mapping, constraint) == {Module3, :c}
+    end
+
+    test "names the entity type and relationship of a join table's target" do
+      mapping = derive!([Module1, Module2, Module3])
+      constraint = "test_fixtures_entity_module3_a_$join_target_id_$fk"
+
+      assert referencing_relationship(mapping, constraint) == {Module3, :a}
+    end
+
+    test "names the grant store's user reference" do
+      mapping = derive!([Module1, Module14])
+
+      constraint =
+        mapping[RoleGrant].columns
+        |> Enum.find(&(&1.name == "user_id"))
+        |> Map.fetch!(:fk_constraint)
+
+      assert referencing_relationship(mapping, constraint) == {RoleGrant, :user}
+    end
+
+    test "returns nil for a constraint no relationship derives" do
+      mapping = derive!([Module1, Module2, Module3])
+
+      assert referencing_relationship(mapping, "nope_$fk") == nil
+    end
+  end
+
   # The primary OTP app root in this test suite is Hologram (Reflection.otp_app() == :hologram).
   describe "table_name/1" do
     test "pins the role grant table to its full path" do
