@@ -2299,6 +2299,7 @@ describe("Hologram", () => {
 
   describe("render()", () => {
     afterEach(() => {
+      Hologram.isRendering = false;
       Hologram.virtualDocument = null;
       Renderer.listenerBindings = [];
       sinon.restore();
@@ -2390,6 +2391,39 @@ describe("Hologram", () => {
         previousVirtualDocument,
         renderedVirtualDocument,
       );
+    });
+
+    // A dispatch arriving while the flag is set has to wait for the render to finish, so the flag
+    // has to be set for the whole of the render and cleared by the time it returns.
+    it("marks itself as running while it patches", () => {
+      const renderedVirtualDocument = {sel: "html", data: {}, children: []};
+
+      sinon.stub(Renderer, "renderPage").returns(renderedVirtualDocument);
+      sinon.stub(EventListenerRegistry, "reconcile");
+      sinon.stub(EventListeners, "recheckScrollEdges");
+
+      let isRenderingDuringPatch = null;
+
+      sinon.stub(Vdom, "patchVirtualDocument").callsFake(() => {
+        isRenderingDuringPatch = Hologram.isRendering;
+      });
+
+      Hologram.virtualDocument = {sel: "html", data: {}, children: []};
+
+      Hologram.render();
+
+      assert.isTrue(isRenderingDuringPatch);
+      assert.isFalse(Hologram.isRendering);
+    });
+
+    // A page's template expressions are app code and can raise. A render that died with the flag
+    // still set would leave every dispatch after it waiting for a render that had already ended.
+    it("stops marking itself as running when the render raises", () => {
+      sinon.stub(Renderer, "renderPage").throws(new Error("render failed"));
+
+      assert.throws(() => Hologram.render(), Error, "render failed");
+
+      assert.isFalse(Hologram.isRendering);
     });
   });
 
