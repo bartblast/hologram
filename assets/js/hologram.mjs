@@ -76,6 +76,12 @@ export default class Hologram {
   static domEpoch = 0;
 
   // Made public to make tests easier
+  // Whether a render is on the stack - its patch walking the live DOM, or its event bindings
+  // being reconciled onto it. Set by render() alone: a patch made outside a render is not
+  // covered, and has to keep a dispatch out by its own means.
+  static isRendering = false;
+
+  // Made public to make tests easier
   static prefetchedPages = new Map();
 
   // Made public to make tests easier
@@ -101,6 +107,9 @@ export default class Hologram {
 
   // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
   static #deadEpochs = new Set();
+
+  // Actions that arrived while a render was on the stack, waiting for it to finish.
+  static #deferredActions = [];
 
   // Actions belonging to a page that cannot answer for them yet, waiting for its mount.
   static #heldActions = [];
@@ -492,45 +501,69 @@ export default class Hologram {
   static render() {
     const startTime = performance.now();
 
-    const newVirtualDocument = Renderer.renderPage(
-      Hologram.#pageModule,
-      Hologram.#pageParams,
-    );
+    // A synchronous DOM event can reach a dispatch from inside this render: removing the element
+    // that has focus makes the browser fire focusout before the removal returns, and the document
+    // listener flushes that element's pending debounced dispatches there and then. An action
+    // running at that point renders into a tree this render is still walking, and the two renders
+    // leave the DOM and the virtual document describing different pages. While this flag is set a
+    // dispatch waits instead of running.
+    $.isRendering = true;
 
-    // On a full document load there is no previous render to diff against, only the page the
-    // server sent, so the old side is built by mirroring this render onto it. The patch then
-    // adopts those nodes instead of recreating the whole page.
-    if (Hologram.virtualDocument === null) {
-      Hologram.virtualDocument = Vdom.mirror(
-        newVirtualDocument,
-        document.documentElement,
+    try {
+      const newVirtualDocument = Renderer.renderPage(
+        Hologram.#pageModule,
+        Hologram.#pageParams,
       );
+
+      // On a full document load there is no previous render to diff against, only the page the
+      // server sent, so the old side is built by mirroring this render onto it. The patch then
+      // adopts those nodes instead of recreating the whole page.
+      if (Hologram.virtualDocument === null) {
+        Hologram.virtualDocument = Vdom.mirror(
+          newVirtualDocument,
+          document.documentElement,
+        );
+      }
+
+      Hologram.virtualDocument = Vdom.patchVirtualDocument(
+        Hologram.virtualDocument,
+        newVirtualDocument,
+      );
+
+      // renderPage() collected this render's <window>/<document> bindings into Renderer.listenerBindings
+      // and its deferred element bindings (reach, resize) into Renderer.reachBindings and
+      // Renderer.resizeBindings. Now that the DOM is patched, reconcile them into real listeners on
+      // their targets. The deferred bindings are resolved here because their target is a live DOM
+      // element, which exists only after patch. Each resolve also drops a binding whose once modifier
+      // has fired, so reconcile tears it down. Every page-entry path reaches render() through
+      // #mountPage, so this also tears down a previous page's listeners on navigation.
+      EventListenerRegistry.reconcile([
+        ...Renderer.resolveListenerBindings(),
+        ...Renderer.resolveReachBindings(),
+        ...Renderer.resolveResizeBindings(),
+      ]);
+
+      // Reach listeners persist across renders, so reconcile alone does not re-run them. Recheck them
+      // now that the DOM is patched, so each re-syncs the children it watches and recomputes - firing
+      // again as content this render added extends or fills the container.
+      EventListeners.recheckScrollEdges();
+    } finally {
+      // A template expression is app code and can raise, so the flag is cleared on the way out
+      // either way. Leaving it set would silence every dispatch from here on.
+      $.isRendering = false;
     }
 
-    Hologram.virtualDocument = Vdom.patchVirtualDocument(
-      Hologram.virtualDocument,
-      newVirtualDocument,
-    );
-
-    // renderPage() collected this render's <window>/<document> bindings into Renderer.listenerBindings
-    // and its deferred element bindings (reach, resize) into Renderer.reachBindings and
-    // Renderer.resizeBindings. Now that the DOM is patched, reconcile them into real listeners on
-    // their targets. The deferred bindings are resolved here because their target is a live DOM
-    // element, which exists only after patch. Each resolve also drops a binding whose once modifier
-    // has fired, so reconcile tears it down. Every page-entry path reaches render() through
-    // #mountPage, so this also tears down a previous page's listeners on navigation.
-    EventListenerRegistry.reconcile([
-      ...Renderer.resolveListenerBindings(),
-      ...Renderer.resolveReachBindings(),
-      ...Renderer.resolveResizeBindings(),
-    ]);
-
-    // Reach listeners persist across renders, so reconcile alone does not re-run them. Recheck them
-    // now that the DOM is patched, so each re-syncs the children it watches and recomputes - firing
-    // again as content this render added extends or fills the container.
-    EventListeners.recheckScrollEdges();
-
     console.log("Hologram: page rendered in", PerformanceTimer.diff(startTime));
+
+    // Drained after the reconcile above rather than straight after the patch: a deferred action
+    // renders, and a render collects the page's <window>/<document> bindings into
+    // Renderer.listenerBindings. Running one earlier would leave this render reconciling the
+    // other render's bindings.
+    //
+    // Reached only when the render finished. A render that raised left the DOM and the virtual
+    // document describing different pages, and running the queue against that repairs nothing -
+    // it waits for the next render that finishes.
+    $.#drainDeferredActions();
   }
 
   static run() {
@@ -851,6 +884,32 @@ export default class Hologram {
     actions.forEach(([actionName, target, params]) => {
       Hologram.dispatchAction(actionName, target, params);
     });
+  }
+
+  // Runs what a render held back, in the order it arrived. Settled rather than executed: a
+  // deferred action never got an answer from the settle rule, so it meets the same rules as any
+  // other, against the page the client is on by the time it runs.
+  //
+  // One action is no reason to drop the rest: a single focusout flushes every pending slot on the
+  // element at once, so a queue of several is the ordinary case, and they have nothing to do with
+  // one another. Every one is delivered and the first error is raised once the queue is empty -
+  // the same bargain the debouncer makes with the callbacks it flushes.
+  static #drainDeferredActions() {
+    let firstError;
+
+    while ($.#deferredActions.length > 0) {
+      const {action, epoch} = $.#deferredActions.shift();
+
+      try {
+        $.#settleAction(action, epoch);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+
+    if (firstError !== undefined) {
+      throw firstError;
+    }
   }
 
   // Takes the page's own bundle out of the document the server described, leaving every other
@@ -1682,6 +1741,13 @@ export default class Hologram {
     // the one being moved to, and it cannot answer until it mounts.
     if ($.domEpoch !== $.registryEpoch) {
       $.#heldActions.push({action: action, epoch: epoch});
+      return;
+    }
+
+    // A render is on the stack, so the DOM it is walking is mid-update and this action's own
+    // render would walk the same tree behind it. It waits, and runs when that render is done.
+    if ($.isRendering) {
+      $.#deferredActions.push({action: action, epoch: epoch});
       return;
     }
 
