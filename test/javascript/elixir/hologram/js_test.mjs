@@ -14,6 +14,7 @@ import Elixir_Hologram_JS, {
 import {box} from "../../../../assets/js/js_interop.mjs";
 
 import ERTS from "../../../../assets/js/erts.mjs";
+import HologramInterpreterError from "../../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../../assets/js/interpreter.mjs";
 import Type from "../../../../assets/js/type.mjs";
 
@@ -310,6 +311,48 @@ describe("resolveBinding()", () => {
     const result = resolveBinding(Type.integer(42), Type.alias("Unused"));
 
     assert.strictEqual(result, 42);
+  });
+
+  it("raises when the name is neither a binding nor a global", () => {
+    Interpreter.defineManuallyPortedFunction(
+      "TestModule2",
+      "dummy/0",
+      "public",
+      () => {},
+    );
+
+    const expectedMessage =
+      'there is no JS binding or global named "__missingBinding__" in scope in TestModule2 (is a js_import declaration missing?)';
+
+    assert.throw(
+      () =>
+        resolveBinding(
+          Type.atom("__missingBinding__"),
+          Type.alias("TestModule2"),
+        ),
+      HologramInterpreterError,
+      expectedMessage,
+    );
+  });
+
+  it("resolves a global whose value is undefined", () => {
+    globalThis.__testUndefinedGlobal__ = undefined;
+
+    Interpreter.defineManuallyPortedFunction(
+      "TestModule2",
+      "dummy/0",
+      "public",
+      () => {},
+    );
+
+    const result = resolveBinding(
+      Type.atom("__testUndefinedGlobal__"),
+      Type.alias("TestModule2"),
+    );
+
+    assert.isUndefined(result);
+
+    delete globalThis.__testUndefinedGlobal__;
   });
 });
 
