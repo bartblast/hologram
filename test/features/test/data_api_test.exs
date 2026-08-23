@@ -4,21 +4,51 @@ defmodule HologramFeatureTests.DataApiTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias HologramFeatureTests.DataApiPage
+  alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
 
-  # Both tables truncate in one statement: the review table's foreign key to the
-  # product table makes Postgres reject truncating the referenced table alone.
+  # The review and product tables truncate in one statement: the review table's foreign key
+  # to the product table makes Postgres reject truncating the referenced table alone. The
+  # account table has no references and rides along.
   setup do
+    account_table = Mapper.table_name(Account)
     product_table = Mapper.table_name(Product)
     review_table = Mapper.table_name(Review)
 
     statement =
-      ~s(TRUNCATE "hologram_data"."#{review_table}", "hologram_data"."#{product_table}")
+      ~s(TRUNCATE "hologram_data"."#{review_table}", ) <>
+        ~s("hologram_data"."#{product_table}", "hologram_data"."#{account_table}")
 
     {:ok, _result} = Connection.query(statement, [])
 
     :ok
+  end
+
+  feature "refuses a duplicate of a unique attribute's value as a structured violation", %{
+    session: session
+  } do
+    session
+    |> visit(DataApiPage)
+    |> click(button("Create duplicate account"))
+    |> assert_text(css("#result"), "duplicate_account_{:error, %{handle: [:unique]}}")
+  end
+
+  feature "raises on a duplicate through the bang variant", %{session: session} do
+    session
+    |> visit(DataApiPage)
+    |> click(button("Raise on duplicate account"))
+    |> assert_text(
+      css("#result"),
+      ~s(cannot create HologramFeatureTests.Entities.Account - handle "taken" is already taken)
+    )
+  end
+
+  feature "refuses updating into a taken unique value", %{session: session} do
+    session
+    |> visit(DataApiPage)
+    |> click(button("Update into duplicate account"))
+    |> assert_text(css("#result"), "updated_into_duplicate_{:error, %{handle: [:unique]}}")
   end
 
   feature "writes an entity and reads it back", %{session: session} do
