@@ -86,6 +86,26 @@ defmodule Hologram.DB do
   end
 
   @doc """
+  Like delete/2, raising Hologram.WriteConflictError instead of returning {:error, ...}.
+
+  The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
+  takes delete/2.
+  """
+  @spec delete!(module, String.t()) :: :ok
+  def delete!(entity_type, id) do
+    case delete(entity_type, id) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        raise WriteConflictError,
+          message:
+            "cannot delete #{inspect(entity_type)} #{inspect(id)} - another entity still references it",
+          reason: reason
+    end
+  end
+
+  @doc """
   Deletes the (source, target) edge from the given to-many relationship of the entity
   with the given id. Idempotent - deleting an absent edge is a no-op. Returns :ok.
   Naming anything but a declared to-many relationship raises ArgumentError.

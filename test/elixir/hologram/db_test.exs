@@ -13,6 +13,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module19
+  alias Hologram.Test.Fixtures.Entity.Module3
 
   describe "init/1" do
     test "starts only the connection pool in test" do
@@ -149,6 +150,48 @@ defmodule Hologram.DBTest do
       assert_error ArgumentError, expected_msg, fn ->
         delete(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
       end
+    end
+  end
+
+  describe "delete!/2" do
+    test "returns :ok" do
+      {:ok, entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      assert delete!(Module1, entity.id) == :ok
+      assert get(Module1, entity.id) == nil
+    end
+
+    test "raises a write conflict when another entity references the row" do
+      {:ok, target} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, _referencing} =
+        Module3
+        |> Entity.new(c_id: target.id)
+        |> create()
+
+      expected_msg =
+        ~s(cannot delete Hologram.Test.Fixtures.Entity.Module1 "#{target.id}" - ) <>
+          "another entity still references it"
+
+      assert_error Hologram.WriteConflictError, expected_msg, fn ->
+        delete!(Module1, target.id)
+      end
+
+      error =
+        try do
+          delete!(Module1, target.id)
+        rescue
+          error in Hologram.WriteConflictError -> error
+        end
+
+      assert error.reason == {:restricted, %{entity_type: Module1, id: target.id}}
+      assert get(Module1, target.id) == target
     end
   end
 
