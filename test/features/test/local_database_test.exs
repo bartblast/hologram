@@ -2,8 +2,9 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   # async: false - each test truncates the shared table.
   use HologramFeatureTests.TestCase, async: false
 
-  import Hologram.DB.EntityOperations, only: [create: 1, delete: 2, update: 3]
+  import Hologram.DB.EntityOperations, only: [delete: 2, update: 3]
 
+  alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
@@ -46,7 +47,7 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
     product =
       Product
       |> Entity.new(name: "abacus")
-      |> create()
+      |> DB.create!()
 
     session
     |> visit(Page2)
@@ -63,7 +64,7 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   feature "shows a row created after the page was rendered", %{session: session} do
     Product
     |> Entity.new(name: "bicycle")
-    |> create()
+    |> DB.create!()
 
     session
     |> visit(Page2)
@@ -72,7 +73,7 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
 
     Product
     |> Entity.new(name: "birdcage")
-    |> create()
+    |> DB.create!()
 
     session
     |> assert_text(css("#live_products"), ~r/^bicycle,birdcage$/)
@@ -83,12 +84,12 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
     kept =
       Product
       |> Entity.new(name: "cabinet")
-      |> create()
+      |> DB.create!()
 
     removed =
       Product
       |> Entity.new(name: "candle")
-      |> create()
+      |> DB.create!()
 
     session
     |> visit(Page2)
@@ -111,11 +112,11 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   feature "places a row arriving later where the query orders it", %{session: session} do
     Product
     |> Entity.new(name: "dolphin")
-    |> create()
+    |> DB.create!()
 
     Product
     |> Entity.new(name: "dragon")
-    |> create()
+    |> DB.create!()
 
     session
     |> visit(Page2)
@@ -124,7 +125,7 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
 
     Product
     |> Entity.new(name: "daffodil")
-    |> create()
+    |> DB.create!()
 
     session
     |> assert_text(css("#live_products"), ~r/^daffodil,dolphin,dragon$/)
@@ -136,15 +137,15 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   feature "orders rows by an enum in its declared order", %{session: session} do
     Ticket
     |> Entity.new(priority: :medium, title: "a")
-    |> create()
+    |> DB.create!()
 
     Ticket
     |> Entity.new(priority: :high, title: "b")
-    |> create()
+    |> DB.create!()
 
     Ticket
     |> Entity.new(priority: :low, title: "c")
-    |> create()
+    |> DB.create!()
 
     session
     |> visit(Page2)
@@ -154,15 +155,15 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
   feature "filters rows at or above a declared enum value", %{session: session} do
     Ticket
     |> Entity.new(priority: :low, title: "a")
-    |> create()
+    |> DB.create!()
 
     Ticket
     |> Entity.new(priority: :medium, title: "b")
-    |> create()
+    |> DB.create!()
 
     Ticket
     |> Entity.new(priority: :high, title: "c")
-    |> create()
+    |> DB.create!()
 
     session
     |> visit(Page2)
@@ -177,11 +178,11 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
     ticket_a =
       Ticket
       |> Entity.new(priority: :low, title: "a")
-      |> create()
+      |> DB.create!()
 
     Ticket
     |> Entity.new(priority: :medium, title: "b")
-    |> create()
+    |> DB.create!()
 
     session
     |> visit(Page2)
@@ -202,7 +203,7 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
     Enum.each(["apple", "Łódź", "Mango", "Ödön", "Zebra"], fn name ->
       Product
       |> Entity.new(name: name)
-      |> create()
+      |> DB.create!()
     end)
 
     session
@@ -214,15 +215,15 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
     apple =
       Product
       |> Entity.new(name: "apple")
-      |> create()
+      |> DB.create!()
 
     Product
     |> Entity.new(name: "Mango")
-    |> create()
+    |> DB.create!()
 
     Product
     |> Entity.new(name: "Zebra")
-    |> create()
+    |> DB.create!()
 
     session
     |> visit(Page2)

@@ -38,7 +38,7 @@ defmodule HologramFeatureTests.Policies.Page1 do
     user =
       User
       |> Entity.new(email: "manager@example.com")
-      |> DB.create()
+      |> DB.create!()
 
     put_action(%{server | user_id: user.id}, :show_result, result: "logged_in")
   end

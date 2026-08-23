@@ -38,12 +38,12 @@ defmodule HologramFeatureTests.DataApiPage do
     product =
       Product
       |> Entity.new(name: "create_review_product")
-      |> DB.create()
+      |> DB.create!()
 
     review =
       Review
       |> Entity.new(product_id: product.id, rating: 4)
-      |> DB.create()
+      |> DB.create!()
 
     persisted_review = DB.get(Review, review.id)
 
@@ -54,13 +54,13 @@ defmodule HologramFeatureTests.DataApiPage do
     product =
       Product
       |> Entity.new(name: "reject_invalid_review_product")
-      |> DB.create()
+      |> DB.create!()
 
     result =
       try do
         Review
         |> Entity.new(product_id: product.id, rating: 0)
-        |> DB.create()
+        |> DB.create!()
 
         "rejected_nothing"
       rescue
@@ -74,7 +74,7 @@ defmodule HologramFeatureTests.DataApiPage do
     Enum.each(["run_query_banana", "run_query_apple", "run_query_excluded"], fn name ->
       Product
       |> Entity.new(name: name)
-      |> DB.create()
+      |> DB.create!()
     end)
 
     names =

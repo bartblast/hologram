@@ -2,9 +2,10 @@ defmodule HologramFeatureTests.SyncTest do
   # async: false - each test truncates the shared tables.
   use HologramFeatureTests.TestCase, async: false
 
-  import Hologram.DB.EntityOperations, only: [create: 1, delete: 2, update: 3]
+  import Hologram.DB.EntityOperations, only: [delete: 2, update: 3]
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
@@ -102,7 +103,7 @@ defmodule HologramFeatureTests.SyncTest do
   feature "fills a connecting client with the rows it may read", %{session: _session} do
     Document
     |> Entity.new(public: true, title: "seeded_before_connect")
-    |> create()
+    |> DB.create!()
 
     {data, _client} = await_deltas_carrying(connect(), ~s["title":"seeded_before_connect"])
 
@@ -123,7 +124,7 @@ defmodule HologramFeatureTests.SyncTest do
     document =
       Document
       |> Entity.new(public: true, title: "before_patch")
-      |> create()
+      |> DB.create!()
 
     client = drain_initial_sync(connect())
 
@@ -141,11 +142,11 @@ defmodule HologramFeatureTests.SyncTest do
     folder =
       Folder
       |> Entity.new(name: "folder_before_patch", public: true)
-      |> create()
+      |> DB.create!()
 
     Document
     |> Entity.new(folder_id: folder.id, public: true, title: "reaches_the_folder")
-    |> create()
+    |> DB.create!()
 
     client = drain_initial_sync(connect())
 
@@ -172,7 +173,7 @@ defmodule HologramFeatureTests.SyncTest do
 
     Document
     |> Entity.new(public: true, title: "created_while_watching")
-    |> create()
+    |> DB.create!()
 
     {data, _client} = await_deltas_carrying(client, ~s["title":"created_while_watching"])
 
@@ -183,7 +184,7 @@ defmodule HologramFeatureTests.SyncTest do
     document =
       Document
       |> Entity.new(public: true, title: "to_be_deleted")
-      |> create()
+      |> DB.create!()
 
     client = drain_initial_sync(connect())
 
@@ -205,7 +206,7 @@ defmodule HologramFeatureTests.SyncTest do
   feature "keeps a server-only value out of the frame its row travels in", %{session: _session} do
     Document
     |> Entity.new(api_token: "api_token_9xK4", public: true, title: "row_with_secret")
-    |> create()
+    |> DB.create!()
 
     # Waiting for the row is the positive artifact beside the negative one: this is the frame the
     # row travelled in, so what it does not carry is what was kept from it.
@@ -222,13 +223,13 @@ defmodule HologramFeatureTests.SyncTest do
   feature "tells a returning client only what moved while it was away", %{session: _session} do
     Document
     |> Entity.new(public: true, title: "held_across_the_gap")
-    |> create()
+    |> DB.create!()
 
     filled_client = drain_initial_sync(connect())
 
     Document
     |> Entity.new(public: true, title: "dated_the_store")
-    |> create()
+    |> DB.create!()
 
     {dating_data, departing_client} =
       await_deltas_carrying(filled_client, ~s["title":"dated_the_store"])
@@ -240,7 +241,7 @@ defmodule HologramFeatureTests.SyncTest do
 
     Document
     |> Entity.new(public: true, title: "landed_while_away")
-    |> create()
+    |> DB.create!()
 
     {gap_data, _returned} =
       await_deltas_carrying(connect(cursor: cursor), ~s["title":"landed_while_away"])
@@ -255,7 +256,7 @@ defmodule HologramFeatureTests.SyncTest do
   feature "tells a client whose place cannot be read to start over", %{session: _session} do
     Document
     |> Entity.new(public: true, title: "sent_again_after_resync")
-    |> create()
+    |> DB.create!()
 
     returning_client = connect(cursor: "not a cursor")
 
@@ -274,11 +275,11 @@ defmodule HologramFeatureTests.SyncTest do
   } do
     Document
     |> Entity.new(public: true, title: "public_row")
-    |> create()
+    |> DB.create!()
 
     Document
     |> Entity.new(title: "private_row")
-    |> create()
+    |> DB.create!()
 
     # The frame the readable row travelled in, so what it does not carry is what a visitor was not
     # shown rather than what happened to arrive later.

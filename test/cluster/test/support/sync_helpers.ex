@@ -7,8 +7,7 @@ defmodule HologramClusterTests.SyncHelpers do
   paths every peer adds. An `rpc` into a test module answers `:undef`.
   """
 
-  import Hologram.DB.EntityOperations, only: [create: 1]
-
+  alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.Entity
   alias HologramClusterTests.Entities.Item
@@ -20,7 +19,7 @@ defmodule HologramClusterTests.SyncHelpers do
   def create_item(slug, title) do
     Item
     |> Entity.new(slug: slug, title: title)
-    |> create()
+    |> DB.create!()
   end
 
   @doc """

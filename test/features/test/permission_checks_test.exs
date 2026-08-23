@@ -2,8 +2,6 @@ defmodule HologramFeatureTests.PermissionChecksTest do
   # async: false - each test truncates the shared tables.
   use HologramFeatureTests.TestCase, async: false
 
-  import Hologram.DB.EntityOperations, only: [create: 1]
-
   alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
@@ -44,7 +42,7 @@ defmodule HologramFeatureTests.PermissionChecksTest do
   defp create_document(title) do
     Document
     |> Entity.new(public: true, title: title)
-    |> create()
+    |> DB.create!()
   end
 
   defp session_user do
