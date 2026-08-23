@@ -12,6 +12,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Entity
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module19
 
   describe "init/1" do
     test "starts only the connection pool in test" do
@@ -77,6 +78,14 @@ defmodule Hologram.DBTest do
   end
 
   describe "create/1" do
+    # Both shapes in one test: the first create binds {:ok, _} or the match fails, and the
+    # second pins the violation travelling out through the gateway unchanged.
+    test "returns the unique violation" do
+      {:ok, _entity} = create(Entity.new(Module19, slug: "x"))
+
+      assert create(Entity.new(Module19, slug: "x")) == {:error, %{slug: [:unique]}}
+    end
+
     test "rejects role grants" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
@@ -106,6 +115,13 @@ defmodule Hologram.DBTest do
   end
 
   describe "update/3" do
+    test "returns the unique violation" do
+      {:ok, first} = create(Entity.new(Module19, slug: "held"))
+      {:ok, second} = create(Entity.new(Module19, slug: "other"))
+
+      assert update(Module19, second.id, slug: first.slug) == {:error, %{slug: [:unique]}}
+    end
+
     test "rejects role grants" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
