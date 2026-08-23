@@ -934,7 +934,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert get(Module3, created_entity.id).b_id == nil
     end
 
-    test "returns the violation when the new value is taken" do
+    test "returns the violation from the write itself when the new value is taken" do
       {:ok, first} =
         Module19
         |> Entity.new(slug: "taken")
@@ -982,6 +982,33 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert update(Module19, second.id, slug: first.slug) == {:error, %{slug: [:unique]}}
 
       assert Enum.map(outbox_effects(), & &1.op) == ["put_entity", "put_entity"]
+    end
+
+    test "reports a value violation and a taken unique value together" do
+      {:ok, first} =
+        Module19
+        |> Entity.new(code: "update_taken", slug: "update_a")
+        |> create()
+
+      {:ok, second} =
+        Module19
+        |> Entity.new(code: "update_free", slug: "update_b")
+        |> create()
+
+      assert update(Module19, second.id, %{code: first.code, slug: 123}) ==
+               {:error, %{code: [:unique], slug: [type: :string]}}
+    end
+
+    # The unique index excludes the row from its own comparison, and so does the advisory
+    # query - a resubmitted form carrying a row's unchanged value must not be refused.
+    test "does not count the row's own value as taken" do
+      {:ok, entity} =
+        Module19
+        |> Entity.new(code: "update_own", slug: "update_c")
+        |> create()
+
+      assert update(Module19, entity.id, %{code: entity.code, slug: 123}) ==
+               {:error, %{slug: [type: :string]}}
     end
 
     test "returns every change violation without writing" do

@@ -82,7 +82,7 @@ defmodule Hologram.DBTest do
   describe "create/1" do
     # Both shapes in one test: the first create binds {:ok, _} or the match fails, and the
     # second pins the violation travelling out through the gateway unchanged.
-    test "returns the unique violation" do
+    test "returns the unique violation from the write itself" do
       {:ok, _entity} =
         Module19
         |> Entity.new(slug: "x")
@@ -265,7 +265,7 @@ defmodule Hologram.DBTest do
   end
 
   describe "update/3" do
-    test "returns the unique violation" do
+    test "returns the unique violation from the write itself" do
       {:ok, first} =
         Module19
         |> Entity.new(slug: "held")
@@ -277,6 +277,21 @@ defmodule Hologram.DBTest do
         |> create()
 
       assert update(Module19, second.id, slug: first.slug) == {:error, %{slug: [:unique]}}
+    end
+
+    test "returns a value violation and a taken unique value in one map" do
+      {:ok, first} =
+        Module19
+        |> Entity.new(code: "gateway_update_taken", slug: "gateway_update_a")
+        |> create()
+
+      {:ok, second} =
+        Module19
+        |> Entity.new(code: "gateway_update_free", slug: "gateway_update_b")
+        |> create()
+
+      assert update(Module19, second.id, %{code: first.code, slug: 123}) ==
+               {:error, %{code: [:unique], slug: [type: :string]}}
     end
 
     test "rejects role grants" do

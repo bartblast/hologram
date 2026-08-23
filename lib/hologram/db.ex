@@ -192,7 +192,10 @@ defmodule Hologram.DB do
   enum values, the required-nil rule, the constraint options), and :unique for a changed
   unique attribute whose new value another row already holds. A row's own current value never
   conflicts with itself. Values are judged before any SQL runs, and a write is attempted only
-  once they pass. A write reports the first violated database constraint only.
+  once they pass. Uniqueness is reported by the write itself when the values pass, and asked
+  advisorily when they fail - an advisory answer describes the moment it was asked, and a value
+  free then can be taken by the next attempt. A write reports the first violated database
+  constraint only.
 
   The misuses named above raise rather than returning, as does a constraint violation the
   mapping does not explain.
