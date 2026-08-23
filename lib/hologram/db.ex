@@ -63,9 +63,12 @@ defmodule Hologram.DB do
         stamped_entity
 
       {:error, violations} ->
+        entity_type = entity.__struct__
+
         raise WriteError,
           message:
-            "cannot create #{inspect(entity.__struct__)} - #{taken_description(violations, entity)}",
+            "cannot create #{inspect(entity_type)}:\n" <>
+              refusal_lines(entity_type, violations, Map.from_struct(entity)),
           reason: violations
     end
   end
@@ -222,7 +225,8 @@ defmodule Hologram.DB do
       {:error, violations} ->
         raise WriteError,
           message:
-            "cannot update #{inspect(entity_type)} #{inspect(id)} - #{taken_description(violations, Map.new(changes))}",
+            "cannot update #{inspect(entity_type)} #{inspect(id)}:\n" <>
+              refusal_lines(entity_type, violations, Map.new(changes)),
           reason: violations
     end
   end
@@ -372,16 +376,6 @@ defmodule Hologram.DB do
     Supervisor.init(children, strategy: :one_for_one)
   end
 
-  # Written to describe several fields though a write reports one: PostgreSQL aborts at the
-  # first violated constraint, so the map always holds a single key today.
-  defp taken_description(violations, values) do
-    violations
-    |> Enum.sort()
-    |> Enum.map_join(", ", fn {field, _reasons} ->
-      "#{field} #{inspect(Map.fetch!(values, field))} is already taken"
-    end)
-  end
-
   defp assert_no_placeholders!(term) do
     case Query.placeholder_names(term) do
       [] ->
@@ -392,5 +386,21 @@ defmodule Hologram.DB do
           message:
             "cannot run a query term containing placeholders - placeholder #{inspect(name)} has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
     end
+  end
+
+  # One line per violation, always bulleted - the shape Validator.error_message/3 set, and the
+  # only one that reads the same whether the map holds one entry or several. A taken value is
+  # described here because the validator never reports uniqueness: it is state, not a value.
+  defp refusal_lines(entity_type, violations, values) do
+    violations
+    |> Enum.flat_map(fn {field, reasons} -> Enum.map(reasons, &{field, &1}) end)
+    |> Enum.sort()
+    |> Enum.map_join("\n", fn
+      {field, :unique} ->
+        "  * attribute #{inspect(field)} #{inspect(Map.fetch!(values, field))} is already taken"
+
+      violation ->
+        Validator.violation_description(entity_type, values, violation)
+    end)
   end
 end

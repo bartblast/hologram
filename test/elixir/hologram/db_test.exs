@@ -122,7 +122,10 @@ defmodule Hologram.DBTest do
         |> create()
 
       expected_msg =
-        ~s(cannot create Hologram.Test.Fixtures.Entity.Module19 - slug "x" is already taken)
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Entity.Module19:
+          * attribute :slug "x" is already taken\
+        """)
 
       assert_error Hologram.WriteError, expected_msg, fn ->
         Module19
@@ -252,8 +255,10 @@ defmodule Hologram.DBTest do
         |> create()
 
       expected_msg =
-        ~s(cannot update Hologram.Test.Fixtures.Entity.Module19 "#{second.id}" - ) <>
-          ~s(slug "held" is already taken)
+        normalize_newlines("""
+        cannot update Hologram.Test.Fixtures.Entity.Module19 "#{second.id}":
+          * attribute :slug "held" is already taken\
+        """)
 
       assert_error Hologram.WriteError, expected_msg, fn ->
         update!(Module19, second.id, slug: first.slug)
