@@ -98,10 +98,11 @@ defmodule Hologram.DB do
       :ok ->
         :ok
 
-      {:error, reason} ->
+      {:error, %{referenced_by: referenced_by, relationship: relationship} = reason} ->
         raise WriteConflictError,
           message:
-            "cannot delete #{inspect(entity_type)} #{inspect(id)} - another entity still references it",
+            "cannot delete #{inspect(entity_type)} #{inspect(id)} - still referenced by " <>
+              "#{inspect(referenced_by)} through #{inspect(relationship)}",
           reason: reason
     end
   end
