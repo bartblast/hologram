@@ -16,6 +16,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Role
 
   defp count_edges(source_entity, target_entity) do
     count_sql =
@@ -630,7 +631,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       effects_before = outbox_effects()
 
-      assert {:error, {:restricted, _details}} = delete(Module1, target_entity.id)
+      assert {:error, %{referenced_by: _entity_type}} = delete(Module1, target_entity.id)
 
       assert outbox_effects() == effects_before
     end
@@ -647,7 +648,7 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> create()
 
       assert delete(Module1, target_entity.id) ==
-               {:error, {:restricted, %{entity_type: Module1, id: target_entity.id}}}
+               {:error, %{referenced_by: Module3, relationship: :c}}
 
       assert get(Module1, target_entity.id) == target_entity
       assert get(Module3, referencing_entity.id) == referencing_entity
@@ -672,9 +673,24 @@ defmodule Hologram.DB.EntityOperationsTest do
       :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
 
       assert delete(Module2, target_entity.id) ==
-               {:error, {:restricted, %{entity_type: Module2, id: target_entity.id}}}
+               {:error, %{referenced_by: Module3, relationship: :a}}
 
       assert count_edges(source_entity, target_entity) == 1
+    end
+
+    # The grant store is an entity like any other, so its reference to the user is named the
+    # same way. The grant is written with user_id alone - granted_by_id stays nil, so exactly
+    # one foreign key references the user and the answer is deterministic.
+    test "names the grant store when a grant still references the user" do
+      {:ok, user} =
+        Module14
+        |> Entity.new(email: "granted@example.com")
+        |> create()
+
+      :ok = insert_global_grant(user.id, Role.Module1)
+
+      assert delete(Module14, user.id) ==
+               {:error, %{referenced_by: RoleGrant, relationship: :user}}
     end
 
     test "deleting a nonexistent id is a no-op" do

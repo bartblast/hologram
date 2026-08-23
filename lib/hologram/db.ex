@@ -74,11 +74,12 @@ defmodule Hologram.DB do
   Deletes the entity of the given type with the given id together with its own outgoing
   to-many edges, in one transaction. An incoming reference from another entity - a
   to-one reference column or an edge pointing at this entity - restricts the delete,
-  returning {:error, {:restricted, %{entity_type: entity_type, id: id}}} with nothing
-  deleted. This is the one translated constraint error - any other constraint violation
-  raises. Deleting a nonexistent id is a no-op. Returns :ok.
+  returning {:error, %{referenced_by: entity_type, relationship: name}} naming the entity
+  type and relationship that still reference the row, with nothing deleted. PostgreSQL
+  reports the first such reference only. This is the one translated constraint error - any
+  other constraint violation raises. Deleting a nonexistent id is a no-op. Returns :ok.
   """
-  @spec delete(module, String.t()) :: :ok | {:error, {:restricted, map}}
+  @spec delete(module, String.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity_type, id) do
     Validator.validate_writable!(entity_type)
 

@@ -190,7 +190,7 @@ defmodule Hologram.DBTest do
           error in Hologram.WriteConflictError -> error
         end
 
-      assert error.reason == {:restricted, %{entity_type: Module1, id: target.id}}
+      assert error.reason == %{referenced_by: Module3, relationship: :c}
       assert get(Module1, target.id) == target
     end
   end
