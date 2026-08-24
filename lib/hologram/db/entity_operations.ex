@@ -159,10 +159,13 @@ defmodule Hologram.DB.EntityOperations do
     :ok
   end
 
+  # With lock: true the row is read FOR UPDATE, so it stays as read until the enclosing
+  # transaction ends - what a write evaluated against the row as it stands needs, since nothing
+  # can change the row between the evaluation and the write.
   @doc false
-  @spec get(module, String.t()) :: struct | nil
+  @spec get(module, String.t(), keyword) :: struct | nil
   # sobelow_skip ["SQL.Query"]
-  def get(entity_type, id) do
+  def get(entity_type, id, opts \\ []) do
     validate_id!(id)
 
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
@@ -170,7 +173,10 @@ defmodule Hologram.DB.EntityOperations do
     persisted_columns = Enum.reject(columns, &match?({:sort_key, _name}, &1.source))
 
     column_list = Enum.map_join(persisted_columns, ", ", &Mapper.quote_identifier(&1.name))
-    statement = ~s|SELECT #{column_list} FROM #{qualified_table(table)} WHERE "id" = $1|
+    lock_clause = if opts[:lock] == true, do: " FOR UPDATE", else: ""
+
+    statement =
+      ~s|SELECT #{column_list} FROM #{qualified_table(table)} WHERE "id" = $1#{lock_clause}|
 
     encoded_id = Codec.encode(id, :uuid)
 

@@ -7,6 +7,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -49,6 +50,19 @@ defmodule Hologram.DB.EntityOperationsTest do
   # The system clock can be coarser than a microsecond (Windows timer granularity reaches
   # ~16ms), making consecutive utc_now readings equal - wait until the clock has visibly
   # advanced, so that a subsequent write provably stamps a later timestamp.
+  # The lock modes this session holds on the entity type's table - a FOR UPDATE read holds
+  # RowShareLock on the relation, a plain read only AccessShareLock.
+  defp relation_lock_modes(entity_type) do
+    statement =
+      "SELECT mode FROM pg_locks WHERE relation = $1::text::regclass AND pid = pg_backend_pid()"
+
+    relation = ~s|"hologram_data"."#{Mapper.table_name(entity_type)}"|
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [relation])
+
+    Enum.map(rows, fn [mode] -> mode end)
+  end
+
   defp wait_until_clock_advances_past(datetime) do
     now = DateTime.utc_now(:microsecond)
 
@@ -877,7 +891,17 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
   end
 
-  describe "get/2" do
+  describe "get/3" do
+    test "locks the row with lock: true" do
+      {:ok, created_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      assert get(Module1, created_entity.id, lock: true) == created_entity
+      assert "RowShareLock" in relation_lock_modes(Module1)
+    end
+
     test "returns the entity with values decoded back into their logical types" do
       entity = Entity.new(Module4, a: ~D[2026-07-19], b: DateTime.utc_now(:microsecond), d: 1.5)
 
@@ -902,6 +926,17 @@ defmodule Hologram.DB.EntityOperationsTest do
 
     test "returns nil when no row matches" do
       assert get(Module1, Entity.generate_id()) == nil
+    end
+
+    test "takes no row lock without the option" do
+      {:ok, created_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      get(Module1, created_entity.id)
+
+      refute "RowShareLock" in relation_lock_modes(Module1)
     end
   end
 
