@@ -94,6 +94,40 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> assert_text(css("#result"), "grant_editor_true")
   end
 
+  feature "reads every row on the server's authority", %{session: session} do
+    Document
+    |> Entity.new(title: "hidden_document")
+    |> DB.create!()
+
+    Document
+    |> Entity.new(public: true, title: "public_document")
+    |> DB.create!()
+
+    session
+    |> visit(PoliciesPage)
+    |> click(button("Log in"))
+    |> assert_text(css("#result"), "logged_in")
+    |> click(button("Read documents as server"))
+    |> assert_text(css("#result"), "read_as_server_hidden_document,public_document")
+  end
+
+  feature "reads only the rows the session user may read", %{session: session} do
+    Document
+    |> Entity.new(title: "hidden_document")
+    |> DB.create!()
+
+    Document
+    |> Entity.new(public: true, title: "public_document")
+    |> DB.create!()
+
+    session
+    |> visit(PoliciesPage)
+    |> click(button("Log in"))
+    |> assert_text(css("#result"), "logged_in")
+    |> click(button("Read documents as user"))
+    |> assert_text(css("#result"), "read_as_user_public_document")
+  end
+
   feature "revokes a role it granted", %{session: session} do
     session
     |> visit(PoliciesPage)

@@ -2,11 +2,17 @@ defmodule Hologram.DBReadTest do
   use Hologram.Test.DatabaseCase, async: true
 
   import Hologram.Query
+  import Hologram.Test, only: [as_user: 2]
 
+  alias Hologram.Auth
   alias Hologram.DB
   alias Hologram.Entity
   alias Hologram.Query.Placeholder
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
 
   defp create_module_2_entity(values) do
     Module2
@@ -14,7 +20,83 @@ defmodule Hologram.DBReadTest do
     |> DB.create!()
   end
 
+  defp create_policy_module_2_entity do
+    PolicyModule2
+    |> Entity.new()
+    |> DB.create!()
+  end
+
+  defp create_user(email) do
+    Module14
+    |> Entity.new(email: email)
+    |> DB.create!()
+  end
+
   describe "read/1" do
+    test "counts only the rows the acting user may read" do
+      user = create_user("db_read_count@example.com")
+      granted_entity = create_policy_module_2_entity()
+      create_policy_module_2_entity()
+
+      Auth.grant_role(user, granted_entity, :member)
+
+      count =
+        as_user(user, fn ->
+          PolicyModule2
+          |> count()
+          |> DB.read()
+        end)
+
+      assert count == 1
+    end
+
+    test "filters an include's rows by the target type's read policies" do
+      user = create_user("db_read_include@example.com")
+
+      public_child =
+        PolicyModule1
+        |> Entity.new(public: true)
+        |> DB.create!()
+
+      private_child =
+        PolicyModule1
+        |> Entity.new(public: false)
+        |> DB.create!()
+
+      source =
+        PolicyModule3
+        |> Entity.new()
+        |> DB.create!()
+
+      source
+      |> add_relationship(:children, public_child.id)
+      |> add_relationship(:children, private_child.id)
+      |> DB.update!()
+
+      results =
+        as_user(user, fn ->
+          PolicyModule3
+          |> include(:children)
+          |> DB.read()
+        end)
+
+      assert [%PolicyModule3{children: [%PolicyModule1{id: child_id}]}] = results
+      assert child_id == public_child.id
+    end
+
+    test "filters the rows by the acting user's read policies" do
+      user = create_user("db_read_filter@example.com")
+      granted_entity = create_policy_module_2_entity()
+      create_policy_module_2_entity()
+
+      Auth.grant_role(user, granted_entity, :member)
+
+      results = as_user(user, fn -> DB.read(PolicyModule2) end)
+
+      assert [%PolicyModule2{id: id}] = results
+      assert id == granted_entity.id
+    end
+
     test "reads a set query and returns entity structs" do
       create_module_2_entity(a: true, c: "bbb")
       create_module_2_entity(a: false, c: "aaa")
@@ -53,6 +135,33 @@ defmodule Hologram.DBReadTest do
       assert missing_entity == nil
     end
 
+    test "reads a single-result query as nil for a row the acting user may not read" do
+      user = create_user("db_read_single@example.com")
+      entity = create_policy_module_2_entity()
+
+      hidden_entity =
+        as_user(user, fn ->
+          PolicyModule2
+          |> filter(id: entity.id)
+          |> one()
+          |> DB.read()
+        end)
+
+      assert hidden_entity == nil
+
+      Auth.grant_role(user, entity, :member)
+
+      readable_entity =
+        as_user(user, fn ->
+          PolicyModule2
+          |> filter(id: entity.id)
+          |> one()
+          |> DB.read()
+        end)
+
+      assert readable_entity.id == entity.id
+    end
+
     test "reads a counting query" do
       create_module_2_entity(a: true, c: "x")
       create_module_2_entity(a: true, c: "y")
@@ -65,6 +174,34 @@ defmodule Hologram.DBReadTest do
         |> DB.read()
 
       assert count == 2
+    end
+
+    test "reads a trusted query raw under an acting user" do
+      user = create_user("db_read_trusted@example.com")
+      create_policy_module_2_entity()
+      create_policy_module_2_entity()
+
+      trusted_results =
+        as_user(user, fn ->
+          PolicyModule2
+          |> trust()
+          |> DB.read()
+        end)
+
+      untrusted_results = as_user(user, fn -> DB.read(PolicyModule2) end)
+
+      assert length(trusted_results) == 2
+      assert untrusted_results == []
+    end
+
+    # Pins that no actor is the trusted tier rather than an anonymous session: the anonymous
+    # semantics drop actor-gated rules, so PolicyModule2's "allow :read, to: :member" would
+    # grant nothing and this would read [].
+    test "reads every row without an acting user" do
+      create_policy_module_2_entity()
+      create_policy_module_2_entity()
+
+      assert length(DB.read(PolicyModule2)) == 2
     end
 
     test "raises on a query term containing placeholders" do

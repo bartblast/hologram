@@ -911,6 +911,17 @@ defmodule Hologram.QueryTest do
       end
     end
 
+    # The root's mark already reads the whole query on the server's authority, includes and all,
+    # so a sub-term marking one of its own would say nothing the read honours.
+    test "raises on a sub-term carrying a trust mark" do
+      expected_msg =
+        "include sub-terms take no trust mark - trust/1 goes on the query root and reads the whole query, includes and all, on the server's authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, :a, &trust/1)
+      end
+    end
+
     test "raises on an attribute name" do
       expected_msg =
         ":a is an attribute in Hologram.Test.Fixtures.Entity.Module2 - only relationships can be included"
@@ -1087,6 +1098,15 @@ defmodule Hologram.QueryTest do
         |> normalize()
 
       assert normalize(normalized) == normalized
+    end
+
+    test "keeps a trust mark" do
+      query =
+        Module2
+        |> trust()
+        |> normalize()
+
+      assert query.trust == true
     end
 
     test "leaves orderings already keyed by id untouched" do
@@ -1631,8 +1651,39 @@ defmodule Hologram.QueryTest do
       assert result.__meta__ == %Metadata{claim: :trust}
     end
 
-    test "raises when the entity is not an entity struct" do
-      assert_error ArgumentError, ~s(trust takes an entity struct, got: "x"), fn ->
+    test "marks a query term as trusted, keeping its stages" do
+      result =
+        Module2
+        |> filter(a: true)
+        |> trust()
+
+      assert result.filter == [{:a, :==, true}]
+      assert result.trust == true
+    end
+
+    test "marks an entity type's query as trusted" do
+      expected_term =
+        Module2
+        |> base_term()
+        |> Map.put(:trust, true)
+
+      assert trust(Module2) == expected_term
+    end
+
+    test "raises on a trust mark in an include sub-term" do
+      expected_msg =
+        "include sub-terms take no trust mark - trust/1 goes on the query root and reads the whole query, includes and all, on the server's authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, :b, &trust/1)
+      end
+    end
+
+    test "raises when the subject is neither an entity struct, an entity type nor a query term" do
+      expected_msg =
+        ~s("x" is not an entity type module or a query term - a query starts from a module with the "use Hologram.Entity" directive)
+
+      assert_error ArgumentError, expected_msg, fn ->
         trust(wrap_term("x"))
       end
     end

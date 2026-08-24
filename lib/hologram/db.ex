@@ -3,6 +3,7 @@ defmodule Hologram.DB do
 
   use Supervisor
 
+  alias Hologram.Auth.Context
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
@@ -167,9 +168,27 @@ defmodule Hologram.DB do
 
   Raises ArgumentError when the id is not a canonical entity id (a lowercase
   8-4-4-4-12 UUID string).
+
+  With an acting user set, the row is read through that user's :read policies and a row the
+  policies withhold reads as nil - as if it did not exist, which is what the template tier and
+  the client answer. Without an acting user the row is read raw.
   """
   @spec get(module, String.t()) :: struct | nil
-  defdelegate get(entity_type, id), to: EntityOperations
+  def get(entity_type, id) do
+    case Context.actor_user_id() do
+      nil ->
+        EntityOperations.get(entity_type, id)
+
+      actor_user_id ->
+        EntityOperations.validate_id!(id)
+
+        entity_type
+        |> Query.filter(id: id)
+        |> Query.one()
+        |> Query.normalize()
+        |> QueryRunner.run_policied(mapping(), actor_user_id)
+    end
+  end
 
   @doc """
   Executes the given SQL statement with the given placeholders and returns {:ok, result} or
@@ -191,6 +210,15 @@ defmodule Hologram.DB do
 
   A :string ordering reads the attribute's sort-key companion column, which every
   :string attribute derives.
+
+  With an acting user set, the query is read through that user's :read policies - the rows the
+  policies grant, each included relationship filtered by its own type's :read rules, a
+  single-result query answering nil and a counting query counting only what the user may read -
+  exactly as a template's registered query is. Without an acting user the query is read raw:
+  the trusted tier, for seeds, tasks and jobs.
+
+  A query marked with trust/1 is read raw whether or not a user is acting - the server's own
+  authority, the spelling for a read that must see past the acting user's policies.
   """
   @spec read(module | %{atom => any}) :: list(struct) | struct | integer | nil
   def read(query) do
@@ -198,7 +226,13 @@ defmodule Hologram.DB do
 
     assert_no_placeholders!(term)
 
-    QueryRunner.run(term, mapping())
+    actor_user_id = Context.actor_user_id()
+
+    if term[:trust] == true or is_nil(actor_user_id) do
+      QueryRunner.run(term, mapping())
+    else
+      QueryRunner.run_policied(term, mapping(), actor_user_id)
+    end
   end
 
   @doc """

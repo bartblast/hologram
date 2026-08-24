@@ -22,6 +22,8 @@ defmodule HologramFeatureTests.PoliciesPage do
       <button $click={command: :grant_editor}> Grant editor </button>
       <button $click={command: :leave_last_owner}> Leave last owner </button>
       <button $click={command: :log_in}> Log in </button>
+      <button $click={command: :read_documents_as_server}> Read documents as server </button>
+      <button $click={command: :read_documents_as_user}> Read documents as user </button>
       <button $click={command: :revoke_editor}> Revoke editor </button>
       <button $click={command: :seed_documents}> Seed documents </button>
     </p>
@@ -72,6 +74,27 @@ defmodule HologramFeatureTests.PoliciesPage do
     user = create_user("session@example.com")
 
     put_action(%{server | user_id: user.id}, :show_result, result: "logged_in")
+  end
+
+  def command(:read_documents_as_server, _params, server) do
+    titles =
+      Document
+      |> order_by(:title)
+      |> trust()
+      |> DB.read()
+      |> Enum.map_join(",", & &1.title)
+
+    put_action(server, :show_result, result: "read_as_server_#{titles}")
+  end
+
+  def command(:read_documents_as_user, _params, server) do
+    titles =
+      Document
+      |> order_by(:title)
+      |> DB.read()
+      |> Enum.map_join(",", & &1.title)
+
+    put_action(server, :show_result, result: "read_as_user_#{titles}")
   end
 
   def command(:revoke_editor, _params, server) do
