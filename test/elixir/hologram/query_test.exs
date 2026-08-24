@@ -132,6 +132,72 @@ defmodule Hologram.QueryTest do
     end
   end
 
+  describe "authorize/2" do
+    test "keeps the rest of the metadata" do
+      target_id = Entity.generate_id()
+
+      result =
+        Module3
+        |> Entity.new()
+        |> put_attribute(c_id: target_id)
+        |> add_relationship(:a, target_id)
+        |> authorize(:archive)
+
+      assert result.__meta__.attribute_changes == %{c_id: target_id}
+      assert result.__meta__.relationship_ops == %{{:a, target_id} => :add}
+      assert result.__meta__.claim == {:authorize, :archive}
+    end
+
+    test "records the claim for the operation" do
+      entity = Entity.new(Module2, c: "x")
+
+      result = authorize(entity, :archive)
+
+      assert result.__meta__ == %Metadata{claim: {:authorize, :archive}}
+    end
+
+    test "raises when the entity is not an entity struct" do
+      assert_error ArgumentError, ~s(authorize takes an entity struct, got: "x"), fn ->
+        authorize(wrap_term("x"), :archive)
+      end
+    end
+
+    test "raises when the operation is not an atom" do
+      entity = Entity.new(Module2, c: "x")
+      expected_msg = ~s(authorize takes an operation atom, got: "archive")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        authorize(entity, wrap_term("archive"))
+      end
+    end
+
+    test "raises when the struct already carries an authorize claim" do
+      entity = Entity.new(Module2, c: "x")
+
+      expected_msg =
+        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim ({:authorize, :archive}) - a write claims exactly one authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        entity
+        |> authorize(:archive)
+        |> authorize(:publish)
+      end
+    end
+
+    test "raises when the struct already carries a trust claim" do
+      entity = Entity.new(Module2, c: "x")
+
+      expected_msg =
+        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim (:trust) - a write claims exactly one authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        entity
+        |> trust()
+        |> authorize(:archive)
+      end
+    end
+  end
+
   describe "count/1" do
     test "composes with other stages" do
       query =
@@ -1541,6 +1607,59 @@ defmodule Hologram.QueryTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         put_attribute(entity, :nope, 1)
+      end
+    end
+  end
+
+  describe "trust/1" do
+    test "keeps the rest of the metadata" do
+      result =
+        Module2
+        |> Entity.new(c: "x")
+        |> put_attribute(a: true)
+        |> trust()
+
+      assert result.__meta__.attribute_changes == %{a: true}
+      assert result.__meta__.claim == :trust
+    end
+
+    test "records the claim" do
+      entity = Entity.new(Module2, c: "x")
+
+      result = trust(entity)
+
+      assert result.__meta__ == %Metadata{claim: :trust}
+    end
+
+    test "raises when the entity is not an entity struct" do
+      assert_error ArgumentError, ~s(trust takes an entity struct, got: "x"), fn ->
+        trust(wrap_term("x"))
+      end
+    end
+
+    test "raises when the struct already carries an authorize claim" do
+      entity = Entity.new(Module2, c: "x")
+
+      expected_msg =
+        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim ({:authorize, :archive}) - a write claims exactly one authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        entity
+        |> authorize(:archive)
+        |> trust()
+      end
+    end
+
+    test "raises when the struct already carries a trust claim" do
+      entity = Entity.new(Module2, c: "x")
+
+      expected_msg =
+        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim (:trust) - a write claims exactly one authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        entity
+        |> trust()
+        |> trust()
       end
     end
   end

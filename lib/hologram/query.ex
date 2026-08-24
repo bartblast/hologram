@@ -10,6 +10,7 @@ defmodule Hologram.Query do
       import Hologram.Query,
         only: [
           add_relationship: 3,
+          authorize: 2,
           count: 1,
           delete_relationship: 3,
           filter: 2,
@@ -21,7 +22,8 @@ defmodule Hologram.Query do
           order_by: 2,
           paginate: 2,
           put_attribute: 2,
-          put_attribute: 3
+          put_attribute: 3,
+          trust: 1
         ]
 
       alias Hologram.DB
@@ -55,6 +57,30 @@ defmodule Hologram.Query do
   @spec add_relationship(struct, atom, String.t()) :: struct
   def add_relationship(entity, relationship_name, target_id) do
     put_relationship_op(entity, relationship_name, target_id, :add, "add_relationship")
+  end
+
+  @doc """
+  Claims the acting user's authority for the given operation on the given entity struct and
+  returns the struct - the DB verb writing it evaluates that operation, against the row, for
+  the acting user, instead of the operation the verb performs on its own.
+
+  The entity is an entity struct - one a query read, or one Entity.new/2 constructed. The
+  operation is an atom naming a policy operation the entity type declares an allow line for -
+  `:pin`, `:publish`, `:archive` - and is recorded in the struct's metadata as the claim the
+  write carries. There is no user argument: the subject of a claim is always the acting user.
+  A write carries exactly one claim - a struct already claiming an authority, through
+  authorize/2 or trust/1, cannot claim another.
+
+  Raises ArgumentError when the entity is not an entity struct, when the operation is not an
+  atom, or when the struct already carries a claim.
+  """
+  @spec authorize(struct, atom) :: struct
+  def authorize(entity, operation) when is_atom(operation) do
+    put_claim(entity, {:authorize, operation}, "authorize")
+  end
+
+  def authorize(_entity, operation) do
+    raise ArgumentError, message: "authorize takes an operation atom, got: #{inspect(operation)}"
   end
 
   @doc """
@@ -499,6 +525,26 @@ defmodule Hologram.Query do
     put_attribute(entity, [{name, value}])
   end
 
+  @doc """
+  Claims the server's own authority for the given entity struct and returns the struct - the
+  DB verb writing it evaluates no policy, and applies the write as trusted code would.
+
+  The entity is an entity struct - one a query read, or one Entity.new/2 constructed. The
+  claim is recorded in the struct's metadata, and is the spelling for a write no user's
+  authority is behind: recording what an external system reported, applying what a poller
+  fetched. Trust claims authority, it does not skip validation - a trusted write is validated,
+  stamped and recorded like any other, and creator roles are granted when an acting user is
+  set. A write carries exactly one claim - a struct already claiming an authority, through
+  authorize/2 or trust/1, cannot claim another.
+
+  Raises ArgumentError when the entity is not an entity struct, or when the struct already
+  carries a claim.
+  """
+  @spec trust(struct) :: struct
+  def trust(entity) do
+    put_claim(entity, :trust, "trust")
+  end
+
   defp attribute_names(entity_type) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 
@@ -830,6 +876,23 @@ defmodule Hologram.Query do
 
   defp plain_value?(value) do
     not is_tuple(value) and not is_list(value) and not is_struct(value, Range)
+  end
+
+  # The two claim stages share everything but the claim they record. A second claim is refused
+  # here, where it is written - a struct carrying two authorities would have to pick one at the
+  # write, silently.
+  defp put_claim(entity, claim, stage) do
+    entity_type = entity_type!(entity, stage)
+
+    %Metadata{claim: recorded_claim} = metadata = entity.__meta__
+
+    if recorded_claim != nil do
+      raise ArgumentError,
+        message:
+          "#{inspect(entity_type)} already carries a claim (#{inspect(recorded_claim)}) - a write claims exactly one authority"
+    end
+
+    Map.put(entity, :__meta__, %Metadata{metadata | claim: claim})
   end
 
   # The two edge stages share everything but the operation they record.
