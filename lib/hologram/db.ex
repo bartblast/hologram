@@ -144,14 +144,7 @@ defmodule Hologram.DB do
   defdelegate query(statement, placeholders \\ [], opts \\ []), to: Connection
 
   @doc """
-  Aborts the innermost enclosing transaction/2, making it return {:error, reason}. Raises
-  ArgumentError when called outside of a transaction.
-  """
-  @spec rollback(any) :: no_return
-  defdelegate rollback(reason), to: Connection
-
-  @doc """
-  Runs the given query against the database and returns its result - a list of entity
+  Reads the given query from the database and returns its result - a list of entity
   structs for set queries, an entity struct or nil for single-result queries, and an
   integer for counting queries.
 
@@ -163,14 +156,21 @@ defmodule Hologram.DB do
   A :string ordering reads the attribute's sort-key companion column, which every
   :string attribute derives.
   """
-  @spec run(module | %{atom => any}) :: list(struct) | struct | integer | nil
-  def run(query) do
+  @spec read(module | %{atom => any}) :: list(struct) | struct | integer | nil
+  def read(query) do
     term = Query.normalize(query)
 
     assert_no_placeholders!(term)
 
     QueryRunner.run(term, mapping())
   end
+
+  @doc """
+  Aborts the innermost enclosing transaction/2, making it return {:error, reason}. Raises
+  ArgumentError when called outside of a transaction.
+  """
+  @spec rollback(any) :: no_return
+  defdelegate rollback(reason), to: Connection
 
   @doc """
   Runs the given zero-arity function inside a database transaction and returns
@@ -405,7 +405,7 @@ defmodule Hologram.DB do
       [name | _rest] ->
         raise ArgumentError,
           message:
-            "cannot run a query term containing placeholders - placeholder #{inspect(name)} has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
+            "cannot read a query term containing placeholders - placeholder #{inspect(name)} has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
     end
   end
 
