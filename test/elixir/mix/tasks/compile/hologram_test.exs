@@ -51,15 +51,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end)
   end
 
+  # A build refuses a component's queries two ways, and both mean unbuildable here: a validation
+  # objecting to the term (Hologram.CompileError), and a query stage refusing its own arguments
+  # while the extractor evaluates the capture (ArgumentError). The question is whether the build
+  # can produce this component's queries at all, not which tier said no.
   defp buildable_queries?(module, entity_types) do
     Compiler.build_queries([module], entity_types)
     true
   rescue
+    ArgumentError -> false
     Hologram.CompileError -> false
   end
 
   # Only a component declaring a from_query prop can be refused - one without produces no terms,
-  # so neither the extractor nor the two validations have anything to object to. Asking the cheap
+  # so neither the extractor nor the validations have anything to object to. Asking the cheap
   # question first keeps this out of the suite's timing.
   defp declares_query_prop?(module) do
     Reflection.has_function?(module, :__props__, 0) and
