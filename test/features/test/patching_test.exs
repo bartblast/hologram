@@ -12,6 +12,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page15
   alias HologramFeatureTests.Patching.Page16
   alias HologramFeatureTests.Patching.Page17
+  alias HologramFeatureTests.Patching.Page18
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
@@ -1182,6 +1183,30 @@ defmodule HologramFeatureTests.PatchingTest do
       session
       |> assert_text(css("#result"), "1")
       |> assert_script_result(state, ["field", 2, 5, 30])
+    end
+  end
+
+  describe "adopting an element whose tag name carries case" do
+    feature "the first render keeps the SVG element the server sent", %{session: session} do
+      server_nodes = """
+      return ["art", "grad"].filter(
+        (id) => document.getElementById(id).__fromServer === true,
+      );
+      """
+
+      ids = ["art", "grad"]
+
+      session
+      |> visit(Page18)
+      |> assert_text(css("#result"), "0")
+      # Waiting for a click to land proves the client has rendered: the assertions below would
+      # pass on their own against a page that had booted no further than the server's markup.
+      |> click(button("Increment"))
+      |> assert_text(css("#result"), "1")
+      # A script element runs when it is created, so a second run means the first render rebuilt
+      # the page rather than adopting it, and the stamps below would be its own work.
+      |> assert_script_result("return window.__scriptRuns;", 1)
+      |> assert_script_result(server_nodes, ids)
     end
   end
 
