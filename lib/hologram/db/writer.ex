@@ -47,6 +47,19 @@ defmodule Hologram.DB.Writer do
     applied
   end
 
+  # Naming the row by type and id carries no claim, so under an actor this is delete/1 of a
+  # struct that carries none - the verb's own operation, evaluated against the locked row.
+  # Without an actor there is nothing to evaluate and the row is deleted raw, as before.
+  @doc false
+  @spec delete(module, String.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
+  def delete(entity_type, id) do
+    if Context.actor_user_id() do
+      delete(%{struct!(entity_type) | id: id})
+    else
+      EntityOperations.delete(entity_type, id)
+    end
+  end
+
   @doc false
   @spec update(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity) do
@@ -74,6 +87,28 @@ defmodule Hologram.DB.Writer do
       end)
 
     applied
+  end
+
+  # The type-indexed twin of update/1: no struct, so no recorded changes and no claim - the
+  # changes are given outright and the operation is the verb's own.
+  @doc false
+  @spec update(module, String.t(), map | keyword) ::
+          :ok | {:error, %{atom => list(atom | {atom, any})}}
+  def update(entity_type, id, changes) do
+    if Context.actor_user_id() do
+      {:ok, applied} =
+        Connection.transaction(fn ->
+          row = lock_row!(entity_type, id, "update")
+
+          evaluate_operation!(:update, row)
+
+          EntityOperations.update(entity_type, id, changes)
+        end)
+
+      applied
+    else
+      EntityOperations.update(entity_type, id, changes)
+    end
   end
 
   defp apply_relationship_op(:add, entity_type, id, relationship_name, target_id) do

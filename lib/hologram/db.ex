@@ -21,16 +21,6 @@ defmodule Hologram.DB do
   @pool_name Hologram.DB.Pool
 
   @doc """
-  Adds the (source, target) edge to the given to-many relationship of the entity with
-  the given id. Idempotent - adding an existing edge is a no-op. Returns :ok. Naming
-  anything but a declared to-many relationship raises ArgumentError, and a missing
-  source or target entity raises through the edge's foreign keys.
-  """
-  @spec add_relationship(module, String.t(), atom, String.t()) :: :ok
-  defdelegate add_relationship(entity_type, id, relationship_name, target_id),
-    to: EntityOperations
-
-  @doc """
   Inserts the given entity as a full row - every column is named and bound explicitly -
   stamping created_at and updated_at with the same current UTC timestamp.
 
@@ -95,12 +85,17 @@ defmodule Hologram.DB do
   type and relationship that still reference the row, with nothing deleted. PostgreSQL
   reports the first such reference only. This is the one translated constraint error - any
   other constraint violation raises. Deleting a nonexistent id is a no-op. Returns :ok.
+
+  With an acting user set, the delete is evaluated against that user's policies for :delete,
+  against the row as it stands, read FOR UPDATE - naming the row by type and id carries no
+  claim, so delete/1 is the spelling for one on another operation's authority. Without an
+  acting user the delete is raw.
   """
   @spec delete(module, String.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity_type, id) do
     Validator.validate_writable!(entity_type)
 
-    EntityOperations.delete(entity_type, id)
+    Writer.delete(entity_type, id)
   end
 
   @doc """
@@ -144,15 +139,6 @@ defmodule Hologram.DB do
           reason: reason
     end
   end
-
-  @doc """
-  Deletes the (source, target) edge from the given to-many relationship of the entity
-  with the given id. Idempotent - deleting an absent edge is a no-op. Returns :ok.
-  Naming anything but a declared to-many relationship raises ArgumentError.
-  """
-  @spec delete_relationship(module, String.t(), atom, String.t()) :: :ok
-  defdelegate delete_relationship(entity_type, id, relationship_name, target_id),
-    to: EntityOperations
 
   @doc """
   Returns the entity of the given type with the given id, or nil when no row matches.
@@ -241,13 +227,18 @@ defmodule Hologram.DB do
 
   The misuses named above raise rather than returning, as does a constraint violation the
   mapping does not explain.
+
+  With an acting user set, the update is evaluated against that user's policies for :update,
+  against the row as it stands, read FOR UPDATE - naming the row by type and id carries no
+  claim, so update/1 is the spelling for one on another operation's authority. Without an
+  acting user the update is raw.
   """
   @spec update(module, String.t(), map | keyword) ::
           :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity_type, id, changes) do
     Validator.validate_writable!(entity_type)
 
-    EntityOperations.update(entity_type, id, changes)
+    Writer.update(entity_type, id, changes)
   end
 
   @doc """

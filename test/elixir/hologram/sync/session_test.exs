@@ -1,6 +1,7 @@
 defmodule Hologram.Sync.SessionTest do
   use Hologram.Test.DatabaseCase, async: false
 
+  import Hologram.Query, only: [add_relationship: 3, delete_relationship: 3]
   import Hologram.Test.Stubs
   import Mox
 
@@ -898,7 +899,10 @@ defmodule Hologram.Sync.SessionTest do
 
       # The child leaves the include window's reach without leaving the database - the board
       # window still roots it, so the client keeps the row and is told nothing.
-      DB.delete_relationship(Module3, source.id, :a, child.id)
+      source
+      |> delete_relationship(:a, child.id)
+      |> DB.update()
+
       Evaluator.round(@include_window, [])
 
       refute_receive {:sync_deltas, _cursor, _deltas}, 100
@@ -915,7 +919,10 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, _include_cursor, _include_fill}
       assert_receive {:sync_synced, :all}
 
-      DB.delete_relationship(Module3, source.id, :a, child.id)
+      source
+      |> delete_relationship(:a, child.id)
+      |> DB.update()
+
       Evaluator.round(@include_window, [])
       refute_receive {:sync_deltas, _cursor, _include_deltas}, 100
 
@@ -937,7 +944,10 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, _fill_cursor, _fill}
       assert_receive {:sync_synced, :all}
 
-      DB.delete_relationship(Module3, source.id, :a, child.id)
+      source
+      |> delete_relationship(:a, child.id)
+      |> DB.update()
+
       Evaluator.round(@include_window, [])
 
       assert_receive {:sync_deltas, _cursor, deltas}
@@ -999,7 +1009,9 @@ defmodule Hologram.Sync.SessionTest do
       |> Entity.new(c_id: required.id)
       |> DB.create!()
 
-    DB.add_relationship(Module3, source.id, :a, child.id)
+    source
+    |> add_relationship(:a, child.id)
+    |> DB.update()
 
     source
   end

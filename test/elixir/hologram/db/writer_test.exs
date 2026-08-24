@@ -283,6 +283,52 @@ defmodule Hologram.DB.WriterTest do
     end
   end
 
+  describe "delete/2" do
+    test "deletes raw without an acting user" do
+      entity =
+        Module1
+        |> Entity.new()
+        |> DB.create!()
+
+      assert delete(Module1, entity.id) == :ok
+      assert DB.get(Module1, entity.id) == nil
+    end
+
+    test "evaluates :delete for the acting user" do
+      user = create_user("id_deleter@example.com")
+
+      parent =
+        Module2
+        |> Entity.new()
+        |> DB.create!()
+
+      entity =
+        Module1
+        |> Entity.new(parent_id: parent.id)
+        |> DB.create!()
+
+      expected_msg =
+        ~s(not allowed to delete Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> delete(Module1, entity.id) end)
+      end
+
+      assert DB.get(Module1, entity.id) != nil
+
+      Auth.grant_role(user, parent, :admin)
+
+      assert as_user(user, fn -> delete(Module1, entity.id) end) == :ok
+      assert DB.get(Module1, entity.id) == nil
+    end
+
+    test "is a no-op for an id naming no row" do
+      user = create_user("id_ghost@example.com")
+
+      assert as_user(user, fn -> delete(Module1, Entity.generate_id()) end) == :ok
+    end
+  end
+
   describe "update/1" do
     test "applies changes and relationship ops under one transaction - a refused value applies no op" do
       source =
@@ -501,6 +547,53 @@ defmodule Hologram.DB.WriterTest do
                entity
                |> put_attribute(:priority, wrap_term("x"))
                |> update()
+    end
+  end
+
+  describe "update/3" do
+    test "writes raw without an acting user" do
+      entity =
+        Module1
+        |> Entity.new(priority: 5)
+        |> DB.create!()
+
+      assert update(Module1, entity.id, priority: 7) == :ok
+      assert DB.get(Module1, entity.id).priority == 7
+    end
+
+    test "evaluates :update for the acting user" do
+      user = create_user("id_editor@example.com")
+
+      entity =
+        Module1
+        |> Entity.new(priority: 5)
+        |> DB.create!()
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> update(Module1, entity.id, public: true) end)
+      end
+
+      assert DB.get(Module1, entity.id).public == false
+
+      Auth.grant_role(user, entity, :editor)
+
+      assert as_user(user, fn -> update(Module1, entity.id, public: true) end) == :ok
+      assert DB.get(Module1, entity.id).public == true
+    end
+
+    test "raises when the row does not exist" do
+      user = create_user("id_missing@example.com")
+      id = Entity.generate_id()
+
+      expected_msg =
+        ~s(cannot update Hologram.Test.Fixtures.Policy.Module1 - no entity with id "#{id}")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        as_user(user, fn -> update(Module1, id, public: true) end)
+      end
     end
   end
 end
