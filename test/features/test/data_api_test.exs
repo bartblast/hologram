@@ -37,7 +37,7 @@ defmodule HologramFeatureTests.DataApiTest do
   feature "answers a refused write inside a transaction and carries on", %{session: session} do
     session
     |> visit(DataApiPage)
-    |> click(button("Create duplicate account in transaction"))
+    |> click(button("Create duplicate in transaction"))
     |> assert_text(
       css("#result"),
       ~s(duplicate_account_in_transaction_{:ok, {{:error, %{handle: [:unique]}}, "other"}})
@@ -55,7 +55,7 @@ defmodule HologramFeatureTests.DataApiTest do
   feature "raises through the bang inside a transaction", %{session: session} do
     session
     |> visit(DataApiPage)
-    |> click(button("Raise on duplicate account in transaction"))
+    |> click(button("Raise on duplicate in transaction"))
     |> assert_text(css("#result"), "raise_on_duplicate_account_in_transaction_:raised")
   end
 

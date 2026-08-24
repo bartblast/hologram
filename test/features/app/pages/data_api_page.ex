@@ -18,17 +18,21 @@ defmodule HologramFeatureTests.DataApiPage do
     put_state(component, :result, nil)
   end
 
+  # A button is clicked by a label the browser driver matches as a SUBSTRING, so no label
+  # here may contain another's - a test clicking the shorter one would find both. That is
+  # why the in-transaction buttons say "duplicate" where their top-level twins say
+  # "duplicate account".
   def template do
     ~HOLO"""
     <p>
       <button $click={command: :create_duplicate_account}> Create duplicate account </button>
-      <button $click={command: :create_duplicate_account_in_transaction}> Create duplicate account in transaction </button>
+      <button $click={command: :create_duplicate_account_in_transaction}> Create duplicate in transaction </button>
       <button $click={command: :create_invalid_duplicate_account}> Create invalid duplicate account </button>
       <button $click={command: :create_review}> Create review </button>
       <button $click={command: :delete_referenced_product}> Delete referenced product </button>
       <button $click={command: :reject_invalid_review}> Reject invalid review </button>
       <button $click={command: :raise_on_duplicate_account}> Raise on duplicate account </button>
-      <button $click={command: :raise_on_duplicate_account_in_transaction}> Raise on duplicate account in transaction </button>
+      <button $click={command: :raise_on_duplicate_account_in_transaction}> Raise on duplicate in transaction </button>
       <button $click={command: :run_query}> Run query </button>
       <button $click={command: :update_into_duplicate_account}> Update into duplicate account </button>
       <button $click={command: :validate_changes}> Validate changes </button>
