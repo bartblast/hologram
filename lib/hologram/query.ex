@@ -9,7 +9,9 @@ defmodule Hologram.Query do
     quote do
       import Hologram.Query,
         only: [
+          add_relationship: 3,
           count: 1,
+          delete_relationship: 3,
           filter: 2,
           include: 2,
           include: 3,
@@ -34,6 +36,28 @@ defmodule Hologram.Query do
   @ordering_operators [:<, :<=, :>, :>=]
 
   @doc """
+  Records on the given entity struct that the given to-many relationship gains an edge to the
+  entity with the given target id, and returns the struct - the edge is added when DB.update/1
+  writes the struct.
+
+  The entity is an entity struct - one a query read, or one Entity.new/2 constructed. The
+  relationship is one of its declared to-many relationships, and the target id an entity id.
+  The edge is recorded in the struct's metadata under the relationship and target - a later
+  add_relationship/3 or delete_relationship/3 for the same edge replaces it, so a struct
+  carries one operation per edge, the last one recorded. The relationship's own field is left as
+  it is: what the struct holds of the relationship's rows is what the query read, and the
+  recorded edge is not among them until it is written. Whether the target exists is the
+  write's to judge.
+
+  Raises ArgumentError when the entity is not an entity struct, when the target id is not a
+  string, or when the relationship is a to-one relationship, an attribute, or unknown.
+  """
+  @spec add_relationship(struct, atom, String.t()) :: struct
+  def add_relationship(entity, relationship_name, target_id) do
+    put_relationship_op(entity, relationship_name, target_id, :add, "add_relationship")
+  end
+
+  @doc """
   Marks the given query as counting and returns the resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built
@@ -53,6 +77,21 @@ defmodule Hologram.Query do
     end
 
     %{term | cardinality: :count}
+  end
+
+  @doc """
+  Records on the given entity struct that the given to-many relationship loses its edge to the
+  entity with the given target id, and returns the struct - the edge is deleted when
+  DB.update/1 writes the struct. add_relationship/3 with the opposite operation: the same
+  arguments, the same recording, the same replacement of an earlier operation on the edge,
+  and deleting an edge the relationship does not hold is a no-op at the write.
+
+  Raises ArgumentError when the entity is not an entity struct, when the target id is not a
+  string, or when the relationship is a to-one relationship, an attribute, or unknown.
+  """
+  @spec delete_relationship(struct, atom, String.t()) :: struct
+  def delete_relationship(entity, relationship_name, target_id) do
+    put_relationship_op(entity, relationship_name, target_id, :delete, "delete_relationship")
   end
 
   @doc """
@@ -793,6 +832,24 @@ defmodule Hologram.Query do
     not is_tuple(value) and not is_list(value) and not is_struct(value, Range)
   end
 
+  # The two edge stages share everything but the operation they record.
+  defp put_relationship_op(entity, relationship_name, target_id, op, stage) do
+    entity_type = entity_type!(entity, stage)
+
+    validate_edge_relationship_name!(relationship_name, entity_type)
+
+    if not is_binary(target_id) do
+      raise ArgumentError,
+        message: "#{stage} takes a target id string, got: #{inspect(target_id)}"
+    end
+
+    %Metadata{relationship_ops: relationship_ops} = metadata = entity.__meta__
+
+    recorded_ops = Map.put(relationship_ops, {relationship_name, target_id}, op)
+
+    Map.put(entity, :__meta__, %Metadata{metadata | relationship_ops: recorded_ops})
+  end
+
   defp raise_unknown_operator!(operator, name) do
     raise ArgumentError,
       message:
@@ -845,6 +902,12 @@ defmodule Hologram.Query do
 
   defp system_attribute_names(entity_type) do
     Enum.map(entity_type.__system_attributes__(), fn {name, _type, _opts} -> name end)
+  end
+
+  defp to_many_relationship_names(entity_type) do
+    entity_type.__relationships__()
+    |> Enum.filter(fn {_name, type, _opts} -> is_list(type) end)
+    |> Enum.map(fn {name, _type, _opts} -> name end)
   end
 
   defp to_one_relationship_names(entity_type) do
@@ -935,6 +998,34 @@ defmodule Hologram.Query do
   # A comparison operand on an enum is one of the values it declares, refused where it is written
   # rather than where it is run: the database refuses an undeclared label too, but only once the
   # statement reaches it, and by then nothing can name the values there were to choose from.
+  # A declared to-many relationship - refused where it is written, with the fix named for the
+  # names an edge stage is most often given by mistake.
+  defp validate_edge_relationship_name!(name, entity_type) do
+    to_many_names = to_many_relationship_names(entity_type)
+
+    cond do
+      name in to_many_names ->
+        :ok
+
+      name in to_one_relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a to-one relationship in #{inspect(entity_type)} - only to-many relationships hold edges - set its reference via put_attribute(:#{name}_id, id)"
+
+      name in attribute_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is an attribute in #{inspect(entity_type)} - only to-many relationships hold edges - put it via put_attribute"
+
+      true ->
+        known = Enum.map_join(to_many_names, ", ", &inspect/1)
+
+        raise ArgumentError,
+          message:
+            "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known to-many relationships: #{known}"
+    end
+  end
+
   defp validate_enum_operand!(name, operand, entity_type) do
     case attribute_definition(entity_type, name) do
       {_name, :enum, opts} ->
