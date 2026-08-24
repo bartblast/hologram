@@ -1,17 +1,15 @@
 defmodule Hologram.DB.Connection do
   @moduledoc false
 
-  # The connection substrate of the database gateway: statement execution, the flat
-  # transaction model, and the test sandbox mode. The public surface lives on
+  # The connection substrate of the database gateway: statement execution, nested
+  # transactions as savepoints, and the test sandbox mode. The public surface lives on
   # Hologram.DB - these functions back its delegates, which also carry the docs.
 
   alias Hologram.DB
 
   @connection_key {__MODULE__, :connection}
 
-  @sandbox_rollback_throw {__MODULE__, :sandbox_rollback}
-
-  @sandbox_savepoint "hologram_transaction"
+  @rollback_throw {__MODULE__, :rollback}
 
   @timeout_key {__MODULE__, :timeout}
 
@@ -49,11 +47,14 @@ defmodule Hologram.DB.Connection do
   @spec rollback(any) :: no_return
   def rollback(reason) do
     case Process.get(@transaction_key) do
-      {:transaction, connection} ->
+      {:transaction, connection, 1} ->
         Postgrex.rollback(connection, reason)
 
-      {:sandbox_transaction, _pool_name} ->
-        throw({@sandbox_rollback_throw, reason})
+      {:transaction, _connection, depth} ->
+        throw({@rollback_throw, depth, reason})
+
+      {:sandbox_transaction, _pool_name, depth} ->
+        throw({@rollback_throw, depth, reason})
 
       _other ->
         raise ArgumentError, "cannot rollback - not inside a transaction"
@@ -66,10 +67,17 @@ defmodule Hologram.DB.Connection do
     opts = with_timeout_opt(opts)
 
     case Process.get(@transaction_key) do
-      nil -> run_transaction(fun, opts)
-      {:sandbox, pool_name} -> run_sandbox_transaction(fun, pool_name)
-      {:transaction, _connection} -> {:ok, fun.()}
-      {:sandbox_transaction, _pool_name} -> {:ok, fun.()}
+      nil ->
+        run_transaction(fun, opts)
+
+      {:sandbox, pool_name} ->
+        run_savepoint(fun, 1, {:sandbox_transaction, pool_name, 1})
+
+      {:transaction, connection, depth} ->
+        run_savepoint(fun, depth + 1, {:transaction, connection, depth + 1})
+
+      {:sandbox_transaction, pool_name, depth} ->
+        run_savepoint(fun, depth + 1, {:sandbox_transaction, pool_name, depth + 1})
     end
   end
 
@@ -124,8 +132,8 @@ defmodule Hologram.DB.Connection do
     case Process.get(@transaction_key) do
       nil -> Process.get(@connection_key, DB.pool_name())
       {:sandbox, pool_name} -> pool_name
-      {:sandbox_transaction, pool_name} -> pool_name
-      {:transaction, connection} -> connection
+      {:sandbox_transaction, pool_name, _depth} -> pool_name
+      {:transaction, connection, _depth} -> connection
     end
   end
 
@@ -133,27 +141,32 @@ defmodule Hologram.DB.Connection do
 
   defp restore_key(key, value), do: Process.put(key, value)
 
-  # Emulates the outermost transaction inside the externally managed sandbox transaction:
-  # a savepoint stands in for BEGIN, so that commit/abort of the emulated transaction
-  # never touches the sandbox transaction around it.
-  defp run_sandbox_transaction(fun, pool_name) do
-    Postgrex.query!(pool_name, "SAVEPOINT #{@sandbox_savepoint}", [])
-    Process.put(@transaction_key, {:sandbox_transaction, pool_name})
+  # A nested transaction is a savepoint named by its depth, the externally managed sandbox
+  # transaction being depth 0. Each level rolls back its own savepoint and no other, which
+  # is what lets a write verb's refusal return from the verb instead of unwinding the
+  # caller's transaction with it.
+  defp run_savepoint(fun, depth, mode) do
+    connection = current_connection()
+    outer_mode = Process.get(@transaction_key)
+    savepoint = "hologram_#{depth}"
+
+    Postgrex.query!(connection, "SAVEPOINT #{savepoint}", [])
+    Process.put(@transaction_key, mode)
 
     try do
       result = fun.()
-      Postgrex.query!(pool_name, "RELEASE SAVEPOINT #{@sandbox_savepoint}", [])
+      Postgrex.query!(connection, "RELEASE SAVEPOINT #{savepoint}", [])
       {:ok, result}
     rescue
       exception ->
-        Postgrex.query!(pool_name, "ROLLBACK TO SAVEPOINT #{@sandbox_savepoint}", [])
+        Postgrex.query!(connection, "ROLLBACK TO SAVEPOINT #{savepoint}", [])
         reraise exception, __STACKTRACE__
     catch
-      :throw, {@sandbox_rollback_throw, reason} ->
-        Postgrex.query!(pool_name, "ROLLBACK TO SAVEPOINT #{@sandbox_savepoint}", [])
+      :throw, {@rollback_throw, thrown_depth, reason} when thrown_depth == depth ->
+        Postgrex.query!(connection, "ROLLBACK TO SAVEPOINT #{savepoint}", [])
         {:error, reason}
     after
-      Process.put(@transaction_key, {:sandbox, pool_name})
+      Process.put(@transaction_key, outer_mode)
     end
   end
 
@@ -163,7 +176,7 @@ defmodule Hologram.DB.Connection do
     Postgrex.transaction(
       connection,
       fn connection ->
-        Process.put(@transaction_key, {:transaction, connection})
+        Process.put(@transaction_key, {:transaction, connection, 1})
 
         try do
           fun.()

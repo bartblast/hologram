@@ -5,6 +5,8 @@ defmodule Hologram.DB.ConnectionTest do
 
   alias Hologram.DB.Config
 
+  @insert_given_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "updated_at") VALUES ($1, now(), now())|
+
   @insert_returning_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "updated_at") VALUES (gen_random_uuid(), now(), now()) RETURNING "id"|
 
   defp count_by_id(id) do
@@ -13,6 +15,13 @@ defmodule Hologram.DB.ConnectionTest do
 
     {:ok, %Postgrex.Result{rows: [[count]]}} = query(count_sql, [id])
     count
+  end
+
+  defp delete_by_id(id) do
+    delete_sql = ~s|DELETE FROM "hologram_data"."test_fixtures_entity_module1" WHERE "id" = $1|
+
+    {:ok, _result} = query(delete_sql, [id])
+    :ok
   end
 
   describe "query/3" do
@@ -26,7 +35,7 @@ defmodule Hologram.DB.ConnectionTest do
   end
 
   describe "rollback/1" do
-    test "makes the enclosing transaction return the reason" do
+    test "makes the innermost enclosing transaction return the reason" do
       assert transaction(fn -> rollback(:some_reason) end) == {:error, :some_reason}
     end
 
@@ -47,28 +56,98 @@ defmodule Hologram.DB.ConnectionTest do
 
       assert count_by_id(inserted_id) == 1
 
-      delete_sql =
-        ~s|DELETE FROM "hologram_data"."test_fixtures_entity_module1" WHERE "id" = $1|
-
-      {:ok, _result} = query(delete_sql, [inserted_id])
+      delete_by_id(inserted_id)
     end
 
-    test "joins the ongoing transaction when nested" do
-      assert transaction(fn -> transaction(fn -> :inner end) end) == {:ok, {:ok, :inner}}
-    end
-
-    test "rollback in a joined transaction aborts the whole flat transaction" do
+    test "keeps the enclosing transaction usable after a nested statement fails" do
       result =
         transaction(fn ->
           {:ok, %Postgrex.Result{rows: [[id]]}} = query(@insert_returning_id_sql)
-          Process.put(:inserted_id, id)
-          transaction(fn -> rollback(:aborted) end)
+          Process.put(:outer_id, id)
+
+          transaction(fn ->
+            {:error, %Postgrex.Error{}} = query(@insert_given_id_sql, [id])
+            rollback(:refused)
+          end)
+
+          {:ok, _result} = query("SELECT 1")
+
+          :usable
         end)
 
-      inserted_id = Process.get(:inserted_id)
+      outer_id = Process.get(:outer_id)
 
-      assert result == {:error, :aborted}
-      assert count_by_id(inserted_id) == 0
+      assert result == {:ok, :usable}
+      assert count_by_id(outer_id) == 1
+
+      delete_by_id(outer_id)
+    end
+
+    test "returns a nested transaction's result to the enclosing one" do
+      assert transaction(fn -> transaction(fn -> :inner end) end) == {:ok, {:ok, :inner}}
+    end
+
+    test "rollback in a nested transaction aborts it alone and the enclosing one continues" do
+      result =
+        transaction(fn ->
+          {:ok, %Postgrex.Result{rows: [[outer_id]]}} = query(@insert_returning_id_sql)
+          Process.put(:outer_id, outer_id)
+
+          nested_result =
+            transaction(fn ->
+              {:ok, %Postgrex.Result{rows: [[inner_id]]}} = query(@insert_returning_id_sql)
+              Process.put(:inner_id, inner_id)
+              rollback(:aborted)
+            end)
+
+          assert nested_result == {:error, :aborted}
+
+          :continued
+        end)
+
+      outer_id = Process.get(:outer_id)
+
+      assert result == {:ok, :continued}
+      assert count_by_id(outer_id) == 1
+      assert count_by_id(Process.get(:inner_id)) == 0
+
+      delete_by_id(outer_id)
+    end
+
+    test "rolls each nesting level back on its own" do
+      result =
+        transaction(fn ->
+          {:ok, %Postgrex.Result{rows: [[outer_id]]}} = query(@insert_returning_id_sql)
+          Process.put(:outer_id, outer_id)
+
+          transaction(fn ->
+            {:ok, %Postgrex.Result{rows: [[middle_id]]}} = query(@insert_returning_id_sql)
+
+            transaction(fn ->
+              {:ok, %Postgrex.Result{rows: [[inner_id]]}} = query(@insert_returning_id_sql)
+              Process.put(:inner_id, inner_id)
+              rollback(:innermost)
+            end)
+
+            assert count_by_id(Process.get(:inner_id)) == 0
+            assert count_by_id(middle_id) == 1
+
+            Process.put(:middle_id, middle_id)
+            rollback(:middle)
+          end)
+
+          assert count_by_id(Process.get(:middle_id)) == 0
+          assert count_by_id(outer_id) == 1
+
+          :continued
+        end)
+
+      outer_id = Process.get(:outer_id)
+
+      assert result == {:ok, :continued}
+      assert count_by_id(outer_id) == 1
+
+      delete_by_id(outer_id)
     end
 
     test "rolls back and reraises on exceptions" do
