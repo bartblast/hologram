@@ -29,6 +29,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Component.Module19, as: ComponentModule19
   alias Hologram.Test.Fixtures.Component.Module20, as: ComponentModule20
   alias Hologram.Test.Fixtures.Component.Module24, as: ComponentModule24
+  alias Hologram.Test.Fixtures.Component.Module28, as: ComponentModule28
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
@@ -686,6 +687,20 @@ defmodule Hologram.CompilerTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries([ComponentModule19], entity_types)
+      end
+    end
+
+    test "raises for a registered query claiming the server's authority", %{
+      entity_types: entity_types
+    } do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module28 claims the server's " <>
+          "authority with trust() - a component's query is read for the session user on both " <>
+          "tiers, so it cannot claim another. Drop trust(), or read through the backend API in " <>
+          "a command."
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries([ComponentModule28], entity_types)
       end
     end
   end

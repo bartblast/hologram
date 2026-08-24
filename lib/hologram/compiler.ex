@@ -311,8 +311,10 @@ defmodule Hologram.Compiler do
 
   Raises Hologram.CompileError when a registered query reads an entity type declaring no allow
   lines - default deny makes it statically dead, returning no rows when it is the query's root and
-  no embedded row when it is an include target - and when a registered query filters or orders on
-  a server-only attribute, which the client never holds and so could never evaluate locally.
+  no embedded row when it is an include target - when a registered query filters or orders on
+  a server-only attribute, which the client never holds and so could never evaluate locally, and
+  when a registered query claims the server's own authority with trust/1, which a component's
+  query has no authority to claim on either tier.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_2/README.md
   """
@@ -327,6 +329,7 @@ defmodule Hologram.Compiler do
 
     Enum.each(module_queries, &validate_readable_queries!/1)
     Enum.each(module_queries, &validate_client_evaluable_queries!/1)
+    Enum.each(module_queries, &validate_untrusted_queries!/1)
 
     terms = Enum.flat_map(module_queries, fn {_module, module_terms} -> module_terms end)
     entries = Registry.build(terms)
@@ -2011,6 +2014,10 @@ defmodule Hologram.Compiler do
     end
   end
 
+  defp trusted_query_message(module) do
+    "the registered query in #{inspect(module)} claims the server's authority with trust() - a component's query is read for the session user on both tiers, so it cannot claim another. Drop trust(), or read through the backend API in a command."
+  end
+
   # A registered query is provisioned to the client, which evaluates it locally over rows that
   # never carry a server-only value - so it must not reference one.
   defp validate_client_evaluable_queries!({module, module_terms}) do
@@ -2050,6 +2057,17 @@ defmodule Hologram.Compiler do
 
         dead_entity_types ->
           raise Hologram.CompileError, message: dead_root_message(module, dead_entity_types)
+      end
+    end)
+  end
+
+  # A registered query is read for the session user on the server and replayed on the client from
+  # its own database - there is no server authority to claim on the client, and a claim the server
+  # honored would hand the client rows it may not hold.
+  defp validate_untrusted_queries!({module, module_terms}) do
+    Enum.each(module_terms, fn term ->
+      if term[:trust] == true do
+        raise Hologram.CompileError, message: trusted_query_message(module)
       end
     end)
   end
