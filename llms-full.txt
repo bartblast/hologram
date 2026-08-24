@@ -4030,6 +4030,8 @@ Our development roadmap is organized by timeline, with colors representing proxi
 
 Thank you for your interest in contributing to Hologram! This guide will help you get started with contributing to the project.
 
+Security vulnerabilities are the exception - report those privately (https://hologram.page/reference/reporting-vulnerabilities) instead of opening a public issue.
+
 #### Current Focus: Porting Erlang Functions
 
 The most impactful way to contribute right now is by helping port Erlang functions to JavaScript. This work expands Elixir standard library coverage in the browser, enabling more of the Elixir you know and love to run client-side.
