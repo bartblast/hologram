@@ -33,7 +33,9 @@ defmodule Hologram.Test do
 
       as_user(author, fn -> DB.create(post) end)
 
-  The write is evaluated as the user's :create, the way every write under an acting user is.
+  That write is evaluated as the user's :create - every write under an acting user is
+  evaluated against the verb's own operation, or against the one the entity claims through
+  authorize/2.
 
   Takes the user entity, a bare user id, or nil to run the function anonymously - the spelling
   for a block that must not carry the enclosing actor.
