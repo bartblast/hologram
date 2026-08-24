@@ -216,6 +216,9 @@ defmodule Hologram.DB do
   single-result query answering nil and a counting query counting only what the user may read -
   exactly as a template's registered query is. Without an acting user the query is read raw:
   the trusted tier, for seeds, tasks and jobs.
+
+  A query marked with trust/1 is read raw whether or not a user is acting - the server's own
+  authority, the spelling for a read that must see past the acting user's policies.
   """
   @spec read(module | %{atom => any}) :: list(struct) | struct | integer | nil
   def read(query) do
@@ -223,9 +226,12 @@ defmodule Hologram.DB do
 
     assert_no_placeholders!(term)
 
-    case Context.actor_user_id() do
-      nil -> QueryRunner.run(term, mapping())
-      actor_user_id -> QueryRunner.run_policied(term, mapping(), actor_user_id)
+    actor_user_id = Context.actor_user_id()
+
+    if term[:trust] == true or is_nil(actor_user_id) do
+      QueryRunner.run(term, mapping())
+    else
+      QueryRunner.run_policied(term, mapping(), actor_user_id)
     end
   end
 

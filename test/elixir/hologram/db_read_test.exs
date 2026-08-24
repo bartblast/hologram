@@ -176,6 +176,24 @@ defmodule Hologram.DBReadTest do
       assert count == 2
     end
 
+    test "reads a trusted query raw under an acting user" do
+      user = create_user("db_read_trusted@example.com")
+      create_policy_module_2_entity()
+      create_policy_module_2_entity()
+
+      trusted_results =
+        as_user(user, fn ->
+          PolicyModule2
+          |> trust()
+          |> DB.read()
+        end)
+
+      untrusted_results = as_user(user, fn -> DB.read(PolicyModule2) end)
+
+      assert length(trusted_results) == 2
+      assert untrusted_results == []
+    end
+
     # Pins that no actor is the trusted tier rather than an anonymous session: the anonymous
     # semantics drop actor-gated rules, so PolicyModule2's "allow :read, to: :member" would
     # grant nothing and this would read [].
