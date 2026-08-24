@@ -3,6 +3,7 @@ defmodule Hologram.DB do
 
   use Supervisor
 
+  alias Hologram.Auth.Context
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
@@ -191,6 +192,12 @@ defmodule Hologram.DB do
 
   A :string ordering reads the attribute's sort-key companion column, which every
   :string attribute derives.
+
+  With an acting user set, the query is read through that user's :read policies - the rows the
+  policies grant, each included relationship filtered by its own type's :read rules, a
+  single-result query answering nil and a counting query counting only what the user may read -
+  exactly as a template's registered query is. Without an acting user the query is read raw:
+  the trusted tier, for seeds, tasks and jobs.
   """
   @spec read(module | %{atom => any}) :: list(struct) | struct | integer | nil
   def read(query) do
@@ -198,7 +205,10 @@ defmodule Hologram.DB do
 
     assert_no_placeholders!(term)
 
-    QueryRunner.run(term, mapping())
+    case Context.actor_user_id() do
+      nil -> QueryRunner.run(term, mapping())
+      actor_user_id -> QueryRunner.run_policied(term, mapping(), actor_user_id)
+    end
   end
 
   @doc """
