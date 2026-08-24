@@ -4437,7 +4437,7 @@ After that:
 
 You get credit in the advisory under whatever name or handle you like, or none at all if you'd rather stay anonymous. Just say which.
 
-Anything exploitable gets a patch release rather than waiting for the next minor. The advisory goes public when that release does. The fix commit is public the moment it lands, so holding the advisory back any longer only keeps it from the people who need to upgrade.
+Anything exploitable gets a patch release rather than waiting for the next minor. The advisory goes public when that release does. The fix commit becomes public with that release, so holding the advisory back any longer only keeps it from the people who need to upgrade.
 
 If something turns out to need a redesign and can't move that fast, you'll hear where it stands rather than nothing at all.
 
