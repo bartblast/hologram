@@ -10,6 +10,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -364,6 +365,36 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert create(entity) == {:error, %{c_id: [:not_found]}}
       assert get(Module3, entity.id) == nil
       assert outbox_effects() == []
+    end
+
+    # PostgreSQL enforces foreign keys by triggers after the row goes in and abandons the
+    # statement at the first one that fails, so the second missing target is never its to
+    # report - it is asked about after the write, the way a second taken value is.
+    test "reports every missing reference target" do
+      assert create(Entity.new(Module3, b_id: Entity.generate_id(), c_id: Entity.generate_id())) ==
+               {:error, %{b_id: [:not_found], c_id: [:not_found]}}
+    end
+
+    # The values failed, so no write was attempted and nothing authoritative was learned - the
+    # reference is asked about all the same, and one submit answers for both.
+    test "reports a missing reference target beside a value violation" do
+      gone_id = Entity.generate_id()
+
+      assert create(Entity.new(Module13, parent_id: gone_id, title: nil)) ==
+               {:error, %{parent_id: [:not_found], title: [:required]}}
+    end
+
+    # A cleared reference names nothing to look for, and an optional one is free to stay empty.
+    test "skips a nil reference" do
+      assert create(Entity.new(Module13, parent_id: nil, title: nil)) ==
+               {:error, %{title: [:required]}}
+    end
+
+    # A value that is not an id cannot be bound to the existence query at all, so the field keeps
+    # the violation it earned - and the reference beside it is still asked about.
+    test "skips a reference carrying its own violation" do
+      assert create(Entity.new(Module3, b_id: Entity.generate_id(), c_id: "garbage")) ==
+               {:error, %{b_id: [:not_found], c_id: [type: :uuid]}}
     end
 
     test "reports a value violation and a taken unique value together" do

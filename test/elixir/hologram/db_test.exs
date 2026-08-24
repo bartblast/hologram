@@ -112,6 +112,11 @@ defmodule Hologram.DBTest do
                {:error, %{c_id: [:not_found]}}
     end
 
+    test "returns every missing reference target" do
+      assert create(Entity.new(Module3, b_id: Entity.generate_id(), c_id: Entity.generate_id())) ==
+               {:error, %{b_id: [:not_found], c_id: [:not_found]}}
+    end
+
     test "rejects role grants" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
@@ -227,6 +232,21 @@ defmodule Hologram.DBTest do
         end
 
       assert error.reason == %{parent_id: [:not_found]}
+    end
+
+    test "raises naming the missing target beside the value violation" do
+      gone_id = Entity.generate_id()
+
+      expected_msg =
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Entity.Module13:
+          * reference :parent_id "#{gone_id}" names no existing entity
+          * attribute :title is required\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        create!(Entity.new(Module13, parent_id: gone_id, title: nil))
+      end
     end
   end
 

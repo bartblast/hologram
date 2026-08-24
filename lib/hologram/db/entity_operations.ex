@@ -90,7 +90,7 @@ defmodule Hologram.DB.EntityOperations do
         violations = write_violations!(entity_type, refusal)
         values = Map.from_struct(entity)
 
-        {:error, advisory_unique_violations(entity_type, values, entity.id, violations)}
+        {:error, advisory_violations(entity_type, values, entity.id, violations)}
     end
   end
 
@@ -269,7 +269,7 @@ defmodule Hologram.DB.EntityOperations do
       {:error, refusal} ->
         violations = write_violations!(entity_type, refusal)
 
-        {:error, advisory_unique_violations(entity_type, changes_map, id, violations)}
+        {:error, advisory_violations(entity_type, changes_map, id, violations)}
     end
   end
 
@@ -280,24 +280,52 @@ defmodule Hologram.DB.EntityOperations do
       not is_nil(values[name])
   end
 
+  # A to-one reference is worth asking about only when it names something to look for: nil is a
+  # cleared reference rather than a missing one, and a field carrying its own violation holds a
+  # value no id column can be compared against - binding it would fail the query rather than
+  # answer it. To-many relationships have no column here at all; their edges carry their own.
+  defp advisory_reference_candidates(entity_type, values, violations) do
+    entity_type.__relationships__()
+    |> Enum.reject(fn {_name, target, _opts} -> is_list(target) end)
+    |> Enum.map(fn {name, target, _opts} -> {String.to_existing_atom("#{name}_id"), target} end)
+    |> Enum.filter(fn {field, _target} ->
+      not Map.has_key?(violations, field) and not is_nil(values[field])
+    end)
+  end
+
   # Completes an answer that stopped early. The database names the first constraint it refused
   # and abandons the statement, so every unique attribute it never reached is asked about here,
-  # as is every one of them when the values failed and no write was attempted at all. The
-  # candidate filter leaves a field that already carries a violation alone, so an authoritative
-  # answer is never replaced by an advisory one. Advisory by nature: what is taken now may be
-  # free by the resubmit, and the resubmit is answered by the write.
-  defp advisory_unique_violations(entity_type, values, id, violations) do
+  # as is every one of them when the values failed and no write was attempted at all. References
+  # are asked about the same way and for the same reason: a foreign key is enforced by a trigger
+  # after the row goes in, and the first one that fails abandons the rest. The candidate filters
+  # leave a field that already carries a violation alone, so an authoritative answer is never
+  # replaced by an advisory one - and references read the attributes' result rather than the
+  # original map, so one pass cannot overwrite the other. Advisory by nature: what is taken now
+  # may be free by the resubmit, and a target alive now may be gone - the resubmit is answered
+  # by the write.
+  defp advisory_violations(entity_type, values, id, violations) do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
-    entity_type.__attributes__()
-    |> Enum.filter(&advisory_candidate?(&1, values, violations))
-    |> Enum.reduce(violations, fn {name, type, _opts}, acc ->
-      column = Enum.find(columns, &(&1.source == {:attribute, name}))
+    attribute_violations =
+      entity_type.__attributes__()
+      |> Enum.filter(&advisory_candidate?(&1, values, violations))
+      |> Enum.reduce(violations, fn {name, type, _opts}, acc ->
+        column = Enum.find(columns, &(&1.source == {:attribute, name}))
 
-      if unique_value_taken?(table, column.name, values[name], type, id) do
-        Map.put(acc, name, [:unique])
-      else
+        if unique_value_taken?(table, column.name, values[name], type, id) do
+          Map.put(acc, name, [:unique])
+        else
+          acc
+        end
+      end)
+
+    entity_type
+    |> advisory_reference_candidates(values, attribute_violations)
+    |> Enum.reduce(attribute_violations, fn {field, target}, acc ->
+      if reference_target_exists?(target, values[field]) do
         acc
+      else
+        Map.put(acc, field, [:not_found])
       end
     end)
   end
@@ -522,6 +550,20 @@ defmodule Hologram.DB.EntityOperations do
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
+  end
+
+  # Whether the row a reference names is there, asked of the TARGET type's own table - the one
+  # question the mapping cannot answer from a declaration.
+  # sobelow_skip ["SQL.Query"]
+  defp reference_target_exists?(target, id) do
+    %{table: table} = Map.fetch!(DB.mapping(), target)
+
+    statement = ~s|SELECT EXISTS (SELECT 1 FROM #{qualified_table(table)} WHERE "id" = $1)|
+
+    case Connection.query(statement, [Codec.encode(id, :uuid)]) do
+      {:ok, %Postgrex.Result{rows: [[exists?]]}} -> exists?
+      {:error, error} -> raise error
+    end
   end
 
   # A to-one reference column carries the foreign key constraint that names it back, so a target
