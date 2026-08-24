@@ -14,6 +14,40 @@ defmodule Hologram.Template.Renderer do
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
 
+  # The characters a value cannot carry into a script element as the text of a JavaScript string
+  # literal, each with the escape sequence it is written as instead. Every sequence is valid
+  # inside all three kinds of literal - double-quoted, single-quoted and template - and reads back
+  # as the character it stands for, so the value arrives unchanged whichever quotes the template
+  # wrote around it.
+  #
+  #   \\   would eat the character after it
+  #   "    '    `    would close the literal
+  #   $    would open an expression inside a template literal
+  #   \n   and \r are not allowed inside a literal at all
+  #   NUL  is rewritten to U+FFFD by the HTML parser inside script data
+  #   <    so that "</script" can never form in a page's inline script
+  #
+  # Hologram.Compiler.Encoder escapes a shorter set for the same reason: it writes the quotes
+  # around its literal itself, so only one kind of quote can close it and "$" opens nothing. Here
+  # the template author writes the quotes, so every kind has to be covered.
+  #
+  # WARNING: must match SCRIPT_TEXT_ESCAPES in the client renderer (renderer.mjs). The text the
+  # two sides put inside a script element has to be identical, or the boot patch rebuilds the
+  # element instead of adopting it, and the script runs twice.
+  @script_text_escapes %{
+    "\\" => "\\\\",
+    "\"" => "\\\"",
+    "'" => "\\'",
+    "`" => "\\`",
+    "$" => "\\$",
+    "\n" => "\\n",
+    "\r" => "\\r",
+    <<0>> => "\\u{0}",
+    "<" => "\\u{3C}"
+  }
+
+  @script_text_escapable_chars Map.keys(@script_text_escapes)
+
   @typedoc """
   A node of an evaluated tree: only what a document can hold - elements, text, comments, and the
   doctype. Text and attribute values are unescaped, and each attribute value is a single string
@@ -405,17 +439,16 @@ defmodule Hologram.Template.Renderer do
     {{:element, tag_name, attributes, children}, component_registry, mutated_server_struct}
   end
 
-  # An expression evaluated inside a script element is entity-encoded at evaluation, unlike every
-  # other text in the tree. This is deliberate: in the HTML projection an interpolated value could
-  # otherwise break out of the script with a "</script" of its own, so encoding is the projection's
-  # safety and it must happen before the value merges with the script's literal code, which is the
-  # last moment the two are distinguishable.
+  # An expression evaluated inside a script element is escaped at evaluation, unlike every other
+  # text in the tree, which is held unescaped and escaped by whatever prints it. This is
+  # deliberate: in the tree the value merges with the script's literal code, which is the last
+  # moment the two are distinguishable, so the escaping that keeps a value from ending the script
+  # element, and from ending the string literal the template wrote it into, has to happen here.
   #
-  # WARNING: the client renderer diverges here on purpose (renderer.mjs expression case): it
-  # renders expressions unencoded, because it sets text through the DOM where no markup context
-  # exists to break out of. Do not "fix" either side alone.
+  # WARNING: must match the client renderer's expression case (renderer.mjs), which escapes the
+  # same characters the same way - see @script_text_escapes.
   def render_tree({:expression, {value}}, %Env{tag_name: "script"}, server_struct) do
-    {{:text, stringify_for_interpolation(value)}, %{}, server_struct}
+    {{:text, stringify_for_script_interpolation(value)}, %{}, server_struct}
   end
 
   def render_tree({:expression, {value}}, _env, server_struct) do
@@ -458,22 +491,31 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
-  Converts a value to a string for safe interpolation in HTML templates.
-  Always HTML-escapes the output to prevent XSS.
+  Converts a value to the text it contributes to a script element: its string form, escaped as
+  the text of a JavaScript string literal.
+
+  Every character that could end the literal, end the script element or be altered by the HTML
+  parser on the way in is written as an escape sequence that reads back as that character, and
+  every other character travels as itself. The value therefore reaches the script unchanged when
+  the template writes it between quotes of any kind, and it can never end the script it is part
+  of.
 
   ## Examples
 
-      iex> stringify_for_interpolation("hello")
+      iex> stringify_for_script_interpolation("hello")
       "hello"
-      
-      iex> stringify_for_interpolation("<script>")
-      "&lt;script&gt;"
+
+      iex> stringify_for_script_interpolation(~s(say "hi"))
+      ~S(say \\"hi\\")
+
+      iex> stringify_for_script_interpolation("</script>")
+      ~S(\\u{3C}/script>)
   """
-  @spec stringify_for_interpolation(any) :: String.t()
-  def stringify_for_interpolation(value) do
+  @spec stringify_for_script_interpolation(any) :: String.t()
+  def stringify_for_script_interpolation(value) do
     value
     |> to_string()
-    |> HtmlEntities.encode()
+    |> String.replace(@script_text_escapable_chars, &Map.fetch!(@script_text_escapes, &1))
   end
 
   defp build_layout_props_dom(page_module, page_state) do

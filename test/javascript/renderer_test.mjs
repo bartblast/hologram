@@ -8946,7 +8946,7 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    // Note: server-side version escapes
+    // Note: escaped the same way on the server
     it("expression inside script elements", () => {
       // <script>{"abc < xyz"}</script>
       const node = Type.tuple([
@@ -8971,11 +8971,93 @@ describe("Renderer", () => {
 
       const expected = vnode(
         "script",
-        {attrs: {}, key: "__hologramScript__:abc < xyz", on: {}},
-        ["abc < xyz"],
+        {attrs: {}, key: "__hologramScript__:abc \\u{3C} xyz", on: {}},
+        ["abc \\u{3C} xyz"],
       );
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    // The text an expression contributes to a script element, as rendered by the client.
+    const scriptExpressionText = (text) => {
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("script"),
+        Type.list(),
+        Type.list([
+          Type.tuple([
+            Type.atom("expression"),
+            Type.tuple([Type.bitstring(text)]),
+          ]),
+        ]),
+      ]);
+
+      return Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      ).children[0].text;
+    };
+
+    it("expression inside script elements, backslash char", () => {
+      assert.equal(scriptExpressionText("\\"), "\\\\");
+    });
+
+    it("expression inside script elements, double quote char", () => {
+      assert.equal(scriptExpressionText('"'), '\\"');
+    });
+
+    it("expression inside script elements, single quote char", () => {
+      assert.equal(scriptExpressionText("'"), "\\'");
+    });
+
+    it("expression inside script elements, backtick char", () => {
+      assert.equal(scriptExpressionText("`"), "\\`");
+    });
+
+    it("expression inside script elements, dollar char", () => {
+      assert.equal(scriptExpressionText("$"), "\\$");
+    });
+
+    it("expression inside script elements, line feed char", () => {
+      assert.equal(scriptExpressionText("\n"), "\\n");
+    });
+
+    it("expression inside script elements, carriage return char", () => {
+      assert.equal(scriptExpressionText("\r"), "\\r");
+    });
+
+    it("expression inside script elements, null char", () => {
+      assert.equal(scriptExpressionText("\0"), "\\u{0}");
+    });
+
+    it("expression inside script elements, less-than char", () => {
+      assert.equal(scriptExpressionText("<"), "\\u{3C}");
+    });
+
+    it("expression inside script elements, closing script tag", () => {
+      assert.equal(scriptExpressionText("</script>"), "\\u{3C}/script>");
+    });
+
+    it("expression inside script elements, template literal expression opener", () => {
+      assert.equal(scriptExpressionText("${x}"), "\\${x}");
+    });
+
+    it("expression inside script elements, greater-than and ampersand chars travel as themselves", () => {
+      assert.equal(scriptExpressionText("a > b & c"), "a > b & c");
+    });
+
+    it("expression inside script elements, non-ASCII text travels as itself", () => {
+      assert.equal(scriptExpressionText("全息图"), "全息图");
+    });
+
+    it("expression inside script elements, text around escaped chars is kept", () => {
+      assert.equal(
+        scriptExpressionText('say "hi" <b>'),
+        'say \\"hi\\" \\u{3C}b>',
+      );
     });
 
     // Note: server-side version escapes

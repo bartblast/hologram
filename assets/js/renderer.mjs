@@ -21,6 +21,37 @@ import Vdom from "./vdom.mjs";
 import {h as vnode} from "./vendor/snabbdom/build/index.js";
 import vnodeToHtml from "snabbdom-to-html";
 
+// The characters a value cannot carry into a script element as the text of a JavaScript string
+// literal, each with the escape sequence it is written as instead. Every sequence is valid inside
+// all three kinds of literal - double-quoted, single-quoted and template - and reads back as the
+// character it stands for, so the value arrives unchanged whichever quotes the template wrote
+// around it.
+//
+//   \    would eat the character after it
+//   "    '    `    would close the literal
+//   $    would open an expression inside a template literal
+//   \n   and \r are not allowed inside a literal at all
+//   NUL  is rewritten to U+FFFD by the HTML parser inside script data
+//   <    so that "</script" can never form in a page's inline script
+//
+// WARNING: must match @script_text_escapes in Hologram.Template.Renderer. The text the two sides
+// put inside a script element has to be identical, or the boot patch rebuilds the element
+// instead of adopting it, and the script runs twice.
+const SCRIPT_TEXT_ESCAPES = {
+  "\\": "\\\\",
+  '"': '\\"',
+  "'": "\\'",
+  "`": "\\`",
+  $: "\\$",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\0": "\\u{0}",
+  "<": "\\u{3C}",
+};
+
+// One character class over the keys above, so the replace is a single pass.
+const SCRIPT_TEXT_ESCAPABLE_CHARS = /[\\"'`$\n\r\0<]/g;
+
 export default class Renderer {
   // Event listener bindings collected during the current render, each a {target, key, attach,
   // handler} descriptor (see EventListenerRegistry). A <window> or <document> tag pushes here (with
@@ -113,15 +144,15 @@ export default class Renderer {
           parentModule,
         );
 
-      case "expression":
+      case "expression": {
         // HTML escaping is done by Snabbdom.
-        //
-        // WARNING: the server's render_tree/3 diverges here on purpose: it entity-encodes an
-        // expression evaluated inside a script element, because in its HTML projection an
-        // interpolated value could otherwise break out of the script with a "</script" of its
-        // own. This renderer sets text through the DOM, where no markup context exists to break
-        // out of. Do not "fix" either side alone.
-        return $.toText(dom.data[1].data[0]);
+        const text = $.toText(dom.data[1].data[0]);
+
+        // WARNING: must match render_tree/3's script clause on the server: inside a script
+        // element both sides write the value as the text of a JavaScript string literal, escaped
+        // the same way - see SCRIPT_TEXT_ESCAPES.
+        return parentTagName === "script" ? $.#escapeScriptText(text) : text;
+      }
 
       case "page":
         return Renderer.renderDom(
@@ -808,6 +839,14 @@ export default class Renderer {
     }
 
     return null;
+  }
+
+  // Based on stringify_for_script_interpolation/1
+  static #escapeScriptText(text) {
+    return text.replace(
+      SCRIPT_TEXT_ESCAPABLE_CHARS,
+      (char) => SCRIPT_TEXT_ESCAPES[char],
+    );
   }
 
   // A spread entry is {:spread, {value}} - its name slot holds the :spread atom rather than a
