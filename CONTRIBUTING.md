@@ -16,7 +16,7 @@ Issues are where that discussion happens. You describe the problem, we talk thro
 
 ## What helps most
 
-Bugs, feature requests, and docs feedback go through [GitHub issues](https://github.com/bartblast/hologram/issues). For help with your own project, the [Discord](https://discord.gg/huJWNuqt8J) and the [Elixir Forum](https://elixirforum.com/hologram) are the places to get unstuck.
+Bugs, feature requests, and docs feedback go through [GitHub issues](https://github.com/bartblast/hologram/issues). Security vulnerabilities are the exception - [report those privately](SECURITY.md) instead of opening a public issue. For help with your own project, the [Discord](https://discord.gg/huJWNuqt8J) and the [Elixir Forum](https://elixirforum.com/hologram) are the places to get unstuck.
 
 If a bug or missing feature is blocking you, say so in the issue and describe what it blocks - a project, a migration, a decision whether to adopt Hologram. Blockers weigh heavily when I decide what to work on next.
 

@@ -10,8 +10,10 @@ import {
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
+import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Erlang_Binary from "../../../assets/js/erlang/binary.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -1695,6 +1697,32 @@ describe("Erlang_Binary", () => {
       assertBoxedStrictEqual(result, Bitstring.fromText("hello universe"));
     });
 
+    it("raises ArgumentError if function arity is not 1 and the pattern has no match", () => {
+      const subject = Bitstring.fromText("hello");
+      const pattern = Bitstring.fromText("z");
+
+      const replacement = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("_matched"),
+              Type.variablePattern("_extra"),
+            ],
+            guards: [],
+            body: (_context) => Bitstring.fromText("X"),
+          },
+        ],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => replace(subject, pattern, replacement),
+        "ArgumentError",
+        buildArgumentErrorMsg(3, "not a valid replacement"),
+      );
+    });
+
     it("error frame carries args and error_info", () => {
       const subject = Type.bitstring("abc");
       const pattern = Type.bitstring("b");
@@ -1988,6 +2016,188 @@ describe("Erlang_Binary", () => {
               params: (_context) => [Type.variablePattern("_matched")],
               guards: [],
               body: (_context) => Type.atom("not_binary"),
+            },
+          ],
+          contextFixture(),
+        );
+
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError if function arity is not 1", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+
+        const replacement = Type.anonymousFunction(
+          2,
+          [
+            {
+              params: (_context) => [
+                Type.variablePattern("_matched"),
+                Type.variablePattern("_extra"),
+              ],
+              guards: [],
+              body: (_context) => Bitstring.fromText("X"),
+            },
+          ],
+          contextFixture(),
+        );
+
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          buildArgumentErrorMsg(3, "not a valid replacement"),
+        );
+      });
+
+      it("raises ArgumentError if function arity is not 1 and the pattern has no match", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("z");
+
+        const replacement = Type.anonymousFunction(
+          2,
+          [
+            {
+              params: (_context) => [
+                Type.variablePattern("_matched"),
+                Type.variablePattern("_extra"),
+              ],
+              guards: [],
+              body: (_context) => Bitstring.fromText("X"),
+            },
+          ],
+          contextFixture(),
+        );
+
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          buildArgumentErrorMsg(3, "not a valid replacement"),
+        );
+      });
+
+      it("raises ArgumentError if function arity is zero", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+
+        const replacement = Type.anonymousFunction(
+          0,
+          [
+            {
+              params: (_context) => [],
+              guards: [],
+              body: (_context) => Bitstring.fromText("X"),
+            },
+          ],
+          contextFixture(),
+        );
+
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          buildArgumentErrorMsg(3, "not a valid replacement"),
+        );
+      });
+
+      it("raises ArgumentError if the function raises", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+
+        const replacement = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Type.variablePattern("_matched")],
+              guards: [],
+              body: (_context) =>
+                Interpreter.raiseError("RuntimeError", "boom"),
+            },
+          ],
+          contextFixture(),
+        );
+
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError if the function throws", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+
+        const replacement = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Type.variablePattern("_matched")],
+              guards: [],
+              body: (_context) => Erlang["throw/1"](Type.atom("boom")),
+            },
+          ],
+          contextFixture(),
+        );
+
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError if the function exits", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+
+        const replacement = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Type.variablePattern("_matched")],
+              guards: [],
+              body: (_context) => Erlang["exit/1"](Type.atom("boom")),
+            },
+          ],
+          contextFixture(),
+        );
+
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError if no function clause matches", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+
+        const replacement = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Bitstring.fromText("x")],
+              guards: [],
+              body: (_context) => Bitstring.fromText("X"),
             },
           ],
           contextFixture(),
@@ -2558,6 +2768,39 @@ describe("Erlang_Binary", () => {
           Type.tuple([Type.integer(0), Type.integer(10)]),
         ]),
       ]);
+
+      let caught;
+
+      try {
+        replace(subject, pattern, replacement, options);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        binaryErrorFrame(
+          "replace",
+          Type.list([subject, pattern, replacement, options]),
+        ),
+      ]);
+    });
+
+    it("error frame carries no cause for a raising replacement function", () => {
+      const subject = Type.bitstring("abc");
+      const pattern = Type.bitstring("b");
+      const options = Type.list();
+
+      const replacement = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("_matched")],
+            guards: [],
+            body: (_context) => Interpreter.raiseError("RuntimeError", "boom"),
+          },
+        ],
+        contextFixture(),
+      );
 
       let caught;
 

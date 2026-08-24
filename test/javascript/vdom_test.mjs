@@ -376,6 +376,44 @@ describe("Vdom", () => {
       assert.equal(container.querySelector("p"), serverP);
     });
 
+    // Inside <svg> a tag name keeps its case, and the parser corrects the markup's spelling to the
+    // one the spec gives, so the DOM reads back "linearGradient" however it was written.
+    it("adopts an element whose tag name carries case", () => {
+      // The element carries the key of its place, the way every rendered element does. A node
+      // mirrored as itself carries none, so a failed match rebuilds it rather than keeping it.
+      const {container, patched} = adopt(
+        [
+          vnode("svg", {attrs: {}}, [
+            vnode("defs", {attrs: {}}, [
+              vnode("linearGradient", {attrs: {id: "grad"}, key: "my_key"}, []),
+            ]),
+          ]),
+        ],
+        '<svg><defs><linearGradient id="grad"></linearGradient></defs></svg>',
+      );
+
+      const serverGradient = container.querySelector("#grad");
+      patched();
+
+      assert.equal(container.querySelector("#grad"), serverGradient);
+    });
+
+    // A node the render has no counterpart for is written down as it really is, and inside <svg>
+    // that means keeping the case. There is no element called "lineargradient".
+    it("names a mirrored-as-itself element the way its namespace spells it", () => {
+      const {mirrored} = adopt(
+        [],
+        '<p>hello</p><svg><defs><linearGradient id="grad"></linearGradient></defs></svg>',
+      );
+
+      const [paragraph, svg] = mirrored.children;
+
+      assert.equal(paragraph.sel, "p");
+      assert.equal(svg.sel, "svg");
+      assert.equal(svg.children[0].sel, "defs");
+      assert.equal(svg.children[0].children[0].sel, "linearGradient");
+    });
+
     it("does not adopt a script element for a different source", () => {
       const {container, patched} = adopt(
         [
