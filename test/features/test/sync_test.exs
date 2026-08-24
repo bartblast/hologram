@@ -12,6 +12,7 @@ defmodule HologramFeatureTests.SyncTest do
   alias Hologram.Test.SyncClient
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Entities.User
@@ -25,9 +26,13 @@ defmodule HologramFeatureTests.SyncTest do
     await_evaluator_drain()
 
     tables =
-      Enum.map_join([Document, Folder, Review, Product, RoleGrant, User], ", ", fn entity_type ->
-        ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
-      end)
+      Enum.map_join(
+        [Document, Folder, Note, Review, Product, RoleGrant, User],
+        ", ",
+        fn entity_type ->
+          ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
+        end
+      )
 
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
 
