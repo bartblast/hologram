@@ -180,8 +180,8 @@ defmodule Hologram.DB do
   violations} or raises through its bang, and the transaction stays usable. An exception
   rolls the transaction back and re-raises.
 
-  A nested call costs two statements (SAVEPOINT and RELEASE), and PostgreSQL caches 64
-  subtransactions per session - a transaction opening more than that, such as a loop of
+  A nested call costs two statements (SAVEPOINT and RELEASE, three when it rolls back),
+  and PostgreSQL caches 64 subtransactions per session - a transaction opening more than that, such as a loop of
   writes inside one transaction/2, slows every other session's visibility checks for as
   long as it runs. Split such batches into transactions of their own.
   """

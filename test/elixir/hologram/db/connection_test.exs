@@ -83,6 +83,43 @@ defmodule Hologram.DB.ConnectionTest do
       delete_by_id(outer_id)
     end
 
+    # The probe runs one level down and its result travels out through rollback/1: a
+    # savepoint that is gone cannot be released, and the refusal aborts the transaction
+    # until the enclosing level rolls its own savepoint back.
+    test "releases a nested transaction's savepoint when it raises" do
+      result =
+        transaction(fn ->
+          transaction(fn ->
+            Enum.each(1..3, fn _index ->
+              try do
+                transaction(fn -> raise RuntimeError, "boom" end)
+              rescue
+                _error in RuntimeError -> :ok
+              end
+            end)
+
+            rollback(query("RELEASE SAVEPOINT hologram_3"))
+          end)
+        end)
+
+      assert {:ok, {:error, {:error, %Postgrex.Error{postgres: %{code: code}}}}} = result
+      assert code == :invalid_savepoint_specification
+    end
+
+    test "releases a nested transaction's savepoint when it rolls back" do
+      result =
+        transaction(fn ->
+          transaction(fn ->
+            Enum.each(1..3, fn _index -> transaction(fn -> rollback(:aborted) end) end)
+
+            rollback(query("RELEASE SAVEPOINT hologram_3"))
+          end)
+        end)
+
+      assert {:ok, {:error, {:error, %Postgrex.Error{postgres: %{code: code}}}}} = result
+      assert code == :invalid_savepoint_specification
+    end
+
     test "returns a nested transaction's result to the enclosing one" do
       assert transaction(fn -> transaction(fn -> :inner end) end) == {:ok, {:ok, :inner}}
     end

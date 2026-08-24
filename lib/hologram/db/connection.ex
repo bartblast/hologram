@@ -141,10 +141,21 @@ defmodule Hologram.DB.Connection do
 
   defp restore_key(key, value), do: Process.put(key, value)
 
+  defp rollback_savepoint(connection, savepoint) do
+    Postgrex.query!(connection, "ROLLBACK TO SAVEPOINT #{savepoint}", [])
+    Postgrex.query!(connection, "RELEASE SAVEPOINT #{savepoint}", [])
+  end
+
   # A nested transaction is a savepoint named by its depth, the externally managed sandbox
   # transaction being depth 0. Each level rolls back its own savepoint and no other, which
   # is what lets a write verb's refusal return from the verb instead of unwinding the
   # caller's transaction with it.
+  #
+  # A rollback releases the savepoint as well: ROLLBACK TO leaves it defined, and a name
+  # reused at the same depth hides the earlier savepoint rather than replacing it - so a
+  # loop of refused writes inside one transaction would pile up a subtransaction per
+  # refusal, against the 64 PostgreSQL caches per session, for as long as the transaction
+  # ran.
   defp run_savepoint(fun, depth, mode) do
     connection = current_connection()
     outer_mode = Process.get(@transaction_key)
@@ -159,11 +170,11 @@ defmodule Hologram.DB.Connection do
       {:ok, result}
     rescue
       exception ->
-        Postgrex.query!(connection, "ROLLBACK TO SAVEPOINT #{savepoint}", [])
+        rollback_savepoint(connection, savepoint)
         reraise exception, __STACKTRACE__
     catch
       :throw, {@rollback_throw, thrown_depth, reason} when thrown_depth == depth ->
-        Postgrex.query!(connection, "ROLLBACK TO SAVEPOINT #{savepoint}", [])
+        rollback_savepoint(connection, savepoint)
         {:error, reason}
     after
       Process.put(@transaction_key, outer_mode)
