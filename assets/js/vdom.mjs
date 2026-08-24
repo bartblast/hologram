@@ -324,6 +324,10 @@ export default class Vdom {
   // so the patch decides what happens to it - matching it by tag or key and keeping it, or
   // removing it. It has to describe the node truthfully, children included: a vnode that claims
   // to be empty makes the patch append content the node already has.
+  //
+  // The tag is named the way its namespace spells it - localName is lowercase for HTML, whose tag
+  // names have no case, and verbatim for SVG and MathML, whose do. Lowercasing everything would
+  // name an element that does not exist.
   static #vnodeOfDomNode(domNode) {
     if (domNode.nodeType === Node.TEXT_NODE) {
       return rawVnode(
@@ -353,13 +357,7 @@ export default class Vdom {
       ),
     );
 
-    return rawVnode(
-      domNode.tagName.toLowerCase(),
-      data,
-      children,
-      undefined,
-      domNode,
-    );
+    return rawVnode(domNode.localName, data, children, undefined, domNode);
   }
 }
 

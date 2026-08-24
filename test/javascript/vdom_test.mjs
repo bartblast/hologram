@@ -398,6 +398,22 @@ describe("Vdom", () => {
       assert.equal(container.querySelector("#grad"), serverGradient);
     });
 
+    // A node the render has no counterpart for is written down as it really is, and inside <svg>
+    // that means keeping the case. There is no element called "lineargradient".
+    it("names a mirrored-as-itself element the way its namespace spells it", () => {
+      const {mirrored} = adopt(
+        [],
+        '<p>hello</p><svg><defs><linearGradient id="grad"></linearGradient></defs></svg>',
+      );
+
+      const [paragraph, svg] = mirrored.children;
+
+      assert.equal(paragraph.sel, "p");
+      assert.equal(svg.sel, "svg");
+      assert.equal(svg.children[0].sel, "defs");
+      assert.equal(svg.children[0].children[0].sel, "linearGradient");
+    });
+
     it("does not adopt a script element for a different source", () => {
       const {container, patched} = adopt(
         [
