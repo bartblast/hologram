@@ -3,7 +3,10 @@ defmodule Hologram.DBTest do
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.DB
+  import Hologram.Query, only: [put_attribute: 3]
+  import Hologram.Test, only: [as_user: 2]
 
+  alias Hologram.AccessDeniedError
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Connection
   alias Hologram.DB.Introspection
@@ -16,6 +19,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.WriteError
 
   describe "init/1" do
     test "starts only the connection pool in test" do
@@ -81,6 +85,17 @@ defmodule Hologram.DBTest do
   end
 
   describe "create/1" do
+    test "evaluates the claim under an acting user" do
+      entity = Entity.new(Module1)
+
+      expected_msg =
+        ~s(not allowed to create Hologram.Test.Fixtures.Entity.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(Entity.generate_id(), fn -> create(entity) end)
+      end
+    end
+
     # Both shapes in one test: the first create binds {:ok, _} or the match fails, and the
     # second pins the violation travelling out through the gateway unchanged.
     test "returns the unique violation from the write itself" do
@@ -256,6 +271,71 @@ defmodule Hologram.DBTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         delete(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+      end
+    end
+  end
+
+  describe "delete/1" do
+    test "deletes the given entity struct" do
+      {:ok, entity} = create(Entity.new(Module1))
+
+      assert delete(entity) == :ok
+      assert get(Module1, entity.id) == nil
+    end
+  end
+
+  describe "delete!/1" do
+    test "deletes the given entity struct" do
+      {:ok, entity} = create(Entity.new(Module1))
+
+      assert delete!(entity) == :ok
+      assert get(Module1, entity.id) == nil
+    end
+
+    test "lets a denied claim propagate" do
+      {:ok, entity} = create(Entity.new(Module1))
+
+      expected_msg =
+        ~s(not allowed to delete Hologram.Test.Fixtures.Entity.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(Entity.generate_id(), fn -> delete!(entity) end)
+      end
+
+      assert get(Module1, entity.id) != nil
+    end
+
+    test "raises on a restricted delete" do
+      {:ok, target} = create(Entity.new(Module1))
+
+      {:ok, source} =
+        Module3
+        |> Entity.new(c_id: target.id)
+        |> create()
+
+      expected_msg =
+        "cannot delete Hologram.Test.Fixtures.Entity.Module1 #{inspect(target.id)} - " <>
+          "still referenced by Hologram.Test.Fixtures.Entity.Module3 through :c"
+
+      assert_error WriteError, expected_msg, fn -> delete!(target) end
+
+      assert get(Module3, source.id) != nil
+    end
+
+    test "raises on a restricted delete inside a transaction" do
+      {:ok, target} = create(Entity.new(Module1))
+
+      {:ok, _source} =
+        Module3
+        |> Entity.new(c_id: target.id)
+        |> create()
+
+      expected_msg =
+        "cannot delete Hologram.Test.Fixtures.Entity.Module1 #{inspect(target.id)} - " <>
+          "still referenced by Hologram.Test.Fixtures.Entity.Module3 through :c"
+
+      assert_error WriteError, expected_msg, fn ->
+        transaction(fn -> delete!(target) end)
       end
     end
   end
@@ -527,6 +607,111 @@ defmodule Hologram.DBTest do
     end
   end
 
+  describe "update!/1" do
+    test "writes the changes recorded on the struct" do
+      {:ok, entity} =
+        Module2
+        |> Entity.new(c: "before")
+        |> create()
+
+      assert entity
+             |> put_attribute(:c, "after")
+             |> update!() == :ok
+
+      assert get(Module2, entity.id).c == "after"
+    end
+
+    test "lets a denied claim propagate" do
+      {:ok, entity} =
+        Module2
+        |> Entity.new(c: "before")
+        |> create()
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Entity.Module2 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(Entity.generate_id(), fn ->
+          entity
+          |> put_attribute(:c, "after")
+          |> update!()
+        end)
+      end
+
+      assert get(Module2, entity.id).c == "before"
+    end
+
+    test "raises on a refused value" do
+      {:ok, entity} =
+        Module19
+        |> Entity.new(slug: "taken")
+        |> create()
+
+      {:ok, other_entity} =
+        Module19
+        |> Entity.new(slug: "free")
+        |> create()
+
+      expected_msg =
+        "cannot update Hologram.Test.Fixtures.Entity.Module19 #{inspect(other_entity.id)}:\n" <>
+          ~s|  * attribute :slug "taken" is already taken|
+
+      assert_error WriteError, expected_msg, fn ->
+        other_entity
+        |> put_attribute(:slug, "taken")
+        |> update!()
+      end
+
+      assert get(Module19, entity.id).slug == "taken"
+    end
+
+    test "names the value the write used, not the one the struct holds" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(slug: "written")
+        |> create()
+
+      {:ok, other_entity} =
+        Module19
+        |> Entity.new(slug: "spare")
+        |> create()
+
+      # The recorded change is what the write uses - a field set directly on the struct
+      # afterwards is neither written nor named in the refusal.
+      entity = %{put_attribute(other_entity, :slug, "written") | slug: "set directly"}
+
+      expected_msg =
+        "cannot update Hologram.Test.Fixtures.Entity.Module19 #{inspect(other_entity.id)}:\n" <>
+          ~s|  * attribute :slug "written" is already taken|
+
+      assert_error WriteError, expected_msg, fn -> update!(entity) end
+    end
+
+    test "raises on a refused value inside a transaction" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(slug: "held")
+        |> create()
+
+      {:ok, other_entity} =
+        Module19
+        |> Entity.new(slug: "spare")
+        |> create()
+
+      expected_msg =
+        "cannot update Hologram.Test.Fixtures.Entity.Module19 #{inspect(other_entity.id)}:\n" <>
+          ~s|  * attribute :slug "held" is already taken|
+
+      assert_error WriteError, expected_msg, fn ->
+        transaction(fn ->
+          other_entity
+          |> put_attribute(:slug, "held")
+          |> update!()
+        end)
+      end
+    end
+  end
+
   describe "update!/3" do
     test "returns :ok" do
       {:ok, entity} =
@@ -629,14 +814,27 @@ defmodule Hologram.DBTest do
   end
 
   describe "update/1" do
-    test "raises a teaching error for a struct argument" do
-      entity = Entity.new(Module1)
+    test "writes the changes recorded on the struct" do
+      {:ok, entity} =
+        Module2
+        |> Entity.new(c: "before")
+        |> create()
+
+      assert entity
+             |> put_attribute(:c, "after")
+             |> update() == :ok
+
+      assert get(Module2, entity.id).c == "after"
+    end
+
+    test "raises a teaching error for a struct carrying nothing recorded" do
+      {:ok, entity} = create(Entity.new(Module1))
 
       expected_msg =
-        "update takes explicit changes, not a modified struct - pass the changed attributes: " <>
-          "DB.update(Hologram.Test.Fixtures.Entity.Module1, entity.id, attribute: value). " <>
-          "Full-row writes from a struct aren't supported: they would overwrite concurrent " <>
-          "changes to fields you didn't touch."
+        "update takes recorded changes - put values with put_attribute and edges with " <>
+          "add_relationship or delete_relationship. A field set directly on the struct is " <>
+          "not recorded: writing the whole struct would overwrite concurrent changes to " <>
+          "fields you didn't touch."
 
       assert_error ArgumentError, expected_msg, fn -> update(entity) end
     end

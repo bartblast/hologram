@@ -3,8 +3,11 @@ defmodule Hologram.QueryTest do
 
   import Hologram.Query
 
+  alias Hologram.Entity
+  alias Hologram.Entity.Metadata
   alias Hologram.Query.Placeholder
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -20,6 +23,179 @@ defmodule Hologram.QueryTest do
       offset: nil,
       order_by: []
     }
+  end
+
+  describe "add_relationship/3" do
+    test "keeps the rest of the metadata" do
+      metadata = %Metadata{attribute_changes: %{c_id: "x"}, claim: :trust}
+      entity = %{Entity.new(Module3) | __meta__: metadata}
+      target_id = Entity.generate_id()
+
+      result = add_relationship(entity, :a, target_id)
+
+      assert result.__meta__.attribute_changes == %{c_id: "x"}
+      assert result.__meta__.claim == :trust
+      assert result.__meta__.relationship_ops == %{{:a, target_id} => :add}
+    end
+
+    test "leaves the relationship's own field as it is" do
+      entity = Entity.new(Module3)
+
+      result = add_relationship(entity, :a, Entity.generate_id())
+
+      assert result.a == entity.a
+    end
+
+    test "records an add operation for the edge" do
+      entity = Entity.new(Module3)
+      target_id = Entity.generate_id()
+
+      result = add_relationship(entity, :a, target_id)
+
+      assert result.__meta__ == %Metadata{relationship_ops: %{{:a, target_id} => :add}}
+    end
+
+    test "records one operation per edge, several edges coexisting" do
+      target_id_1 = Entity.generate_id()
+      target_id_2 = Entity.generate_id()
+
+      result =
+        Module3
+        |> Entity.new()
+        |> add_relationship(:a, target_id_1)
+        |> add_relationship(:a, target_id_2)
+
+      assert result.__meta__.relationship_ops == %{
+               {:a, target_id_1} => :add,
+               {:a, target_id_2} => :add
+             }
+    end
+
+    test "replaces a delete operation recorded for the same edge" do
+      target_id = Entity.generate_id()
+
+      result =
+        Module3
+        |> Entity.new()
+        |> delete_relationship(:a, target_id)
+        |> add_relationship(:a, target_id)
+
+      assert result.__meta__.relationship_ops == %{{:a, target_id} => :add}
+    end
+
+    test "raises on a to-one relationship name" do
+      entity = Entity.new(Module3)
+
+      expected_msg =
+        ":c is a to-one relationship in Hologram.Test.Fixtures.Entity.Module3 - only to-many relationships hold edges - set its reference via put_attribute(:c_id, id)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        add_relationship(entity, :c, Entity.generate_id())
+      end
+    end
+
+    test "raises on an attribute name" do
+      entity = Entity.new(Module16)
+
+      expected_msg =
+        ":name is an attribute in Hologram.Test.Fixtures.Entity.Module16 - only to-many relationships hold edges - put it via put_attribute"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        add_relationship(entity, :name, Entity.generate_id())
+      end
+    end
+
+    test "raises on an unknown relationship name" do
+      entity = Entity.new(Module3)
+
+      expected_msg =
+        "unknown relationship :nope in Hologram.Test.Fixtures.Entity.Module3 - known to-many relationships: :a"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        add_relationship(entity, :nope, Entity.generate_id())
+      end
+    end
+
+    test "raises when the entity is not an entity struct" do
+      assert_error ArgumentError, ~s(add_relationship takes an entity struct, got: "x"), fn ->
+        add_relationship(wrap_term("x"), :a, Entity.generate_id())
+      end
+    end
+
+    test "raises when the target id is not a string" do
+      entity = Entity.new(Module3)
+      expected_msg = "add_relationship takes a target id string, got: 123"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        add_relationship(entity, :a, wrap_term(123))
+      end
+    end
+  end
+
+  describe "authorize/2" do
+    test "keeps the rest of the metadata" do
+      target_id = Entity.generate_id()
+
+      result =
+        Module3
+        |> Entity.new()
+        |> put_attribute(c_id: target_id)
+        |> add_relationship(:a, target_id)
+        |> authorize(:archive)
+
+      assert result.__meta__.attribute_changes == %{c_id: target_id}
+      assert result.__meta__.relationship_ops == %{{:a, target_id} => :add}
+      assert result.__meta__.claim == {:authorize, :archive}
+    end
+
+    test "records the claim for the operation" do
+      entity = Entity.new(Module2, c: "x")
+
+      result = authorize(entity, :archive)
+
+      assert result.__meta__ == %Metadata{claim: {:authorize, :archive}}
+    end
+
+    test "raises when the entity is not an entity struct" do
+      assert_error ArgumentError, ~s(authorize takes an entity struct, got: "x"), fn ->
+        authorize(wrap_term("x"), :archive)
+      end
+    end
+
+    test "raises when the operation is not an atom" do
+      entity = Entity.new(Module2, c: "x")
+      expected_msg = ~s(authorize takes an operation atom, got: "archive")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        authorize(entity, wrap_term("archive"))
+      end
+    end
+
+    test "raises when the struct already carries an authorize claim" do
+      entity = Entity.new(Module2, c: "x")
+
+      expected_msg =
+        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim ({:authorize, :archive}) - a write claims exactly one authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        entity
+        |> authorize(:archive)
+        |> authorize(:publish)
+      end
+    end
+
+    test "raises when the struct already carries a trust claim" do
+      entity = Entity.new(Module2, c: "x")
+
+      expected_msg =
+        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim (:trust) - a write claims exactly one authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        entity
+        |> trust()
+        |> authorize(:archive)
+      end
+    end
   end
 
   describe "count/1" do
@@ -52,6 +228,67 @@ defmodule Hologram.QueryTest do
         Module2
         |> one()
         |> count()
+      end
+    end
+  end
+
+  describe "delete_relationship/3" do
+    test "keeps the rest of the metadata" do
+      metadata = %Metadata{attribute_changes: %{c_id: "x"}, claim: :trust}
+      entity = %{Entity.new(Module3) | __meta__: metadata}
+      target_id = Entity.generate_id()
+
+      result = delete_relationship(entity, :a, target_id)
+
+      assert result.__meta__.attribute_changes == %{c_id: "x"}
+      assert result.__meta__.claim == :trust
+      assert result.__meta__.relationship_ops == %{{:a, target_id} => :delete}
+    end
+
+    test "records a delete operation for the edge" do
+      entity = Entity.new(Module3)
+      target_id = Entity.generate_id()
+
+      result = delete_relationship(entity, :a, target_id)
+
+      assert result.__meta__ == %Metadata{relationship_ops: %{{:a, target_id} => :delete}}
+    end
+
+    test "replaces an add operation recorded for the same edge" do
+      target_id = Entity.generate_id()
+
+      result =
+        Module3
+        |> Entity.new()
+        |> add_relationship(:a, target_id)
+        |> delete_relationship(:a, target_id)
+
+      assert result.__meta__.relationship_ops == %{{:a, target_id} => :delete}
+    end
+
+    test "raises on a to-one relationship name" do
+      entity = Entity.new(Module3)
+
+      expected_msg =
+        ":c is a to-one relationship in Hologram.Test.Fixtures.Entity.Module3 - only to-many relationships hold edges - set its reference via put_attribute(:c_id, id)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        delete_relationship(entity, :c, Entity.generate_id())
+      end
+    end
+
+    test "raises when the entity is not an entity struct" do
+      assert_error ArgumentError, ~s(delete_relationship takes an entity struct, got: "x"), fn ->
+        delete_relationship(wrap_term("x"), :a, Entity.generate_id())
+      end
+    end
+
+    test "raises when the target id is not a string" do
+      entity = Entity.new(Module3)
+      expected_msg = "delete_relationship takes a target id string, got: 123"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        delete_relationship(entity, :a, wrap_term(123))
       end
     end
   end
@@ -1231,6 +1468,199 @@ defmodule Hologram.QueryTest do
 
     test "yields an empty list for a concrete term" do
       assert placeholder_names(filter(Module2, a: true)) == []
+    end
+  end
+
+  describe "put_attribute/2" do
+    test "accepts a map of values" do
+      entity = Entity.new(Module2, c: "x")
+
+      result = put_attribute(entity, %{b: 7})
+
+      assert result.b == 7
+      assert result.__meta__ == %Metadata{attribute_changes: %{b: 7}}
+    end
+
+    test "keeps the rest of the metadata" do
+      metadata = %Metadata{claim: :trust, relationship_ops: %{{:a, "x"} => :add}}
+      entity = %{Entity.new(Module3) | __meta__: metadata}
+
+      result = put_attribute(entity, b_id: Entity.generate_id())
+
+      assert result.__meta__.claim == :trust
+      assert result.__meta__.relationship_ops == %{{:a, "x"} => :add}
+    end
+
+    test "merges into the changes already recorded, the later value replacing the earlier" do
+      result =
+        Module2
+        |> Entity.new(c: "x")
+        |> put_attribute(a: true, c: "y")
+        |> put_attribute(c: "z")
+
+      assert result.c == "z"
+      assert result.__meta__ == %Metadata{attribute_changes: %{a: true, c: "z"}}
+    end
+
+    test "sets a to-one reference field" do
+      target_id = Entity.generate_id()
+      entity = Entity.new(Module3)
+
+      result = put_attribute(entity, b_id: target_id)
+
+      assert result.b_id == target_id
+      assert result.__meta__ == %Metadata{attribute_changes: %{b_id: target_id}}
+    end
+
+    test "sets the values on the struct and records them as changes" do
+      entity = Entity.new(Module2, c: "x")
+
+      result = put_attribute(entity, a: true, c: "y")
+
+      assert result.a == true
+      assert result.c == "y"
+      assert result.__meta__ == %Metadata{attribute_changes: %{a: true, c: "y"}}
+    end
+
+    test "raises on a system attribute name" do
+      entity = Entity.new(Module2, c: "x")
+
+      expected_msg =
+        ":id is a system attribute of Hologram.Test.Fixtures.Entity.Module2 - it is managed automatically and can't be put"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(entity, id: Entity.generate_id())
+      end
+    end
+
+    test "raises on a to-many relationship name" do
+      entity = Entity.new(Module3)
+
+      expected_msg =
+        ":a is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be put - add its edges via add_relationship"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(entity, a: [])
+      end
+    end
+
+    test "raises on a to-one relationship name" do
+      entity = Entity.new(Module3)
+
+      expected_msg =
+        ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be put - set its reference via :c_id"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(entity, c: Entity.new(Module1))
+      end
+    end
+
+    test "raises on an unknown name" do
+      entity = Entity.new(Module3)
+
+      expected_msg =
+        "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module3 - known attributes: :b_id, :c_id"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(entity, nope: 1)
+      end
+    end
+
+    test "raises when the entity is not an entity struct" do
+      assert_error ArgumentError, ~s(put_attribute takes an entity struct, got: "x"), fn ->
+        put_attribute(wrap_term("x"), a: true)
+      end
+
+      assert_error ArgumentError,
+                   "put_attribute takes an entity struct, got: Hologram.Test.Fixtures.Entity.Module2",
+                   fn -> put_attribute(wrap_term(Module2), a: true) end
+    end
+
+    test "raises when the values are neither a keyword list nor a map" do
+      entity = Entity.new(Module2, c: "x")
+
+      assert_error ArgumentError,
+                   "put_attribute takes a keyword list or a map of attribute values, got: [1, 2]",
+                   fn -> put_attribute(entity, [1, 2]) end
+
+      assert_error ArgumentError,
+                   ~s(put_attribute takes a keyword list or a map of attribute values, got: "a"),
+                   fn -> put_attribute(entity, wrap_term("a")) end
+    end
+  end
+
+  describe "put_attribute/3" do
+    test "sets the value on the struct and records it as a change" do
+      entity = Entity.new(Module2, c: "x")
+
+      result = put_attribute(entity, :a, true)
+
+      assert result.a == true
+      assert result.__meta__ == %Metadata{attribute_changes: %{a: true}}
+    end
+
+    test "raises on an unknown name" do
+      entity = Entity.new(Module2, c: "x")
+
+      expected_msg =
+        "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(entity, :nope, 1)
+      end
+    end
+  end
+
+  describe "trust/1" do
+    test "keeps the rest of the metadata" do
+      result =
+        Module2
+        |> Entity.new(c: "x")
+        |> put_attribute(a: true)
+        |> trust()
+
+      assert result.__meta__.attribute_changes == %{a: true}
+      assert result.__meta__.claim == :trust
+    end
+
+    test "records the claim" do
+      entity = Entity.new(Module2, c: "x")
+
+      result = trust(entity)
+
+      assert result.__meta__ == %Metadata{claim: :trust}
+    end
+
+    test "raises when the entity is not an entity struct" do
+      assert_error ArgumentError, ~s(trust takes an entity struct, got: "x"), fn ->
+        trust(wrap_term("x"))
+      end
+    end
+
+    test "raises when the struct already carries an authorize claim" do
+      entity = Entity.new(Module2, c: "x")
+
+      expected_msg =
+        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim ({:authorize, :archive}) - a write claims exactly one authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        entity
+        |> authorize(:archive)
+        |> trust()
+      end
+    end
+
+    test "raises when the struct already carries a trust claim" do
+      entity = Entity.new(Module2, c: "x")
+
+      expected_msg =
+        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim (:trust) - a write claims exactly one authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        entity
+        |> trust()
+        |> trust()
+      end
     end
   end
 end

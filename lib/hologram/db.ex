@@ -9,6 +9,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryRunner
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.DB.Writer
   alias Hologram.Entity.Validator
   alias Hologram.Migrator
   alias Hologram.Query
@@ -18,16 +19,6 @@ defmodule Hologram.DB do
   @mapping_key {__MODULE__, :mapping}
 
   @pool_name Hologram.DB.Pool
-
-  @doc """
-  Adds the (source, target) edge to the given to-many relationship of the entity with
-  the given id. Idempotent - adding an existing edge is a no-op. Returns :ok. Naming
-  anything but a declared to-many relationship raises ArgumentError, and a missing
-  source or target entity raises through the edge's foreign keys.
-  """
-  @spec add_relationship(module, String.t(), atom, String.t()) :: :ok
-  defdelegate add_relationship(entity_type, id, relationship_name, target_id),
-    to: EntityOperations
 
   @doc """
   Inserts the given entity as a full row - every column is named and bound explicitly -
@@ -45,6 +36,13 @@ defmodule Hologram.DB do
   taken by the next attempt. A write refuses at the first violated database constraint and
   reports no other of its own.
 
+  With an acting user set, the write is evaluated against that user's policies for :create - or
+  for the operation the entity claims through authorize/2 - against the row being inserted, and
+  raises Hologram.AccessDeniedError when no rule grants it. An entity claiming the server's own
+  authority through trust/1 is written without evaluation. Without an acting user an unclaimed
+  write is raw - the trusted tier - and a claimed operation is evaluated with the anonymous
+  semantics. The returned entity carries no claim and no recorded changes.
+
   Misuse raises rather than returning - a role grant, which is written only through
   grant_role/revoke_role - as does a constraint violation the mapping does not explain.
   """
@@ -52,7 +50,7 @@ defmodule Hologram.DB do
   def create(entity) do
     Validator.validate_writable!(entity.__struct__)
 
-    EntityOperations.create(entity)
+    Writer.create(entity)
   end
 
   @doc """
@@ -87,12 +85,59 @@ defmodule Hologram.DB do
   type and relationship that still reference the row, with nothing deleted. PostgreSQL
   reports the first such reference only. This is the one translated constraint error - any
   other constraint violation raises. Deleting a nonexistent id is a no-op. Returns :ok.
+
+  With an acting user set, the delete is evaluated against that user's policies for :delete,
+  against the row as it stands, read FOR UPDATE - naming the row by type and id carries no
+  claim, so delete/1 is the spelling for one on another operation's authority. Without an
+  acting user the delete is raw.
   """
   @spec delete(module, String.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity_type, id) do
     Validator.validate_writable!(entity_type)
 
-    EntityOperations.delete(entity_type, id)
+    Writer.delete(entity_type, id)
+  end
+
+  @doc """
+  Deletes the given entity struct together with its own outgoing to-many edges, in one
+  transaction, and returns :ok. delete/2 for a struct in hand rather than a type and an id -
+  an incoming reference restricts it the same way, returning
+  {:error, %{referenced_by: entity_type, relationship: name}}, and a struct whose id names no
+  row is a no-op.
+
+  With an acting user set, the delete is evaluated against that user's policies for :delete -
+  or for the operation the entity claims through authorize/2 - against the row as it stands,
+  read FOR UPDATE, and raises Hologram.AccessDeniedError when no rule grants it. An entity
+  claiming the server's own authority through trust/1 is deleted without evaluation, and
+  without an acting user an unclaimed delete is raw. A struct whose id names no row is not
+  evaluated at all: there is nothing to authorize against.
+  """
+  @spec delete(struct) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
+  def delete(entity) when is_struct(entity) do
+    Validator.validate_writable!(entity.__struct__)
+
+    Writer.delete(entity)
+  end
+
+  @doc """
+  Like delete/1, raising Hologram.WriteError instead of returning {:error, ...}.
+
+  The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a
+  restriction takes delete/1. A denied claim raises Hologram.AccessDeniedError from either.
+  """
+  @spec delete!(struct) :: :ok
+  def delete!(entity) when is_struct(entity) do
+    case delete(entity) do
+      :ok ->
+        :ok
+
+      {:error, %{referenced_by: referenced_by, relationship: relationship} = reason} ->
+        raise WriteError,
+          message:
+            "cannot delete #{inspect(entity.__struct__)} #{inspect(entity.id)} - still " <>
+              "referenced by #{inspect(referenced_by)} through #{inspect(relationship)}",
+          reason: reason
+    end
   end
 
   @doc """
@@ -117,15 +162,6 @@ defmodule Hologram.DB do
   end
 
   @doc """
-  Deletes the (source, target) edge from the given to-many relationship of the entity
-  with the given id. Idempotent - deleting an absent edge is a no-op. Returns :ok.
-  Naming anything but a declared to-many relationship raises ArgumentError.
-  """
-  @spec delete_relationship(module, String.t(), atom, String.t()) :: :ok
-  defdelegate delete_relationship(entity_type, id, relationship_name, target_id),
-    to: EntityOperations
-
-  @doc """
   Returns the entity of the given type with the given id, or nil when no row matches.
   Column values are decoded back into their logical types.
 
@@ -144,14 +180,7 @@ defmodule Hologram.DB do
   defdelegate query(statement, placeholders \\ [], opts \\ []), to: Connection
 
   @doc """
-  Aborts the innermost enclosing transaction/2, making it return {:error, reason}. Raises
-  ArgumentError when called outside of a transaction.
-  """
-  @spec rollback(any) :: no_return
-  defdelegate rollback(reason), to: Connection
-
-  @doc """
-  Runs the given query against the database and returns its result - a list of entity
+  Reads the given query from the database and returns its result - a list of entity
   structs for set queries, an entity struct or nil for single-result queries, and an
   integer for counting queries.
 
@@ -163,14 +192,21 @@ defmodule Hologram.DB do
   A :string ordering reads the attribute's sort-key companion column, which every
   :string attribute derives.
   """
-  @spec run(module | %{atom => any}) :: list(struct) | struct | integer | nil
-  def run(query) do
+  @spec read(module | %{atom => any}) :: list(struct) | struct | integer | nil
+  def read(query) do
     term = Query.normalize(query)
 
     assert_no_placeholders!(term)
 
     QueryRunner.run(term, mapping())
   end
+
+  @doc """
+  Aborts the innermost enclosing transaction/2, making it return {:error, reason}. Raises
+  ArgumentError when called outside of a transaction.
+  """
+  @spec rollback(any) :: no_return
+  defdelegate rollback(reason), to: Connection
 
   @doc """
   Runs the given zero-arity function inside a database transaction and returns
@@ -212,23 +248,69 @@ defmodule Hologram.DB do
 
   The misuses named above raise rather than returning, as does a constraint violation the
   mapping does not explain.
+
+  With an acting user set, the update is evaluated against that user's policies for :update,
+  against the row as it stands, read FOR UPDATE - naming the row by type and id carries no
+  claim, so update/1 is the spelling for one on another operation's authority. Without an
+  acting user the update is raw.
   """
   @spec update(module, String.t(), map | keyword) ::
           :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity_type, id, changes) do
     Validator.validate_writable!(entity_type)
 
-    EntityOperations.update(entity_type, id, changes)
+    Writer.update(entity_type, id, changes)
   end
 
-  @doc false
-  @spec update(struct) :: no_return
+  @doc """
+  Writes the changes recorded on the given entity struct - the values put on it with
+  put_attribute and the edges recorded with add_relationship and delete_relationship - in one
+  transaction, and returns :ok.
+
+  Only recorded changes are written: a field set directly on the struct is not among them, and
+  a struct carrying nothing recorded raises ArgumentError, as does an id that names no entity.
+  The attribute changes go first and the edges follow, so a refused value leaves the edges
+  unapplied and an edge that raises takes the values with it.
+
+  With an acting user set, the write is evaluated against that user's policies for :update - or
+  for the operation the entity claims through authorize/2 - and raises
+  Hologram.AccessDeniedError when no rule grants it. The row is read FOR UPDATE first and the
+  claim is evaluated against it as it stands, before the recorded changes apply, so a rule
+  describing the state a change leaves ("an editor may pin a note that is not pinned") reads
+  the way it reads in a template. Nothing can change the row between the evaluation and the
+  write. An entity claiming the server's own authority through trust/1 is written without
+  evaluation, and without an acting user an unclaimed write is raw.
+
+  Returns {:error, violations} for a refused value exactly as update/3 does.
+  """
+  @spec update(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity) when is_struct(entity) do
-    raise ArgumentError,
-          "update takes explicit changes, not a modified struct - pass the changed attributes: " <>
-            "DB.update(#{inspect(entity.__struct__)}, entity.id, attribute: value). " <>
-            "Full-row writes from a struct aren't supported: they would overwrite concurrent " <>
-            "changes to fields you didn't touch."
+    Validator.validate_writable!(entity.__struct__)
+
+    Writer.update(entity)
+  end
+
+  @doc """
+  Like update/1, raising Hologram.WriteError instead of returning {:error, ...}.
+
+  The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
+  takes update/1. A denied claim raises Hologram.AccessDeniedError from either.
+  """
+  @spec update!(struct) :: :ok
+  def update!(entity) when is_struct(entity) do
+    case update(entity) do
+      :ok ->
+        :ok
+
+      {:error, violations} ->
+        entity_type = entity.__struct__
+
+        raise WriteError,
+          message:
+            "cannot update #{inspect(entity_type)} #{inspect(entity.id)}:\n" <>
+              refusal_lines(entity_type, violations, entity.__meta__.attribute_changes),
+          reason: violations
+    end
   end
 
   @doc """
@@ -405,7 +487,7 @@ defmodule Hologram.DB do
       [name | _rest] ->
         raise ArgumentError,
           message:
-            "cannot run a query term containing placeholders - placeholder #{inspect(name)} has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
+            "cannot read a query term containing placeholders - placeholder #{inspect(name)} has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
     end
   end
 

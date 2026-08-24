@@ -1277,6 +1277,21 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects the metadata field name" do
+      expected_msg =
+        "reserved name :__meta__ used for attribute in Hologram.Entity.ValidatorTest.ReservedAttrMeta - it holds the framework's own metadata on every entity struct and can't be declared"
+
+      code = """
+      defmodule Hologram.Entity.ValidatorTest.ReservedAttrMeta do
+        use Hologram.Entity
+
+        attribute :__meta__, :string
+      end
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+    end
+
     test "rejects reserved system attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
@@ -1478,6 +1493,21 @@ defmodule Hologram.Entity.ValidatorTest do
           relationship :owner, Module1, [:optional]
         end
       end
+    end
+
+    test "rejects the metadata field name" do
+      expected_msg =
+        "reserved name :__meta__ used for relationship in Hologram.Entity.ValidatorTest.ReservedRelationshipMeta - it holds the framework's own metadata on every entity struct and can't be declared"
+
+      code = """
+      defmodule Hologram.Entity.ValidatorTest.ReservedRelationshipMeta do
+        use Hologram.Entity
+
+        relationship :__meta__, Hologram.Test.Fixtures.Entity.Module1
+      end
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
     end
 
     test "rejects reserved system attribute names" do

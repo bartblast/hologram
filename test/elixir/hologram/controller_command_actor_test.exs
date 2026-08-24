@@ -110,6 +110,22 @@ defmodule Hologram.ControllerCommandActorTest do
     Map.put(@anonymous_session, :hologram_user_id, user_id)
   end
 
+  test "evaluates a plain write in a command handler as the session user's :create" do
+    user = create_user("user_0@example.com")
+
+    expected_msg = ~r/^not allowed to create Hologram\.Test\.Fixtures\.Policy\.Module1 "/
+
+    assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+      execute_command(
+        :my_command_creating_entity_on_the_users_authority,
+        %{},
+        session_of(user.id)
+      )
+    end
+
+    assert entity_count() == 0
+  end
+
   test "grants the creator roles of an entity created in a command handler to the session user" do
     user = create_user("user_1@example.com")
 

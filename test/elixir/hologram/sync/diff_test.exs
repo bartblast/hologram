@@ -1,6 +1,7 @@
 defmodule Hologram.Sync.DiffTest do
   use Hologram.Test.DatabaseCase, async: true
 
+  import Hologram.Query, only: [add_relationship: 3]
   import Hologram.Sync.Diff
 
   alias Hologram.Auth
@@ -47,7 +48,11 @@ defmodule Hologram.Sync.DiffTest do
       |> Entity.new(c_id: required.id)
       |> DB.create!()
 
-    Enum.each(targets, &DB.add_relationship(Module3, source.id, :a, &1.id))
+    Enum.each(targets, fn target ->
+      source
+      |> add_relationship(:a, target.id)
+      |> DB.update()
+    end)
 
     %{source | a: targets}
   end

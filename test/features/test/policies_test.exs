@@ -8,6 +8,7 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias Hologram.Entity
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.PoliciesPage
 
@@ -15,7 +16,7 @@ defmodule HologramFeatureTests.PoliciesTest do
   # user table make Postgres reject truncating the referenced table alone.
   setup do
     tables =
-      Enum.map_join([Document, Folder, RoleGrant, User], ", ", fn entity_type ->
+      Enum.map_join([Document, Folder, Note, RoleGrant, User], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 

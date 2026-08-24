@@ -2,6 +2,8 @@
 defmodule Hologram.Test.Fixtures.Controller.Module33 do
   use Hologram.Component
 
+  import Hologram.Query, only: [trust: 1]
+
   alias Hologram.Auth
   alias Hologram.DB
   alias Hologram.Entity
@@ -10,6 +12,15 @@ defmodule Hologram.Test.Fixtures.Controller.Module33 do
 
   @impl Component
   def command(:my_command_creating_entity, _params, server) do
+    Module1
+    |> Entity.new()
+    |> trust()
+    |> DB.create!()
+
+    %{server | next_action: nil}
+  end
+
+  def command(:my_command_creating_entity_on_the_users_authority, _params, server) do
     Module1
     |> Entity.new()
     |> DB.create!()
