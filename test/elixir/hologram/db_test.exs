@@ -466,6 +466,21 @@ defmodule Hologram.DBTest do
                {:error, %{code: [:unique], slug: [type: :string]}}
     end
 
+    test "returns a missing reference target" do
+      {:ok, target_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, entity} =
+        Module3
+        |> Entity.new(c_id: target_entity.id)
+        |> create()
+
+      assert update(Module3, entity.id, %{c_id: Entity.generate_id()}) ==
+               {:error, %{c_id: [:not_found]}}
+    end
+
     test "rejects role grants" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
@@ -540,6 +555,39 @@ defmodule Hologram.DBTest do
         end
 
       assert error.reason == %{slug: [:unique]}
+    end
+
+    test "raises naming the missing target" do
+      gone_id = Entity.generate_id()
+
+      {:ok, target_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, entity} =
+        Module3
+        |> Entity.new(c_id: target_entity.id)
+        |> create()
+
+      expected_msg =
+        normalize_newlines("""
+        cannot update Hologram.Test.Fixtures.Entity.Module3 "#{entity.id}":
+          * reference :c_id "#{gone_id}" names no existing entity\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        update!(Module3, entity.id, c_id: gone_id)
+      end
+
+      error =
+        try do
+          update!(Module3, entity.id, c_id: gone_id)
+        rescue
+          error in Hologram.WriteError -> error
+        end
+
+      assert error.reason == %{c_id: [:not_found]}
     end
   end
 

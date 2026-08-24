@@ -1107,6 +1107,41 @@ defmodule Hologram.DB.EntityOperationsTest do
                {:error, %{c_id: [type: :uuid]}}
     end
 
+    test "returns a missing reference target from the write itself" do
+      {:ok, target_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, created_entity} =
+        Module3
+        |> Entity.new(c_id: target_entity.id)
+        |> create()
+
+      assert update(Module3, created_entity.id, %{c_id: Entity.generate_id()}) ==
+               {:error, %{c_id: [:not_found]}}
+    end
+
+    test "changes nothing and records nothing for a refused reference" do
+      {:ok, target_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, created_entity} =
+        Module3
+        |> Entity.new(c_id: target_entity.id)
+        |> create()
+
+      effects_before = outbox_effects()
+
+      assert update(Module3, created_entity.id, %{c_id: Entity.generate_id()}) ==
+               {:error, %{c_id: [:not_found]}}
+
+      assert get(Module3, created_entity.id).c_id == target_entity.id
+      assert outbox_effects() == effects_before
+    end
+
     test "raises when changes name anything but declared attributes and to-one relationships" do
       {:ok, created_entity} =
         Module2

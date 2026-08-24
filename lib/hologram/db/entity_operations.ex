@@ -250,8 +250,8 @@ defmodule Hologram.DB.EntityOperations do
           # beside them, and a reader recomputes them rather than being told.
           data = Map.put(changes_map, :updated_at, updated_at)
 
-          # The transaction's reason is the violations map, the way create/1's is - a duplicate
-          # rolls the update back rather than raising.
+          # The transaction's reason is whatever refused the write, the way create/1's is - a
+          # refusal rolls the update back rather than raising.
           Connection.transaction(fn ->
             run_update!(statement, params, entity_type, id, data)
           end)
@@ -266,7 +266,9 @@ defmodule Hologram.DB.EntityOperations do
       {:ok, _appended} ->
         :ok
 
-      {:error, violations} ->
+      {:error, refusal} ->
+        violations = write_violations!(entity_type, refusal)
+
         {:error, advisory_unique_violations(entity_type, changes_map, id, violations)}
     end
   end
@@ -511,11 +513,10 @@ defmodule Hologram.DB.EntityOperations do
         raise ArgumentError,
               "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
 
+      # The writer explains nothing, the way insert/2 does not - update/3's merge point turns
+      # what refused the write into an answer or re-raises it.
       {:error, error} ->
-        case unique_violations(entity_type, error) do
-          nil -> raise error
-          violations -> Connection.rollback(violations)
-        end
+        Connection.rollback(error)
     end
   end
 
