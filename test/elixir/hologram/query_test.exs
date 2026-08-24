@@ -1089,6 +1089,15 @@ defmodule Hologram.QueryTest do
       assert normalize(normalized) == normalized
     end
 
+    test "keeps a trust mark" do
+      query =
+        Module2
+        |> trust()
+        |> normalize()
+
+      assert query.trust == true
+    end
+
     test "leaves orderings already keyed by id untouched" do
       query =
         Module2
@@ -1631,8 +1640,30 @@ defmodule Hologram.QueryTest do
       assert result.__meta__ == %Metadata{claim: :trust}
     end
 
-    test "raises when the entity is not an entity struct" do
-      assert_error ArgumentError, ~s(trust takes an entity struct, got: "x"), fn ->
+    test "marks a query term as trusted, keeping its stages" do
+      result =
+        Module2
+        |> filter(a: true)
+        |> trust()
+
+      assert result.filter == [{:a, :==, true}]
+      assert result.trust == true
+    end
+
+    test "marks an entity type's query as trusted" do
+      expected_term =
+        Module2
+        |> base_term()
+        |> Map.put(:trust, true)
+
+      assert trust(Module2) == expected_term
+    end
+
+    test "raises when the subject is neither an entity struct, an entity type nor a query term" do
+      expected_msg =
+        ~s("x" is not an entity type module or a query term - a query starts from a module with the "use Hologram.Entity" directive)
+
+      assert_error ArgumentError, expected_msg, fn ->
         trust(wrap_term("x"))
       end
     end

@@ -537,12 +537,25 @@ defmodule Hologram.Query do
   set. A write carries exactly one claim - a struct already claiming an authority, through
   authorize/2 or trust/1, cannot claim another.
 
-  Raises ArgumentError when the entity is not an entity struct, or when the struct already
-  carries a claim.
+  On a query - an entity type module or a query term - it marks the query as read on the
+  server's own authority: DB.read/1 reads it raw whether or not a user is acting. The spelling
+  for a read that must see past the acting user's policies, such as finding the user an invite
+  names by email when users may read only themselves. A registered query (a component's
+  from_query) cannot carry it - the build refuses one that does - since a component's query is
+  read for the session user on both tiers.
+
+  Raises ArgumentError when the subject is neither an entity struct, an entity type module nor
+  a query term, or when a struct already carries a claim.
   """
-  @spec trust(struct) :: struct
-  def trust(entity) do
+  @spec trust(struct | module | %{atom => any}) :: struct | %{atom => any}
+  def trust(%{__struct__: _entity_type} = entity) do
     put_claim(entity, :trust, "trust")
+  end
+
+  def trust(query) do
+    query
+    |> to_term()
+    |> Map.put(:trust, true)
   end
 
   defp attribute_names(entity_type) do
