@@ -66,9 +66,12 @@ defmodule Hologram.DB.EntityOperations do
 
             Outbox.append([put_effect(stamped_entity)])
 
+            # The grants ride in the create's own transaction rather than opening one each -
+            # a row never exists without its creator's roles, and a nested transaction per
+            # grant would be a savepoint per grant once transactions nest.
             entity
             |> creator_grants()
-            |> Enum.each(&create_if_absent/1)
+            |> Enum.each(&insert_if_absent/1)
 
             stamped_entity
           end)
@@ -93,22 +96,7 @@ defmodule Hologram.DB.EntityOperations do
   @doc false
   @spec create_if_absent(struct) :: :ok
   def create_if_absent(entity) do
-    # The framework writes its own grants through this path, so an invalid one is a broken
-    # invariant rather than something a caller can answer - it raises where create/1 returns.
-    validate_entity!(entity.__struct__, entity)
-
-    {:ok, :ok} =
-      Connection.transaction(fn ->
-        {stamped_entity, result} = insert(entity, " ON CONFLICT DO NOTHING")
-
-        # A row that was already there is not a change, and the conflicting insert wrote
-        # nothing - an effect recorded for it would be a change clients never saw happen.
-        if result.num_rows == 1 do
-          Outbox.append([put_effect(stamped_entity)])
-        end
-
-        :ok
-      end)
+    {:ok, :ok} = Connection.transaction(fn -> insert_if_absent(entity) end)
 
     :ok
   end
@@ -458,6 +446,22 @@ defmodule Hologram.DB.EntityOperations do
           violations -> Connection.rollback(violations)
         end
     end
+  end
+
+  defp insert_if_absent(entity) do
+    # The framework writes its own grants through this path, so an invalid one is a broken
+    # invariant rather than something a caller can answer - it raises where create/1 returns.
+    validate_entity!(entity.__struct__, entity)
+
+    {stamped_entity, result} = insert(entity, " ON CONFLICT DO NOTHING")
+
+    # A row that was already there is not a change, and the conflicting insert wrote
+    # nothing - an effect recorded for it would be a change clients never saw happen.
+    if result.num_rows == 1 do
+      Outbox.append([put_effect(stamped_entity)])
+    end
+
+    :ok
   end
 
   # What the entity is, as the effect log records it: every column the row carries except the

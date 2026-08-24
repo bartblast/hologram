@@ -18,15 +18,21 @@ defmodule HologramFeatureTests.DataApiPage do
     put_state(component, :result, nil)
   end
 
+  # A button is clicked by a label the browser driver matches as a SUBSTRING, so no label
+  # here may contain another's - a test clicking the shorter one would find both. That is
+  # why the in-transaction buttons say "duplicate" where their top-level twins say
+  # "duplicate account".
   def template do
     ~HOLO"""
     <p>
       <button $click={command: :create_duplicate_account}> Create duplicate account </button>
+      <button $click={command: :create_duplicate_account_in_transaction}> Create duplicate in transaction </button>
       <button $click={command: :create_invalid_duplicate_account}> Create invalid duplicate account </button>
       <button $click={command: :create_review}> Create review </button>
       <button $click={command: :delete_referenced_product}> Delete referenced product </button>
       <button $click={command: :reject_invalid_review}> Reject invalid review </button>
       <button $click={command: :raise_on_duplicate_account}> Raise on duplicate account </button>
+      <button $click={command: :raise_on_duplicate_account_in_transaction}> Raise on duplicate in transaction </button>
       <button $click={command: :run_query}> Run query </button>
       <button $click={command: :update_into_duplicate_account}> Update into duplicate account </button>
       <button $click={command: :validate_changes}> Validate changes </button>
@@ -52,6 +58,31 @@ defmodule HologramFeatureTests.DataApiPage do
       |> DB.create()
 
     put_action(server, :show_result, result: "duplicate_account_#{inspect(result)}")
+  end
+
+  def command(:create_duplicate_account_in_transaction, _params, server) do
+    Account
+    |> Entity.new(handle: "taken")
+    |> DB.create!()
+
+    result =
+      DB.transaction(fn ->
+        refusal =
+          Account
+          |> Entity.new(handle: "taken")
+          |> DB.create()
+
+        other =
+          Account
+          |> Entity.new(handle: "other")
+          |> DB.create!()
+
+        {refusal, other.handle}
+      end)
+
+    put_action(server, :show_result,
+      result: "duplicate_account_in_transaction_#{inspect(result)}"
+    )
   end
 
   def command(:create_invalid_duplicate_account, _params, server) do
@@ -135,6 +166,29 @@ defmodule HologramFeatureTests.DataApiPage do
       end
 
     put_action(server, :show_result, result: result)
+  end
+
+  def command(:raise_on_duplicate_account_in_transaction, _params, server) do
+    Account
+    |> Entity.new(handle: "taken")
+    |> DB.create!()
+
+    result =
+      try do
+        DB.transaction(fn ->
+          Account
+          |> Entity.new(handle: "taken")
+          |> DB.create!()
+        end)
+
+        :raised_nothing
+      rescue
+        _error in WriteError -> :raised
+      end
+
+    put_action(server, :show_result,
+      result: "raise_on_duplicate_account_in_transaction_#{inspect(result)}"
+    )
   end
 
   def command(:run_query, _params, server) do

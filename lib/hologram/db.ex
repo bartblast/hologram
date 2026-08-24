@@ -142,7 +142,7 @@ defmodule Hologram.DB do
   defdelegate query(statement, placeholders \\ [], opts \\ []), to: Connection
 
   @doc """
-  Aborts the enclosing transaction/2, making it return {:error, reason}. Raises
+  Aborts the innermost enclosing transaction/2, making it return {:error, reason}. Raises
   ArgumentError when called outside of a transaction.
   """
   @spec rollback(any) :: no_return
@@ -172,10 +172,18 @@ defmodule Hologram.DB do
 
   @doc """
   Runs the given zero-arity function inside a database transaction and returns
-  {:ok, result}. Transactions are flat: a nested call joins the ongoing transaction
-  instead of nesting - there are no savepoints, and rollback/1 aborts the one flat
-  transaction wherever it is called. An exception rolls the transaction back and
-  re-raises.
+  {:ok, result}, or {:error, reason} when the function calls rollback/1.
+
+  A nested call opens a savepoint: its own rollback/1 or exception undoes what it wrote
+  and nothing more, and the enclosing transaction continues. The write verbs answer the
+  same way inside a transaction as outside it - a refused write returns {:error,
+  violations} or raises through its bang, and the transaction stays usable. An exception
+  rolls the transaction back and re-raises.
+
+  A nested call costs two statements (SAVEPOINT and RELEASE, three when it rolls back),
+  and PostgreSQL caches 64 subtransactions per session - a transaction opening more than that, such as a loop of
+  writes inside one transaction/2, slows every other session's visibility checks for as
+  long as it runs. Split such batches into transactions of their own.
   """
   @spec transaction((-> any), keyword) :: {:ok, any} | {:error, any}
   defdelegate transaction(fun, opts \\ []), to: Connection
