@@ -239,7 +239,7 @@ defmodule HologramFeatureTests.DataApiPage do
       Product
       |> filter(name: {:!=, "run_query_excluded"})
       |> order_by(:name)
-      |> DB.run()
+      |> DB.read()
       |> Enum.map_join(",", & &1.name)
 
     put_action(server, :show_result, result: names)

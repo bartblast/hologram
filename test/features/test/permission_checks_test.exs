@@ -47,7 +47,7 @@ defmodule HologramFeatureTests.PermissionChecksTest do
 
   defp session_user do
     User
-    |> DB.run()
+    |> DB.read()
     |> Enum.find(&(&1.email == "manager@example.com"))
   end
 
