@@ -35,7 +35,7 @@ defmodule Hologram.Test do
 
   That write is evaluated as the user's :create - every write under an acting user is
   evaluated against the verb's own operation, or against the one the entity claims through
-  authorize/2.
+  authorize/2. A read inside the block is filtered by the user's :read policies the same way.
 
   Takes the user entity, a bare user id, or nil to run the function anonymously - the spelling
   for a block that must not carry the enclosing actor.

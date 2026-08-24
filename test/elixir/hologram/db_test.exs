@@ -7,6 +7,7 @@ defmodule Hologram.DBTest do
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.AccessDeniedError
+  alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Connection
   alias Hologram.DB.Introspection
@@ -16,9 +17,11 @@ defmodule Hologram.DBTest do
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module13
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.WriteError
 
   describe "init/1" do
@@ -379,6 +382,41 @@ defmodule Hologram.DBTest do
 
       assert error.reason == %{referenced_by: Module3, relationship: :c}
       assert get(Module1, target.id) == target
+    end
+  end
+
+  describe "get/2" do
+    test "reads nil for a row the acting user may not read" do
+      {:ok, entity} = create(Entity.new(PolicyModule2))
+      {:ok, user} = create(Entity.new(Module14, email: "db_get_hidden@example.com"))
+
+      assert as_user(user, fn -> get(PolicyModule2, entity.id) end) == nil
+    end
+
+    test "reads the row the acting user may read" do
+      {:ok, entity} = create(Entity.new(PolicyModule2))
+      {:ok, user} = create(Entity.new(Module14, email: "db_get_readable@example.com"))
+
+      Auth.grant_role(user, entity, :member)
+
+      assert as_user(user, fn -> get(PolicyModule2, entity.id) end) == entity
+    end
+
+    test "reads the row without an acting user" do
+      {:ok, entity} = create(Entity.new(PolicyModule2))
+
+      assert get(PolicyModule2, entity.id) == entity
+    end
+
+    test "raises on a non-canonical id under an acting user" do
+      {:ok, user} = create(Entity.new(Module14, email: "db_get_invalid_id@example.com"))
+
+      expected_msg =
+        ~s(invalid id "nope" for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings)
+
+      assert_error ArgumentError, expected_msg, fn ->
+        as_user(user, fn -> get(PolicyModule2, "nope") end)
+      end
     end
   end
 

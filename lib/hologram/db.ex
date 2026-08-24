@@ -168,9 +168,27 @@ defmodule Hologram.DB do
 
   Raises ArgumentError when the id is not a canonical entity id (a lowercase
   8-4-4-4-12 UUID string).
+
+  With an acting user set, the row is read through that user's :read policies and a row the
+  policies withhold reads as nil - as if it did not exist, which is what the template tier and
+  the client answer. Without an acting user the row is read raw.
   """
   @spec get(module, String.t()) :: struct | nil
-  defdelegate get(entity_type, id), to: EntityOperations
+  def get(entity_type, id) do
+    case Context.actor_user_id() do
+      nil ->
+        EntityOperations.get(entity_type, id)
+
+      actor_user_id ->
+        EntityOperations.validate_id!(id)
+
+        entity_type
+        |> Query.filter(id: id)
+        |> Query.one()
+        |> Query.normalize()
+        |> QueryRunner.run_policied(mapping(), actor_user_id)
+    end
+  end
 
   @doc """
   Executes the given SQL statement with the given placeholders and returns {:ok, result} or

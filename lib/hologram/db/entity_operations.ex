@@ -279,6 +279,17 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  @doc false
+  @spec validate_id!(any) :: :ok
+  def validate_id!(id) do
+    if not Validator.attribute_value_valid?(id, :uuid) do
+      raise ArgumentError,
+            "invalid id #{inspect(id)} for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+    end
+
+    :ok
+  end
+
   # A unique attribute is worth asking about only when the value could be compared at all: a
   # field carrying its own violation is not comparable, and nil never conflicts.
   defp advisory_candidate?({name, _type, opts}, values, violations) do
@@ -661,13 +672,6 @@ defmodule Hologram.DB.EntityOperations do
 
       {:error, errors} ->
         raise ArgumentError, Validator.error_message(entity_type, data, errors)
-    end
-  end
-
-  defp validate_id!(id) do
-    if not Validator.attribute_value_valid?(id, :uuid) do
-      raise ArgumentError,
-            "invalid id #{inspect(id)} for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
     end
   end
 
