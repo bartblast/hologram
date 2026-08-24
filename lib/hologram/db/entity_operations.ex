@@ -284,7 +284,7 @@ defmodule Hologram.DB.EntityOperations do
   def validate_id!(id) do
     if not Validator.attribute_value_valid?(id, :uuid) do
       raise ArgumentError,
-            "invalid id #{inspect(id)} for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+            "invalid id #{inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
     end
 
     :ok

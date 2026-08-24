@@ -7,7 +7,6 @@ defmodule Hologram.DBTest do
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.AccessDeniedError
-  alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Connection
   alias Hologram.DB.Introspection
@@ -17,11 +16,9 @@ defmodule Hologram.DBTest do
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module13
-  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
-  alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.WriteError
 
   describe "init/1" do
@@ -150,7 +147,7 @@ defmodule Hologram.DBTest do
         |> create!()
 
       assert entity.created_at
-      assert get(Module1, entity.id).id == entity.id
+      assert read(Module1, entity.id).id == entity.id
     end
 
     test "raises a write error naming every value violation" do
@@ -283,7 +280,7 @@ defmodule Hologram.DBTest do
       {:ok, entity} = create(Entity.new(Module1))
 
       assert delete(entity) == :ok
-      assert get(Module1, entity.id) == nil
+      assert read(Module1, entity.id) == nil
     end
   end
 
@@ -292,7 +289,7 @@ defmodule Hologram.DBTest do
       {:ok, entity} = create(Entity.new(Module1))
 
       assert delete!(entity) == :ok
-      assert get(Module1, entity.id) == nil
+      assert read(Module1, entity.id) == nil
     end
 
     test "lets a denied claim propagate" do
@@ -305,7 +302,7 @@ defmodule Hologram.DBTest do
         as_user(Entity.generate_id(), fn -> delete!(entity) end)
       end
 
-      assert get(Module1, entity.id) != nil
+      assert read(Module1, entity.id) != nil
     end
 
     test "raises on a restricted delete" do
@@ -322,7 +319,7 @@ defmodule Hologram.DBTest do
 
       assert_error WriteError, expected_msg, fn -> delete!(target) end
 
-      assert get(Module3, source.id) != nil
+      assert read(Module3, source.id) != nil
     end
 
     test "raises on a restricted delete inside a transaction" do
@@ -351,7 +348,7 @@ defmodule Hologram.DBTest do
         |> create()
 
       assert delete!(Module1, entity.id) == :ok
-      assert get(Module1, entity.id) == nil
+      assert read(Module1, entity.id) == nil
     end
 
     test "raises a write error when another entity references the row" do
@@ -381,42 +378,7 @@ defmodule Hologram.DBTest do
         end
 
       assert error.reason == %{referenced_by: Module3, relationship: :c}
-      assert get(Module1, target.id) == target
-    end
-  end
-
-  describe "get/2" do
-    test "reads nil for a row the acting user may not read" do
-      {:ok, entity} = create(Entity.new(PolicyModule2))
-      {:ok, user} = create(Entity.new(Module14, email: "db_get_hidden@example.com"))
-
-      assert as_user(user, fn -> get(PolicyModule2, entity.id) end) == nil
-    end
-
-    test "reads the row the acting user may read" do
-      {:ok, entity} = create(Entity.new(PolicyModule2))
-      {:ok, user} = create(Entity.new(Module14, email: "db_get_readable@example.com"))
-
-      Auth.grant_role(user, entity, :member)
-
-      assert as_user(user, fn -> get(PolicyModule2, entity.id) end) == entity
-    end
-
-    test "reads the row without an acting user" do
-      {:ok, entity} = create(Entity.new(PolicyModule2))
-
-      assert get(PolicyModule2, entity.id) == entity
-    end
-
-    test "raises on a non-canonical id under an acting user" do
-      {:ok, user} = create(Entity.new(Module14, email: "db_get_invalid_id@example.com"))
-
-      expected_msg =
-        ~s(invalid id "nope" for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings)
-
-      assert_error ArgumentError, expected_msg, fn ->
-        as_user(user, fn -> get(PolicyModule2, "nope") end)
-      end
+      assert read(Module1, target.id) == target
     end
   end
 
@@ -491,7 +453,7 @@ defmodule Hologram.DBTest do
         end)
 
       assert {:ok, {{:error, %{slug: [:unique]}}, other_id}} = result
-      assert get(Module19, other_id)
+      assert read(Module19, other_id)
     end
 
     test "returns a restricted delete's referencer inside a transaction" do
@@ -509,7 +471,7 @@ defmodule Hologram.DBTest do
         transaction(fn ->
           refusal = delete(Module1, target.id)
 
-          {refusal, get(Module1, target.id)}
+          {refusal, read(Module1, target.id)}
         end)
 
       assert result == {:ok, {{:error, %{referenced_by: Module3, relationship: :c}}, target}}
@@ -570,7 +532,7 @@ defmodule Hologram.DBTest do
         end)
       end
 
-      assert get(Module19, Process.get(:earlier_id)) == nil
+      assert read(Module19, Process.get(:earlier_id)) == nil
     end
   end
 
@@ -656,7 +618,7 @@ defmodule Hologram.DBTest do
              |> put_attribute(:c, "after")
              |> update!() == :ok
 
-      assert get(Module2, entity.id).c == "after"
+      assert read(Module2, entity.id).c == "after"
     end
 
     test "lets a denied claim propagate" do
@@ -676,7 +638,7 @@ defmodule Hologram.DBTest do
         end)
       end
 
-      assert get(Module2, entity.id).c == "before"
+      assert read(Module2, entity.id).c == "before"
     end
 
     test "raises on a refused value" do
@@ -700,7 +662,7 @@ defmodule Hologram.DBTest do
         |> update!()
       end
 
-      assert get(Module19, entity.id).slug == "taken"
+      assert read(Module19, entity.id).slug == "taken"
     end
 
     test "names the value the write used, not the one the struct holds" do
@@ -862,7 +824,7 @@ defmodule Hologram.DBTest do
              |> put_attribute(:c, "after")
              |> update() == :ok
 
-      assert get(Module2, entity.id).c == "after"
+      assert read(Module2, entity.id).c == "after"
     end
 
     test "raises a teaching error for a struct carrying nothing recorded" do

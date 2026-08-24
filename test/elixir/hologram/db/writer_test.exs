@@ -68,7 +68,7 @@ defmodule Hologram.DB.WriterTest do
         as_user(user, fn -> create(entity) end)
       end
 
-      assert DB.get(Module2, entity.id) == nil
+      assert DB.read(Module2, entity.id) == nil
     end
 
     test "evaluates a type-wide role's rule for the acting user" do
@@ -81,7 +81,7 @@ defmodule Hologram.DB.WriterTest do
         |> authorize(:update)
 
       assert {:ok, %Module2{}} = as_user(user, fn -> create(entity) end)
-      assert DB.get(Module2, entity.id) != nil
+      assert DB.read(Module2, entity.id) != nil
     end
 
     test "evaluates an explicit claim without an acting user with the anonymous semantics" do
@@ -125,14 +125,14 @@ defmodule Hologram.DB.WriterTest do
         as_user(user, fn -> create(denied_entity) end)
       end
 
-      assert DB.get(Module2, denied_entity.id) == nil
+      assert DB.read(Module2, denied_entity.id) == nil
     end
 
     test "inserts raw without an acting user" do
       entity = Entity.new(Module2, public: true)
 
       assert {:ok, %Module2{created_at: %DateTime{}} = stamped_entity} = create(entity)
-      assert DB.get(Module2, entity.id) == stamped_entity
+      assert DB.read(Module2, entity.id) == stamped_entity
     end
 
     test "joins the enclosing transaction" do
@@ -144,7 +144,7 @@ defmodule Hologram.DB.WriterTest do
                DB.rollback(:abort)
              end) == {:error, :abort}
 
-      assert DB.get(Module2, entity.id) == nil
+      assert DB.read(Module2, entity.id) == nil
     end
 
     test "returns an entity carrying no claim" do
@@ -177,7 +177,7 @@ defmodule Hologram.DB.WriterTest do
         |> DB.create!()
 
       assert delete(entity) == :ok
-      assert DB.get(Module1, entity.id) == nil
+      assert DB.read(Module1, entity.id) == nil
     end
 
     test "evaluates :delete for the acting user" do
@@ -200,13 +200,13 @@ defmodule Hologram.DB.WriterTest do
         as_user(user, fn -> delete(entity) end)
       end
 
-      assert DB.get(Module1, entity.id) != nil
+      assert DB.read(Module1, entity.id) != nil
 
       # allow :delete, to: {:parent, :admin} - the grant is on the PARENT, not the row.
       Auth.grant_role(user, parent, :admin)
 
       assert as_user(user, fn -> delete(entity) end) == :ok
-      assert DB.get(Module1, entity.id) == nil
+      assert DB.read(Module1, entity.id) == nil
     end
 
     test "evaluates the claim against the row as it stands, not the struct in hand" do
@@ -239,7 +239,7 @@ defmodule Hologram.DB.WriterTest do
         as_user(user, fn -> delete(entity) end)
       end
 
-      assert DB.get(Module1, entity.id) != nil
+      assert DB.read(Module1, entity.id) != nil
     end
 
     test "evaluates the operation the entity claims" do
@@ -253,7 +253,7 @@ defmodule Hologram.DB.WriterTest do
       claimed_entity = authorize(entity, :archive)
 
       assert as_user(user, fn -> delete(claimed_entity) end) == :ok
-      assert DB.get(Module1, entity.id) == nil
+      assert DB.read(Module1, entity.id) == nil
     end
 
     test "skips evaluation for a trust claim" do
@@ -265,7 +265,7 @@ defmodule Hologram.DB.WriterTest do
         |> DB.create!()
 
       assert as_user(user, fn -> delete(trust(entity)) end) == :ok
-      assert DB.get(Module1, entity.id) == nil
+      assert DB.read(Module1, entity.id) == nil
     end
 
     test "is a no-op for an id naming no row, evaluating nothing" do
@@ -303,7 +303,7 @@ defmodule Hologram.DB.WriterTest do
         |> DB.create!()
 
       assert delete(Module1, entity.id) == :ok
-      assert DB.get(Module1, entity.id) == nil
+      assert DB.read(Module1, entity.id) == nil
     end
 
     test "evaluates :delete for the acting user" do
@@ -326,12 +326,12 @@ defmodule Hologram.DB.WriterTest do
         as_user(user, fn -> delete(Module1, entity.id) end)
       end
 
-      assert DB.get(Module1, entity.id) != nil
+      assert DB.read(Module1, entity.id) != nil
 
       Auth.grant_role(user, parent, :admin)
 
       assert as_user(user, fn -> delete(Module1, entity.id) end) == :ok
-      assert DB.get(Module1, entity.id) == nil
+      assert DB.read(Module1, entity.id) == nil
     end
 
     test "is a no-op for an id naming no row" do
@@ -368,8 +368,8 @@ defmodule Hologram.DB.WriterTest do
         end)
       end
 
-      assert DB.get(Module1, earlier_entity.id) == nil
-      assert DB.get(Module1, target.id).public == false
+      assert DB.read(Module1, earlier_entity.id) == nil
+      assert DB.read(Module1, target.id).public == false
     end
 
     test "applies changes and relationship ops under one transaction - a refused value applies no op" do
@@ -463,7 +463,7 @@ defmodule Hologram.DB.WriterTest do
         end)
       end
 
-      assert DB.get(Module1, entity.id).public == true
+      assert DB.read(Module1, entity.id).public == true
     end
 
     test "evaluates the operation the entity claims" do
@@ -514,7 +514,7 @@ defmodule Hologram.DB.WriterTest do
                |> update()
              end) == :ok
 
-      assert DB.get(Module1, entity.id).priority == 9
+      assert DB.read(Module1, entity.id).priority == 9
     end
 
     test "writes the recorded changes raw without an acting user" do
@@ -527,7 +527,7 @@ defmodule Hologram.DB.WriterTest do
              |> put_attribute(:priority, 7)
              |> update() == :ok
 
-      reloaded_entity = DB.get(Module1, entity.id)
+      reloaded_entity = DB.read(Module1, entity.id)
 
       assert reloaded_entity.priority == 7
       assert reloaded_entity.public == entity.public
@@ -548,7 +548,7 @@ defmodule Hologram.DB.WriterTest do
              |> put_attribute(:parent_id, parent.id)
              |> update() == :ok
 
-      assert DB.get(Module1, entity.id).parent_id == parent.id
+      assert DB.read(Module1, entity.id).parent_id == parent.id
     end
 
     test "raises when nothing is recorded" do
@@ -600,7 +600,7 @@ defmodule Hologram.DB.WriterTest do
         |> DB.create!()
 
       assert update(Module1, entity.id, priority: 7) == :ok
-      assert DB.get(Module1, entity.id).priority == 7
+      assert DB.read(Module1, entity.id).priority == 7
     end
 
     test "evaluates :update for the acting user" do
@@ -618,12 +618,12 @@ defmodule Hologram.DB.WriterTest do
         as_user(user, fn -> update(Module1, entity.id, public: true) end)
       end
 
-      assert DB.get(Module1, entity.id).public == false
+      assert DB.read(Module1, entity.id).public == false
 
       Auth.grant_role(user, entity, :editor)
 
       assert as_user(user, fn -> update(Module1, entity.id, public: true) end) == :ok
-      assert DB.get(Module1, entity.id).public == true
+      assert DB.read(Module1, entity.id).public == true
     end
 
     test "raises when the row does not exist" do
