@@ -3,6 +3,7 @@
 import Bitstring from "../bitstring.mjs";
 import Erlang from "./erlang.mjs";
 import ERTS from "../erts.mjs";
+import HologramBoxedError from "../errors/boxed_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -955,10 +956,23 @@ const Erlang_Binary = {
     // Helper closes over isReplacementFunction and replacement for clarity
     const buildReplacementBytes = (matchedBitstring, insertPositionsOpt) => {
       if (isReplacementFunction) {
-        const replacementResult = Interpreter.callAnonymousFunction(
-          replacement,
-          [matchedBitstring],
-        );
+        let replacementResult;
+
+        try {
+          replacementResult = Interpreter.callAnonymousFunction(replacement, [
+            matchedBitstring,
+          ]);
+        } catch (error) {
+          // OTP's replace/4 ends its body with a catch-all over every kind, so
+          // whatever the replacement fun raises, throws or exits with leaves
+          // this function as badarg instead. A fault in the runtime itself is
+          // not one of those and is carried out unchanged.
+          if (error instanceof HologramBoxedError) {
+            raiseBadarg();
+          }
+
+          throw error;
+        }
 
         if (!Type.isBinary(replacementResult)) {
           raiseBadarg();
@@ -996,7 +1010,12 @@ const Erlang_Binary = {
 
     // Validate replacement is either binary or function
     const isReplacementBinary = Type.isBinary(replacement);
-    const isReplacementFunction = Type.isAnonymousFunction(replacement);
+
+    // OTP's replace/4 opens its body with is_binary(R) orelse is_function(R, 1),
+    // so a fun of any other arity is rejected before the subject is searched -
+    // it raises even when the pattern has no match at all.
+    const isReplacementFunction =
+      Type.isAnonymousFunction(replacement) && replacement.arity === 1;
 
     if (!isReplacementBinary && !isReplacementFunction) {
       raiseBadarg();
