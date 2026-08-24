@@ -78,6 +78,21 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   @doc """
+  Encodes the given string as a JavaScript string literal that can be printed into a script
+  element: the quotes and backslashes a literal cannot hold raw, the line breaks it cannot span,
+  and the `<` that could spell the closing tag of the element around it are escaped.
+
+  ## Examples
+
+      iex> encode_as_string(~S|a"b\\c</script>|)
+      ~S|"a\\"b\\\\c\\u{3C}/script>"|
+  """
+  @spec encode_as_string(String.t()) :: String.t()
+  def encode_as_string(str) do
+    encode_as_string(str, true)
+  end
+
+  @doc """
   Encodes an Elixir term bound for the client into JavaScript.
   Returns {:ok, js}, or {:error, message} when the term can't be encoded into JavaScript.
   Values of attributes declared server_only never reach the output - every entity struct in the term, at any nesting depth, has them replaced with the Hologram.Entity.ServerOnly sentinel first.

@@ -14,6 +14,7 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
   alias HologramFeatureTests.TemplateSyntax.PropSpreadPage
   alias HologramFeatureTests.TemplateSyntax.PublicCommentPage
   alias HologramFeatureTests.TemplateSyntax.RawBlockPage
+  alias HologramFeatureTests.TemplateSyntax.ScriptInterpolationPage
   alias HologramFeatureTests.TemplateSyntax.TextAndElementPage
 
   @broadcast_channel :template_syntax_dynamic_component
@@ -92,6 +93,21 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
       session
       |> visit(InterpolationPage)
       |> assert_has(css("#string_chars_protocol", text: "1.2.3"))
+    end
+
+    # The value is the page's, repeated here rather than read from it. Each run of the page's
+    # script appends the value as read through double quotes, single quotes and backticks, so one
+    # entry of three equal strings means the value arrived intact through each kind of literal and
+    # the script ran once - the client rendered the same text the server wrote, and hydration
+    # adopted the element. The closing tag inside the value did not end the element, or the
+    # marker it carries would be set.
+    feature "in script element", %{session: session} do
+      value = ~s(</script><script>window.__xss = true</script> & "a" 'b' `c` ${d} e\\f\ng)
+
+      session
+      |> visit(ScriptInterpolationPage)
+      |> assert_script_result("return window.__scriptInterpolation;", [[value, value, value]])
+      |> assert_script_result("return window.__xss;", nil)
     end
   end
 

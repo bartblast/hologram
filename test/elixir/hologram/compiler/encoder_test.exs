@@ -4430,6 +4430,19 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "encode_as_string/1" do
+    test "wraps the text in double quotes" do
+      assert encode_as_string("abc") == ~s/"abc"/
+    end
+
+    # The per-char rules are pinned under "string type" - this pins that the public function
+    # applies them and quotes the result.
+    test "escapes what a script element cannot carry raw" do
+      assert encode_as_string(~S|a"b\c</script>| <> "\n\r" <> <<0>>) ==
+               ~S|"a\"b\\c\u{3C}/script>\n\r\u{0}"|
+    end
+  end
+
   describe "encode_client_term!/1" do
     test "replaces server-only attribute values with the sentinel" do
       entity = %Module15{
