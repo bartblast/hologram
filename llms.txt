@@ -39,6 +39,7 @@
 - [Contributing](https://hologram.page/reference/contributing): How to contribute, Erlang function porting initiative
 - [Package Naming](https://hologram.page/reference/package-naming): Reserved prefixes and namespaces for Hologram packages
 - [Sponsor](https://hologram.page/reference/sponsor): Sponsorship information and project impact
+- [Reporting Vulnerabilities](https://hologram.page/reference/reporting-vulnerabilities): How to report a security vulnerability privately, response process, supported versions, scope
 
 ## Resources
 
