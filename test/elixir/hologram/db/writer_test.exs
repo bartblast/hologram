@@ -135,6 +135,18 @@ defmodule Hologram.DB.WriterTest do
       assert DB.get(Module2, entity.id) == stamped_entity
     end
 
+    test "joins the enclosing transaction" do
+      entity = Entity.new(Module2)
+
+      assert DB.transaction(fn ->
+               create(entity)
+
+               DB.rollback(:abort)
+             end) == {:error, :abort}
+
+      assert DB.get(Module2, entity.id) == nil
+    end
+
     test "returns an entity carrying no claim" do
       entity =
         Module2
@@ -330,6 +342,36 @@ defmodule Hologram.DB.WriterTest do
   end
 
   describe "update/1" do
+    test "a denied claim rolls back the writes made before it" do
+      user = create_user("roller@example.com")
+      earlier_entity = Entity.new(Module1)
+
+      target =
+        Module1
+        |> Entity.new(priority: 5)
+        |> DB.create!()
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{target.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn ->
+          DB.transaction(fn ->
+            earlier_entity
+            |> trust()
+            |> create()
+
+            target
+            |> put_attribute(:public, true)
+            |> update()
+          end)
+        end)
+      end
+
+      assert DB.get(Module1, earlier_entity.id) == nil
+      assert DB.get(Module1, target.id).public == false
+    end
+
     test "applies changes and relationship ops under one transaction - a refused value applies no op" do
       source =
         Module16
