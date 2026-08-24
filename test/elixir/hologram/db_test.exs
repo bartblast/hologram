@@ -3,7 +3,9 @@ defmodule Hologram.DBTest do
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.DB
+  import Hologram.Test, only: [as_user: 2]
 
+  alias Hologram.AccessDeniedError
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Connection
   alias Hologram.DB.Introspection
@@ -81,6 +83,17 @@ defmodule Hologram.DBTest do
   end
 
   describe "create/1" do
+    test "evaluates the claim under an acting user" do
+      entity = Entity.new(Module1)
+
+      expected_msg =
+        ~s(not allowed to create Hologram.Test.Fixtures.Entity.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(Entity.generate_id(), fn -> create(entity) end)
+      end
+    end
+
     # Both shapes in one test: the first create binds {:ok, _} or the match fails, and the
     # second pins the violation travelling out through the gateway unchanged.
     test "returns the unique violation from the write itself" do

@@ -9,6 +9,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryRunner
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.DB.Writer
   alias Hologram.Entity.Validator
   alias Hologram.Migrator
   alias Hologram.Query
@@ -45,6 +46,13 @@ defmodule Hologram.DB do
   taken by the next attempt. A write refuses at the first violated database constraint and
   reports no other of its own.
 
+  With an acting user set, the write is evaluated against that user's policies for :create - or
+  for the operation the entity claims through authorize/2 - against the row being inserted, and
+  raises Hologram.AccessDeniedError when no rule grants it. An entity claiming the server's own
+  authority through trust/1 is written without evaluation. Without an acting user an unclaimed
+  write is raw - the trusted tier - and a claimed operation is evaluated with the anonymous
+  semantics. The returned entity carries no claim and no recorded changes.
+
   Misuse raises rather than returning - a role grant, which is written only through
   grant_role/revoke_role - as does a constraint violation the mapping does not explain.
   """
@@ -52,7 +60,7 @@ defmodule Hologram.DB do
   def create(entity) do
     Validator.validate_writable!(entity.__struct__)
 
-    EntityOperations.create(entity)
+    Writer.create(entity)
   end
 
   @doc """
