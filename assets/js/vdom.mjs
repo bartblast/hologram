@@ -233,6 +233,11 @@ export default class Vdom {
   // script that has already executed does not run again when its src changes. The key an element
   // carries for its place, which the DOM never held, does not constrain the pairing - it is
   // identity rather than content.
+  //
+  // Case is dropped on both sides. An HTML tag name has no case - the DOM reads it back uppercase
+  // whatever the markup wrote - while an SVG or MathML one keeps the case the spec gives it, and
+  // the parser corrects the markup's spelling to that. So the two sides can disagree on case
+  // alone, and case is the only thing being ignored: no two elements differ by it.
   static #correspondsTo(renderedVnode, domNode) {
     if (renderedVnode.sel === undefined) {
       return (
@@ -247,7 +252,7 @@ export default class Vdom {
 
     if (
       domNode.nodeType !== Node.ELEMENT_NODE ||
-      domNode.tagName.toLowerCase() !== renderedVnode.sel
+      domNode.tagName.toLowerCase() !== renderedVnode.sel.toLowerCase()
     ) {
       return false;
     }
