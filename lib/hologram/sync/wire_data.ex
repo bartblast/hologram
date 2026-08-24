@@ -60,6 +60,10 @@ defmodule Hologram.Sync.WireData do
     |> Map.new(fn {name, type, _opts} -> {name, type} end)
   end
 
+  # The framework's own field is not the row's data - a client is never told what a struct is
+  # carrying toward a write.
+  defp encode_field({:__meta__, _metadata}, _model), do: []
+
   defp encode_field({_name, %NotIncluded{}}, _model), do: []
 
   defp encode_field({name, value}, model) do

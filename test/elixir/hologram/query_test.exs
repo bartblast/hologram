@@ -3,6 +3,8 @@ defmodule Hologram.QueryTest do
 
   import Hologram.Query
 
+  alias Hologram.Entity
+  alias Hologram.Entity.Metadata
   alias Hologram.Query.Placeholder
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -1231,6 +1233,146 @@ defmodule Hologram.QueryTest do
 
     test "yields an empty list for a concrete term" do
       assert placeholder_names(filter(Module2, a: true)) == []
+    end
+  end
+
+  describe "put_attribute/2" do
+    test "accepts a map of values" do
+      entity = Entity.new(Module2, c: "x")
+
+      result = put_attribute(entity, %{b: 7})
+
+      assert result.b == 7
+      assert result.__meta__ == %Metadata{attribute_changes: %{b: 7}}
+    end
+
+    test "keeps the rest of the metadata" do
+      metadata = %Metadata{claim: :trust, relationship_ops: %{{:a, "x"} => :add}}
+      entity = %{Entity.new(Module3) | __meta__: metadata}
+
+      result = put_attribute(entity, b_id: Entity.generate_id())
+
+      assert result.__meta__.claim == :trust
+      assert result.__meta__.relationship_ops == %{{:a, "x"} => :add}
+    end
+
+    test "merges into the changes already recorded, the later value replacing the earlier" do
+      result =
+        Module2
+        |> Entity.new(c: "x")
+        |> put_attribute(a: true, c: "y")
+        |> put_attribute(c: "z")
+
+      assert result.c == "z"
+      assert result.__meta__ == %Metadata{attribute_changes: %{a: true, c: "z"}}
+    end
+
+    test "sets a to-one reference field" do
+      target_id = Entity.generate_id()
+      entity = Entity.new(Module3)
+
+      result = put_attribute(entity, b_id: target_id)
+
+      assert result.b_id == target_id
+      assert result.__meta__ == %Metadata{attribute_changes: %{b_id: target_id}}
+    end
+
+    test "sets the values on the struct and records them as changes" do
+      entity = Entity.new(Module2, c: "x")
+
+      result = put_attribute(entity, a: true, c: "y")
+
+      assert result.a == true
+      assert result.c == "y"
+      assert result.__meta__ == %Metadata{attribute_changes: %{a: true, c: "y"}}
+    end
+
+    test "raises on a system attribute name" do
+      entity = Entity.new(Module2, c: "x")
+
+      expected_msg =
+        ":id is a system attribute of Hologram.Test.Fixtures.Entity.Module2 - it is managed automatically and can't be put"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(entity, id: Entity.generate_id())
+      end
+    end
+
+    test "raises on a to-many relationship name" do
+      entity = Entity.new(Module3)
+
+      expected_msg =
+        ":a is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be put - add its edges via add_relationship"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(entity, a: [])
+      end
+    end
+
+    test "raises on a to-one relationship name" do
+      entity = Entity.new(Module3)
+
+      expected_msg =
+        ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be put - set its reference via :c_id"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(entity, c: Entity.new(Module1))
+      end
+    end
+
+    test "raises on an unknown name" do
+      entity = Entity.new(Module3)
+
+      expected_msg =
+        "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module3 - known attributes: :b_id, :c_id"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(entity, nope: 1)
+      end
+    end
+
+    test "raises when the entity is not an entity struct" do
+      assert_error ArgumentError, ~s(put_attribute takes an entity struct, got: "x"), fn ->
+        put_attribute(wrap_term("x"), a: true)
+      end
+
+      assert_error ArgumentError,
+                   "put_attribute takes an entity struct, got: Hologram.Test.Fixtures.Entity.Module2",
+                   fn -> put_attribute(wrap_term(Module2), a: true) end
+    end
+
+    test "raises when the values are neither a keyword list nor a map" do
+      entity = Entity.new(Module2, c: "x")
+
+      assert_error ArgumentError,
+                   "put_attribute takes a keyword list or a map of attribute values, got: [1, 2]",
+                   fn -> put_attribute(entity, [1, 2]) end
+
+      assert_error ArgumentError,
+                   ~s(put_attribute takes a keyword list or a map of attribute values, got: "a"),
+                   fn -> put_attribute(entity, wrap_term("a")) end
+    end
+  end
+
+  describe "put_attribute/3" do
+    test "sets the value on the struct and records it as a change" do
+      entity = Entity.new(Module2, c: "x")
+
+      result = put_attribute(entity, :a, true)
+
+      assert result.a == true
+      assert result.__meta__ == %Metadata{attribute_changes: %{a: true}}
+    end
+
+    test "raises on an unknown name" do
+      entity = Entity.new(Module2, c: "x")
+
+      expected_msg =
+        "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(entity, :nope, 1)
+      end
     end
   end
 end

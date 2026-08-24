@@ -1,6 +1,7 @@
 defmodule Hologram.Query do
   @moduledoc false
 
+  alias Hologram.Entity.Metadata
   alias Hologram.Query.Placeholder
   alias Hologram.Reflection
 
@@ -16,7 +17,9 @@ defmodule Hologram.Query do
           offset: 2,
           one: 1,
           order_by: 2,
-          paginate: 2
+          paginate: 2,
+          put_attribute: 2,
+          put_attribute: 3
         ]
 
       alias Hologram.DB
@@ -400,6 +403,63 @@ defmodule Hologram.Query do
     end)
   end
 
+  @doc """
+  Puts the given attribute values on the given entity struct and returns it, with the values
+  recorded as the changes DB.update/1 writes.
+
+  The entity is an entity struct - one a query read, or one Entity.new/2 constructed. Values
+  are a keyword list or a map keyed by declared attribute names and to-one reference fields
+  (`<relationship name>_id`) - what DB.update/3 takes as changes. Each value is set on the
+  struct's field and recorded under the same name in the struct's metadata, so a later put of
+  the same name replaces the earlier one. Values are judged at the write, not here - a value
+  the declarations refuse is reported by DB.update/1, and a struct holding one reads like any
+  other until then.
+
+  Only a put value is written: a field changed any other way - `%{entity | name: value}` - is
+  neither recorded nor written, and an entity carrying no recorded change is refused by
+  DB.update/1.
+
+  Raises ArgumentError when the entity is not an entity struct, when the values are neither a
+  keyword list nor a map, or when a name is a relationship, a system attribute, or unknown.
+  """
+  @spec put_attribute(struct, keyword | map) :: struct
+  def put_attribute(entity, values) when is_list(values) or is_map(values) do
+    entity_type = entity_type!(entity, "put_attribute")
+
+    if is_list(values) and not Keyword.keyword?(values) do
+      raise ArgumentError,
+        message:
+          "put_attribute takes a keyword list or a map of attribute values, got: #{inspect(values)}"
+    end
+
+    values_map = Map.new(values)
+
+    Enum.each(values_map, fn {name, _value} -> validate_put_name!(name, entity_type) end)
+
+    %Metadata{attribute_changes: recorded_changes} = metadata = entity.__meta__
+
+    changes = Map.merge(recorded_changes, values_map)
+
+    entity
+    |> Map.merge(values_map)
+    |> Map.put(:__meta__, %Metadata{metadata | attribute_changes: changes})
+  end
+
+  def put_attribute(_entity, values) do
+    raise ArgumentError,
+      message:
+        "put_attribute takes a keyword list or a map of attribute values, got: #{inspect(values)}"
+  end
+
+  @doc """
+  Puts the given attribute value on the given entity struct and returns it, with the value
+  recorded as a change DB.update/1 writes - put_attribute/2 for one name and value.
+  """
+  @spec put_attribute(struct, atom, any) :: struct
+  def put_attribute(entity, name, value) do
+    put_attribute(entity, [{name, value}])
+  end
+
   defp attribute_names(entity_type) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 
@@ -456,6 +516,20 @@ defmodule Hologram.Query do
   defp placeholder_operand(values) when is_list(values), do: normalize_membership_values(values)
 
   defp placeholder_operand(value), do: value
+
+  # A stage on an entity struct: the struct's type, or a refusal naming the stage.
+  defp entity_type!(%{__struct__: entity_type}, stage) do
+    if Reflection.entity?(entity_type) do
+      entity_type
+    else
+      raise ArgumentError,
+        message: "#{stage} takes an entity struct, got: #{inspect(%{__struct__: entity_type})}"
+    end
+  end
+
+  defp entity_type!(subject, stage) do
+    raise ArgumentError, message: "#{stage} takes an entity struct, got: #{inspect(subject)}"
+  end
 
   defp filterable_names(entity_type) do
     Enum.sort(attribute_names(entity_type) ++ reference_field_names(entity_type))
@@ -758,9 +832,19 @@ defmodule Hologram.Query do
     Map.put(term, field, value)
   end
 
+  defp settable_names(entity_type) do
+    declared_names = Enum.map(entity_type.__attributes__(), fn {name, _type, _opts} -> name end)
+
+    Enum.sort(declared_names ++ reference_field_names(entity_type))
+  end
+
   defp sub_term_has_clauses?(sub_term) do
     sub_term.filter != [] or sub_term.order_by != [] or sub_term.limit != nil or
       sub_term.offset != nil
+  end
+
+  defp system_attribute_names(entity_type) do
+    Enum.map(entity_type.__system_attributes__(), fn {name, _type, _opts} -> name end)
   end
 
   defp to_one_relationship_names(entity_type) do
@@ -941,6 +1025,40 @@ defmodule Hologram.Query do
 
       :error ->
         raise ArgumentError, message: "paginate requires the #{inspect(key)} option"
+    end
+  end
+
+  # What DB.update/3 accepts as a change name - a declared attribute or a to-one reference field -
+  # refused where it is written rather than at the write, with the fix named for the mistakes a
+  # relationship invites.
+  defp validate_put_name!(name, entity_type) do
+    settable_names = settable_names(entity_type)
+
+    cond do
+      name in settable_names ->
+        :ok
+
+      name in to_one_relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be put - set its reference via :#{name}_id"
+
+      name in relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be put - add its edges via add_relationship"
+
+      name in system_attribute_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a system attribute of #{inspect(entity_type)} - it is managed automatically and can't be put"
+
+      true ->
+        known = Enum.map_join(settable_names, ", ", &inspect/1)
+
+        raise ArgumentError,
+          message:
+            "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known attributes: #{known}"
     end
   end
 

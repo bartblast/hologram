@@ -2,6 +2,7 @@ defmodule Hologram.Entity do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Entity
+  alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
   alias Hologram.Entity.Validator
@@ -397,7 +398,12 @@ defmodule Hologram.Entity do
           [{:"#{name}_id", nil}, {name, %NotIncluded{relationship: name}}]
       end)
 
-    Enum.sort(system_attribute_fields ++ attribute_fields ++ relationship_fields)
+    # The framework's own field, first in the sort - every entity struct carries an empty one.
+    metadata_field = [{:__meta__, %Metadata{}}]
+
+    Enum.sort(
+      metadata_field ++ system_attribute_fields ++ attribute_fields ++ relationship_fields
+    )
   end
 
   @doc """

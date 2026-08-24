@@ -785,6 +785,13 @@ defmodule Hologram.Entity.Validator do
           "reserved name #{inspect(name)} used for #{kind} in #{inspect(module)} - system attributes #{reserved_names} are managed automatically and can't be declared"
     end
 
+    # The one field every entity struct carries that no declaration puts there.
+    if name == :__meta__ do
+      raise Hologram.CompileError,
+        message:
+          "reserved name #{inspect(name)} used for #{kind} in #{inspect(module)} - it holds the framework's own metadata on every entity struct and can't be declared"
+    end
+
     validate_name_uniqueness!(module, kind, name)
   end
 

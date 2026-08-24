@@ -3,6 +3,7 @@ defmodule Hologram.Sync.WireDataTest do
 
   import Hologram.Sync.WireData
 
+  alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -227,6 +228,18 @@ defmodule Hologram.Sync.WireDataTest do
       wire = row(entity)
 
       assert Map.fetch(wire, :a) == {:ok, []}
+    end
+
+    test "leaves out the metadata the struct carries toward a write" do
+      entity = %{
+        module_2()
+        | __meta__: %Metadata{attribute_changes: %{c: "changed"}, claim: :trust}
+      }
+
+      wire = row(entity)
+
+      refute Map.has_key?(wire, :__meta__)
+      assert wire.c == "text"
     end
   end
 end

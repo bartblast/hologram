@@ -88,14 +88,14 @@ defmodule Hologram.EntityTest do
   end
 
   describe "__struct__/0" do
-    test "defines only system attribute fields for entity type with no declarations" do
+    test "defines only the metadata and system attribute fields for entity type with no declarations" do
       field_names =
         %Module1{}
         |> Map.from_struct()
         |> Map.keys()
         |> Enum.sort()
 
-      assert field_names == [:created_at, :id, :updated_at]
+      assert field_names == [:__meta__, :created_at, :id, :updated_at]
     end
 
     test "includes declared attribute fields" do
@@ -105,7 +105,7 @@ defmodule Hologram.EntityTest do
         |> Map.keys()
         |> Enum.sort()
 
-      assert field_names == [:a, :b, :c, :created_at, :id, :updated_at]
+      assert field_names == [:__meta__, :a, :b, :c, :created_at, :id, :updated_at]
     end
 
     test "defaults relationship embed and to-many fields to the NotIncluded sentinel" do
@@ -125,7 +125,7 @@ defmodule Hologram.EntityTest do
         |> Map.keys()
         |> Enum.sort()
 
-      assert field_names == [:a, :b, :b_id, :c, :c_id, :created_at, :id, :updated_at]
+      assert field_names == [:__meta__, :a, :b, :b_id, :c, :c_id, :created_at, :id, :updated_at]
     end
   end
 
