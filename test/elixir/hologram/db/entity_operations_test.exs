@@ -351,6 +351,21 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert create(Entity.new(Module3, c_id: "garbage")) == {:error, %{c_id: [type: :uuid]}}
     end
 
+    # A well-formed id naming no row is a valid value, so it passes the declarations and the
+    # write is the first thing that can know - the foreign key names the column back.
+    test "returns a missing reference target from the write itself" do
+      assert create(Entity.new(Module3, c_id: Entity.generate_id())) ==
+               {:error, %{c_id: [:not_found]}}
+    end
+
+    test "writes nothing and records nothing for a refused reference" do
+      entity = Entity.new(Module3, c_id: Entity.generate_id())
+
+      assert create(entity) == {:error, %{c_id: [:not_found]}}
+      assert get(Module3, entity.id) == nil
+      assert outbox_effects() == []
+    end
+
     test "reports a value violation and a taken unique value together" do
       {:ok, _entity} =
         Module19
@@ -571,6 +586,21 @@ defmodule Hologram.DB.EntityOperationsTest do
         """)
 
       assert_error ArgumentError, expected_msg, fn -> create_if_absent(grant) end
+    end
+
+    # The framework's own grant rows are not a caller's to answer, so this path keeps raising
+    # where create/1 explains - the constraint belongs to a type no caller named.
+    test "raises when the grantee does not exist" do
+      grant = %RoleGrant{id: Entity.generate_id(), role: :owner, user_id: Entity.generate_id()}
+
+      error =
+        try do
+          create_if_absent(grant)
+        rescue
+          error in Postgrex.Error -> error
+        end
+
+      assert error.postgres.code == :foreign_key_violation
     end
   end
 

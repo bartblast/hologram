@@ -60,7 +60,7 @@ defmodule Hologram.DB.EntityOperations do
       case Entity.validate(entity) do
         :ok ->
           # The transaction's own shape is the contract: its value is the stamped entity, and
-          # the violations a duplicate rolls back with are its reason.
+          # whatever refused the write rolls back as its reason.
           Connection.transaction(fn ->
             {stamped_entity, _result} = insert(entity, "")
 
@@ -86,7 +86,8 @@ defmodule Hologram.DB.EntityOperations do
       {:ok, stamped_entity} ->
         {:ok, stamped_entity}
 
-      {:error, violations} ->
+      {:error, refusal} ->
+        violations = write_violations!(entity_type, refusal)
         values = Map.from_struct(entity)
 
         {:error, advisory_unique_violations(entity_type, values, entity.id, violations)}
@@ -96,9 +97,12 @@ defmodule Hologram.DB.EntityOperations do
   @doc false
   @spec create_if_absent(struct) :: :ok
   def create_if_absent(entity) do
-    {:ok, :ok} = Connection.transaction(fn -> insert_if_absent(entity) end)
-
-    :ok
+    # The framework writes its own grants through here, so a database refusal is a broken
+    # invariant rather than something a caller can answer - it raises where create/1 explains.
+    case Connection.transaction(fn -> insert_if_absent(entity) end) do
+      {:ok, :ok} -> :ok
+      {:error, %Postgrex.Error{} = error} -> raise error
+    end
   end
 
   @doc false
@@ -440,11 +444,10 @@ defmodule Hologram.DB.EntityOperations do
       {:ok, result} ->
         {stamped_entity, result}
 
+      # The writer explains nothing: it rolls back with what refused it, and the verb that was
+      # asked to write turns that into an answer or re-raises it.
       {:error, error} ->
-        case unique_violations(entity_type, error) do
-          nil -> raise error
-          violations -> Connection.rollback(violations)
-        end
+        Connection.rollback(error)
     end
   end
 
@@ -519,6 +522,22 @@ defmodule Hologram.DB.EntityOperations do
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
   end
+
+  # A to-one reference column carries the foreign key constraint that names it back, so a target
+  # row that is gone is answered the way a value violation is - by field, in Entity.validate/1's
+  # shape. Existence is state rather than a value, which is why the validator never reports it.
+  defp reference_violations(entity_type, %Postgrex.Error{
+         postgres: %{code: :foreign_key_violation, constraint: constraint}
+       }) do
+    %{columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
+    case Enum.find(columns, &(&1.fk_constraint == constraint)) do
+      %{source: {:relationship, name}} -> %{String.to_existing_atom("#{name}_id") => [:not_found]}
+      _no_match -> nil
+    end
+  end
+
+  defp reference_violations(_entity_type, _error), do: nil
 
   # A unique index derived from a `unique: true` attribute names that attribute back, so a
   # duplicate is answered the way a value violation is - by field, in Entity.validate/2's shape.
@@ -602,4 +621,18 @@ defmodule Hologram.DB.EntityOperations do
             "invalid id #{inspect(id)} for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
     end
   end
+
+  # The one place a refusal becomes an answer. A validator's map passes straight through - it was
+  # keyed by field before any SQL ran - and a database error is explained against the entity type
+  # the CALLER named. A constraint the mapping does not derive to one of that type's own columns
+  # is not ours to explain and keeps raising, which is what holds the rows the framework writes
+  # for itself in the same transaction - a create's creator grants - out of a caller's map.
+  defp write_violations!(entity_type, %Postgrex.Error{} = error) do
+    case unique_violations(entity_type, error) || reference_violations(entity_type, error) do
+      nil -> raise error
+      violations -> violations
+    end
+  end
+
+  defp write_violations!(_entity_type, violations), do: violations
 end
