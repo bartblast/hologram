@@ -50,26 +50,53 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   @doc false
-  @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom)}}
+  @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
   def create(entity) do
-    # The transaction's own shape is the contract: its value is the stamped entity, and the
-    # violations a duplicate rolls back with are its reason.
-    Connection.transaction(fn ->
-      {stamped_entity, _result} = insert(entity, "")
+    entity_type = entity.__struct__
 
-      Outbox.append([put_effect(stamped_entity)])
+    # Values are judged first - no write is attempted for an entity the declarations already
+    # refuse.
+    result =
+      case Entity.validate(entity) do
+        :ok ->
+          # The transaction's own shape is the contract: its value is the stamped entity, and
+          # the violations a duplicate rolls back with are its reason.
+          Connection.transaction(fn ->
+            {stamped_entity, _result} = insert(entity, "")
 
-      entity
-      |> creator_grants()
-      |> Enum.each(&create_if_absent/1)
+            Outbox.append([put_effect(stamped_entity)])
 
-      stamped_entity
-    end)
+            entity
+            |> creator_grants()
+            |> Enum.each(&create_if_absent/1)
+
+            stamped_entity
+          end)
+
+        {:error, violations} ->
+          {:error, violations}
+      end
+
+    # Whatever refused it, the answer is completed the same way - one merge point, so a caller
+    # cannot tell from the map's shape which layer got there first.
+    case result do
+      {:ok, stamped_entity} ->
+        {:ok, stamped_entity}
+
+      {:error, violations} ->
+        values = Map.from_struct(entity)
+
+        {:error, advisory_unique_violations(entity_type, values, entity.id, violations)}
+    end
   end
 
   @doc false
   @spec create_if_absent(struct) :: :ok
   def create_if_absent(entity) do
+    # The framework writes its own grants through this path, so an invalid one is a broken
+    # invariant rather than something a caller can answer - it raises where create/1 returns.
+    validate_entity!(entity.__struct__, entity)
+
     {:ok, :ok} =
       Connection.transaction(fn ->
         {stamped_entity, result} = insert(entity, " ON CONFLICT DO NOTHING")
@@ -175,7 +202,8 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   @doc false
-  @spec update(module, String.t(), map | keyword) :: :ok | {:error, %{atom => list(atom)}}
+  @spec update(module, String.t(), map | keyword) ::
+          :ok | {:error, %{atom => list(atom | {atom, any})}}
   # sobelow_skip ["SQL.Query"]
   def update(entity_type, id, changes) do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
@@ -185,60 +213,99 @@ defmodule Hologram.DB.EntityOperations do
       |> Enum.reject(&(&1.source == :system or match?({:sort_key, _name}, &1.source)))
       |> Map.new(&{field_name(&1), &1})
 
-    sorted_changes =
-      changes
-      |> Map.new()
-      |> Enum.sort()
+    changes_map = Map.new(changes)
+    sorted_changes = Enum.sort(changes_map)
 
     validate_changes!(entity_type, sorted_changes, columns_by_field)
-    validate_change_values!(entity_type, sorted_changes)
 
-    change_entries =
-      Enum.map(sorted_changes, fn {name, value} ->
-        column = columns_by_field[name]
+    # Values are judged before the statement is built - nothing is written for changes the
+    # declarations already refuse.
+    result =
+      case Entity.validate(entity_type, changes_map) do
+        :ok ->
+          change_entries =
+            Enum.map(sorted_changes, fn {name, value} ->
+              column = columns_by_field[name]
 
-        {column, Codec.encode(value, column.type)}
-      end)
+              {column, Codec.encode(value, column.type)}
+            end)
 
-    set_entries = change_entries ++ companion_entries(columns, sorted_changes)
+          set_entries = change_entries ++ companion_entries(columns, sorted_changes)
 
-    set_list =
-      set_entries
-      |> Enum.with_index(1)
-      |> Enum.map_join(", ", fn {{column, _value}, index} ->
-        "#{Mapper.quote_identifier(column.name)} = $#{index}"
-      end)
+          set_list =
+            set_entries
+            |> Enum.with_index(1)
+            |> Enum.map_join(", ", fn {{column, _value}, index} ->
+              "#{Mapper.quote_identifier(column.name)} = $#{index}"
+            end)
 
-    updated_at_placeholder = length(set_entries) + 1
-    id_placeholder = length(set_entries) + 2
+          updated_at_placeholder = length(set_entries) + 1
+          id_placeholder = length(set_entries) + 2
 
-    statement =
-      ~s|UPDATE #{qualified_table(table)} SET #{set_list}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder}|
+          statement =
+            ~s|UPDATE #{qualified_table(table)} SET #{set_list}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder}|
 
-    changed_values = Enum.map(set_entries, fn {_column, value} -> value end)
+          changed_values = Enum.map(set_entries, fn {_column, value} -> value end)
 
-    updated_at = DateTime.utc_now(:microsecond)
-    encoded_updated_at = Codec.encode(updated_at, :datetime)
-    encoded_id = Codec.encode(id, :uuid)
+          updated_at = DateTime.utc_now(:microsecond)
+          encoded_updated_at = Codec.encode(updated_at, :datetime)
+          encoded_id = Codec.encode(id, :uuid)
 
-    params = changed_values ++ [encoded_updated_at, encoded_id]
+          params = changed_values ++ [encoded_updated_at, encoded_id]
 
-    # The stamp travels with the changes: every update moves updated_at, and a client holding
-    # the row holds that too. The sort-key companions do not - they are derived from the values
-    # beside them, and a reader recomputes them rather than being told.
-    data =
-      sorted_changes
-      |> Map.new()
-      |> Map.put(:updated_at, updated_at)
+          # The stamp travels with the changes: every update moves updated_at, and a client holding
+          # the row holds that too. The sort-key companions do not - they are derived from the values
+          # beside them, and a reader recomputes them rather than being told.
+          data = Map.put(changes_map, :updated_at, updated_at)
 
-    # The transaction's reason is the violations map, the way create/1's is - a duplicate rolls
-    # the update back rather than raising.
-    case Connection.transaction(fn ->
-           run_update!(statement, params, entity_type, id, data)
-         end) do
-      {:ok, _appended} -> :ok
-      {:error, violations} -> {:error, violations}
+          # The transaction's reason is the violations map, the way create/1's is - a duplicate
+          # rolls the update back rather than raising.
+          Connection.transaction(fn ->
+            run_update!(statement, params, entity_type, id, data)
+          end)
+
+        {:error, violations} ->
+          {:error, violations}
+      end
+
+    # Whatever refused it, the answer is completed the same way - one merge point, so a caller
+    # cannot tell from the map's shape which layer got there first.
+    case result do
+      {:ok, _appended} ->
+        :ok
+
+      {:error, violations} ->
+        {:error, advisory_unique_violations(entity_type, changes_map, id, violations)}
     end
+  end
+
+  # A unique attribute is worth asking about only when the value could be compared at all: a
+  # field carrying its own violation is not comparable, and nil never conflicts.
+  defp advisory_candidate?({name, _type, opts}, values, violations) do
+    Keyword.get(opts, :unique) == true and not Map.has_key?(violations, name) and
+      not is_nil(values[name])
+  end
+
+  # Completes an answer that stopped early. The database names the first constraint it refused
+  # and abandons the statement, so every unique attribute it never reached is asked about here,
+  # as is every one of them when the values failed and no write was attempted at all. The
+  # candidate filter leaves a field that already carries a violation alone, so an authoritative
+  # answer is never replaced by an advisory one. Advisory by nature: what is taken now may be
+  # free by the resubmit, and the resubmit is answered by the write.
+  defp advisory_unique_violations(entity_type, values, id, violations) do
+    %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
+    entity_type.__attributes__()
+    |> Enum.filter(&advisory_candidate?(&1, values, violations))
+    |> Enum.reduce(violations, fn {name, type, _opts}, acc ->
+      column = Enum.find(columns, &(&1.source == {:attribute, name}))
+
+      if unique_value_taken?(table, column.name, values[name], type, id) do
+        Map.put(acc, name, [:unique])
+      else
+        acc
+      end
+    end)
   end
 
   defp companion_entries(columns, sorted_changes) do
@@ -369,8 +436,6 @@ defmodule Hologram.DB.EntityOperations do
     entity_type = entity.__struct__
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
-    validate_entity!(entity_type, entity, columns)
-
     now = DateTime.utc_now(:microsecond)
     stamped_entity = %{entity | created_at: now, updated_at: now}
 
@@ -456,6 +521,22 @@ defmodule Hologram.DB.EntityOperations do
   # Any other unique index is not ours to explain and keeps raising: a duplicate primary key is
   # a framework bug rather than something a caller did, and the grant store's index is over four
   # columns, so neither matches the single-attribute shape below.
+  # The row being updated is excluded the way the unique index excludes it, so a resubmitted
+  # form holding a row's own unchanged value is not refused. A create passes an id no row
+  # carries yet, which excludes nothing.
+  # sobelow_skip ["SQL.Query"]
+  defp unique_value_taken?(table, column_name, value, type, id) do
+    statement =
+      ~s|SELECT EXISTS (SELECT 1 FROM #{qualified_table(table)} WHERE #{Mapper.quote_identifier(column_name)} = $1 AND "id" != $2)|
+
+    params = [Codec.encode(value, type), Codec.encode(id, :uuid)]
+
+    case Connection.query(statement, params) do
+      {:ok, %Postgrex.Result{rows: [[taken?]]}} -> taken?
+      {:error, error} -> raise error
+    end
+  end
+
   defp unique_violations(entity_type, %Postgrex.Error{
          postgres: %{code: :unique_violation, constraint: constraint}
        }) do
@@ -470,18 +551,6 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   defp unique_violations(_entity_type, _error), do: nil
-
-  defp validate_change_values!(entity_type, sorted_changes) do
-    changes_map = Map.new(sorted_changes)
-
-    case Validator.validate_changes(entity_type, changes_map) do
-      :ok ->
-        :ok
-
-      {:error, errors} ->
-        raise ArgumentError, Validator.error_message(entity_type, changes_map, errors)
-    end
-  end
 
   defp validate_changes!(entity_type, sorted_changes, columns_by_field) do
     if sorted_changes == [] do
@@ -504,7 +573,9 @@ defmodule Hologram.DB.EntityOperations do
     :ok
   end
 
-  defp validate_entity!(entity_type, entity, columns) do
+  defp validate_entity!(entity_type, entity) do
+    %{columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
     field_names =
       columns
       |> Enum.reject(&(&1.source == :system or match?({:sort_key, _name}, &1.source)))

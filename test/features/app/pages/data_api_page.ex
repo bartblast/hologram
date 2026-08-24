@@ -5,7 +5,7 @@ defmodule HologramFeatureTests.DataApiPage do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
-  alias Hologram.WriteConflictError
+  alias Hologram.WriteError
   alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
@@ -22,6 +22,7 @@ defmodule HologramFeatureTests.DataApiPage do
     ~HOLO"""
     <p>
       <button $click={command: :create_duplicate_account}> Create duplicate account </button>
+      <button $click={command: :create_invalid_duplicate_account}> Create invalid duplicate account </button>
       <button $click={command: :create_review}> Create review </button>
       <button $click={command: :delete_referenced_product}> Delete referenced product </button>
       <button $click={command: :reject_invalid_review}> Reject invalid review </button>
@@ -51,6 +52,19 @@ defmodule HologramFeatureTests.DataApiPage do
       |> DB.create()
 
     put_action(server, :show_result, result: "duplicate_account_#{inspect(result)}")
+  end
+
+  def command(:create_invalid_duplicate_account, _params, server) do
+    Account
+    |> Entity.new(handle: "taken")
+    |> DB.create!()
+
+    result =
+      Account
+      |> Entity.new(bio: "far too long for ten", handle: "taken")
+      |> DB.create()
+
+    put_action(server, :show_result, result: "invalid_duplicate_account_#{inspect(result)}")
   end
 
   def command(:create_review, _params, server) do
@@ -98,7 +112,7 @@ defmodule HologramFeatureTests.DataApiPage do
 
         "rejected_nothing"
       rescue
-        error in ArgumentError -> error.message
+        error in WriteError -> error.message
       end
 
     put_action(server, :show_result, result: result)
@@ -117,7 +131,7 @@ defmodule HologramFeatureTests.DataApiPage do
 
         "raised_nothing"
       rescue
-        error in WriteConflictError -> error.message
+        error in WriteError -> error.message
       end
 
     put_action(server, :show_result, result: result)

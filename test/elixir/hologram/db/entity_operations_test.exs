@@ -283,7 +283,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert Enum.map(grant_effects, &Map.fetch!(&1.data, "role")) == ["maintainer", "owner"]
     end
 
-    test "returns the violation when a unique attribute's value is taken" do
+    test "returns the violation from the write itself when a unique attribute's value is taken" do
       {:ok, _entity} =
         Module19
         |> Entity.new(slug: "x")
@@ -325,6 +325,78 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert Enum.map(outbox_effects(), & &1.entity_id) == [entity.id]
     end
 
+    test "returns every value violation without writing a row" do
+      entity = Entity.new(Module2, b: "nope")
+
+      assert create(entity) == {:error, %{b: [type: :integer], c: [:required]}}
+      assert get(Module2, entity.id) == nil
+      assert outbox_effects() == []
+    end
+
+    test "returns declared constraint option violations" do
+      assert create(Entity.new(Module10, count: 0)) == {:error, %{count: [min: 1]}}
+    end
+
+    # One byte over what the unique index's btree entry carries - refused here, before the insert,
+    # so PostgreSQL never gets to raise program_limit_exceeded for it.
+    test "returns the byte-bound violation for a unique string its index cannot carry" do
+      entity = Entity.new(Module19, slug: String.duplicate("a", 2693))
+
+      assert create(entity) == {:error, %{slug: [max_bytes: 2692]}}
+    end
+
+    test "returns reference violations" do
+      assert create(Entity.new(Module3)) == {:error, %{c_id: [:required]}}
+
+      assert create(Entity.new(Module3, c_id: "garbage")) == {:error, %{c_id: [type: :uuid]}}
+    end
+
+    test "reports a value violation and a taken unique value together" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: "taken", slug: "a")
+        |> create()
+
+      assert create(Entity.new(Module19, code: "taken", slug: 123)) ==
+               {:error, %{code: [:unique], slug: [type: :string]}}
+    end
+
+    # PostgreSQL abandons the statement at the first constraint it refuses, so the second taken
+    # value is never its to report - it is asked about after the write, the way it would be had
+    # the values failed and no write been attempted at all.
+    test "reports a second taken unique value the write did not reach" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: "both_code", slug: "both_slug")
+        |> create()
+
+      assert create(Entity.new(Module19, code: "both_code", slug: "both_slug")) ==
+               {:error, %{code: [:unique], slug: [:unique]}}
+    end
+
+    # A value that is not even the right type cannot be compared against what other rows hold,
+    # so the field keeps the violation it earned and nothing is asked about it.
+    test "skips the advisory check for a field carrying its own violation" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: "held", slug: "b")
+        |> create()
+
+      assert create(Entity.new(Module19, code: 456, slug: 123)) ==
+               {:error, %{code: [type: :string], slug: [type: :string]}}
+    end
+
+    # An optional unique attribute admits any number of nils, so a nil is never taken.
+    test "skips nil values" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: nil, slug: "c")
+        |> create()
+
+      assert create(Entity.new(Module19, code: nil, slug: 123)) ==
+               {:error, %{slug: [type: :string]}}
+    end
+
     test "raises on constraint violations" do
       entity = Entity.new(Module1)
       {:ok, _entity} = create(entity)
@@ -337,74 +409,6 @@ defmodule Hologram.DB.EntityOperationsTest do
         end
 
       assert error.postgres.code == :unique_violation
-    end
-
-    test "raises naming every validation violation before touching the database" do
-      entity = Entity.new(Module2, b: "nope")
-
-      expected_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module2:
-          * attribute :b must be of type :integer, got: "nope"
-          * attribute :c is required\
-        """)
-
-      assert_error ArgumentError, expected_msg, fn -> create(entity) end
-    end
-
-    test "raises on declared constraint option violations" do
-      entity = Entity.new(Module10, count: 0)
-
-      expected_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module10:
-          * attribute :count must be at least 1, got: 0\
-        """)
-
-      assert_error ArgumentError, expected_msg, fn -> create(entity) end
-    end
-
-    # One byte over what the unique index's btree entry carries - refused here, before the insert,
-    # so PostgreSQL never gets to raise program_limit_exceeded for it.
-    test "raises on a unique string its index cannot carry" do
-      slug = String.duplicate("a", 2693)
-      entity = Entity.new(Module19, slug: slug)
-
-      expected_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module19:
-          * attribute :slug must hold at most 2692 bytes (the most its unique index can carry), got: #{inspect(slug)}\
-        """)
-
-      assert_error ArgumentError, expected_msg, fn -> create(entity) end
-    end
-
-    test "raises on reference violations" do
-      expected_required_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module3:
-          * reference :c_id is required\
-        """)
-
-      assert_error ArgumentError, expected_required_msg, fn ->
-        {:ok, _entity} =
-          Module3
-          |> Entity.new()
-          |> create()
-      end
-
-      expected_invalid_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module3:
-          * reference :c_id must be a valid entity id, got: "garbage"\
-        """)
-
-      assert_error ArgumentError, expected_invalid_msg, fn ->
-        {:ok, _entity} =
-          Module3
-          |> Entity.new(c_id: "garbage")
-          |> create()
-      end
     end
   end
 
@@ -555,6 +559,18 @@ defmodule Hologram.DB.EntityOperationsTest do
       create_if_absent(role_grant(user, :owner))
 
       assert outbox_effects() == effects_after_first
+    end
+
+    test "raises on an invalid entity" do
+      grant = %RoleGrant{id: Entity.generate_id(), role: :owner}
+
+      expected_msg =
+        normalize_newlines("""
+        invalid data for Hologram.Auth.RoleGrant:
+          * reference :user_id is required\
+        """)
+
+      assert_error ArgumentError, expected_msg, fn -> create_if_absent(grant) end
     end
   end
 
@@ -931,7 +947,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert get(Module3, created_entity.id).b_id == nil
     end
 
-    test "returns the violation when the new value is taken" do
+    test "returns the violation from the write itself when the new value is taken" do
       {:ok, first} =
         Module19
         |> Entity.new(slug: "taken")
@@ -981,6 +997,86 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert Enum.map(outbox_effects(), & &1.op) == ["put_entity", "put_entity"]
     end
 
+    test "reports a value violation and a taken unique value together" do
+      {:ok, first} =
+        Module19
+        |> Entity.new(code: "update_taken", slug: "update_a")
+        |> create()
+
+      {:ok, second} =
+        Module19
+        |> Entity.new(code: "update_free", slug: "update_b")
+        |> create()
+
+      assert update(Module19, second.id, %{code: first.code, slug: 123}) ==
+               {:error, %{code: [:unique], slug: [type: :string]}}
+    end
+
+    test "reports a second taken unique value the write did not reach" do
+      {:ok, first} =
+        Module19
+        |> Entity.new(code: "upd_both_code", slug: "upd_both_slug")
+        |> create()
+
+      {:ok, second} =
+        Module19
+        |> Entity.new(code: "upd_other_code", slug: "upd_other_slug")
+        |> create()
+
+      assert update(Module19, second.id, %{code: first.code, slug: first.slug}) ==
+               {:error, %{code: [:unique], slug: [:unique]}}
+    end
+
+    # The unique index excludes the row from its own comparison, and so does the advisory
+    # query - a resubmitted form carrying a row's unchanged value must not be refused.
+    test "does not count the row's own value as taken" do
+      {:ok, entity} =
+        Module19
+        |> Entity.new(code: "update_own", slug: "update_c")
+        |> create()
+
+      assert update(Module19, entity.id, %{code: entity.code, slug: 123}) ==
+               {:error, %{slug: [type: :string]}}
+    end
+
+    test "returns every change violation without writing" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      assert update(Module2, created_entity.id, %{b: "nope", c: nil}) ==
+               {:error, %{b: [type: :integer], c: [:required]}}
+
+      assert get(Module2, created_entity.id).c == "some text"
+    end
+
+    test "returns declared constraint option violations" do
+      {:ok, created_entity} =
+        Module10
+        |> Entity.new(count: 5)
+        |> create()
+
+      assert update(Module10, created_entity.id, %{count: 0}) == {:error, %{count: [min: 1]}}
+    end
+
+    test "returns reference change violations" do
+      {:ok, required_target} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, created_entity} =
+        Module3
+        |> Entity.new(c_id: required_target.id)
+        |> create()
+
+      assert update(Module3, created_entity.id, %{c_id: nil}) == {:error, %{c_id: [:required]}}
+
+      assert update(Module3, created_entity.id, %{c_id: "garbage"}) ==
+               {:error, %{c_id: [type: :uuid]}}
+    end
+
     test "raises when changes name anything but declared attributes and to-one relationships" do
       {:ok, created_entity} =
         Module2
@@ -1024,73 +1120,6 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         update(Module2, nonexistent_id, %{c: "some text"})
-      end
-    end
-
-    test "raises naming every change violation before touching the database" do
-      {:ok, created_entity} =
-        Module2
-        |> Entity.new(a: true, c: "some text")
-        |> create()
-
-      expected_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module2:
-          * attribute :b must be of type :integer, got: "nope"
-          * attribute :c is required\
-        """)
-
-      assert_error ArgumentError, expected_msg, fn ->
-        update(Module2, created_entity.id, %{b: "nope", c: nil})
-      end
-    end
-
-    test "raises on declared constraint option violations" do
-      {:ok, created_entity} =
-        Module10
-        |> Entity.new(count: 5)
-        |> create()
-
-      expected_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module10:
-          * attribute :count must be at least 1, got: 0\
-        """)
-
-      assert_error ArgumentError, expected_msg, fn ->
-        update(Module10, created_entity.id, %{count: 0})
-      end
-    end
-
-    test "raises on reference change violations" do
-      {:ok, required_target} =
-        Module1
-        |> Entity.new()
-        |> create()
-
-      {:ok, created_entity} =
-        Module3
-        |> Entity.new(c_id: required_target.id)
-        |> create()
-
-      expected_nil_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module3:
-          * reference :c_id is required\
-        """)
-
-      assert_error ArgumentError, expected_nil_msg, fn ->
-        update(Module3, created_entity.id, %{c_id: nil})
-      end
-
-      expected_invalid_msg =
-        normalize_newlines("""
-        invalid data for Hologram.Test.Fixtures.Entity.Module3:
-          * reference :c_id must be a valid entity id, got: "garbage"\
-        """)
-
-      assert_error ArgumentError, expected_invalid_msg, fn ->
-        update(Module3, created_entity.id, %{c_id: "garbage"})
       end
     end
   end

@@ -13,6 +13,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module19
+  alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
 
   describe "init/1" do
@@ -81,7 +82,7 @@ defmodule Hologram.DBTest do
   describe "create/1" do
     # Both shapes in one test: the first create binds {:ok, _} or the match fails, and the
     # second pins the violation travelling out through the gateway unchanged.
-    test "returns the unique violation" do
+    test "returns the unique violation from the write itself" do
       {:ok, _entity} =
         Module19
         |> Entity.new(slug: "x")
@@ -93,6 +94,16 @@ defmodule Hologram.DBTest do
         |> create()
 
       assert result == {:error, %{slug: [:unique]}}
+    end
+
+    test "returns a value violation and a taken unique value in one map" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: "gateway_taken", slug: "gateway_a")
+        |> create()
+
+      assert create(Entity.new(Module19, code: "gateway_taken", slug: 123)) ==
+               {:error, %{code: [:unique], slug: [type: :string]}}
     end
 
     test "rejects role grants" do
@@ -113,18 +124,65 @@ defmodule Hologram.DBTest do
       assert get(Module1, entity.id).id == entity.id
     end
 
+    test "raises a write error naming every value violation" do
+      expected_msg =
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Entity.Module2:
+          * attribute :b must be of type :integer, got: "nope"
+          * attribute :c is required\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        Module2
+        |> Entity.new(b: "nope")
+        |> create!()
+      end
+
+      error =
+        try do
+          Module2
+          |> Entity.new(b: "nope")
+          |> create!()
+        rescue
+          error in Hologram.WriteError -> error
+        end
+
+      assert error.reason == %{b: [type: :integer], c: [:required]}
+    end
+
     # assert_error sees the message and nothing else, so the reason field - what the plain
     # variant would have returned - is caught and asserted separately.
-    test "raises a write conflict when a unique attribute's value is taken" do
+    test "raises naming the taken value beside the value violation" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: "bang_taken", slug: "bang_a")
+        |> create()
+
+      expected_msg =
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Entity.Module19:
+          * attribute :code "bang_taken" is already taken
+          * attribute :slug must be of type :string, got: 123\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        create!(Entity.new(Module19, code: "bang_taken", slug: 123))
+      end
+    end
+
+    test "raises a write error when a unique attribute's value is taken" do
       {:ok, _entity} =
         Module19
         |> Entity.new(slug: "x")
         |> create()
 
       expected_msg =
-        ~s(cannot create Hologram.Test.Fixtures.Entity.Module19 - slug "x" is already taken)
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Entity.Module19:
+          * attribute :slug "x" is already taken\
+        """)
 
-      assert_error Hologram.WriteConflictError, expected_msg, fn ->
+      assert_error Hologram.WriteError, expected_msg, fn ->
         Module19
         |> Entity.new(slug: "x")
         |> create!()
@@ -136,7 +194,7 @@ defmodule Hologram.DBTest do
           |> Entity.new(slug: "x")
           |> create!()
         rescue
-          error in Hologram.WriteConflictError -> error
+          error in Hologram.WriteError -> error
         end
 
       assert error.reason == %{slug: [:unique]}
@@ -164,7 +222,7 @@ defmodule Hologram.DBTest do
       assert get(Module1, entity.id) == nil
     end
 
-    test "raises a write conflict when another entity references the row" do
+    test "raises a write error when another entity references the row" do
       {:ok, target} =
         Module1
         |> Entity.new()
@@ -179,7 +237,7 @@ defmodule Hologram.DBTest do
         ~s(cannot delete Hologram.Test.Fixtures.Entity.Module1 "#{target.id}" - ) <>
           "still referenced by Hologram.Test.Fixtures.Entity.Module3 through :c"
 
-      assert_error Hologram.WriteConflictError, expected_msg, fn ->
+      assert_error Hologram.WriteError, expected_msg, fn ->
         delete!(Module1, target.id)
       end
 
@@ -187,7 +245,7 @@ defmodule Hologram.DBTest do
         try do
           delete!(Module1, target.id)
         rescue
-          error in Hologram.WriteConflictError -> error
+          error in Hologram.WriteError -> error
         end
 
       assert error.reason == %{referenced_by: Module3, relationship: :c}
@@ -207,7 +265,7 @@ defmodule Hologram.DBTest do
   end
 
   describe "update/3" do
-    test "returns the unique violation" do
+    test "returns the unique violation from the write itself" do
       {:ok, first} =
         Module19
         |> Entity.new(slug: "held")
@@ -219,6 +277,21 @@ defmodule Hologram.DBTest do
         |> create()
 
       assert update(Module19, second.id, slug: first.slug) == {:error, %{slug: [:unique]}}
+    end
+
+    test "returns a value violation and a taken unique value in one map" do
+      {:ok, first} =
+        Module19
+        |> Entity.new(code: "gateway_update_taken", slug: "gateway_update_a")
+        |> create()
+
+      {:ok, second} =
+        Module19
+        |> Entity.new(code: "gateway_update_free", slug: "gateway_update_b")
+        |> create()
+
+      assert update(Module19, second.id, %{code: first.code, slug: 123}) ==
+               {:error, %{code: [:unique], slug: [type: :string]}}
     end
 
     test "rejects role grants" do
@@ -240,7 +313,33 @@ defmodule Hologram.DBTest do
       assert update!(Module19, entity.id, slug: "after") == :ok
     end
 
-    test "raises a write conflict when the new value is taken" do
+    test "raises a write error naming every change violation" do
+      {:ok, entity} =
+        Module2
+        |> Entity.new(a: true, c: "some text")
+        |> create()
+
+      expected_msg =
+        normalize_newlines("""
+        cannot update Hologram.Test.Fixtures.Entity.Module2 "#{entity.id}":
+          * attribute :b must be of type :integer, got: "nope"\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        update!(Module2, entity.id, b: "nope")
+      end
+
+      error =
+        try do
+          update!(Module2, entity.id, b: "nope")
+        rescue
+          error in Hologram.WriteError -> error
+        end
+
+      assert error.reason == %{b: [type: :integer]}
+    end
+
+    test "raises a write error when the new value is taken" do
       {:ok, first} =
         Module19
         |> Entity.new(slug: "held")
@@ -252,10 +351,12 @@ defmodule Hologram.DBTest do
         |> create()
 
       expected_msg =
-        ~s(cannot update Hologram.Test.Fixtures.Entity.Module19 "#{second.id}" - ) <>
-          ~s(slug "held" is already taken)
+        normalize_newlines("""
+        cannot update Hologram.Test.Fixtures.Entity.Module19 "#{second.id}":
+          * attribute :slug "held" is already taken\
+        """)
 
-      assert_error Hologram.WriteConflictError, expected_msg, fn ->
+      assert_error Hologram.WriteError, expected_msg, fn ->
         update!(Module19, second.id, slug: first.slug)
       end
 
@@ -263,7 +364,7 @@ defmodule Hologram.DBTest do
         try do
           update!(Module19, second.id, slug: first.slug)
         rescue
-          error in Hologram.WriteConflictError -> error
+          error in Hologram.WriteError -> error
         end
 
       assert error.reason == %{slug: [:unique]}

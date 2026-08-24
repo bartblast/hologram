@@ -38,9 +38,17 @@ defmodule HologramFeatureTests.DataApiTest do
     session
     |> visit(DataApiPage)
     |> click(button("Raise on duplicate account"))
+    |> assert_text(css("#result"), "cannot create HologramFeatureTests.Entities.Account:")
+    |> assert_text(css("#result"), ~s(* attribute :handle "taken" is already taken))
+  end
+
+  feature "reports a value violation and a taken unique value in one pass", %{session: session} do
+    session
+    |> visit(DataApiPage)
+    |> click(button("Create invalid duplicate account"))
     |> assert_text(
       css("#result"),
-      ~s(cannot create HologramFeatureTests.Entities.Account - handle "taken" is already taken)
+      "invalid_duplicate_account_{:error, %{bio: [max_length: 10], handle: [:unique]}}"
     )
   end
 

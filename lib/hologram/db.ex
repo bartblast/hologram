@@ -13,7 +13,7 @@ defmodule Hologram.DB do
   alias Hologram.Migrator
   alias Hologram.Query
   alias Hologram.Reflection
-  alias Hologram.WriteConflictError
+  alias Hologram.WriteError
 
   @mapping_key {__MODULE__, :mapping}
 
@@ -33,16 +33,20 @@ defmodule Hologram.DB do
   Inserts the given entity as a full row - every column is named and bound explicitly -
   stamping created_at and updated_at with the same current UTC timestamp.
 
-  Returns {:ok, entity} with the stamped entity, or {:error, violations} when the value of a
-  unique attribute is already held by another row - violations is the map Entity.validate/1
-  returns, the attribute name to [:unique]. A write reports the first violated database
-  constraint only. Any other constraint violation raises.
+  Returns {:ok, entity} with the stamped entity, or {:error, violations} - the map
+  Entity.validate/1 returns, naming each field that broke its declaration: the declared
+  constraints its value breaks (type, enum values, required presence, the constraint
+  options), and :unique for a unique attribute whose value another row already holds.
+  Values are judged before any SQL runs, and a write is attempted only once they pass.
+  Uniqueness is reported by the write itself for the attribute it refuses, and asked advisorily
+  for every unique attribute the write did not answer for - an advisory answer describes the
+  moment it was asked, and a value free then can be taken by the next attempt. A write refuses
+  at the first violated database constraint and reports no other of its own.
 
-  Attribute values are validated against the entity type's declarations before any SQL
-  runs - type, enum values, required presence, and the declared constraint options -
-  raising one ArgumentError that lists every violation.
+  Misuse raises rather than returning - a role grant, which is written only through
+  grant_role/revoke_role - as does a constraint violation the mapping does not explain.
   """
-  @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom)}}
+  @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
   def create(entity) do
     Validator.validate_writable!(entity.__struct__)
 
@@ -50,7 +54,7 @@ defmodule Hologram.DB do
   end
 
   @doc """
-  Like create/1, returning the stamped entity directly and raising Hologram.WriteConflictError
+  Like create/1, returning the stamped entity directly and raising Hologram.WriteError
   instead of returning {:error, ...}.
 
   The spelling for seeds, scripts and fixtures, where a conflict is a reason to stop rather than
@@ -63,9 +67,12 @@ defmodule Hologram.DB do
         stamped_entity
 
       {:error, violations} ->
-        raise WriteConflictError,
+        entity_type = entity.__struct__
+
+        raise WriteError,
           message:
-            "cannot create #{inspect(entity.__struct__)} - #{taken_description(violations, entity)}",
+            "cannot create #{inspect(entity_type)}:\n" <>
+              refusal_lines(entity_type, violations, Map.from_struct(entity)),
           reason: violations
     end
   end
@@ -87,7 +94,7 @@ defmodule Hologram.DB do
   end
 
   @doc """
-  Like delete/2, raising Hologram.WriteConflictError instead of returning {:error, ...}.
+  Like delete/2, raising Hologram.WriteError instead of returning {:error, ...}.
 
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
   takes delete/2.
@@ -99,7 +106,7 @@ defmodule Hologram.DB do
         :ok
 
       {:error, %{referenced_by: referenced_by, relationship: relationship} = reason} ->
-        raise WriteConflictError,
+        raise WriteError,
           message:
             "cannot delete #{inspect(entity_type)} #{inspect(id)} - still referenced by " <>
               "#{inspect(referenced_by)} through #{inspect(relationship)}",
@@ -181,16 +188,22 @@ defmodule Hologram.DB do
   name, system attributes included, raises ArgumentError - as do empty changes and an
   id that names no entity.
 
-  Returns :ok, or {:error, violations} when a changed unique attribute's new value is already
-  held by another row - violations is the map Entity.validate/2 returns, the attribute name to
-  [:unique]. A row's own current value never conflicts with itself. A write reports the first
-  violated database constraint only. Any other constraint violation raises.
+  Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
+  changed field that broke its declaration: the declared constraints its value breaks (type,
+  enum values, the required-nil rule, the constraint options), and :unique for a changed
+  unique attribute whose new value another row already holds. A row's own current value never
+  conflicts with itself. Values are judged before any SQL runs, and a write is attempted only
+  once they pass. Uniqueness is reported by the write itself for the attribute it refuses, and
+  asked advisorily for every changed unique attribute the write did not answer for - an advisory
+  answer describes the moment it was asked, and a value free then can be taken by the next
+  attempt. A write refuses at the first violated database constraint and reports no other of
+  its own.
 
-  Changed attribute values are validated against the entity type's declarations before
-  any SQL runs - type, enum values, the required-nil rule, and the declared constraint
-  options - raising one ArgumentError that lists every violation.
+  The misuses named above raise rather than returning, as does a constraint violation the
+  mapping does not explain.
   """
-  @spec update(module, String.t(), map | keyword) :: :ok | {:error, %{atom => list(atom)}}
+  @spec update(module, String.t(), map | keyword) ::
+          :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity_type, id, changes) do
     Validator.validate_writable!(entity_type)
 
@@ -208,7 +221,7 @@ defmodule Hologram.DB do
   end
 
   @doc """
-  Like update/3, raising Hologram.WriteConflictError instead of returning {:error, ...}.
+  Like update/3, raising Hologram.WriteError instead of returning {:error, ...}.
 
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
   takes update/3.
@@ -220,9 +233,10 @@ defmodule Hologram.DB do
         :ok
 
       {:error, violations} ->
-        raise WriteConflictError,
+        raise WriteError,
           message:
-            "cannot update #{inspect(entity_type)} #{inspect(id)} - #{taken_description(violations, Map.new(changes))}",
+            "cannot update #{inspect(entity_type)} #{inspect(id)}:\n" <>
+              refusal_lines(entity_type, violations, Map.new(changes)),
           reason: violations
     end
   end
@@ -372,16 +386,6 @@ defmodule Hologram.DB do
     Supervisor.init(children, strategy: :one_for_one)
   end
 
-  # Written to describe several fields though a write reports one: PostgreSQL aborts at the
-  # first violated constraint, so the map always holds a single key today.
-  defp taken_description(violations, values) do
-    violations
-    |> Enum.sort()
-    |> Enum.map_join(", ", fn {field, _reasons} ->
-      "#{field} #{inspect(Map.fetch!(values, field))} is already taken"
-    end)
-  end
-
   defp assert_no_placeholders!(term) do
     case Query.placeholder_names(term) do
       [] ->
@@ -392,5 +396,21 @@ defmodule Hologram.DB do
           message:
             "cannot run a query term containing placeholders - placeholder #{inspect(name)} has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
     end
+  end
+
+  # One line per violation, always bulleted - the shape Validator.error_message/3 set, and the
+  # only one that reads the same whether the map holds one entry or several. A taken value is
+  # described here because the validator never reports uniqueness: it is state, not a value.
+  defp refusal_lines(entity_type, violations, values) do
+    violations
+    |> Enum.flat_map(fn {field, reasons} -> Enum.map(reasons, &{field, &1}) end)
+    |> Enum.sort()
+    |> Enum.map_join("\n", fn
+      {field, :unique} ->
+        "  * attribute #{inspect(field)} #{inspect(Map.fetch!(values, field))} is already taken"
+
+      violation ->
+        Validator.violation_description(entity_type, values, violation)
+    end)
   end
 end

@@ -90,13 +90,8 @@ defmodule Hologram.Entity.Validator do
   """
   @spec error_message(module, %{atom => any}, list({atom, atom | {atom, any}})) :: String.t()
   def error_message(entity_type, data, errors) do
-    reference_names =
-      entity_type
-      |> reference_definitions()
-      |> Enum.map(fn {field, _optional?} -> field end)
-
     descriptions =
-      Enum.map_join(errors, "\n", &violation_description(reference_names, data, &1))
+      Enum.map_join(errors, "\n", &violation_description(entity_type, data, &1))
 
     "invalid data for #{inspect(entity_type)}:\n#{descriptions}"
   end
@@ -346,6 +341,14 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
+  @doc """
+  Builds the description of a single violation reported by validate/2 - one line naming the attribute or reference, the expectation, and the received value, in the bulleted form error_message/3 renders.
+  """
+  @spec violation_description(module, %{atom => any}, {atom, atom | {atom, any}}) :: String.t()
+  def violation_description(entity_type, data, error) do
+    violation_line(reference_field_names(entity_type), data, error)
+  end
+
   defp attribute_data_errors(data, {name, type, opts}) do
     optional? = Keyword.get(opts, :optional) == true
 
@@ -555,6 +558,12 @@ defmodule Hologram.Entity.Validator do
     |> Enum.map(fn {name, _type, opts} ->
       {String.to_existing_atom("#{name}_id"), Keyword.get(opts, :optional) == true}
     end)
+  end
+
+  defp reference_field_names(entity_type) do
+    entity_type
+    |> reference_definitions()
+    |> Enum.map(fn {field, _optional?} -> field end)
   end
 
   defp relationship_field_names(name, [_target]), do: [Atom.to_string(name)]
@@ -1224,17 +1233,17 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp violation_description(reference_names, _data, {name, :required}) do
+  defp violation_line(reference_names, _data, {name, :required}) do
     kind_word = if name in reference_names, do: "reference", else: "attribute"
 
     "  * #{kind_word} #{inspect(name)} is required"
   end
 
-  defp violation_description(_reference_names, _data, {name, :unknown}) do
+  defp violation_line(_reference_names, _data, {name, :unknown}) do
     "  * #{inspect(name)} is not a declared attribute or to-one reference"
   end
 
-  defp violation_description(reference_names, data, {name, reason}) do
+  defp violation_line(reference_names, data, {name, reason}) do
     received = inspect(Map.get(data, name))
 
     if name in reference_names do

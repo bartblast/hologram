@@ -1815,4 +1815,16 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
   end
+
+  describe "violation_description/3" do
+    test "describes an attribute violation naming the expectation and the received value" do
+      assert violation_description(Module10, %{count: 0}, {:count, {:min, 1}}) ==
+               "  * attribute :count must be at least 1, got: 0"
+    end
+
+    test "describes a reference violation with reference wording" do
+      assert violation_description(Module3, %{}, {:c_id, :required}) ==
+               "  * reference :c_id is required"
+    end
+  end
 end
