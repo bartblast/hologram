@@ -1264,6 +1264,12 @@ defmodule Hologram.Query do
           "include sub-terms take no cardinality marker - the relationship declaration governs cardinality"
     end
 
+    if sub_term[:trust] == true do
+      raise ArgumentError,
+        message:
+          "include sub-terms take no trust mark - trust/1 goes on the query root and reads the whole query, includes and all, on the server's authority"
+    end
+
     if kind == :to_one and sub_term_has_clauses?(sub_term) do
       raise ArgumentError,
         message:

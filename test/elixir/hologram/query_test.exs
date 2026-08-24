@@ -911,6 +911,17 @@ defmodule Hologram.QueryTest do
       end
     end
 
+    # The root's mark already reads the whole query on the server's authority, includes and all,
+    # so a sub-term marking one of its own would say nothing the read honours.
+    test "raises on a sub-term carrying a trust mark" do
+      expected_msg =
+        "include sub-terms take no trust mark - trust/1 goes on the query root and reads the whole query, includes and all, on the server's authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, :a, &trust/1)
+      end
+    end
+
     test "raises on an attribute name" do
       expected_msg =
         ":a is an attribute in Hologram.Test.Fixtures.Entity.Module2 - only relationships can be included"
@@ -1657,6 +1668,15 @@ defmodule Hologram.QueryTest do
         |> Map.put(:trust, true)
 
       assert trust(Module2) == expected_term
+    end
+
+    test "raises on a trust mark in an include sub-term" do
+      expected_msg =
+        "include sub-terms take no trust mark - trust/1 goes on the query root and reads the whole query, includes and all, on the server's authority"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, :b, &trust/1)
+      end
     end
 
     test "raises when the subject is neither an entity struct, an entity type nor a query term" do
