@@ -120,6 +120,27 @@ defmodule Hologram.DB do
   end
 
   @doc """
+  Like delete/1, raising Hologram.WriteError instead of returning {:error, ...}.
+
+  The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a
+  restriction takes delete/1. A denied claim raises Hologram.AccessDeniedError from either.
+  """
+  @spec delete!(struct) :: :ok
+  def delete!(entity) when is_struct(entity) do
+    case delete(entity) do
+      :ok ->
+        :ok
+
+      {:error, %{referenced_by: referenced_by, relationship: relationship} = reason} ->
+        raise WriteError,
+          message:
+            "cannot delete #{inspect(entity.__struct__)} #{inspect(entity.id)} - still " <>
+              "referenced by #{inspect(referenced_by)} through #{inspect(relationship)}",
+          reason: reason
+    end
+  end
+
+  @doc """
   Like delete/2, raising Hologram.WriteError instead of returning {:error, ...}.
 
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
@@ -267,6 +288,29 @@ defmodule Hologram.DB do
     Validator.validate_writable!(entity.__struct__)
 
     Writer.update(entity)
+  end
+
+  @doc """
+  Like update/1, raising Hologram.WriteError instead of returning {:error, ...}.
+
+  The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
+  takes update/1. A denied claim raises Hologram.AccessDeniedError from either.
+  """
+  @spec update!(struct) :: :ok
+  def update!(entity) when is_struct(entity) do
+    case update(entity) do
+      :ok ->
+        :ok
+
+      {:error, violations} ->
+        entity_type = entity.__struct__
+
+        raise WriteError,
+          message:
+            "cannot update #{inspect(entity_type)} #{inspect(entity.id)}:\n" <>
+              refusal_lines(entity_type, violations, entity.__meta__.attribute_changes),
+          reason: violations
+    end
   end
 
   @doc """
