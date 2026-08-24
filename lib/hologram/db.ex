@@ -104,6 +104,27 @@ defmodule Hologram.DB do
   end
 
   @doc """
+  Deletes the given entity struct together with its own outgoing to-many edges, in one
+  transaction, and returns :ok. delete/2 for a struct in hand rather than a type and an id -
+  an incoming reference restricts it the same way, returning
+  {:error, %{referenced_by: entity_type, relationship: name}}, and a struct whose id names no
+  row is a no-op.
+
+  With an acting user set, the delete is evaluated against that user's policies for :delete -
+  or for the operation the entity claims through authorize/2 - against the row as it stands,
+  read FOR UPDATE, and raises Hologram.AccessDeniedError when no rule grants it. An entity
+  claiming the server's own authority through trust/1 is deleted without evaluation, and
+  without an acting user an unclaimed delete is raw. A struct whose id names no row is not
+  evaluated at all: there is nothing to authorize against.
+  """
+  @spec delete(struct) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
+  def delete(entity) when is_struct(entity) do
+    Validator.validate_writable!(entity.__struct__)
+
+    Writer.delete(entity)
+  end
+
+  @doc """
   Like delete/2, raising Hologram.WriteError instead of returning {:error, ...}.
 
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict

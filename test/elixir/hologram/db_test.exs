@@ -274,6 +274,15 @@ defmodule Hologram.DBTest do
     end
   end
 
+  describe "delete/1" do
+    test "deletes the given entity struct" do
+      {:ok, entity} = create(Entity.new(Module1))
+
+      assert delete(entity) == :ok
+      assert get(Module1, entity.id) == nil
+    end
+  end
+
   describe "delete!/2" do
     test "returns :ok" do
       {:ok, entity} =

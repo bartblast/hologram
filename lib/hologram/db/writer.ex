@@ -25,6 +25,29 @@ defmodule Hologram.DB.Writer do
   end
 
   @doc false
+  @spec delete(struct) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
+  def delete(entity) do
+    entity_type = entity.__struct__
+
+    {:ok, applied} =
+      Connection.transaction(fn ->
+        # No row is nothing to authorize against, and deleting an id that names none is a no-op
+        # through the type-indexed verb too.
+        case EntityOperations.get(entity_type, entity.id, lock: true) do
+          nil ->
+            :ok
+
+          row ->
+            evaluate!(entity, :delete, row)
+
+            EntityOperations.delete(entity_type, entity.id)
+        end
+      end)
+
+    applied
+  end
+
+  @doc false
   @spec update(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity) do
     %Metadata{attribute_changes: attribute_changes, relationship_ops: relationship_ops} =

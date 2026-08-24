@@ -157,6 +157,132 @@ defmodule Hologram.DB.WriterTest do
     end
   end
 
+  describe "delete/1" do
+    test "deletes raw without an acting user" do
+      entity =
+        Module1
+        |> Entity.new()
+        |> DB.create!()
+
+      assert delete(entity) == :ok
+      assert DB.get(Module1, entity.id) == nil
+    end
+
+    test "evaluates :delete for the acting user" do
+      user = create_user("deleter@example.com")
+
+      parent =
+        Module2
+        |> Entity.new()
+        |> DB.create!()
+
+      entity =
+        Module1
+        |> Entity.new(parent_id: parent.id)
+        |> DB.create!()
+
+      expected_msg =
+        ~s(not allowed to delete Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> delete(entity) end)
+      end
+
+      assert DB.get(Module1, entity.id) != nil
+
+      # allow :delete, to: {:parent, :admin} - the grant is on the PARENT, not the row.
+      Auth.grant_role(user, parent, :admin)
+
+      assert as_user(user, fn -> delete(entity) end) == :ok
+      assert DB.get(Module1, entity.id) == nil
+    end
+
+    test "evaluates the claim against the row as it stands, not the struct in hand" do
+      user = create_user("mover@example.com")
+
+      granting_parent =
+        Module2
+        |> Entity.new()
+        |> DB.create!()
+
+      other_parent =
+        Module2
+        |> Entity.new()
+        |> DB.create!()
+
+      entity =
+        Module1
+        |> Entity.new(parent_id: granting_parent.id)
+        |> DB.create!()
+
+      # allow :delete, to: {:parent, :admin} - the role is granted on the parent the STRUCT
+      # names, while the row has since been moved to a parent the user has no role on.
+      Auth.grant_role(user, granting_parent, :admin)
+      EntityOperations.update(Module1, entity.id, parent_id: other_parent.id)
+
+      expected_msg =
+        ~s(not allowed to delete Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> delete(entity) end)
+      end
+
+      assert DB.get(Module1, entity.id) != nil
+    end
+
+    test "evaluates the operation the entity claims" do
+      user = create_user("archiver@example.com")
+
+      entity =
+        Module1
+        |> Entity.new(author_id: user.id)
+        |> DB.create!()
+
+      claimed_entity = authorize(entity, :archive)
+
+      assert as_user(user, fn -> delete(claimed_entity) end) == :ok
+      assert DB.get(Module1, entity.id) == nil
+    end
+
+    test "skips evaluation for a trust claim" do
+      user = create_user("purger@example.com")
+
+      entity =
+        Module1
+        |> Entity.new()
+        |> DB.create!()
+
+      assert as_user(user, fn -> delete(trust(entity)) end) == :ok
+      assert DB.get(Module1, entity.id) == nil
+    end
+
+    test "is a no-op for an id naming no row, evaluating nothing" do
+      user = create_user("ghost@example.com")
+
+      assert delete(Entity.new(Module1)) == :ok
+      assert as_user(user, fn -> delete(Entity.new(Module1)) end) == :ok
+    end
+
+    test "names the referencer when an incoming reference blocks the delete" do
+      source =
+        Module16
+        |> Entity.new()
+        |> DB.create!()
+
+      target =
+        Module15
+        |> Entity.new(token: "t")
+        |> DB.create!()
+
+      source
+      |> add_relationship(:secrets, target.id)
+      |> update()
+
+      assert delete(target) == {:error, %{referenced_by: Module16, relationship: :secrets}}
+      assert count_edges(source, target) == 1
+    end
+  end
+
   describe "update/1" do
     test "applies changes and relationship ops under one transaction - a refused value applies no op" do
       source =
