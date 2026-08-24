@@ -226,4 +226,71 @@ defmodule Hologram.DBReadTest do
       end
     end
   end
+
+  describe "read/2" do
+    test "reads a policied row without an acting user" do
+      entity = create_policy_module_2_entity()
+
+      assert DB.read(PolicyModule2, entity.id) == entity
+    end
+
+    test "reads nil for a row the acting user may not read" do
+      user = create_user("db_read_by_id_hidden@example.com")
+      entity = create_policy_module_2_entity()
+
+      assert as_user(user, fn -> DB.read(PolicyModule2, entity.id) end) == nil
+    end
+
+    test "reads nil when no row has the id" do
+      create_module_2_entity(a: true, c: "some text")
+
+      assert DB.read(Module2, Entity.generate_id()) == nil
+    end
+
+    test "reads the row" do
+      entity = create_module_2_entity(a: true, c: "some text")
+
+      assert DB.read(Module2, entity.id) == entity
+    end
+
+    test "reads the row the acting user may read" do
+      user = create_user("db_read_by_id_readable@example.com")
+      entity = create_policy_module_2_entity()
+
+      Auth.grant_role(user, entity, :member)
+
+      assert as_user(user, fn -> DB.read(PolicyModule2, entity.id) end) == entity
+    end
+
+    test "raises on a non-canonical id" do
+      user = create_user("db_read_by_id_invalid_id@example.com")
+
+      expected_msg =
+        ~s(invalid id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings)
+
+      assert_error ArgumentError, expected_msg, fn -> DB.read(PolicyModule2, "nope") end
+
+      assert_error ArgumentError, expected_msg, fn ->
+        as_user(user, fn -> DB.read(PolicyModule2, "nope") end)
+      end
+    end
+
+    # A term reaches both branches the same way or it reaches neither: before this refusal the
+    # no-actor branch raised KeyError and the acting-user branch answered nil, ignoring the mark
+    # the term carries.
+    test "raises on a query term" do
+      user = create_user("db_read_by_id_term@example.com")
+      entity = create_policy_module_2_entity()
+      term = trust(PolicyModule2)
+
+      expected_msg =
+        "#{inspect(term)} is not an entity type module - a by-id read takes the entity type, a query term is read with read/1"
+
+      assert_error ArgumentError, expected_msg, fn -> DB.read(term, entity.id) end
+
+      assert_error ArgumentError, expected_msg, fn ->
+        as_user(user, fn -> DB.read(term, entity.id) end)
+      end
+    end
+  end
 end

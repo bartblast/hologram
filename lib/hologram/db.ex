@@ -163,34 +163,6 @@ defmodule Hologram.DB do
   end
 
   @doc """
-  Returns the entity of the given type with the given id, or nil when no row matches.
-  Column values are decoded back into their logical types.
-
-  Raises ArgumentError when the id is not a canonical entity id (a lowercase
-  8-4-4-4-12 UUID string).
-
-  With an acting user set, the row is read through that user's :read policies and a row the
-  policies withhold reads as nil - as if it did not exist, which is what the template tier and
-  the client answer. Without an acting user the row is read raw.
-  """
-  @spec get(module, String.t()) :: struct | nil
-  def get(entity_type, id) do
-    case Context.actor_user_id() do
-      nil ->
-        EntityOperations.get(entity_type, id)
-
-      actor_user_id ->
-        EntityOperations.validate_id!(id)
-
-        entity_type
-        |> Query.filter(id: id)
-        |> Query.one()
-        |> Query.normalize()
-        |> QueryRunner.run_policied(mapping(), actor_user_id)
-    end
-  end
-
-  @doc """
   Executes the given SQL statement with the given placeholders and returns {:ok, result} or
   {:error, exception}. Inside transaction/2 the statement runs on the transaction's
   connection, otherwise on the pool.
@@ -233,6 +205,29 @@ defmodule Hologram.DB do
     else
       QueryRunner.run_policied(term, mapping(), actor_user_id)
     end
+  end
+
+  @doc """
+  Returns the entity of the given type with the given id, or nil when no row matches -
+  read/1 with one more predicate and single-result cardinality. Column values are decoded
+  back into their logical types.
+
+  With an acting user set, the row is read through that user's :read policies and a row the
+  policies withhold reads as nil - as if it did not exist, which is what the template tier and
+  the client answer. Without an acting user the row is read raw.
+
+  Raises ArgumentError when the id is not a canonical entity id (a lowercase
+  8-4-4-4-12 UUID string), or when the first argument is not an entity type module.
+  """
+  @spec read(module, String.t()) :: struct | nil
+  def read(entity_type, id) do
+    EntityOperations.validate_id!(id)
+    validate_entity_type!(entity_type)
+
+    entity_type
+    |> Query.filter(id: id)
+    |> Query.one()
+    |> read()
   end
 
   @doc """
@@ -543,5 +538,17 @@ defmodule Hologram.DB do
       violation ->
         Validator.violation_description(entity_type, values, violation)
     end)
+  end
+
+  # A by-id read is indexed by the entity type, the way delete/2 and update/3 are - a query
+  # term reaches the same row through read/1, which is where the stages compose.
+  defp validate_entity_type!(query) do
+    if not Reflection.entity?(query) do
+      raise ArgumentError,
+        message:
+          "#{inspect(query)} is not an entity type module - a by-id read takes the entity type, a query term is read with read/1"
+    end
+
+    :ok
   end
 end
