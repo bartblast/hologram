@@ -34,12 +34,29 @@ defmodule HologramFeatureTests.DataApiTest do
     |> assert_text(css("#result"), "duplicate_account_{:error, %{handle: [:unique]}}")
   end
 
+  feature "answers a refused write inside a transaction and carries on", %{session: session} do
+    session
+    |> visit(DataApiPage)
+    |> click(button("Create duplicate account in transaction"))
+    |> assert_text(
+      css("#result"),
+      ~s(duplicate_account_in_transaction_{:ok, {{:error, %{handle: [:unique]}}, "other"}})
+    )
+  end
+
   feature "raises on a duplicate through the bang variant", %{session: session} do
     session
     |> visit(DataApiPage)
     |> click(button("Raise on duplicate account"))
     |> assert_text(css("#result"), "cannot create HologramFeatureTests.Entities.Account:")
     |> assert_text(css("#result"), ~s(* attribute :handle "taken" is already taken))
+  end
+
+  feature "raises through the bang inside a transaction", %{session: session} do
+    session
+    |> visit(DataApiPage)
+    |> click(button("Raise on duplicate account in transaction"))
+    |> assert_text(css("#result"), "raise_on_duplicate_account_in_transaction_:raised")
   end
 
   feature "reports a value violation and a taken unique value in one pass", %{session: session} do
