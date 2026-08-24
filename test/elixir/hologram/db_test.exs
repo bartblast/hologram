@@ -501,6 +501,23 @@ defmodule Hologram.DBTest do
                {:error, %{c_id: [:not_found]}}
     end
 
+    test "returns every missing reference target" do
+      {:ok, target_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, entity} =
+        Module3
+        |> Entity.new(c_id: target_entity.id)
+        |> create()
+
+      changes = %{b_id: Entity.generate_id(), c_id: Entity.generate_id()}
+
+      assert update(Module3, entity.id, changes) ==
+               {:error, %{b_id: [:not_found], c_id: [:not_found]}}
+    end
+
     test "rejects role grants" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 

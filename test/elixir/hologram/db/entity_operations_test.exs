@@ -1173,6 +1173,55 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert outbox_effects() == effects_before
     end
 
+    # The write names the first foreign key it refuses and abandons the rest, so the second
+    # missing target is asked about after it - the create half's rule, on the update path.
+    test "reports every missing reference target" do
+      {:ok, target_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, created_entity} =
+        Module3
+        |> Entity.new(c_id: target_entity.id)
+        |> create()
+
+      changes = %{b_id: Entity.generate_id(), c_id: Entity.generate_id()}
+
+      assert update(Module3, created_entity.id, changes) ==
+               {:error, %{b_id: [:not_found], c_id: [:not_found]}}
+    end
+
+    test "reports a missing reference target beside a value violation" do
+      {:ok, created_entity} =
+        Module13
+        |> Entity.new(title: "some title")
+        |> create()
+
+      changes = %{parent_id: Entity.generate_id(), title: nil}
+
+      assert update(Module13, created_entity.id, changes) ==
+               {:error, %{parent_id: [:not_found], title: [:required]}}
+    end
+
+    # An unchanged reference is absent from the changes, so nothing is asked about it. What
+    # binds here is the nil filter alone: referential integrity keeps an unchanged reference
+    # pointing at a live row, so asking about it would answer "exists" and add nothing - reading
+    # the whole row instead of the changes was mutated in and every test still passed.
+    test "asks only about changed references" do
+      {:ok, target_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, created_entity} =
+        Module13
+        |> Entity.new(parent_id: target_entity.id, title: "some title")
+        |> create()
+
+      assert update(Module13, created_entity.id, %{title: nil}) == {:error, %{title: [:required]}}
+    end
+
     test "raises when changes name anything but declared attributes and to-one relationships" do
       {:ok, created_entity} =
         Module2
