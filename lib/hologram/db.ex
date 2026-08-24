@@ -229,14 +229,32 @@ defmodule Hologram.DB do
     EntityOperations.update(entity_type, id, changes)
   end
 
-  @doc false
-  @spec update(struct) :: no_return
+  @doc """
+  Writes the changes recorded on the given entity struct - the values put on it with
+  put_attribute and the edges recorded with add_relationship and delete_relationship - in one
+  transaction, and returns :ok.
+
+  Only recorded changes are written: a field set directly on the struct is not among them, and
+  a struct carrying nothing recorded raises ArgumentError, as does an id that names no entity.
+  The attribute changes go first and the edges follow, so a refused value leaves the edges
+  unapplied and an edge that raises takes the values with it.
+
+  With an acting user set, the write is evaluated against that user's policies for :update - or
+  for the operation the entity claims through authorize/2 - and raises
+  Hologram.AccessDeniedError when no rule grants it. The row is read FOR UPDATE first and the
+  claim is evaluated against it as it stands, before the recorded changes apply, so a rule
+  describing the state a change leaves ("an editor may pin a note that is not pinned") reads
+  the way it reads in a template. Nothing can change the row between the evaluation and the
+  write. An entity claiming the server's own authority through trust/1 is written without
+  evaluation, and without an acting user an unclaimed write is raw.
+
+  Returns {:error, violations} for a refused value exactly as update/3 does.
+  """
+  @spec update(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity) when is_struct(entity) do
-    raise ArgumentError,
-          "update takes explicit changes, not a modified struct - pass the changed attributes: " <>
-            "DB.update(#{inspect(entity.__struct__)}, entity.id, attribute: value). " <>
-            "Full-row writes from a struct aren't supported: they would overwrite concurrent " <>
-            "changes to fields you didn't touch."
+    Validator.validate_writable!(entity.__struct__)
+
+    Writer.update(entity)
   end
 
   @doc """

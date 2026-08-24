@@ -3,6 +3,7 @@ defmodule Hologram.DBTest do
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.DB
+  import Hologram.Query, only: [put_attribute: 3]
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.AccessDeniedError
@@ -642,14 +643,27 @@ defmodule Hologram.DBTest do
   end
 
   describe "update/1" do
-    test "raises a teaching error for a struct argument" do
-      entity = Entity.new(Module1)
+    test "writes the changes recorded on the struct" do
+      {:ok, entity} =
+        Module2
+        |> Entity.new(c: "before")
+        |> create()
+
+      assert entity
+             |> put_attribute(:c, "after")
+             |> update() == :ok
+
+      assert get(Module2, entity.id).c == "after"
+    end
+
+    test "raises a teaching error for a struct carrying nothing recorded" do
+      {:ok, entity} = create(Entity.new(Module1))
 
       expected_msg =
-        "update takes explicit changes, not a modified struct - pass the changed attributes: " <>
-          "DB.update(Hologram.Test.Fixtures.Entity.Module1, entity.id, attribute: value). " <>
-          "Full-row writes from a struct aren't supported: they would overwrite concurrent " <>
-          "changes to fields you didn't touch."
+        "update takes recorded changes - put values with put_attribute and edges with " <>
+          "add_relationship or delete_relationship. A field set directly on the struct is " <>
+          "not recorded: writing the whole struct would overwrite concurrent changes to " <>
+          "fields you didn't touch."
 
       assert_error ArgumentError, expected_msg, fn -> update(entity) end
     end

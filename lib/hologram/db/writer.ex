@@ -8,6 +8,7 @@ defmodule Hologram.DB.Writer do
 
   alias Hologram.Auth
   alias Hologram.Auth.Context
+  alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity.Metadata
 
@@ -21,6 +22,62 @@ defmodule Hologram.DB.Writer do
     entity
     |> clean()
     |> EntityOperations.create()
+  end
+
+  @doc false
+  @spec update(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
+  def update(entity) do
+    %Metadata{attribute_changes: attribute_changes, relationship_ops: relationship_ops} =
+      entity.__meta__
+
+    if attribute_changes == %{} and relationship_ops == %{} do
+      raise ArgumentError,
+        message:
+          "update takes recorded changes - put values with put_attribute and edges with " <>
+            "add_relationship or delete_relationship. A field set directly on the struct is " <>
+            "not recorded: writing the whole struct would overwrite concurrent changes to " <>
+            "fields you didn't touch."
+    end
+
+    entity_type = entity.__struct__
+
+    {:ok, applied} =
+      Connection.transaction(fn ->
+        row = lock_row!(entity_type, entity.id, "update")
+
+        evaluate!(entity, :update, row)
+
+        apply_update(entity_type, entity.id, attribute_changes, relationship_ops)
+      end)
+
+    applied
+  end
+
+  defp apply_relationship_op(:add, entity_type, id, relationship_name, target_id) do
+    EntityOperations.add_relationship(entity_type, id, relationship_name, target_id)
+  end
+
+  defp apply_relationship_op(:delete, entity_type, id, relationship_name, target_id) do
+    EntityOperations.delete_relationship(entity_type, id, relationship_name, target_id)
+  end
+
+  # Sorted by key, so a struct carrying several edge changes applies them in one order rather
+  # than the map's.
+  defp apply_relationship_ops(entity_type, id, relationship_ops) do
+    relationship_ops
+    |> Enum.sort()
+    |> Enum.each(fn {{relationship_name, target_id}, op} ->
+      apply_relationship_op(op, entity_type, id, relationship_name, target_id)
+    end)
+  end
+
+  # The attribute changes go first and the edges follow, all inside one transaction: a refused
+  # value leaves the edges unapplied, and an edge that raises takes the values with it.
+  defp apply_update(entity_type, id, attribute_changes, relationship_ops) do
+    case update_attributes(entity_type, id, attribute_changes) do
+      :ok -> apply_relationship_ops(entity_type, id, relationship_ops)
+      {:error, violations} -> {:error, violations}
+    end
   end
 
   # The executor returns what the row IS - the metadata the struct carried toward the write is
@@ -56,5 +113,26 @@ defmodule Hologram.DB.Writer do
       raise Hologram.AccessDeniedError,
         message: "not allowed to #{operation} #{inspect(row.__struct__)} #{inspect(row.id)}"
     end
+  end
+
+  # Read as the transaction will commit it: nothing can change the row between the claim's
+  # evaluation and the write, because the row is locked from here to the commit.
+  defp lock_row!(entity_type, id, verb) do
+    case EntityOperations.get(entity_type, id, lock: true) do
+      nil ->
+        raise ArgumentError,
+          message: "cannot #{verb} #{inspect(entity_type)} - no entity with id #{inspect(id)}"
+
+      row ->
+        row
+    end
+  end
+
+  defp update_attributes(_entity_type, _id, attribute_changes)
+       when map_size(attribute_changes) == 0,
+       do: :ok
+
+  defp update_attributes(entity_type, id, attribute_changes) do
+    EntityOperations.update(entity_type, id, attribute_changes)
   end
 end
