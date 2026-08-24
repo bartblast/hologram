@@ -130,7 +130,7 @@ defmodule HologramFeatureTests.DataApiPage do
       |> Entity.new(product_id: product.id, rating: 4)
       |> DB.create!()
 
-    persisted_review = DB.get(Review, review.id)
+    persisted_review = DB.read(Review, review.id)
 
     put_action(server, :show_result, result: "created_review_#{persisted_review.rating}")
   end
