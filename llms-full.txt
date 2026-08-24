@@ -549,7 +549,9 @@ A `<script>` element is different, because the browser hands its text straight t
 
 Whatever the value holds, it cannot end the string literal it sits in, and it cannot end the script element - so the `"</script>"` case above is covered here too.
 
-An interpolation written without quotes, such as `var x = {@value};`, is JavaScript code rather than text, so it only works for values that are already valid JavaScript on their own - numbers and booleans. To pass structured data, interpolate into a string and parse it: `JSON.parse("{@json}")`.
+An interpolation written without quotes, such as `var x = {@value};`, puts the value in code position rather than text position. It is escaped like any other interpolation in a script, but the escaping only means something inside a string literal. Outside one, a value of `alert(1)` has nothing to escape and simply runs, while a value holding a quote or a `<` becomes `\"` or `\u{3C}`, which are a syntax error in code position and stop the whole script.
+
+Being valid JavaScript is not the same as being safe. Write a bare interpolation only for code your own application generates, such as a number or a boolean, and never for anything coming from a user, a request or a database. To pass structured data, interpolate into a string and parse it: `JSON.parse("{@json}")`.
 
 #### Attribute and Prop Spread
 

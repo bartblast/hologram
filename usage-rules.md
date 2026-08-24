@@ -49,7 +49,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Event bindings (`$`-prefixed keys) can't be spread and raise `ArgumentError` - write them as literal attributes.
 - To forward arbitrary attributes through a wrapper component, declare a map prop (`prop :html_attrs, :map`) and spread it onto the inner element: `<button class="fancy" ...{@html_attrs}>`.
 - All interpolated expressions are automatically HTML-escaped to prevent XSS.
-- Inside a `<script>` element an interpolated expression is escaped as the text of a JavaScript string literal instead, so write it between quotes - `"{@value}"`, `'{@value}'` or `` `{@value}` `` - and the script receives the value exactly as it is; it can never end the script element or the literal. Bare interpolation (`var x = {@value};`) only works for values with none of ``\ " ' ` $ <`` or line breaks, such as numbers and booleans.
+- Inside a `<script>` element an interpolated expression is escaped as the text of a JavaScript string literal instead, so write it between quotes - `"{@value}"`, `'{@value}'` or `` `{@value}` `` - and the script receives the value exactly as it is; it can never end the script element or the literal. Bare interpolation (`var x = {@value};`) puts the value in code position, where escaping cannot protect it. A value of `alert(1)` runs. A value holding a quote or a `<` becomes a syntax error that stops the script. Write one only for code your own application generates, such as a number or a boolean, and never for anything coming from a user, a request or a database.
 
 ## Components
 
