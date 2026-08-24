@@ -264,6 +264,149 @@ defmodule Hologram.DBTest do
     end
   end
 
+  describe "transaction/2" do
+    test "completes a refused write's map inside a transaction" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(code: "nested_taken", slug: "nested_taken")
+        |> create()
+
+      result =
+        transaction(fn ->
+          Module19
+          |> Entity.new(code: "nested_taken", slug: "nested_taken")
+          |> create()
+        end)
+
+      assert result == {:ok, {:error, %{code: [:unique], slug: [:unique]}}}
+    end
+
+    test "returns a refused update's violations inside a transaction" do
+      {:ok, first} =
+        Module19
+        |> Entity.new(slug: "nested_update_held")
+        |> create()
+
+      {:ok, second} =
+        Module19
+        |> Entity.new(slug: "nested_update_other")
+        |> create()
+
+      result =
+        transaction(fn ->
+          refusal = update(Module19, second.id, slug: first.slug)
+
+          {refusal, update(Module19, second.id, slug: "nested_update_free")}
+        end)
+
+      assert result == {:ok, {{:error, %{slug: [:unique]}}, :ok}}
+    end
+
+    test "returns a refused write's violations inside a transaction and keeps it usable" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(slug: "nested_held")
+        |> create()
+
+      result =
+        transaction(fn ->
+          refusal =
+            Module19
+            |> Entity.new(slug: "nested_held")
+            |> create()
+
+          {:ok, other} =
+            Module19
+            |> Entity.new(slug: "nested_other")
+            |> create()
+
+          {refusal, other.id}
+        end)
+
+      assert {:ok, {{:error, %{slug: [:unique]}}, other_id}} = result
+      assert get(Module19, other_id)
+    end
+
+    test "returns a restricted delete's referencer inside a transaction" do
+      {:ok, target} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, _referencing} =
+        Module3
+        |> Entity.new(c_id: target.id)
+        |> create()
+
+      result =
+        transaction(fn ->
+          refusal = delete(Module1, target.id)
+
+          {refusal, get(Module1, target.id)}
+        end)
+
+      assert result == {:ok, {{:error, %{referenced_by: Module3, relationship: :c}}, target}}
+    end
+
+    test "returns a value violation inside a transaction" do
+      result =
+        transaction(fn ->
+          Module2
+          |> Entity.new(b: "nope")
+          |> create()
+        end)
+
+      assert result == {:ok, {:error, %{b: [type: :integer], c: [:required]}}}
+    end
+
+    test "raises through the bang for a value violation inside a transaction" do
+      expected_msg =
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Entity.Module2:
+          * attribute :b must be of type :integer, got: "nope"
+          * attribute :c is required\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        transaction(fn ->
+          Module2
+          |> Entity.new(b: "nope")
+          |> create!()
+        end)
+      end
+    end
+
+    test "raises through the bang inside a transaction and rolls it back" do
+      {:ok, _entity} =
+        Module19
+        |> Entity.new(slug: "nested_bang_held")
+        |> create()
+
+      expected_msg =
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Entity.Module19:
+          * attribute :slug "nested_bang_held" is already taken\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        transaction(fn ->
+          {:ok, earlier} =
+            Module19
+            |> Entity.new(slug: "nested_bang_earlier")
+            |> create()
+
+          Process.put(:earlier_id, earlier.id)
+
+          Module19
+          |> Entity.new(slug: "nested_bang_held")
+          |> create!()
+        end)
+      end
+
+      assert get(Module19, Process.get(:earlier_id)) == nil
+    end
+  end
+
   describe "update/3" do
     test "returns the unique violation from the write itself" do
       {:ok, first} =
