@@ -95,6 +95,28 @@ defmodule HologramFeatureTests.DataApiTest do
     |> assert_text(css("#result"), "created_review_4")
   end
 
+  feature "reports a missing reference target as a violation", %{session: session} do
+    session
+    |> visit(DataApiPage)
+    |> click(button("Review a missing product"))
+    |> assert_text(
+      css("#result"),
+      "review_for_missing_product_{:error, %{product_id: [:not_found]}}"
+    )
+  end
+
+  feature "reports a missing reference target beside a value violation in one pass", %{
+    session: session
+  } do
+    session
+    |> visit(DataApiPage)
+    |> click(button("Submit invalid review for a missing product"))
+    |> assert_text(
+      css("#result"),
+      "invalid_review_for_missing_product_{:error, %{product_id: [:not_found], rating: [in: 1..5]}}"
+    )
+  end
+
   feature "rejects a write violating a declared constraint", %{session: session} do
     session
     |> visit(DataApiPage)

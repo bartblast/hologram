@@ -36,12 +36,14 @@ defmodule Hologram.DB do
   Returns {:ok, entity} with the stamped entity, or {:error, violations} - the map
   Entity.validate/1 returns, naming each field that broke its declaration: the declared
   constraints its value breaks (type, enum values, required presence, the constraint
-  options), and :unique for a unique attribute whose value another row already holds.
-  Values are judged before any SQL runs, and a write is attempted only once they pass.
-  Uniqueness is reported by the write itself for the attribute it refuses, and asked advisorily
-  for every unique attribute the write did not answer for - an advisory answer describes the
-  moment it was asked, and a value free then can be taken by the next attempt. A write refuses
-  at the first violated database constraint and reports no other of its own.
+  options), :unique for a unique attribute whose value another row already holds, and
+  :not_found for a to-one reference whose target row does not exist. Values are judged
+  before any SQL runs, and a write is attempted only once they pass. Uniqueness and
+  reference existence are reported by the write itself for the constraint it refuses, and
+  asked advisorily for every unique attribute and to-one reference the write did not answer
+  for - an advisory answer describes the moment it was asked, and a value free then can be
+  taken by the next attempt. A write refuses at the first violated database constraint and
+  reports no other of its own.
 
   Misuse raises rather than returning - a role grant, which is written only through
   grant_role/revoke_role - as does a constraint violation the mapping does not explain.
@@ -198,14 +200,15 @@ defmodule Hologram.DB do
 
   Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
   changed field that broke its declaration: the declared constraints its value breaks (type,
-  enum values, the required-nil rule, the constraint options), and :unique for a changed
-  unique attribute whose new value another row already holds. A row's own current value never
-  conflicts with itself. Values are judged before any SQL runs, and a write is attempted only
-  once they pass. Uniqueness is reported by the write itself for the attribute it refuses, and
-  asked advisorily for every changed unique attribute the write did not answer for - an advisory
-  answer describes the moment it was asked, and a value free then can be taken by the next
-  attempt. A write refuses at the first violated database constraint and reports no other of
-  its own.
+  enum values, the required-nil rule, the constraint options), :unique for a changed unique
+  attribute whose new value another row already holds, and :not_found for a changed to-one
+  reference whose target row does not exist. A row's own current value never conflicts with
+  itself. Values are judged before any SQL runs, and a write is attempted only once they pass.
+  Uniqueness and reference existence are reported by the write itself for the constraint it
+  refuses, and asked advisorily for every changed unique attribute and changed to-one reference
+  the write did not answer for - an advisory answer describes the moment it was asked, and a
+  value free then can be taken by the next attempt. A write refuses at the first violated
+  database constraint and reports no other of its own.
 
   The misuses named above raise rather than returning, as does a constraint violation the
   mapping does not explain.
@@ -409,6 +412,7 @@ defmodule Hologram.DB do
   # One line per violation, always bulleted - the shape Validator.error_message/3 set, and the
   # only one that reads the same whether the map holds one entry or several. A taken value is
   # described here because the validator never reports uniqueness: it is state, not a value.
+  # A missing reference target is described here for the same reason - existence is state too.
   defp refusal_lines(entity_type, violations, values) do
     violations
     |> Enum.flat_map(fn {field, reasons} -> Enum.map(reasons, &{field, &1}) end)
@@ -416,6 +420,9 @@ defmodule Hologram.DB do
     |> Enum.map_join("\n", fn
       {field, :unique} ->
         "  * attribute #{inspect(field)} #{inspect(Map.fetch!(values, field))} is already taken"
+
+      {field, :not_found} ->
+        "  * reference #{inspect(field)} #{inspect(Map.fetch!(values, field))} names no existing entity"
 
       violation ->
         Validator.violation_description(entity_type, values, violation)

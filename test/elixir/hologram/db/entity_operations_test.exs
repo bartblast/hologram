@@ -10,6 +10,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -351,6 +352,51 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert create(Entity.new(Module3, c_id: "garbage")) == {:error, %{c_id: [type: :uuid]}}
     end
 
+    # A well-formed id naming no row is a valid value, so it passes the declarations and the
+    # write is the first thing that can know - the foreign key names the column back.
+    test "returns a missing reference target from the write itself" do
+      assert create(Entity.new(Module3, c_id: Entity.generate_id())) ==
+               {:error, %{c_id: [:not_found]}}
+    end
+
+    test "writes nothing and records nothing for a refused reference" do
+      entity = Entity.new(Module3, c_id: Entity.generate_id())
+
+      assert create(entity) == {:error, %{c_id: [:not_found]}}
+      assert get(Module3, entity.id) == nil
+      assert outbox_effects() == []
+    end
+
+    # PostgreSQL enforces foreign keys by triggers after the row goes in and abandons the
+    # statement at the first one that fails, so the second missing target is never its to
+    # report - it is asked about after the write, the way a second taken value is.
+    test "reports every missing reference target" do
+      assert create(Entity.new(Module3, b_id: Entity.generate_id(), c_id: Entity.generate_id())) ==
+               {:error, %{b_id: [:not_found], c_id: [:not_found]}}
+    end
+
+    # The values failed, so no write was attempted and nothing authoritative was learned - the
+    # reference is asked about all the same, and one submit answers for both.
+    test "reports a missing reference target beside a value violation" do
+      gone_id = Entity.generate_id()
+
+      assert create(Entity.new(Module13, parent_id: gone_id, title: nil)) ==
+               {:error, %{parent_id: [:not_found], title: [:required]}}
+    end
+
+    # A cleared reference names nothing to look for, and an optional one is free to stay empty.
+    test "skips a nil reference" do
+      assert create(Entity.new(Module13, parent_id: nil, title: nil)) ==
+               {:error, %{title: [:required]}}
+    end
+
+    # A value that is not an id cannot be bound to the existence query at all, so the field keeps
+    # the violation it earned - and the reference beside it is still asked about.
+    test "skips a reference carrying its own violation" do
+      assert create(Entity.new(Module3, b_id: Entity.generate_id(), c_id: "garbage")) ==
+               {:error, %{b_id: [:not_found], c_id: [type: :uuid]}}
+    end
+
     test "reports a value violation and a taken unique value together" do
       {:ok, _entity} =
         Module19
@@ -571,6 +617,21 @@ defmodule Hologram.DB.EntityOperationsTest do
         """)
 
       assert_error ArgumentError, expected_msg, fn -> create_if_absent(grant) end
+    end
+
+    # The framework's own grant rows are not a caller's to answer, so this path keeps raising
+    # where create/1 explains - the constraint belongs to a type no caller named.
+    test "raises when the grantee does not exist" do
+      grant = %RoleGrant{id: Entity.generate_id(), role: :owner, user_id: Entity.generate_id()}
+
+      error =
+        try do
+          create_if_absent(grant)
+        rescue
+          error in Postgrex.Error -> error
+        end
+
+      assert error.postgres.code == :foreign_key_violation
     end
   end
 
@@ -1075,6 +1136,90 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert update(Module3, created_entity.id, %{c_id: "garbage"}) ==
                {:error, %{c_id: [type: :uuid]}}
+    end
+
+    test "returns a missing reference target from the write itself" do
+      {:ok, target_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, created_entity} =
+        Module3
+        |> Entity.new(c_id: target_entity.id)
+        |> create()
+
+      assert update(Module3, created_entity.id, %{c_id: Entity.generate_id()}) ==
+               {:error, %{c_id: [:not_found]}}
+    end
+
+    test "changes nothing and records nothing for a refused reference" do
+      {:ok, target_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, created_entity} =
+        Module3
+        |> Entity.new(c_id: target_entity.id)
+        |> create()
+
+      effects_before = outbox_effects()
+
+      assert update(Module3, created_entity.id, %{c_id: Entity.generate_id()}) ==
+               {:error, %{c_id: [:not_found]}}
+
+      assert get(Module3, created_entity.id).c_id == target_entity.id
+      assert outbox_effects() == effects_before
+    end
+
+    # The write names the first foreign key it refuses and abandons the rest, so the second
+    # missing target is asked about after it - the create half's rule, on the update path.
+    test "reports every missing reference target" do
+      {:ok, target_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, created_entity} =
+        Module3
+        |> Entity.new(c_id: target_entity.id)
+        |> create()
+
+      changes = %{b_id: Entity.generate_id(), c_id: Entity.generate_id()}
+
+      assert update(Module3, created_entity.id, changes) ==
+               {:error, %{b_id: [:not_found], c_id: [:not_found]}}
+    end
+
+    test "reports a missing reference target beside a value violation" do
+      {:ok, created_entity} =
+        Module13
+        |> Entity.new(title: "some title")
+        |> create()
+
+      changes = %{parent_id: Entity.generate_id(), title: nil}
+
+      assert update(Module13, created_entity.id, changes) ==
+               {:error, %{parent_id: [:not_found], title: [:required]}}
+    end
+
+    # An unchanged reference is absent from the changes, so nothing is asked about it. What
+    # binds here is the nil filter alone: referential integrity keeps an unchanged reference
+    # pointing at a live row, so asking about it would answer "exists" and add nothing - reading
+    # the whole row instead of the changes was mutated in and every test still passed.
+    test "asks only about changed references" do
+      {:ok, target_entity} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, created_entity} =
+        Module13
+        |> Entity.new(parent_id: target_entity.id, title: "some title")
+        |> create()
+
+      assert update(Module13, created_entity.id, %{title: nil}) == {:error, %{title: [:required]}}
     end
 
     test "raises when changes name anything but declared attributes and to-one relationships" do

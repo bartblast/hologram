@@ -60,7 +60,7 @@ defmodule Hologram.DB.EntityOperations do
       case Entity.validate(entity) do
         :ok ->
           # The transaction's own shape is the contract: its value is the stamped entity, and
-          # the violations a duplicate rolls back with are its reason.
+          # whatever refused the write rolls back as its reason.
           Connection.transaction(fn ->
             {stamped_entity, _result} = insert(entity, "")
 
@@ -86,19 +86,23 @@ defmodule Hologram.DB.EntityOperations do
       {:ok, stamped_entity} ->
         {:ok, stamped_entity}
 
-      {:error, violations} ->
+      {:error, refusal} ->
+        violations = write_violations!(entity_type, refusal)
         values = Map.from_struct(entity)
 
-        {:error, advisory_unique_violations(entity_type, values, entity.id, violations)}
+        {:error, advisory_violations(entity_type, values, entity.id, violations)}
     end
   end
 
   @doc false
   @spec create_if_absent(struct) :: :ok
   def create_if_absent(entity) do
-    {:ok, :ok} = Connection.transaction(fn -> insert_if_absent(entity) end)
-
-    :ok
+    # The framework writes its own grants through here, so a database refusal is a broken
+    # invariant rather than something a caller can answer - it raises where create/1 explains.
+    case Connection.transaction(fn -> insert_if_absent(entity) end) do
+      {:ok, :ok} -> :ok
+      {:error, %Postgrex.Error{} = error} -> raise error
+    end
   end
 
   @doc false
@@ -246,8 +250,8 @@ defmodule Hologram.DB.EntityOperations do
           # beside them, and a reader recomputes them rather than being told.
           data = Map.put(changes_map, :updated_at, updated_at)
 
-          # The transaction's reason is the violations map, the way create/1's is - a duplicate
-          # rolls the update back rather than raising.
+          # The transaction's reason is whatever refused the write, the way create/1's is - a
+          # refusal rolls the update back rather than raising.
           Connection.transaction(fn ->
             run_update!(statement, params, entity_type, id, data)
           end)
@@ -262,8 +266,10 @@ defmodule Hologram.DB.EntityOperations do
       {:ok, _appended} ->
         :ok
 
-      {:error, violations} ->
-        {:error, advisory_unique_violations(entity_type, changes_map, id, violations)}
+      {:error, refusal} ->
+        violations = write_violations!(entity_type, refusal)
+
+        {:error, advisory_violations(entity_type, changes_map, id, violations)}
     end
   end
 
@@ -274,24 +280,52 @@ defmodule Hologram.DB.EntityOperations do
       not is_nil(values[name])
   end
 
+  # A to-one reference is worth asking about only when it names something to look for: nil is a
+  # cleared reference rather than a missing one, and a field carrying its own violation holds a
+  # value no id column can be compared against - binding it would fail the query rather than
+  # answer it. To-many relationships have no column here at all; their edges carry their own.
+  defp advisory_reference_candidates(entity_type, values, violations) do
+    entity_type.__relationships__()
+    |> Enum.reject(fn {_name, target, _opts} -> is_list(target) end)
+    |> Enum.map(fn {name, target, _opts} -> {String.to_existing_atom("#{name}_id"), target} end)
+    |> Enum.filter(fn {field, _target} ->
+      not Map.has_key?(violations, field) and not is_nil(values[field])
+    end)
+  end
+
   # Completes an answer that stopped early. The database names the first constraint it refused
   # and abandons the statement, so every unique attribute it never reached is asked about here,
-  # as is every one of them when the values failed and no write was attempted at all. The
-  # candidate filter leaves a field that already carries a violation alone, so an authoritative
-  # answer is never replaced by an advisory one. Advisory by nature: what is taken now may be
-  # free by the resubmit, and the resubmit is answered by the write.
-  defp advisory_unique_violations(entity_type, values, id, violations) do
+  # as is every one of them when the values failed and no write was attempted at all. References
+  # are asked about the same way and for the same reason: a foreign key is enforced by a trigger
+  # after the row goes in, and the first one that fails abandons the rest. The candidate filters
+  # leave a field that already carries a violation alone, so an authoritative answer is never
+  # replaced by an advisory one - and references read the attributes' result rather than the
+  # original map, so one pass cannot overwrite the other. Advisory by nature: what is taken now
+  # may be free by the resubmit, and a target alive now may be gone - the resubmit is answered
+  # by the write.
+  defp advisory_violations(entity_type, values, id, violations) do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
-    entity_type.__attributes__()
-    |> Enum.filter(&advisory_candidate?(&1, values, violations))
-    |> Enum.reduce(violations, fn {name, type, _opts}, acc ->
-      column = Enum.find(columns, &(&1.source == {:attribute, name}))
+    attribute_violations =
+      entity_type.__attributes__()
+      |> Enum.filter(&advisory_candidate?(&1, values, violations))
+      |> Enum.reduce(violations, fn {name, type, _opts}, acc ->
+        column = Enum.find(columns, &(&1.source == {:attribute, name}))
 
-      if unique_value_taken?(table, column.name, values[name], type, id) do
-        Map.put(acc, name, [:unique])
-      else
+        if unique_value_taken?(table, column.name, values[name], type, id) do
+          Map.put(acc, name, [:unique])
+        else
+          acc
+        end
+      end)
+
+    entity_type
+    |> advisory_reference_candidates(values, attribute_violations)
+    |> Enum.reduce(attribute_violations, fn {field, target}, acc ->
+      if reference_target_exists?(target, values[field]) do
         acc
+      else
+        Map.put(acc, field, [:not_found])
       end
     end)
   end
@@ -440,11 +474,10 @@ defmodule Hologram.DB.EntityOperations do
       {:ok, result} ->
         {stamped_entity, result}
 
+      # The writer explains nothing: it rolls back with what refused it, and the verb that was
+      # asked to write turns that into an answer or re-raises it.
       {:error, error} ->
-        case unique_violations(entity_type, error) do
-          nil -> raise error
-          violations -> Connection.rollback(violations)
-        end
+        Connection.rollback(error)
     end
   end
 
@@ -508,17 +541,46 @@ defmodule Hologram.DB.EntityOperations do
         raise ArgumentError,
               "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
 
+      # The writer explains nothing, the way insert/2 does not - update/3's merge point turns
+      # what refused the write into an answer or re-raises it.
       {:error, error} ->
-        case unique_violations(entity_type, error) do
-          nil -> raise error
-          violations -> Connection.rollback(violations)
-        end
+        Connection.rollback(error)
     end
   end
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
   end
+
+  # Whether the row a reference names is there, asked of the TARGET type's own table - the one
+  # question the mapping cannot answer from a declaration.
+  # sobelow_skip ["SQL.Query"]
+  defp reference_target_exists?(target, id) do
+    %{table: table} = Map.fetch!(DB.mapping(), target)
+
+    statement = ~s|SELECT EXISTS (SELECT 1 FROM #{qualified_table(table)} WHERE "id" = $1)|
+
+    case Connection.query(statement, [Codec.encode(id, :uuid)]) do
+      {:ok, %Postgrex.Result{rows: [[exists?]]}} -> exists?
+      {:error, error} -> raise error
+    end
+  end
+
+  # A to-one reference column carries the foreign key constraint that names it back, so a target
+  # row that is gone is answered the way a value violation is - by field, in Entity.validate/1's
+  # shape. Existence is state rather than a value, which is why the validator never reports it.
+  defp reference_violations(entity_type, %Postgrex.Error{
+         postgres: %{code: :foreign_key_violation, constraint: constraint}
+       }) do
+    %{columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
+    case Enum.find(columns, &(&1.fk_constraint == constraint)) do
+      %{source: {:relationship, name}} -> %{String.to_existing_atom("#{name}_id") => [:not_found]}
+      _no_match -> nil
+    end
+  end
+
+  defp reference_violations(_entity_type, _error), do: nil
 
   # A unique index derived from a `unique: true` attribute names that attribute back, so a
   # duplicate is answered the way a value violation is - by field, in Entity.validate/2's shape.
@@ -602,4 +664,18 @@ defmodule Hologram.DB.EntityOperations do
             "invalid id #{inspect(id)} for get - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
     end
   end
+
+  # The one place a refusal becomes an answer. A validator's map passes straight through - it was
+  # keyed by field before any SQL ran - and a database error is explained against the entity type
+  # the CALLER named. A constraint the mapping does not derive to one of that type's own columns
+  # is not ours to explain and keeps raising, which is what holds the rows the framework writes
+  # for itself in the same transaction - a create's creator grants - out of a caller's map.
+  defp write_violations!(entity_type, %Postgrex.Error{} = error) do
+    case unique_violations(entity_type, error) || reference_violations(entity_type, error) do
+      nil -> raise error
+      violations -> violations
+    end
+  end
+
+  defp write_violations!(_entity_type, violations), do: violations
 end

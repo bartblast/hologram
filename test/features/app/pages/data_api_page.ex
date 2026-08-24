@@ -21,14 +21,17 @@ defmodule HologramFeatureTests.DataApiPage do
   # A button is clicked by a label the browser driver matches as a SUBSTRING, so no label
   # here may contain another's - a test clicking the shorter one would find both. That is
   # why the in-transaction buttons say "duplicate" where their top-level twins say
-  # "duplicate account".
+  # "duplicate account", and why the missing-product buttons avoid "Create review"
+  # rather than extending it.
   def template do
     ~HOLO"""
     <p>
       <button $click={command: :create_duplicate_account}> Create duplicate account </button>
       <button $click={command: :create_duplicate_account_in_transaction}> Create duplicate in transaction </button>
       <button $click={command: :create_invalid_duplicate_account}> Create invalid duplicate account </button>
+      <button $click={command: :create_invalid_review_for_missing_product}> Submit invalid review for a missing product </button>
       <button $click={command: :create_review}> Create review </button>
+      <button $click={command: :create_review_for_missing_product}> Review a missing product </button>
       <button $click={command: :delete_referenced_product}> Delete referenced product </button>
       <button $click={command: :reject_invalid_review}> Reject invalid review </button>
       <button $click={command: :raise_on_duplicate_account}> Raise on duplicate account </button>
@@ -98,6 +101,24 @@ defmodule HologramFeatureTests.DataApiPage do
     put_action(server, :show_result, result: "invalid_duplicate_account_#{inspect(result)}")
   end
 
+  def command(:create_invalid_review_for_missing_product, _params, server) do
+    product =
+      Product
+      |> Entity.new(name: "invalid_missing_product")
+      |> DB.create!()
+
+    DB.delete!(Product, product.id)
+
+    result =
+      Review
+      |> Entity.new(product_id: product.id, rating: 0)
+      |> DB.create()
+
+    put_action(server, :show_result,
+      result: "invalid_review_for_missing_product_#{inspect(result)}"
+    )
+  end
+
   def command(:create_review, _params, server) do
     product =
       Product
@@ -112,6 +133,22 @@ defmodule HologramFeatureTests.DataApiPage do
     persisted_review = DB.get(Review, review.id)
 
     put_action(server, :show_result, result: "created_review_#{persisted_review.rating}")
+  end
+
+  def command(:create_review_for_missing_product, _params, server) do
+    product =
+      Product
+      |> Entity.new(name: "missing_product")
+      |> DB.create!()
+
+    DB.delete!(Product, product.id)
+
+    result =
+      Review
+      |> Entity.new(product_id: product.id, rating: 4)
+      |> DB.create()
+
+    put_action(server, :show_result, result: "review_for_missing_product_#{inspect(result)}")
   end
 
   def command(:delete_referenced_product, _params, server) do
