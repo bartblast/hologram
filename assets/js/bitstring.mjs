@@ -345,13 +345,7 @@ export default class Bitstring {
       bytes[j] = parseInt(hex.slice(i, i + 2), 16);
     }
 
-    return {
-      type: "bitstring",
-      text: null,
-      bytes,
-      leftoverBitCount: 0,
-      hex: null,
-    };
+    return $.fromBytes(bytes);
   }
 
   static fromSegments(segments) {
