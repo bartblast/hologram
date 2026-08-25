@@ -2211,7 +2211,7 @@ defmodule Hologram.Template.RendererTest do
                {~s'<div class="abc &lt; xyz"></div>', %{}, @server}
     end
 
-    test "expression inside non-script elements" do
+    test "expression inside non-raw-text elements" do
       # <div>{"abc < xyz"}</div>
       node = {:element, "div", [], [expression: {"abc < xyz"}]}
 
@@ -2224,6 +2224,14 @@ defmodule Hologram.Template.RendererTest do
 
       assert render_dom(node, @env, @server) ==
                {"<script>abc \\u{3C} xyz</script>", %{}, @server}
+    end
+
+    test "expression inside style elements" do
+      # <style>{"abc < xyz"}</style>
+      node = {:element, "style", [], [expression: {"abc < xyz"}]}
+
+      assert render_dom(node, @env, @server) ==
+               {"<style>abc \\00003C  xyz</style>", %{}, @server}
     end
 
     test "expression inside public comments" do
@@ -2447,6 +2455,195 @@ defmodule Hologram.Template.RendererTest do
 
     test "text around escaped chars is kept" do
       assert stringify_for_script_interpolation(~s(say "hi" <b>)) == ~S(say \"hi\" \u{3C}b>)
+    end
+  end
+
+  describe "stringify_for_style_interpolation/1" do
+    test "atom, non-boolean and non-nil" do
+      assert stringify_for_style_interpolation(:abc) == "abc"
+    end
+
+    test "atom, true" do
+      assert stringify_for_style_interpolation(true) == "true"
+    end
+
+    test "atom, false" do
+      assert stringify_for_style_interpolation(false) == "false"
+    end
+
+    test "atom, nil" do
+      assert stringify_for_style_interpolation(nil) == ""
+    end
+
+    test "bitstring, binary" do
+      assert stringify_for_style_interpolation(<<97, 98, 99>>) == "abc"
+    end
+
+    test "bitstring, non-binary" do
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for/,
+                   fn ->
+                     stringify_for_style_interpolation(<<97::6, 98::4>>)
+                   end
+    end
+
+    test "float" do
+      assert stringify_for_style_interpolation(1.23) == "1.23"
+    end
+
+    test "function, anonymous" do
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for/,
+                   fn ->
+                     stringify_for_style_interpolation(fn x, y -> x + y end)
+                   end
+    end
+
+    test "function, captured" do
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for/,
+                   fn ->
+                     stringify_for_style_interpolation(&Map.put/3)
+                   end
+    end
+
+    test "integer" do
+      assert stringify_for_style_interpolation(123) == "123"
+    end
+
+    test "list, strings" do
+      assert stringify_for_style_interpolation(["ab", "cd"]) == "abcd"
+    end
+
+    test "list, Unicode code points" do
+      assert stringify_for_style_interpolation([97, 98, 99]) == "abc"
+    end
+
+    test "list, not stringifiable" do
+      assert_error ArgumentError, ~r/cannot convert the given list to a string/, fn ->
+        stringify_for_style_interpolation([1, nil, 2])
+      end
+    end
+
+    test "map, atom keys" do
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for/,
+                   fn ->
+                     stringify_for_style_interpolation(%{a: 1, b: 2})
+                   end
+    end
+
+    test "map, mixed keys" do
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for/,
+                   fn ->
+                     stringify_for_style_interpolation(%{:a => 1, "b" => nil, 2 => 3})
+                   end
+    end
+
+    test "PID" do
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for/,
+                   fn ->
+                     stringify_for_style_interpolation(pid("0.11.222"))
+                   end
+    end
+
+    test "port" do
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for/,
+                   fn ->
+                     stringify_for_style_interpolation(port("0.11"))
+                   end
+    end
+
+    test "reference" do
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for/,
+                   fn ->
+                     stringify_for_style_interpolation(ref("0.1.2.3"))
+                   end
+    end
+
+    test "struct, having String.Chars protocol implementation" do
+      value = %Version{major: 1, minor: 2, patch: 3}
+
+      assert stringify_for_style_interpolation(value) == "1.2.3"
+    end
+
+    test "struct, not having String.Chars protocol implementation" do
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for/,
+                   fn ->
+                     stringify_for_style_interpolation(MapSet.new([1, 2, 3]))
+                   end
+    end
+
+    test "tuple" do
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for/,
+                   fn ->
+                     stringify_for_style_interpolation({97, 98, 99})
+                   end
+    end
+
+    test "backslash char" do
+      assert stringify_for_style_interpolation("\\") == "\\\\"
+    end
+
+    test "double quote char" do
+      assert stringify_for_style_interpolation("\"") == "\\\""
+    end
+
+    test "single quote char" do
+      assert stringify_for_style_interpolation("'") == "\\'"
+    end
+
+    test "line feed char" do
+      assert stringify_for_style_interpolation("\n") == "\\00000A "
+    end
+
+    test "carriage return char" do
+      assert stringify_for_style_interpolation("\r") == "\\00000D "
+    end
+
+    test "null char" do
+      assert stringify_for_style_interpolation(<<0>>) == "\\00FFFD "
+    end
+
+    test "less-than char" do
+      assert stringify_for_style_interpolation("<") == "\\00003C "
+    end
+
+    test "closing style tag" do
+      # An unescaped "<" would end the style element the value is written into.
+      assert stringify_for_style_interpolation("</style>") == "\\00003C /style>"
+    end
+
+    test "backtick and dollar chars travel as themselves" do
+      assert stringify_for_style_interpolation("`${x}") == "`${x}"
+    end
+
+    test "greater-than and ampersand chars travel as themselves" do
+      # A child combinator in an interpolated selector is the point of the issue this covers.
+      assert stringify_for_style_interpolation("a > b & c") == "a > b & c"
+    end
+
+    test "space after an escaped char is kept" do
+      # The escape carries a space of its own, which the CSS tokenizer eats instead of this one.
+      assert stringify_for_style_interpolation("a< b") == "a\\00003C  b"
+    end
+
+    test "hex digit after an escaped char is not absorbed" do
+      assert stringify_for_style_interpolation("<a") == "\\00003C a"
+    end
+
+    test "non-ASCII text travels as itself" do
+      assert stringify_for_style_interpolation("全息图") == "全息图"
+    end
+
+    test "text around escaped chars is kept" do
+      assert stringify_for_style_interpolation(~s(say "hi" <b>)) == ~S(say \"hi\" \00003C b>)
     end
   end
 
