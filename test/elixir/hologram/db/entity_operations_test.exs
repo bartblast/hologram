@@ -1110,6 +1110,53 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert get(Module3, created_entity.id).b_id == nil
     end
 
+    test "raises the touched columns' revisions and leaves the rest" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      :ok = update(Module2, created_entity.id, a: false)
+
+      revisions = get(Module2, created_entity.id).__meta__.revisions
+
+      assert revisions.a > created_entity.__meta__.revisions.a
+      assert revisions.c == created_entity.__meta__.revisions.c
+    end
+
+    test "stamps every column of one update alike" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      :ok = update(Module2, created_entity.id, a: false, c: "xyz")
+
+      revisions = get(Module2, created_entity.id).__meta__.revisions
+
+      assert revisions.a > created_entity.__meta__.revisions.a
+      assert revisions.c == revisions.a
+    end
+
+    test "never lowers a revision" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      # A revision a day ahead of this node's clock - what a peer whose clock runs fast, or a
+      # client stamping its own write, can leave behind.
+      ahead_of_this_node = (System.os_time(:millisecond) + 86_400_000) * 1024
+
+      set_revisions(Module2, created_entity.id, %{"a" => ahead_of_this_node})
+
+      :ok = update(Module2, created_entity.id, a: false)
+
+      revisions = get(Module2, created_entity.id).__meta__.revisions
+
+      assert revisions.a == ahead_of_this_node + 1
+    end
+
     test "returns the violation from the write itself when the new value is taken" do
       {:ok, first} =
         Module19
@@ -1342,6 +1389,13 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert_error ArgumentError, expected_system_msg, fn ->
         update(Module2, created_entity.id, %{created_at: DateTime.utc_now(:microsecond)})
+      end
+
+      expected_revisions_msg =
+        ~s(invalid changes for Hologram.Test.Fixtures.Entity.Module2 - only declared attributes and to-one relationships can be updated: :"$revisions")
+
+      assert_error ArgumentError, expected_revisions_msg, fn ->
+        update(Module2, created_entity.id, %{"$revisions": %{}})
       end
     end
 

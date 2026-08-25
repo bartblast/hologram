@@ -251,19 +251,29 @@ defmodule Hologram.DB.EntityOperations do
               "#{Mapper.quote_identifier(column.name)} = $#{index}"
             end)
 
-          updated_at_placeholder = length(set_entries) + 1
-          id_placeholder = length(set_entries) + 2
+          stamp_placeholder = length(set_entries) + 1
+          updated_at_placeholder = length(set_entries) + 2
+          id_placeholder = length(set_entries) + 3
+
+          # One stamp for the whole statement, so every column it sets reads as set together.
+          set_columns =
+            set_entries
+            |> Enum.map(fn {column, _value} -> column end)
+            |> Enum.filter(&settable?/1)
+
+          revisions_assignment = revisions_assignment(set_columns, stamp_placeholder)
 
           statement =
-            ~s|UPDATE #{qualified_table(table)} SET #{set_list}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder}|
+            ~s|UPDATE #{qualified_table(table)} SET #{set_list}, #{revisions_assignment}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder} RETURNING "$revisions"|
 
           changed_values = Enum.map(set_entries, fn {_column, value} -> value end)
 
+          stamp = Clock.stamp()
           updated_at = DateTime.utc_now(:microsecond)
           encoded_updated_at = Codec.encode(updated_at, :datetime)
           encoded_id = Codec.encode(id, :uuid)
 
-          params = changed_values ++ [encoded_updated_at, encoded_id]
+          params = changed_values ++ [stamp, encoded_updated_at, encoded_id]
 
           # The stamp travels with the changes: every update moves updated_at, and a client holding
           # the row holds that too. The sort-key companions do not - they are derived from the values
@@ -273,7 +283,7 @@ defmodule Hologram.DB.EntityOperations do
           # The transaction's reason is whatever refused the write, the way create/1's is - a
           # refusal rolls the update back rather than raising.
           Connection.transaction(fn ->
-            run_update!(statement, params, entity_type, id, data)
+            run_update!(statement, params, entity_type, id, data, set_columns)
           end)
 
         {:error, violations} ->
@@ -359,6 +369,17 @@ defmodule Hologram.DB.EntityOperations do
         Map.put(acc, field, [:not_found])
       end
     end)
+  end
+
+  # The one place a column name is spliced into SQL as a LITERAL rather than as a quoted
+  # identifier. Every name here comes from the mapping and never from a caller - the guard is
+  # there because a name is still data, and a literal is the position where that would matter.
+  defp column_literal(name) do
+    if not String.match?(name, ~r/^[a-z0-9_]+$/) do
+      raise ArgumentError, "cannot record a revision for column #{inspect(name)}"
+    end
+
+    "'#{name}'"
   end
 
   defp companion_entries(columns, sorted_changes) do
@@ -582,11 +603,19 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
-  defp run_update!(statement, params, entity_type, id, data) do
+  defp run_update!(statement, params, entity_type, id, data, set_columns) do
     case Connection.query(statement, params) do
-      {:ok, %Postgrex.Result{num_rows: 1}} ->
+      # The stored map comes back rather than the stamp that was sent: a column already past the
+      # stamp keeps its own revision, so what the row now holds is the only true answer.
+      {:ok, %Postgrex.Result{num_rows: 1, rows: [[stored_revisions]]}} ->
         Outbox.append([
-          %{op: :patch_entity, entity_type: entity_type, entity_id: id, data: data}
+          %{
+            op: :patch_entity,
+            entity_type: entity_type,
+            entity_id: id,
+            data: data,
+            revisions: revisions_from_row(stored_revisions, set_columns)
+          }
         ])
 
       {:ok, %Postgrex.Result{num_rows: 0}} ->
@@ -637,6 +666,20 @@ defmodule Hologram.DB.EntityOperations do
   # The stored map is keyed by COLUMN name, so it is read back through the columns rather than by
   # making atoms of its keys. A key naming no current column belonged to a declaration that has
   # since been dropped - it reads as nothing, the way a column never set does.
+  # GREATEST is the never-decrease invariant, stated in SQL: a node whose clock runs behind
+  # another's cannot lower a revision that node or a client already stored, and a lowered one
+  # could equal a revision an older read still holds and so read as unmoved.
+  defp revisions_assignment(set_columns, stamp_placeholder) do
+    entries =
+      Enum.map_join(set_columns, ", ", fn column ->
+        literal = column_literal(column.name)
+
+        ~s|#{literal}, GREATEST($#{stamp_placeholder}::int8, COALESCE(("$revisions"->>#{literal})::int8, 0) + 1)|
+      end)
+
+    "\"$revisions\" = \"$revisions\" || jsonb_build_object(#{entries})"
+  end
+
   defp revisions_from_row(revisions, columns) do
     revisions
     |> Enum.flat_map(fn {name, revision} ->
