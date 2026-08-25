@@ -95,7 +95,7 @@ defmodule Hologram.Sync.Frame do
   follows is the whole of what it may see rather than what changed.
 
   Sent when a returning client cannot be told what it missed - its place could not be read, the
-  log was pruned past it, or the gap spans a change of model. The reason says which, for the sake
+  place predates the log, or the gap spans a change of model. The reason says which, for the sake
   of whoever is looking at why a client paid for a resync, and the client does the same thing
   whichever it is.
 

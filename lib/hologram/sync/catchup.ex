@@ -9,7 +9,7 @@ defmodule Hologram.Sync.Catchup do
   # moved, which is why the gap is the routine and the resync is the fallback.
   #
   # Four doors lead to that fallback, and each is a thing that cannot usefully be answered rather
-  # than a thing that went wrong: a place that cannot be read, a log pruned past that place, a gap
+  # than a thing that went wrong: a place that cannot be read, a place predating the log, a gap
   # too big to be worth replaying, and a gap spanning a change of model. All of them are decided
   # before a single ROW is looked at - the effects name which rows to read, and none is read here.
 
@@ -125,15 +125,15 @@ defmodule Hologram.Sync.Catchup do
   end
 
   # The cursor came from a frame, so the effect it names was written. If the oldest effect still
-  # held is NEWER than that, the log was pruned past the client and what it missed is gone. If the
-  # oldest is at or below it, nothing past the client was pruned and the gap is whole.
+  # held is NEWER than that, the cursor predates the log and what it names cannot be told. If the
+  # oldest is at or below it, the log speaks for the whole gap.
   #
   # A log holding nothing cannot say either way, so it says the honest thing.
   defp check_retention(tx, seq) do
     case Outbox.oldest_place() do
       nil -> {:full_resync, :retention}
       oldest when oldest <= {tx, seq} -> :ok
-      _pruned_past -> {:full_resync, :retention}
+      _predates_log -> {:full_resync, :retention}
     end
   end
 

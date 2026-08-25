@@ -16,7 +16,6 @@ defmodule Hologram.Sync.Supervisor do
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Fanout
-  alias Hologram.Sync.Pruner
   alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.ResultStore
 
@@ -44,8 +43,7 @@ defmodule Hologram.Sync.Supervisor do
       Evaluators,
       ReadEdge,
       notifications_child(),
-      dispatcher_child(),
-      Pruner
+      dispatcher_child()
     ]
 
     # The order above is a dependency order, and rest_for_one is what makes it one: each child is
@@ -64,8 +62,6 @@ defmodule Hologram.Sync.Supervisor do
   # The dispatcher comes after what it hands work to: it starts reading straight away, and what it
   # reads goes to evaluators found through the registry started before it. It comes after the read
   # edge for the same reason - a restart resumes from what that kept, which it can only read from a
-  # process already up. Only the pruner's position is free: it reads nothing this tree holds, and
-  # prunes nothing until an hour in.
   #
   # Being last but one is what makes keeping the edge worth it: nothing before the dispatcher is
   # restarted when the dispatcher dies, so it comes back beside the same evaluators and the same

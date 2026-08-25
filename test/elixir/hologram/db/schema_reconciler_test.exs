@@ -169,7 +169,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       assert rows == [["database"], ["migration"], ["outbox"], ["schema_object"]]
     end
 
-    test "gives the outbox the indexes reading it forward and pruning it behind need" do
+    test "gives the outbox the indexes reading it forward and by time need" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
 
@@ -187,8 +187,10 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       {:ok, %{rows: rows}} = Connection.query(statement)
 
-      # BRIN rather than btree for the prune scan: the table is append-only, so a btree here
-      # would put its rightmost page in the path of every write to speed up an hourly chore.
+      # BRIN rather than btree on the timestamp: the table is append-only and never pruned, so
+      # its physical order already follows time, and a btree would put its rightmost page in the
+      # path of every write to serve a read nothing does yet. Built for the prune that has gone,
+      # kept for the history-by-time read that comes next.
       assert rows == [
                ["outbox_inserted_at_$idx", "brin", "inserted_at"],
                ["outbox_pkey", "btree", "seq"],

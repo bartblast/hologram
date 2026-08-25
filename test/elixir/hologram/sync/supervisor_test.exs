@@ -7,7 +7,6 @@ defmodule Hologram.Sync.SupervisorTest do
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Fanout
-  alias Hologram.Sync.Pruner
   alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.ResultStore
 
@@ -31,8 +30,7 @@ defmodule Hologram.Sync.SupervisorTest do
                Evaluators,
                ReadEdge,
                notifications(),
-               Dispatcher,
-               Pruner
+               Dispatcher
              ]
     end
 
