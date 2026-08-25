@@ -567,7 +567,11 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode_ir(%IR.StringType{value: value}, _context) do
-    encode_primitive_type(:bitstring, value, true)
+    if String.valid?(value) do
+      encode_primitive_type(:bitstring, value, true)
+    else
+      encode_bytes(value)
+    end
   end
 
   # TODO: catch_clauses, else_clauses, after_block
@@ -866,6 +870,15 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_block_expr(expr_js, false, false) do
     "\n#{expr_js};"
+  end
+
+  # A string literal carries text and nothing else: the client reads it back through UTF-8, so a
+  # byte that is not valid UTF-8 has no spelling in one - an escape naming the byte comes back as
+  # the UTF-8 bytes of the character it named. A binary holding such a byte travels as the hex of
+  # its bytes instead, and the client rebuilds them as they were. Lowercase, which is the one
+  # spelling of hex the client writes and the server reads. Linear, like the escaping it replaces.
+  defp encode_bytes(binary) do
+    ~s/Type.bitstring("#{Base.encode16(binary, case: :lower)}", "hex")/
   end
 
   # The clause head is rendered at build time, but which of its parts failed to
