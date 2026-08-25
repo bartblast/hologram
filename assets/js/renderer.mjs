@@ -59,7 +59,8 @@ const SCRIPT_TEXT_ESCAPABLE_CHARS = /[\\"'`$\n\r\0<]/g;
 //
 //   \    would eat the character after it
 //   "    '    would close the literal
-//   \n   and \r are not allowed inside a literal at all
+//   \n   \r and \f are not allowed inside a literal at all - CSS preprocessing folds CR
+//        and FF into LF before tokenizing, so a form feed breaks a string as a newline does
 //   NUL  is rewritten to U+FFFD by the CSS tokenizer, so it cannot travel as itself
 //   <    so that "</style" can never form in a page's inline stylesheet
 //
@@ -79,12 +80,13 @@ const STYLE_TEXT_ESCAPES = {
   "'": "\\'",
   "\n": "\\00000A ",
   "\r": "\\00000D ",
+  "\f": "\\00000C ",
   "\0": "\\00FFFD ",
   "<": "\\00003C ",
 };
 
 // One character class over the keys above, so the replace is a single pass.
-const STYLE_TEXT_ESCAPABLE_CHARS = /[\\"'\n\r\0<]/g;
+const STYLE_TEXT_ESCAPABLE_CHARS = /[\\"'\n\r\f\0<]/g;
 
 // The tag names whose case the HTML parser restores inside <svg>. Everywhere else a tag name has
 // no case at all: the tokenizer lowercases it before anything else sees it, and only these names

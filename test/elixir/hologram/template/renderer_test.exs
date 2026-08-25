@@ -2607,6 +2607,11 @@ defmodule Hologram.Template.RendererTest do
       assert stringify_for_style_interpolation("\r") == "\\00000D "
     end
 
+    test "form feed char" do
+      # CSS preprocessing folds a form feed into a newline, which a string literal can't hold.
+      assert stringify_for_style_interpolation("\f") == "\\00000C "
+    end
+
     test "null char" do
       assert stringify_for_style_interpolation(<<0>>) == "\\00FFFD "
     end

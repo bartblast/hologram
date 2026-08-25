@@ -63,7 +63,8 @@ defmodule Hologram.Template.Renderer do
   #
   #   \\   would eat the character after it
   #   "    '    would close the literal
-  #   \n   and \r are not allowed inside a literal at all
+  #   \n   \r and \f are not allowed inside a literal at all - CSS preprocessing folds CR
+  #        and FF into LF before tokenizing, so a form feed breaks a string as a newline does
   #   NUL  is rewritten to U+FFFD by the CSS tokenizer, so it cannot travel as itself
   #   <    so that "</style" can never form in a page's inline stylesheet
   #
@@ -83,6 +84,7 @@ defmodule Hologram.Template.Renderer do
     "'" => "\\'",
     "\n" => "\\00000A ",
     "\r" => "\\00000D ",
+    "\f" => "\\00000C ",
     <<0>> => "\\00FFFD ",
     "<" => "\\00003C "
   }

@@ -9046,6 +9046,10 @@ describe("Renderer", () => {
       assert.equal(styleExpressionText("\r"), "\\00000D ");
     });
 
+    it("expression inside style elements, form feed char", () => {
+      assert.equal(styleExpressionText("\f"), "\\00000C ");
+    });
+
     it("expression inside style elements, null char", () => {
       assert.equal(styleExpressionText("\0"), "\\00FFFD ");
     });
