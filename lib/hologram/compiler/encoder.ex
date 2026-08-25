@@ -32,8 +32,9 @@ defmodule Hologram.Compiler.Encoder do
   #   NUL  is rewritten to U+FFFD by the HTML parser inside script data
   #   <    so that "</script" can never form in a page's inline script
   #
-  # Bytes that are not valid UTF-8 have to go too, since a document carrying them has to be
-  # valid UTF-8. They are absent here because a pattern cannot name them - see escape_bytes/1.
+  # A binary that is not valid UTF-8 is not escaped at all: a string literal is read back as
+  # text, so such bytes have no spelling in one, and the binary travels as hex instead - see
+  # encode_bytes/1.
   @escapable_chars [<<0>>, "\n", "\r", "\"", "<", "\\"]
 
   # A compiled pattern holds a reference, which no module attribute can carry, and compiling one
@@ -1158,28 +1159,6 @@ defmodule Hologram.Compiler.Encoder do
     end
   end
 
-  # Walks a binary that is not text, so that a byte which is not valid UTF-8 can be named. The
-  # escapable chars are matched first, since this path answers for the whole binary.
-  defp escape_bytes(str), do: escape_bytes(str, [])
-
-  defp escape_bytes(<<0, rest::binary>>, acc), do: escape_bytes(rest, ["\\u{0}" | acc])
-  defp escape_bytes("\n" <> rest, acc), do: escape_bytes(rest, ["\\n" | acc])
-  defp escape_bytes("\r" <> rest, acc), do: escape_bytes(rest, ["\\r" | acc])
-  defp escape_bytes("\"" <> rest, acc), do: escape_bytes(rest, ["\\\"" | acc])
-  defp escape_bytes("<" <> rest, acc), do: escape_bytes(rest, ["\\u{3C}" | acc])
-  defp escape_bytes("\\" <> rest, acc), do: escape_bytes(rest, ["\\\\" | acc])
-
-  defp escape_bytes(<<char::utf8, rest::binary>>, acc) do
-    escape_bytes(rest, [<<char::utf8>> | acc])
-  end
-
-  defp escape_bytes(<<byte::integer, rest::binary>>, acc) do
-    # No need to pad with 0, because every byte below 16 is valid UTF-8 and matched above.
-    escape_bytes(rest, ["\\x#{Integer.to_string(byte, 16)}" | acc])
-  end
-
-  defp escape_bytes("", acc), do: Enum.reverse(acc)
-
   defp escape_char(0), do: "\\u{0}"
   defp escape_char(?\n), do: "\\n"
   defp escape_char(?\r), do: "\\r"
@@ -1203,15 +1182,12 @@ defmodule Hologram.Compiler.Encoder do
   # text character by character: one native scan, and each stretch is a sub-binary that is never
   # copied until the result is assembled. Linear in the length of the text, where growing the
   # result with `<>` on the way out of a per-character recursion was quadratic.
+  #
+  # Takes text. A binary that is not valid UTF-8 never gets here - see encode_bytes/1.
   defp escape_non_printable_and_special_chars(str) do
-    iodata =
-      if String.valid?(str) do
-        escape_matches(str, 0, :binary.matches(str, escapable_chars_pattern()), [])
-      else
-        escape_bytes(str)
-      end
-
-    IO.iodata_to_binary(iodata)
+    str
+    |> escape_matches(0, :binary.matches(str, escapable_chars_pattern()), [])
+    |> IO.iodata_to_binary()
   end
 
   defp has_async_call?(clauses, context) do
