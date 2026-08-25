@@ -97,7 +97,7 @@ defmodule Hologram.Template.Parser do
               processed_tags: [],
               processed_tokens: [],
               raw?: false,
-              raw_text?: false,
+              script_or_style?: false,
               tag_name: nil,
               token_buffer: []
 
@@ -130,7 +130,7 @@ defmodule Hologram.Template.Parser do
             processed_tags: list(Parser.parsed_tag()),
             processed_tokens: list(Tokenizer.token()),
             raw?: boolean,
-            raw_text?: boolean,
+            script_or_style?: boolean,
             tag_name: Parser.tag_name() | nil,
             token_buffer: list(Tokenizer.token())
           }
@@ -321,7 +321,7 @@ defmodule Hologram.Template.Parser do
 
     context
     |> set_tag_name(tag_name)
-    |> maybe_disable_raw_text_mode(tag_name)
+    |> maybe_disable_script_or_style_mode(tag_name)
     |> add_processed_token(token)
     |> set_prev_status(:end_tag_name)
     |> parse_tokens(:end_tag, rest)
@@ -599,7 +599,7 @@ defmodule Hologram.Template.Parser do
     context
     |> reset_attributes()
     |> set_tag_name(tag_name)
-    |> maybe_enable_raw_text_mode(tag_name)
+    |> maybe_enable_script_or_style_mode(tag_name)
     |> add_processed_token(token)
     |> set_prev_status(:start_tag_name)
     |> parse_tokens(:start_tag, rest)
@@ -753,7 +753,7 @@ defmodule Hologram.Template.Parser do
     |> parse_tokens(:start_tag, rest)
   end
 
-  def parse_tokens(%{raw_text?: true, delimiter_stack: []} = context, :text, [
+  def parse_tokens(%{script_or_style?: true, delimiter_stack: []} = context, :text, [
         {:symbol, "\""} = token | rest
       ]) do
     context
@@ -762,7 +762,7 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse_tokens(
-        %{raw_text?: true, delimiter_stack: [:double_quote | _tail]} = context,
+        %{script_or_style?: true, delimiter_stack: [:double_quote | _tail]} = context,
         :text,
         [
           {:symbol, "\""} = token | rest
@@ -773,7 +773,7 @@ defmodule Hologram.Template.Parser do
     |> parse_text(token, rest)
   end
 
-  def parse_tokens(%{raw_text?: true, delimiter_stack: []} = context, :text, [
+  def parse_tokens(%{script_or_style?: true, delimiter_stack: []} = context, :text, [
         {:symbol, "'"} = token | rest
       ]) do
     context
@@ -782,7 +782,7 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse_tokens(
-        %{raw_text?: true, delimiter_stack: [:single_quote | _tail]} = context,
+        %{script_or_style?: true, delimiter_stack: [:single_quote | _tail]} = context,
         :text,
         [
           {:symbol, "'"} = token | rest
@@ -793,7 +793,7 @@ defmodule Hologram.Template.Parser do
     |> parse_text(token, rest)
   end
 
-  def parse_tokens(%{raw_text?: true, delimiter_stack: []} = context, :text, [
+  def parse_tokens(%{script_or_style?: true, delimiter_stack: []} = context, :text, [
         {:symbol, "`"} = token | rest
       ]) do
     context
@@ -801,9 +801,13 @@ defmodule Hologram.Template.Parser do
     |> parse_text(token, rest)
   end
 
-  def parse_tokens(%{raw_text?: true, delimiter_stack: [:backtick | _tail]} = context, :text, [
-        {:symbol, "`"} = token | rest
-      ]) do
+  def parse_tokens(
+        %{script_or_style?: true, delimiter_stack: [:backtick | _tail]} = context,
+        :text,
+        [
+          {:symbol, "`"} = token | rest
+        ]
+      ) do
     context
     |> pop_delimiter_stack()
     |> parse_text(token, rest)
@@ -816,7 +820,7 @@ defmodule Hologram.Template.Parser do
     |> parse_tokens(:text, rest)
   end
 
-  def parse_tokens(%{node_type: :text, raw_text?: false} = context, :text, [
+  def parse_tokens(%{node_type: :text, script_or_style?: false} = context, :text, [
         {:symbol, "<!--"} = token | rest
       ]) do
     context
@@ -840,7 +844,7 @@ defmodule Hologram.Template.Parser do
     parse_text(context, token, rest)
   end
 
-  def parse_tokens(%{node_type: :text, raw_text?: false} = context, :text, [
+  def parse_tokens(%{node_type: :text, script_or_style?: false} = context, :text, [
         {:symbol, "<!"} = token_1 | rest_1
       ]) do
     case rest_1 do
@@ -927,7 +931,9 @@ defmodule Hologram.Template.Parser do
     |> parse_expression({:symbol, "{"}, rest)
   end
 
-  def parse_tokens(%{raw?: false, raw_text?: false} = context, :text, [{:symbol, "${"} | rest]) do
+  def parse_tokens(%{raw?: false, script_or_style?: false} = context, :text, [
+        {:symbol, "${"} | rest
+      ]) do
     context
     |> buffer_token({:symbol, "$"})
     |> maybe_add_text_tag()
@@ -965,14 +971,18 @@ defmodule Hologram.Template.Parser do
     |> parse_tokens(:text, rest)
   end
 
-  def parse_tokens(%{raw_text?: true, delimiter_stack: [delimiter | _tail]} = context, :text, [
-        {:symbol, "</"} = token | rest
-      ])
+  def parse_tokens(
+        %{script_or_style?: true, delimiter_stack: [delimiter | _tail]} = context,
+        :text,
+        [
+          {:symbol, "</"} = token | rest
+        ]
+      )
       when delimiter in [:backtick, :double_quote, :single_quote] do
     parse_text(context, token, rest)
   end
 
-  # Dynamic end tags are recognized in raw text mode, just like static end tags are.
+  # Dynamic end tags are recognized inside a script or style, just like static end tags are.
   def parse_tokens(%{node_type: :text, raw?: false} = context, :text, [
         {:symbol, "</"} = token,
         {:symbol, "{"} = expression_token | rest
@@ -1003,14 +1013,14 @@ defmodule Hologram.Template.Parser do
     |> parse_tokens(:end_tag_name, rest)
   end
 
-  def parse_tokens(%{node_type: :text, raw?: false, raw_text?: false} = context, :text, [
+  def parse_tokens(%{node_type: :text, raw?: false, script_or_style?: false} = context, :text, [
         {:symbol, "<"} = token,
         {:symbol, "{"} = expression_token | rest
       ]) do
     parse_dynamic_tag_name(context, :dynamic_start_tag, token, expression_token, rest)
   end
 
-  def parse_tokens(%{node_type: :text, raw?: true, raw_text?: false} = context, :text, [
+  def parse_tokens(%{node_type: :text, raw?: true, script_or_style?: false} = context, :text, [
         {:symbol, "<"} = token,
         {:symbol, "{"} = expression_token | rest
       ]) do
@@ -1023,7 +1033,7 @@ defmodule Hologram.Template.Parser do
     )
   end
 
-  def parse_tokens(%{node_type: :text, raw_text?: false} = context, :text, [
+  def parse_tokens(%{node_type: :text, script_or_style?: false} = context, :text, [
         {:symbol, "<"} = token | [{next_type, next_value} | _tokens] = rest
       ])
       when is_tag_name_token(next_type, next_value) do
@@ -1037,13 +1047,13 @@ defmodule Hologram.Template.Parser do
     |> parse_tokens(:start_tag_name, rest)
   end
 
-  def parse_tokens(%{node_type: :text, raw_text?: false} = context, :text, [
+  def parse_tokens(%{node_type: :text, script_or_style?: false} = context, :text, [
         {:symbol, "<"} = token | rest
       ]) do
     raise_error(@unescaped_lt_char_details, context, :text, token, rest)
   end
 
-  def parse_tokens(%{node_type: :text, raw_text?: false} = context, :text, [
+  def parse_tokens(%{node_type: :text, script_or_style?: false} = context, :text, [
         {:symbol, ">"} = token | rest
       ]) do
     details =
@@ -1171,16 +1181,16 @@ defmodule Hologram.Template.Parser do
     %{context | raw?: false}
   end
 
-  defp disable_raw_text_mode(context) do
-    %{context | raw_text?: false}
+  defp disable_script_or_style_mode(context) do
+    %{context | script_or_style?: false}
   end
 
   defp enable_raw_mode(context) do
     %{context | raw?: true}
   end
 
-  defp enable_raw_text_mode(context) do
-    %{context | raw_text?: true}
+  defp enable_script_or_style_mode(context) do
+    %{context | script_or_style?: true}
   end
 
   defp encode_tokens(tokens) do
@@ -1220,17 +1230,17 @@ defmodule Hologram.Template.Parser do
     end
   end
 
-  defp maybe_disable_raw_text_mode(context, tag_name) when tag_name in @raw_text_elems do
-    disable_raw_text_mode(context)
+  defp maybe_disable_script_or_style_mode(context, tag_name) when tag_name in @raw_text_elems do
+    disable_script_or_style_mode(context)
   end
 
-  defp maybe_disable_raw_text_mode(context, _tag_name), do: context
+  defp maybe_disable_script_or_style_mode(context, _tag_name), do: context
 
-  defp maybe_enable_raw_text_mode(context, tag_name) when tag_name in @raw_text_elems do
-    enable_raw_text_mode(context)
+  defp maybe_enable_script_or_style_mode(context, tag_name) when tag_name in @raw_text_elems do
+    enable_script_or_style_mode(context)
   end
 
-  defp maybe_enable_raw_text_mode(context, _tag_name), do: context
+  defp maybe_enable_script_or_style_mode(context, _tag_name), do: context
 
   defp parse_attribute_name(context, token, rest) do
     context

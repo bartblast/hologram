@@ -212,7 +212,7 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("</-foo>", expected_msg)
     end
 
-    test "raw text mode is not activated for script-prefixed custom element" do
+    test "script or style mode is not activated for script-prefixed custom element" do
       assert parse_markup("<script-widget>{@var}</script-widget>") == [
                start_tag: {"script-widget", []},
                expression: "{@var}",
@@ -220,7 +220,7 @@ defmodule Hologram.Template.ParserTest do
              ]
     end
 
-    test "raw text mode is not activated for style-prefixed custom element" do
+    test "script or style mode is not activated for style-prefixed custom element" do
       assert parse_markup("<style-widget>{@var}</style-widget>") == [
                start_tag: {"style-widget", []},
                expression: "{@var}",
@@ -228,7 +228,7 @@ defmodule Hologram.Template.ParserTest do
              ]
     end
 
-    test "raw text mode is still activated for script tag with attributes" do
+    test "script or style mode is still activated for script tag with attributes" do
       assert parse_markup(~s(<script defer>var x = "<div>";</script>)) == [
                start_tag: {"script", [{"defer", []}]},
                text: ~s(var x = "<div>";),
@@ -236,7 +236,7 @@ defmodule Hologram.Template.ParserTest do
              ]
     end
 
-    test "raw text mode is still activated for style tag with attributes" do
+    test "script or style mode is still activated for style tag with attributes" do
       assert parse_markup(~s(<style media="print">a > b</style>)) == [
                start_tag: {"style", [{"media", [text: "print"]}]},
                text: "a > b",
@@ -311,7 +311,7 @@ defmodule Hologram.Template.ParserTest do
              ]
     end
 
-    test "raw text mode is off after the end tag" do
+    test "script or style mode is off after the end tag" do
       assert_raise TemplateSyntaxError, ~r/Unescaped '>' character inside text node/, fn ->
         parse_markup("<style>a</style>b > c")
       end
