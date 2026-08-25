@@ -4,6 +4,7 @@ defmodule Hologram.Sync.FrameTest do
   import Hologram.Sync.Frame
 
   alias Hologram.Entity
+  alias Hologram.Entity.Metadata
   alias Hologram.Entity.Model
   alias Hologram.Sync.WireData
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -31,16 +32,45 @@ defmodule Hologram.Sync.FrameTest do
     end
 
     test "sends a row that changed as the attributes that moved" do
-      row = Entity.new(Module2, a: true, c: "after")
+      row = %{
+        Entity.new(Module2, a: true, c: "after")
+        | __meta__: %Metadata{revisions: %{a: 1, c: 5}}
+      }
 
       assert deltas(news(%{patched: [{row, %{c: "after"}}]})) == [
                %{
-                 data: %{c: "after"},
+                 data: %{:c => "after", :"$revisions" => %{c: 5}},
                  id: row.id,
                  op: :patch_entity,
                  type: "Hologram.Test.Fixtures.Entity.Module2"
                }
              ]
+    end
+
+    test "carries the revisions of the columns a patch names" do
+      row = %{
+        Entity.new(Module2, a: true, c: "after")
+        | __meta__: %Metadata{revisions: %{a: 1, c: 5}}
+      }
+
+      assert [%{data: data}] = deltas(news(%{patched: [{row, %{a: true, c: "after"}}]}))
+      assert data[:"$revisions"] == %{a: 1, c: 5}
+    end
+
+    # The log stopped dropping server-only values, so a change to one reaches the frame - it is
+    # gone from the data, and the revisions are taken against the data so that a client is never
+    # told a column it may not have has moved.
+    test "leaves a server-only attribute out of a patch's revisions" do
+      row = %{
+        Entity.new(Module14, email: "user@test.com")
+        | __meta__: %Metadata{revisions: %{email: 3, password_hash: 4}}
+      }
+
+      moved = %{email: "user@test.com", password_hash: "hashed_secret_v5"}
+
+      assert [%{data: data}] = deltas(news(%{patched: [{row, moved}]}))
+      assert data[:"$revisions"] == %{email: 3}
+      refute Map.has_key?(data, :password_hash)
     end
 
     # Every update moves the stamp, so a patch carrying a value that must be written for the wire
@@ -50,7 +80,12 @@ defmodule Hologram.Sync.FrameTest do
       moved = %{c: "after", updated_at: ~U[2026-08-16 16:20:00.000000Z]}
 
       assert [%{data: data}] = deltas(news(%{patched: [{row, moved}]}))
-      assert data == %{c: "after", updated_at: "2026-08-16T16:20:00.000000Z"}
+
+      assert data == %{
+               :c => "after",
+               :updated_at => "2026-08-16T16:20:00.000000Z",
+               :"$revisions" => %{}
+             }
     end
 
     test "sends a row that left as its id, under the type it was held under" do
@@ -190,7 +225,9 @@ defmodule Hologram.Sync.FrameTest do
 
       assert decoded_deltas(envelope) == %{
                "patch_entity" => %{
-                 "Hologram.Test.Fixtures.Entity.Module2" => [%{"c" => "after", "id" => row.id}]
+                 "Hologram.Test.Fixtures.Entity.Module2" => [
+                   %{"$revisions" => %{}, "c" => "after", "id" => row.id}
+                 ]
                },
                "add_relationship" => %{
                  "Hologram.Test.Fixtures.Entity.Module3" => [

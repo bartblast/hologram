@@ -165,9 +165,19 @@ defmodule Hologram.Sync.Frame do
 
   # The row comes along for its type as much as its id: a bag of changed attributes cannot say
   # what it belongs to, and without that the values cannot be written the way the wire wants them.
+  #
+  # Every column the patch names was set at a revision the row's own map holds - the row is the
+  # fresh read the frame is built from - so the patch carries those entries and the client writes
+  # them over its map rather than being sent one. They are taken against the WRITTEN data rather
+  # than against the changes: a change to a server-only column reaches here (the log stopped
+  # dropping it) and is gone from the data, so taking from the data is what keeps a client from
+  # being told that a column it may not have has moved.
   defp patch_entity(row, patch) do
+    data = WireData.patch(row.__struct__, patch)
+    revisions = Map.take(row.__meta__.revisions, Map.keys(data))
+
     %{
-      data: WireData.patch(row.__struct__, patch),
+      data: Map.put(data, :"$revisions", revisions),
       id: row.id,
       op: :patch_entity,
       type: type_of(row)
