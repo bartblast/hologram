@@ -15,6 +15,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Component
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Realtime
   alias Hologram.Server
@@ -276,6 +277,24 @@ defmodule Hologram.Test.Helpers do
 
       Exception.message(error_with_blame)
     end
+  end
+
+  @doc """
+  Writes the given per-column revisions onto a row directly, for a test that needs a revision
+  standing in a row before a write would stamp one.
+
+  The revisions go as a MAP - a JSON string parameter would be encoded as a jsonb string scalar
+  rather than an object, and would read back as the binary it was written from.
+  """
+  @spec set_revisions(module, String.t(), map) :: :ok
+  def set_revisions(entity_type, id, revisions) do
+    statement =
+      ~s|UPDATE "hologram_data"."#{Mapper.table_name(entity_type)}" | <>
+        ~s|SET "$revisions" = $1 WHERE "id" = $2|
+
+    {:ok, _result} = Connection.query(statement, [revisions, Codec.encode(id, :uuid)])
+
+    :ok
   end
 
   @doc """

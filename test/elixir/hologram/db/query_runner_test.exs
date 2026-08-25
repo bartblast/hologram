@@ -468,6 +468,50 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert %DateTime{} = embedded_entity.created_at
     end
 
+    test "fills the metadata of every row of a set read" do
+      {first, second, _third} = create_module_2_entities()
+
+      set_revisions(Module2, first.id, %{"a" => 3, "c" => 2})
+      set_revisions(Module2, second.id, %{"c" => 5})
+
+      term = Query.normalize(Module2)
+
+      revisions =
+        term
+        |> run(@mapping)
+        |> Map.new(&{&1.id, &1.__meta__.revisions})
+
+      assert revisions[first.id] == %{a: 3, c: 2}
+      assert revisions[second.id] == %{c: 5}
+    end
+
+    test "fills the metadata of an included row" do
+      {:ok, required_target} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, included_target} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      {:ok, _source} =
+        Module3
+        |> Entity.new(b_id: included_target.id, c_id: required_target.id)
+        |> create()
+
+      set_revisions(Module2, included_target.id, %{"a" => 3, "c" => 2})
+
+      term =
+        Module3
+        |> include(:b)
+        |> Query.normalize()
+
+      assert [%Module3{b: %Module2{} = embedded_entity}] = run(term, @mapping)
+      assert embedded_entity.__meta__.revisions == %{a: 3, c: 2}
+    end
+
     test "embeds an included row the read policy hides from an acting user" do
       parent =
         PolicyModule2

@@ -5,6 +5,7 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.DB.Connection
   alias Hologram.DB.QueryCompiler
   alias Hologram.DB.SortKey
+  alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
   alias Hologram.Policy
 
@@ -158,7 +159,20 @@ defmodule Hologram.DB.QueryRunner do
         {name, decode_embed(nested_value, nested_sub_term, mapping)}
       end)
 
-    struct!(sub_term.entity, Map.merge(base_fields, nested_fields))
+    revisions_column = Enum.find(target_mapping.columns, &(&1.source == :revisions))
+
+    revisions =
+      object
+      |> Map.fetch!(revisions_column.name)
+      |> decode_embedded_value(revisions_column.type)
+      |> revisions_from_row(target_mapping.columns)
+
+    struct!(
+      sub_term.entity,
+      base_fields
+      |> Map.merge(nested_fields)
+      |> Map.put(:__meta__, %Metadata{revisions: revisions})
+    )
   end
 
   defp decode_embedded_value(nil, _type), do: nil
@@ -197,12 +211,16 @@ defmodule Hologram.DB.QueryRunner do
     entity_mapping = Map.fetch!(mapping, term.entity)
     {column_values, include_values} = Enum.split(row, length(entity_mapping.columns))
 
+    column_pairs = Enum.zip(entity_mapping.columns, column_values)
+
+    # Exactly one revisions column per table, by construction - it is framework state rather than
+    # a value the entity declares, so it lands in the metadata and never as a field.
+    {[{revisions_column, revisions_value}], value_pairs} =
+      Enum.split_with(column_pairs, fn {column, _value} -> column.source == :revisions end)
+
     base_fields =
-      entity_mapping.columns
-      |> Enum.zip(column_values)
-      |> Enum.reject(fn {column, _value} ->
-        column.source == :revisions or match?({:sort_key, _name}, column.source)
-      end)
+      value_pairs
+      |> Enum.reject(fn {column, _value} -> match?({:sort_key, _name}, column.source) end)
       |> Map.new(fn {column, value} ->
         {field_name(column), Codec.decode(value, column.type)}
       end)
@@ -215,7 +233,17 @@ defmodule Hologram.DB.QueryRunner do
         {name, decode_embed(value, sub_term, mapping)}
       end)
 
-    struct!(term.entity, Map.merge(base_fields, include_fields))
+    revisions =
+      revisions_value
+      |> Codec.decode(revisions_column.type)
+      |> revisions_from_row(entity_mapping.columns)
+
+    struct!(
+      term.entity,
+      base_fields
+      |> Map.merge(include_fields)
+      |> Map.put(:__meta__, %Metadata{revisions: revisions})
+    )
   end
 
   defp encode_param!(values, name, {:list, type}) when is_list(values) do
@@ -276,6 +304,19 @@ defmodule Hologram.DB.QueryRunner do
       {:ok, value} ->
         encode_param!(value, name, type)
     end
+  end
+
+  # The same reading EntityOperations.revisions_from_row/2 does for a by-id read, beside the
+  # field_name/1 clauses this module already keeps its own copy of.
+  defp revisions_from_row(revisions, columns) do
+    revisions
+    |> Enum.flat_map(fn {name, revision} ->
+      case Enum.find(columns, &(&1.name == name)) do
+        nil -> []
+        column -> [{field_name(column), revision}]
+      end
+    end)
+    |> Map.new()
   end
 
   defp validate_binding!(name, values, :list, type, opts) when is_list(values) do
