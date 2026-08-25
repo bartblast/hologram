@@ -16,6 +16,7 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
   alias HologramFeatureTests.TemplateSyntax.PublicCommentPage
   alias HologramFeatureTests.TemplateSyntax.RawBlockPage
   alias HologramFeatureTests.TemplateSyntax.ScriptInterpolationPage
+  alias HologramFeatureTests.TemplateSyntax.StyleInterpolationPage
   alias HologramFeatureTests.TemplateSyntax.TextAndElementPage
 
   @broadcast_channel :template_syntax_dynamic_component
@@ -109,6 +110,29 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
       |> visit(ScriptInterpolationPage)
       |> assert_script_result("return window.__scriptInterpolation;", [[value, value, value]])
       |> assert_script_result("return window.__xss;", nil)
+    end
+
+    # The value read back out of the stylesheet is compared against the same value carried through
+    # a script interpolation, which #1101 established arrives exact - so the expected value is not
+    # written out a second time here. Chrome serializes a computed "content" with wrapping quotes
+    # and backslash escapes, which the decode below undoes. The visibility assertion is the other
+    # half: the closing tag inside the value did not end the element, or the rule it carries would
+    # have hidden the div.
+    feature "in style element", %{session: session} do
+      decode = """
+      const css = window.__styleInterpolation.content;
+      const decoded = css.slice(1, -1).replace(/\\\\(.)/g, "$1");
+      return decoded === window.__styleInterpolationExpected;
+      """
+
+      session
+      |> visit(StyleInterpolationPage)
+      |> assert_script_result(decode, true)
+      |> assert_script_result("return window.__styleInterpolation.visibility;", "visible")
+      |> assert_script_result(
+        "return window.__styleInterpolation.text === document.getElementById('style_interpolation_sheet').textContent;",
+        true
+      )
     end
   end
 
