@@ -3646,7 +3646,7 @@ end
 </script>
 ```
 
-Note: Escape curly braces with backslashes (`\{`, `\}`) inside `~HOLO` templates to prevent them from being interpreted as Hologram expressions. Alternatively, wrap the element's body in a `{%raw}...{/raw}` block to disable template syntax entirely. The same applies to a `<style>` element, whose CSS rules are brace-heavy.
+Note: Escape curly braces with backslashes (`\{`, `\}`) inside `~HOLO` templates to prevent them from being interpreted as Hologram expressions. Alternatively, wrap the script body in a `{%raw}...{/raw}` block to disable template syntax entirely.
 
 #### Type Conversion
 
