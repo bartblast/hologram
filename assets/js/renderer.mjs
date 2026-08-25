@@ -52,6 +52,40 @@ const SCRIPT_TEXT_ESCAPES = {
 // One character class over the keys above, so the replace is a single pass.
 const SCRIPT_TEXT_ESCAPABLE_CHARS = /[\\"'`$\n\r\0<]/g;
 
+// The characters a value cannot carry into a style element as the text of a CSS string literal,
+// each with the escape sequence it is written as instead. Every sequence is valid inside both
+// kinds of literal - double-quoted and single-quoted - and reads back as the character it stands
+// for, so the value arrives unchanged whichever quotes the template wrote around it.
+//
+//   \    would eat the character after it
+//   "    '    would close the literal
+//   \n   and \r are not allowed inside a literal at all
+//   NUL  is rewritten to U+FFFD by the CSS tokenizer, so it cannot travel as itself
+//   <    so that "</style" can never form in a page's inline stylesheet
+//
+// ">" and "&" are absent on purpose: neither can end a raw text element, and writing ">" as an
+// escape would break a child combinator in an interpolated selector.
+//
+// A hex escape is six digits long, so a hex digit following it in the value is never absorbed
+// into it, and it ends with a space of its own: the CSS tokenizer consumes one whitespace
+// character after an escape, and that space is there to be the one it eats. DO NOT trim it - a
+// space that was in the value would be swallowed in its place.
+//
+// WARNING: must match @style_text_escapes in Hologram.Template.Renderer. The text the two sides
+// put inside a style element has to be identical, or the boot patch rewrites it.
+const STYLE_TEXT_ESCAPES = {
+  "\\": "\\\\",
+  '"': '\\"',
+  "'": "\\'",
+  "\n": "\\00000A ",
+  "\r": "\\00000D ",
+  "\0": "\\00FFFD ",
+  "<": "\\00003C ",
+};
+
+// One character class over the keys above, so the replace is a single pass.
+const STYLE_TEXT_ESCAPABLE_CHARS = /[\\"'\n\r\0<]/g;
+
 // The tag names whose case the HTML parser restores inside <svg>. Everywhere else a tag name has
 // no case at all: the tokenizer lowercases it before anything else sees it, and only these names
 // are given their spelling back.
@@ -185,10 +219,20 @@ export default class Renderer {
         // HTML escaping is done by Snabbdom.
         const text = $.toText(dom.data[1].data[0]);
 
-        // WARNING: must match render_tree/3's script clause on the server: inside a script
-        // element both sides write the value as the text of a JavaScript string literal, escaped
-        // the same way - see SCRIPT_TEXT_ESCAPES.
-        return parentTagName === "script" ? $.#escapeScriptText(text) : text;
+        // WARNING: must match render_tree/3's script and style clauses on the server: inside a
+        // raw text element both sides write the value as the text of a string literal of the
+        // language that element holds, escaped the same way - see SCRIPT_TEXT_ESCAPES and
+        // STYLE_TEXT_ESCAPES.
+        switch (parentTagName) {
+          case "script":
+            return $.#escapeScriptText(text);
+
+          case "style":
+            return $.#escapeStyleText(text);
+
+          default:
+            return text;
+        }
       }
 
       case "page":
@@ -875,6 +919,14 @@ export default class Renderer {
     return text.replace(
       SCRIPT_TEXT_ESCAPABLE_CHARS,
       (char) => SCRIPT_TEXT_ESCAPES[char],
+    );
+  }
+
+  // Based on stringify_for_style_interpolation/1
+  static #escapeStyleText(text) {
+    return text.replace(
+      STYLE_TEXT_ESCAPABLE_CHARS,
+      (char) => STYLE_TEXT_ESCAPES[char],
     );
   }
 

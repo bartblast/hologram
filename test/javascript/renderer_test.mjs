@@ -8700,7 +8700,7 @@ describe("Renderer", () => {
     const slots = Type.keywordList();
 
     // Note: server-side version escapes
-    it("text inside non-script elements", () => {
+    it("text inside non-raw-text elements", () => {
       // <div>abc < xyz</div>
       const node = Type.tuple([
         Type.atom("element"),
@@ -8748,6 +8748,32 @@ describe("Renderer", () => {
         {attrs: {}, key: "__hologramScript__:abc < xyz", on: {}},
         ["abc < xyz"],
       );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    // The client never escapes plain text - it sets it through the DOM, where nothing decodes.
+    // A style element carries no resource key, unlike a script.
+    it("text inside style elements", () => {
+      // <style>a > b & c</style>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("style"),
+        Type.list(),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring("a > b & c")]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("style", {attrs: {}, on: {}}, ["a > b & c"]);
 
       assert.deepStrictEqual(result, expected);
     });
@@ -8806,7 +8832,7 @@ describe("Renderer", () => {
     });
 
     // Note: server-side version escapes
-    it("expression inside non-script elements", () => {
+    it("expression inside non-raw-text elements", () => {
       // <div>{"abc < xyz"}</div>
       const node = Type.tuple([
         Type.atom("element"),
@@ -8944,6 +8970,118 @@ describe("Renderer", () => {
       assert.equal(
         scriptExpressionText('say "hi" <b>'),
         'say \\"hi\\" \\u{3C}b>',
+      );
+    });
+
+    // Note: escaped the same way on the server
+    it("expression inside style elements", () => {
+      // <style>{"abc < xyz"}</style>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("style"),
+        Type.list(),
+        Type.list([
+          Type.tuple([
+            Type.atom("expression"),
+            Type.tuple([Type.bitstring("abc < xyz")]),
+          ]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("style", {attrs: {}, on: {}}, [
+        "abc \\00003C  xyz",
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    // The text an expression contributes to a style element, as rendered by the client.
+    const styleExpressionText = (text) => {
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("style"),
+        Type.list(),
+        Type.list([
+          Type.tuple([
+            Type.atom("expression"),
+            Type.tuple([Type.bitstring(text)]),
+          ]),
+        ]),
+      ]);
+
+      return Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      ).children[0].text;
+    };
+
+    it("expression inside style elements, backslash char", () => {
+      assert.equal(styleExpressionText("\\"), "\\\\");
+    });
+
+    it("expression inside style elements, double quote char", () => {
+      assert.equal(styleExpressionText('"'), '\\"');
+    });
+
+    it("expression inside style elements, single quote char", () => {
+      assert.equal(styleExpressionText("'"), "\\'");
+    });
+
+    it("expression inside style elements, line feed char", () => {
+      assert.equal(styleExpressionText("\n"), "\\00000A ");
+    });
+
+    it("expression inside style elements, carriage return char", () => {
+      assert.equal(styleExpressionText("\r"), "\\00000D ");
+    });
+
+    it("expression inside style elements, null char", () => {
+      assert.equal(styleExpressionText("\0"), "\\00FFFD ");
+    });
+
+    it("expression inside style elements, less-than char", () => {
+      assert.equal(styleExpressionText("<"), "\\00003C ");
+    });
+
+    it("expression inside style elements, closing style tag", () => {
+      assert.equal(styleExpressionText("</style>"), "\\00003C /style>");
+    });
+
+    it("expression inside style elements, backtick and dollar chars travel as themselves", () => {
+      assert.equal(styleExpressionText("`${x}"), "`${x}");
+    });
+
+    it("expression inside style elements, greater-than and ampersand chars travel as themselves", () => {
+      assert.equal(styleExpressionText("a > b & c"), "a > b & c");
+    });
+
+    it("expression inside style elements, space after an escaped char is kept", () => {
+      assert.equal(styleExpressionText("a< b"), "a\\00003C  b");
+    });
+
+    it("expression inside style elements, hex digit after an escaped char is not absorbed", () => {
+      assert.equal(styleExpressionText("<a"), "\\00003C a");
+    });
+
+    it("expression inside style elements, non-ASCII text travels as itself", () => {
+      assert.equal(styleExpressionText("全息图"), "全息图");
+    });
+
+    it("expression inside style elements, text around escaped chars is kept", () => {
+      assert.equal(
+        styleExpressionText('say "hi" <b>'),
+        'say \\"hi\\" \\00003C b>',
       );
     });
 
