@@ -63,6 +63,19 @@ defmodule Hologram.DB.EntityOperationsTest do
     Enum.map(rows, fn [mode] -> mode end)
   end
 
+  # Until a write stamps them, the only way to stand a revision in a row is to write it directly.
+  # The map goes as a map - a string parameter would be encoded as a jsonb STRING rather than an
+  # object, and would read back as the binary it was written from.
+  defp set_revisions(entity_type, id, revisions) do
+    statement =
+      ~s|UPDATE "hologram_data"."#{Mapper.table_name(entity_type)}" | <>
+        ~s|SET "$revisions" = $1 WHERE "id" = $2|
+
+    {:ok, _result} = Connection.query(statement, [revisions, Codec.encode(id, :uuid)])
+
+    :ok
+  end
+
   defp wait_until_clock_advances_past(datetime) do
     now = DateTime.utc_now(:microsecond)
 
@@ -937,6 +950,28 @@ defmodule Hologram.DB.EntityOperationsTest do
       get(Module1, created_entity.id)
 
       refute "RowShareLock" in relation_lock_modes(Module1)
+    end
+
+    test "fills the metadata with the row's revisions" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      set_revisions(Module2, created_entity.id, %{"a" => 3, "c" => 2})
+
+      assert get(Module2, created_entity.id).__meta__.revisions == %{a: 3, c: 2}
+    end
+
+    test "reads a revisions entry naming no column as nothing" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      set_revisions(Module2, created_entity.id, %{"gone" => 1})
+
+      assert get(Module2, created_entity.id).__meta__.revisions == %{}
     end
   end
 

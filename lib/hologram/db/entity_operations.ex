@@ -17,6 +17,7 @@ defmodule Hologram.DB.EntityOperations do
   alias Hologram.DB.Outbox
   alias Hologram.DB.SortKey
   alias Hologram.Entity
+  alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
 
   @data_schema "hologram_data"
@@ -185,16 +186,24 @@ defmodule Hologram.DB.EntityOperations do
         nil
 
       {:ok, %Postgrex.Result{rows: [row]}} ->
-        # TODO: routed into the struct's __meta__ instead of dropped, once the metadata carries it.
-        fields =
+        # Exactly one revisions column per table, by construction - it is framework state rather
+        # than a value the entity declares, so it lands in the metadata and never as a field.
+        {[{revisions_column, revisions_value}], field_pairs} =
           persisted_columns
           |> Enum.zip(row)
-          |> Enum.reject(fn {column, _value} -> column.source == :revisions end)
-          |> Enum.map(fn {column, value} ->
+          |> Enum.split_with(fn {column, _value} -> column.source == :revisions end)
+
+        fields =
+          Enum.map(field_pairs, fn {column, value} ->
             {field_name(column), Codec.decode(value, column.type)}
           end)
 
-        struct!(entity_type, fields)
+        revisions =
+          revisions_value
+          |> Codec.decode(revisions_column.type)
+          |> revisions_from_row(columns)
+
+        struct!(entity_type, [{:__meta__, %Metadata{revisions: revisions}} | fields])
 
       {:error, error} ->
         raise error
@@ -605,6 +614,20 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   defp reference_violations(_entity_type, _error), do: nil
+
+  # The stored map is keyed by COLUMN name, so it is read back through the columns rather than by
+  # making atoms of its keys. A key naming no current column belonged to a declaration that has
+  # since been dropped - it reads as nothing, the way a column never set does.
+  defp revisions_from_row(revisions, columns) do
+    revisions
+    |> Enum.flat_map(fn {name, revision} ->
+      case Enum.find(columns, &(&1.name == name)) do
+        nil -> []
+        column -> [{field_name(column), revision}]
+      end
+    end)
+    |> Map.new()
+  end
 
   # A unique index derived from a `unique: true` attribute names that attribute back, so a
   # duplicate is answered the way a value violation is - by field, in Entity.validate/2's shape.
