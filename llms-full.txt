@@ -553,6 +553,23 @@ An interpolation written without quotes, such as `var x = {@value};`, puts the v
 
 Being valid JavaScript is not the same as being safe. Write a bare interpolation only for code your own application generates, such as a number or a boolean, and never for anything coming from a user, a request or a database. To pass structured data, interpolate into a string and parse it: `JSON.parse("{@json}")`.
 
+###### Inside Style Elements
+
+A `<style>` element works the same way, with CSS in place of JavaScript. The browser hands its text to the CSS parser without decoding entities, so the stylesheet reaches the page exactly as the template spells it, child combinators and ampersands included. An interpolated expression there is escaped as the text of a CSS string literal, so between quotes, double or single, the stylesheet receives the value exactly as it is:
+
+```holo
+<style>
+  nav > a \{ color: red \}
+  .banner::after \{ content: "{@label}" \}
+</style>
+```
+
+The braces of a CSS rule are template syntax, so escape them as `\{` and `\}`, or wrap the stylesheet in a `{%raw}...{/raw}` block. No value can end the literal it sits in or the element around it, and `>` and `&` inside a value are left alone, so selectors and `content` strings arrive as written.
+
+Without quotes, as in `color: {@value};`, the value lands in code position instead. Most CSS survives that: braces, colons, semicolons, parentheses and whole rules pass through unchanged, so a fragment the application generated can be interpolated in one piece. A newline, a quote and a `<` do not. Each becomes a CSS escape sequence, which is a parse error outside a string literal and drops the declaration around it.
+
+A bare interpolation is only as safe as the value. Write one for values the application produced itself, and never for anything coming from a user, a request or a database.
+
 #### Attribute and Prop Spread
 
 A bare braced expression prefixed with `...` injects a map's or keyword list's entries as the tag's attributes (on elements) or props (on components). The `...` marker sits outside the braces, so their content is ordinary Elixir - any expression is allowed:
