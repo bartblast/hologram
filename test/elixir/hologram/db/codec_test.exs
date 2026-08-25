@@ -41,6 +41,10 @@ defmodule Hologram.DB.CodecTest do
       assert decode(9, :integer) == 9
     end
 
+    test "passes a map through unchanged" do
+      assert decode(%{"title" => 3}, :map) == %{"title" => 3}
+    end
+
     test "passes :string values through" do
       assert decode("abc", :string) == "abc"
     end
@@ -112,6 +116,10 @@ defmodule Hologram.DB.CodecTest do
       assert encode(11, :integer) == 11
     end
 
+    test "passes a map through unchanged" do
+      assert encode(%{"title" => 3}, :map) == %{"title" => 3}
+    end
+
     test "passes :string values through" do
       assert encode("xyz", :string) == "xyz"
     end
@@ -174,6 +182,10 @@ defmodule Hologram.DB.CodecTest do
       assert encode_json(11, :integer) == 11
     end
 
+    test "passes a map through unchanged" do
+      assert encode_json(%{"title" => 3}, :map) == %{"title" => 3}
+    end
+
     test "passes :string values through" do
       assert encode_json("xyz", :string) == "xyz"
     end
@@ -190,6 +202,7 @@ defmodule Hologram.DB.CodecTest do
         {Module1, :enum},
         {2.5, :float},
         {11, :integer},
+        {%{"title" => 3}, :map},
         {"xyz", :string},
         {@uuid_string, :uuid}
       ]
@@ -197,7 +210,7 @@ defmodule Hologram.DB.CodecTest do
       encoded = Enum.map(values, fn {value, type} -> encode_json(value, type) end)
 
       assert Jason.encode!(encoded) ==
-               ~s([false,"2026-07-19","2026-07-18T08:30:00.123456Z","Hologram.Test.Fixtures.Role.Module1",2.5,11,"xyz","#{@uuid_string}"])
+               ~s([false,"2026-07-19","2026-07-18T08:30:00.123456Z","Hologram.Test.Fixtures.Role.Module1",2.5,11,{"title":3},"xyz","#{@uuid_string}"])
     end
   end
 
