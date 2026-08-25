@@ -212,7 +212,7 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("</-foo>", expected_msg)
     end
 
-    test "script mode is not activated for script-prefixed custom element" do
+    test "raw text mode is not activated for script-prefixed custom element" do
       assert parse_markup("<script-widget>{@var}</script-widget>") == [
                start_tag: {"script-widget", []},
                expression: "{@var}",
@@ -220,12 +220,101 @@ defmodule Hologram.Template.ParserTest do
              ]
     end
 
-    test "script mode is still activated for script tag with attributes" do
+    test "raw text mode is not activated for style-prefixed custom element" do
+      assert parse_markup("<style-widget>{@var}</style-widget>") == [
+               start_tag: {"style-widget", []},
+               expression: "{@var}",
+               end_tag: "style-widget"
+             ]
+    end
+
+    test "raw text mode is still activated for script tag with attributes" do
       assert parse_markup(~s(<script defer>var x = "<div>";</script>)) == [
                start_tag: {"script", [{"defer", []}]},
                text: ~s(var x = "<div>";),
                end_tag: "script"
              ]
+    end
+
+    test "raw text mode is still activated for style tag with attributes" do
+      assert parse_markup(~s(<style media="print">a > b</style>)) == [
+               start_tag: {"style", [{"media", [text: "print"]}]},
+               text: "a > b",
+               end_tag: "style"
+             ]
+    end
+  end
+
+  describe "style element" do
+    test "child combinator is text" do
+      assert parse_markup("<style>a > b</style>") == [
+               start_tag: {"style", []},
+               text: "a > b",
+               end_tag: "style"
+             ]
+    end
+
+    test "less-than char is text" do
+      assert parse_markup("<style>a < b</style>") == [
+               start_tag: {"style", []},
+               text: "a < b",
+               end_tag: "style"
+             ]
+    end
+
+    test "start tag is not recognized" do
+      assert parse_markup("<style><div></style>") == [
+               start_tag: {"style", []},
+               text: "<div>",
+               end_tag: "style"
+             ]
+    end
+
+    test "comment opener is text" do
+      assert parse_markup("<style><!-- a --></style>") == [
+               start_tag: {"style", []},
+               text: "<!-- a -->",
+               end_tag: "style"
+             ]
+    end
+
+    test "end tag is recognized" do
+      assert parse_markup("<style>a</style>b") == [
+               start_tag: {"style", []},
+               text: "a",
+               end_tag: "style",
+               text: "b"
+             ]
+    end
+
+    test "end tag is not recognized inside quoting" do
+      assert parse_markup(~s(<style>content: "</div>"</style>)) == [
+               start_tag: {"style", []},
+               text: ~s(content: "</div>"),
+               end_tag: "style"
+             ]
+    end
+
+    test "expression is still interpolated" do
+      assert parse_markup("<style>{@color}</style>") == [
+               start_tag: {"style", []},
+               expression: "{@color}",
+               end_tag: "style"
+             ]
+    end
+
+    test "escaped braces are text" do
+      assert parse_markup("<style>a \\{ b \\}</style>") == [
+               start_tag: {"style", []},
+               text: "a { b }",
+               end_tag: "style"
+             ]
+    end
+
+    test "raw text mode is off after the end tag" do
+      assert_raise TemplateSyntaxError, ~r/Unescaped '>' character inside text node/, fn ->
+        parse_markup("<style>a</style>b > c")
+      end
     end
   end
 
