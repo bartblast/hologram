@@ -7278,6 +7278,43 @@ describe("Renderer", () => {
         ]),
       );
     });
+
+    it("tag name with uppercase chars", () => {
+      // <{"DIV"}></{"DIV"}>
+      const result = render(dynamicTag(Type.bitstring("DIV")));
+
+      assert.deepStrictEqual(result, vnode("div", {attrs: {}, on: {}}, []));
+    });
+
+    it("SVG tag name that lost its case", () => {
+      // <{"lineargradient"}></{"lineargradient"}>
+      const result = render(dynamicTag(Type.bitstring("lineargradient")));
+
+      assert.deepStrictEqual(
+        result,
+        vnode("linearGradient", {attrs: {}, on: {}}, []),
+      );
+    });
+
+    it("SVG tag name that is already spelled the way the parser spells it", () => {
+      // <{"linearGradient"}></{"linearGradient"}>
+      const result = render(dynamicTag(Type.bitstring("linearGradient")));
+
+      assert.deepStrictEqual(
+        result,
+        vnode("linearGradient", {attrs: {}, on: {}}, []),
+      );
+    });
+
+    it("tag name that names an Object.prototype member", () => {
+      // <{"constructor"}></{"constructor"}>
+      const result = render(dynamicTag(Type.bitstring("constructor")));
+
+      assert.deepStrictEqual(
+        result,
+        vnode("constructor", {attrs: {}, on: {}}, []),
+      );
+    });
   });
 
   describe("dynamic tag node, component branch", () => {
