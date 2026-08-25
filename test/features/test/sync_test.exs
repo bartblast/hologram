@@ -140,6 +140,32 @@ defmodule HologramFeatureTests.SyncTest do
     assert data =~ ~s["patch_entity":]
   end
 
+  # The wire half of the revisions path: a patch carries an entry for each column it names, which
+  # is what the client writes over its own map rather than being sent a whole one.
+  feature "carries the revisions of a patched column", %{session: _session} do
+    document =
+      Document
+      |> Entity.new(public: true, title: "before_revision_patch")
+      |> DB.create!()
+
+    client = drain_initial_sync(connect())
+
+    update(Document, document.id, %{title: "after_revision_patch"})
+
+    {data, _client} = await_deltas_carrying(client, ~s["$revisions":{"title":])
+
+    patched =
+      data
+      |> Jason.decode!()
+      |> get_in(["deltas", "patch_entity", "HologramFeatureTests.Entities.Document"])
+
+    reloaded = DB.read(Document, document.id)
+
+    assert [%{"$revisions" => revisions, "id" => patched_id}] = patched
+    assert patched_id == document.id
+    assert revisions == %{"title" => reloaded.__meta__.revisions.title}
+  end
+
   # The defect this spec pins: membership must cover the window's whole REACH, so a row no window
   # roots - the folder is reachable only through the document window's include - still receives
   # its own patches. Rooted-everywhere fixtures kept the hole green for a whole step.
