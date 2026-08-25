@@ -222,6 +222,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                ["model_hash", "text", true],
                ["mutation_ref", "jsonb", false],
                ["op", "text", true],
+               ["revisions", "jsonb", false],
                ["seq", "bigint", true],
                ["tx", "xid8", true],
                ["type", "text", true]
