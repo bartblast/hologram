@@ -10,6 +10,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Reflection
   alias Hologram.Server
   alias Hologram.Template.DOM
+  alias Hologram.Template.Helpers
 
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
@@ -381,10 +382,16 @@ defmodule Hologram.Template.Renderer do
   end
 
   # A dynamic tag decides between the element and the component branch at render time, then behaves
-  # exactly like the equivalent static tag would.
+  # exactly like the equivalent static tag would. That includes its spelling: a name that only
+  # exists once the page renders is out of the compiler's reach, so it is spelled the way the
+  # parser would spell it here instead.
   def render_tree({:dynamic_tag, {tag_name}, attrs_dom, children_dom}, env, server_struct)
       when is_binary(tag_name) do
-    render_tree({:element, tag_name, attrs_dom, children_dom}, env, server_struct)
+    render_tree(
+      {:element, Helpers.normalize_tag_name(tag_name), attrs_dom, children_dom},
+      env,
+      server_struct
+    )
   end
 
   def render_tree({:dynamic_tag, {module}, props_dom, children_dom}, env, server_struct)
