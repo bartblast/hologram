@@ -10,6 +10,7 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
   alias HologramFeatureTests.TemplateSyntax.DynamicElementPage
   alias HologramFeatureTests.TemplateSyntax.ForBlockPage
   alias HologramFeatureTests.TemplateSyntax.IfBlockPage
+  alias HologramFeatureTests.TemplateSyntax.InlineStylesheetPage
   alias HologramFeatureTests.TemplateSyntax.InterpolationPage
   alias HologramFeatureTests.TemplateSyntax.PropSpreadPage
   alias HologramFeatureTests.TemplateSyntax.PublicCommentPage
@@ -109,6 +110,21 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
       |> assert_script_result("return window.__scriptInterpolation;", [[value, value, value]])
       |> assert_script_result("return window.__xss;", nil)
     end
+  end
+
+  # The stylesheet is read at parse time, before the runtime boots, so these are the server's own
+  # bytes rather than the client's repair of them. The last assertion compares that text with what
+  # the element holds after hydration: equal means the client rendered the same stylesheet and the
+  # boot patch adopted it instead of rewriting it.
+  feature "inline stylesheet", %{session: session} do
+    session
+    |> visit(InlineStylesheetPage)
+    |> assert_script_result("return window.__inlineStylesheet.color;", "rgb(1, 2, 3)")
+    |> assert_script_result("return window.__inlineStylesheet.content;", ~s("a & b"))
+    |> assert_script_result(
+      "return window.__inlineStylesheet.text === document.getElementById('inline_stylesheet_sheet').textContent;",
+      true
+    )
   end
 
   feature "public comment", %{session: session} do
