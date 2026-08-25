@@ -15,6 +15,13 @@ defmodule Hologram.Template.Renderer do
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
 
+  # The elements the HTML parser reads as raw text: their content reaches the language they hold -
+  # JavaScript, CSS - without entity decoding, so entity-encoding it on the way out would put a
+  # different program in the document than the tree holds. See print_node/2.
+  #
+  # https://html.spec.whatwg.org/multipage/syntax.html#raw-text-elements
+  @raw_text_elems ~w(script style)
+
   # The characters a value cannot carry into a script element as the text of a JavaScript string
   # literal, each with the escape sequence it is written as instead. Every sequence is valid
   # inside all three kinds of literal - double-quoted, single-quoted and template - and reads back
@@ -48,6 +55,41 @@ defmodule Hologram.Template.Renderer do
   }
 
   @script_text_escapable_chars Map.keys(@script_text_escapes)
+
+  # The characters a value cannot carry into a style element as the text of a CSS string literal,
+  # each with the escape sequence it is written as instead. Every sequence is valid inside both
+  # kinds of literal - double-quoted and single-quoted - and reads back as the character it stands
+  # for, so the value arrives unchanged whichever quotes the template wrote around it.
+  #
+  #   \\   would eat the character after it
+  #   "    '    would close the literal
+  #   \n   \r and \f are not allowed inside a literal at all - CSS preprocessing folds CR
+  #        and FF into LF before tokenizing, so a form feed breaks a string as a newline does
+  #   NUL  is rewritten to U+FFFD by the CSS tokenizer, so it cannot travel as itself
+  #   <    so that "</style" can never form in a page's inline stylesheet
+  #
+  # ">" and "&" are absent on purpose: neither can end a raw text element, and writing ">" as an
+  # escape would break a child combinator in an interpolated selector.
+  #
+  # A hex escape is six digits long, so a hex digit following it in the value is never absorbed
+  # into it, and it ends with a space of its own: the CSS tokenizer consumes one whitespace
+  # character after an escape, and that space is there to be the one it eats. DO NOT trim it - a
+  # space that was in the value would be swallowed in its place.
+  #
+  # WARNING: must match STYLE_TEXT_ESCAPES in the client renderer (renderer.mjs). The text the two
+  # sides put inside a style element has to be identical, or the boot patch rewrites it.
+  @style_text_escapes %{
+    "\\" => "\\\\",
+    "\"" => "\\\"",
+    "'" => "\\'",
+    "\n" => "\\00000A ",
+    "\r" => "\\00000D ",
+    "\f" => "\\00000C ",
+    <<0>> => "\\00FFFD ",
+    "<" => "\\00003C "
+  }
+
+  @style_text_escapable_chars Map.keys(@style_text_escapes)
 
   @typedoc """
   A node of an evaluated tree: only what a document can hold - elements, text, comments, and the
@@ -458,6 +500,17 @@ defmodule Hologram.Template.Renderer do
     {{:text, stringify_for_script_interpolation(value)}, %{}, server_struct}
   end
 
+  # The same reasoning as the script clause above, for the language a style element holds. A CSS
+  # parser does not decode entities either, so nothing downstream can make the value safe: it is
+  # escaped as the text of a CSS string literal here, where it is still distinguishable from the
+  # stylesheet it is about to merge with.
+  #
+  # WARNING: must match the client renderer's expression case (renderer.mjs), which escapes the
+  # same characters the same way - see @style_text_escapes.
+  def render_tree({:expression, {value}}, %Env{tag_name: "style"}, server_struct) do
+    {{:text, stringify_for_style_interpolation(value)}, %{}, server_struct}
+  end
+
   def render_tree({:expression, {value}}, _env, server_struct) do
     {{:text, to_string(value)}, %{}, server_struct}
   end
@@ -523,6 +576,34 @@ defmodule Hologram.Template.Renderer do
     value
     |> to_string()
     |> String.replace(@script_text_escapable_chars, &Map.fetch!(@script_text_escapes, &1))
+  end
+
+  @doc """
+  Converts a value to the text it contributes to a style element: its string form, escaped as the
+  text of a CSS string literal.
+
+  Every character that could end the literal, end the style element or be altered by the CSS
+  tokenizer on the way in is written as an escape sequence that reads back as that character, and
+  every other character travels as itself - ">" and "&" included, so a child combinator survives.
+  The value therefore reaches the stylesheet unchanged when the template writes it between quotes
+  of either kind, and it can never end the style element it is part of.
+
+  ## Examples
+
+      iex> stringify_for_style_interpolation("nav > a")
+      "nav > a"
+
+      iex> stringify_for_style_interpolation(~s(say "hi"))
+      ~S(say \\"hi\\")
+
+      iex> stringify_for_style_interpolation("</style>")
+      ~S(\\00003C /style>)
+  """
+  @spec stringify_for_style_interpolation(any) :: String.t()
+  def stringify_for_style_interpolation(value) do
+    value
+    |> to_string()
+    |> String.replace(@style_text_escapable_chars, &Map.fetch!(@style_text_escapes, &1))
   end
 
   defp build_layout_props_dom(page_module, page_state) do
@@ -856,9 +937,10 @@ defmodule Hologram.Template.Renderer do
     |> StringUtils.prepend_if_not_empty(" ")
   end
 
-  # The tag the printed node sits in travels down, since it decides whether text is markup or
-  # code. A comment passes it along rather than clearing it: "<!--" inside a script opens no
-  # comment, so escaping the text it wraps would corrupt the code it belongs to.
+  # The tag the printed node sits in travels down, since it decides whether text is markup or the
+  # code of a raw text element. A comment passes it along rather than clearing it: "<!--" inside a
+  # script or a style opens no comment, so escaping the text it wraps would corrupt the code it
+  # belongs to.
   defp print_node(nodes, parent_tag_name) when is_list(nodes) do
     Enum.map_join(nodes, &print_node(&1, parent_tag_name))
   end
@@ -884,7 +966,9 @@ defmodule Hologram.Template.Renderer do
     "<!--#{print_node(children, parent_tag_name)}-->"
   end
 
-  defp print_node({:text, text}, "script"), do: text
+  defp print_node({:text, text}, parent_tag_name) when parent_tag_name in @raw_text_elems do
+    text
+  end
 
   defp print_node({:text, text}, _parent_tag_name), do: HtmlEntities.encode(text)
 
