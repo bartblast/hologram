@@ -1423,6 +1423,35 @@ defmodule Hologram.Template.RendererTest do
                "component_3" => %{module: Module3, struct: %Component{state: %{a: 1, b: 2}}}
              }
     end
+
+    test "tag name with uppercase chars" do
+      # <{"DIV"}></{"DIV"}>
+      node = {:dynamic_tag, {"DIV"}, [], []}
+
+      assert render_dom(node, @env, @server) == {"<div></div>", %{}, @server}
+    end
+
+    test "SVG tag name that lost its case" do
+      # <{"lineargradient"}></{"lineargradient"}>
+      node = {:dynamic_tag, {"lineargradient"}, [], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<linearGradient></linearGradient>", %{}, @server}
+    end
+
+    test "SVG tag name that is already spelled the way the parser spells it" do
+      # <{"linearGradient"}></{"linearGradient"}>
+      node = {:dynamic_tag, {"linearGradient"}, [], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<linearGradient></linearGradient>", %{}, @server}
+    end
+
+    test "void element named with uppercase chars" do
+      node = {:dynamic_tag, {"IMG"}, [{"attr_1", [text: "aaa"]}], []}
+
+      assert render_dom(node, @env, @server) == {~s(<img attr_1="aaa" />), %{}, @server}
+    end
   end
 
   describe "dynamic tag node, component branch" do

@@ -36,9 +36,10 @@
 - [Client Runtime](https://hologram.page/reference/client-runtime): Erlang-to-JavaScript porting status, Elixir standard library coverage
 - [Features](https://hologram.page/reference/features): Feature implementation status and progress tracking
 - [Roadmap](https://hologram.page/docs/roadmap): Short-term, medium-term, and long-term development goals
-- [Contributing](https://hologram.page/reference/contributing): How to contribute, Erlang function porting initiative
+- [Contributing](https://hologram.page/reference/contributing): How to contribute, Erlang function porting initiative, where security vulnerabilities go instead
 - [Package Naming](https://hologram.page/reference/package-naming): Reserved prefixes and namespaces for Hologram packages
 - [Sponsor](https://hologram.page/reference/sponsor): Sponsorship information and project impact
+- [Reporting Vulnerabilities](https://hologram.page/reference/reporting-vulnerabilities): How to report a security vulnerability privately, response process, supported versions, scope
 
 ## Resources
 

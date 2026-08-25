@@ -842,6 +842,14 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert :binary.replace("hello world", "world", "universe") == "hello universe"
     end
 
+    test "raises ArgumentError if function arity is not 1 and the pattern has no match" do
+      replacement = wrap_term(fn _matched, _extra -> "X" end)
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a valid replacement"),
+                   fn -> :binary.replace("hello", "z", replacement) end
+    end
+
     test "error frame carries args and error_info" do
       replacement = wrap_term(:bad)
 
@@ -968,6 +976,62 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    fn ->
                      :binary.replace("hello", "l", fn _matched -> :not_binary end, [])
                    end
+    end
+
+    test "raises ArgumentError if function arity is not 1" do
+      replacement = wrap_term(fn _matched, _extra -> "X" end)
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a valid replacement"),
+                   fn -> :binary.replace("hello", "l", replacement, []) end
+    end
+
+    test "raises ArgumentError if function arity is not 1 and the pattern has no match" do
+      replacement = wrap_term(fn _matched, _extra -> "X" end)
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a valid replacement"),
+                   fn -> :binary.replace("hello", "z", replacement, []) end
+    end
+
+    test "raises ArgumentError if function arity is zero" do
+      replacement = wrap_term(fn -> "X" end)
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a valid replacement"),
+                   fn -> :binary.replace("hello", "l", replacement, []) end
+    end
+
+    test "raises ArgumentError if the function raises" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   fn ->
+                     :binary.replace("hello", "l", fn _matched -> raise "boom" end, [])
+                   end
+    end
+
+    test "raises ArgumentError if the function throws" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   fn ->
+                     :binary.replace("hello", "l", fn _matched -> throw(:boom) end, [])
+                   end
+    end
+
+    test "raises ArgumentError if the function exits" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   fn ->
+                     :binary.replace("hello", "l", fn _matched -> exit(:boom) end, [])
+                   end
+    end
+
+    test "raises ArgumentError if no function clause matches" do
+      replacement = wrap_term(fn "x" -> "y" end)
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   fn -> :binary.replace("hello", "l", replacement, []) end
     end
 
     # With :scope option
@@ -1204,6 +1268,23 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert {:binary, :replace, ["abc", "b", "x", [scope: {0, 10}]], location} =
                wrap_term(top_frame)
 
+      assert location[:error_info] == %{module: :erl_stdlib_errors}
+    end
+
+    test "error frame carries no cause for a raising replacement function" do
+      replacement = wrap_term(fn _matched -> raise "boom" end)
+
+      top_frame =
+        try do
+          :binary.replace("abc", "b", replacement, [])
+        rescue
+          _error -> hd(wrap_term(__STACKTRACE__))
+        end
+
+      # The server implements this function in Erlang code inside binary.erl,
+      # so its frame location also carries the OTP-internal file and line,
+      # which the client doesn't mirror.
+      assert {:binary, :replace, ["abc", "b", ^replacement, []], location} = wrap_term(top_frame)
       assert location[:error_info] == %{module: :erl_stdlib_errors}
     end
   end

@@ -57,6 +57,56 @@ const SCRIPT_TEXT_ESCAPES = {
 // One character class over the keys above, so the replace is a single pass.
 const SCRIPT_TEXT_ESCAPABLE_CHARS = /[\\"'`$\n\r\0<]/g;
 
+// The tag names whose case the HTML parser restores inside <svg>. Everywhere else a tag name has
+// no case at all: the tokenizer lowercases it before anything else sees it, and only these names
+// are given their spelling back.
+//
+// Reached only for a tag name that comes from a value, since a name written in a template is
+// spelled by the compiler instead.
+//
+// WARNING: must match @svg_adjusted_tag_names in Hologram.Template.Helpers. The two sides have to
+// spell an element the same way, or the boot patch rebuilds it instead of adopting it.
+//
+// See: https://html.spec.whatwg.org/multipage/parsing.html#adjust-svg-tag-name
+const SVG_ADJUSTED_TAG_NAMES = {
+  altglyph: "altGlyph",
+  altglyphdef: "altGlyphDef",
+  altglyphitem: "altGlyphItem",
+  animatecolor: "animateColor",
+  animatemotion: "animateMotion",
+  animatetransform: "animateTransform",
+  clippath: "clipPath",
+  feblend: "feBlend",
+  fecolormatrix: "feColorMatrix",
+  fecomponenttransfer: "feComponentTransfer",
+  fecomposite: "feComposite",
+  feconvolvematrix: "feConvolveMatrix",
+  fediffuselighting: "feDiffuseLighting",
+  fedisplacementmap: "feDisplacementMap",
+  fedistantlight: "feDistantLight",
+  feflood: "feFlood",
+  fefunca: "feFuncA",
+  fefuncb: "feFuncB",
+  fefuncg: "feFuncG",
+  fefuncr: "feFuncR",
+  fegaussianblur: "feGaussianBlur",
+  feimage: "feImage",
+  femerge: "feMerge",
+  femergenode: "feMergeNode",
+  femorphology: "feMorphology",
+  feoffset: "feOffset",
+  fepointlight: "fePointLight",
+  fespecularlighting: "feSpecularLighting",
+  fespotlight: "feSpotLight",
+  fetile: "feTile",
+  feturbulence: "feTurbulence",
+  foreignobject: "foreignObject",
+  glyphref: "glyphRef",
+  lineargradient: "linearGradient",
+  radialgradient: "radialGradient",
+  textpath: "textPath",
+};
+
 export default class Renderer {
   // Event listener bindings collected during the current render, each a {target, key, attach,
   // handler} descriptor (see EventListenerRegistry). A <window> or <document> tag pushes here (with
@@ -1576,6 +1626,20 @@ export default class Renderer {
     ]);
   }
 
+  // Spells a tag name the way the HTML parser would. A name written in a template is spelled by
+  // the compiler; a name that first exists at render time is spelled here.
+  //
+  // The table is keyed by tag names taken from a value, so a lookup goes through Object.hasOwn - a
+  // tag named like an Object.prototype member would otherwise resolve to the inherited value
+  // instead of to itself.
+  static #normalizeTagName(tagName) {
+    const downcased = tagName.toLowerCase();
+
+    return Object.hasOwn(SVG_ADJUSTED_TAG_NAMES, downcased)
+      ? SVG_ADJUSTED_TAG_NAMES[downcased]
+      : downcased;
+  }
+
   // Returns true when the modifiers map carries a once modifier, which fires the binding a single
   // time then stops re-dispatching.
   // Deps: [:maps.is_key/2]
@@ -1808,8 +1872,12 @@ export default class Renderer {
 
     // Mirrors the server's is_binary/1 guard - a non-binary bitstring is not a tag name.
     if (Type.isBinary(value)) {
+      const tagName = Type.bitstring(
+        Renderer.#normalizeTagName(Bitstring.toText(value)),
+      );
+
       return Renderer.renderDom(
-        Type.tuple([Type.atom("element"), value, attrsDom, childrenDom]),
+        Type.tuple([Type.atom("element"), tagName, attrsDom, childrenDom]),
         context,
         slots,
         defaultTarget,
