@@ -251,7 +251,15 @@ defmodule Hologram.Compiler.Encoder do
         %IR.BitstringSegment{value: %IR.StringType{value: value}, modifiers: modifiers},
         context
       ) do
-    value_str = encode_primitive_type(:string, value, true)
+    # Text goes as a string; bytes that are not text go as a bitstring, which the client splices
+    # in whole. See encode_bytes/1.
+    value_str =
+      if String.valid?(value) do
+        encode_primitive_type(:string, value, true)
+      else
+        encode_bytes(value)
+      end
+
     encode_bitstring_segment(value_str, modifiers, context)
   end
 

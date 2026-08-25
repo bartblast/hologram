@@ -744,6 +744,17 @@ defmodule Hologram.Compiler.EncoderTest do
                ~s/Type.bitstringSegment(Type.string(\"abc\"), {type: "utf8"})/
     end
 
+    test "from string type that is not valid UTF-8" do
+      # <<255>> - the segment Macro.escape makes of the byte-aligned part of a bitstring.
+      ir = %IR.BitstringSegment{
+        value: %IR.StringType{value: <<255>>},
+        modifiers: [type: :binary]
+      }
+
+      assert encode_ir(ir) ==
+               ~s/Type.bitstringSegment(Type.bitstring("ff", "hex"), {type: "binary"})/
+    end
+
     test "from non-string type" do
       # <<123::big>>
       ir = %IR.BitstringSegment{
@@ -4507,6 +4518,12 @@ defmodule Hologram.Compiler.EncoderTest do
 
     test "bitstring that is not valid UTF-8" do
       assert encode_term!(<<240, 145, 163>>) == ~s/Type.bitstring("f091a3", "hex")/
+    end
+
+    test "bitstring that is not byte-aligned and not valid UTF-8" do
+      # Macro.escape makes this a one-bit integer segment followed by the rest as a binary.
+      assert encode_term!(<<255, 1::1>>) ==
+               ~s/Type.bitstring([Type.bitstringSegment(Type.integer(1n), {type: "integer", size: Type.integer(1n)}), Type.bitstringSegment(Type.bitstring("ff", "hex"), {type: "binary"})])/
     end
 
     test "float, non-zero" do
