@@ -146,6 +146,7 @@ defmodule Hologram.Sync.FrameTest do
                "put_entity" => %{
                  "Hologram.Test.Fixtures.Entity.Module3" => [
                    %{
+                     "$revisions" => %{},
                      "a" => [child.id],
                      "b_id" => nil,
                      "c_id" => parent.c_id,
@@ -156,6 +157,7 @@ defmodule Hologram.Sync.FrameTest do
                  ],
                  "Hologram.Test.Fixtures.Entity.Module2" => [
                    %{
+                     "$revisions" => %{},
                      "a" => true,
                      "b" => nil,
                      "c" => "child",

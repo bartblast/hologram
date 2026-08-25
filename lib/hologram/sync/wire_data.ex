@@ -17,6 +17,10 @@ defmodule Hologram.Sync.WireData do
   # rows travel once each, as their own deltas), and a to-one never is, because its reference
   # field already carries the id.
   #
+  # The row's per-column revisions travel beside its data, as `$revisions` - a name no attribute
+  # can have, since a declared name never carries the seam, so a client reads them apart from the
+  # values without either being able to shadow the other.
+  #
   # Server-only attributes are dropped by what the MODEL DECLARES, never by finding a sentinel in
   # the row: a row read through the trusted tier holds the real value, and one written moments ago
   # holds what was written. Reading the row would hide the value exactly when it was already safe
@@ -60,9 +64,13 @@ defmodule Hologram.Sync.WireData do
     |> Map.new(fn {name, type, _opts} -> {name, type} end)
   end
 
-  # The framework's own field is not the row's data - a client is never told what a struct is
-  # carrying toward a write.
-  defp encode_field({:__meta__, _metadata}, _model), do: []
+  # What a struct is carrying TOWARD a write is never told - the revisions it was READ at are,
+  # because they are what a later write says it was based on. A server-only column is left out of
+  # them for the same reason its value is: a client is told nothing about a column it may not have,
+  # its having moved included.
+  defp encode_field({:__meta__, metadata}, model) do
+    [{:"$revisions", Map.drop(metadata.revisions, MapSet.to_list(model.server_only))}]
+  end
 
   defp encode_field({_name, %NotIncluded{}}, _model), do: []
 

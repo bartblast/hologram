@@ -70,12 +70,13 @@ defmodule Hologram.Sync.WireDataTest do
   describe "row/1" do
     test "writes every attribute the row holds, its system ones included" do
       assert row(module_2()) == %{
-               a: true,
-               b: 7,
-               c: "text",
-               created_at: "2026-08-16T15:18:13.022508Z",
-               id: @entity_id,
-               updated_at: "2026-08-16T16:20:00.000000Z"
+               :a => true,
+               :b => 7,
+               :c => "text",
+               :created_at => "2026-08-16T15:18:13.022508Z",
+               :id => @entity_id,
+               :updated_at => "2026-08-16T16:20:00.000000Z",
+               :"$revisions" => %{}
              }
     end
 
@@ -230,16 +231,35 @@ defmodule Hologram.Sync.WireDataTest do
       assert Map.fetch(wire, :a) == {:ok, []}
     end
 
-    test "leaves out the metadata the struct carries toward a write" do
+    test "writes the row's revisions and nothing else of its metadata" do
       entity = %{
         module_2()
-        | __meta__: %Metadata{attribute_changes: %{c: "changed"}, claim: :trust}
+        | __meta__: %Metadata{
+            attribute_changes: %{c: "changed"},
+            claim: :trust,
+            revisions: %{a: 3}
+          }
       }
 
       wire = row(entity)
 
       refute Map.has_key?(wire, :__meta__)
+      assert wire[:"$revisions"] == %{a: 3}
       assert wire.c == "text"
+    end
+
+    test "leaves a server-only attribute out of the revisions" do
+      entity =
+        struct(Module14, %{
+          created_at: @created_at,
+          email: "user@test.com",
+          id: @entity_id,
+          password_hash: "hashed_secret_v4",
+          updated_at: @updated_at,
+          __meta__: %Metadata{revisions: %{email: 3, password_hash: 4}}
+        })
+
+      assert row(entity)[:"$revisions"] == %{email: 3}
     end
   end
 end
