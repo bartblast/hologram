@@ -372,14 +372,15 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   # The one place a column name is spliced into SQL as a LITERAL rather than as a quoted
-  # identifier. Every name here comes from the mapping and never from a caller - the guard is
+  # identifier. Every name here comes from the mapping and never from a caller - the escape is
   # there because a name is still data, and a literal is the position where that would matter.
+  #
+  # Escaped rather than validated against a shape: a declaration name is any atom the dev writes,
+  # so `attribute :"a$b"` and `attribute :Upper` both derive columns the rest of the mapping
+  # handles by quoting them. A guard admitting only lowercase names would refuse an ordinary
+  # update on either. This is the same doubling DDL renders its own literals with.
   defp column_literal(name) do
-    if not String.match?(name, ~r/^[a-z0-9_]+$/) do
-      raise ArgumentError, "cannot record a revision for column #{inspect(name)}"
-    end
-
-    "'#{name}'"
+    "'#{String.replace(name, "'", "''")}'"
   end
 
   defp companion_entries(columns, sorted_changes) do
