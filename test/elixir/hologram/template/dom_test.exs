@@ -617,6 +617,45 @@ defmodule Hologram.Template.DOMTest do
                ]
       end
     end)
+
+    # A tag whose first char is uppercase is a component, so the element branch only ever sees a
+    # name that starts lowercase. That is where the case a template wrote can still differ from the
+    # case the parser produces.
+    test "element node with uppercase chars in its tag name" do
+      # <dIV></dIV>
+      tags = [{:start_tag, {"dIV", []}}, {:end_tag, "dIV"}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "div", [key(tags, 0)], []]}
+             ]
+    end
+
+    test "element node with an SVG tag name that lost its case" do
+      # <lineargradient></lineargradient>
+      tags = [{:start_tag, {"lineargradient", []}}, {:end_tag, "lineargradient"}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "linearGradient", [key(tags, 0)], []]}
+             ]
+    end
+
+    test "element node with an SVG tag name already spelled the way the parser spells it" do
+      # <linearGradient></linearGradient>
+      tags = [{:start_tag, {"linearGradient", []}}, {:end_tag, "linearGradient"}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "linearGradient", [key(tags, 0)], []]}
+             ]
+    end
+
+    test "self-closing element node with an SVG tag name that lost its case" do
+      # <lineargradient />
+      tags = [{:self_closing_tag, {"lineargradient", []}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "linearGradient", [key(tags, 0)], []]}
+             ]
+    end
   end
 
   describe "build_ast/1, dynamic tag node" do

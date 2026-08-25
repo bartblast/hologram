@@ -288,9 +288,12 @@ defmodule Hologram.Template.DOM do
       validate_reserved_tag_attributes(tag_name, attributes)
     end
 
+    # HTML source carries no tag-name case, so the name is written the way the parser would spell
+    # it. The compiled template feeds the server and the client alike, so both then agree - and the
+    # client, which builds elements rather than parsing them, gets a name it can build.
     tag_name_code =
       if tag_type == :element do
-        "\"#{tag_name}\""
+        "\"#{Helpers.normalize_tag_name(tag_name)}\""
       else
         "alias!(#{tag_name})"
       end
