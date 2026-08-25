@@ -96,6 +96,42 @@ describe("Model", () => {
       assert.deepEqual(field(boxed, "__struct__"), Type.alias(TASK));
     });
 
+    it("boxes the row's revisions into its metadata", () => {
+      const boxed = Model.box(TASK, row({$revisions: {position: 3, title: 5}}));
+
+      assert.deepEqual(
+        field(boxed, "__meta__"),
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Hologram.Entity.Metadata")],
+          [Type.atom("attribute_changes"), Type.map([])],
+          [Type.atom("claim"), Type.nil()],
+          [Type.atom("relationship_ops"), Type.map([])],
+          [
+            Type.atom("revisions"),
+            Type.map([
+              [Type.atom("position"), Type.integer(3)],
+              [Type.atom("title"), Type.integer(5)],
+            ]),
+          ],
+        ]),
+      );
+    });
+
+    it("boxes a row carrying no revisions with an empty metadata", () => {
+      const boxed = Model.box(TASK, row());
+
+      assert.deepEqual(
+        field(boxed, "__meta__"),
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Hologram.Entity.Metadata")],
+          [Type.atom("attribute_changes"), Type.map([])],
+          [Type.atom("claim"), Type.nil()],
+          [Type.atom("relationship_ops"), Type.map([])],
+          [Type.atom("revisions"), Type.map([])],
+        ]),
+      );
+    });
+
     it("boxes a boolean, a float, an integer and a string as they are spelled", () => {
       const boxed = Model.box(TASK, row());
 
