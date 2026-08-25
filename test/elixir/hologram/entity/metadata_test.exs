@@ -1,0 +1,16 @@
+defmodule Hologram.Entity.MetadataTest do
+  use Hologram.Test.BasicCase, async: true
+
+  alias Hologram.Entity.Metadata
+
+  describe "inspect/2" do
+    test "leaves out every field at its default" do
+      assert inspect(%Metadata{}) == "#Hologram.Entity.Metadata<>"
+    end
+
+    test "shows the revisions when set" do
+      assert inspect(%Metadata{revisions: %{a: 3}}) ==
+               "#Hologram.Entity.Metadata<revisions: %{a: 3}>"
+    end
+  end
+end

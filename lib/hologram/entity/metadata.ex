@@ -3,16 +3,19 @@ defmodule Hologram.Entity.Metadata do
 
   # The framework's own state on an entity struct, held under its __meta__ field: the write the
   # struct is carrying - the attribute values put on it, the relationship edges to add or delete,
-  # and the authority claimed for it - which the DB verbs read and apply. Every entity struct
-  # carries one, empty until a stage records into it, so a reader never guards against nil and a
-  # clean struct always compares equal to another.
+  # and the authority claimed for it - which the DB verbs read and apply, and, for a struct that
+  # was read, the revision each settable column was last set at - what a write will say it was
+  # based on. Every entity struct carries one, empty until a stage records into it or a read
+  # fills it, so a reader never guards against nil and a clean struct always compares equal to
+  # another.
 
-  defstruct attribute_changes: %{}, claim: nil, relationship_ops: %{}
+  defstruct attribute_changes: %{}, claim: nil, relationship_ops: %{}, revisions: %{}
 
   @type t :: %__MODULE__{
           attribute_changes: %{atom => any},
           claim: {:authorize, atom} | :trust | nil,
-          relationship_ops: %{{atom, String.t()} => :add | :delete}
+          relationship_ops: %{{atom, String.t()} => :add | :delete},
+          revisions: %{atom => pos_integer}
         }
 
   # Rendered as what is recorded and nothing else - a clean struct shows an empty pair of
@@ -29,7 +32,8 @@ defmodule Hologram.Entity.Metadata do
           [
             attribute_changes: metadata.attribute_changes,
             claim: metadata.claim,
-            relationship_ops: metadata.relationship_ops
+            relationship_ops: metadata.relationship_ops,
+            revisions: metadata.revisions
           ],
           fn {_name, value} -> value in [%{}, nil] end
         )
