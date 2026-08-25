@@ -11,6 +11,7 @@ defmodule Hologram.DB.EntityOperations do
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
+  alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
@@ -451,9 +452,6 @@ defmodule Hologram.DB.EntityOperations do
     }
   end
 
-  # TODO: replaced by the write's own stamp per settable column, once the server tier has a clock.
-  defp encoded_column_value(_entity, %{source: :revisions}), do: %{}
-
   defp encoded_column_value(entity, %{source: {:sort_key, attribute_name}} = column) do
     entity
     |> Map.fetch!(attribute_name)
@@ -492,9 +490,24 @@ defmodule Hologram.DB.EntityOperations do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
     now = DateTime.utc_now(:microsecond)
-    stamped_entity = %{entity | created_at: now, updated_at: now}
 
-    encoded_values = Enum.map(columns, &encoded_column_value(stamped_entity, &1))
+    # One stamp for the whole row: every column it sets was set by this write, at this moment.
+    stamp = Clock.stamp()
+    settable_columns = Enum.filter(columns, &settable?/1)
+    revisions = Map.new(settable_columns, &{field_name(&1), stamp})
+
+    stamped_entity = %{
+      entity
+      | created_at: now,
+        updated_at: now,
+        __meta__: %{entity.__meta__ | revisions: revisions}
+    }
+
+    encoded_values =
+      Enum.map(columns, fn
+        %{source: :revisions} -> Map.new(settable_columns, &{&1.name, stamp})
+        column -> encoded_column_value(stamped_entity, column)
+      end)
 
     column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
     placeholder_list = Enum.map_join(1..length(columns), ", ", &"$#{&1}")
@@ -545,7 +558,13 @@ defmodule Hologram.DB.EntityOperations do
         {name, Map.fetch!(entity, name)}
       end)
 
-    %{op: :put_entity, entity_type: entity_type, entity_id: entity.id, data: data}
+    %{
+      op: :put_entity,
+      entity_type: entity_type,
+      entity_id: entity.id,
+      data: data,
+      revisions: entity.__meta__.revisions
+    }
   end
 
   # An edge the database already had, or already lacked, is not a change: the statement wrote
@@ -638,6 +657,12 @@ defmodule Hologram.DB.EntityOperations do
   # form holding a row's own unchanged value is not refused. A create passes an id no row
   # carries yet, which excludes nothing.
   # sobelow_skip ["SQL.Query"]
+  # The columns a client can write, which is what a revision is kept for - the system ones and
+  # the sort-key companions are nobody's to set.
+  defp settable?(column) do
+    match?({:attribute, _name}, column.source) or match?({:relationship, _name}, column.source)
+  end
+
   defp unique_value_taken?(table, column_name, value, type, id) do
     statement =
       ~s|SELECT EXISTS (SELECT 1 FROM #{qualified_table(table)} WHERE #{Mapper.quote_identifier(column_name)} = $1 AND "id" != $2)|

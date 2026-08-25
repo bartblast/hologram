@@ -298,6 +298,51 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert Enum.map(grant_effects, &Map.fetch!(&1.data, "role")) == ["maintainer", "owner"]
     end
 
+    test "stamps every settable column with the insert's stamp" do
+      {:ok, required_target} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, optional_target} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      {:ok, created_entity} =
+        Module3
+        |> Entity.new(b_id: optional_target.id, c_id: required_target.id)
+        |> create()
+
+      revisions = created_entity.__meta__.revisions
+
+      # Module3 declares no attributes and one to-many, which derives no column - so its settable
+      # set is exactly its two to-one reference columns.
+      stamped_fields =
+        revisions
+        |> Map.keys()
+        |> Enum.sort()
+
+      distinct_stamps =
+        revisions
+        |> Map.values()
+        |> Enum.uniq()
+
+      assert stamped_fields == [:b_id, :c_id]
+      assert length(distinct_stamps) == 1
+    end
+
+    test "reloads with the revisions it answered" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      reloaded_entity = get(Module2, created_entity.id)
+
+      assert reloaded_entity.__meta__.revisions == created_entity.__meta__.revisions
+    end
+
     test "returns the violation from the write itself when a unique attribute's value is taken" do
       {:ok, _entity} =
         Module19
