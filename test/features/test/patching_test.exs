@@ -13,6 +13,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page16
   alias HologramFeatureTests.Patching.Page17
   alias HologramFeatureTests.Patching.Page18
+  alias HologramFeatureTests.Patching.Page19
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
@@ -1207,6 +1208,19 @@ defmodule HologramFeatureTests.PatchingTest do
       # the page rather than adopting it, and the stamps below would be its own work.
       |> assert_script_result("return window.__scriptRuns;", 1)
       |> assert_script_result(server_nodes, ids)
+    end
+  end
+
+  describe "building an element the server never sent" do
+    feature "an SVG tag name is built under the name the parser gives it", %{session: session} do
+      name = ~s|return document.getElementById("grad").localName;|
+
+      session
+      |> visit(Page19)
+      |> assert_text(css("#result"), "false")
+      |> click(button("Show"))
+      |> assert_text(css("#result"), "true")
+      |> assert_script_result(name, "linearGradient")
     end
   end
 
