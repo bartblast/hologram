@@ -4,18 +4,19 @@ defmodule Hologram.DB.Outbox do
   # The effect log: one row per entity-level effect, appended in the transaction that caused it,
   # so a write and the record of it either both land or neither does. What the rows are read for
   # is which entity types and attributes a transaction touched - the values a client is sent come
-  # from reading the rows themselves afresh, never from here.
+  # from reading the rows themselves afresh, never from here. That is what lets the log store a
+  # write WHOLE, server-only values included: what may be shown is decided where a row meets the
+  # wire, against the model of the moment, rather than by what was stored years earlier.
 
   alias Hologram.Auth.Context
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
-  alias Hologram.Entity
   alias Hologram.Entity.Model
 
   @channel "hologram_outbox"
 
-  @columns ["op", "type", "entity_id", "data", "model_hash", "actor_id"]
+  @columns ["op", "type", "entity_id", "data", "model_hash", "actor_id", "revisions"]
 
   @data_ops [:patch_entity, :put_entity]
 
@@ -34,10 +35,14 @@ defmodule Hologram.DB.Outbox do
   carries: `:data` for `:put_entity` (every attribute) and `:patch_entity` (the changed ones),
   `:relationship` and `:target_id` for the relationship ops, nothing for `:del_entity`.
 
-  Values of attributes declared server_only are dropped rather than stored - the log outlives the
-  transaction by as long as its retention window, and nothing in it may hold what never leaves
-  the server. The acting user is read from the ambient context, so writes made by the framework
-  itself, which have no actor, record none.
+  An effect of a create or an update carries the `:revisions` it set - the stamp per column, keyed
+  by field - which is stored beside it. An edge or a delete carries none.
+
+  Every value the write set is stored, values of server_only attributes included: the log is kept
+  for good, and what an attribute is allowed to show is a fact about the model NOW, which the wire
+  applies when a row reaches it. Nothing reads a value from here to send it - the readers below
+  take the KEYS, to know what moved. The acting user is read from the ambient context, so writes
+  made by the framework itself, which have no actor, record none.
   """
   @spec append(list(map)) :: :ok
   def append([]), do: :ok
@@ -160,7 +165,7 @@ defmodule Hologram.DB.Outbox do
   @spec read_after(non_neg_integer, non_neg_integer, pos_integer) :: list(map)
   def read_after(tx, seq, limit) do
     statement = """
-    SELECT "seq", "op", "type", "entity_id", "tx", "model_hash", "actor_id"
+    SELECT "seq", "op", "type", "entity_id", "tx", "model_hash", "actor_id", "revisions"
     FROM "hologram_system"."outbox"
     WHERE "tx" > $1 OR ("tx" = $1 AND "seq" > $2)
     ORDER BY "tx", "seq"
@@ -183,13 +188,14 @@ defmodule Hologram.DB.Outbox do
   rows themselves.
 
   An op or entity type this node does not know stays the label it was written with, and data keys
-  stay strings, because a peer running a newer build can write names this node has
-  never heard of - names that match nothing here, which is exactly what they should do.
+  stay strings, as do the revisions' keys, because a peer running a newer build can write names
+  this node has never heard of - names that match nothing here, which is exactly what they should
+  do.
   """
   @spec read_window(non_neg_integer, non_neg_integer) :: list({non_neg_integer, list(map)})
   def read_window(last_xmin, current_xmin) do
     statement = """
-    SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id"
+    SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions"
     FROM "hologram_system"."outbox"
     WHERE "tx" >= $1 AND "tx" < $2
     ORDER BY "tx", "seq"
@@ -215,11 +221,7 @@ defmodule Hologram.DB.Outbox do
   end
 
   defp data(%{op: op, entity_type: entity_type, data: data}) when op in @data_ops do
-    server_only = Entity.server_only_attribute_names(entity_type)
-
-    data
-    |> Map.drop(server_only)
-    |> Map.new(fn {name, value} ->
+    Map.new(data, fn {name, value} ->
       {name, Codec.encode_json(value, attribute_type(entity_type, name))}
     end)
   end
@@ -250,25 +252,27 @@ defmodule Hologram.DB.Outbox do
   # The history read's shape: everything the windowed read gives except the payload, which nothing
   # replaying it looks at. Fixed size by construction, which is what lets its caller bound a gap by
   # counting.
-  defp place_event([seq, op, type, entity_id, tx, model_hash, actor_id]) do
+  defp place_event([seq, op, type, entity_id, tx, model_hash, actor_id, revisions]) do
     %{
       actor_id: Codec.decode(actor_id, :uuid),
       entity_id: Codec.decode(entity_id, :uuid),
       model_hash: model_hash,
       op: operation(op),
+      revisions: revisions,
       seq: seq,
       tx: tx,
       type: entity_type(type)
     }
   end
 
-  defp event([seq, op, type, entity_id, data, tx, model_hash, actor_id]) do
+  defp event([seq, op, type, entity_id, data, tx, model_hash, actor_id, revisions]) do
     %{
       actor_id: Codec.decode(actor_id, :uuid),
       data: data,
       entity_id: Codec.decode(entity_id, :uuid),
       model_hash: model_hash,
       op: operation(op),
+      revisions: revisions,
       seq: seq,
       tx: tx,
       type: entity_type(type)
@@ -296,7 +300,8 @@ defmodule Hologram.DB.Outbox do
       Codec.encode(entity_id, :uuid),
       data(effect),
       model_hash,
-      actor_id
+      actor_id,
+      Map.get(effect, :revisions)
     ]
   end
 

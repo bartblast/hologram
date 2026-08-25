@@ -32,14 +32,15 @@ defmodule Hologram.DB.OutboxTest do
 
   defp rows do
     statement = """
-    SELECT "op", "type", "entity_id", "data", "model_hash", "mutation_ref", "actor_id"
+    SELECT "op", "type", "entity_id", "data", "model_hash", "mutation_ref", "actor_id",
+           "revisions"
     FROM "hologram_system"."outbox"
     ORDER BY "seq"
     """
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
 
-    Enum.map(rows, fn [op, type, entity_id, data, model_hash, mutation_ref, actor_id] ->
+    Enum.map(rows, fn [op, type, entity_id, data, model_hash, mutation_ref, actor_id, revisions] ->
       %{
         actor_id: Codec.decode(actor_id, :uuid),
         data: data,
@@ -47,18 +48,20 @@ defmodule Hologram.DB.OutboxTest do
         model_hash: model_hash,
         mutation_ref: mutation_ref,
         op: op,
+        revisions: revisions,
         type: type
       }
     end)
   end
 
-  defp seed(tx, op, type_label, entity_id, data \\ nil) do
+  defp seed(tx, op, type_label, entity_id, data \\ nil, revisions \\ nil) do
     statement = """
-    INSERT INTO "hologram_system"."outbox" ("op", "type", "entity_id", "data", "tx", "model_hash")
-    VALUES ($1, $2, $3, $4, $5, 'seeded')
+    INSERT INTO "hologram_system"."outbox"
+      ("op", "type", "entity_id", "data", "tx", "model_hash", "revisions")
+    VALUES ($1, $2, $3, $4, $5, 'seeded', $6)
     """
 
-    params = [op, type_label, Codec.encode(entity_id, :uuid), data, tx]
+    params = [op, type_label, Codec.encode(entity_id, :uuid), data, tx, revisions]
 
     {:ok, _result} = Connection.query(statement, params)
 
@@ -167,6 +170,13 @@ defmodule Hologram.DB.OutboxTest do
       assert event.entity_id == @target_id
     end
 
+    test "returns the revisions the effect was stored with" do
+      seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, nil, %{a: 5})
+
+      assert [event] = read_after(199, 0, 10)
+      assert event.revisions == %{"a" => 5}
+    end
+
     test "leaves out the effect at the given place, which the reader already has" do
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
@@ -232,6 +242,13 @@ defmodule Hologram.DB.OutboxTest do
       assert event.type == Module2
       assert event.entity_id == @entity_id
       assert event.model_hash == "seeded"
+    end
+
+    test "returns the revisions the effect was stored with" do
+      seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, nil, %{a: 5})
+
+      assert [{200, [event]}] = read_window(200, 201)
+      assert event.revisions == %{"a" => 5}
     end
 
     test "leaves out transactions below the window" do
@@ -402,7 +419,43 @@ defmodule Hologram.DB.OutboxTest do
       assert [%{mutation_ref: nil}] = rows()
     end
 
-    test "never records the value of a server-only attribute" do
+    test "stores the revisions an effect carries" do
+      effect = %{
+        op: :put_entity,
+        entity_type: Module2,
+        entity_id: @entity_id,
+        data: %{a: true},
+        revisions: %{a: 5}
+      }
+
+      assert append([effect]) == :ok
+
+      assert [%{revisions: revisions}] = rows()
+      assert revisions == %{"a" => 5}
+    end
+
+    test "stores no revisions for an effect carrying none" do
+      effect = %{
+        op: :add_relationship,
+        entity_type: Module3,
+        entity_id: @entity_id,
+        relationship: :a,
+        target_id: @target_id
+      }
+
+      assert append([effect]) == :ok
+
+      assert [%{revisions: revisions}] = rows()
+      assert revisions == nil
+    end
+
+    # Half of a pair. Its twin is wire_data_test.exs's "leaves out a server-only attribute whose
+    # real value the row is holding", and together they state the design: the LOG is complete and
+    # the WIRE is filtered. Which one is allowed to show a value is a fact about the model now, so
+    # only the wire can decide it - a strip at write time would classify a permanent log by a flag
+    # that can be added to or removed from an attribute later. Breaking either half names which of
+    # the two rules was violated.
+    test "stores the value of a server-only attribute" do
       effect = %{
         op: :put_entity,
         entity_type: Module14,
@@ -413,12 +466,7 @@ defmodule Hologram.DB.OutboxTest do
       assert append([effect]) == :ok
 
       assert [%{data: data}] = rows()
-      assert data == %{"email" => "user@test.com"}
-
-      {:ok, %Postgrex.Result{rows: [[log]]}} =
-        Connection.query(~s|SELECT "data"::text FROM "hologram_system"."outbox"|)
-
-      refute log =~ "hashed_secret_v1"
+      assert data == %{"email" => "user@test.com", "password_hash" => "hashed_secret_v1"}
     end
   end
 end
