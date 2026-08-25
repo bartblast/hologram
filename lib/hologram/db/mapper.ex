@@ -335,14 +335,20 @@ defmodule Hologram.DB.Mapper do
   end
 
   defp describe_column_collision({name, group}) do
-    sources =
-      Enum.map_join(group, ", ", fn column ->
-        {kind, declaration_name} = column.source
-        "#{kind} #{inspect(declaration_name)}"
-      end)
+    sources = Enum.map_join(group, ", ", &describe_column_source/1)
 
     "  * column \"#{name}\" is derived from #{sources}"
   end
+
+  # A column derived from a declaration names it. One the framework owns outright - the id, the
+  # timestamps, the revisions - has no declaration to name, and saying so is the whole message for
+  # a caller that collided with one: the declaration is theirs to rename, and the other side of the
+  # collision is not.
+  defp describe_column_source(%{source: {kind, declaration_name}}) do
+    "#{kind} #{inspect(declaration_name)}"
+  end
+
+  defp describe_column_source(%{source: _framework}), do: "the framework"
 
   defp describe_cycle([{first_entity_type, _first_name} | _later_hops] = cycle) do
     hops =

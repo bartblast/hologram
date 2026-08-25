@@ -336,6 +336,30 @@ defmodule Hologram.DB.MapperTest do
         columns(InlineEntityFixture1)
       end
     end
+
+    # The entity validator refuses a declared name carrying the $ seam, so the DSL cannot reach
+    # this - but a module writing the reflection functions by hand never meets the validator, and
+    # the grant store is one such module. The framework's own side of the collision has no
+    # declaration to name, which is what the message has to survive saying.
+    test "rejects a declaration deriving a column name the framework owns" do
+      defmodule InlineEntityFixture21 do
+        @spec __attributes__() :: list(tuple)
+        def __attributes__, do: [{:"$revisions", :string, []}]
+
+        @spec __relationships__() :: list(tuple)
+        def __relationships__, do: []
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        colliding column names in Hologram.DB.MapperTest.InlineEntityFixture21 - rename the declarations so that every derived column name is unique:
+          * column "$revisions" is derived from attribute :"$revisions", the framework\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        columns(InlineEntityFixture21)
+      end
+    end
   end
 
   describe "derive!/1" do
