@@ -20,16 +20,7 @@ export default class Deserializer {
       return Type.bitstring("");
     }
 
-    const hex = serialized.slice(2);
-    const hexLength = hex.length;
-    const bytes = new Uint8Array(hexLength >> 1);
-
-    // Use separate j index variable to avoid division in each iteration
-    for (let i = 0, j = 0; i < hexLength; i += 2, j++) {
-      bytes[j] = parseInt(hex.slice(i, i + 2), 16);
-    }
-
-    const bitstring = Bitstring.fromBytes(bytes);
+    const bitstring = Bitstring.fromHex(serialized.slice(2));
     bitstring.leftoverBitCount = parseInt(serialized[1]);
 
     return bitstring;
