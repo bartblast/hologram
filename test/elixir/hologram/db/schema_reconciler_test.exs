@@ -54,9 +54,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   defp insert_module2_row(b_value, c_value) do
     statement = """
     INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-      ("id", "a", "b", "c", "created_at", "updated_at")
+      ("id", "a", "b", "c", "created_at", "updated_at", "$revisions")
     VALUES ('00000000-0000-0000-0000-000000000001', TRUE, #{b_value}, #{c_value},
-            '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+            '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
     """
 
     {:ok, _result} = Connection.query(statement)
@@ -72,9 +72,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     |> Enum.each(fn {c_value, index} ->
       statement = """
       INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-        ("id", "a", "b", "c", "created_at", "updated_at")
+        ("id", "a", "b", "c", "created_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-00000000000#{index}', TRUE, NULL, '#{c_value}',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(statement)
@@ -729,9 +729,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       insert_statement = """
       INSERT INTO "hologram_data"."test_fixtures_entity_module4"
-        ("id", "a", "b", "c", "d", "created_at", "updated_at")
+        ("id", "a", "b", "c", "d", "created_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000001', '2026-01-01', '2026-01-01 00:00:00+00',
-              'y', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+              'y', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert_statement)

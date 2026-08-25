@@ -91,8 +91,8 @@ defmodule Hologram.Migration.GrantStoreTest do
   defp insert_grant do
     statement = """
     INSERT INTO "hologram_data"."hologram_role_grant"
-      ("id", "user_id", "role", "created_at", "updated_at")
-    VALUES (gen_random_uuid(), $1, 'editor', now(), now())
+      ("id", "user_id", "role", "created_at", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, 'editor', now(), now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(@user_id)])
@@ -113,8 +113,8 @@ defmodule Hologram.Migration.GrantStoreTest do
   defp insert_role_grant(role) do
     statement = """
     INSERT INTO "hologram_data"."hologram_role_grant"
-      ("id", "user_id", "role", "created_at", "updated_at")
-    VALUES (gen_random_uuid(), $1, $2, now(), now())
+      ("id", "user_id", "role", "created_at", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, $2, now(), now(), '{}')
     """
 
     {:ok, _result} =
@@ -124,8 +124,8 @@ defmodule Hologram.Migration.GrantStoreTest do
   defp insert_scoped_grant(resource_type) do
     statement = """
     INSERT INTO "hologram_data"."hologram_role_grant"
-      ("id", "user_id", "role", "resource_type", "resource_id", "created_at", "updated_at")
-    VALUES (gen_random_uuid(), $1, 'editor', $2, $1, now(), now())
+      ("id", "user_id", "role", "resource_type", "resource_id", "created_at", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, 'editor', $2, $1, now(), now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(@user_id), resource_type])
@@ -133,8 +133,8 @@ defmodule Hologram.Migration.GrantStoreTest do
 
   defp insert_user(table) do
     statement = """
-    INSERT INTO "hologram_data"."#{table}" ("id", "created_at", "updated_at")
-    VALUES ($1, now(), now())
+    INSERT INTO "hologram_data"."#{table}" ("id", "created_at", "updated_at", "$revisions")
+    VALUES ($1, now(), now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(@user_id)])

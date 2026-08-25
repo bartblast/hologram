@@ -45,6 +45,7 @@ defmodule Hologram.Migration.RendererTest do
         Enum.find(result.transactional, &(&1.op == :create_table and &1.table == "my_app_task"))
 
       assert Map.keys(task_table.columns) == [
+               "$revisions",
                "created_at",
                "id",
                "title",

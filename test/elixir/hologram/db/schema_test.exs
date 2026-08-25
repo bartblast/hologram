@@ -703,7 +703,8 @@ defmodule Hologram.DB.SchemaTest do
                    columns: %{
                      "id" => %{type: "uuid", collation: nil, null: false},
                      "created_at" => %{type: "timestamptz", collation: nil, null: false},
-                     "updated_at" => %{type: "timestamptz", collation: nil, null: false}
+                     "updated_at" => %{type: "timestamptz", collation: nil, null: false},
+                     "$revisions" => %{type: "jsonb", collation: nil, null: false}
                    },
                    primary_key: %{
                      columns: ["id"],
@@ -747,6 +748,9 @@ defmodule Hologram.DB.SchemaTest do
     test "keys columns by name with type, collation, and nullability" do
       columns = table(Module2, "test_fixtures_entity_module2").columns
 
+      # The same map as introspection_test reads back from Postgres - reconciliation diffs the
+      # two, so they are identical on purpose and both must spell every column.
+      # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
       assert columns == %{
                "id" => %{type: "uuid", collation: nil, null: false},
                "a" => %{type: "boolean", collation: nil, null: false},
@@ -754,7 +758,8 @@ defmodule Hologram.DB.SchemaTest do
                "c" => %{type: "text", collation: "C", null: false},
                "c_$sort" => %{type: "text", collation: "C", null: true},
                "created_at" => %{type: "timestamptz", collation: nil, null: false},
-               "updated_at" => %{type: "timestamptz", collation: nil, null: false}
+               "updated_at" => %{type: "timestamptz", collation: nil, null: false},
+               "$revisions" => %{type: "jsonb", collation: nil, null: false}
              }
     end
 

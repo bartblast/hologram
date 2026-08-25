@@ -185,9 +185,11 @@ defmodule Hologram.DB.EntityOperations do
         nil
 
       {:ok, %Postgrex.Result{rows: [row]}} ->
+        # TODO: routed into the struct's __meta__ instead of dropped, once the metadata carries it.
         fields =
           persisted_columns
           |> Enum.zip(row)
+          |> Enum.reject(fn {column, _value} -> column.source == :revisions end)
           |> Enum.map(fn {column, value} ->
             {field_name(column), Codec.decode(value, column.type)}
           end)
@@ -208,7 +210,9 @@ defmodule Hologram.DB.EntityOperations do
 
     columns_by_field =
       columns
-      |> Enum.reject(&(&1.source == :system or match?({:sort_key, _name}, &1.source)))
+      |> Enum.reject(
+        &(&1.source in [:revisions, :system] or match?({:sort_key, _name}, &1.source))
+      )
       |> Map.new(&{field_name(&1), &1})
 
     changes_map = Map.new(changes)
@@ -438,6 +442,9 @@ defmodule Hologram.DB.EntityOperations do
     }
   end
 
+  # TODO: replaced by the write's own stamp per settable column, once the server tier has a clock.
+  defp encoded_column_value(_entity, %{source: :revisions}), do: %{}
+
   defp encoded_column_value(entity, %{source: {:sort_key, attribute_name}} = column) do
     entity
     |> Map.fetch!(attribute_name)
@@ -522,7 +529,7 @@ defmodule Hologram.DB.EntityOperations do
 
     data =
       columns
-      |> Enum.reject(&match?({:sort_key, _name}, &1.source))
+      |> Enum.reject(&(&1.source == :revisions or match?({:sort_key, _name}, &1.source)))
       |> Map.new(fn column ->
         name = field_name(column)
 
@@ -661,7 +668,9 @@ defmodule Hologram.DB.EntityOperations do
 
     field_names =
       columns
-      |> Enum.reject(&(&1.source == :system or match?({:sort_key, _name}, &1.source)))
+      |> Enum.reject(
+        &(&1.source in [:revisions, :system] or match?({:sort_key, _name}, &1.source))
+      )
       |> Enum.map(&field_name/1)
 
     data = Map.take(entity, field_names)

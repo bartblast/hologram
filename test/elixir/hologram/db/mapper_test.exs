@@ -61,6 +61,42 @@ defmodule Hologram.DB.MapperTest do
                  fk_constraint: nil,
                  index: nil,
                  source: :system
+               },
+               %{
+                 name: "$revisions",
+                 type: :map,
+                 sql_type: "jsonb",
+                 collation: nil,
+                 enum_values: nil,
+                 default: %{},
+                 null: false,
+                 references: nil,
+                 fk_constraint: nil,
+                 index: nil,
+                 source: :revisions
+               }
+             ]
+    end
+
+    test "derives the revisions column for every entity type" do
+      revisions_columns =
+        Module2
+        |> columns()
+        |> Enum.filter(&(&1.source == :revisions))
+
+      assert revisions_columns == [
+               %{
+                 name: "$revisions",
+                 type: :map,
+                 sql_type: "jsonb",
+                 collation: nil,
+                 enum_values: nil,
+                 default: %{},
+                 null: false,
+                 references: nil,
+                 fk_constraint: nil,
+                 index: nil,
+                 source: :revisions
                }
              ]
     end

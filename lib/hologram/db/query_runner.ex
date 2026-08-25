@@ -144,7 +144,7 @@ defmodule Hologram.DB.QueryRunner do
 
     base_fields =
       target_mapping.columns
-      |> Enum.reject(&match?({:sort_key, _name}, &1.source))
+      |> Enum.reject(&(&1.source == :revisions or match?({:sort_key, _name}, &1.source)))
       |> Map.new(fn column ->
         value = decode_embedded_value(Map.fetch!(object, column.name), column.type)
 
@@ -200,7 +200,9 @@ defmodule Hologram.DB.QueryRunner do
     base_fields =
       entity_mapping.columns
       |> Enum.zip(column_values)
-      |> Enum.reject(fn {column, _value} -> match?({:sort_key, _name}, column.source) end)
+      |> Enum.reject(fn {column, _value} ->
+        column.source == :revisions or match?({:sort_key, _name}, column.source)
+      end)
       |> Map.new(fn {column, value} ->
         {field_name(column), Codec.decode(value, column.type)}
       end)

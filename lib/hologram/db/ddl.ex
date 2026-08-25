@@ -5,7 +5,7 @@ defmodule Hologram.DB.DDL do
 
   # Types the mapper emits by name - anything else is a derived enum type, which lives
   # in the data schema and must be schema-qualified and quoted.
-  @builtin_types ["boolean", "date", "float8", "int8", "text", "timestamptz", "uuid"]
+  @builtin_types ["boolean", "date", "float8", "int8", "jsonb", "text", "timestamptz", "uuid"]
 
   # Casts that succeed exactly when the existing rows allow them - each has a pre-flight
   # check statement counting the rows that cannot follow.
@@ -529,6 +529,9 @@ defmodule Hologram.DB.DDL do
   defp column_order_key("created_at"), do: {2, "created_at"}
 
   defp column_order_key("updated_at"), do: {2, "updated_at"}
+
+  # After the timestamps rather than second, which is where a leading $ would otherwise sort it.
+  defp column_order_key("$revisions"), do: {3, "$revisions"}
 
   defp column_order_key(name), do: {1, name}
 

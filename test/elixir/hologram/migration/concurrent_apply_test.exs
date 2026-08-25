@@ -146,6 +146,7 @@ defmodule Hologram.Migration.ConcurrentApplyTest do
         assert marker_count() == 1
 
         assert task_columns() == [
+                 "$revisions",
                  "created_at",
                  "id",
                  "priority",

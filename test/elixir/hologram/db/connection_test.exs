@@ -5,9 +5,9 @@ defmodule Hologram.DB.ConnectionTest do
 
   alias Hologram.DB.Config
 
-  @insert_given_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "updated_at") VALUES ($1, now(), now())|
+  @insert_given_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "updated_at", "$revisions") VALUES ($1, now(), now(), '{}')|
 
-  @insert_returning_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "updated_at") VALUES (gen_random_uuid(), now(), now()) RETURNING "id"|
+  @insert_returning_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "updated_at", "$revisions") VALUES (gen_random_uuid(), now(), now(), '{}') RETURNING "id"|
 
   defp count_by_id(id) do
     count_sql =

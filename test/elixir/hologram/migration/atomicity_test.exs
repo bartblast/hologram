@@ -42,8 +42,8 @@ defmodule Hologram.Migration.AtomicityTest do
 
   defp insert_task(title, amount) do
     statement = """
-    INSERT INTO "hologram_data"."my_app_task" ("id", "title", "amount", "created_at", "updated_at")
-    VALUES (gen_random_uuid(), $1, $2, now(), now())
+    INSERT INTO "hologram_data"."my_app_task" ("id", "title", "amount", "created_at", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, $2, now(), now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [title, amount])
@@ -160,6 +160,7 @@ defmodule Hologram.Migration.AtomicityTest do
         # The rename applied inside the transaction the refusal then rolled back: the column
         # answers to its old name, and nothing of the file stands.
         assert task_columns() == [
+                 "$revisions",
                  "amount",
                  "amount_$sort",
                  "created_at",
@@ -213,6 +214,7 @@ defmodule Hologram.Migration.AtomicityTest do
         # The op that would have succeeded never ran: the refusal covers the file, not the
         # op that earned it.
         assert task_columns() == [
+                 "$revisions",
                  "amount",
                  "amount_$sort",
                  "created_at",
@@ -263,6 +265,7 @@ defmodule Hologram.Migration.AtomicityTest do
         assert run([create, refused], full_model, @context) == :ok
 
         assert task_columns() == [
+                 "$revisions",
                  "amount",
                  "amount_$sort",
                  "created_at",
