@@ -2175,7 +2175,7 @@ defmodule Hologram.Template.RendererTest do
   # Note: the behaviour is different on client-side vs server-side
   # because client-side escaping is delegated to Snabbdom
   describe "escaping" do
-    test "text inside non-script elements" do
+    test "text inside non-raw-text elements" do
       # <div>abc < xyz</div>
       node = {:element, "div", [], [text: "abc < xyz"]}
 
@@ -2187,6 +2187,13 @@ defmodule Hologram.Template.RendererTest do
       node = {:element, "script", [], [text: "abc < xyz"]}
 
       assert render_dom(node, @env, @server) == {"<script>abc < xyz</script>", %{}, @server}
+    end
+
+    test "text inside style elements" do
+      # <style>a > b & c</style>
+      node = {:element, "style", [], [text: "a > b & c"]}
+
+      assert render_dom(node, @env, @server) == {"<style>a > b & c</style>", %{}, @server}
     end
 
     test "text inside public comments" do
@@ -2646,6 +2653,13 @@ defmodule Hologram.Template.RendererTest do
       dom = {:element, "script", [], [{:text, "abc < xyz"}]}
 
       assert print_dom(dom) == "<script>abc < xyz</script>"
+    end
+
+    test "text node, inside style element" do
+      # <style>a > b & c</style>
+      dom = {:element, "style", [], [{:text, "a > b & c"}]}
+
+      assert print_dom(dom) == "<style>a > b & c</style>"
     end
 
     test "doctype node" do

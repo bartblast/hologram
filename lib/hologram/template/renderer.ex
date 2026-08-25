@@ -15,6 +15,13 @@ defmodule Hologram.Template.Renderer do
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
 
+  # The elements the HTML parser reads as raw text: their content reaches the language they hold -
+  # JavaScript, CSS - without entity decoding, so entity-encoding it on the way out would put a
+  # different program in the document than the tree holds. See print_node/2.
+  #
+  # https://html.spec.whatwg.org/multipage/syntax.html#raw-text-elements
+  @raw_text_elems ~w(script style)
+
   # The characters a value cannot carry into a script element as the text of a JavaScript string
   # literal, each with the escape sequence it is written as instead. Every sequence is valid
   # inside all three kinds of literal - double-quoted, single-quoted and template - and reads back
@@ -827,9 +834,10 @@ defmodule Hologram.Template.Renderer do
     |> StringUtils.prepend_if_not_empty(" ")
   end
 
-  # The tag the printed node sits in travels down, since it decides whether text is markup or
-  # code. A comment passes it along rather than clearing it: "<!--" inside a script opens no
-  # comment, so escaping the text it wraps would corrupt the code it belongs to.
+  # The tag the printed node sits in travels down, since it decides whether text is markup or the
+  # code of a raw text element. A comment passes it along rather than clearing it: "<!--" inside a
+  # script or a style opens no comment, so escaping the text it wraps would corrupt the code it
+  # belongs to.
   defp print_node(nodes, parent_tag_name) when is_list(nodes) do
     Enum.map_join(nodes, &print_node(&1, parent_tag_name))
   end
@@ -855,7 +863,9 @@ defmodule Hologram.Template.Renderer do
     "<!--#{print_node(children, parent_tag_name)}-->"
   end
 
-  defp print_node({:text, text}, "script"), do: text
+  defp print_node({:text, text}, parent_tag_name) when parent_tag_name in @raw_text_elems do
+    text
+  end
 
   defp print_node({:text, text}, _parent_tag_name), do: HtmlEntities.encode(text)
 
