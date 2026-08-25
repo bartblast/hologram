@@ -4,6 +4,7 @@ defmodule Hologram.DB do
   use Supervisor
 
   alias Hologram.Auth.Context
+  alias Hologram.DB.Clock
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
@@ -465,6 +466,10 @@ defmodule Hologram.DB do
     # other column.
     mapping = Mapper.derive!(Reflection.list_entities())
     :persistent_term.put(@mapping_key, mapping)
+
+    # The clock every server-tier write stamps its column revisions from - a boot-time fact like
+    # the mapping, and read the same way.
+    Clock.init()
 
     resolved_opts =
       :hologram

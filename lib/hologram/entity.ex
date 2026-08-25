@@ -2,7 +2,6 @@ defmodule Hologram.Entity do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Entity
-  alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
   alias Hologram.Entity.Validator
@@ -65,7 +64,14 @@ defmodule Hologram.Entity do
       |> Macro.escape()
 
     quote do
-      defstruct unquote(struct_fields)
+      # The metadata struct is expanded HERE, in the entity's own module body, so the module
+      # carries a compile-time dependency on it. Escaping a pre-built one instead bakes a copy of
+      # whatever shape it had when the FRAMEWORK compiled, and an incremental build never
+      # revisits it: a field added to the metadata would leave every entity holding the old
+      # shape, disagreeing with a freshly constructed one for as long as the build lasts.
+      defstruct Enum.sort([
+                  {:__meta__, %Hologram.Entity.Metadata{}} | unquote(struct_fields)
+                ])
 
       @doc """
       Returns the list of attribute definitions for the compiled entity type, sorted by attribute name.
@@ -373,6 +379,8 @@ defmodule Hologram.Entity do
 
   def strip_server_only_deep(term), do: term
 
+  # Everything the entity DECLARES, sorted by name. The framework's own __meta__ field is added
+  # by the caller rather than here, so that its struct is expanded in the entity's module.
   @doc false
   # sobelow_skip ["DOS.BinToAtom"]
   @spec struct_fields(module) :: list({atom, any})
@@ -398,12 +406,7 @@ defmodule Hologram.Entity do
           [{:"#{name}_id", nil}, {name, %NotIncluded{relationship: name}}]
       end)
 
-    # The framework's own field, first in the sort - every entity struct carries an empty one.
-    metadata_field = [{:__meta__, %Metadata{}}]
-
-    Enum.sort(
-      metadata_field ++ system_attribute_fields ++ attribute_fields ++ relationship_fields
-    )
+    Enum.sort(system_attribute_fields ++ attribute_fields ++ relationship_fields)
   end
 
   @doc """

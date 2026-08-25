@@ -14,27 +14,33 @@ defmodule Hologram.DB.Mapper do
   @doc """
   Returns the column definitions derived from the given entity type module, in physical order:
   id, declared attributes sorted by name, to-one relationship references sorted by name,
-  system timestamps.
+  system timestamps, the framework's revisions column, sort-key companions.
 
   Each definition is a map with :name (column name string), :type (the logical attribute type,
   as consumed by the codec), :sql_type (the SQL type name - a derived per-attribute enum type
   name for :enum attributes), :collation (the pinned per-column collation name, nil for types
   that carry none), :enum_values (the declared enum values as strings in declaration order,
-  nil for non-enum types), :default (the declared default value, nil when none - creation
-  semantics owned by the write path, never a DB DEFAULT), :null (true only for optional
+  nil for non-enum types), :default (the declared default value, or the framework's own for a
+  column it derives whole, nil when none - creation semantics owned by the write path,
+  never a DB DEFAULT), :null (true only for optional
   declarations), :references (the referenced table name for to-one relationship columns,
   nil otherwise), :fk_constraint (the derived `<table>_<column>_$fk` constraint name for
   reference columns, nil otherwise), :index (the derived index name for the columns that
   carry one - `<table>_<column>_$idx` on a to-one reference, which PostgreSQL never indexes
   automatically, and `<table>_<attribute>_$sort_$idx` on a sort-key companion, so an ordering
   or a comparison on the attribute is served from the key rather than from a sort - nil
-  otherwise), and :source (:system, or the declaration the column is derived from).
+  otherwise), and :source (:system, :revisions, or the declaration the column is derived from).
   To-many relationships derive no columns - they live in join tables.
 
   Each :string attribute derives a nullable `<attribute>_$sort` companion column (source
   `{:sort_key, name}`) holding the attribute's derived sort key - the order both executors
   sort and compare the attribute by. It is a column like any other the mapping derives:
   migrations create, rename and drop it with its attribute.
+
+  Every table also carries a framework-owned `$revisions` column (source :revisions, type
+  :map, a jsonb object): for each settable column - the attributes and the to-one references -
+  the revision of the write that last set it, a stamp the writer authored. Never a struct
+  field: readers route it into the struct's `__meta__`.
 
   Raises Hologram.CompileError when two declarations derive the same column name (an attribute
   named x_id collides with a to-one relationship named x).
@@ -320,7 +326,8 @@ defmodule Hologram.DB.Mapper do
     sort_columns = sort_key_columns(table_name, entry.attributes)
 
     columns =
-      [id_column() | attribute_columns] ++ to_one_columns ++ timestamp_columns() ++ sort_columns
+      [id_column() | attribute_columns] ++
+        to_one_columns ++ timestamp_columns() ++ [revisions_column()] ++ sort_columns
 
     validate_column_names!(entity_type, columns)
 
@@ -328,14 +335,20 @@ defmodule Hologram.DB.Mapper do
   end
 
   defp describe_column_collision({name, group}) do
-    sources =
-      Enum.map_join(group, ", ", fn column ->
-        {kind, declaration_name} = column.source
-        "#{kind} #{inspect(declaration_name)}"
-      end)
+    sources = Enum.map_join(group, ", ", &describe_column_source/1)
 
     "  * column \"#{name}\" is derived from #{sources}"
   end
+
+  # A column derived from a declaration names it. One the framework owns outright - the id, the
+  # timestamps, the revisions - has no declaration to name, and saying so is the whole message for
+  # a caller that collided with one: the declaration is theirs to rename, and the other side of the
+  # collision is not.
+  defp describe_column_source(%{source: {kind, declaration_name}}) do
+    "#{kind} #{inspect(declaration_name)}"
+  end
+
+  defp describe_column_source(%{source: _framework}), do: "the framework"
 
   defp describe_cycle([{first_entity_type, _first_name} | _later_hops] = cycle) do
     hops =
@@ -538,6 +551,25 @@ defmodule Hologram.DB.Mapper do
   # and the ordering as an incremental sort within each equal-key group. It rides the column so
   # that creation, rename and drop follow the column through the machinery the reference index
   # already uses.
+  # Framework-owned, on every table: the revision each settable column was last set at. The
+  # default fills existing rows through the reconciler's add-nullable-fill-tighten path, and is
+  # never a DB DEFAULT - a row written after this reads its revisions from whoever wrote it.
+  defp revisions_column do
+    %{
+      name: "$revisions",
+      type: :map,
+      sql_type: "jsonb",
+      collation: nil,
+      enum_values: nil,
+      default: %{},
+      null: false,
+      references: nil,
+      fk_constraint: nil,
+      index: nil,
+      source: :revisions
+    }
+  end
+
   defp sort_key_columns(table_name, attributes) do
     attributes
     |> Enum.filter(fn {_name, type, _opts} -> type == :string end)

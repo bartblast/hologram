@@ -48,6 +48,9 @@ defmodule Hologram.DB.IntrospectionTest do
     end
 
     test "introspects columns with type, collation, and nullability" do
+      # The same map as the mapper projects in schema_test - reconciliation diffs the two, so
+      # they are identical on purpose and both must spell every column.
+      # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
       assert schema().tables["test_fixtures_entity_module2"].columns == %{
                "id" => %{type: "uuid", collation: nil, null: false},
                "a" => %{type: "boolean", collation: nil, null: false},
@@ -55,7 +58,8 @@ defmodule Hologram.DB.IntrospectionTest do
                "c" => %{type: "text", collation: "C", null: false},
                "c_$sort" => %{type: "text", collation: "C", null: true},
                "created_at" => %{type: "timestamptz", collation: nil, null: false},
-               "updated_at" => %{type: "timestamptz", collation: nil, null: false}
+               "updated_at" => %{type: "timestamptz", collation: nil, null: false},
+               "$revisions" => %{type: "jsonb", collation: nil, null: false}
              }
     end
 

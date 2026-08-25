@@ -54,9 +54,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   defp insert_module2_row(b_value, c_value) do
     statement = """
     INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-      ("id", "a", "b", "c", "created_at", "updated_at")
+      ("id", "a", "b", "c", "created_at", "updated_at", "$revisions")
     VALUES ('00000000-0000-0000-0000-000000000001', TRUE, #{b_value}, #{c_value},
-            '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+            '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
     """
 
     {:ok, _result} = Connection.query(statement)
@@ -72,9 +72,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     |> Enum.each(fn {c_value, index} ->
       statement = """
       INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-        ("id", "a", "b", "c", "created_at", "updated_at")
+        ("id", "a", "b", "c", "created_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-00000000000#{index}', TRUE, NULL, '#{c_value}',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(statement)
@@ -169,7 +169,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       assert rows == [["database"], ["migration"], ["outbox"], ["schema_object"]]
     end
 
-    test "gives the outbox the indexes reading it forward and pruning it behind need" do
+    test "gives the outbox the indexes reading it forward and by time need" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
 
@@ -187,8 +187,10 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       {:ok, %{rows: rows}} = Connection.query(statement)
 
-      # BRIN rather than btree for the prune scan: the table is append-only, so a btree here
-      # would put its rightmost page in the path of every write to speed up an hourly chore.
+      # BRIN rather than btree on the timestamp: the table is append-only and never pruned, so
+      # its physical order already follows time, and a btree would put its rightmost page in the
+      # path of every write to serve a read nothing does yet. Built for the prune that has gone,
+      # kept for the history-by-time read that comes next.
       assert rows == [
                ["outbox_inserted_at_$idx", "brin", "inserted_at"],
                ["outbox_pkey", "btree", "seq"],
@@ -222,6 +224,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                ["model_hash", "text", true],
                ["mutation_ref", "jsonb", false],
                ["op", "text", true],
+               ["revisions", "jsonb", false],
                ["seq", "bigint", true],
                ["tx", "xid8", true],
                ["type", "text", true]
@@ -729,9 +732,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       insert_statement = """
       INSERT INTO "hologram_data"."test_fixtures_entity_module4"
-        ("id", "a", "b", "c", "d", "created_at", "updated_at")
+        ("id", "a", "b", "c", "d", "created_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000001', '2026-01-01', '2026-01-01 00:00:00+00',
-              'y', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+              'y', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert_statement)

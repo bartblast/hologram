@@ -2,7 +2,9 @@ defmodule Hologram.Auth.RoleGrantTest do
   use Hologram.Test.BasicCase, async: true
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
+  alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Role
 
@@ -81,6 +83,7 @@ defmodule Hologram.Auth.RoleGrantTest do
       entity = %RoleGrant{}
 
       assert Map.from_struct(entity) == %{
+               __meta__: %Metadata{},
                created_at: nil,
                granted_by: %NotIncluded{relationship: :granted_by},
                granted_by_id: nil,
@@ -92,6 +95,25 @@ defmodule Hologram.Auth.RoleGrantTest do
                user: %NotIncluded{relationship: :user},
                user_id: nil
              }
+    end
+
+    # The hardcoded map above states the fields but cannot notice one the macro GAINS - it kept
+    # passing when every generated entity grew a __meta__ and this hand-written struct did not.
+    # Module1 declares nothing, so its fields are exactly the set use Hologram.Entity owns.
+    test "carries every field the entity macro puts on an entity that declares nothing" do
+      macro_fields =
+        %Module1{}
+        |> Map.from_struct()
+        |> Map.keys()
+        |> MapSet.new()
+
+      own_fields =
+        %RoleGrant{}
+        |> Map.from_struct()
+        |> Map.keys()
+        |> MapSet.new()
+
+      assert MapSet.difference(macro_fields, own_fields) == MapSet.new()
     end
   end
 

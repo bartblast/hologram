@@ -792,6 +792,23 @@ defmodule Hologram.Entity.Validator do
           "reserved name #{inspect(name)} used for #{kind} in #{inspect(module)} - it holds the framework's own metadata on every entity struct and can't be declared"
     end
 
+    # The seam every physical name the framework derives carries - the sort-key companion
+    # `<attribute>_$sort`, the revisions column `$revisions`, the index and constraint names. It is
+    # what lets a declaration take any word at all without colliding with one of ours, and that
+    # holds only while nothing declared can spell it. Refused here rather than where the collision
+    # would be found: the mapper derives names at boot, so the same mistake caught there takes the
+    # supervision tree down naming neither the module nor the declaration.
+    carries_seam? =
+      name
+      |> Atom.to_string()
+      |> String.contains?("$")
+
+    if carries_seam? do
+      raise Hologram.CompileError,
+        message:
+          "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - $ is reserved for the physical names the framework derives, so a declared name can't contain it"
+    end
+
     validate_name_uniqueness!(module, kind, name)
   end
 

@@ -87,8 +87,8 @@ defmodule Hologram.Migration.IndexRecoveryTest do
   defp insert_global_grant(user_id) do
     statement = """
     INSERT INTO "hologram_data"."hologram_role_grant"
-      ("id", "user_id", "role", "created_at", "updated_at")
-    VALUES (gen_random_uuid(), $1, 'editor', now(), now())
+      ("id", "user_id", "role", "created_at", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, 'editor', now(), now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(user_id)])
@@ -96,8 +96,8 @@ defmodule Hologram.Migration.IndexRecoveryTest do
 
   defp insert_user(user_id) do
     statement = """
-    INSERT INTO "hologram_data"."my_app_user" ("id", "created_at", "updated_at")
-    VALUES ($1, now(), now())
+    INSERT INTO "hologram_data"."my_app_user" ("id", "created_at", "updated_at", "$revisions")
+    VALUES ($1, now(), now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(user_id)])

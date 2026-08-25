@@ -40,7 +40,8 @@ defmodule Hologram.DB.SchemaReconciler do
   # it. `create_system_tables/0` runs only when claiming a virgin database, so a claimed one
   # never gains a later table or column on its own - the symptom is not subtle, and it has
   # been seen: a database claimed before the outbox existed makes every dispatcher poll
-  # crash with `relation "hologram_system.outbox" does not exist`. Harmless only because no
+  # crash with `relation "hologram_system.outbox" does not exist`, and one claimed before this
+  # branch lacks the outbox's revisions column. Harmless only because no
   # such database exists outside this branch's local dev and test databases and CI's, which
   # are virgin per run - and until that upgrade exists a stale one is dropped and recreated
   # rather than carried forward.
@@ -98,6 +99,7 @@ defmodule Hologram.DB.SchemaReconciler do
       "tx" xid8 NOT NULL DEFAULT pg_current_xact_id(),
       "model_hash" text NOT NULL,
       "mutation_ref" jsonb,
+      "revisions" jsonb,
       "actor_id" uuid,
       "inserted_at" timestamptz NOT NULL DEFAULT now()
     )

@@ -1292,6 +1292,25 @@ defmodule Hologram.Entity.ValidatorTest do
       assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
     end
 
+    # $ marks every physical name the framework derives from a declared one, so a declaration
+    # spelling it could collide with one - `title` beside its `title_$sort` companion, or the
+    # revisions column. Refused here rather than at the collision, which the mapper only finds
+    # while deriving names at boot.
+    test "rejects an attribute name carrying the framework's name seam" do
+      expected_msg =
+        "invalid name :\"a$b\" used for attribute in Hologram.Entity.ValidatorTest.SeamAttr - $ is reserved for the physical names the framework derives, so a declared name can't contain it"
+
+      code = """
+      defmodule Hologram.Entity.ValidatorTest.SeamAttr do
+        use Hologram.Entity
+
+        attribute :"a$b", :string
+      end
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+    end
+
     test "rejects reserved system attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
@@ -1504,6 +1523,21 @@ defmodule Hologram.Entity.ValidatorTest do
         use Hologram.Entity
 
         relationship :__meta__, Hologram.Test.Fixtures.Entity.Module1
+      end
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+    end
+
+    test "rejects a relationship name carrying the framework's name seam" do
+      expected_msg =
+        "invalid name :\"r$x\" used for relationship in Hologram.Entity.ValidatorTest.SeamRelationship - $ is reserved for the physical names the framework derives, so a declared name can't contain it"
+
+      code = """
+      defmodule Hologram.Entity.ValidatorTest.SeamRelationship do
+        use Hologram.Entity
+
+        relationship :"r$x", Hologram.Test.Fixtures.Entity.Module1
       end
       """
 

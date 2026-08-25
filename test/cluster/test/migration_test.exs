@@ -111,8 +111,9 @@ defmodule HologramClusterTests.MigrationTest do
       plant_applied_prefix!(3)
 
       insert_item = """
-      INSERT INTO "hologram_data"."entities_item" ("id", "slug", "title", "created_at", "updated_at")
-      VALUES (gen_random_uuid(), $1, $2, now(), now())
+      INSERT INTO "hologram_data"."entities_item"
+        ("id", "slug", "title", "created_at", "updated_at", "$revisions")
+      VALUES (gen_random_uuid(), $1, $2, now(), now(), '{}')
       """
 
       with_migrations_db(fn ->
@@ -245,8 +246,9 @@ defmodule HologramClusterTests.MigrationTest do
       plant_applied_prefix!(2)
 
       insert_item = """
-      INSERT INTO "hologram_data"."entities_item" ("id", "title", "created_at", "updated_at")
-      VALUES (gen_random_uuid(), $1, now(), now())
+      INSERT INTO "hologram_data"."entities_item"
+        ("id", "title", "created_at", "updated_at", "$revisions")
+      VALUES (gen_random_uuid(), $1, now(), now(), '{}')
       """
 
       with_migrations_db(fn ->

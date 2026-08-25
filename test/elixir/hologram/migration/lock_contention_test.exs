@@ -229,8 +229,8 @@ defmodule Hologram.Migration.LockContentionTest do
       # transaction.
       {:ok, _result} =
         Connection.query("""
-        INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "updated_at")
-        SELECT gen_random_uuid(), 'task ' || g, now(), now() FROM generate_series(1, 200000) g
+        INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "updated_at", "$revisions")
+        SELECT gen_random_uuid(), 'task ' || g, now(), now(), '{}' FROM generate_series(1, 200000) g
         """)
 
       {:ok, _result} = Connection.query(~s{DROP INDEX "hologram_data"."#{@index}"})

@@ -35,15 +35,21 @@ defmodule Hologram.DB.EntityOperationsTest do
 
   defp outbox_effects do
     statement = """
-    SELECT "op", "type", "entity_id", "data"
+    SELECT "op", "type", "entity_id", "data", "revisions"
     FROM "hologram_system"."outbox"
     ORDER BY "seq"
     """
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
 
-    Enum.map(rows, fn [op, type, entity_id, data] ->
-      %{data: data, entity_id: Codec.decode(entity_id, :uuid), op: op, type: type}
+    Enum.map(rows, fn [op, type, entity_id, data, revisions] ->
+      %{
+        data: data,
+        entity_id: Codec.decode(entity_id, :uuid),
+        op: op,
+        revisions: revisions,
+        type: type
+      }
     end)
   end
 
@@ -296,6 +302,63 @@ defmodule Hologram.DB.EntityOperationsTest do
              ]
 
       assert Enum.map(grant_effects, &Map.fetch!(&1.data, "role")) == ["maintainer", "owner"]
+    end
+
+    test "stamps every settable column with the insert's stamp" do
+      {:ok, required_target} =
+        Module1
+        |> Entity.new()
+        |> create()
+
+      {:ok, optional_target} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      {:ok, created_entity} =
+        Module3
+        |> Entity.new(b_id: optional_target.id, c_id: required_target.id)
+        |> create()
+
+      revisions = created_entity.__meta__.revisions
+
+      # Module3 declares no attributes and one to-many, which derives no column - so its settable
+      # set is exactly its two to-one reference columns.
+      stamped_fields =
+        revisions
+        |> Map.keys()
+        |> Enum.sort()
+
+      distinct_stamps =
+        revisions
+        |> Map.values()
+        |> Enum.uniq()
+
+      assert stamped_fields == [:b_id, :c_id]
+      assert length(distinct_stamps) == 1
+    end
+
+    test "records the revisions on the effect" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      stamp = created_entity.__meta__.revisions.a
+
+      assert [effect] = outbox_effects()
+      assert effect.revisions == %{"a" => stamp, "b" => stamp, "c" => stamp}
+    end
+
+    test "reloads with the revisions it answered" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      reloaded_entity = get(Module2, created_entity.id)
+
+      assert reloaded_entity.__meta__.revisions == created_entity.__meta__.revisions
     end
 
     test "returns the violation from the write itself when a unique attribute's value is taken" do
@@ -938,6 +1001,28 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       refute "RowShareLock" in relation_lock_modes(Module1)
     end
+
+    test "fills the metadata with the row's revisions" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      set_revisions(Module2, created_entity.id, %{"a" => 3, "c" => 2})
+
+      assert get(Module2, created_entity.id).__meta__.revisions == %{a: 3, c: 2}
+    end
+
+    test "reads a revisions entry naming no column as nothing" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      set_revisions(Module2, created_entity.id, %{"gone" => 1})
+
+      assert get(Module2, created_entity.id).__meta__.revisions == %{}
+    end
   end
 
   describe "update/3" do
@@ -981,7 +1066,11 @@ defmodule Hologram.DB.EntityOperationsTest do
              }
     end
 
-    test "never records the value of a server-only attribute it changed" do
+    # The log records what a write did, whole - deciding what may be SHOWN is the wire's, against
+    # the model of the moment, because server_only can be added to or removed from an attribute
+    # long after the entry was written. wire_data_test.exs holds the twin proving the same value
+    # never reaches a frame.
+    test "records the value of a server-only attribute it changed" do
       {:ok, created_entity} =
         Module14
         |> Entity.new(email: "before@example.com")
@@ -990,12 +1079,8 @@ defmodule Hologram.DB.EntityOperationsTest do
       update(Module14, created_entity.id, %{password_hash: "hashed_secret_v2"})
 
       assert effect = List.last(outbox_effects())
-      assert Map.keys(effect.data) == ["updated_at"]
-
-      {:ok, %Postgrex.Result{rows: [[log]]}} =
-        Connection.query(~s|SELECT string_agg("data"::text, ' ') FROM "hologram_system"."outbox"|)
-
-      refute log =~ "hashed_secret_v2"
+      assert Map.keys(effect.data) == ["password_hash", "updated_at"]
+      assert effect.data["password_hash"] == "hashed_secret_v2"
     end
 
     test "records nothing when no entity has the given id" do
@@ -1041,6 +1126,67 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       :ok = update(Module3, created_entity.id, %{b_id: nil})
       assert get(Module3, created_entity.id).b_id == nil
+    end
+
+    test "raises the touched columns' revisions and leaves the rest" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      :ok = update(Module2, created_entity.id, a: false)
+
+      revisions = get(Module2, created_entity.id).__meta__.revisions
+
+      assert revisions.a > created_entity.__meta__.revisions.a
+      assert revisions.c == created_entity.__meta__.revisions.c
+    end
+
+    test "records the revisions of the touched columns on the effect" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      :ok = update(Module2, created_entity.id, a: false)
+
+      revisions = get(Module2, created_entity.id).__meta__.revisions
+
+      assert %{revisions: effect_revisions} = List.last(outbox_effects())
+      assert effect_revisions == %{"a" => revisions.a}
+    end
+
+    test "stamps every column of one update alike" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      :ok = update(Module2, created_entity.id, a: false, c: "xyz")
+
+      revisions = get(Module2, created_entity.id).__meta__.revisions
+
+      assert revisions.a > created_entity.__meta__.revisions.a
+      assert revisions.c == revisions.a
+    end
+
+    test "never lowers a revision" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      # A revision a day ahead of this node's clock - what a peer whose clock runs fast, or a
+      # client stamping its own write, can leave behind.
+      ahead_of_this_node = (System.os_time(:millisecond) + 86_400_000) * 1024
+
+      set_revisions(Module2, created_entity.id, %{"a" => ahead_of_this_node})
+
+      :ok = update(Module2, created_entity.id, a: false)
+
+      revisions = get(Module2, created_entity.id).__meta__.revisions
+
+      assert revisions.a == ahead_of_this_node + 1
     end
 
     test "returns the violation from the write itself when the new value is taken" do
@@ -1275,6 +1421,13 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert_error ArgumentError, expected_system_msg, fn ->
         update(Module2, created_entity.id, %{created_at: DateTime.utc_now(:microsecond)})
+      end
+
+      expected_revisions_msg =
+        ~s(invalid changes for Hologram.Test.Fixtures.Entity.Module2 - only declared attributes and to-one relationships can be updated: :"$revisions")
+
+      assert_error ArgumentError, expected_revisions_msg, fn ->
+        update(Module2, created_entity.id, %{"$revisions": %{}})
       end
     end
 

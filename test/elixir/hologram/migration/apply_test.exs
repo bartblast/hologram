@@ -104,6 +104,7 @@ defmodule Hologram.Migration.ApplyTest do
         # The companion column rides the string attribute's declaration, so the layout the
         # chain leaves is the full derived one rather than the two attributes it names.
         assert table_columns("my_app_task") == [
+                 "$revisions",
                  "created_at",
                  "id",
                  "priority",

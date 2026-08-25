@@ -19,12 +19,14 @@ defmodule Hologram.Auth.RoleGrant do
 
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
+  alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
   alias Hologram.Reflection
 
   @resolution_key {__MODULE__, :resolution}
 
-  defstruct created_at: nil,
+  defstruct __meta__: %Metadata{},
+            created_at: nil,
             granted_by: %NotIncluded{relationship: :granted_by},
             granted_by_id: nil,
             id: nil,
@@ -36,6 +38,7 @@ defmodule Hologram.Auth.RoleGrant do
             user_id: nil
 
   @type t :: %__MODULE__{
+          __meta__: Metadata.t(),
           created_at: DateTime.t() | nil,
           granted_by: struct | NotIncluded.t() | nil,
           granted_by_id: String.t() | nil,

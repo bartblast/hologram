@@ -11,12 +11,14 @@ defmodule Hologram.DB.EntityOperations do
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
+  alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Outbox
   alias Hologram.DB.SortKey
   alias Hologram.Entity
+  alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
 
   @data_schema "hologram_data"
@@ -185,14 +187,24 @@ defmodule Hologram.DB.EntityOperations do
         nil
 
       {:ok, %Postgrex.Result{rows: [row]}} ->
-        fields =
+        # Exactly one revisions column per table, by construction - it is framework state rather
+        # than a value the entity declares, so it lands in the metadata and never as a field.
+        {[{revisions_column, revisions_value}], field_pairs} =
           persisted_columns
           |> Enum.zip(row)
-          |> Enum.map(fn {column, value} ->
+          |> Enum.split_with(fn {column, _value} -> column.source == :revisions end)
+
+        fields =
+          Enum.map(field_pairs, fn {column, value} ->
             {field_name(column), Codec.decode(value, column.type)}
           end)
 
-        struct!(entity_type, fields)
+        revisions =
+          revisions_value
+          |> Codec.decode(revisions_column.type)
+          |> revisions_from_row(columns)
+
+        struct!(entity_type, [{:__meta__, %Metadata{revisions: revisions}} | fields])
 
       {:error, error} ->
         raise error
@@ -208,7 +220,9 @@ defmodule Hologram.DB.EntityOperations do
 
     columns_by_field =
       columns
-      |> Enum.reject(&(&1.source == :system or match?({:sort_key, _name}, &1.source)))
+      |> Enum.reject(
+        &(&1.source in [:revisions, :system] or match?({:sort_key, _name}, &1.source))
+      )
       |> Map.new(&{field_name(&1), &1})
 
     changes_map = Map.new(changes)
@@ -237,19 +251,29 @@ defmodule Hologram.DB.EntityOperations do
               "#{Mapper.quote_identifier(column.name)} = $#{index}"
             end)
 
-          updated_at_placeholder = length(set_entries) + 1
-          id_placeholder = length(set_entries) + 2
+          stamp_placeholder = length(set_entries) + 1
+          updated_at_placeholder = length(set_entries) + 2
+          id_placeholder = length(set_entries) + 3
+
+          # One stamp for the whole statement, so every column it sets reads as set together.
+          set_columns =
+            set_entries
+            |> Enum.map(fn {column, _value} -> column end)
+            |> Enum.filter(&settable?/1)
+
+          revisions_assignment = revisions_assignment(set_columns, stamp_placeholder)
 
           statement =
-            ~s|UPDATE #{qualified_table(table)} SET #{set_list}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder}|
+            ~s|UPDATE #{qualified_table(table)} SET #{set_list}, #{revisions_assignment}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder} RETURNING "$revisions"|
 
           changed_values = Enum.map(set_entries, fn {_column, value} -> value end)
 
+          stamp = Clock.stamp()
           updated_at = DateTime.utc_now(:microsecond)
           encoded_updated_at = Codec.encode(updated_at, :datetime)
           encoded_id = Codec.encode(id, :uuid)
 
-          params = changed_values ++ [encoded_updated_at, encoded_id]
+          params = changed_values ++ [stamp, encoded_updated_at, encoded_id]
 
           # The stamp travels with the changes: every update moves updated_at, and a client holding
           # the row holds that too. The sort-key companions do not - they are derived from the values
@@ -259,7 +283,7 @@ defmodule Hologram.DB.EntityOperations do
           # The transaction's reason is whatever refused the write, the way create/1's is - a
           # refusal rolls the update back rather than raising.
           Connection.transaction(fn ->
-            run_update!(statement, params, entity_type, id, data)
+            run_update!(statement, params, entity_type, id, data, set_columns)
           end)
 
         {:error, violations} ->
@@ -345,6 +369,18 @@ defmodule Hologram.DB.EntityOperations do
         Map.put(acc, field, [:not_found])
       end
     end)
+  end
+
+  # The one place a column name is spliced into SQL as a LITERAL rather than as a quoted
+  # identifier. Every name here comes from the mapping and never from a caller - the escape is
+  # there because a name is still data, and a literal is the position where that would matter.
+  #
+  # Escaped rather than validated against a shape: a declaration name is any atom the dev writes,
+  # so `attribute :"a$b"` and `attribute :Upper` both derive columns the rest of the mapping
+  # handles by quoting them. A guard admitting only lowercase names would refuse an ordinary
+  # update on either. This is the same doubling DDL renders its own literals with.
+  defp column_literal(name) do
+    "'#{String.replace(name, "'", "''")}'"
   end
 
   defp companion_entries(columns, sorted_changes) do
@@ -476,9 +512,24 @@ defmodule Hologram.DB.EntityOperations do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
     now = DateTime.utc_now(:microsecond)
-    stamped_entity = %{entity | created_at: now, updated_at: now}
 
-    encoded_values = Enum.map(columns, &encoded_column_value(stamped_entity, &1))
+    # One stamp for the whole row: every column it sets was set by this write, at this moment.
+    stamp = Clock.stamp()
+    settable_columns = Enum.filter(columns, &settable?/1)
+    revisions = Map.new(settable_columns, &{field_name(&1), stamp})
+
+    stamped_entity = %{
+      entity
+      | created_at: now,
+        updated_at: now,
+        __meta__: %{entity.__meta__ | revisions: revisions}
+    }
+
+    encoded_values =
+      Enum.map(columns, fn
+        %{source: :revisions} -> Map.new(settable_columns, &{&1.name, stamp})
+        column -> encoded_column_value(stamped_entity, column)
+      end)
 
     column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
     placeholder_list = Enum.map_join(1..length(columns), ", ", &"$#{&1}")
@@ -522,14 +573,20 @@ defmodule Hologram.DB.EntityOperations do
 
     data =
       columns
-      |> Enum.reject(&match?({:sort_key, _name}, &1.source))
+      |> Enum.reject(&(&1.source == :revisions or match?({:sort_key, _name}, &1.source)))
       |> Map.new(fn column ->
         name = field_name(column)
 
         {name, Map.fetch!(entity, name)}
       end)
 
-    %{op: :put_entity, entity_type: entity_type, entity_id: entity.id, data: data}
+    %{
+      op: :put_entity,
+      entity_type: entity_type,
+      entity_id: entity.id,
+      data: data,
+      revisions: entity.__meta__.revisions
+    }
   end
 
   # An edge the database already had, or already lacked, is not a change: the statement wrote
@@ -547,11 +604,19 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
-  defp run_update!(statement, params, entity_type, id, data) do
+  defp run_update!(statement, params, entity_type, id, data, set_columns) do
     case Connection.query(statement, params) do
-      {:ok, %Postgrex.Result{num_rows: 1}} ->
+      # The stored map comes back rather than the stamp that was sent: a column already past the
+      # stamp keeps its own revision, so what the row now holds is the only true answer.
+      {:ok, %Postgrex.Result{num_rows: 1, rows: [[stored_revisions]]}} ->
         Outbox.append([
-          %{op: :patch_entity, entity_type: entity_type, entity_id: id, data: data}
+          %{
+            op: :patch_entity,
+            entity_type: entity_type,
+            entity_id: id,
+            data: data,
+            revisions: revisions_from_row(stored_revisions, set_columns)
+          }
         ])
 
       {:ok, %Postgrex.Result{num_rows: 0}} ->
@@ -599,6 +664,34 @@ defmodule Hologram.DB.EntityOperations do
 
   defp reference_violations(_entity_type, _error), do: nil
 
+  # The stored map is keyed by COLUMN name, so it is read back through the columns rather than by
+  # making atoms of its keys. A key naming no current column belonged to a declaration that has
+  # since been dropped - it reads as nothing, the way a column never set does.
+  # GREATEST is the never-decrease invariant, stated in SQL: a node whose clock runs behind
+  # another's cannot lower a revision that node or a client already stored, and a lowered one
+  # could equal a revision an older read still holds and so read as unmoved.
+  defp revisions_assignment(set_columns, stamp_placeholder) do
+    entries =
+      Enum.map_join(set_columns, ", ", fn column ->
+        literal = column_literal(column.name)
+
+        ~s|#{literal}, GREATEST($#{stamp_placeholder}::int8, COALESCE(("$revisions"->>#{literal})::int8, 0) + 1)|
+      end)
+
+    "\"$revisions\" = \"$revisions\" || jsonb_build_object(#{entries})"
+  end
+
+  defp revisions_from_row(revisions, columns) do
+    revisions
+    |> Enum.flat_map(fn {name, revision} ->
+      case Enum.find(columns, &(&1.name == name)) do
+        nil -> []
+        column -> [{field_name(column), revision}]
+      end
+    end)
+    |> Map.new()
+  end
+
   # A unique index derived from a `unique: true` attribute names that attribute back, so a
   # duplicate is answered the way a value violation is - by field, in Entity.validate/2's shape.
   # Any other unique index is not ours to explain and keeps raising: a duplicate primary key is
@@ -608,6 +701,12 @@ defmodule Hologram.DB.EntityOperations do
   # form holding a row's own unchanged value is not refused. A create passes an id no row
   # carries yet, which excludes nothing.
   # sobelow_skip ["SQL.Query"]
+  # The columns a client can write, which is what a revision is kept for - the system ones and
+  # the sort-key companions are nobody's to set.
+  defp settable?(column) do
+    match?({:attribute, _name}, column.source) or match?({:relationship, _name}, column.source)
+  end
+
   defp unique_value_taken?(table, column_name, value, type, id) do
     statement =
       ~s|SELECT EXISTS (SELECT 1 FROM #{qualified_table(table)} WHERE #{Mapper.quote_identifier(column_name)} = $1 AND "id" != $2)|
@@ -661,7 +760,9 @@ defmodule Hologram.DB.EntityOperations do
 
     field_names =
       columns
-      |> Enum.reject(&(&1.source == :system or match?({:sort_key, _name}, &1.source)))
+      |> Enum.reject(
+        &(&1.source in [:revisions, :system] or match?({:sort_key, _name}, &1.source))
+      )
       |> Enum.map(&field_name/1)
 
     data = Map.take(entity, field_names)

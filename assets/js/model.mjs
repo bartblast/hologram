@@ -28,7 +28,11 @@ export default class Model {
   // becoming null, which is a different answer.
   static box(type, row, includes = {}) {
     const entry = Model.entry(type);
-    const data = [[Type.atom("__struct__"), Type.alias(type)]];
+
+    const data = [
+      [Type.atom("__struct__"), Type.alias(type)],
+      [Type.atom("__meta__"), Model.#metadata(row)],
+    ];
 
     for (const [name, attributeType] of Object.entries(entry.attributes)) {
       data.push([
@@ -228,6 +232,23 @@ export default class Model {
 
   static #field(struct, name) {
     return struct.data[Type.encodeMapKey(Type.atom(name))][1];
+  }
+
+  // The framework's state on the struct, as the server would fill it for a row that was READ:
+  // the revisions the wire carried, and the write-side fields empty - those record what a struct
+  // is carrying toward a write, and a row arriving from the server is carrying none.
+  static #metadata(row) {
+    const revisions = Object.entries(row["$revisions"] ?? {}).map(
+      ([name, revision]) => [Type.atom(name), Type.integer(revision)],
+    );
+
+    return Type.map([
+      [Type.atom("__struct__"), Type.alias("Hologram.Entity.Metadata")],
+      [Type.atom("attribute_changes"), Type.map([])],
+      [Type.atom("claim"), Type.nil()],
+      [Type.atom("relationship_ops"), Type.map([])],
+      [Type.atom("revisions"), Type.map(revisions)],
+    ]);
   }
 
   static #pad(value, width) {

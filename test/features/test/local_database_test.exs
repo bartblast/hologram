@@ -236,4 +236,48 @@ defmodule HologramFeatureTests.LocalDatabaseTest do
     |> assert_text(css("#products_from_m"), ~r/^Mango,mulberry,Zebra$/)
     |> assert_same_page_load()
   end
+
+  # A revision is framework state under __meta__ rather than an attribute, so these two cover a
+  # path nothing else here does: the server's struct fills the first paint, and the stream fills
+  # it again from the revisions a patch carries for the columns it names.
+  feature "shows the revision a row's name was set at", %{session: session} do
+    product =
+      Product
+      |> Entity.new(name: "abacus")
+      |> DB.create!()
+
+    session
+    |> visit(Page2)
+    |> assert_text(
+      css("#product_revisions"),
+      ~r/^abacus:#{product.__meta__.revisions.name}$/
+    )
+  end
+
+  feature "moves the revision of a name changed after the page was rendered",
+          %{session: session} do
+    product =
+      Product
+      |> Entity.new(name: "abacus")
+      |> DB.create!()
+
+    session
+    |> visit(Page2)
+    |> assert_text(
+      css("#product_revisions"),
+      ~r/^abacus:#{product.__meta__.revisions.name}$/
+    )
+    |> mark_this_page_load()
+
+    update(Product, product.id, name: "armchair")
+
+    reloaded = DB.read(Product, product.id)
+
+    session
+    |> assert_text(
+      css("#product_revisions"),
+      ~r/^armchair:#{reloaded.__meta__.revisions.name}$/
+    )
+    |> assert_same_page_load()
+  end
 end

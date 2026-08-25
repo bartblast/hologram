@@ -93,8 +93,8 @@ defmodule Hologram.Migration.TailBuildTest do
 
   defp insert_task(slug) do
     statement = """
-    INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "updated_at")
-    VALUES (gen_random_uuid(), $1, now(), now())
+    INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, now(), now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [slug])
