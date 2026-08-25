@@ -54,6 +54,23 @@ describe("Deltas", () => {
       assert.isFalse(row.done);
     });
 
+    it("files the row's revisions beside its attributes", () => {
+      Deltas.apply({
+        put_entity: {
+          [TASK]: [
+            {
+              done: false,
+              id: "t1",
+              title: "Draft copy",
+              $revisions: {title: 3},
+            },
+          ],
+        },
+      });
+
+      assert.deepEqual(LocalDatabase.getRow(TASK, "t1").$revisions, {title: 3});
+    });
+
     it("records the target ids a to-many relationship names as facts", () => {
       Deltas.apply({
         put_entity: {
@@ -285,6 +302,54 @@ describe("Deltas", () => {
         LocalDatabase.getTargetIds(PROJECT, "tasks", "p1"),
         new Set(["t1"]),
       );
+    });
+
+    it("writes the patch's revisions over the row's and leaves the rest", () => {
+      Deltas.apply({
+        put_entity: {
+          [TASK]: [
+            {
+              done: false,
+              id: "t1",
+              title: "Draft copy",
+              $revisions: {done: 1, title: 1},
+            },
+          ],
+        },
+      });
+
+      Deltas.apply({
+        patch_entity: {
+          [TASK]: [{id: "t1", title: "Ship it", $revisions: {title: 2}}],
+        },
+      });
+
+      assert.deepEqual(LocalDatabase.getRow(TASK, "t1").$revisions, {
+        done: 1,
+        title: 2,
+      });
+    });
+
+    it("leaves the map alone for a patch carrying no revisions", () => {
+      Deltas.apply({
+        put_entity: {
+          [TASK]: [
+            {
+              done: false,
+              id: "t1",
+              title: "Draft copy",
+              $revisions: {done: 1, title: 1},
+            },
+          ],
+        },
+      });
+
+      Deltas.apply({patch_entity: {[TASK]: [{id: "t1", title: "Ship it"}]}});
+
+      assert.deepEqual(LocalDatabase.getRow(TASK, "t1").$revisions, {
+        done: 1,
+        title: 1,
+      });
     });
 
     // A patch names a row the client was told about, so one it does not hold is one it has been

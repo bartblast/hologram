@@ -83,7 +83,18 @@ export default class Deltas {
       return;
     }
 
-    Deltas.#fileRow(type, Object.assign({}, held, changes));
+    const merged = Object.assign({}, held, changes);
+
+    // A patch carries the revisions of the columns it names and nothing else, so the row's map is
+    // the held one with those written over it - the assign above would otherwise have replaced the
+    // whole map with the partial one, losing the revision of every column the patch left alone.
+    merged["$revisions"] = Object.assign(
+      {},
+      held["$revisions"] ?? {},
+      changes["$revisions"] ?? {},
+    );
+
+    Deltas.#fileRow(type, merged);
   }
 
   static #putRow(type, row, opts) {
