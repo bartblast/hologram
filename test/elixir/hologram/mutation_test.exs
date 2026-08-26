@@ -217,7 +217,42 @@ defmodule Hologram.MutationTest do
 
       run(envelope([publish_write(Entity.generate_id())], client_id: client_id, seq: 3), server())
 
-      assert Record.result(client_id, 3) == %{"status" => "confirmed", "dropped" => %{}}
+      assert Record.find(client_id, 3).result == %{"status" => "confirmed", "dropped" => %{}}
+    end
+
+    test "answers a repeated batch from the record without applying it again" do
+      batch = envelope([publish_write(Entity.generate_id())])
+
+      assert {:ok, answer} = run(batch, server())
+      assert run(batch, server()) == {:ok, answer}
+
+      assert mutation_row_count() == 1
+      assert length(outbox_rows()) == 1
+    end
+
+    test "applies each sequence number of one client on its own" do
+      client_id = Entity.generate_id()
+      first_id = Entity.generate_id()
+      second_id = Entity.generate_id()
+
+      run(envelope([publish_write(first_id)], client_id: client_id, seq: 1), server())
+      run(envelope([publish_write(second_id)], client_id: client_id, seq: 2), server())
+
+      assert EntityOperations.get(PolicyModule2, first_id) != nil
+      assert EntityOperations.get(PolicyModule2, second_id) != nil
+      assert mutation_row_count() == 2
+    end
+
+    test "applies one sequence number for each client on its own" do
+      first_id = Entity.generate_id()
+      second_id = Entity.generate_id()
+
+      run(envelope([publish_write(first_id)], seq: 1), server())
+      run(envelope([publish_write(second_id)], seq: 1), server())
+
+      assert EntityOperations.get(PolicyModule2, first_id) != nil
+      assert EntityOperations.get(PolicyModule2, second_id) != nil
+      assert mutation_row_count() == 2
     end
 
     test "applies an update to the columns the writer saw unchanged" do
@@ -439,9 +474,38 @@ defmodule Hologram.MutationTest do
       assert {:rejected, 0, _reason} =
                run(envelope([write], client_id: client_id), server())
 
-      assert Record.result(client_id, 1) == nil
+      assert Record.find(client_id, 1) == nil
       assert mutation_row_count() == 0
       assert outbox_rows() == []
+    end
+
+    test "refuses a batch whose client and sequence number belong to another session" do
+      sender = create_user("sender@example.com")
+      other = create_user("other@example.com")
+      batch = envelope([publish_write(Entity.generate_id())])
+
+      assert {:ok, _answer} = run(batch, server(sender.id))
+
+      assert run(batch, server(other.id)) == {:rejected, nil, :forged_client}
+      assert mutation_row_count() == 1
+    end
+
+    test "refuses a signed-in session's batch claimed anonymously" do
+      sender = create_user("owner@example.com")
+      batch = envelope([publish_write(Entity.generate_id())])
+
+      assert {:ok, _answer} = run(batch, server(sender.id))
+
+      assert run(batch, server()) == {:rejected, nil, :forged_client}
+    end
+
+    test "refuses an anonymous batch claimed by a signed-in session" do
+      user = create_user("claimant@example.com")
+      batch = envelope([publish_write(Entity.generate_id())])
+
+      assert {:ok, _answer} = run(batch, server())
+
+      assert run(batch, server(user.id)) == {:rejected, nil, :forged_client}
     end
 
     test "refuses a batch built against another model" do

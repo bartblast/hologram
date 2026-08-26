@@ -22,13 +22,22 @@ defmodule Hologram.Mutation do
   alias Hologram.Mutation.Write
   alias Hologram.Server
 
-  @type rejection :: :stale_build | :clock | :not_found | %Hologram.AccessDeniedError{} | map
+  @type rejection ::
+          :stale_build
+          | :clock
+          | :forged_client
+          | :not_found
+          | %Hologram.AccessDeniedError{}
+          | map
 
   @doc """
   Applies the given batch, as the request decoded it, on behalf of the given session.
 
   Returns what to answer: the result of a batch that landed, the write and the reason of one that
   was refused, or the message of one that could not be parsed at all.
+
+  A batch already applied is answered from its record rather than applied a second time, and only
+  for the session that sent it.
   """
   @spec run(map, Server.t()) ::
           {:ok, map} | {:rejected, non_neg_integer | nil, rejection} | {:invalid, String.t()}
@@ -42,39 +51,26 @@ defmodule Hologram.Mutation do
     end
   end
 
-  # The actor outside, the batch reference inside it, the transaction innermost - the same wrap a
-  # command runs under, with the reference added so the outbox knows whose effects these are.
-  defp apply_batch(envelope, server_struct) do
-    ref = %{client_id: envelope.client_id, seq: envelope.seq}
+  # The claim lost to an arrival that has COMMITTED by now: a unique violation against a row still
+  # uncommitted blocks until that transaction ends, and one that ends by aborting leaves the key
+  # free - so the only way to lose the key is to lose it to a batch that finished, answer and all.
+  defp answer_from_race(envelope, actor_id) do
+    case recorded_answer(envelope, actor_id) do
+      nil ->
+        raise "batch #{envelope.client_id}/#{envelope.seq} lost its claim to an arrival that left no answer"
 
-    result =
-      Context.with_actor(server_struct.user_id, fn ->
-        Ref.with_ref(ref, fn -> apply_in_transaction(envelope, server_struct) end)
-      end)
-
-    # A refusal reaches here as the transaction's rollback reason, which is what took the batch's
-    # writes, its effects and its claim on the record back with it.
-    case result do
-      {:ok, answer} -> {:ok, answer}
-      {:error, {:rejected, index, reason}} -> {:rejected, index, reason}
+      answer ->
+        answer
     end
   end
 
-  defp apply_in_transaction(envelope, server_struct) do
-    Connection.transaction(fn ->
-      Record.claim!(
-        envelope.client_id,
-        envelope.seq,
-        server_struct.user_id,
-        envelope.model_hash
-      )
-
-      result = apply_writes(envelope.writes)
-
-      Record.complete!(envelope.client_id, envelope.seq, result)
-
-      result
-    end)
+  # The actor outside, the batch reference inside it, the transaction innermost - the same wrap a
+  # command runs under, with the reference added so the outbox knows whose effects these are.
+  defp apply_batch(envelope, server_struct) do
+    case recorded_answer(envelope, server_struct.user_id) do
+      nil -> apply_new_batch(envelope, server_struct)
+      answer -> answer
+    end
   end
 
   defp apply_changes(_write, changes, _index) when changes == %{}, do: :ok
@@ -95,6 +91,40 @@ defmodule Hologram.Mutation do
     case Merge.resolve_delete(write.based_on, write.stamp, row.__meta__.revisions) do
       :delete -> run_delete(write, index)
       :drop -> lost_values(write, stored_columns(row))
+    end
+  end
+
+  defp apply_in_transaction(envelope, server_struct) do
+    Connection.transaction(fn ->
+      Record.claim!(
+        envelope.client_id,
+        envelope.seq,
+        server_struct.user_id,
+        envelope.model_hash
+      )
+
+      result = apply_writes(envelope.writes)
+
+      Record.complete!(envelope.client_id, envelope.seq, result)
+
+      result
+    end)
+  end
+
+  defp apply_new_batch(envelope, server_struct) do
+    ref = %{client_id: envelope.client_id, seq: envelope.seq}
+
+    result =
+      Context.with_actor(server_struct.user_id, fn ->
+        Ref.with_ref(ref, fn -> apply_in_transaction(envelope, server_struct) end)
+      end)
+
+    # A refusal reaches here as the transaction's rollback reason, which is what took the batch's
+    # writes, its effects and its claim on the record back with it.
+    case result do
+      {:ok, answer} -> {:ok, answer}
+      {:error, :duplicate} -> answer_from_race(envelope, server_struct.user_id)
+      {:error, {:rejected, index, reason}} -> {:rejected, index, reason}
     end
   end
 
@@ -183,13 +213,6 @@ defmodule Hologram.Mutation do
     Map.merge(attributes, references)
   end
 
-  # Every column the row holds a revision of, which is every column a delete would have taken.
-  defp stored_columns(row) do
-    row.__meta__.revisions
-    |> Map.keys()
-    |> Enum.sort()
-  end
-
   defp lock_row(write, index) do
     case EntityOperations.get(write.entity_type, write.id, lock: true) do
       nil -> Connection.rollback({:rejected, index, :not_found})
@@ -217,6 +240,20 @@ defmodule Hologram.Mutation do
     end
   end
 
+  # An answer is replayed only to the session that earned it. Anyone can present anyone's client id
+  # and sequence number, and a stored answer is revealing - a denial names a row, a violation map
+  # shows what was written - so a record belonging to another session is refused rather than read
+  # back. An anonymous session's record has no actor and matches only another anonymous one, which
+  # is the same rule rather than an exception to it.
+  defp recorded_answer(envelope, actor_id) do
+    case Record.find(envelope.client_id, envelope.seq) do
+      nil -> nil
+      %{actor_id: ^actor_id, result: nil} -> nil
+      %{actor_id: ^actor_id, result: result} -> {:ok, result}
+      _another_sessions -> {:rejected, nil, :forged_client}
+    end
+  end
+
   defp run_delete(write, index) do
     result =
       write
@@ -227,5 +264,12 @@ defmodule Hologram.Mutation do
       :ok -> %{}
       {:error, reason} -> Connection.rollback({:rejected, index, reason})
     end
+  end
+
+  # Every column the row holds a revision of, which is every column a delete would have taken.
+  defp stored_columns(row) do
+    row.__meta__.revisions
+    |> Map.keys()
+    |> Enum.sort()
   end
 end

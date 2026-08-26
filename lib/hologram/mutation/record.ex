@@ -67,20 +67,28 @@ defmodule Hologram.Mutation.Record do
   end
 
   @doc """
-  Returns the answer the given batch got, or nil when it has none - no record at all, or a claim
-  whose transaction has not finished.
+  Returns what is recorded for the given batch - the user who sent it and the answer it was given -
+  or nil when the batch has no record.
+
+  The answer is nil only for a batch being applied at this moment, which cannot be seen from
+  outside: the claim lives in the transaction applying it, and that transaction either commits with
+  an answer or takes the claim back with it.
+
+  Both halves come back together because a caller needs both: an answer is only ever replayed to
+  the session that earned it.
   """
-  @spec result(String.t(), non_neg_integer) :: map | nil
-  def result(client_id, seq) do
+  @spec find(String.t(), non_neg_integer) ::
+          %{actor_id: String.t() | nil, result: map | nil} | nil
+  def find(client_id, seq) do
     statement = """
-    SELECT "result" FROM "hologram_system"."mutation"
+    SELECT "actor_id", "result" FROM "hologram_system"."mutation"
     WHERE "client_id" = $1 AND "seq" = $2
     """
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [client_id, seq])
 
     case rows do
-      [[result]] -> result
+      [[actor_id, result]] -> %{actor_id: Codec.decode(actor_id, :uuid), result: result}
       [] -> nil
     end
   end

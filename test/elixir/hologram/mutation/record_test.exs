@@ -94,30 +94,35 @@ defmodule Hologram.Mutation.RecordTest do
     end
   end
 
-  describe "result/2" do
-    test "returns the answer the batch got" do
-      claim(@client_id, 1)
+  describe "find/2" do
+    test "returns the sender and the answer the batch got" do
+      user_id = Entity.generate_id()
+
+      claim(@client_id, 1, user_id)
       complete!(@client_id, 1, %{"status" => "confirmed"})
 
-      assert result(@client_id, 1) == %{"status" => "confirmed"}
+      assert find(@client_id, 1) == %{
+               actor_id: user_id,
+               result: %{"status" => "confirmed"}
+             }
     end
 
     test "returns nil for a batch with no record" do
-      assert result(@client_id, 1) == nil
+      assert find(@client_id, 1) == nil
     end
 
-    test "returns nil for a batch claimed but not answered" do
+    test "returns no answer for a batch claimed but not answered" do
       claim(@client_id, 1)
 
-      assert result(@client_id, 1) == nil
+      assert find(@client_id, 1) == %{actor_id: nil, result: nil}
     end
 
     test "returns nothing of another batch's record" do
       claim(@client_id, 1)
       complete!(@client_id, 1, %{"status" => "confirmed"})
 
-      assert result(@client_id, 2) == nil
-      assert result(@other_client_id, 1) == nil
+      assert find(@client_id, 2) == nil
+      assert find(@other_client_id, 1) == nil
     end
   end
 end
