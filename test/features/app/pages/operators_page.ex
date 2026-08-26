@@ -23,8 +23,11 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   @list_a [1, 2, 3]
   @list_b [2, 3, 4]
+  @list_float [1.0]
+  @list_integer [1]
 
   @map_a %{a: @integer_a, b: @integer_b}
+  @map_b %{a: @integer_a}
 
   @range_a @integer_a..@integer_c
 
@@ -83,6 +86,9 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id="===" $click="==="> === </button>
       <button id="!=" $click="!="> != </button>
       <button id="!==" $click="!=="> !== </button>
+      <button id="=== (map)" $click="=== (map)"> === (map) </button>
+      <button id="== (map)" $click="== (map)"> == (map) </button>
+      <button id="== (nested number)" $click="== (nested number)"> == (nested number) </button>
       <button id="<" $click="<"> &lt; </button>
       <button id=">" $click=">"> &gt; </button>
       <button id="<=" $click="<="> &lt;= </button>
@@ -276,6 +282,18 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   def action(:===, _params, component) do
     put_state(component, :result, wrap_term(@integer_a) === wrap_term(@float_a))
+  end
+
+  def action(:"=== (map)", _params, component) do
+    put_state(component, :result, wrap_term(@map_b) === wrap_term(@map_a))
+  end
+
+  def action(:"== (map)", _params, component) do
+    put_state(component, :result, wrap_term(@map_b) == wrap_term(@map_a))
+  end
+
+  def action(:"== (nested number)", _params, component) do
+    put_state(component, :result, wrap_term(@list_integer) == wrap_term(@list_float))
   end
 
   def action(:!=, _params, component) do

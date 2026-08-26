@@ -763,14 +763,24 @@ export default class Interpreter {
 
   static isEqual(left, right) {
     if (Type.isNumber(left)) {
-      if (Type.isNumber(right)) {
-        return left.value == right.value;
-      } else {
-        return false;
-      }
+      return Type.isNumber(right) && left.value == right.value;
     }
 
-    return $.isStrictlyEqual(left, right);
+    if (left.type !== right.type) return false;
+
+    switch (left.type) {
+      case "list":
+        return $.#areListsEqual(left, right);
+
+      case "map":
+        return $.#areMapsEqual(left, right);
+
+      case "tuple":
+        return $.#areCollectionsItemsEqual(left.data, right.data);
+
+      default:
+        return $.isStrictlyEqual(left, right);
+    }
   }
 
   static isMatched(left, right, context) {
@@ -788,13 +798,13 @@ export default class Interpreter {
         return left.value === right.value;
 
       case "map":
-        return $.#areMapsEqual(left, right);
+        return $.#areMapsStrictlyEqual(left, right);
 
       case "bitstring":
         return $.#areBitstringsEqual(left, right);
 
       case "list":
-        return $.#areListsEqual(left, right);
+        return $.#areListsStrictlyEqual(left, right);
 
       case "integer":
         return left.value === right.value;
@@ -1545,6 +1555,16 @@ export default class Interpreter {
     return true;
   }
 
+  static #areCollectionsItemsEqual(items1, items2) {
+    if (items1.length !== items2.length) return false;
+
+    for (let i = 0; i < items1.length; i++) {
+      if (!$.isEqual(items1[i], items2[i])) return false;
+    }
+
+    return true;
+  }
+
   static #areCollectionsItemsStrictlyEqual(items1, items2) {
     if (items1.length !== items2.length) return false;
 
@@ -1585,6 +1605,13 @@ export default class Interpreter {
 
   static #areListsEqual(list1, list2) {
     return (
+      $.#areCollectionsItemsEqual(list1.data, list2.data) &&
+      list1.isProper === list2.isProper
+    );
+  }
+
+  static #areListsStrictlyEqual(list1, list2) {
+    return (
       $.#areCollectionsItemsStrictlyEqual(list1.data, list2.data) &&
       list1.isProper === list2.isProper
     );
@@ -1594,9 +1621,28 @@ export default class Interpreter {
     const data1 = map1.data;
     const data2 = map2.data;
 
-    if (data1.length !== data2.length) return false;
+    const keys = Object.keys(data1);
+
+    if (keys.length !== Object.keys(data2).length) return false;
+
+    for (let i = 0; i < keys.length; ++i) {
+      const key = keys[i];
+
+      if (!(key in data2) || !$.isEqual(data1[key][1], data2[key][1])) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  static #areMapsStrictlyEqual(map1, map2) {
+    const data1 = map1.data;
+    const data2 = map2.data;
 
     const keys = Object.keys(data1);
+
+    if (keys.length !== Object.keys(data2).length) return false;
 
     for (let i = 0; i < keys.length; ++i) {
       const key = keys[i];
