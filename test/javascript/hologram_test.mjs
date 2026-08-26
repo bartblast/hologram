@@ -1813,9 +1813,10 @@ describe("Hologram", () => {
         }
       });
 
-      // The other half of putting the cancellation at the navigation's start: from there on the
-      // page on screen is the destination, its listeners are attached, and a window opened on it
-      // is its own. Cancelling any later would sweep that along with the previous page's.
+      // A statement about the registries, not a scenario the browser reaches: a destination's
+      // bindings are wired by the mount's render, not by the navigation's patch, so nothing it
+      // owns can arm a window before it mounts. What this pins is that starting a navigation
+      // schedules no later sweep.
       it("keeps a debounced dispatch armed after the navigation began", async () => {
         const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
         const element = document.createElement("div");

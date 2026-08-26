@@ -1269,11 +1269,9 @@ export default class Hologram {
   }
 
   static #mountPage(isPageModuleRegistered = false) {
-    // Nothing pending from the page the user left is dropped here. By the time a mount runs, the
-    // destination has been on screen for as long as its bundle took to arrive, and whatever was
-    // armed in that stretch is the destination's own - a sweep here would take it too. The
-    // dropping belongs at the instant the user leaves, which is where #showNewPage and
-    // #handlePopstateEvent do it.
+    // Nothing pending from the page the user left is dropped here. It is dropped at the instant
+    // the user leaves instead - in #showNewPage and #handlePopstateEvent - which is the last
+    // point at which every pending timer provably belongs to the page being left.
     //
     // Whichever pointer ran ahead during the transition, the mount is where they converge: from
     // here the page on screen and the page the registry answers for are the same page.
