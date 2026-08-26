@@ -13,6 +13,7 @@ import CallStack from "../../assets/js/erts/call_stack.mjs";
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Config from "../../assets/js/config.mjs";
+import Debouncer from "../../assets/js/debouncer.mjs";
 import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
@@ -22,6 +23,7 @@ import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
+import Throttler from "../../assets/js/throttler.mjs";
 import Type from "../../assets/js/type.mjs";
 import UncaughtErrorOverlay from "../../assets/js/uncaught_error_overlay.mjs";
 import Vdom from "../../assets/js/vdom.mjs";
@@ -1758,6 +1760,78 @@ describe("Hologram", () => {
           clock.restore();
           executeActionStub.restore();
           warnStub.restore();
+        }
+      });
+
+      // A debounce holds its dispatch in a timer, and a timer outlives the page that armed it.
+      // The destination is on screen from the patch onward and, when its bundle has still to
+      // arrive, stays that way for a whole round trip before the mount - long enough for a window
+      // opened on the page being left to elapse against the page that replaced it.
+      it("drops a debounced dispatch the page being left had pending", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+        const element = document.createElement("div");
+
+        let dispatched = false;
+
+        try {
+          Debouncer.run(element, "my_slot", 2000, () => (dispatched = true));
+
+          await Hologram.loadNewPage("/target", payloadFor("debounce-pending"));
+
+          clock.tick(5000);
+
+          assert.isFalse(dispatched);
+        } finally {
+          clock.restore();
+        }
+      });
+
+      // The trailing edge is the throttle's equivalent of a pending debounce: a call held for the
+      // end of a window that has not closed yet.
+      it("drops a throttled dispatch the page being left was holding", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+        const element = document.createElement("div");
+
+        let leadingEdgeCount = 0;
+        let trailingEdgeCount = 0;
+
+        try {
+          Throttler.run(element, "my_slot", 2000, () => leadingEdgeCount++);
+          Throttler.run(element, "my_slot", 2000, () => trailingEdgeCount++);
+
+          assert.equal(leadingEdgeCount, 1);
+          assert.equal(trailingEdgeCount, 0);
+
+          await Hologram.loadNewPage("/target", payloadFor("throttle-held"));
+
+          clock.tick(5000);
+
+          assert.equal(leadingEdgeCount, 1);
+          assert.equal(trailingEdgeCount, 0);
+        } finally {
+          clock.restore();
+        }
+      });
+
+      // The other half of putting the cancellation at the navigation's start: from there on the
+      // page on screen is the destination, its listeners are attached, and a window opened on it
+      // is its own. Cancelling any later would sweep that along with the previous page's.
+      it("keeps a debounced dispatch armed after the navigation began", async () => {
+        const clock = sinon.useFakeTimers({shouldClearNativeTimers: true});
+        const element = document.createElement("div");
+
+        let dispatched = false;
+
+        try {
+          await Hologram.loadNewPage("/target", payloadFor("debounce-armed"));
+
+          Debouncer.run(element, "my_slot", 2000, () => (dispatched = true));
+
+          clock.tick(5000);
+
+          assert.isTrue(dispatched);
+        } finally {
+          clock.restore();
         }
       });
 
