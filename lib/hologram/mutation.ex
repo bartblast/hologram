@@ -10,6 +10,7 @@ defmodule Hologram.Mutation do
   # rolls the whole batch back and names the write it refused.
 
   alias Hologram.Auth.Context
+  alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
@@ -21,6 +22,16 @@ defmodule Hologram.Mutation do
   alias Hologram.Mutation.Ref
   alias Hologram.Mutation.Write
   alias Hologram.Server
+
+  # How far ahead of this node's wall clock a writer's stamp may run. A stamp is stored as given -
+  # rewriting it would break the chain its writer's next write is based on - so a clock set far
+  # into the future is refused rather than corrected, and one within the allowance can win an
+  # unfair tiebreak for at most this long. The number is policy: its floor is real (a synchronized
+  # device is within milliseconds, an unsynchronized one drifts seconds to minutes, so under a
+  # minute would refuse honest clients), its ceiling is judgement, and five minutes is where
+  # Kerberos put its skew tolerance for the same reason. Overridable per app under the :mutation
+  # key, since a managed fleet can afford a tighter one.
+  @default_clock_allowance_ms 300_000
 
   @type rejection ::
           :stale_build
@@ -49,6 +60,12 @@ defmodule Hologram.Mutation do
       raw["model_hash"] != Model.hash() -> {:rejected, nil, :stale_build}
       true -> parse_and_apply(raw, server_struct)
     end
+  end
+
+  defp allowance_ms do
+    :hologram
+    |> Application.get_env(:mutation, [])
+    |> Keyword.get(:clock_allowance_ms, @default_clock_allowance_ms)
   end
 
   # The claim lost to an arrival that has COMMITTED by now: a unique violation against a row still
@@ -185,6 +202,28 @@ defmodule Hologram.Mutation do
     %{"status" => "confirmed", "dropped" => dropped}
   end
 
+  # Checked before anything runs, against the writes as a whole - a stamp the server cannot vouch
+  # for refuses the batch and names the write that carried it.
+  defp check_clocks(writes) do
+    writes
+    |> Enum.with_index()
+    |> Enum.find_value(:ok, fn {write, index} ->
+      if clock_off?(write), do: {:rejected, index, :clock}
+    end)
+  end
+
+  # Two ways a stamp is one this node cannot vouch for. Its wall clock runs further ahead of this
+  # node's than the allowance, which is a device with the wrong time. Or it is not above a revision
+  # the same write says it was based on - a writer's stamp is above everything it has seen, so this
+  # is a clock that went backwards, and the executor would raise the stamp to the stored revision
+  # plus one on the way in, which is the one rewrite the design forbids.
+  defp clock_off?(%Write{stamp: nil}), do: false
+
+  defp clock_off?(%Write{stamp: stamp, based_on: based_on}) do
+    Clock.wall_clock_ms(stamp) > System.os_time(:millisecond) + allowance_ms() or
+      Enum.any?(based_on, fn {_name, revision} -> stamp <= revision end)
+  end
+
   # The index is a string because the answer is stored as jsonb and sent as JSON, where an object's
   # keys are strings whatever they started as.
   defp collect_lost({write, index}, dropped) do
@@ -233,9 +272,9 @@ defmodule Hologram.Mutation do
     end)
   end
 
-  defp parse_and_apply(raw, server_struct) do
+  defp parse(raw) do
     case Envelope.parse(raw) do
-      {:ok, envelope} -> apply_batch(envelope, server_struct)
+      {:ok, envelope} -> {:ok, envelope}
       {:error, message} -> {:invalid, message}
     end
   end
@@ -245,6 +284,13 @@ defmodule Hologram.Mutation do
   # shows what was written - so a record belonging to another session is refused rather than read
   # back. An anonymous session's record has no actor and matches only another anonymous one, which
   # is the same rule rather than an exception to it.
+  defp parse_and_apply(raw, server_struct) do
+    with {:ok, envelope} <- parse(raw),
+         :ok <- check_clocks(envelope.writes) do
+      apply_batch(envelope, server_struct)
+    end
+  end
+
   defp recorded_answer(envelope, actor_id) do
     case Record.find(envelope.client_id, envelope.seq) do
       nil -> nil

@@ -508,6 +508,42 @@ defmodule Hologram.MutationTest do
       assert run(batch, server(user.id)) == {:rejected, nil, :forged_client}
     end
 
+    test "refuses a stamp running ahead of the server's clock and names the write" do
+      id = Entity.generate_id()
+      a_year_ahead = (System.os_time(:millisecond) + 365 * 86_400_000) * 1024
+      write = publish_write(id, stamp: a_year_ahead)
+
+      assert run(envelope([write]), server()) == {:rejected, 0, :clock}
+
+      assert EntityOperations.get(PolicyModule2, id) == nil
+      assert mutation_row_count() == 0
+    end
+
+    test "accepts a stamp within the allowance" do
+      id = Entity.generate_id()
+      four_minutes_ahead = (System.os_time(:millisecond) + 4 * 60_000) * 1024
+
+      assert {:ok, _answer} =
+               run(envelope([publish_write(id, stamp: four_minutes_ahead)]), server())
+
+      assert EntityOperations.get(PolicyModule2, id) != nil
+    end
+
+    test "refuses a stamp not above the revisions its write was based on" do
+      user = create_user("backwards@example.com")
+      row = create_archivable(user, priority: 5)
+      seen = row.__meta__.revisions.priority
+
+      write =
+        update_write(PolicyModule1, row.id, %{"priority" => 9},
+          based_on: %{"priority" => seen},
+          stamp: seen
+        )
+
+      assert run(envelope([write]), server(user.id)) == {:rejected, 0, :clock}
+      assert EntityOperations.get(PolicyModule1, row.id).priority == 5
+    end
+
     test "refuses a batch built against another model" do
       id = Entity.generate_id()
       write = create_write(Module2, id, %{"c" => "x"})
