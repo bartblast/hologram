@@ -114,11 +114,10 @@ defmodule Hologram.Template.Renderer do
   defmodule Env do
     @moduledoc false
 
-    defstruct context: %{}, node_type: nil, slots: [], tag_name: nil
+    defstruct context: %{}, slots: [], tag_name: nil
 
     @type t :: %__MODULE__{
             context: %{(atom | {any, atom}) => any},
-            node_type: :attribute | :element | :property | :public_comment | nil,
             slots: keyword(DOM.t()),
             tag_name: String.t() | nil
           }
@@ -451,7 +450,7 @@ defmodule Hologram.Template.Renderer do
   def render_tree({:element, tag_name, attrs_dom, children_dom}, %Env{} = env, server_struct) do
     attributes = render_tree_attributes(attrs_dom)
 
-    children_env = %Env{env | node_type: :element, tag_name: tag_name}
+    children_env = %Env{env | tag_name: tag_name}
 
     {children, component_registry, mutated_server_struct} =
       render_tree(children_dom, children_env, server_struct)
@@ -487,10 +486,8 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render_tree({:public_comment, children_dom}, %Env{} = env, server_struct) do
-    children_env = %Env{env | node_type: :public_comment}
-
     {children, component_registry, mutated_server_struct} =
-      render_tree(children_dom, children_env, server_struct)
+      render_tree(children_dom, env, server_struct)
 
     {{:public_comment, children}, component_registry, mutated_server_struct}
   end
