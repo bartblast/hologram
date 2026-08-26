@@ -47,6 +47,56 @@ defmodule Hologram.DB.Codec do
   def decode_enum_label(label), do: String.to_existing_atom(label)
 
   @doc """
+  Translates a value from its JSON form into the Elixir term held by entity structs, per attribute type - the inverse of encode_json/2, and the way a value written elsewhere is read back.
+  Returns {:ok, value}, or :error for a value that is not the given type's JSON form.
+  nil reads back as nil for every type, an ISO 8601 string becomes a :date or a :datetime, an :enum label becomes the atom or module it names - booleans, maps, numbers and strings are read as they are spelled, and a :uuid stays the string it is, its form being the model's to judge.
+  A whole number reads back as a :float value, because a JSON writer spells 1.0 as 1 and the two are one number to it.
+  Which type a JSON value carries is not recoverable from the value itself, since a :date, an :enum and a :uuid all arrive as strings - reading one back means knowing the attribute it belongs to, whose type the model states.
+  """
+  @spec decode_json(any, atom) :: {:ok, any} | :error
+  def decode_json(value, type)
+
+  def decode_json(nil, _type), do: {:ok, nil}
+
+  def decode_json(value, :boolean) when is_boolean(value), do: {:ok, value}
+
+  def decode_json(value, :date) when is_binary(value) do
+    case Date.from_iso8601(value) do
+      {:ok, date} -> {:ok, date}
+      {:error, _reason} -> :error
+    end
+  end
+
+  def decode_json(value, :datetime) when is_binary(value) do
+    # from_iso8601/1 answers the UTC representation of whatever offset it was given, which is
+    # the form encode/2 stores and the only one an entity struct holds.
+    case DateTime.from_iso8601(value) do
+      {:ok, datetime, _utc_offset} -> {:ok, datetime}
+      {:error, _reason} -> :error
+    end
+  end
+
+  def decode_json(value, :enum) when is_binary(value) do
+    {:ok, decode_enum_label(value)}
+  rescue
+    ArgumentError -> :error
+  end
+
+  def decode_json(value, :float) when is_float(value), do: {:ok, value}
+
+  def decode_json(value, :float) when is_integer(value), do: {:ok, value * 1.0}
+
+  def decode_json(value, :integer) when is_integer(value), do: {:ok, value}
+
+  def decode_json(value, :map) when is_map(value), do: {:ok, value}
+
+  def decode_json(value, :string) when is_binary(value), do: {:ok, value}
+
+  def decode_json(value, :uuid) when is_binary(value), do: {:ok, value}
+
+  def decode_json(_value, _type), do: :error
+
+  @doc """
   Translates an Elixir term held by entity structs into the value the Postgres driver exchanges, per attribute type.
   nil stays nil, :datetime values are normalized to their UTC representation, :enum atoms become strings, :uuid strings become 16-byte binaries - values of the other admitted types pass through unchanged.
   An :enum value that is a module is stored under its name without the "Elixir." prefix, which is the spelling the model declares it with.
