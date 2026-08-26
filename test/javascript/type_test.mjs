@@ -110,6 +110,34 @@ describe("Type", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("builds bitstring from hex digits when the encoding says so", () => {
+      const result = Type.bitstring("f091a3", "hex");
+
+      const expected = {
+        type: "bitstring",
+        text: null,
+        bytes: new Uint8Array([240, 145, 163]),
+        leftoverBitCount: 0,
+        hex: null,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("reads a string as text unless an encoding says otherwise", () => {
+      const result = Type.bitstring("f091a3");
+
+      const expected = {
+        type: "bitstring",
+        text: "f091a3",
+        bytes: null,
+        leftoverBitCount: 0,
+        hex: null,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("builds bitstring from segments array", () => {
       const segment1 = Type.bitstringSegment(Type.integer(97), {
         type: "integer",

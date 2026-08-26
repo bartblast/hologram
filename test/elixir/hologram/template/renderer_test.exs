@@ -2389,6 +2389,32 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, @env, @server) ==
                {~s'<div class="a &lt; b &lt; c &lt; d &lt; e"></div>', %{}, @server}
     end
+
+    test "text inside component prop" do
+      # <Module64 my_prop="abc < xyz" />
+      node = {:component, Module64, [{"my_prop", [text: "abc < xyz"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s'my_prop = &quot;abc &lt; xyz&quot;', %{}, @server}
+    end
+
+    test "expression inside component prop" do
+      # <Module64 my_prop={"abc < xyz"} />
+      node = {:component, Module64, [{"my_prop", [expression: {"abc < xyz"}]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s'my_prop = &quot;abc &lt; xyz&quot;', %{}, @server}
+    end
+
+    test "multi-part component prop" do
+      # <Module64 my_prop="a < b {"< c <"} d < e" />
+      node =
+        {:component, Module64,
+         [{"my_prop", [text: "a < b ", expression: {"< c <"}, text: " d < e"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s'my_prop = &quot;a &lt; b &lt; c &lt; d &lt; e&quot;', %{}, @server}
+    end
   end
 
   describe "stringify_for_script_interpolation/1" do
@@ -3132,6 +3158,16 @@ defmodule Hologram.Template.RendererTest do
 
       assert render_tree(node, @env, @server) ==
                {{:element, "div", [{"attr", [text: "ccc987 < eee"]}], []}, %{}, @server}
+    end
+
+    test "component node, prop value parts collapse to a single unescaped string" do
+      # <Module64 my_prop="ccc{987} < eee" />
+      node =
+        {:component, Module64, [{"my_prop", [text: "ccc", expression: {987}, text: " < eee"]}],
+         []}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:text, ~s'my_prop = "ccc987 < eee"'}], %{}, @server}
     end
 
     test "element node, attribute with an empty value list stays a boolean attribute" do

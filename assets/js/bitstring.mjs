@@ -333,6 +333,21 @@ export default class Bitstring {
     };
   }
 
+  // Reads the hex digits of the bytes, two per byte, lowercase - the spelling a binary that is
+  // not valid UTF-8 arrives in, since a string literal can carry text and nothing else. The hex
+  // cache is left empty: maybeResolveHex() owns it and derives it from the bytes in one spelling,
+  // so a map key never depends on how a caller happened to write its hex.
+  static fromHex(hex) {
+    const byteCount = hex.length >> 1;
+    const bytes = new Uint8Array(byteCount);
+
+    for (let i = 0, j = 0; j < byteCount; i += 2, j++) {
+      bytes[j] = parseInt(hex.slice(i, i + 2), 16);
+    }
+
+    return $.fromBytes(bytes);
+  }
+
   static fromSegments(segments) {
     const bitstrings = segments.map((segment) => {
       switch (segment.value.type) {

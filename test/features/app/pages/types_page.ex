@@ -30,7 +30,9 @@ defmodule HologramFeatureTests.TypesPage do
     <p>
       <button id="atom" $click="atom"> atom </button>
       <button id="bitstring (binary)" $click="bitstring (binary)"> bitstring (binary) </button>
+      <button id="bitstring (binary, not valid UTF-8)" $click="bitstring (binary, not valid UTF-8)"> bitstring (binary, not valid UTF-8) </button>
       <button id="bitstring (non-binary)" $click="bitstring (non-binary)"> bitstring (non-binary) </button>
+      <button id="bitstring (non-binary, not valid UTF-8)" $click="bitstring (non-binary, not valid UTF-8)"> bitstring (non-binary, not valid UTF-8) </button>
       <button id="float" $click="float"> float </button>
       <button id="integer" $click="integer"> integer </button>
       <button id="list" $click="list"> list </button>
@@ -75,8 +77,18 @@ defmodule HologramFeatureTests.TypesPage do
     put_command(component, :echo, term: term)
   end
 
+  def action(:"bitstring (binary, not valid UTF-8)", _params, component) do
+    term = <<240, 145, 163>>
+    put_command(component, :echo, term: term)
+  end
+
   def action(:"bitstring (non-binary)", _params, component) do
     term = <<1::1, 0::1, 1::1, 0::1>>
+    put_command(component, :echo, term: term)
+  end
+
+  def action(:"bitstring (non-binary, not valid UTF-8)", _params, component) do
+    term = <<255, 1::1>>
     put_command(component, :echo, term: term)
   end
 
