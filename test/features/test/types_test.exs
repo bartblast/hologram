@@ -21,12 +21,35 @@ defmodule HologramFeatureTests.TypesTest do
       |> assert_text(css("#result"), expected)
     end
 
+    # The term starts on the client and comes back inside the action the server sends. The way
+    # back is what is under test: the server writes the term into JavaScript, and a byte that is
+    # not valid UTF-8 has no place in a string literal.
+    feature "binary, not valid UTF-8", %{session: session} do
+      expected = inspect(<<240, 145, 163>>)
+
+      session
+      |> visit(TypesPage)
+      |> click(css("button[id='bitstring (binary, not valid UTF-8)']"))
+      |> assert_text(css("#result"), expected)
+    end
+
     feature "non-binary", %{session: session} do
       expected = inspect(<<1::1, 0::1, 1::1, 0::1>>)
 
       session
       |> visit(TypesPage)
       |> click(css("button[id='bitstring (non-binary)']"))
+      |> assert_text(css("#result"), expected)
+    end
+
+    # Macro.escape splits this into a one-bit integer segment and a one-byte binary segment; the
+    # binary segment is the part that has to travel as bytes.
+    feature "non-binary, not valid UTF-8", %{session: session} do
+      expected = inspect(<<255, 1::1>>)
+
+      session
+      |> visit(TypesPage)
+      |> click(css("button[id='bitstring (non-binary, not valid UTF-8)']"))
       |> assert_text(css("#result"), expected)
     end
   end
