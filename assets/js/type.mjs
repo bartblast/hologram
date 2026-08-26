@@ -59,9 +59,15 @@ export default class Type {
     return {type: "atom", value: value};
   }
 
-  static bitstring(arg) {
+  // A string is text unless an encoding says otherwise, the default Buffer.from() has as well.
+  // "hex" reads it as the hex digits of the bytes - how a binary that is not valid UTF-8 arrives,
+  // since the client reads a string literal back through UTF-8 and such bytes have no spelling
+  // there.
+  static bitstring(arg, encoding = "utf8") {
     if (typeof arg === "string") {
-      return Bitstring.fromText(arg);
+      return encoding === "hex"
+        ? Bitstring.fromHex(arg)
+        : Bitstring.fromText(arg);
     }
 
     if (arg.length > 0 && typeof arg[0] === "object") {

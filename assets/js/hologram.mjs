@@ -1141,6 +1141,12 @@ export default class Hologram {
   }
 
   static async #handlePopstateEvent(event) {
+    // The same boundary as #showNewPage, on the history's side of it: nothing of the destination
+    // exists yet, so every debounced or throttled dispatch still pending belongs to the page being
+    // left. It cannot wait for the restore below, which a popstate carrying no snapshot skips.
+    Debouncer.cancelAll();
+    Throttler.cancelAll();
+
     await $.#savePageSnapshot();
     $.#historyId = event.state;
 
@@ -1368,17 +1374,13 @@ export default class Hologram {
   }
 
   static #mountPage(isPageModuleRegistered = false) {
+    // Nothing pending from the page the user left is dropped here. It is dropped at the instant
+    // the user leaves instead - in #showNewPage and #handlePopstateEvent - which is the last
+    // point at which every pending timer provably belongs to the page being left.
+    //
     // Whichever pointer ran ahead during the transition, the mount is where they converge: from
     // here the page on screen and the page the registry answers for are the same page.
     $.domEpoch = $.registryEpoch = Math.max($.domEpoch, $.registryEpoch);
-
-    // Every page-entry path funnels through here (client-side navigation, back/forward
-    // restoration, initial mount), so this is where dispatches still pending from the previous
-    // page are dropped - the context they were meant for no longer exists. Cancel, not flush: a
-    // dispatch must never execute on a page the user has left. On the initial mount both
-    // cancellations are no-ops.
-    Debouncer.cancelAll();
-    Throttler.cancelAll();
 
     let mountData = null;
 
@@ -1516,6 +1518,15 @@ export default class Hologram {
     // runtime exists - so it is the one queue the epoch cannot speak for, and it is emptied by
     // hand.
     $.#pendingJsInteropActions = [];
+
+    // A debounce or a throttle holds its dispatch in a timer rather than in a queue, and a timer
+    // outlives the page that armed it. This line is the last instant that is still only the page
+    // being left - nothing of the destination is on screen, none of its listeners are attached,
+    // none of its scripts have run - so every timer pending here provably belongs to the page
+    // being left, and cancelling all of them takes nothing from the destination. Cancel, not
+    // flush: a dispatch must never execute on a page the user has left.
+    Debouncer.cancelAll();
+    Throttler.cancelAll();
 
     // The patch below puts the destination's markup on screen and runs its scripts, so the epoch
     // of what is displayed advances here, ahead of the registry - the mount brings the registry

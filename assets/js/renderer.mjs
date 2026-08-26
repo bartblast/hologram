@@ -2527,7 +2527,7 @@ export default class Renderer {
     return key;
   }
 
-  // WARNING: must match evaluate_attribute_value/1 on the server: parts evaluate raw and
+  // WARNING: must match value_dom_to_text/1 on the server: parts evaluate raw and
   // concatenate, with no escaping.
   static #valueDomToText(valueDom) {
     return Bitstring.toText(Renderer.valueDomToBitstring(valueDom));

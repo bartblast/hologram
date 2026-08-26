@@ -42,4 +42,24 @@ defmodule HologramFeatureTests.Events.ThrottleTest do
     |> sleep(3_000)
     |> assert_text(css("#layout_result"), "0")
   end
+
+  # The same guarantee down the history handler rather than the page swap, which is a separate
+  # entry point with its own cancellation. Two independent things keep the held dispatch off the
+  # restored page - it is cancelled when the page is left, and were it not, it carries the epoch
+  # of the page it was held on and would be dropped on settling - so this passes with either one
+  # alone. It is here to hold the pair on this path, not to single out the cancellation.
+  feature "going back to another page cancels a held trailing throttled dispatch",
+          %{session: session} do
+    session
+    |> visit(Page3)
+    |> click(link("Page 2 link"))
+    |> assert_page(Page2)
+    |> hover(css("#hover_zone"))
+    |> assert_text(css("#layout_result"), "1")
+    |> hover(css("#hover_zone_inner"))
+    |> go_back()
+    |> assert_page(Page3)
+    |> sleep(3_000)
+    |> assert_text(css("#layout_result"), "0")
+  end
 end

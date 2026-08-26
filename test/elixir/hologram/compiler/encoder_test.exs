@@ -745,6 +745,17 @@ defmodule Hologram.Compiler.EncoderTest do
                ~s/Type.bitstringSegment(Type.string(\"abc\"), {type: "utf8"})/
     end
 
+    test "from string type that is not valid UTF-8" do
+      # <<255>> - the segment Macro.escape makes of the byte-aligned part of a bitstring.
+      ir = %IR.BitstringSegment{
+        value: %IR.StringType{value: <<255>>},
+        modifiers: [type: :binary]
+      }
+
+      assert encode_ir(ir) ==
+               ~s/Type.bitstringSegment(Type.bitstring("ff", "hex"), {type: "binary"})/
+    end
+
     test "from non-string type" do
       # <<123::big>>
       ir = %IR.BitstringSegment{
@@ -3227,24 +3238,38 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == ~s/Type.bitstring("\u{1F600}")/
     end
 
-    test "single-byte char outside of the standard ASCII range" do
+    test "a byte that is not valid UTF-8 travels as hex" do
       ir = %IR.StringType{value: <<240>>}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\xF0")/
+      assert encode_ir(ir) == ~s/Type.bitstring("f0", "hex")/
     end
 
-    test "multiple single-byte chars outside of the standard ASCII range" do
+    test "bytes that are not valid UTF-8 travel as hex" do
       ir = %IR.StringType{value: <<240, 145, 163>>}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\xF0\\x91\\xA3")/
+      assert encode_ir(ir) == ~s/Type.bitstring("f091a3", "hex")/
     end
 
-    test "escapable chars inside a binary that is not text" do
-      # A binary holding a byte that is not valid UTF-8 takes the byte-walking path, which still
-      # has to escape everything the scanning path escapes.
+    test "escapable chars next to a byte that is not valid UTF-8 travel as hex with it" do
+      # Nothing is escaped in hex, since hex holds none of the chars that have to be escaped.
       ir = %IR.StringType{value: "a" <> <<240>> <> "\"<\n"}
 
-      assert encode_ir(ir) == ~s|Type.bitstring("a\\xF0\\"\\u{3C}\\n")|
+      assert encode_ir(ir) == ~s/Type.bitstring("61f0223c0a", "hex")/
+    end
+
+    test "text next to a byte that is not valid UTF-8 travels as hex with it" do
+      # A binary is text or it is not - a string literal cannot say which of its chars are bytes.
+      ir = %IR.StringType{value: "全" <> <<240>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("e585a8f0", "hex")/
+    end
+
+    test "the UTF-8 spelling of a surrogate is not text" do
+      # A JavaScript string can hold a lone surrogate and TextEncoder turns one into U+FFFD, so
+      # these bytes must never travel as text. String.valid?/1 rejects them.
+      ir = %IR.StringType{value: <<237, 160, 128>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("eda080", "hex")/
     end
 
     test "multiple chars that travel as themselves and chars that do not" do
@@ -3265,10 +3290,10 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "string type (property)" do
-    # Escaping runs through two paths that never meet in production: a native scan over the
-    # chars that have to be escaped, taken for text, and a byte walk taken for a binary that is
-    # not valid UTF-8. Nothing else in the suite would notice the two drifting apart, so both
-    # are checked here against the escaping rules written out directly.
+    # Text escaping is a native scan over the chars that have to be escaped, and a binary that is
+    # not text is not escaped at all but spelled as hex. Nothing else in the suite would notice
+    # either drifting from the rule it implements, so both are checked here against the rule
+    # written out directly.
 
     test "text escapes the same as walking it char by char" do
       # Seeded so a failure reproduces.
@@ -3283,15 +3308,16 @@ defmodule Hologram.Compiler.EncoderTest do
       end
     end
 
-    test "a binary that is not text escapes the same as walking it byte by byte" do
+    test "a binary that is not text travels as the hex of its bytes" do
       # Seeded so a failure reproduces.
       :rand.seed(:exsss, {4, 5, 6})
 
       for _index <- 1..2_000 do
-        value = random_bytes(60)
+        # 0xFF is valid UTF-8 nowhere, so whatever surrounds it the binary is not text.
+        value = random_bytes(30) <> <<0xFF>> <> random_bytes(30)
 
         assert encode_ir(%IR.StringType{value: value}) ==
-                 ~s/Type.bitstring("/ <> reference_escape(value) <> ~s/")/,
+                 ~s/Type.bitstring("/ <> reference_hex(value) <> ~s/", "hex")/,
                "failed for #{inspect(value, binaries: :as_binaries)}"
       end
     end
@@ -4522,6 +4548,16 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_term!("abc") == ~s/Type.bitstring("abc")/
     end
 
+    test "bitstring that is not valid UTF-8" do
+      assert encode_term!(<<240, 145, 163>>) == ~s/Type.bitstring("f091a3", "hex")/
+    end
+
+    test "bitstring that is not byte-aligned and not valid UTF-8" do
+      # Macro.escape makes this a one-bit integer segment followed by the rest as a binary.
+      assert encode_term!(<<255, 1::1>>) ==
+               ~s/Type.bitstring([Type.bitstringSegment(Type.integer(1n), {type: "integer", size: Type.integer(1n)}), Type.bitstringSegment(Type.bitstring("ff", "hex"), {type: "binary"})])/
+    end
+
     test "float, non-zero" do
       assert encode_term!(1.23) == "Type.float(1.23)"
     end
@@ -4609,9 +4645,15 @@ defmodule Hologram.Compiler.EncoderTest do
     [<<char::utf8>> | reference_escape_parts(rest)]
   end
 
-  defp reference_escape_parts(<<byte::integer, rest::binary>>) do
-    ["\\x#{Integer.to_string(byte, 16)}" | reference_escape_parts(rest)]
-  end
-
   defp reference_escape_parts(""), do: []
+
+  # The hex spelling, written out as a plain walk: two lowercase digits per byte, in order.
+  defp reference_hex(binary) do
+    for <<byte <- binary>>, into: "" do
+      byte
+      |> Integer.to_string(16)
+      |> String.downcase()
+      |> String.pad_leading(2, "0")
+    end
+  end
 end

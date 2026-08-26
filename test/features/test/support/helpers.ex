@@ -6,6 +6,7 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Realtime
   alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
+  alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
   alias Wallaby.Browser
   alias Wallaby.Element
   alias Wallaby.Query
@@ -350,6 +351,26 @@ defmodule HologramFeatureTests.Helpers do
   def send_keys(session, keys) do
     # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
     Browser.send_keys(session, List.wrap(keys) ++ [:null])
+  end
+
+  @doc """
+  Arms a delay on every page bundle this browser fetches from now on, then
+  returns the `session` so the helper can be piped.
+
+  A navigation shows the destination as soon as the server describes it and
+  mounts it once its bundle arrives. Over a local loop those two are
+  milliseconds apart, which is too narrow for a test to act in between. This
+  widens the gap to `delay_ms`.
+
+  Scoped by cookie, so concurrently running test files are unaffected. Navigates
+  to a blank page first, since a cookie cannot be set before the browser holds a
+  document.
+  """
+  @spec simulate_slow_page_bundle(Wallaby.Session.t(), pos_integer) :: Wallaby.Session.t()
+  def simulate_slow_page_bundle(session, delay_ms) do
+    session
+    |> visit("/external")
+    |> Browser.set_cookie(SlowPageBundle.cookie(), to_string(delay_ms))
   end
 
   @doc """

@@ -1407,6 +1407,50 @@ describe("Bitstring", () => {
     });
   });
 
+  describe("fromHex()", () => {
+    it("reads one byte", () => {
+      const result = Bitstring.fromHex("f0");
+
+      const expected = {
+        type: "bitstring",
+        text: null,
+        bytes: new Uint8Array([240]),
+        leftoverBitCount: 0,
+        hex: null,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("reads many bytes, the lowest and highest values among them", () => {
+      const result = Bitstring.fromHex("00f0ff");
+
+      const expected = {
+        type: "bitstring",
+        text: null,
+        bytes: new Uint8Array([0, 240, 255]),
+        leftoverBitCount: 0,
+        hex: null,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("reads no bytes from an empty string", () => {
+      const result = Bitstring.fromHex("");
+
+      const expected = {
+        type: "bitstring",
+        text: null,
+        bytes: new Uint8Array([]),
+        leftoverBitCount: 0,
+        hex: null,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("fromSegments()", () => {
     it("returns an empty bitstring for an empty array of segments", () => {
       assert.deepStrictEqual(Bitstring.fromSegments([]), Type.bitstring(""));

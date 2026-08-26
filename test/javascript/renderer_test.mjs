@@ -9375,6 +9375,64 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // Note: server-side version escapes
+    it("text inside component prop", () => {
+      // <Module64 my_prop="abc < xyz" />
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module64"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("my_prop"),
+            Type.keywordList([
+              [Type.atom("text"), Type.bitstring("abc < xyz")],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, ['my_prop = "abc < xyz"']);
+    });
+
+    // Note: server-side version escapes
+    it("multi-part component prop", () => {
+      // <Module64 my_prop="a < b {"< c <"} d < e" />
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module64"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("my_prop"),
+            Type.keywordList([
+              [Type.atom("text"), Type.bitstring("a < b ")],
+              [Type.atom("expression"), Type.tuple([Type.bitstring("< c <")])],
+              [Type.atom("text"), Type.bitstring(" d < e")],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, ['my_prop = "a < b < c < d < e"']);
+    });
+
     describe("client-side only", () => {
       describe("form inputs", () => {
         it("does not escape expressions in text input value attribute", () => {
