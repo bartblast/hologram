@@ -8,14 +8,19 @@ defmodule Hologram.Entity.Metadata do
   # based on. Every entity struct carries one, empty until a stage records into it or a read
   # fills it, so a reader never guards against nil and a clean struct always compares equal to
   # another.
+  #
+  # A write authored elsewhere carries its writer's stamp too, which the executor stores as the
+  # revision of every column the write sets, in place of one from this node's clock - the writer's
+  # next write says it was based on that exact value, so nothing may re-author it on the way in.
 
-  defstruct attribute_changes: %{}, claim: nil, relationship_ops: %{}, revisions: %{}
+  defstruct attribute_changes: %{}, claim: nil, relationship_ops: %{}, revisions: %{}, stamp: nil
 
   @type t :: %__MODULE__{
           attribute_changes: %{atom => any},
           claim: {:authorize, atom} | :trust | nil,
           relationship_ops: %{{atom, String.t()} => :add | :delete},
-          revisions: %{atom => pos_integer}
+          revisions: %{atom => pos_integer},
+          stamp: pos_integer | nil
         }
 
   # Rendered as what is recorded and nothing else - a clean struct shows an empty pair of
@@ -33,7 +38,8 @@ defmodule Hologram.Entity.Metadata do
             attribute_changes: metadata.attribute_changes,
             claim: metadata.claim,
             relationship_ops: metadata.relationship_ops,
-            revisions: metadata.revisions
+            revisions: metadata.revisions,
+            stamp: metadata.stamp
           ],
           fn {_name, value} -> value in [%{}, nil] end
         )

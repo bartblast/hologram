@@ -29,8 +29,8 @@ defmodule Hologram.DB.SchemaReconciler do
   # that changes nothing here leaves it alone.
   #
   # STILL 1 while the data layer is unreleased, deliberately. The outbox table, its two
-  # indexes and the migration table's model_hash column all arrived after this number was
-  # first set, and none of them has shipped: `lib/hologram/db` exists on neither master nor
+  # indexes, the migration table's model_hash column and the mutation table all arrived
+  # after this number was first set, and none of them has shipped: `lib/hologram/db` exists on neither master nor
   # dev, and the published package has no data layer at all. A version names a layout
   # someone can be RUNNING, so numbering the intermediate states of an unreleased branch
   # would invent layouts no database was ever built with.
@@ -41,7 +41,7 @@ defmodule Hologram.DB.SchemaReconciler do
   # never gains a later table or column on its own - the symptom is not subtle, and it has
   # been seen: a database claimed before the outbox existed makes every dispatcher poll
   # crash with `relation "hologram_system.outbox" does not exist`, and one claimed before this
-  # branch lacks the outbox's revisions column. Harmless only because no
+  # branch lacks the outbox's revisions column or the mutation table. Harmless only because no
   # such database exists outside this branch's local dev and test databases and CI's, which
   # are virgin per run - and until that upgrade exists a stale one is dropped and recreated
   # rather than carried forward.
@@ -51,7 +51,14 @@ defmodule Hologram.DB.SchemaReconciler do
   # The database table is the managed-database marker (single row, maintained by
   # write_marker/1) - the schema_object table is the managed-object registry - the
   # migration table records the applied migration versions - the outbox table records the
-  # effect each write had, written in the writing transaction and read by the dispatcher.
+  # effect each write had, written in the writing transaction and read by the dispatcher -
+  # the mutation table records each applied batch of client writes by the client that sent
+  # it and that client's sequence number, which is what answers a batch arriving twice.
+  #
+  # The mutation table keeps no envelope: the rows a batch wrote are in the outbox under
+  # mutation_ref, keyed by the same pair, so storing the batch here would store every write
+  # twice. A refused batch leaves no row at all - its claim rolls back with the transaction
+  # that refused it, and this table holds what happened.
   #
   # The outbox is read by transaction id rather than by insert order, because a sequence
   # hands out its numbers before the transaction holding them commits: a reader trusting
@@ -110,6 +117,17 @@ defmodule Hologram.DB.SchemaReconciler do
     """
     CREATE INDEX "outbox_inserted_at_$idx" ON "hologram_system"."outbox"
     USING brin ("inserted_at")
+    """,
+    """
+    CREATE TABLE "hologram_system"."mutation" (
+      "client_id" text NOT NULL,
+      "seq" bigint NOT NULL,
+      "actor_id" uuid,
+      "model_hash" text NOT NULL,
+      "result" jsonb,
+      "applied_at" timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY ("client_id", "seq")
+    )
     """,
     """
     CREATE TABLE "hologram_system"."schema_object" (

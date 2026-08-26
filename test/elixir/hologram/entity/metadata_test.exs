@@ -12,5 +12,10 @@ defmodule Hologram.Entity.MetadataTest do
       assert inspect(%Metadata{revisions: %{a: 3}}) ==
                "#Hologram.Entity.Metadata<revisions: %{a: 3}>"
     end
+
+    test "shows the stamp when set" do
+      assert inspect(%Metadata{stamp: 1_756_100_000_123_004}) ==
+               "#Hologram.Entity.Metadata<stamp: 1756100000123004>"
+    end
   end
 end

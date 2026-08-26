@@ -7,10 +7,12 @@ defmodule Hologram.DB.OutboxTest do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.Entity.Model
+  alias Hologram.Mutation.Ref
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
 
+  @client_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
 
@@ -46,14 +48,14 @@ defmodule Hologram.DB.OutboxTest do
     end)
   end
 
-  defp seed(tx, op, type_label, entity_id, data \\ nil, revisions \\ nil) do
+  defp seed(tx, op, type_label, entity_id, data \\ nil, revisions \\ nil, mutation_ref \\ nil) do
     statement = """
     INSERT INTO "hologram_system"."outbox"
-      ("op", "type", "entity_id", "data", "tx", "model_hash", "revisions")
-    VALUES ($1, $2, $3, $4, $5, 'seeded', $6)
+      ("op", "type", "entity_id", "data", "tx", "model_hash", "revisions", "mutation_ref")
+    VALUES ($1, $2, $3, $4, $5, 'seeded', $6, $7)
     """
 
-    params = [op, type_label, Codec.encode(entity_id, :uuid), data, tx, revisions]
+    params = [op, type_label, Codec.encode(entity_id, :uuid), data, tx, revisions, mutation_ref]
 
     {:ok, _result} = Connection.query(statement, params)
 
@@ -179,6 +181,23 @@ defmodule Hologram.DB.OutboxTest do
 
       assert [{200, [event]}] = read_window(200, 201)
       assert event.revisions == %{"a" => 5}
+    end
+
+    test "returns the batch the effect was written under" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, nil, nil, %{
+        client_id: @client_id,
+        seq: 7
+      })
+
+      assert [{200, [event]}] = read_window(200, 201)
+      assert event.mutation_ref == %{"client_id" => @client_id, "seq" => 7}
+    end
+
+    test "returns no batch for an effect written outside one" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      assert [{200, [event]}] = read_window(200, 201)
+      assert event.mutation_ref == nil
     end
 
     test "leaves out transactions below the window" do
@@ -340,8 +359,15 @@ defmodule Hologram.DB.OutboxTest do
       assert [%{actor_id: nil}] = rows()
     end
 
-    # Provenance beyond the actor arrives with mutations, which do not exist yet.
-    test "records no mutation reference" do
+    test "records the batch an effect was written under" do
+      effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
+
+      assert Ref.with_ref(%{client_id: @client_id, seq: 7}, fn -> append([effect]) end) == :ok
+
+      assert [%{mutation_ref: %{"client_id" => @client_id, "seq" => 7}}] = rows()
+    end
+
+    test "records no batch for an effect written outside one" do
       effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
 
       assert append([effect]) == :ok

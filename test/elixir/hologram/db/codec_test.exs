@@ -64,6 +64,116 @@ defmodule Hologram.DB.CodecTest do
     end
   end
 
+  describe "decode_json/2" do
+    test "reads nil back for any type" do
+      assert decode_json(nil, :datetime) == {:ok, nil}
+    end
+
+    test "reads :boolean values back" do
+      assert decode_json(false, :boolean) == {:ok, false}
+    end
+
+    test "reads :date values back from their ISO 8601 form" do
+      assert decode_json("2026-07-19", :date) == {:ok, ~D[2026-07-19]}
+    end
+
+    test "reads :datetime values back from their ISO 8601 form" do
+      assert decode_json("2026-07-18T08:30:00.123456Z", :datetime) ==
+               {:ok, ~U[2026-07-18 08:30:00.123456Z]}
+    end
+
+    test "reads a :datetime value given with an offset back as its UTC representation" do
+      assert decode_json("2026-07-18T10:30:00.123456+02:00", :datetime) ==
+               {:ok, ~U[2026-07-18 08:30:00.123456Z]}
+    end
+
+    test "reads :enum values back from their labels" do
+      assert decode_json("high", :enum) == {:ok, :high}
+    end
+
+    test "reads :enum values that are modules back from their labels" do
+      assert decode_json("Hologram.Test.Fixtures.Role.Module1", :enum) == {:ok, Module1}
+    end
+
+    test "reads :float values back" do
+      assert decode_json(2.5, :float) == {:ok, 2.5}
+    end
+
+    # Compared strictly: an integer equals the float of the same value under ==, so the
+    # assertion would hold against a clause that did not convert at all.
+    test "reads a whole number back as a :float value" do
+      assert decode_json(2, :float) === {:ok, 2.0}
+    end
+
+    test "reads :integer values back" do
+      assert decode_json(11, :integer) == {:ok, 11}
+    end
+
+    test "reads a map back" do
+      assert decode_json(%{"title" => 3}, :map) == {:ok, %{"title" => 3}}
+    end
+
+    test "reads :string values back" do
+      assert decode_json("xyz", :string) == {:ok, "xyz"}
+    end
+
+    test "reads :uuid values back as they are spelled" do
+      assert decode_json(@uuid_string, :uuid) == {:ok, @uuid_string}
+    end
+
+    test "reads back every value encode_json/2 writes" do
+      values = [
+        {false, :boolean},
+        {~D[2026-07-19], :date},
+        {~U[2026-07-18 08:30:00.123456Z], :datetime},
+        {Module1, :enum},
+        {2.5, :float},
+        {11, :integer},
+        {%{"title" => 3}, :map},
+        {"xyz", :string},
+        {@uuid_string, :uuid}
+      ]
+
+      round_tripped =
+        Enum.map(values, fn {value, type} ->
+          {:ok, decoded} =
+            value
+            |> encode_json(type)
+            |> Jason.encode!()
+            |> Jason.decode!()
+            |> decode_json(type)
+
+          {decoded, type}
+        end)
+
+      assert round_tripped == values
+    end
+
+    # An integer with arbitrary precision cannot always become a 64-bit float, and the promotion
+    # raises rather than saturating - so the refusal has to be an answer, not an exception.
+    test "refuses an integer too large to be a :float value" do
+      too_large =
+        "9"
+        |> String.duplicate(400)
+        |> String.to_integer()
+
+      assert decode_json(too_large, :float) == :error
+    end
+
+    test "refuses a value that is not the type's JSON form" do
+      assert decode_json("yes", :boolean) == :error
+      assert decode_json("2026-13-40", :date) == :error
+      assert decode_json("not a datetime", :datetime) == :error
+      assert decode_json("no_such_label_for_codec_test", :enum) == :error
+      assert decode_json("No.Such.Module.For.Codec.Test", :enum) == :error
+      assert decode_json("2.5", :float) == :error
+      assert decode_json("1", :integer) == :error
+      assert decode_json([], :map) == :error
+      assert decode_json(1, :string) == :error
+      assert decode_json(1, :uuid) == :error
+    end
+  end
+
   describe "encode/2" do
     test "passes nil through for any type" do
       assert encode(nil, :string) == nil

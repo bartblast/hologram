@@ -63,8 +63,11 @@ defmodule Hologram.DB.Writer do
   @doc false
   @spec update(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity) do
-    %Metadata{attribute_changes: attribute_changes, relationship_ops: relationship_ops} =
-      entity.__meta__
+    %Metadata{
+      attribute_changes: attribute_changes,
+      relationship_ops: relationship_ops,
+      stamp: stamp
+    } = entity.__meta__
 
     if attribute_changes == %{} and relationship_ops == %{} do
       raise ArgumentError,
@@ -83,7 +86,7 @@ defmodule Hologram.DB.Writer do
 
         evaluate!(entity, :update, row)
 
-        apply_update(entity_type, entity.id, attribute_changes, relationship_ops)
+        apply_update(entity_type, entity.id, attribute_changes, relationship_ops, stamp)
       end)
 
     applied
@@ -131,17 +134,19 @@ defmodule Hologram.DB.Writer do
 
   # The attribute changes go first and the edges follow, all inside one transaction: a refused
   # value leaves the edges unapplied, and an edge that raises takes the values with it.
-  defp apply_update(entity_type, id, attribute_changes, relationship_ops) do
-    case update_attributes(entity_type, id, attribute_changes) do
+  defp apply_update(entity_type, id, attribute_changes, relationship_ops, stamp) do
+    case update_attributes(entity_type, id, attribute_changes, stamp) do
       :ok -> apply_relationship_ops(entity_type, id, relationship_ops)
       {:error, violations} -> {:error, violations}
     end
   end
 
   # The executor returns what the row IS - the metadata the struct carried toward the write is
-  # consumed here, and the stamped entity a create answers with starts over.
+  # consumed here, and the stamped entity a create answers with starts over. The stamp goes
+  # through: it does not describe the write, it is the revision the write is to be stored under,
+  # and the insert is the only thing that can apply it.
   defp clean(entity) do
-    %{entity | __meta__: %Metadata{}}
+    %{entity | __meta__: %Metadata{stamp: entity.__meta__.stamp}}
   end
 
   # Which authority the write is on, and for which operation. A trust claim is the server's own
@@ -186,11 +191,15 @@ defmodule Hologram.DB.Writer do
     end
   end
 
-  defp update_attributes(_entity_type, _id, attribute_changes)
+  defp update_attributes(_entity_type, _id, attribute_changes, _stamp)
        when map_size(attribute_changes) == 0,
        do: :ok
 
-  defp update_attributes(entity_type, id, attribute_changes) do
-    EntityOperations.update(entity_type, id, attribute_changes)
+  defp update_attributes(entity_type, id, attribute_changes, stamp) do
+    # An absent stamp is left absent rather than passed as nil: the option's presence is what
+    # says a revision was authored elsewhere, and a nil under the key would reach the statement.
+    opts = if stamp, do: [stamp: stamp], else: []
+
+    EntityOperations.update(entity_type, id, attribute_changes, opts)
   end
 end
