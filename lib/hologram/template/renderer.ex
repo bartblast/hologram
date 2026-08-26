@@ -114,11 +114,10 @@ defmodule Hologram.Template.Renderer do
   defmodule Env do
     @moduledoc false
 
-    defstruct context: %{}, node_type: nil, slots: [], tag_name: nil
+    defstruct context: %{}, slots: [], tag_name: nil
 
     @type t :: %__MODULE__{
             context: %{(atom | {any, atom}) => any},
-            node_type: :attribute | :element | :property | :public_comment | nil,
             slots: keyword(DOM.t()),
             tag_name: String.t() | nil
           }
@@ -451,7 +450,7 @@ defmodule Hologram.Template.Renderer do
   def render_tree({:element, tag_name, attrs_dom, children_dom}, %Env{} = env, server_struct) do
     attributes = render_tree_attributes(attrs_dom)
 
-    children_env = %Env{env | node_type: :element, tag_name: tag_name}
+    children_env = %Env{env | tag_name: tag_name}
 
     {children, component_registry, mutated_server_struct} =
       render_tree(children_dom, children_env, server_struct)
@@ -487,10 +486,8 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render_tree({:public_comment, children_dom}, %Env{} = env, server_struct) do
-    children_env = %Env{env | node_type: :public_comment}
-
     {children, component_registry, mutated_server_struct} =
-      render_tree(children_dom, children_env, server_struct)
+      render_tree(children_dom, env, server_struct)
 
     {{:public_comment, children}, component_registry, mutated_server_struct}
   end
@@ -644,9 +641,10 @@ defmodule Hologram.Template.Renderer do
   end
 
   # WARNING: must match the client renderer's #valueDomToText: parts evaluate raw and concatenate,
-  # with no escaping - the value lands in the DOM through setAttribute on the client, and the HTML
-  # projection escapes at print time.
-  defp evaluate_attribute_value(value_dom) do
+  # with no escaping. An attribute value lands in the DOM through setAttribute on the client, a
+  # prop is a value a component receives rather than markup, and the HTML projection escapes
+  # either one at print time.
+  defp value_dom_to_text(value_dom) do
     Enum.map_join(value_dom, fn
       {:text, text} -> text
       {:expression, {value}} -> to_string(value)
@@ -661,11 +659,11 @@ defmodule Hologram.Template.Renderer do
     {name, value}
   end
 
+  # WARNING: must match the client renderer's #evalutatePropValue: parts evaluate raw and
+  # concatenate, with no escaping. A prop is a value the component receives rather than markup,
+  # so the HTML projection escapes it at print time, like every other text the tree holds.
   defp evaluate_prop_value({name, value_dom}) do
-    {value_str, %{}, _server_struct} =
-      render_dom(value_dom, %Env{node_type: :property}, %Server{})
-
-    {name, value_str}
+    {name, value_dom_to_text(value_dom)}
   end
 
   defp expand_attribute(attr_dom)
@@ -1025,7 +1023,7 @@ defmodule Hologram.Template.Renderer do
   defp render_tree_attribute({_name, [expression: {false}]}), do: nil
 
   defp render_tree_attribute({name, value_dom}) do
-    {name, [text: evaluate_attribute_value(value_dom)]}
+    {name, [text: value_dom_to_text(value_dom)]}
   end
 
   # Event bindings stay behind: they are built from compile-time listener information the tree
