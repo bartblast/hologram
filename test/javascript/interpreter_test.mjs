@@ -4915,6 +4915,90 @@ describe("Interpreter", () => {
 
       assert.isFalse(result);
     });
+
+    // [1] == [1.0]
+    it("returns true for a boxed list holding an integer equal to a list holding a float", () => {
+      const left = Type.list([Type.integer(1)]);
+      const right = Type.list([Type.float(1.0)]);
+
+      assert.isTrue(Interpreter.isEqual(left, right));
+    });
+
+    // [1] == [2.0]
+    it("returns false for a boxed list holding an integer not equal to a list holding a float", () => {
+      const left = Type.list([Type.integer(1)]);
+      const right = Type.list([Type.float(2.0)]);
+
+      assert.isFalse(Interpreter.isEqual(left, right));
+    });
+
+    // [[1]] == [[1.0]]
+    it("returns true for nested boxed lists holding an integer and a float of the same value", () => {
+      const left = Type.list([Type.list([Type.integer(1)])]);
+      const right = Type.list([Type.list([Type.float(1.0)])]);
+
+      assert.isTrue(Interpreter.isEqual(left, right));
+    });
+
+    // [1 | 2] == [1 | 2.0]
+    it("returns true for boxed improper lists whose tails are an integer and a float of the same value", () => {
+      const left = Type.improperList([Type.integer(1), Type.integer(2)]);
+      const right = Type.improperList([Type.integer(1), Type.float(2.0)]);
+
+      assert.isTrue(Interpreter.isEqual(left, right));
+    });
+
+    // [1 | 2] == [1, 2]
+    it("returns false for a boxed improper list compared to a proper list with the same items", () => {
+      const left = Type.improperList([Type.integer(1), Type.integer(2)]);
+      const right = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assert.isFalse(Interpreter.isEqual(left, right));
+    });
+
+    // {1} == {1.0}
+    it("returns true for a boxed tuple holding an integer equal to a tuple holding a float", () => {
+      const left = Type.tuple([Type.integer(1)]);
+      const right = Type.tuple([Type.float(1.0)]);
+
+      assert.isTrue(Interpreter.isEqual(left, right));
+    });
+
+    // %{a: 1} == %{a: 1.0}
+    it("returns true for a boxed map whose value is an integer equal to a map whose value is a float", () => {
+      const left = Type.map([[Type.atom("a"), Type.integer(1)]]);
+      const right = Type.map([[Type.atom("a"), Type.float(1.0)]]);
+
+      assert.isTrue(Interpreter.isEqual(left, right));
+    });
+
+    // %{a: 1} == %{a: 1, b: 2}
+    it("returns false for a boxed map compared to a map holding it plus another key", () => {
+      const left = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+      const right = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      assert.isFalse(Interpreter.isEqual(left, right));
+    });
+
+    // %{1 => :x} == %{1.0 => :x}
+    it("returns false for boxed maps whose keys are an integer and a float of the same value", () => {
+      const left = Type.map([[Type.integer(1), Type.atom("x")]]);
+      const right = Type.map([[Type.float(1.0), Type.atom("x")]]);
+
+      assert.isFalse(Interpreter.isEqual(left, right));
+    });
+
+    // [1] == {1}
+    it("returns false for a boxed list compared to a boxed tuple with the same items", () => {
+      const left = Type.list([Type.integer(1)]);
+      const right = Type.tuple([Type.integer(1)]);
+
+      assert.isFalse(Interpreter.isEqual(left, right));
+    });
   });
 
   describe("isMatched()", () => {
@@ -5240,6 +5324,53 @@ describe("Interpreter", () => {
         ]);
 
         assert.isFalse(isStrictlyEqual(map1, map2));
+      });
+
+      it("left map is a subset of the right map", () => {
+        const map1 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+        const map2 = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]);
+
+        assert.isFalse(isStrictlyEqual(map1, map2));
+      });
+
+      it("right map is a subset of the left map", () => {
+        const map1 = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]);
+
+        const map2 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+        assert.isFalse(isStrictlyEqual(map1, map2));
+      });
+
+      it("same size, different keys", () => {
+        const map1 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+        const map2 = Type.map([[Type.atom("b"), Type.integer(1)]]);
+
+        assert.isFalse(isStrictlyEqual(map1, map2));
+      });
+
+      it("left map is empty, right map is not", () => {
+        const map1 = Type.map();
+        const map2 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+        assert.isFalse(isStrictlyEqual(map1, map2));
+      });
+
+      it("right map is empty, left map is not", () => {
+        const map1 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+        const map2 = Type.map();
+
+        assert.isFalse(isStrictlyEqual(map1, map2));
+      });
+
+      it("both maps are empty", () => {
+        assert.isTrue(isStrictlyEqual(Type.map(), Type.map()));
       });
     });
 
@@ -9348,6 +9479,28 @@ describe("Interpreter", () => {
         ]);
 
         const right = Type.list([Type.integer(1), Type.integer(2)]);
+
+        assertBoxedError(
+          () => Interpreter.matchOperator(right, left, context),
+          "MatchError",
+          buildMatchErrorMsg(right),
+        );
+      });
+
+      // [x, x] = [%{a: 1}, %{a: 1, b: 2}]
+      it("multiple variables with the same name being matched to a map and its superset", () => {
+        const left = Type.list([
+          Type.variablePattern("x"),
+          Type.variablePattern("x"),
+        ]);
+
+        const right = Type.list([
+          Type.map([[Type.atom("a"), Type.integer(1)]]),
+          Type.map([
+            [Type.atom("a"), Type.integer(1)],
+            [Type.atom("b"), Type.integer(2)],
+          ]),
+        ]);
 
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),

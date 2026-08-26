@@ -104,6 +104,19 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionTest do
     end
   end
 
+  describe "unique" do
+    # The expected text is a literal rather than inspect/1, because the page renders with
+    # Hologram.Commons.KernelUtils.inspect/1, which sorts map keys, while Kernel.inspect/1
+    # prints them in the VM's per-boot order. Building the expectation with inspect/1 here
+    # would pass or fail depending on the boot.
+    feature "keeps a map and its subset, which are distinct items", %{session: session} do
+      session
+      |> visit(ComprehensionPage)
+      |> click(button("Unique with a map and its subset"))
+      |> assert_text(css("#result"), ~s([%{a: 1, b: 2}, %{a: 1}]))
+    end
+  end
+
   describe "reducer" do
     feature "accumulates over a single enumerable generator", %{session: session} do
       session

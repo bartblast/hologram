@@ -34,6 +34,7 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionPage do
       <button $click="reducer_with_selective_filter"> Reducer with selective filter </button>
       <button $click="reducer_with_single_generator"> Reducer with single generator </button>
       <button $click="reducer_with_unmatched_accumulator"> Reducer with unmatched accumulator </button>
+      <button $click="unique_with_map_and_subset"> Unique with a map and its subset </button>
     </p>
     <p>
       <button $click="generator_with_struct_pattern"> Generator with struct pattern </button>
@@ -177,6 +178,12 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionPage do
     for x <- [1], reduce: 0 do
       :nomatch -> x
     end
+  end
+
+  def action(:unique_with_map_and_subset, _params, component) do
+    result = for x <- [%{a: 1, b: 2}, %{a: 1}], uniq: true, do: x
+
+    put_state(component, :result, result)
   end
 
   def action(:generator_with_struct_pattern, _params, component) do
