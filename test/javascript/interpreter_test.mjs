@@ -4915,6 +4915,90 @@ describe("Interpreter", () => {
 
       assert.isFalse(result);
     });
+
+    // [1] == [1.0]
+    it("returns true for a boxed list holding an integer equal to a list holding a float", () => {
+      const left = Type.list([Type.integer(1)]);
+      const right = Type.list([Type.float(1.0)]);
+
+      assert.isTrue(Interpreter.isEqual(left, right));
+    });
+
+    // [1] == [2.0]
+    it("returns false for a boxed list holding an integer not equal to a list holding a float", () => {
+      const left = Type.list([Type.integer(1)]);
+      const right = Type.list([Type.float(2.0)]);
+
+      assert.isFalse(Interpreter.isEqual(left, right));
+    });
+
+    // [[1]] == [[1.0]]
+    it("returns true for nested boxed lists holding an integer and a float of the same value", () => {
+      const left = Type.list([Type.list([Type.integer(1)])]);
+      const right = Type.list([Type.list([Type.float(1.0)])]);
+
+      assert.isTrue(Interpreter.isEqual(left, right));
+    });
+
+    // [1 | 2] == [1 | 2.0]
+    it("returns true for boxed improper lists whose tails are an integer and a float of the same value", () => {
+      const left = Type.improperList([Type.integer(1), Type.integer(2)]);
+      const right = Type.improperList([Type.integer(1), Type.float(2.0)]);
+
+      assert.isTrue(Interpreter.isEqual(left, right));
+    });
+
+    // [1 | 2] == [1, 2]
+    it("returns false for a boxed improper list compared to a proper list with the same items", () => {
+      const left = Type.improperList([Type.integer(1), Type.integer(2)]);
+      const right = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assert.isFalse(Interpreter.isEqual(left, right));
+    });
+
+    // {1} == {1.0}
+    it("returns true for a boxed tuple holding an integer equal to a tuple holding a float", () => {
+      const left = Type.tuple([Type.integer(1)]);
+      const right = Type.tuple([Type.float(1.0)]);
+
+      assert.isTrue(Interpreter.isEqual(left, right));
+    });
+
+    // %{a: 1} == %{a: 1.0}
+    it("returns true for a boxed map whose value is an integer equal to a map whose value is a float", () => {
+      const left = Type.map([[Type.atom("a"), Type.integer(1)]]);
+      const right = Type.map([[Type.atom("a"), Type.float(1.0)]]);
+
+      assert.isTrue(Interpreter.isEqual(left, right));
+    });
+
+    // %{a: 1} == %{a: 1, b: 2}
+    it("returns false for a boxed map compared to a map holding it plus another key", () => {
+      const left = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+      const right = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      assert.isFalse(Interpreter.isEqual(left, right));
+    });
+
+    // %{1 => :x} == %{1.0 => :x}
+    it("returns false for boxed maps whose keys are an integer and a float of the same value", () => {
+      const left = Type.map([[Type.integer(1), Type.atom("x")]]);
+      const right = Type.map([[Type.float(1.0), Type.atom("x")]]);
+
+      assert.isFalse(Interpreter.isEqual(left, right));
+    });
+
+    // [1] == {1}
+    it("returns false for a boxed list compared to a boxed tuple with the same items", () => {
+      const left = Type.list([Type.integer(1)]);
+      const right = Type.tuple([Type.integer(1)]);
+
+      assert.isFalse(Interpreter.isEqual(left, right));
+    });
   });
 
   describe("isMatched()", () => {
