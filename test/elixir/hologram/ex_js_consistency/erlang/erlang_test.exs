@@ -1103,7 +1103,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "list holding an integer =< list holding a float of the same value" do
-      assert :erlang."=<"([1], [1.0]) == true
+      left = wrap_term([1])
+      right = wrap_term([1.0])
+
+      assert :erlang."=<"(left, right) == true
     end
 
     # TODO: reference, function, port, map, bitstring
@@ -1559,7 +1562,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "list holding an integer >= list holding a float of the same value" do
-      assert :erlang.>=([1], [1.0]) == true
+      left = wrap_term([1])
+      right = wrap_term([1.0])
+
+      assert :erlang.>=(left, right) == true
     end
 
     # TODO: reference, function, port, map, bitstring
