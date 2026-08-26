@@ -1594,9 +1594,9 @@ export default class Interpreter {
     const data1 = map1.data;
     const data2 = map2.data;
 
-    if (data1.length !== data2.length) return false;
-
     const keys = Object.keys(data1);
+
+    if (keys.length !== Object.keys(data2).length) return false;
 
     for (let i = 0; i < keys.length; ++i) {
       const key = keys[i];
