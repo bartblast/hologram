@@ -5241,6 +5241,53 @@ describe("Interpreter", () => {
 
         assert.isFalse(isStrictlyEqual(map1, map2));
       });
+
+      it("left map is a subset of the right map", () => {
+        const map1 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+        const map2 = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]);
+
+        assert.isFalse(isStrictlyEqual(map1, map2));
+      });
+
+      it("right map is a subset of the left map", () => {
+        const map1 = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]);
+
+        const map2 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+        assert.isFalse(isStrictlyEqual(map1, map2));
+      });
+
+      it("same size, different keys", () => {
+        const map1 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+        const map2 = Type.map([[Type.atom("b"), Type.integer(1)]]);
+
+        assert.isFalse(isStrictlyEqual(map1, map2));
+      });
+
+      it("left map is empty, right map is not", () => {
+        const map1 = Type.map();
+        const map2 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+        assert.isFalse(isStrictlyEqual(map1, map2));
+      });
+
+      it("right map is empty, left map is not", () => {
+        const map1 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+        const map2 = Type.map();
+
+        assert.isFalse(isStrictlyEqual(map1, map2));
+      });
+
+      it("both maps are empty", () => {
+        assert.isTrue(isStrictlyEqual(Type.map(), Type.map()));
+      });
     });
 
     describe("PIDs", () => {
@@ -9348,6 +9395,28 @@ describe("Interpreter", () => {
         ]);
 
         const right = Type.list([Type.integer(1), Type.integer(2)]);
+
+        assertBoxedError(
+          () => Interpreter.matchOperator(right, left, context),
+          "MatchError",
+          buildMatchErrorMsg(right),
+        );
+      });
+
+      // [x, x] = [%{a: 1}, %{a: 1, b: 2}]
+      it("multiple variables with the same name being matched to a map and its superset", () => {
+        const left = Type.list([
+          Type.variablePattern("x"),
+          Type.variablePattern("x"),
+        ]);
+
+        const right = Type.list([
+          Type.map([[Type.atom("a"), Type.integer(1)]]),
+          Type.map([
+            [Type.atom("a"), Type.integer(1)],
+            [Type.atom("b"), Type.integer(2)],
+          ]),
+        ]);
 
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
