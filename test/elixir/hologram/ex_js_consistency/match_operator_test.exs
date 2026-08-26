@@ -975,6 +975,21 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
         [x, x] = wrap_term([1, 2])
       end
     end
+
+    # [x, x] = [%{a: 1}, %{a: 1, b: 2}]
+    #
+    # The expected message is built with Kernel.inspect/1 rather than
+    # build_match_error_msg/1, because the latter sorts map keys (sort_maps: true)
+    # while a real MatchError message does not. Both engines print map keys in
+    # their own unsorted order, so each side asserts against its own inspect.
+    test "multiple variables with the same name being matched to a map and its superset" do
+      right = [%{a: 1}, %{a: 1, b: 2}]
+      expected_msg = "no match of right hand side value:\n\n    #{inspect(right)}\n"
+
+      assert_error MatchError, expected_msg, fn ->
+        [x, x] = wrap_term(right)
+      end
+    end
   end
 
   # IMPORTANT!

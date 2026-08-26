@@ -9402,6 +9402,28 @@ describe("Interpreter", () => {
           buildMatchErrorMsg(right),
         );
       });
+
+      // [x, x] = [%{a: 1}, %{a: 1, b: 2}]
+      it("multiple variables with the same name being matched to a map and its superset", () => {
+        const left = Type.list([
+          Type.variablePattern("x"),
+          Type.variablePattern("x"),
+        ]);
+
+        const right = Type.list([
+          Type.map([[Type.atom("a"), Type.integer(1)]]),
+          Type.map([
+            [Type.atom("a"), Type.integer(1)],
+            [Type.atom("b"), Type.integer(2)],
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => Interpreter.matchOperator(right, left, context),
+          "MatchError",
+          buildMatchErrorMsg(right),
+        );
+      });
     });
 
     describe("named function params", () => {
