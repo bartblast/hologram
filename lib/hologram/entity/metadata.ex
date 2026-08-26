@@ -2,21 +2,27 @@ defmodule Hologram.Entity.Metadata do
   @moduledoc false
 
   # The framework's own state on an entity struct, held under its __meta__ field: the write the
-  # struct is carrying - the attribute values put on it, the relationship edges to add or delete,
-  # and the authority claimed for it - which the DB verbs read and apply, and, for a struct that
-  # was read, the revision each settable column was last set at - what a write will say it was
-  # based on. Every entity struct carries one, empty until a stage records into it or a read
-  # fills it, so a reader never guards against nil and a clean struct always compares equal to
-  # another.
+  # struct is carrying - the attribute values put on it, the amounts its integer attributes are to
+  # move by, the relationship edges to add or delete, and the authority claimed for it - which the
+  # DB verbs read and apply, and, for a struct that was read, the revision each settable column
+  # was last set at - what a write will say it was based on. Every entity struct carries one,
+  # empty until a stage records into it or a read fills it, so a reader never guards against nil
+  # and a clean struct always compares equal to another.
   #
   # A write authored elsewhere carries its writer's stamp too, which the executor stores as the
   # revision of every column the write sets, in place of one from this node's clock - the writer's
   # next write says it was based on that exact value, so nothing may re-author it on the way in.
 
-  defstruct attribute_changes: %{}, claim: nil, relationship_ops: %{}, revisions: %{}, stamp: nil
+  defstruct attribute_changes: %{},
+            attribute_deltas: %{},
+            claim: nil,
+            relationship_ops: %{},
+            revisions: %{},
+            stamp: nil
 
   @type t :: %__MODULE__{
           attribute_changes: %{atom => any},
+          attribute_deltas: %{atom => integer},
           claim: {:authorize, atom} | :trust | nil,
           relationship_ops: %{{atom, String.t()} => :add | :delete},
           revisions: %{atom => pos_integer},
@@ -36,6 +42,7 @@ defmodule Hologram.Entity.Metadata do
         Enum.reject(
           [
             attribute_changes: metadata.attribute_changes,
+            attribute_deltas: metadata.attribute_deltas,
             claim: metadata.claim,
             relationship_ops: metadata.relationship_ops,
             revisions: metadata.revisions,
