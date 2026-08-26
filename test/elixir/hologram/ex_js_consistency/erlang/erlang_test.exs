@@ -759,7 +759,27 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=/="({1, 2, 3}, {1, 2}) == true
     end
 
-    # TODO: reference, function, port, map, list, bitstring
+    test "map == map" do
+      assert :erlang."=/="(%{a: 1, b: 2}, %{a: 1, b: 2}) == false
+    end
+
+    test "map is a subset of the other map" do
+      assert :erlang."=/="(%{a: 1}, %{a: 1, b: 2}) == true
+    end
+
+    test "map is a superset of the other map" do
+      assert :erlang."=/="(%{a: 1, b: 2}, %{a: 1}) == true
+    end
+
+    test "maps of the same size with different keys" do
+      assert :erlang."=/="(%{a: 1}, %{b: 1}) == true
+    end
+
+    test "empty map == non-empty map" do
+      assert :erlang."=/="(%{}, %{a: 1}) == true
+    end
+
+    # TODO: reference, function, port, list, bitstring
   end
 
   describe "=:=/2" do
@@ -869,7 +889,27 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=:="({1, 2, 3}, {1, 2}) == false
     end
 
-    # TODO: reference, function, port, map, list, bitstring
+    test "map == map" do
+      assert :erlang."=:="(%{a: 1, b: 2}, %{a: 1, b: 2}) == true
+    end
+
+    test "map is a subset of the other map" do
+      assert :erlang."=:="(%{a: 1}, %{a: 1, b: 2}) == false
+    end
+
+    test "map is a superset of the other map" do
+      assert :erlang."=:="(%{a: 1, b: 2}, %{a: 1}) == false
+    end
+
+    test "maps of the same size with different keys" do
+      assert :erlang."=:="(%{a: 1}, %{b: 1}) == false
+    end
+
+    test "empty map == non-empty map" do
+      assert :erlang."=:="(%{}, %{a: 1}) == false
+    end
+
+    # TODO: reference, function, port, list, bitstring
   end
 
   describe "=</2" do
