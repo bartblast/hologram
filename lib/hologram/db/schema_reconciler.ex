@@ -41,7 +41,8 @@ defmodule Hologram.DB.SchemaReconciler do
   # never gains a later table or column on its own - the symptom is not subtle, and it has
   # been seen: a database claimed before the outbox existed makes every dispatcher poll
   # crash with `relation "hologram_system.outbox" does not exist`, and one claimed before this
-  # branch lacks the outbox's revisions column or the mutation table. Harmless only because no
+  # branch lacks the outbox's revisions column, the mutation table, or that table's envelope
+  # column. Harmless only because no
   # such database exists outside this branch's local dev and test databases and CI's, which
   # are virgin per run - and until that upgrade exists a stale one is dropped and recreated
   # rather than carried forward.
@@ -52,13 +53,15 @@ defmodule Hologram.DB.SchemaReconciler do
   # write_marker/1) - the schema_object table is the managed-object registry - the
   # migration table records the applied migration versions - the outbox table records the
   # effect each write had, written in the writing transaction and read by the dispatcher -
-  # the mutation table records each applied batch of client writes by the client that sent
-  # it and that client's sequence number, which is what answers a batch arriving twice.
+  # the mutation table records each batch of client writes the server ANSWERED, by the
+  # client that sent it and that client's sequence number, which is what answers a batch
+  # arriving twice - and keeps a refused batch as it arrived, since its rows reached no log.
   #
-  # The mutation table keeps no envelope: the rows a batch wrote are in the outbox under
-  # mutation_ref, keyed by the same pair, so storing the batch here would store every write
-  # twice. A refused batch leaves no row at all - its claim rolls back with the transaction
-  # that refused it, and this table holds what happened.
+  # The envelope column is filled for a refused batch only. A batch that LANDED has its rows
+  # in the outbox under mutation_ref, keyed by the same pair, so keeping them here would keep
+  # every write twice - a refused batch's rows are nowhere else, which is what this column is
+  # for. A refused batch's claim rolls back with its transaction, and its row is written
+  # afterwards, on its own statement.
   #
   # The outbox is read by transaction id rather than by insert order, because a sequence
   # hands out its numbers before the transaction holding them commits: a reader trusting
@@ -125,7 +128,8 @@ defmodule Hologram.DB.SchemaReconciler do
       "actor_id" uuid,
       "model_hash" text NOT NULL,
       "result" jsonb,
-      "applied_at" timestamptz NOT NULL DEFAULT now(),
+      "envelope" jsonb,
+      "answered_at" timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY ("client_id", "seq")
     )
     """,

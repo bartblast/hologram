@@ -7,7 +7,9 @@ defmodule Hologram.Mutation.RecordTest do
   alias Hologram.DB.Connection
   alias Hologram.Entity
 
+  @answer %{"reason" => "Type.atom(\"not_found\")", "status" => "rejected", "write" => 0}
   @client_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
+  @envelope %{"client_id" => "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f", "seq" => 1, "writes" => []}
   @other_client_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
 
   defp claim(client_id, seq, actor_id \\ nil, model_hash \\ "h") do
@@ -16,18 +18,19 @@ defmodule Hologram.Mutation.RecordTest do
 
   defp rows do
     statement = """
-    SELECT "client_id", "seq", "actor_id", "model_hash", "result", "applied_at"
+    SELECT "client_id", "seq", "actor_id", "model_hash", "result", "envelope", "answered_at"
     FROM "hologram_system"."mutation"
     ORDER BY "client_id", "seq"
     """
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
 
-    Enum.map(rows, fn [client_id, seq, actor_id, model_hash, result, applied_at] ->
+    Enum.map(rows, fn [client_id, seq, actor_id, model_hash, result, envelope, answered_at] ->
       %{
         actor_id: Codec.decode(actor_id, :uuid),
-        applied_at: applied_at,
+        answered_at: answered_at,
         client_id: client_id,
+        envelope: envelope,
         model_hash: model_hash,
         result: result,
         seq: seq
@@ -41,7 +44,8 @@ defmodule Hologram.Mutation.RecordTest do
 
       assert [row] = rows()
       assert %{actor_id: nil, client_id: @client_id, model_hash: "h", result: nil, seq: 1} = row
-      assert %DateTime{} = row.applied_at
+      assert row.envelope == nil
+      assert %DateTime{} = row.answered_at
     end
 
     test "records the user who sent the batch" do
@@ -117,12 +121,59 @@ defmodule Hologram.Mutation.RecordTest do
       assert find(@client_id, 1) == %{actor_id: nil, result: nil}
     end
 
+    test "returns the answer a refused batch got" do
+      user_id = Entity.generate_id()
+
+      refuse!(@client_id, 1, user_id, "h", @envelope, @answer)
+
+      assert find(@client_id, 1) == %{actor_id: user_id, result: @answer}
+    end
+
     test "returns nothing of another batch's record" do
       claim(@client_id, 1)
       complete!(@client_id, 1, %{"status" => "confirmed"})
 
       assert find(@client_id, 2) == nil
       assert find(@other_client_id, 1) == nil
+    end
+  end
+
+  describe "refuse!/6" do
+    test "keeps a refused batch with what it carried and the answer it got" do
+      user_id = Entity.generate_id()
+
+      assert refuse!(@client_id, 1, user_id, "h", @envelope, @answer) == :ok
+
+      assert [row] = rows()
+
+      assert %{
+               actor_id: ^user_id,
+               client_id: @client_id,
+               envelope: @envelope,
+               model_hash: "h",
+               result: @answer,
+               seq: 1
+             } = row
+
+      assert %DateTime{} = row.answered_at
+    end
+
+    test "keeps the first of two refusals of one batch" do
+      user_id = Entity.generate_id()
+
+      refuse!(@client_id, 1, user_id, "h", @envelope, @answer)
+      refuse!(@client_id, 1, user_id, "h", @envelope, %{@answer | "write" => 1})
+
+      assert [%{result: @answer}] = rows()
+    end
+
+    test "keeps a refusal beside a landed batch's record" do
+      claim(@client_id, 1)
+      complete!(@client_id, 1, %{"status" => "confirmed"})
+
+      refuse!(@client_id, 2, Entity.generate_id(), "h", @envelope, @answer)
+
+      assert Enum.map(rows(), & &1.envelope) == [nil, @envelope]
     end
   end
 end

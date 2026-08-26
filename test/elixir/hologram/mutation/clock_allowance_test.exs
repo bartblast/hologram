@@ -5,6 +5,7 @@ defmodule Hologram.Mutation.ClockAllowanceTest do
 
   import Hologram.Mutation
 
+  alias Hologram.Compiler.Encoder
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Server
@@ -35,7 +36,13 @@ defmodule Hologram.Mutation.ClockAllowanceTest do
 
       a_second_ahead = (System.os_time(:millisecond) + 1_000) * 1024
 
-      assert run(envelope(a_second_ahead), %Server{}) == {:rejected, 0, :clock}
+      assert run(envelope(a_second_ahead), %Server{}) ==
+               {:ok,
+                %{
+                  "reason" => Encoder.encode_client_term!(:clock),
+                  "status" => "rejected",
+                  "write" => 0
+                }}
     end
   end
 end

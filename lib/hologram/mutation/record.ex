@@ -1,19 +1,21 @@
 defmodule Hologram.Mutation.Record do
   @moduledoc false
 
-  # One row per applied batch of client writes, keyed by the client that sent it and that
-  # client's own sequence number - the primary key IS the dedup. The row is claimed first, inside
-  # the batch's transaction and with no answer yet, so a second arrival of the same batch blocks
-  # on the key until the first commits and then fails its own claim, and the answer is written
-  # just before the commit.
+  # One row per batch of client writes the server ANSWERED, keyed by the client that sent it and
+  # that client's own sequence number - the primary key IS the dedup.
   #
-  # A refused batch's claim rolls back with everything else, so this table holds what happened
-  # and a refusal did not happen. A claim with no answer therefore cannot be observed from
-  # outside: it exists only inside the transaction holding it, which either commits with an
-  # answer or takes the claim with it.
+  # A batch that LANDS is claimed first, inside its own transaction and with no answer yet, so a
+  # second arrival of the same batch blocks on the key until the first commits and then fails its
+  # own claim, and the answer is written just before the commit. A claim with no answer therefore
+  # cannot be observed from outside: it exists only inside the transaction holding it, which
+  # either commits with an answer or takes the claim with it.
   #
-  # The batch itself is not kept: the rows it wrote are in the effect log under mutation_ref,
-  # keyed by the same pair, so keeping it here would keep every write twice.
+  # A batch the evaluator REFUSED is written afterwards instead, on its own statement - its claim
+  # rolled back with everything else the transaction did - and it keeps the batch as it arrived
+  # beside the answer, since its rows reached no log and exist nowhere else on the server.
+  #
+  # A landed batch's envelope is not kept: the rows it wrote are in the effect log under
+  # mutation_ref, keyed by the same pair, so keeping it here would keep every write twice.
 
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -67,8 +69,8 @@ defmodule Hologram.Mutation.Record do
   end
 
   @doc """
-  Returns what is recorded for the given batch - the user who sent it and the answer it was given -
-  or nil when the batch has no record.
+  Returns what is recorded for the given batch - the user who sent it and the answer it was given,
+  a confirmation or a refusal - or nil when the batch has no record.
 
   The answer is nil only for a batch being applied at this moment, which cannot be seen from
   outside: the claim lives in the transaction applying it, and that transaction either commits with
@@ -91,5 +93,29 @@ defmodule Hologram.Mutation.Record do
       [[actor_id, result]] -> %{actor_id: Codec.decode(actor_id, :uuid), result: result}
       [] -> nil
     end
+  end
+
+  @doc """
+  Records the given batch as refused - the batch as it arrived and the answer it got, bound to the
+  user who sent it - and returns :ok.
+
+  A batch already recorded is left as it is, so two arrivals of one refused batch do not collide.
+  """
+  @spec refuse!(String.t(), non_neg_integer, String.t(), String.t(), map, map) :: :ok
+  def refuse!(client_id, seq, actor_id, model_hash, envelope, answer) do
+    # Outside any transaction by intent: the refusal already took the batch's transaction back,
+    # and this is the one statement that outlives it.
+    statement = """
+    INSERT INTO "hologram_system"."mutation"
+      ("client_id", "seq", "actor_id", "model_hash", "envelope", "result")
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT ("client_id", "seq") DO NOTHING
+    """
+
+    params = [client_id, seq, Codec.encode(actor_id, :uuid), model_hash, envelope, answer]
+
+    {:ok, _result} = Connection.query(statement, params)
+
+    :ok
   end
 end

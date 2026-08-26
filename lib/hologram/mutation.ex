@@ -2,14 +2,16 @@ defmodule Hologram.Mutation do
   @moduledoc false
 
   # Applies a batch of client writes: refuses one built against another model, answers one already
-  # applied from its record, and runs the rest in ONE transaction under the session's own user.
+  # answered from its record, and runs the rest in ONE transaction under the session's own user.
   #
   # Every write goes through the same executor a server-side verb goes through, so a claim, a
   # value, a reference and a merge are judged exactly as they are for a write made on the server -
   # there is no second set of rules for a write that arrived over the wire. A refusal at any step
-  # rolls the whole batch back and names the write it refused.
+  # rolls the whole batch back and names the write it refused - and a refusal the EVALUATOR made
+  # is then kept, the batch as it arrived beside its answer, for the session that sent it.
 
   alias Hologram.Auth.Context
+  alias Hologram.Compiler.Encoder
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -44,20 +46,20 @@ defmodule Hologram.Mutation do
   @doc """
   Applies the given batch, as the request decoded it, on behalf of the given session.
 
-  Returns what to answer: the result of a batch that landed, the write and the reason of one that
-  was refused, or the message of one that could not be parsed at all.
+  Returns `{:ok, answer}` - what to send back, spelled as the wire carries it, for a batch that
+  landed or one that was refused - or `{:invalid, message}` for a batch that could not be parsed
+  at all.
 
-  A batch already applied is answered from its record rather than applied a second time, and only
-  for the session that sent it.
+  A batch already answered is answered from its record rather than evaluated a second time, and
+  only for the session that sent it.
   """
-  @spec run(map, Server.t()) ::
-          {:ok, map} | {:rejected, non_neg_integer | nil, rejection} | {:invalid, String.t()}
+  @spec run(map, Server.t()) :: {:ok, map} | {:invalid, String.t()}
   def run(raw, server_struct) do
     cond do
       # Checked before anything is parsed: a client built against another model is told exactly
       # that, rather than tripping over a field name its model no longer has.
       not is_binary(raw["model_hash"]) -> {:invalid, "model_hash must be a string"}
-      raw["model_hash"] != Model.hash() -> {:rejected, nil, :stale_build}
+      raw["model_hash"] != Model.hash() -> {:ok, rejection(nil, :stale_build)}
       true -> parse_and_apply(raw, server_struct)
     end
   end
@@ -83,9 +85,9 @@ defmodule Hologram.Mutation do
 
   # The actor outside, the batch reference inside it, the transaction innermost - the same wrap a
   # command runs under, with the reference added so the outbox knows whose effects these are.
-  defp apply_batch(envelope, server_struct) do
+  defp apply_batch(envelope, raw, server_struct) do
     case recorded_answer(envelope, server_struct.user_id) do
-      nil -> apply_new_batch(envelope, server_struct)
+      nil -> apply_new_batch(envelope, raw, server_struct)
       answer -> answer
     end
   end
@@ -128,7 +130,7 @@ defmodule Hologram.Mutation do
     end)
   end
 
-  defp apply_new_batch(envelope, server_struct) do
+  defp apply_new_batch(envelope, raw, server_struct) do
     ref = %{client_id: envelope.client_id, seq: envelope.seq}
 
     result =
@@ -139,9 +141,14 @@ defmodule Hologram.Mutation do
     # A refusal reaches here as the transaction's rollback reason, which is what took the batch's
     # writes, its effects and its claim on the record back with it.
     case result do
-      {:ok, answer} -> {:ok, answer}
-      {:error, :duplicate} -> answer_from_race(envelope, server_struct.user_id)
-      {:error, {:rejected, index, reason}} -> {:rejected, index, reason}
+      {:ok, answer} ->
+        {:ok, answer}
+
+      {:error, :duplicate} ->
+        answer_from_race(envelope, server_struct.user_id)
+
+      {:error, {:rejected, index, reason}} ->
+        keep_refused(envelope, raw, server_struct.user_id, index, reason)
     end
   end
 
@@ -252,6 +259,27 @@ defmodule Hologram.Mutation do
     Map.merge(attributes, references)
   end
 
+  # A refusal took the batch back - its writes, its effects and its claim on the record - so what
+  # is kept of it is written after the rollback, on its own statement: the batch as it arrived and
+  # the answer it got, so that a change a browser made and then lost is somewhere, with the reason.
+  #
+  # Only a refusal the EVALUATOR made reaches here. A batch refused before its transaction was
+  # refused for its build or its clock rather than for what it writes, and the server read nothing
+  # of it worth keeping - a stale one it could not parse at all.
+  #
+  # Nothing is kept for an anonymous session either: an answer is replayed only to the session that
+  # earned it, and one anonymous session cannot be told from another - so a refusal kept under no
+  # actor would be readable by a stranger, or by nobody.
+  defp keep_refused(envelope, raw, actor_id, index, reason) do
+    answer = rejection(index, reason)
+
+    if actor_id do
+      Record.refuse!(envelope.client_id, envelope.seq, actor_id, envelope.model_hash, raw, answer)
+    end
+
+    {:ok, answer}
+  end
+
   defp lock_row(write, index) do
     case EntityOperations.get(write.entity_type, write.id, lock: true) do
       nil -> Connection.rollback({:rejected, index, :not_found})
@@ -287,7 +315,10 @@ defmodule Hologram.Mutation do
   defp parse_and_apply(raw, server_struct) do
     with {:ok, envelope} <- parse(raw),
          :ok <- check_clocks(envelope.writes) do
-      apply_batch(envelope, server_struct)
+      apply_batch(envelope, raw, server_struct)
+    else
+      {:invalid, message} -> {:invalid, message}
+      {:rejected, index, reason} -> {:ok, rejection(index, reason)}
     end
   end
 
@@ -296,8 +327,22 @@ defmodule Hologram.Mutation do
       nil -> nil
       %{actor_id: ^actor_id, result: nil} -> nil
       %{actor_id: ^actor_id, result: result} -> {:ok, result}
-      _another_sessions -> {:rejected, nil, :forged_client}
+      _another_sessions -> {:ok, rejection(nil, :forged_client)}
     end
+  end
+
+  # The answer a refusal travels as: the position of the write it names - nil for a refusal of the
+  # whole batch - and the reason as an encoded client term, since a reason is an arbitrary term (a
+  # field-keyed map holding a regex or a range, an exception struct) that JSON cannot spell and the
+  # client's interpreter already reads. Built here and nowhere else, so that what the record stores
+  # is byte for byte what the wire carried.
+  @spec rejection(non_neg_integer | nil, rejection) :: map
+  defp rejection(index, reason) do
+    %{
+      "reason" => Encoder.encode_client_term!(reason),
+      "status" => "rejected",
+      "write" => index
+    }
   end
 
   defp run_delete(write, index) do
