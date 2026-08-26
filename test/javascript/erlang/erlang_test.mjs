@@ -38,6 +38,7 @@ const atomA = Type.atom("a");
 const atomAbc = Type.atom("abc");
 const atomB = Type.atom("b");
 const atomC = Type.atom("c");
+const atomX = Type.atom("x");
 const float1 = Type.float(1.0);
 const float2 = Type.float(2.0);
 const float3 = Type.float(3.0);
@@ -58,6 +59,9 @@ const integer36 = Type.integer(36);
 const integer123 = Type.integer(123);
 const list1 = Type.list([integer1, integer2]);
 const list2 = Type.list([integer1, integer3]);
+const listWithDifferentFloat = Type.list([float2]);
+const listWithFloat = Type.list([float1]);
+const listWithInteger = Type.list([integer1]);
 
 const mapA1 = Type.map([[atomA, integer1]]);
 
@@ -66,12 +70,22 @@ const mapA1B2 = Type.map([
   [atomB, integer2],
 ]);
 
+const mapA1Float = Type.map([[atomA, float1]]);
+
 const mapB1 = Type.map([[atomB, integer1]]);
+
+const mapWithFloatKey = Type.map([[float1, atomX]]);
+const mapWithIntegerKey = Type.map([[integer1, atomX]]);
+
+const nestedListWithFloat = Type.list([listWithFloat]);
+const nestedListWithInteger = Type.list([listWithInteger]);
 
 const pid1 = Type.pid("my_node@my_host", [0, 11, 111]);
 const pid2 = Type.pid("my_node@my_host", [0, 11, 112]);
 const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
 const tuple3 = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
+const tupleWithFloat = Type.tuple([float1]);
+const tupleWithInteger = Type.tuple([integer1]);
 
 // Returns a fresh caller frame for :erlang.error/1,2,3 raising-frame tests -
 // fresh, because the tested code copies and augments frames and the tests
@@ -758,7 +772,31 @@ describe("Erlang", () => {
       assertBoxedTrue(testedFun(Type.map(), mapA1));
     });
 
-    // TODO: reference, function, port, list, bitstring
+    it("list holding an integer == list holding a float of the same value", () => {
+      assertBoxedFalse(testedFun(listWithInteger, listWithFloat));
+    });
+
+    it("list holding an integer == list holding a float of a different value", () => {
+      assertBoxedTrue(testedFun(listWithInteger, listWithDifferentFloat));
+    });
+
+    it("nested lists holding an integer and a float of the same value", () => {
+      assertBoxedFalse(testedFun(nestedListWithInteger, nestedListWithFloat));
+    });
+
+    it("tuple holding an integer == tuple holding a float of the same value", () => {
+      assertBoxedFalse(testedFun(tupleWithInteger, tupleWithFloat));
+    });
+
+    it("map value that is an integer == map value that is a float of the same value", () => {
+      assertBoxedFalse(testedFun(mapA1, mapA1Float));
+    });
+
+    it("map keys that are an integer and a float of the same value", () => {
+      assertBoxedTrue(testedFun(mapWithIntegerKey, mapWithFloatKey));
+    });
+
+    // TODO: reference, function, port, bitstring
   });
 
   describe("</2", () => {
@@ -1274,6 +1312,10 @@ describe("Erlang", () => {
       );
     });
 
+    it("list holding an integer =< list holding a float of the same value", () => {
+      assertBoxedTrue(testedFun(listWithInteger, listWithFloat));
+    });
+
     // TODO: reference, function, port, map, bitstring
   });
 
@@ -1396,15 +1438,31 @@ describe("Erlang", () => {
       assertBoxedFalse(testedFun(Type.map(), mapA1));
     });
 
-    // TODO: fix the failing test (tracked in #1140):
-    // TODO: the client compares values inside a container strictly even under ==,
-    // TODO: so it answers false here. Same for lists and tuples.
-    // it("map with an integer value == map with a float value", () => {
-    //   const mapA1Float = Type.map([[atomA, Type.float(1.0)]]);
-    //   assertBoxedTrue(testedFun(mapA1, mapA1Float));
-    // });
+    it("list holding an integer == list holding a float of the same value", () => {
+      assertBoxedTrue(testedFun(listWithInteger, listWithFloat));
+    });
 
-    // TODO: reference, function, port, list, bitstring
+    it("list holding an integer == list holding a float of a different value", () => {
+      assertBoxedFalse(testedFun(listWithInteger, listWithDifferentFloat));
+    });
+
+    it("nested lists holding an integer and a float of the same value", () => {
+      assertBoxedTrue(testedFun(nestedListWithInteger, nestedListWithFloat));
+    });
+
+    it("tuple holding an integer == tuple holding a float of the same value", () => {
+      assertBoxedTrue(testedFun(tupleWithInteger, tupleWithFloat));
+    });
+
+    it("map value that is an integer == map value that is a float of the same value", () => {
+      assertBoxedTrue(testedFun(mapA1, mapA1Float));
+    });
+
+    it("map keys that are an integer and a float of the same value", () => {
+      assertBoxedFalse(testedFun(mapWithIntegerKey, mapWithFloatKey));
+    });
+
+    // TODO: reference, function, port, bitstring
   });
 
   describe(">/2", () => {
@@ -1674,6 +1732,10 @@ describe("Erlang", () => {
         HologramInterpreterError,
         expectedMessage,
       );
+    });
+
+    it("list holding an integer >= list holding a float of the same value", () => {
+      assertBoxedTrue(testedFun(listWithInteger, listWithFloat));
     });
 
     // TODO: reference, function, port, map, bitstring

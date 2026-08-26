@@ -517,7 +517,31 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."/="(%{}, %{a: 1}) == true
     end
 
-    # TODO: reference, function, port, list, bitstring
+    test "list holding an integer == list holding a float of the same value" do
+      assert :erlang."/="([1], [1.0]) == false
+    end
+
+    test "list holding an integer == list holding a float of a different value" do
+      assert :erlang."/="([1], [2.0]) == true
+    end
+
+    test "nested lists holding an integer and a float of the same value" do
+      assert :erlang."/="([[1]], [[1.0]]) == false
+    end
+
+    test "tuple holding an integer == tuple holding a float of the same value" do
+      assert :erlang."/="({1}, {1.0}) == false
+    end
+
+    test "map value that is an integer == map value that is a float of the same value" do
+      assert :erlang."/="(%{a: 1}, %{a: 1.0}) == false
+    end
+
+    test "map keys that are an integer and a float of the same value" do
+      assert :erlang."/="(%{1 => :x}, %{1.0 => :x}) == true
+    end
+
+    # TODO: reference, function, port, bitstring
   end
 
   describe "</2" do
@@ -1078,7 +1102,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=<"(arg_1, arg_2) == false
     end
 
-    # TODO: reference, function, port, map, list, bitstring
+    test "list holding an integer =< list holding a float of the same value" do
+      left = wrap_term([1])
+      right = wrap_term([1.0])
+
+      assert :erlang."=<"(left, right) == true
+    end
+
+    # TODO: reference, function, port, map, bitstring
   end
 
   describe "==/2" do
@@ -1208,14 +1239,31 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.==(%{}, %{a: 1}) == false
     end
 
-    # TODO: fix the failing test (tracked in #1140):
-    # TODO: the client compares values inside a container strictly even under ==,
-    # TODO: so it answers false here. Same for lists and tuples.
-    # test "map with an integer value == map with a float value" do
-    #   assert :erlang."=="(%{a: 1}, %{a: 1.0}) == true
-    # end
+    test "list holding an integer == list holding a float of the same value" do
+      assert :erlang.==([1], [1.0]) == true
+    end
 
-    # TODO: reference, function, port, list, bitstring
+    test "list holding an integer == list holding a float of a different value" do
+      assert :erlang.==([1], [2.0]) == false
+    end
+
+    test "nested lists holding an integer and a float of the same value" do
+      assert :erlang.==([[1]], [[1.0]]) == true
+    end
+
+    test "tuple holding an integer == tuple holding a float of the same value" do
+      assert :erlang.==({1}, {1.0}) == true
+    end
+
+    test "map value that is an integer == map value that is a float of the same value" do
+      assert :erlang.==(%{a: 1}, %{a: 1.0}) == true
+    end
+
+    test "map keys that are an integer and a float of the same value" do
+      assert :erlang.==(%{1 => :x}, %{1.0 => :x}) == false
+    end
+
+    # TODO: reference, function, port, bitstring
   end
 
   describe ">/2" do
@@ -1513,7 +1561,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.>=(arg_1, arg_2) == true
     end
 
-    # TODO: reference, function, port, map, list, bitstring
+    test "list holding an integer >= list holding a float of the same value" do
+      left = wrap_term([1])
+      right = wrap_term([1.0])
+
+      assert :erlang.>=(left, right) == true
+    end
+
+    # TODO: reference, function, port, map, bitstring
   end
 
   describe "abs/1" do
