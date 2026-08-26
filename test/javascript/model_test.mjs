@@ -104,6 +104,7 @@ describe("Model", () => {
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Entity.Metadata")],
           [Type.atom("attribute_changes"), Type.map([])],
+          [Type.atom("attribute_deltas"), Type.map([])],
           [Type.atom("claim"), Type.nil()],
           [Type.atom("relationship_ops"), Type.map([])],
           [
@@ -125,6 +126,7 @@ describe("Model", () => {
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Entity.Metadata")],
           [Type.atom("attribute_changes"), Type.map([])],
+          [Type.atom("attribute_deltas"), Type.map([])],
           [Type.atom("claim"), Type.nil()],
           [Type.atom("relationship_ops"), Type.map([])],
           [Type.atom("revisions"), Type.map([])],
