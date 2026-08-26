@@ -29,6 +29,12 @@ defmodule Hologram.MutationTest do
     |> DB.create!()
   end
 
+  # What a client holding this row would send as `based_on` - its whole revisions map, keyed the
+  # way the wire keys it. A delete touches every column, so it carries all of them.
+  defp based_on(row) do
+    Map.new(row.__meta__.revisions, fn {name, revision} -> {Atom.to_string(name), revision} end)
+  end
+
   defp count_edges(source_id, target_id) do
     statement =
       ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_entity_module16_secrets_$join" | <>
@@ -156,6 +162,10 @@ defmodule Hologram.MutationTest do
     }
   end
 
+  # A stamp from the wall clock, for a write against a row this test did NOT just create. For one
+  # that did, use stamp_above/1: this node's clock can already be ahead of raw os_time, so a
+  # wall-clock stamp can sit BELOW the revisions of a row written moments ago - and the merge
+  # compares against those whether or not the write carries a based_on.
   defp stamp, do: System.os_time(:millisecond) * 1024
 
   # A stamp above every revision the row holds. The wall clock alone will not do: this node's
@@ -338,11 +348,9 @@ defmodule Hologram.MutationTest do
       user = create_user("remover@example.com")
       row = create_archivable(user, priority: 5)
 
-      based_on = Map.new(row.__meta__.revisions, fn {name, r} -> {Atom.to_string(name), r} end)
-
       write =
         delete_write(PolicyModule1, row.id,
-          based_on: based_on,
+          based_on: based_on(row),
           claim: ["authorize", "archive"],
           stamp: stamp_above(row)
         )
@@ -482,7 +490,14 @@ defmodule Hologram.MutationTest do
       |> Entity.new(b_id: referenced.id, c_id: required_target.id)
       |> DB.create!()
 
-      write = delete_write(Module2, referenced.id, claim: ["authorize", "read"])
+      # The delete has to WIN the merge to reach the executor at all - a client holding the row
+      # sends its revisions, and a stamp from the wall clock alone can sit below them.
+      write =
+        delete_write(Module2, referenced.id,
+          based_on: based_on(referenced),
+          claim: ["authorize", "read"],
+          stamp: stamp_above(referenced)
+        )
 
       assert run(envelope([write]), server()) ==
                {:rejected, 0, %{referenced_by: Module3, relationship: :b}}
