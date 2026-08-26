@@ -62,6 +62,24 @@ defmodule HologramFeatureTests.Events.DebounceTest do
     |> assert_text(css("#layout_result"), "nil")
   end
 
+  # The same scenario as above with the destination's mount held off, which puts the pending
+  # dispatch's deadline inside the stretch where the destination is displayed but the registry
+  # still answers for the page that armed it. Two independent things keep the dispatch off the
+  # destination there - it is cancelled when the page is left, and were it not, it carries the
+  # epoch of the page it was armed on and would be dropped on settling - so this passes with
+  # either one alone. It is here to hold the pair, not to single out the cancellation.
+  feature "a pending debounced dispatch does not survive into a destination still fetching its bundle",
+          %{session: session} do
+    session
+    |> simulate_slow_page_bundle(4_000)
+    |> visit(Page2)
+    |> hover(css("#hover_zone"))
+    |> click(link("Page 3 link"))
+    |> assert_page(Page3)
+    |> sleep(3_000)
+    |> assert_text(css("#layout_result"), "nil")
+  end
+
   # Escape removes the editor while the input still has focus, so the browser fires focusout from
   # inside the removal and the pending debounced dispatch is flushed while the page is halfway
   # patched. The recorded value says that dispatch was delivered, and the editor being gone says

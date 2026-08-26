@@ -8,6 +8,9 @@ defmodule HologramFeatureTestsWeb.Endpoint do
     store: :cookie
   ]
 
+  # Before Plug.Static, which is what serves the page bundles this delays.
+  plug HologramFeatureTestsWeb.Plugs.SlowPageBundle
+
   plug Plug.Static,
     at: "/",
     from: :hologram_feature_tests,
