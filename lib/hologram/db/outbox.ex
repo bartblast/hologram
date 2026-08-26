@@ -13,10 +13,20 @@ defmodule Hologram.DB.Outbox do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
+  alias Hologram.Mutation.Ref
 
   @channel "hologram_outbox"
 
-  @columns ["op", "type", "entity_id", "data", "model_hash", "actor_id", "revisions"]
+  @columns [
+    "op",
+    "type",
+    "entity_id",
+    "data",
+    "model_hash",
+    "actor_id",
+    "revisions",
+    "mutation_ref"
+  ]
 
   @data_ops [:patch_entity, :put_entity]
 
@@ -38,6 +48,11 @@ defmodule Hologram.DB.Outbox do
   applies when a row reaches it. Nothing reads a value from here to send it - the readers below
   take the KEYS, to know what moved. The acting user is read from the ambient context, so writes
   made by the framework itself, which have no actor, record none.
+
+  The batch of client writes being applied is read from the ambient context the same way, and an
+  effect written outside one records none - a command's write, a seed's, the framework's own. It
+  is what lets a client tell the effects of its own writes apart from everyone else's when they
+  arrive on the stream.
   """
   @spec append(list(map)) :: :ok
   def append([]), do: :ok
@@ -46,8 +61,9 @@ defmodule Hologram.DB.Outbox do
   def append(effects) do
     model_hash = Model.hash()
     actor_id = Codec.encode(Context.actor_user_id(), :uuid)
+    mutation_ref = Ref.get()
 
-    values = Enum.flat_map(effects, &row(&1, model_hash, actor_id))
+    values = Enum.flat_map(effects, &row(&1, model_hash, actor_id, mutation_ref))
 
     column_list = Enum.map_join(@columns, ", ", &Mapper.quote_identifier/1)
     row_list = row_placeholders(length(effects))
@@ -163,7 +179,8 @@ defmodule Hologram.DB.Outbox do
   @spec read_window(non_neg_integer, non_neg_integer) :: list({non_neg_integer, list(map)})
   def read_window(last_xmin, current_xmin) do
     statement = """
-    SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions"
+    SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions",
+           "mutation_ref"
     FROM "hologram_system"."outbox"
     WHERE "tx" >= $1 AND "tx" < $2
     ORDER BY "tx", "seq"
@@ -233,12 +250,13 @@ defmodule Hologram.DB.Outbox do
     }
   end
 
-  defp event([seq, op, type, entity_id, data, tx, model_hash, actor_id, revisions]) do
+  defp event([seq, op, type, entity_id, data, tx, model_hash, actor_id, revisions, mutation_ref]) do
     %{
       actor_id: Codec.decode(actor_id, :uuid),
       data: data,
       entity_id: Codec.decode(entity_id, :uuid),
       model_hash: model_hash,
+      mutation_ref: mutation_ref,
       op: operation(op),
       revisions: revisions,
       seq: seq,
@@ -260,7 +278,8 @@ defmodule Hologram.DB.Outbox do
   defp row(
          %{op: op, entity_type: entity_type, entity_id: entity_id} = effect,
          model_hash,
-         actor_id
+         actor_id,
+         mutation_ref
        ) do
     [
       Atom.to_string(op),
@@ -269,7 +288,8 @@ defmodule Hologram.DB.Outbox do
       data(effect),
       model_hash,
       actor_id,
-      Map.get(effect, :revisions)
+      Map.get(effect, :revisions),
+      mutation_ref
     ]
   end
 
