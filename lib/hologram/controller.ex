@@ -477,8 +477,9 @@ defmodule Hologram.Controller do
   @doc """
   Handles an HTTP POST carrying a batch of client writes.
 
-  Checks the CSRF token and the instance cross-check exactly as a command request does, applies the
-  batch on behalf of the session, and answers with what became of it as JSON.
+  Checks the CSRF token and the instance cross-check exactly as a command request does, checks that
+  the batch's replica id is one the session presenting it was given, applies the batch on behalf of
+  the session, and answers with what became of it as JSON.
 
   ## Parameters
 
@@ -501,6 +502,9 @@ defmodule Hologram.Controller do
 
       not caller_owns_instance_id?(conn, conn.body_params["instance_id"]) ->
         forbid(conn, "instance_id cross-check failed")
+
+      not replica_identity_verified?(conn) ->
+        forbid(conn, "replica identity check failed")
 
       true ->
         send_mutation_response(conn)
@@ -701,6 +705,23 @@ defmodule Hologram.Controller do
       end
     end)
     |> Enum.unzip()
+  end
+
+  # The statement proves that the session presenting this replica id is the one it was minted for -
+  # a stranger who learned an id cannot spend its sequence numbers. It never decides the actor:
+  # that is still the session's user.
+  defp replica_identity_verified?(conn) do
+    raw = conn.body_params
+    token = raw["replica_token"]
+    replica_id = raw["replica_id"]
+
+    is_binary(token) and is_binary(replica_id) and
+      ReplicaIdentity.verify(
+        token,
+        replica_id,
+        Session.get_session_id(conn),
+        Session.get_user_id(conn)
+      ) == :ok
   end
 
   defp apply_subscription_deltas(%Server{__meta__: %{subscription_ops: ops}}) when ops == %{},

@@ -15,6 +15,7 @@ defmodule Hologram.ControllerMutationTest do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
   alias Hologram.Runtime.CSRFProtection
+  alias Hologram.Runtime.ReplicaIdentity
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
@@ -23,11 +24,12 @@ defmodule Hologram.ControllerMutationTest do
   @unmasked_csrf_token CSRFProtection.generate_unmasked_token()
   @masked_csrf_token CSRFProtection.get_masked_token(@unmasked_csrf_token)
 
+  @hologram_session_id "test-session-id"
   @instance_id "test-instance-id"
 
   @anonymous_session %{
     CSRFProtection.session_key() => @unmasked_csrf_token,
-    hologram_session_id: "test-session-id"
+    hologram_session_id: @hologram_session_id
   }
 
   setup do
@@ -63,13 +65,26 @@ defmodule Hologram.ControllerMutationTest do
   end
 
   defp envelope(writes, opts \\ []) do
-    %{
+    replica_id = Keyword.get(opts, :replica_id, Entity.generate_id())
+
+    replica_token =
+      Keyword.get(
+        opts,
+        :replica_token,
+        ReplicaIdentity.issue(replica_id, @hologram_session_id, nil)
+      )
+
+    raw = %{
       "instance_id" => @instance_id,
-      "replica_id" => Keyword.get(opts, :replica_id, Entity.generate_id()),
       "model_hash" => Keyword.get(opts, :model_hash, Model.hash()),
+      "replica_id" => replica_id,
       "seq" => 1,
       "writes" => writes
     }
+
+    # A nil token means the batch carries none at all, which is what a client that was never given
+    # an identity would send - not a batch carrying the key with nothing in it.
+    if replica_token, do: Map.put(raw, "replica_token", replica_token), else: raw
   end
 
   # Scoped to the batch by its own mutation_ref rather than reading the whole table: the outbox is
@@ -138,6 +153,27 @@ defmodule Hologram.ControllerMutationTest do
       assert conn.status == 200
 
       assert outbox_actor_ids(replica_id) == [user.id]
+    end
+
+    test "applies a batch under an identity minted before the session signed in" do
+      user = create_user("signed-in-later@example.com")
+      id = Entity.generate_id()
+      replica_id = Entity.generate_id()
+
+      # Bound to the session, as an anonymous visitor's identity is. Signing in does not rotate the
+      # session id, so the statement keeps working in that session afterwards.
+      raw =
+        envelope([publish_write(id)],
+          replica_id: replica_id,
+          replica_token: ReplicaIdentity.issue(replica_id, @hologram_session_id, nil)
+        )
+
+      conn = post_batch(raw, session_of(user.id))
+
+      assert conn.status == 200
+      assert Jason.decode!(conn.resp_body) == %{"status" => "confirmed", "dropped" => %{}}
+
+      assert EntityOperations.get(PolicyModule2, id) != nil
     end
 
     test "answers a refused batch with the write and the reason" do
@@ -244,6 +280,93 @@ defmodule Hologram.ControllerMutationTest do
       assert conn.halted == true
       assert conn.status == 403
       assert conn.resp_body == "Forbidden"
+    end
+
+    test "refuses a batch carrying no replica token" do
+      id = Entity.generate_id()
+
+      conn = post_batch(envelope([publish_write(id)], replica_token: nil))
+
+      assert conn.halted == true
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+
+      assert EntityOperations.get(PolicyModule2, id) == nil
+    end
+
+    test "refuses a batch whose replica token is not genuine" do
+      id = Entity.generate_id()
+      replica_id = Entity.generate_id()
+
+      raw =
+        envelope([publish_write(id)],
+          replica_id: replica_id,
+          replica_token: ReplicaIdentity.issue(replica_id, @hologram_session_id, nil) <> "x"
+        )
+
+      conn = post_batch(raw)
+
+      assert conn.halted == true
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+
+      assert EntityOperations.get(PolicyModule2, id) == nil
+    end
+
+    test "refuses a batch naming a replica its token does not vouch for" do
+      id = Entity.generate_id()
+
+      raw =
+        envelope([publish_write(id)],
+          replica_token: ReplicaIdentity.issue(Entity.generate_id(), @hologram_session_id, nil)
+        )
+
+      conn = post_batch(raw)
+
+      assert conn.halted == true
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+
+      assert EntityOperations.get(PolicyModule2, id) == nil
+    end
+
+    test "refuses a batch whose replica belongs to another user" do
+      user = create_user("victim@example.com")
+      id = Entity.generate_id()
+      replica_id = Entity.generate_id()
+
+      raw =
+        envelope([publish_write(id)],
+          replica_id: replica_id,
+          replica_token: ReplicaIdentity.issue(replica_id, "another-session", "another-user")
+        )
+
+      conn = post_batch(raw, session_of(user.id))
+
+      assert conn.halted == true
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+
+      assert EntityOperations.get(PolicyModule2, id) == nil
+    end
+
+    test "refuses a batch whose replica belongs to another session" do
+      id = Entity.generate_id()
+      replica_id = Entity.generate_id()
+
+      raw =
+        envelope([publish_write(id)],
+          replica_id: replica_id,
+          replica_token: ReplicaIdentity.issue(replica_id, "another-session", nil)
+        )
+
+      conn = post_batch(raw)
+
+      assert conn.halted == true
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+
+      assert EntityOperations.get(PolicyModule2, id) == nil
     end
   end
 end
