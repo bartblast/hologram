@@ -84,7 +84,14 @@ defmodule Hologram.DB.Codec do
 
   def decode_json(value, :float) when is_float(value), do: {:ok, value}
 
-  def decode_json(value, :float) when is_integer(value), do: {:ok, value * 1.0}
+  def decode_json(value, :float) when is_integer(value) do
+    {:ok, value * 1.0}
+  rescue
+    # An Elixir integer has arbitrary precision and a float is 64 bits, so promoting one past the
+    # float range RAISES rather than saturating. Answered as a value this type cannot hold, which
+    # is what it is - the alternative is the exception escaping a caller that handles only :error.
+    ArithmeticError -> :error
+  end
 
   def decode_json(value, :integer) when is_integer(value), do: {:ok, value}
 

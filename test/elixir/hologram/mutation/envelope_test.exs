@@ -401,6 +401,18 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert parse(raw([entry])) == {:error, "write 0: an edge carries no stamp"}
     end
 
+    # The whole point of parsing here: a value the model cannot hold is answered as a bad envelope
+    # rather than raised out of the applier, which the endpoint would turn into a 500.
+    test "refuses an integer too large for the float attribute it names" do
+      too_large =
+        "9"
+        |> String.duplicate(400)
+        |> String.to_integer()
+
+      assert parse(raw([create(Module4, %{"d" => too_large})])) ==
+               {:error, ~s(write 0: "d" is not a valid float)}
+    end
+
     test "refuses the server's authority as a claim" do
       entry = create(Module2, %{"c" => "x"}, claim: "trust")
 

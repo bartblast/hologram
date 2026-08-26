@@ -149,6 +149,17 @@ defmodule Hologram.DB.CodecTest do
       assert round_tripped == values
     end
 
+    # An integer with arbitrary precision cannot always become a 64-bit float, and the promotion
+    # raises rather than saturating - so the refusal has to be an answer, not an exception.
+    test "refuses an integer too large to be a :float value" do
+      too_large =
+        "9"
+        |> String.duplicate(400)
+        |> String.to_integer()
+
+      assert decode_json(too_large, :float) == :error
+    end
+
     test "refuses a value that is not the type's JSON form" do
       assert decode_json("yes", :boolean) == :error
       assert decode_json("2026-13-40", :date) == :error
