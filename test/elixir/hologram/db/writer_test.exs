@@ -156,6 +156,24 @@ defmodule Hologram.DB.WriterTest do
       assert {:ok, %Module2{__meta__: %Metadata{claim: nil}}} = create(entity)
     end
 
+    test "stores the stamp the struct carries" do
+      # Far past anything this node's clock would answer, so a stamp taken here rather than given
+      # cannot coincide with it.
+      stamp = 4_000_000_000_000_000
+
+      entity =
+        Module2
+        |> Entity.new(public: true)
+        |> trust()
+        |> Map.update!(:__meta__, &%{&1 | stamp: stamp})
+
+      assert {:ok, created_entity} = create(entity)
+
+      assert EntityOperations.get(Module2, created_entity.id).__meta__.revisions == %{
+               public: stamp
+             }
+    end
+
     test "skips evaluation for a trust claim and still grants creator roles" do
       user = create_user("creator@example.com")
 
@@ -549,6 +567,25 @@ defmodule Hologram.DB.WriterTest do
              |> update() == :ok
 
       assert DB.read(Module1, entity.id).parent_id == parent.id
+    end
+
+    test "stores the stamp the struct carries on the columns it sets" do
+      entity =
+        Module1
+        |> Entity.new(priority: 1)
+        |> DB.create!()
+
+      stamp = entity.__meta__.revisions.priority + 1_000_000
+
+      assert entity
+             |> put_attribute(:priority, 2)
+             |> Map.update!(:__meta__, &%{&1 | stamp: stamp})
+             |> update() == :ok
+
+      revisions = EntityOperations.get(Module1, entity.id).__meta__.revisions
+
+      assert revisions.priority == stamp
+      assert revisions.public == entity.__meta__.revisions.public
     end
 
     test "raises when nothing is recorded" do
