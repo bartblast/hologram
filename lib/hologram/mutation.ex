@@ -10,7 +10,10 @@ defmodule Hologram.Mutation do
   # rolls the whole batch back and names the write it refused.
 
   alias Hologram.Auth.Context
+  alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.EntityOperations
+  alias Hologram.DB.Merge
   alias Hologram.DB.Writer
   alias Hologram.Entity.Model
   alias Hologram.Mutation.Envelope
@@ -44,9 +47,17 @@ defmodule Hologram.Mutation do
   defp apply_batch(envelope, server_struct) do
     ref = %{client_id: envelope.client_id, seq: envelope.seq}
 
-    Context.with_actor(server_struct.user_id, fn ->
-      Ref.with_ref(ref, fn -> apply_in_transaction(envelope, server_struct) end)
-    end)
+    result =
+      Context.with_actor(server_struct.user_id, fn ->
+        Ref.with_ref(ref, fn -> apply_in_transaction(envelope, server_struct) end)
+      end)
+
+    # A refusal reaches here as the transaction's rollback reason, which is what took the batch's
+    # writes, its effects and its claim on the record back with it.
+    case result do
+      {:ok, answer} -> {:ok, answer}
+      {:error, {:rejected, index, reason}} -> {:rejected, index, reason}
+    end
   end
 
   defp apply_in_transaction(envelope, server_struct) do
@@ -66,6 +77,29 @@ defmodule Hologram.Mutation do
     end)
   end
 
+  defp apply_changes(_write, changes, _index) when changes == %{}, do: :ok
+
+  defp apply_changes(write, changes, index) do
+    result =
+      %{write | data: changes}
+      |> Write.to_entity()
+      |> Writer.update()
+
+    case result do
+      :ok -> :ok
+      {:error, violations} -> Connection.rollback({:rejected, index, violations})
+    end
+  end
+
+  defp apply_delete(write, row, index) do
+    case Merge.resolve_delete(write.based_on, write.stamp, row.__meta__.revisions) do
+      :delete -> run_delete(write, index)
+      :drop -> lost_values(write, stored_columns(row))
+    end
+  end
+
+  # Each clause answers what the write LOST - nothing, or the values a newer edit kept it from
+  # setting. A refusal never returns from here: it rolls the whole batch back.
   defp apply_write(%Write{op: :create} = write, index) do
     result =
       write
@@ -73,23 +107,119 @@ defmodule Hologram.Mutation do
       |> Writer.create()
 
     case result do
-      {:ok, _entity} -> :ok
+      {:ok, _entity} -> %{}
+      {:error, violations} -> Connection.rollback({:rejected, index, violations})
+    end
+  end
+
+  defp apply_write(%Write{op: :update} = write, index) do
+    row = lock_row(write, index)
+
+    {changes, lost} =
+      Merge.resolve(write.data, write.based_on, write.stamp, row.__meta__.revisions)
+
+    apply_changes(write, changes, index)
+
+    lost_values(write, lost)
+  end
+
+  defp apply_write(%Write{op: :delete} = write, index) do
+    case EntityOperations.get(write.entity_type, write.id, lock: true) do
+      # Deleting a row that is not there is what the verb itself does: nothing, and no complaint.
+      nil -> %{}
+      row -> apply_delete(write, row, index)
+    end
+  end
+
+  defp apply_write(%Write{op: op} = write, index)
+       when op in [:add_relationship, :delete_relationship] do
+    lock_row(write, index)
+
+    result =
+      write
+      |> Write.to_entity()
+      |> Writer.update()
+
+    case result do
+      :ok -> %{}
       {:error, violations} -> Connection.rollback({:rejected, index, violations})
     end
   end
 
   defp apply_writes(writes) do
-    writes
-    |> Enum.with_index()
-    |> Enum.each(fn {write, index} -> apply_write(write, index) end)
+    dropped =
+      writes
+      |> Enum.with_index()
+      |> Enum.reduce(%{}, &collect_lost/2)
 
-    %{"status" => "confirmed", "dropped" => %{}}
+    %{"status" => "confirmed", "dropped" => dropped}
+  end
+
+  # The index is a string because the answer is stored as jsonb and sent as JSON, where an object's
+  # keys are strings whatever they started as.
+  defp collect_lost({write, index}, dropped) do
+    case apply_write(write, index) do
+      lost when lost == %{} -> dropped
+      lost -> Map.put(dropped, Integer.to_string(index), lost)
+    end
+  end
+
+  # Asked only about fields an envelope already admitted, so unlike the parser's own map this one
+  # needs no server-only filter - it answers what type a field holds, for every field there is.
+  defp field_types(entity_type) do
+    attributes = Map.new(entity_type.__attributes__(), fn {name, type, _opts} -> {name, type} end)
+
+    references =
+      entity_type.__relationships__()
+      |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
+      |> Map.new(fn {name, _type, _opts} -> {String.to_existing_atom("#{name}_id"), :uuid} end)
+
+    Map.merge(attributes, references)
+  end
+
+  # Every column the row holds a revision of, which is every column a delete would have taken.
+  defp stored_columns(row) do
+    row.__meta__.revisions
+    |> Map.keys()
+    |> Enum.sort()
+  end
+
+  defp lock_row(write, index) do
+    case EntityOperations.get(write.entity_type, write.id, lock: true) do
+      nil -> Connection.rollback({:rejected, index, :not_found})
+      row -> row
+    end
+  end
+
+  # What the write tried to set and did not, spelled as the client sent it. This is the only place
+  # a losing value survives: it never reached the row, so it is in no log, and a batch that was
+  # CONFIRMED keeps no envelope. A dropped delete carries no values, so its columns answer nothing.
+  defp lost_values(_write, []), do: %{}
+
+  defp lost_values(write, names) do
+    types = field_types(write.entity_type)
+
+    Map.new(names, fn name ->
+      {Atom.to_string(name), Codec.encode_json(Map.get(write.data, name), types[name])}
+    end)
   end
 
   defp parse_and_apply(raw, server_struct) do
     case Envelope.parse(raw) do
       {:ok, envelope} -> apply_batch(envelope, server_struct)
       {:error, message} -> {:invalid, message}
+    end
+  end
+
+  defp run_delete(write, index) do
+    result =
+      write
+      |> Write.to_entity()
+      |> Writer.delete()
+
+    case result do
+      :ok -> %{}
+      {:error, reason} -> Connection.rollback({:rejected, index, reason})
     end
   end
 end

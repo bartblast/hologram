@@ -12,9 +12,45 @@ defmodule Hologram.MutationTest do
   alias Hologram.Mutation.Record
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module15
+  alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+
+  # A row whose author is the given user, which `allow :archive, author_id: user_id()` grants that
+  # user - the fixtures' one write rule that needs no role grant and holds on a multi-column type.
+  defp create_archivable(user, values) do
+    PolicyModule1
+    |> Entity.new(Keyword.put(values, :author_id, user.id))
+    |> DB.create!()
+  end
+
+  defp count_edges(source_id, target_id) do
+    statement =
+      ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_entity_module16_secrets_$join" | <>
+        ~s|WHERE "source_id" = $1 AND "target_id" = $2|
+
+    {:ok, %Postgrex.Result{rows: [[count]]}} =
+      Connection.query(statement, [
+        Codec.encode(source_id, :uuid),
+        Codec.encode(target_id, :uuid)
+      ])
+
+    count
+  end
+
+  defp create_source do
+    Module16
+    |> Entity.new()
+    |> DB.create!()
+  end
+
+  defp create_target do
+    Module15
+    |> Entity.new(token: "t")
+    |> DB.create!()
+  end
 
   defp create_user(email) do
     Module14
@@ -30,6 +66,31 @@ defmodule Hologram.MutationTest do
       "data" => data,
       "claim" => Keyword.get(opts, :claim),
       "stamp" => Keyword.get(opts, :stamp, stamp())
+    }
+  end
+
+  defp delete_write(entity_type, id, opts \\ []) do
+    %{
+      "op" => "delete",
+      "type" => inspect(entity_type),
+      "id" => id,
+      "based_on" => Keyword.get(opts, :based_on),
+      "claim" => Keyword.get(opts, :claim),
+      "stamp" => Keyword.get(opts, :stamp, stamp())
+    }
+  end
+
+  defp edge_write(op, entity_type, id, relationship, target_id) do
+    %{
+      "op" => op,
+      "type" => inspect(entity_type),
+      "id" => id,
+      "relationship" => relationship,
+      "target_id" => target_id,
+      # No fixture grants a write operation on a type that declares a to-many, and what is under
+      # test here is that an edge reaches the executor - so the write claims an operation the
+      # fixture DOES grant. `allow :read` is a bare rule, which grants it to anyone.
+      "claim" => ["authorize", "read"]
     }
   end
 
@@ -76,6 +137,18 @@ defmodule Hologram.MutationTest do
   end
 
   defp server(user_id \\ nil), do: %Server{user_id: user_id}
+
+  defp update_write(entity_type, id, data, opts \\ []) do
+    %{
+      "op" => "update",
+      "type" => inspect(entity_type),
+      "id" => id,
+      "data" => data,
+      "based_on" => Keyword.get(opts, :based_on),
+      "claim" => Keyword.get(opts, :claim, ["authorize", "archive"]),
+      "stamp" => Keyword.get(opts, :stamp, stamp())
+    }
+  end
 
   defp stamp, do: System.os_time(:millisecond) * 1024
 
@@ -135,6 +208,149 @@ defmodule Hologram.MutationTest do
       run(envelope([publish_write(Entity.generate_id())], client_id: client_id, seq: 3), server())
 
       assert Record.result(client_id, 3) == %{"status" => "confirmed", "dropped" => %{}}
+    end
+
+    test "applies an update to the columns the writer saw unchanged" do
+      user = create_user("author@example.com")
+      row = create_archivable(user, priority: 5)
+      writer_stamp = row.__meta__.revisions.priority + 1_000_000
+
+      write =
+        update_write(PolicyModule1, row.id, %{"priority" => 9},
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: writer_stamp
+        )
+
+      assert run(envelope([write]), server(user.id)) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+
+      reloaded = EntityOperations.get(PolicyModule1, row.id)
+
+      assert reloaded.priority == 9
+      assert reloaded.__meta__.revisions.priority == writer_stamp
+      assert reloaded.__meta__.revisions.public == row.__meta__.revisions.public
+    end
+
+    test "drops a column the row holds a newer revision of and names the value that lost" do
+      user = create_user("outrun@example.com")
+      row = create_archivable(user, priority: 5)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(PolicyModule1, row.id, %{"priority" => newer})
+
+      write =
+        update_write(PolicyModule1, row.id, %{"priority" => 9},
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      assert run(envelope([write]), server(user.id)) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{"0" => %{"priority" => 9}}}}
+
+      assert EntityOperations.get(PolicyModule1, row.id).priority == 5
+    end
+
+    test "applies the rest of an update whose column was dropped" do
+      user = create_user("partial@example.com")
+      row = create_archivable(user, priority: 5)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(PolicyModule1, row.id, %{"priority" => newer})
+
+      write =
+        update_write(PolicyModule1, row.id, %{"priority" => 9, "public" => true},
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      assert {:ok, %{"dropped" => %{"0" => %{"priority" => 9}}}} =
+               run(envelope([write]), server(user.id))
+
+      reloaded = EntityOperations.get(PolicyModule1, row.id)
+
+      assert reloaded.priority == 5
+      assert reloaded.public == true
+    end
+
+    test "applies a delete the writer is based on" do
+      user = create_user("remover@example.com")
+      row = create_archivable(user, priority: 5)
+
+      based_on = Map.new(row.__meta__.revisions, fn {name, r} -> {Atom.to_string(name), r} end)
+
+      write =
+        delete_write(PolicyModule1, row.id, based_on: based_on, claim: ["authorize", "archive"])
+
+      assert {:ok, %{"status" => "confirmed", "dropped" => %{}}} =
+               run(envelope([write]), server(user.id))
+
+      assert EntityOperations.get(PolicyModule1, row.id) == nil
+    end
+
+    test "drops a delete when a column moved past it and names every column of the row" do
+      user = create_user("blocked@example.com")
+      row = create_archivable(user, priority: 5)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(PolicyModule1, row.id, %{"priority" => newer})
+
+      write =
+        delete_write(PolicyModule1, row.id,
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          claim: ["authorize", "archive"],
+          stamp: newer - 1
+        )
+
+      assert run(envelope([write]), server(user.id)) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{"0" => %{"priority" => nil}}}}
+
+      assert EntityOperations.get(PolicyModule1, row.id) != nil
+    end
+
+    test "treats a delete of a row that is not there as done" do
+      write = delete_write(Module2, Entity.generate_id())
+
+      assert run(envelope([write]), server()) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}}}
+    end
+
+    test "applies an added edge" do
+      source = create_source()
+      target = create_target()
+
+      write = edge_write("add_relationship", Module16, source.id, "secrets", target.id)
+
+      assert {:ok, %{"status" => "confirmed"}} = run(envelope([write]), server())
+
+      assert count_edges(source.id, target.id) == 1
+    end
+
+    test "applies a deleted edge" do
+      source = create_source()
+      target = create_target()
+
+      :ok = EntityOperations.add_relationship(Module16, source.id, :secrets, target.id)
+
+      write = edge_write("delete_relationship", Module16, source.id, "secrets", target.id)
+
+      assert {:ok, %{"status" => "confirmed"}} = run(envelope([write]), server())
+
+      assert count_edges(source.id, target.id) == 0
+    end
+
+    test "refuses an update naming a row that is not there" do
+      write = update_write(Module2, Entity.generate_id(), %{"c" => "x"})
+
+      assert run(envelope([write]), server()) == {:rejected, 0, :not_found}
+    end
+
+    test "refuses an edge naming a row that is not there" do
+      target = create_target()
+
+      write =
+        edge_write("add_relationship", Module16, Entity.generate_id(), "secrets", target.id)
+
+      assert run(envelope([write]), server()) == {:rejected, 0, :not_found}
     end
 
     # A client is never the trusted tier: with nobody signed in the write is evaluated under the
