@@ -237,7 +237,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
              ]
     end
 
-    test "gives the mutation table the columns dedup and its record need" do
+    test "gives the mutation table the columns dedup and a refused batch need" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
 
@@ -254,12 +254,13 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       {:ok, %{rows: rows}} = Connection.query(statement)
 
-      # No envelope column: the rows a batch wrote are in the outbox under mutation_ref, keyed by
-      # the same pair, so keeping the batch here would keep every write twice.
+      # The envelope is filled for a refused batch only: a landed batch's rows are in the outbox
+      # under mutation_ref, keyed by the same pair, and a refused batch's rows are nowhere else.
       assert rows == [
                ["actor_id", "uuid", false],
-               ["applied_at", "timestamp with time zone", true],
+               ["answered_at", "timestamp with time zone", true],
                ["client_id", "text", true],
+               ["envelope", "jsonb", false],
                ["model_hash", "text", true],
                ["result", "jsonb", false],
                ["seq", "bigint", true]

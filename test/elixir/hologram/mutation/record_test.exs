@@ -16,18 +16,19 @@ defmodule Hologram.Mutation.RecordTest do
 
   defp rows do
     statement = """
-    SELECT "client_id", "seq", "actor_id", "model_hash", "result", "applied_at"
+    SELECT "client_id", "seq", "actor_id", "model_hash", "result", "envelope", "answered_at"
     FROM "hologram_system"."mutation"
     ORDER BY "client_id", "seq"
     """
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
 
-    Enum.map(rows, fn [client_id, seq, actor_id, model_hash, result, applied_at] ->
+    Enum.map(rows, fn [client_id, seq, actor_id, model_hash, result, envelope, answered_at] ->
       %{
         actor_id: Codec.decode(actor_id, :uuid),
-        applied_at: applied_at,
+        answered_at: answered_at,
         client_id: client_id,
+        envelope: envelope,
         model_hash: model_hash,
         result: result,
         seq: seq
@@ -41,7 +42,8 @@ defmodule Hologram.Mutation.RecordTest do
 
       assert [row] = rows()
       assert %{actor_id: nil, client_id: @client_id, model_hash: "h", result: nil, seq: 1} = row
-      assert %DateTime{} = row.applied_at
+      assert row.envelope == nil
+      assert %DateTime{} = row.answered_at
     end
 
     test "records the user who sent the batch" do
