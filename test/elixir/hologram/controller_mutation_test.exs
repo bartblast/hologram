@@ -58,9 +58,17 @@ defmodule Hologram.ControllerMutationTest do
     }
   end
 
-  defp outbox_actor_ids do
-    {:ok, %Postgrex.Result{rows: rows}} =
-      Connection.query(~s|SELECT "actor_id" FROM "hologram_system"."outbox" ORDER BY "seq"|)
+  # Scoped to the batch by its own mutation_ref rather than reading the whole table: the outbox is
+  # shared, and what this file asks about is the effects of ONE batch.
+  defp outbox_actor_ids(client_id) do
+    statement = """
+    SELECT "actor_id"
+    FROM "hologram_system"."outbox"
+    WHERE "mutation_ref"->>'client_id' = $1
+    ORDER BY "seq"
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [client_id])
 
     Enum.map(rows, fn [actor_id] -> Codec.decode(actor_id, :uuid) end)
   end
@@ -107,14 +115,15 @@ defmodule Hologram.ControllerMutationTest do
 
     test "applies the batch under the session's user" do
       user = create_user("publisher@example.com")
+      client_id = Entity.generate_id()
 
-      conn = post_batch(envelope([publish_write(Entity.generate_id())]), session_of(user.id))
+      raw = envelope([publish_write(Entity.generate_id())], client_id: client_id)
+
+      conn = post_batch(raw, session_of(user.id))
 
       assert conn.status == 200
 
-      # The user's own creation comes first and has no actor - this test process is the trusted
-      # tier. The batch's effect is the one that carries the session's user.
-      assert outbox_actor_ids() == [nil, user.id]
+      assert outbox_actor_ids(client_id) == [user.id]
     end
 
     test "answers a refused batch with the write and the reason" do

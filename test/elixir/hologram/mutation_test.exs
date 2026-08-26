@@ -107,21 +107,17 @@ defmodule Hologram.MutationTest do
     }
   end
 
-  defp mutation_row_count do
-    {:ok, %Postgrex.Result{rows: [[count]]}} =
-      Connection.query(~s|SELECT count(*) FROM "hologram_system"."mutation"|)
-
-    count
-  end
-
-  defp outbox_rows do
+  # Scoped to one batch by its own mutation_ref: the outbox is shared, and what these ask about is
+  # the effects of the batch under test rather than everything the table happens to hold.
+  defp outbox_rows(client_id) do
     statement = """
     SELECT "type", "entity_id", "actor_id", "mutation_ref"
     FROM "hologram_system"."outbox"
+    WHERE "mutation_ref"->>'client_id' = $1
     ORDER BY "seq"
     """
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [client_id])
 
     Enum.map(rows, fn [type, entity_id, actor_id, mutation_ref] ->
       %{
@@ -162,6 +158,19 @@ defmodule Hologram.MutationTest do
 
   defp stamp, do: System.os_time(:millisecond) * 1024
 
+  # A stamp above every revision the row holds. The wall clock alone will not do: this node's
+  # clock is `max(last + 1, os_time * 1024)`, so a row written in this millisecond can already
+  # carry a revision ABOVE raw os_time - and the applier refuses a stamp that is not above the
+  # revisions its own write says it was based on.
+  defp stamp_above(row) do
+    highest =
+      row.__meta__.revisions
+      |> Map.values()
+      |> Enum.max()
+
+    max(stamp(), highest + 1)
+  end
+
   describe "run/2" do
     test "applies a create and answers confirmed" do
       id = Entity.generate_id()
@@ -199,17 +208,20 @@ defmodule Hologram.MutationTest do
 
       run(envelope([publish_write(id)], client_id: client_id, seq: 7), server())
 
-      assert [%{mutation_ref: %{"client_id" => ^client_id, "seq" => 7}}] = outbox_rows()
+      assert [%{entity_id: ^id, mutation_ref: %{"client_id" => ^client_id, "seq" => 7}}] =
+               outbox_rows(client_id)
     end
 
     test "records the acting user on the effect" do
       user = create_user("publisher@example.com")
       id = Entity.generate_id()
+      client_id = Entity.generate_id()
 
-      assert {:ok, _result} = run(envelope([publish_write(id)]), server(user.id))
+      assert {:ok, _result} =
+               run(envelope([publish_write(id)], client_id: client_id), server(user.id))
 
-      assert [effect] = Enum.filter(outbox_rows(), &(&1.entity_id == id))
-      assert effect.actor_id == user.id
+      assert [%{actor_id: actor_id}] = outbox_rows(client_id)
+      assert actor_id == user.id
     end
 
     test "records the applied batch" do
@@ -226,8 +238,7 @@ defmodule Hologram.MutationTest do
       assert {:ok, answer} = run(batch, server())
       assert run(batch, server()) == {:ok, answer}
 
-      assert mutation_row_count() == 1
-      assert length(outbox_rows()) == 1
+      assert length(outbox_rows(batch["client_id"])) == 1
     end
 
     test "applies each sequence number of one client on its own" do
@@ -240,19 +251,25 @@ defmodule Hologram.MutationTest do
 
       assert EntityOperations.get(PolicyModule2, first_id) != nil
       assert EntityOperations.get(PolicyModule2, second_id) != nil
-      assert mutation_row_count() == 2
+
+      assert Record.find(client_id, 1) != nil
+      assert Record.find(client_id, 2) != nil
     end
 
     test "applies one sequence number for each client on its own" do
+      first_client = Entity.generate_id()
+      second_client = Entity.generate_id()
       first_id = Entity.generate_id()
       second_id = Entity.generate_id()
 
-      run(envelope([publish_write(first_id)], seq: 1), server())
-      run(envelope([publish_write(second_id)], seq: 1), server())
+      run(envelope([publish_write(first_id)], client_id: first_client, seq: 1), server())
+      run(envelope([publish_write(second_id)], client_id: second_client, seq: 1), server())
 
       assert EntityOperations.get(PolicyModule2, first_id) != nil
       assert EntityOperations.get(PolicyModule2, second_id) != nil
-      assert mutation_row_count() == 2
+
+      assert Record.find(first_client, 1) != nil
+      assert Record.find(second_client, 1) != nil
     end
 
     test "applies an update to the columns the writer saw unchanged" do
@@ -324,7 +341,11 @@ defmodule Hologram.MutationTest do
       based_on = Map.new(row.__meta__.revisions, fn {name, r} -> {Atom.to_string(name), r} end)
 
       write =
-        delete_write(PolicyModule1, row.id, based_on: based_on, claim: ["authorize", "archive"])
+        delete_write(PolicyModule1, row.id,
+          based_on: based_on,
+          claim: ["authorize", "archive"],
+          stamp: stamp_above(row)
+        )
 
       assert {:ok, %{"status" => "confirmed", "dropped" => %{}}} =
                run(envelope([write]), server(user.id))
@@ -475,8 +496,7 @@ defmodule Hologram.MutationTest do
                run(envelope([write], client_id: client_id), server())
 
       assert Record.find(client_id, 1) == nil
-      assert mutation_row_count() == 0
-      assert outbox_rows() == []
+      assert outbox_rows(client_id) == []
     end
 
     test "refuses a batch whose client and sequence number belong to another session" do
@@ -487,7 +507,9 @@ defmodule Hologram.MutationTest do
       assert {:ok, _answer} = run(batch, server(sender.id))
 
       assert run(batch, server(other.id)) == {:rejected, nil, :forged_client}
-      assert mutation_row_count() == 1
+
+      # The record still belongs to the session that earned it.
+      assert Record.find(batch["client_id"], 1).actor_id == sender.id
     end
 
     test "refuses a signed-in session's batch claimed anonymously" do
@@ -511,12 +533,13 @@ defmodule Hologram.MutationTest do
     test "refuses a stamp running ahead of the server's clock and names the write" do
       id = Entity.generate_id()
       a_year_ahead = (System.os_time(:millisecond) + 365 * 86_400_000) * 1024
+      client_id = Entity.generate_id()
       write = publish_write(id, stamp: a_year_ahead)
 
-      assert run(envelope([write]), server()) == {:rejected, 0, :clock}
+      assert run(envelope([write], client_id: client_id), server()) == {:rejected, 0, :clock}
 
       assert EntityOperations.get(PolicyModule2, id) == nil
-      assert mutation_row_count() == 0
+      assert Record.find(client_id, 1) == nil
     end
 
     test "accepts a stamp within the allowance" do
@@ -546,13 +569,15 @@ defmodule Hologram.MutationTest do
 
     test "refuses a batch built against another model" do
       id = Entity.generate_id()
+      client_id = Entity.generate_id()
       write = create_write(Module2, id, %{"c" => "x"})
 
-      assert run(envelope([write], model_hash: "other"), server()) ==
-               {:rejected, nil, :stale_build}
+      raw = envelope([write], client_id: client_id, model_hash: "other")
+
+      assert run(raw, server()) == {:rejected, nil, :stale_build}
 
       assert EntityOperations.get(Module2, id) == nil
-      assert mutation_row_count() == 0
+      assert Record.find(client_id, 1) == nil
     end
 
     test "answers a malformed envelope with what is wrong" do
