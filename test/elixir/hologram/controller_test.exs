@@ -58,6 +58,8 @@ defmodule Hologram.ControllerTest do
 
   @csrf_token_session_key CSRFProtection.session_key()
   @hologram_session_id "test-session-id"
+  @replica_id "test-replica-id"
+  @replica_token "test-replica-token"
 
   @session %{
     @csrf_token_session_key => @unmasked_csrf_token,
@@ -183,7 +185,9 @@ defmodule Hologram.ControllerTest do
     |> handle_page_request(page_module, %{}, client_claimed_sub_keys,
       initial_page?: true,
       instance_id: instance_id,
-      csrf_token: @masked_csrf_token
+      csrf_token: @masked_csrf_token,
+      replica_id: @replica_id,
+      replica_token: @replica_token
     )
   end
 
@@ -2065,7 +2069,9 @@ defmodule Hologram.ControllerTest do
         |> handle_page_request(Module35, %{}, [],
           initial_page?: true,
           instance_id: "test-instance-id",
-          csrf_token: @masked_csrf_token
+          csrf_token: @masked_csrf_token,
+          replica_id: @replica_id,
+          replica_token: @replica_token
         )
 
       assert String.contains?(conn.resp_body, "actor=019ff5c2-0000-7000-8000-000000000002")
@@ -2198,7 +2204,9 @@ defmodule Hologram.ControllerTest do
       |> handle_page_request(Module21, %{}, [],
         initial_page?: true,
         instance_id: "test-instance-id",
-        csrf_token: @masked_csrf_token
+        csrf_token: @masked_csrf_token,
+        replica_id: @replica_id,
+        replica_token: @replica_token
       )
 
       assert_receive {:identity_changed, ^session_id, 7}
@@ -2218,7 +2226,9 @@ defmodule Hologram.ControllerTest do
       |> handle_page_request(Module14, %{}, [],
         initial_page?: true,
         instance_id: "test-instance-id",
-        csrf_token: @masked_csrf_token
+        csrf_token: @masked_csrf_token,
+        replica_id: @replica_id,
+        replica_token: @replica_token
       )
 
       refute_receive {:identity_changed, _session_id, _user_id}
@@ -2239,7 +2249,9 @@ defmodule Hologram.ControllerTest do
         |> handle_page_request(Module22, %{}, [],
           initial_page?: true,
           instance_id: "test-instance-id",
-          csrf_token: @masked_csrf_token
+          csrf_token: @masked_csrf_token,
+          replica_id: @replica_id,
+          replica_token: @replica_token
         )
       end
 
@@ -2258,7 +2270,9 @@ defmodule Hologram.ControllerTest do
       |> handle_page_request(Module28, %{}, [],
         initial_page?: true,
         instance_id: "test-instance-id",
-        csrf_token: @masked_csrf_token
+        csrf_token: @masked_csrf_token,
+        replica_id: @replica_id,
+        replica_token: @replica_token
       )
 
       assert_receive {:identity_changed, ^session_id, 7}
@@ -2276,7 +2290,9 @@ defmodule Hologram.ControllerTest do
       |> handle_page_request(Module25, %{}, [],
         initial_page?: true,
         instance_id: "test-instance-id",
-        csrf_token: @masked_csrf_token
+        csrf_token: @masked_csrf_token,
+        replica_id: @replica_id,
+        replica_token: @replica_token
       )
 
       refute_receive {:identity_changed, _session_id, _user_id}
@@ -2293,7 +2309,9 @@ defmodule Hologram.ControllerTest do
         |> handle_page_request(Module21, %{}, [],
           initial_page?: true,
           instance_id: "test-instance-id",
-          csrf_token: @masked_csrf_token
+          csrf_token: @masked_csrf_token,
+          replica_id: @replica_id,
+          replica_token: @replica_token
         )
 
       assert Plug.Conn.get_session(conn, :hologram_user_id) == 7
@@ -2313,7 +2331,9 @@ defmodule Hologram.ControllerTest do
         |> handle_page_request(Module14, %{}, [],
           initial_page?: true,
           instance_id: "test-instance-id",
-          csrf_token: @masked_csrf_token
+          csrf_token: @masked_csrf_token,
+          replica_id: @replica_id,
+          replica_token: @replica_token
         )
 
       assert Plug.Conn.get_session(conn, :hologram_user_id) == 7

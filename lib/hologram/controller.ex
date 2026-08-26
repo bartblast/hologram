@@ -19,6 +19,7 @@ defmodule Hologram.Controller do
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Deserializer
   alias Hologram.Runtime.PlugConnUtils
+  alias Hologram.Runtime.ReplicaIdentity
   alias Hologram.Runtime.Session
   alias Hologram.Server
   alias Hologram.Server.Middleware
@@ -447,15 +448,30 @@ defmodule Hologram.Controller do
     {conn_with_csrf_token, {masked_csrf_token, _unmasked_csrf_token}} =
       CSRFProtection.ensure_tokens(conn)
 
+    conn_with_session = Session.init(conn_with_csrf_token)
+
     instance_id = UUID.uuid4()
+    replica_id = UUID.uuid4()
+
+    # Minted before the lifecycle, from the session as it stands: a page whose middleware signs
+    # the visitor in gets a session-bound identity that keeps working in that session, and the
+    # next page load mints a user-bound one.
+    replica_token =
+      ReplicaIdentity.issue(
+        replica_id,
+        Session.get_session_id(conn_with_session),
+        Session.get_user_id(conn_with_session)
+      )
 
     renderer_opts = [
       csrf_token: masked_csrf_token,
       initial_page?: true,
-      instance_id: instance_id
+      instance_id: instance_id,
+      replica_id: replica_id,
+      replica_token: replica_token
     ]
 
-    handle_page_request(conn_with_csrf_token, page_module, params, [], renderer_opts)
+    handle_page_request(conn_with_session, page_module, params, [], renderer_opts)
   end
 
   @doc """
