@@ -792,7 +792,7 @@ defmodule Hologram.Controller do
     Session.put_user_id(conn, user_id)
   end
 
-  # Transport only: what a batch becomes is Hologram.Mutation's, the encoding of a refusal's reason
+  # Transport only: what a batch becomes is Hologram.Mutation's, the spelling of its answer
   # included - so that a repeated batch is answered with byte for byte what its first arrival
   # produced.
   defp send_mutation_response(conn) do
@@ -800,13 +800,6 @@ defmodule Hologram.Controller do
       case Mutation.run(conn.body_params, Server.from(conn)) do
         {:ok, answer} ->
           Controller.json(conn, answer)
-
-        {:rejected, index, reason} ->
-          Controller.json(conn, %{
-            reason: Encoder.encode_client_term!(reason),
-            status: "rejected",
-            write: index
-          })
 
         {:invalid, message} ->
           conn

@@ -3,6 +3,7 @@ defmodule Hologram.MutationTest do
 
   import Hologram.Mutation
 
+  alias Hologram.Compiler.Encoder
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -148,6 +149,16 @@ defmodule Hologram.MutationTest do
     create_write(entity_type, id, data, claim: ["authorize", "read"])
   end
 
+  # What a refusal answers, spelled as the wire carries it.
+  defp rejected(index, reason) do
+    {:ok,
+     %{
+       "reason" => Encoder.encode_client_term!(reason),
+       "status" => "rejected",
+       "write" => index
+     }}
+  end
+
   defp server(user_id \\ nil), do: %Server{user_id: user_id}
 
   defp update_write(entity_type, id, data, opts \\ []) do
@@ -197,7 +208,7 @@ defmodule Hologram.MutationTest do
 
       writes = [publish_write(first_id), publish_write(second_id)]
 
-      assert {:ok, _result} = run(envelope(writes), server())
+      assert {:ok, %{"status" => "confirmed"}} = run(envelope(writes), server())
 
       assert EntityOperations.get(PolicyModule2, first_id) != nil
       assert EntityOperations.get(PolicyModule2, second_id) != nil
@@ -227,7 +238,7 @@ defmodule Hologram.MutationTest do
       id = Entity.generate_id()
       client_id = Entity.generate_id()
 
-      assert {:ok, _result} =
+      assert {:ok, %{"status" => "confirmed"}} =
                run(envelope([publish_write(id)], client_id: client_id), server(user.id))
 
       assert [%{actor_id: actor_id}] = outbox_rows(client_id)
@@ -245,7 +256,7 @@ defmodule Hologram.MutationTest do
     test "answers a repeated batch from the record without applying it again" do
       batch = envelope([publish_write(Entity.generate_id())])
 
-      assert {:ok, answer} = run(batch, server())
+      assert {:ok, %{"status" => "confirmed"} = answer} = run(batch, server())
       assert run(batch, server()) == {:ok, answer}
 
       assert length(outbox_rows(batch["client_id"])) == 1
@@ -415,7 +426,7 @@ defmodule Hologram.MutationTest do
     test "refuses an update naming a row that is not there" do
       write = update_write(Module2, Entity.generate_id(), %{"c" => "x"})
 
-      assert run(envelope([write]), server()) == {:rejected, 0, :not_found}
+      assert run(envelope([write]), server()) == rejected(0, :not_found)
     end
 
     test "refuses an edge naming a row that is not there" do
@@ -424,7 +435,7 @@ defmodule Hologram.MutationTest do
       write =
         edge_write("add_relationship", Module16, Entity.generate_id(), "secrets", target.id)
 
-      assert run(envelope([write]), server()) == {:rejected, 0, :not_found}
+      assert run(envelope([write]), server()) == rejected(0, :not_found)
     end
 
     # A client is never the trusted tier: with nobody signed in the write is evaluated under the
@@ -432,10 +443,10 @@ defmodule Hologram.MutationTest do
     test "evaluates an unclaimed create under an anonymous session" do
       write = create_write(PolicyModule1, Entity.generate_id(), %{"public" => false})
 
-      assert {:rejected, 0, %Hologram.AccessDeniedError{message: message}} =
+      assert {:ok, %{"status" => "rejected", "write" => 0, "reason" => reason}} =
                run(envelope([write]), server())
 
-      assert message =~ ~r/^not allowed to create Hologram\.Test\.Fixtures\.Policy\.Module1 /
+      assert reason =~ "not allowed to create Hologram.Test.Fixtures.Policy.Module1"
     end
 
     test "refuses a denied claim and names the write it refused" do
@@ -446,7 +457,7 @@ defmodule Hologram.MutationTest do
         create_write(PolicyModule1, Entity.generate_id(), %{"public" => false})
       ]
 
-      assert {:rejected, 1, %Hologram.AccessDeniedError{}} = run(envelope(writes), server())
+      assert {:ok, %{"status" => "rejected", "write" => 1}} = run(envelope(writes), server())
 
       # The whole batch rolled back, including the write that had already landed.
       assert EntityOperations.get(PolicyModule2, landing_id) == nil
@@ -455,7 +466,7 @@ defmodule Hologram.MutationTest do
     test "refuses a value the declarations refuse" do
       write = readable_write(Module19, Entity.generate_id(), %{"code" => "c"})
 
-      assert run(envelope([write]), server()) == {:rejected, 0, %{slug: [:required]}}
+      assert run(envelope([write]), server()) == rejected(0, %{slug: [:required]})
     end
 
     test "refuses a duplicate of a unique value" do
@@ -465,14 +476,14 @@ defmodule Hologram.MutationTest do
 
       write = readable_write(Module19, Entity.generate_id(), %{"slug" => "taken"})
 
-      assert run(envelope([write]), server()) == {:rejected, 0, %{slug: [:unique]}}
+      assert run(envelope([write]), server()) == rejected(0, %{slug: [:unique]})
     end
 
     test "refuses a reference naming no row" do
       write =
         readable_write(Module3, Entity.generate_id(), %{"c_id" => Entity.generate_id()})
 
-      assert run(envelope([write]), server()) == {:rejected, 0, %{c_id: [:not_found]}}
+      assert run(envelope([write]), server()) == rejected(0, %{c_id: [:not_found]})
     end
 
     test "refuses a delete the row's references block" do
@@ -500,14 +511,14 @@ defmodule Hologram.MutationTest do
         )
 
       assert run(envelope([write]), server()) ==
-               {:rejected, 0, %{referenced_by: Module3, relationship: :b}}
+               rejected(0, %{referenced_by: Module3, relationship: :b})
     end
 
     test "leaves no record and no effect of a refused batch" do
       client_id = Entity.generate_id()
       write = readable_write(Module19, Entity.generate_id(), %{"code" => "c"})
 
-      assert {:rejected, 0, _reason} =
+      assert {:ok, %{"status" => "rejected"}} =
                run(envelope([write], client_id: client_id), server())
 
       assert Record.find(client_id, 1) == nil
@@ -519,9 +530,9 @@ defmodule Hologram.MutationTest do
       other = create_user("other@example.com")
       batch = envelope([publish_write(Entity.generate_id())])
 
-      assert {:ok, _answer} = run(batch, server(sender.id))
+      assert {:ok, %{"status" => "confirmed"}} = run(batch, server(sender.id))
 
-      assert run(batch, server(other.id)) == {:rejected, nil, :forged_client}
+      assert run(batch, server(other.id)) == rejected(nil, :forged_client)
 
       # The record still belongs to the session that earned it.
       assert Record.find(batch["client_id"], 1).actor_id == sender.id
@@ -531,18 +542,18 @@ defmodule Hologram.MutationTest do
       sender = create_user("owner@example.com")
       batch = envelope([publish_write(Entity.generate_id())])
 
-      assert {:ok, _answer} = run(batch, server(sender.id))
+      assert {:ok, %{"status" => "confirmed"}} = run(batch, server(sender.id))
 
-      assert run(batch, server()) == {:rejected, nil, :forged_client}
+      assert run(batch, server()) == rejected(nil, :forged_client)
     end
 
     test "refuses an anonymous batch claimed by a signed-in session" do
       user = create_user("claimant@example.com")
       batch = envelope([publish_write(Entity.generate_id())])
 
-      assert {:ok, _answer} = run(batch, server())
+      assert {:ok, %{"status" => "confirmed"}} = run(batch, server())
 
-      assert run(batch, server(user.id)) == {:rejected, nil, :forged_client}
+      assert run(batch, server(user.id)) == rejected(nil, :forged_client)
     end
 
     test "refuses a stamp running ahead of the server's clock and names the write" do
@@ -551,7 +562,7 @@ defmodule Hologram.MutationTest do
       client_id = Entity.generate_id()
       write = publish_write(id, stamp: a_year_ahead)
 
-      assert run(envelope([write], client_id: client_id), server()) == {:rejected, 0, :clock}
+      assert run(envelope([write], client_id: client_id), server()) == rejected(0, :clock)
 
       assert EntityOperations.get(PolicyModule2, id) == nil
       assert Record.find(client_id, 1) == nil
@@ -561,7 +572,7 @@ defmodule Hologram.MutationTest do
       id = Entity.generate_id()
       four_minutes_ahead = (System.os_time(:millisecond) + 4 * 60_000) * 1024
 
-      assert {:ok, _answer} =
+      assert {:ok, %{"status" => "confirmed"}} =
                run(envelope([publish_write(id, stamp: four_minutes_ahead)]), server())
 
       assert EntityOperations.get(PolicyModule2, id) != nil
@@ -578,7 +589,7 @@ defmodule Hologram.MutationTest do
           stamp: seen
         )
 
-      assert run(envelope([write]), server(user.id)) == {:rejected, 0, :clock}
+      assert run(envelope([write]), server(user.id)) == rejected(0, :clock)
       assert EntityOperations.get(PolicyModule1, row.id).priority == 5
     end
 
@@ -589,7 +600,7 @@ defmodule Hologram.MutationTest do
 
       raw = envelope([write], client_id: client_id, model_hash: "other")
 
-      assert run(raw, server()) == {:rejected, nil, :stale_build}
+      assert run(raw, server()) == rejected(nil, :stale_build)
 
       assert EntityOperations.get(Module2, id) == nil
       assert Record.find(client_id, 1) == nil
