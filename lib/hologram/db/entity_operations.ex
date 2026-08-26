@@ -211,11 +211,13 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  # The :stamp option gives the revision every column this statement sets takes, for a write
+  # authored elsewhere. Without it the node's own clock answers, which is every server-side write.
   @doc false
-  @spec update(module, String.t(), map | keyword) ::
+  @spec update(module, String.t(), map | keyword, keyword) ::
           :ok | {:error, %{atom => list(atom | {atom, any})}}
   # sobelow_skip ["SQL.Query"]
-  def update(entity_type, id, changes) do
+  def update(entity_type, id, changes, opts \\ []) do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
     columns_by_field =
@@ -268,7 +270,7 @@ defmodule Hologram.DB.EntityOperations do
 
           changed_values = Enum.map(set_entries, fn {_column, value} -> value end)
 
-          stamp = Clock.stamp()
+          stamp = Keyword.get_lazy(opts, :stamp, &Clock.stamp/0)
           updated_at = DateTime.utc_now(:microsecond)
           encoded_updated_at = Codec.encode(updated_at, :datetime)
           encoded_id = Codec.encode(id, :uuid)
@@ -513,16 +515,21 @@ defmodule Hologram.DB.EntityOperations do
 
     now = DateTime.utc_now(:microsecond)
 
-    # One stamp for the whole row: every column it sets was set by this write, at this moment.
-    stamp = Clock.stamp()
+    # One stamp for the whole row: every column it sets was set by this write, at this moment. A
+    # write authored elsewhere brings its own and it is stored as given - its writer's next write
+    # says it was based on that exact value, so re-authoring it here would break that chain.
+    stamp = entity.__meta__.stamp || Clock.stamp()
     settable_columns = Enum.filter(columns, &settable?/1)
     revisions = Map.new(settable_columns, &{field_name(&1), stamp})
 
+    # The metadata starts over rather than carrying the caller's: what the struct was holding
+    # toward this write has been spent by it, the stamp included, and an executor answers what
+    # the row IS.
     stamped_entity = %{
       entity
       | created_at: now,
         updated_at: now,
-        __meta__: %{entity.__meta__ | revisions: revisions}
+        __meta__: %Metadata{revisions: revisions}
     }
 
     encoded_values =

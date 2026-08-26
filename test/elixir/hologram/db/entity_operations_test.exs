@@ -9,6 +9,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
+  alias Hologram.Entity.Metadata
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module13
@@ -336,6 +337,34 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert stamped_fields == [:b_id, :c_id]
       assert length(distinct_stamps) == 1
+    end
+
+    test "stores a stamp the struct carries as every column's revision" do
+      # Far past anything this node's clock would answer, so a stamp taken here rather than given
+      # cannot coincide with it.
+      stamp = 4_000_000_000_000_000
+
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> Map.put(:__meta__, %Metadata{stamp: stamp})
+        |> create()
+
+      reloaded_entity = get(Module2, created_entity.id)
+
+      assert created_entity.__meta__.revisions == %{a: stamp, b: stamp, c: stamp}
+      assert reloaded_entity.__meta__.revisions == %{a: stamp, b: stamp, c: stamp}
+    end
+
+    test "answers a struct carrying nothing of the write it made" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> Map.put(:__meta__, %Metadata{claim: :trust, stamp: 4_000_000_000_000_000})
+        |> create()
+
+      assert created_entity.__meta__.claim == nil
+      assert created_entity.__meta__.stamp == nil
     end
 
     test "records the revisions on the effect" do
@@ -1025,7 +1054,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
   end
 
-  describe "update/3" do
+  describe "update/4" do
     test "sets exactly the changed columns and bumps updated_at" do
       {:ok, created_entity} =
         Module2
@@ -1187,6 +1216,39 @@ defmodule Hologram.DB.EntityOperationsTest do
       revisions = get(Module2, created_entity.id).__meta__.revisions
 
       assert revisions.a == ahead_of_this_node + 1
+    end
+
+    test "stores a given stamp as the revision of the columns it sets" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      stamp = created_entity.__meta__.revisions.a + 1_000_000
+
+      :ok = update(Module2, created_entity.id, [a: false], stamp: stamp)
+
+      revisions = get(Module2, created_entity.id).__meta__.revisions
+
+      assert revisions.a == stamp
+      assert revisions.c == created_entity.__meta__.revisions.c
+    end
+
+    test "never lowers a revision to a given stamp" do
+      {:ok, created_entity} =
+        Module2
+        |> Entity.new(a: true, c: "abc")
+        |> create()
+
+      ahead = created_entity.__meta__.revisions.a + 1_000_000
+
+      set_revisions(Module2, created_entity.id, %{"a" => ahead})
+
+      :ok = update(Module2, created_entity.id, [a: false], stamp: ahead - 1)
+
+      revisions = get(Module2, created_entity.id).__meta__.revisions
+
+      assert revisions.a == ahead + 1
     end
 
     test "returns the violation from the write itself when the new value is taken" do
