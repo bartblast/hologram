@@ -15,6 +15,7 @@ defmodule HologramFeatureTests.OperatorsTest do
   @list_b [2, 3, 4]
 
   @map_a %{a: @integer_a, b: @integer_b}
+  @map_b %{a: @integer_a}
 
   @range_a @integer_a..@integer_c
 
@@ -299,6 +300,20 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> visit(OperatorsPage)
       |> click(css("button[id='!==']"))
       |> assert_text(css("#result"), inspect(@integer_a !== @float_a))
+    end
+
+    feature "=== (map)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='=== (map)']"))
+      |> assert_text(css("#result"), inspect(@map_b === @map_a))
+    end
+
+    feature "== (map)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='== (map)']"))
+      |> assert_text(css("#result"), inspect(@map_b == @map_a))
     end
 
     feature "<", %{session: session} do
