@@ -13,6 +13,8 @@ defmodule HologramFeatureTests.OperatorsTest do
 
   @list_a [1, 2, 3]
   @list_b [2, 3, 4]
+  @list_float [1.0]
+  @list_integer [1]
 
   @map_a %{a: @integer_a, b: @integer_b}
   @map_b %{a: @integer_a}
@@ -314,6 +316,13 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> visit(OperatorsPage)
       |> click(css("button[id='== (map)']"))
       |> assert_text(css("#result"), inspect(@map_b == @map_a))
+    end
+
+    feature "== (nested number)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='== (nested number)']"))
+      |> assert_text(css("#result"), inspect(@list_integer == @list_float))
     end
 
     feature "<", %{session: session} do
