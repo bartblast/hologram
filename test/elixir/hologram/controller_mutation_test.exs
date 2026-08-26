@@ -17,6 +17,7 @@ defmodule Hologram.ControllerMutationTest do
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
+  alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
   @unmasked_csrf_token CSRFProtection.generate_unmasked_token()
@@ -40,6 +41,19 @@ defmodule Hologram.ControllerMutationTest do
     start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
 
     :ok
+  end
+
+  # An update claiming the one operation the fixtures grant without a role grant - refused with
+  # :not_found while the row it names is absent, and landing once it exists.
+  defp archive_write(id) do
+    %{
+      "op" => "update",
+      "type" => inspect(PolicyModule1),
+      "id" => id,
+      "data" => %{"priority" => 9},
+      "claim" => ["authorize", "archive"],
+      "stamp" => System.os_time(:millisecond) * 1024
+    }
   end
 
   defp create_user(email) do
@@ -145,6 +159,33 @@ defmodule Hologram.ControllerMutationTest do
                "write" => 0,
                "reason" => Encoder.encode_client_term!(%{slug: [:required]})
              }
+    end
+
+    test "answers a refused batch posted again with what its first arrival got" do
+      user = create_user("resender@example.com")
+      client_id = Entity.generate_id()
+      id = Entity.generate_id()
+      raw = envelope([archive_write(id)], client_id: client_id)
+
+      first = post_batch(raw, session_of(user.id))
+
+      # The world changes between the two posts - a second evaluation would find the row and land
+      # the update - so an answer that still refuses is one the record replayed.
+      PolicyModule1
+      |> Entity.new(id: id, author_id: user.id, priority: 5)
+      |> DB.create!()
+
+      second = post_batch(raw, session_of(user.id))
+
+      assert first.status == 200
+      assert second.status == 200
+
+      # The bytes, not the decoded map: a replay that re-encoded the reason could spell it
+      # differently and still decode equal.
+      assert second.resp_body == first.resp_body
+
+      assert Jason.decode!(first.resp_body)["status"] == "rejected"
+      assert EntityOperations.get(PolicyModule1, id).priority == 5
     end
 
     test "answers a batch built against another model with no write" do
