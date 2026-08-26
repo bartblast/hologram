@@ -149,6 +149,21 @@ defmodule Hologram.MutationTest do
     create_write(entity_type, id, data, claim: ["authorize", "read"])
   end
 
+  # The batch the record kept for a refusal, or nil when it kept none.
+  defp record_envelope(client_id, seq) do
+    statement = """
+    SELECT "envelope" FROM "hologram_system"."mutation"
+    WHERE "client_id" = $1 AND "seq" = $2
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [client_id, seq])
+
+    case rows do
+      [[envelope]] -> envelope
+      [] -> nil
+    end
+  end
+
   # What a refusal answers, spelled as the wire carries it.
   defp rejected(index, reason) do
     {:ok,
@@ -514,15 +529,87 @@ defmodule Hologram.MutationTest do
                rejected(0, %{referenced_by: Module3, relationship: :b})
     end
 
-    test "leaves no record and no effect of a refused batch" do
+    test "keeps a batch the evaluator refused, with what it carried and the answer it got" do
+      user = create_user("refused@example.com")
       client_id = Entity.generate_id()
-      write = readable_write(Module19, Entity.generate_id(), %{"code" => "c"})
+      write = create_write(PolicyModule1, Entity.generate_id(), %{"public" => false})
+      raw = envelope([write], client_id: client_id)
 
-      assert {:ok, %{"status" => "rejected"}} =
-               run(envelope([write], client_id: client_id), server())
+      assert {:ok, %{"status" => "rejected"} = answer} = run(raw, server(user.id))
+
+      assert Record.find(client_id, 1) == %{actor_id: user.id, result: answer}
+      assert record_envelope(client_id, 1) == raw
+    end
+
+    test "answers a refused batch sent again from its record without evaluating it again" do
+      user = create_user("resender@example.com")
+      id = Entity.generate_id()
+      raw = envelope([update_write(PolicyModule1, id, %{"priority" => 9})])
+
+      assert run(raw, server(user.id)) == rejected(0, :not_found)
+
+      # The world changed between the two sends - a second evaluation would find the row and land
+      # the update - and the answer did not, which is what proves it came from the record.
+      create_archivable(user, id: id, priority: 5)
+
+      assert run(raw, server(user.id)) == rejected(0, :not_found)
+      assert EntityOperations.get(PolicyModule1, id).priority == 5
+    end
+
+    test "keeps nothing of a batch refused under an anonymous session" do
+      client_id = Entity.generate_id()
+      target_id = Entity.generate_id()
+      write = readable_write(Module3, Entity.generate_id(), %{"c_id" => target_id})
+      raw = envelope([write], client_id: client_id)
+
+      assert run(raw, server()) == rejected(0, %{c_id: [:not_found]})
+      assert Record.find(client_id, 1) == nil
+
+      # Nothing kept means no key taken: the same batch sent again is evaluated on its own, and
+      # lands once the row its reference names exists.
+      Module1
+      |> Entity.new(id: target_id)
+      |> DB.create!()
+
+      assert {:ok, %{"status" => "confirmed"}} = run(raw, server())
+    end
+
+    test "keeps nothing of a batch refused for its clock" do
+      user = create_user("fastclock@example.com")
+      client_id = Entity.generate_id()
+      a_year_ahead = (System.os_time(:millisecond) + 365 * 86_400_000) * 1024
+      write = publish_write(Entity.generate_id(), stamp: a_year_ahead)
+
+      assert run(envelope([write], client_id: client_id), server(user.id)) ==
+               rejected(0, :clock)
 
       assert Record.find(client_id, 1) == nil
+    end
+
+    test "keeps no envelope of a batch that landed" do
+      client_id = Entity.generate_id()
+      raw = envelope([publish_write(Entity.generate_id())], client_id: client_id)
+
+      assert {:ok, %{"status" => "confirmed"}} = run(raw, server())
+
+      assert record_envelope(client_id, 1) == nil
+      assert Record.find(client_id, 1).result == %{"status" => "confirmed", "dropped" => %{}}
+    end
+
+    test "leaves no effect of a refused batch" do
+      user = create_user("noeffect@example.com")
+      client_id = Entity.generate_id()
+      id = Entity.generate_id()
+      write = readable_write(Module19, id, %{"code" => "c"})
+
+      assert {:ok, %{"status" => "rejected"}} =
+               run(envelope([write], client_id: client_id), server(user.id))
+
+      # The record is not an effect: it says the batch was refused, and nothing the batch wrote
+      # survived it.
+      assert Record.find(client_id, 1) != nil
       assert outbox_rows(client_id) == []
+      assert EntityOperations.get(Module19, id) == nil
     end
 
     test "refuses a batch whose client and sequence number belong to another session" do
