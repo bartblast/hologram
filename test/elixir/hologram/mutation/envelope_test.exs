@@ -25,6 +25,17 @@ defmodule Hologram.Mutation.EnvelopeTest do
     }
   end
 
+  defp delete(entity_type, opts \\ []) do
+    %{
+      "op" => "delete",
+      "type" => inspect(entity_type),
+      "id" => Keyword.get(opts, :id, @id),
+      "based_on" => Keyword.get(opts, :based_on),
+      "claim" => Keyword.get(opts, :claim),
+      "stamp" => Keyword.get(opts, :stamp, 5)
+    }
+  end
+
   defp raw(writes) do
     %{
       "instance_id" => "i1",
@@ -32,6 +43,18 @@ defmodule Hologram.Mutation.EnvelopeTest do
       "model_hash" => "h",
       "seq" => 1,
       "writes" => writes
+    }
+  end
+
+  defp update(entity_type, data, opts \\ []) do
+    %{
+      "op" => "update",
+      "type" => inspect(entity_type),
+      "id" => Keyword.get(opts, :id, @id),
+      "data" => data,
+      "based_on" => Keyword.get(opts, :based_on),
+      "claim" => Keyword.get(opts, :claim),
+      "stamp" => Keyword.get(opts, :stamp, 5)
     }
   end
 
@@ -64,6 +87,57 @@ defmodule Hologram.Mutation.EnvelopeTest do
                stamp: 5,
                target_id: nil
              }
+    end
+
+    test "parses an update into a write" do
+      entry = update(Module2, %{"c" => "x"}, based_on: %{"c" => 3})
+
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
+
+      assert write == %Write{
+               based_on: %{c: 3},
+               claim: nil,
+               data: %{c: "x"},
+               entity_type: Module2,
+               id: @id,
+               op: :update,
+               relationship: nil,
+               stamp: 5,
+               target_id: nil
+             }
+    end
+
+    test "parses a delete into a write" do
+      entry = delete(Module2, based_on: %{"a" => 1, "c" => 3})
+
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
+
+      assert write == %Write{
+               based_on: %{a: 1, c: 3},
+               claim: nil,
+               data: %{},
+               entity_type: Module2,
+               id: @id,
+               op: :delete,
+               relationship: nil,
+               stamp: 5,
+               target_id: nil
+             }
+    end
+
+    test "reads a missing based_on as no revisions" do
+      assert {:ok, %Envelope{writes: [write]}} =
+               parse(raw([update(Module2, %{"c" => "x"})]))
+
+      assert write.based_on == %{}
+    end
+
+    test "reads a based_on through the field a reference is written under" do
+      entry = update(Module3, %{"c_id" => @target_id}, based_on: %{"c_id" => 3})
+
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
+
+      assert write.based_on == %{c_id: 3}
     end
 
     test "parses every write of a batch, in the order they were sent" do
@@ -212,6 +286,42 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert {:ok, %Envelope{writes: [write]}} = parse(raw([create(Module4, %{"c" => "z"})]))
 
       assert write.data == %{c: :z}
+    end
+
+    test "refuses an update changing nothing" do
+      assert parse(raw([update(Module2, %{})])) ==
+               {:error, "write 0: an update must change at least one field"}
+    end
+
+    test "refuses a delete carrying data" do
+      entry =
+        Module2
+        |> delete()
+        |> Map.put("data", %{"c" => "x"})
+
+      assert parse(raw([entry])) == {:error, "write 0: a delete carries no data"}
+    end
+
+    test "refuses a based_on that is not an object" do
+      entry = update(Module2, %{"c" => "x"}, based_on: [3])
+
+      assert parse(raw([entry])) == {:error, "write 0: based_on must be an object"}
+    end
+
+    test "refuses a based_on naming a field a client cannot write" do
+      entry = update(Module2, %{"c" => "x"}, based_on: %{"nope" => 3})
+
+      assert parse(raw([entry])) ==
+               {:error,
+                ~s[write 0: "nope" is not a field of Hologram.Test.Fixtures.Entity.Module2 a client can write]}
+    end
+
+    test "refuses a based_on revision that is not a positive integer" do
+      assert parse(raw([update(Module2, %{"c" => "x"}, based_on: %{"c" => 0})])) ==
+               {:error, ~s(write 0: based_on."c" must be a positive integer)}
+
+      assert parse(raw([update(Module2, %{"c" => "x"}, based_on: %{"c" => "3"})])) ==
+               {:error, ~s(write 0: based_on."c" must be a positive integer)}
     end
 
     test "refuses the server's authority as a claim" do

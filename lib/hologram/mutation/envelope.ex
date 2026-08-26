@@ -52,6 +52,17 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
+  # What the writer saw: the revision of each column the write touches, as of when it decided. An
+  # entry missing altogether reads as no revisions, which is a write based on nothing having been
+  # seen - the merge answers it the same way it answers a column the row has never had set.
+  defp based_on(entry, entity_type) do
+    case Map.get(entry, "based_on") do
+      nil -> {:ok, %{}}
+      revisions when is_map(revisions) -> decode_based_on(revisions, entity_type)
+      _other -> {:error, "based_on must be an object"}
+    end
+  end
+
   defp authorize_claim(operation) do
     {:ok, {:authorize, String.to_existing_atom(operation)}}
   rescue
@@ -83,6 +94,12 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
+  defp decode_based_on(revisions, entity_type) do
+    fields = settable_fields(entity_type)
+
+    Enum.reduce_while(revisions, {:ok, %{}}, &decode_revision_into(&1, &2, fields, entity_type))
+  end
+
   defp decode_data(values, entity_type) do
     fields = settable_fields(entity_type)
 
@@ -101,6 +118,26 @@ defmodule Hologram.Mutation.Envelope do
 
   defp decode_field_into({name, value}, {:ok, decoded}, fields, entity_type) do
     case decode_field(name, value, fields, entity_type) do
+      {:ok, {field, value}} -> {:cont, {:ok, Map.put(decoded, field, value)}}
+      {:error, message} -> {:halt, {:error, message}}
+    end
+  end
+
+  defp decode_revision(name, revision, fields, entity_type) do
+    case Map.fetch(fields, name) do
+      {:ok, {field, _type}} when is_integer(revision) and revision > 0 ->
+        {:ok, {field, revision}}
+
+      {:ok, _field} ->
+        {:error, ~s(based_on."#{name}" must be a positive integer)}
+
+      :error ->
+        {:error, ~s("#{name}" is not a field of #{inspect(entity_type)} a client can write)}
+    end
+  end
+
+  defp decode_revision_into({name, revision}, {:ok, decoded}, fields, entity_type) do
+    case decode_revision(name, revision, fields, entity_type) do
       {:ok, {field, value}} -> {:cont, {:ok, Map.put(decoded, field, value)}}
       {:error, message} -> {:halt, {:error, message}}
     end
@@ -130,6 +167,16 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
+  # A delete takes the whole row, so there is nothing for it to carry values for - one that does
+  # was built by something that does not know what a delete is.
+  defp no_data(entry) do
+    case Map.get(entry, "data") do
+      nil -> :ok
+      values when values == %{} -> :ok
+      _other -> {:error, "a delete carries no data"}
+    end
+  end
+
   defp non_negative_integer(raw, key) do
     case Map.get(raw, key) do
       value when is_integer(value) and value >= 0 -> {:ok, value}
@@ -155,9 +202,51 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
+  defp parse_delete(entry) do
+    with {:ok, entity_type} <- entity_type(entry),
+         {:ok, id} <- id(entry),
+         :ok <- no_data(entry),
+         {:ok, based_on} <- based_on(entry, entity_type),
+         {:ok, claim} <- claim(entry),
+         {:ok, stamp} <- stamp(entry) do
+      {:ok,
+       %Write{
+         based_on: based_on,
+         claim: claim,
+         entity_type: entity_type,
+         id: id,
+         op: :delete,
+         stamp: stamp
+       }}
+    end
+  end
+
+  defp parse_update(entry) do
+    with {:ok, entity_type} <- entity_type(entry),
+         {:ok, id} <- id(entry),
+         {:ok, data} <- data(entry, entity_type),
+         :ok <- some_data(data),
+         {:ok, based_on} <- based_on(entry, entity_type),
+         {:ok, claim} <- claim(entry),
+         {:ok, stamp} <- stamp(entry) do
+      {:ok,
+       %Write{
+         based_on: based_on,
+         claim: claim,
+         data: data,
+         entity_type: entity_type,
+         id: id,
+         op: :update,
+         stamp: stamp
+       }}
+    end
+  end
+
   defp parse_write(entry) when is_map(entry) do
     case Map.get(entry, "op") do
       "create" -> parse_create(entry)
+      "delete" -> parse_delete(entry)
+      "update" -> parse_update(entry)
       _other -> {:error, "op must be one of #{@ops}"}
     end
   end
@@ -197,6 +286,10 @@ defmodule Hologram.Mutation.Envelope do
     # failed to look it up.
     ArgumentError -> {:error, unknown_type_message(label)}
   end
+
+  defp some_data(data) when data == %{}, do: {:error, "an update must change at least one field"}
+
+  defp some_data(_data), do: :ok
 
   # The fields a client may write: the declared attributes minus the server-only ones, which a
   # client is never told exist, and the to-one references under their id spelling.
