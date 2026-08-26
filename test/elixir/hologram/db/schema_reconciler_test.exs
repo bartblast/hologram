@@ -166,7 +166,13 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       {:ok, %{rows: rows}} = Connection.query(statement)
 
-      assert rows == [["database"], ["migration"], ["outbox"], ["schema_object"]]
+      assert rows == [
+               ["database"],
+               ["migration"],
+               ["mutation"],
+               ["outbox"],
+               ["schema_object"]
+             ]
     end
 
     test "gives the outbox the indexes reading it forward and by time need" do
@@ -228,6 +234,61 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                ["seq", "bigint", true],
                ["tx", "xid8", true],
                ["type", "text", true]
+             ]
+    end
+
+    test "gives the mutation table the columns dedup and its record need" do
+      drop_hologram_schemas()
+      {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
+
+      assert create_system_tables() == :ok
+
+      statement = """
+      SELECT a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull
+      FROM pg_catalog.pg_attribute a
+      JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'hologram_system' AND c.relname = 'mutation' AND a.attnum > 0
+      ORDER BY a.attname
+      """
+
+      {:ok, %{rows: rows}} = Connection.query(statement)
+
+      # No envelope column: the rows a batch wrote are in the outbox under mutation_ref, keyed by
+      # the same pair, so keeping the batch here would keep every write twice.
+      assert rows == [
+               ["actor_id", "uuid", false],
+               ["applied_at", "timestamp with time zone", true],
+               ["client_id", "text", true],
+               ["model_hash", "text", true],
+               ["result", "jsonb", false],
+               ["seq", "bigint", true]
+             ]
+    end
+
+    test "keys the mutation table by the client and its sequence number" do
+      drop_hologram_schemas()
+      {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
+
+      assert create_system_tables() == :ok
+
+      statement = """
+      SELECT c.relname, am.amname, a.attname
+      FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_catalog.pg_am am ON am.oid = c.relam
+      JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+      WHERE n.nspname = 'hologram_system' AND c.relkind = 'i' AND c.relname LIKE 'mutation%'
+      ORDER BY c.relname, a.attnum
+      """
+
+      {:ok, %{rows: rows}} = Connection.query(statement)
+
+      # The key IS the dedup: the second arrival of a batch cannot insert its own row, so it
+      # blocks on the first and then answers from what the first recorded.
+      assert rows == [
+               ["mutation_pkey", "btree", "client_id"],
+               ["mutation_pkey", "btree", "seq"]
              ]
     end
 
