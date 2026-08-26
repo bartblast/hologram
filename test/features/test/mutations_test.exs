@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
+  alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
@@ -54,6 +55,11 @@ defmodule HologramFeatureTests.MutationsTest do
     }
   end
 
+  # What the page sends as its client_id, and so what the record is keyed by.
+  defp instance_id(session) do
+    script_result(session, "return globalThis.Hologram.instanceId;")
+  end
+
   defp log_in(session) do
     session
     |> visit(MutationsPage)
@@ -69,6 +75,18 @@ defmodule HologramFeatureTests.MutationsTest do
 
   defp assert_same_page_load(session) do
     assert_script_result(session, "return globalThis.__thisPageLoad;", "held")
+  end
+
+  defp pin_note_write(id) do
+    %{
+      "op" => "update",
+      "type" => inspect(Note),
+      "id" => id,
+      "data" => %{"pinned" => true},
+      "based_on" => %{},
+      "claim" => ["authorize", "pin"],
+      "stamp" => System.os_time(:millisecond) * 1024
+    }
   end
 
   # The batch is built and sent IN THE BROWSER, from the identity and the model hash the runtime
@@ -97,6 +115,21 @@ defmodule HologramFeatureTests.MutationsTest do
     """
 
     execute_script(session, script)
+  end
+
+  # What the server kept of this browser's batches, scoped to the browser that sent them - the
+  # record is a shared table, and each of these features asks only about its own page's batches.
+  defp record_rows(client_id) do
+    statement = """
+    SELECT "actor_id", "result", "envelope" FROM "hologram_system"."mutation"
+    WHERE "client_id" = $1 ORDER BY "seq"
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [client_id])
+
+    Enum.map(rows, fn [actor_id, result, envelope] ->
+      %{actor_id: Codec.decode(actor_id, :uuid), envelope: envelope, result: result}
+    end)
   end
 
   defp session_user do
@@ -177,5 +210,82 @@ defmodule HologramFeatureTests.MutationsTest do
 
     assert DB.read(Note) == []
     assert Model.hash() != "not-this-build"
+  end
+
+  feature "keeps a batch the acting user's policies deny, with its writes and the reason", %{
+    session: session
+  } do
+    session = log_in(session)
+    client_id = instance_id(session)
+
+    other_author =
+      User
+      |> Entity.new(email: "other@example.com")
+      |> DB.create!()
+
+    writes = [create_note_write(other_author.id, "kept")]
+
+    post_batch(session, 1, writes)
+
+    response = await_response(session)
+
+    assert response["status"] == "rejected"
+
+    assert [row] = record_rows(client_id)
+    assert row.actor_id == session_user().id
+
+    # What the browser was told is what the table holds.
+    assert row.result == response
+
+    assert row.envelope["client_id"] == client_id
+    assert row.envelope["seq"] == 1
+    assert row.envelope["writes"] == writes
+
+    assert DB.read(Note) == []
+  end
+
+  feature "answers a refused batch posted again from its record", %{session: session} do
+    session = log_in(session)
+    client_id = instance_id(session)
+    id = Entity.generate_id()
+
+    post_batch(session, 1, [pin_note_write(id)])
+
+    first = await_response(session)
+
+    assert first["status"] == "rejected"
+    assert first["reason"] == ~s[Type.atom("not_found")]
+
+    # The world changes between the two posts: the row the write names now exists, so a second
+    # evaluation would answer something else - a denial, since a row created from the test process
+    # has no acting user to grant its creator role. An answer that still says :not_found is one
+    # the record replayed.
+    Note
+    |> Entity.new(id: id, body: "late", author_id: session_user().id)
+    |> DB.create!()
+
+    post_batch(session, 1, [pin_note_write(id)])
+
+    assert await_response(session) == first
+
+    assert [%Note{pinned: false}] = DB.read(Note)
+    assert length(record_rows(client_id)) == 1
+  end
+
+  feature "keeps nothing of a batch refused before anyone is logged in", %{session: session} do
+    session = visit(session, MutationsPage)
+    client_id = instance_id(session)
+
+    author =
+      User
+      |> Entity.new(email: "nobody@example.com")
+      |> DB.create!()
+
+    post_batch(session, 1, [create_note_write(author.id, "anonymous")])
+
+    assert await_response(session)["status"] == "rejected"
+
+    assert record_rows(client_id) == []
+    assert DB.read(Note) == []
   end
 end
