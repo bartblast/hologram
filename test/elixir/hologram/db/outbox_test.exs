@@ -12,7 +12,7 @@ defmodule Hologram.DB.OutboxTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
 
-  @client_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
+  @replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
 
@@ -185,12 +185,12 @@ defmodule Hologram.DB.OutboxTest do
 
     test "returns the batch the effect was written under" do
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, nil, nil, %{
-        client_id: @client_id,
+        replica_id: @replica_id,
         seq: 7
       })
 
       assert [{200, [event]}] = read_window(200, 201)
-      assert event.mutation_ref == %{"client_id" => @client_id, "seq" => 7}
+      assert event.mutation_ref == %{"replica_id" => @replica_id, "seq" => 7}
     end
 
     test "returns no batch for an effect written outside one" do
@@ -362,9 +362,9 @@ defmodule Hologram.DB.OutboxTest do
     test "records the batch an effect was written under" do
       effect = %{op: :del_entity, entity_type: Module2, entity_id: @entity_id}
 
-      assert Ref.with_ref(%{client_id: @client_id, seq: 7}, fn -> append([effect]) end) == :ok
+      assert Ref.with_ref(%{replica_id: @replica_id, seq: 7}, fn -> append([effect]) end) == :ok
 
-      assert [%{mutation_ref: %{"client_id" => @client_id, "seq" => 7}}] = rows()
+      assert [%{mutation_ref: %{"replica_id" => @replica_id, "seq" => 7}}] = rows()
     end
 
     test "records no batch for an effect written outside one" do

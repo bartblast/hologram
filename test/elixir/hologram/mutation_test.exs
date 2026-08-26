@@ -107,7 +107,7 @@ defmodule Hologram.MutationTest do
   defp envelope(writes, opts \\ []) do
     %{
       "instance_id" => "i1",
-      "client_id" => Keyword.get(opts, :client_id, Entity.generate_id()),
+      "replica_id" => Keyword.get(opts, :replica_id, Entity.generate_id()),
       "model_hash" => Keyword.get(opts, :model_hash, Model.hash()),
       "seq" => Keyword.get(opts, :seq, 1),
       "writes" => writes
@@ -116,15 +116,15 @@ defmodule Hologram.MutationTest do
 
   # Scoped to one batch by its own mutation_ref: the outbox is shared, and what these ask about is
   # the effects of the batch under test rather than everything the table happens to hold.
-  defp outbox_rows(client_id) do
+  defp outbox_rows(replica_id) do
     statement = """
     SELECT "type", "entity_id", "actor_id", "mutation_ref"
     FROM "hologram_system"."outbox"
-    WHERE "mutation_ref"->>'client_id' = $1
+    WHERE "mutation_ref"->>'replica_id' = $1
     ORDER BY "seq"
     """
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [client_id])
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [replica_id])
 
     Enum.map(rows, fn [type, entity_id, actor_id, mutation_ref] ->
       %{
@@ -150,13 +150,13 @@ defmodule Hologram.MutationTest do
   end
 
   # The batch the record kept for a refusal, or nil when it kept none.
-  defp record_envelope(client_id, seq) do
+  defp record_envelope(replica_id, seq) do
     statement = """
     SELECT "envelope" FROM "hologram_system"."mutation"
-    WHERE "client_id" = $1 AND "seq" = $2
+    WHERE "replica_id" = $1 AND "seq" = $2
     """
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [client_id, seq])
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [replica_id, seq])
 
     case rows do
       [[envelope]] -> envelope
@@ -240,32 +240,35 @@ defmodule Hologram.MutationTest do
 
     test "records the batch on the effect it wrote" do
       id = Entity.generate_id()
-      client_id = Entity.generate_id()
+      replica_id = Entity.generate_id()
 
-      run(envelope([publish_write(id)], client_id: client_id, seq: 7), server())
+      run(envelope([publish_write(id)], replica_id: replica_id, seq: 7), server())
 
-      assert [%{entity_id: ^id, mutation_ref: %{"client_id" => ^client_id, "seq" => 7}}] =
-               outbox_rows(client_id)
+      assert [%{entity_id: ^id, mutation_ref: %{"replica_id" => ^replica_id, "seq" => 7}}] =
+               outbox_rows(replica_id)
     end
 
     test "records the acting user on the effect" do
       user = create_user("publisher@example.com")
       id = Entity.generate_id()
-      client_id = Entity.generate_id()
+      replica_id = Entity.generate_id()
 
       assert {:ok, %{"status" => "confirmed"}} =
-               run(envelope([publish_write(id)], client_id: client_id), server(user.id))
+               run(envelope([publish_write(id)], replica_id: replica_id), server(user.id))
 
-      assert [%{actor_id: actor_id}] = outbox_rows(client_id)
+      assert [%{actor_id: actor_id}] = outbox_rows(replica_id)
       assert actor_id == user.id
     end
 
     test "records the applied batch" do
-      client_id = Entity.generate_id()
+      replica_id = Entity.generate_id()
 
-      run(envelope([publish_write(Entity.generate_id())], client_id: client_id, seq: 3), server())
+      run(
+        envelope([publish_write(Entity.generate_id())], replica_id: replica_id, seq: 3),
+        server()
+      )
 
-      assert Record.find(client_id, 3).result == %{"status" => "confirmed", "dropped" => %{}}
+      assert Record.find(replica_id, 3).result == %{"status" => "confirmed", "dropped" => %{}}
     end
 
     test "answers a repeated batch from the record without applying it again" do
@@ -274,32 +277,32 @@ defmodule Hologram.MutationTest do
       assert {:ok, %{"status" => "confirmed"} = answer} = run(batch, server())
       assert run(batch, server()) == {:ok, answer}
 
-      assert length(outbox_rows(batch["client_id"])) == 1
+      assert length(outbox_rows(batch["replica_id"])) == 1
     end
 
-    test "applies each sequence number of one client on its own" do
-      client_id = Entity.generate_id()
+    test "applies each sequence number of one replica on its own" do
+      replica_id = Entity.generate_id()
       first_id = Entity.generate_id()
       second_id = Entity.generate_id()
 
-      run(envelope([publish_write(first_id)], client_id: client_id, seq: 1), server())
-      run(envelope([publish_write(second_id)], client_id: client_id, seq: 2), server())
+      run(envelope([publish_write(first_id)], replica_id: replica_id, seq: 1), server())
+      run(envelope([publish_write(second_id)], replica_id: replica_id, seq: 2), server())
 
       assert EntityOperations.get(PolicyModule2, first_id) != nil
       assert EntityOperations.get(PolicyModule2, second_id) != nil
 
-      assert Record.find(client_id, 1) != nil
-      assert Record.find(client_id, 2) != nil
+      assert Record.find(replica_id, 1) != nil
+      assert Record.find(replica_id, 2) != nil
     end
 
-    test "applies one sequence number for each client on its own" do
+    test "applies one sequence number for each replica on its own" do
       first_client = Entity.generate_id()
       second_client = Entity.generate_id()
       first_id = Entity.generate_id()
       second_id = Entity.generate_id()
 
-      run(envelope([publish_write(first_id)], client_id: first_client, seq: 1), server())
-      run(envelope([publish_write(second_id)], client_id: second_client, seq: 1), server())
+      run(envelope([publish_write(first_id)], replica_id: first_client, seq: 1), server())
+      run(envelope([publish_write(second_id)], replica_id: second_client, seq: 1), server())
 
       assert EntityOperations.get(PolicyModule2, first_id) != nil
       assert EntityOperations.get(PolicyModule2, second_id) != nil
@@ -531,14 +534,14 @@ defmodule Hologram.MutationTest do
 
     test "keeps a batch the evaluator refused, with what it carried and the answer it got" do
       user = create_user("refused@example.com")
-      client_id = Entity.generate_id()
+      replica_id = Entity.generate_id()
       write = create_write(PolicyModule1, Entity.generate_id(), %{"public" => false})
-      raw = envelope([write], client_id: client_id)
+      raw = envelope([write], replica_id: replica_id)
 
       assert {:ok, %{"status" => "rejected"} = answer} = run(raw, server(user.id))
 
-      assert Record.find(client_id, 1) == %{actor_id: user.id, result: answer}
-      assert record_envelope(client_id, 1) == raw
+      assert Record.find(replica_id, 1) == %{actor_id: user.id, result: answer}
+      assert record_envelope(replica_id, 1) == raw
     end
 
     test "answers a refused batch sent again from its record without evaluating it again" do
@@ -557,13 +560,13 @@ defmodule Hologram.MutationTest do
     end
 
     test "keeps nothing of a batch refused under an anonymous session" do
-      client_id = Entity.generate_id()
+      replica_id = Entity.generate_id()
       target_id = Entity.generate_id()
       write = readable_write(Module3, Entity.generate_id(), %{"c_id" => target_id})
-      raw = envelope([write], client_id: client_id)
+      raw = envelope([write], replica_id: replica_id)
 
       assert run(raw, server()) == rejected(0, %{c_id: [:not_found]})
-      assert Record.find(client_id, 1) == nil
+      assert Record.find(replica_id, 1) == nil
 
       # Nothing kept means no key taken: the same batch sent again is evaluated on its own, and
       # lands once the row its reference names exists.
@@ -576,43 +579,43 @@ defmodule Hologram.MutationTest do
 
     test "keeps nothing of a batch refused for its clock" do
       user = create_user("fastclock@example.com")
-      client_id = Entity.generate_id()
+      replica_id = Entity.generate_id()
       a_year_ahead = (System.os_time(:millisecond) + 365 * 86_400_000) * 1024
       write = publish_write(Entity.generate_id(), stamp: a_year_ahead)
 
-      assert run(envelope([write], client_id: client_id), server(user.id)) ==
+      assert run(envelope([write], replica_id: replica_id), server(user.id)) ==
                rejected(0, :clock)
 
-      assert Record.find(client_id, 1) == nil
+      assert Record.find(replica_id, 1) == nil
     end
 
     test "keeps no envelope of a batch that landed" do
-      client_id = Entity.generate_id()
-      raw = envelope([publish_write(Entity.generate_id())], client_id: client_id)
+      replica_id = Entity.generate_id()
+      raw = envelope([publish_write(Entity.generate_id())], replica_id: replica_id)
 
       assert {:ok, %{"status" => "confirmed"}} = run(raw, server())
 
-      assert record_envelope(client_id, 1) == nil
-      assert Record.find(client_id, 1).result == %{"status" => "confirmed", "dropped" => %{}}
+      assert record_envelope(replica_id, 1) == nil
+      assert Record.find(replica_id, 1).result == %{"status" => "confirmed", "dropped" => %{}}
     end
 
     test "leaves no effect of a refused batch" do
       user = create_user("noeffect@example.com")
-      client_id = Entity.generate_id()
+      replica_id = Entity.generate_id()
       id = Entity.generate_id()
       write = readable_write(Module19, id, %{"code" => "c"})
 
       assert {:ok, %{"status" => "rejected"}} =
-               run(envelope([write], client_id: client_id), server(user.id))
+               run(envelope([write], replica_id: replica_id), server(user.id))
 
       # The record is not an effect: it says the batch was refused, and nothing the batch wrote
       # survived it.
-      assert Record.find(client_id, 1) != nil
-      assert outbox_rows(client_id) == []
+      assert Record.find(replica_id, 1) != nil
+      assert outbox_rows(replica_id) == []
       assert EntityOperations.get(Module19, id) == nil
     end
 
-    test "refuses a batch whose client and sequence number belong to another session" do
+    test "refuses a batch whose replica and sequence number belong to another session" do
       sender = create_user("sender@example.com")
       other = create_user("other@example.com")
       batch = envelope([publish_write(Entity.generate_id())])
@@ -622,7 +625,7 @@ defmodule Hologram.MutationTest do
       assert run(batch, server(other.id)) == rejected(nil, :forged_client)
 
       # The record still belongs to the session that earned it.
-      assert Record.find(batch["client_id"], 1).actor_id == sender.id
+      assert Record.find(batch["replica_id"], 1).actor_id == sender.id
     end
 
     test "refuses a signed-in session's batch claimed anonymously" do
@@ -646,13 +649,13 @@ defmodule Hologram.MutationTest do
     test "refuses a stamp running ahead of the server's clock and names the write" do
       id = Entity.generate_id()
       a_year_ahead = (System.os_time(:millisecond) + 365 * 86_400_000) * 1024
-      client_id = Entity.generate_id()
+      replica_id = Entity.generate_id()
       write = publish_write(id, stamp: a_year_ahead)
 
-      assert run(envelope([write], client_id: client_id), server()) == rejected(0, :clock)
+      assert run(envelope([write], replica_id: replica_id), server()) == rejected(0, :clock)
 
       assert EntityOperations.get(PolicyModule2, id) == nil
-      assert Record.find(client_id, 1) == nil
+      assert Record.find(replica_id, 1) == nil
     end
 
     test "accepts a stamp within the allowance" do
@@ -682,15 +685,15 @@ defmodule Hologram.MutationTest do
 
     test "refuses a batch built against another model" do
       id = Entity.generate_id()
-      client_id = Entity.generate_id()
+      replica_id = Entity.generate_id()
       write = create_write(Module2, id, %{"c" => "x"})
 
-      raw = envelope([write], client_id: client_id, model_hash: "other")
+      raw = envelope([write], replica_id: replica_id, model_hash: "other")
 
       assert run(raw, server()) == rejected(nil, :stale_build)
 
       assert EntityOperations.get(Module2, id) == nil
-      assert Record.find(client_id, 1) == nil
+      assert Record.find(replica_id, 1) == nil
     end
 
     test "answers a malformed envelope with what is wrong" do

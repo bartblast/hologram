@@ -381,6 +381,7 @@ defmodule Hologram.Template.Renderer do
       |> put_page_mounted_flag_context(false)
       |> maybe_put_csrf_token_context(opts, initial_page?)
       |> maybe_put_instance_id_context(opts, initial_page?)
+      |> maybe_put_replica_identity_context(opts, initial_page?)
       |> put_user_context()
 
     {initial_tree, initial_component_registry, final_server_struct} =
@@ -1037,6 +1038,23 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp maybe_put_instance_id_context(page_component_struct, _opts, false) do
+    page_component_struct
+  end
+
+  defp maybe_put_replica_identity_context(page_component_struct, opts, true) do
+    replica_id =
+      opts[:replica_id] || raise ArgumentError, "replica_id is required for initial page requests"
+
+    replica_token =
+      opts[:replica_token] ||
+        raise ArgumentError, "replica_token is required for initial page requests"
+
+    page_component_struct
+    |> Component.put_context({Hologram, :replica_id}, replica_id)
+    |> Component.put_context({Hologram, :replica_token}, replica_token)
+  end
+
+  defp maybe_put_replica_identity_context(page_component_struct, _opts, false) do
     page_component_struct
   end
 

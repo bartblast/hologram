@@ -123,14 +123,14 @@ defmodule Hologram.DB.SchemaReconciler do
     """,
     """
     CREATE TABLE "hologram_system"."mutation" (
-      "client_id" text NOT NULL,
+      "replica_id" text NOT NULL,
       "seq" bigint NOT NULL,
       "actor_id" uuid,
       "model_hash" text NOT NULL,
       "result" jsonb,
       "envelope" jsonb,
       "answered_at" timestamptz NOT NULL DEFAULT now(),
-      PRIMARY KEY ("client_id", "seq")
+      PRIMARY KEY ("replica_id", "seq")
     )
     """,
     """

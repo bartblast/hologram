@@ -1,8 +1,8 @@
 defmodule Hologram.Mutation.Record do
   @moduledoc false
 
-  # One row per batch of client writes the server ANSWERED, keyed by the client that sent it and
-  # that client's own sequence number - the primary key IS the dedup.
+  # One row per batch of client writes the server ANSWERED, keyed by the replica that sent it and
+  # that replica's own sequence number - the primary key IS the dedup.
   #
   # A batch that LANDS is claimed first, inside its own transaction and with no answer yet, so a
   # second arrival of the same batch blocks on the key until the first commits and then fails its
@@ -28,13 +28,13 @@ defmodule Hologram.Mutation.Record do
   is answered from its record rather than applied again.
   """
   @spec claim!(String.t(), non_neg_integer, String.t() | nil, String.t()) :: :ok
-  def claim!(client_id, seq, actor_id, model_hash) do
+  def claim!(replica_id, seq, actor_id, model_hash) do
     statement = """
-    INSERT INTO "hologram_system"."mutation" ("client_id", "seq", "actor_id", "model_hash")
+    INSERT INTO "hologram_system"."mutation" ("replica_id", "seq", "actor_id", "model_hash")
     VALUES ($1, $2, $3, $4)
     """
 
-    params = [client_id, seq, Codec.encode(actor_id, :uuid), model_hash]
+    params = [replica_id, seq, Codec.encode(actor_id, :uuid), model_hash]
 
     case Connection.query(statement, params) do
       {:ok, _result} ->
@@ -54,16 +54,16 @@ defmodule Hologram.Mutation.Record do
   Records the answer the given batch got, in the caller's transaction, and returns :ok.
   """
   @spec complete!(String.t(), non_neg_integer, map) :: :ok
-  def complete!(client_id, seq, result) do
+  def complete!(replica_id, seq, result) do
     statement = """
     UPDATE "hologram_system"."mutation" SET "result" = $3
-    WHERE "client_id" = $1 AND "seq" = $2
+    WHERE "replica_id" = $1 AND "seq" = $2
     """
 
     # Answering a batch that was never claimed is a broken invariant rather than something a
     # caller can be told - the claim and the answer are two halves of one transaction.
     {:ok, %Postgrex.Result{num_rows: 1}} =
-      Connection.query(statement, [client_id, seq, result])
+      Connection.query(statement, [replica_id, seq, result])
 
     :ok
   end
@@ -81,13 +81,13 @@ defmodule Hologram.Mutation.Record do
   """
   @spec find(String.t(), non_neg_integer) ::
           %{actor_id: String.t() | nil, result: map | nil} | nil
-  def find(client_id, seq) do
+  def find(replica_id, seq) do
     statement = """
     SELECT "actor_id", "result" FROM "hologram_system"."mutation"
-    WHERE "client_id" = $1 AND "seq" = $2
+    WHERE "replica_id" = $1 AND "seq" = $2
     """
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [client_id, seq])
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [replica_id, seq])
 
     case rows do
       [[actor_id, result]] -> %{actor_id: Codec.decode(actor_id, :uuid), result: result}
@@ -102,17 +102,17 @@ defmodule Hologram.Mutation.Record do
   A batch already recorded is left as it is, so two arrivals of one refused batch do not collide.
   """
   @spec refuse!(String.t(), non_neg_integer, String.t(), String.t(), map, map) :: :ok
-  def refuse!(client_id, seq, actor_id, model_hash, envelope, answer) do
+  def refuse!(replica_id, seq, actor_id, model_hash, envelope, answer) do
     # Outside any transaction by intent: the refusal already took the batch's transaction back,
     # and this is the one statement that outlives it.
     statement = """
     INSERT INTO "hologram_system"."mutation"
-      ("client_id", "seq", "actor_id", "model_hash", "envelope", "result")
+      ("replica_id", "seq", "actor_id", "model_hash", "envelope", "result")
     VALUES ($1, $2, $3, $4, $5, $6)
-    ON CONFLICT ("client_id", "seq") DO NOTHING
+    ON CONFLICT ("replica_id", "seq") DO NOTHING
     """
 
-    params = [client_id, seq, Codec.encode(actor_id, :uuid), model_hash, envelope, answer]
+    params = [replica_id, seq, Codec.encode(actor_id, :uuid), model_hash, envelope, answer]
 
     {:ok, _result} = Connection.query(statement, params)
 

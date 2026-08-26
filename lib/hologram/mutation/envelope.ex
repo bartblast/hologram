@@ -1,7 +1,7 @@
 defmodule Hologram.Mutation.Envelope do
   @moduledoc false
 
-  # A batch as it arrived, checked and decoded: the client's identity and sequence number, the
+  # A batch as it arrived, checked and decoded: the replica's identity and sequence number, the
   # model it was built against, and its writes as Write structs.
   #
   # Everything a client sends is checked HERE, against this build's own model - a type it does not
@@ -20,12 +20,12 @@ defmodule Hologram.Mutation.Envelope do
 
   @ops "create, update, delete, add_relationship, delete_relationship"
 
-  defstruct client_id: nil, instance_id: nil, model_hash: nil, seq: nil, writes: []
+  defstruct instance_id: nil, model_hash: nil, replica_id: nil, seq: nil, writes: []
 
   @type t :: %__MODULE__{
-          client_id: String.t() | nil,
           instance_id: String.t() | nil,
           model_hash: String.t() | nil,
+          replica_id: String.t() | nil,
           seq: non_neg_integer | nil,
           writes: list(Write.t())
         }
@@ -37,15 +37,15 @@ defmodule Hologram.Mutation.Envelope do
   @spec parse(map) :: {:ok, t} | {:error, String.t()}
   def parse(raw) do
     with {:ok, instance_id} <- string(raw, "instance_id"),
-         {:ok, client_id} <- string(raw, "client_id"),
+         {:ok, replica_id} <- string(raw, "replica_id"),
          {:ok, seq} <- non_negative_integer(raw, "seq"),
          {:ok, model_hash} <- string(raw, "model_hash"),
          {:ok, writes} <- writes(raw) do
       {:ok,
        %__MODULE__{
-         client_id: client_id,
          instance_id: instance_id,
          model_hash: model_hash,
+         replica_id: replica_id,
          seq: seq,
          writes: writes
        }}

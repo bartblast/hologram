@@ -56,7 +56,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
   @entity_2_type "Hologram.Test.Fixtures.Entity.Module2"
   @role_grant_type "Hologram.Auth.RoleGrant"
-  @page_opts [csrf_token: "test-csrf-token", initial_page?: true, instance_id: "instance-1"]
+  @page_opts [
+    csrf_token: "test-csrf-token",
+    initial_page?: true,
+    instance_id: "instance-1",
+    replica_id: "test-replica-id",
+    replica_token: "test-replica-token"
+  ]
   @server %Server{}
 
   defp create_entities do

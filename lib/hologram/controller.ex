@@ -19,6 +19,7 @@ defmodule Hologram.Controller do
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Deserializer
   alias Hologram.Runtime.PlugConnUtils
+  alias Hologram.Runtime.ReplicaIdentity
   alias Hologram.Runtime.Session
   alias Hologram.Server
   alias Hologram.Server.Middleware
@@ -447,22 +448,38 @@ defmodule Hologram.Controller do
     {conn_with_csrf_token, {masked_csrf_token, _unmasked_csrf_token}} =
       CSRFProtection.ensure_tokens(conn)
 
+    conn_with_session = Session.init(conn_with_csrf_token)
+
     instance_id = UUID.uuid4()
+    replica_id = UUID.uuid4()
+
+    # Minted before the lifecycle, from the session as it stands: a page whose middleware signs
+    # the visitor in gets a session-bound identity that keeps working in that session, and the
+    # next page load mints a user-bound one.
+    replica_token =
+      ReplicaIdentity.issue(
+        replica_id,
+        Session.get_session_id(conn_with_session),
+        Session.get_user_id(conn_with_session)
+      )
 
     renderer_opts = [
       csrf_token: masked_csrf_token,
       initial_page?: true,
-      instance_id: instance_id
+      instance_id: instance_id,
+      replica_id: replica_id,
+      replica_token: replica_token
     ]
 
-    handle_page_request(conn_with_csrf_token, page_module, params, [], renderer_opts)
+    handle_page_request(conn_with_session, page_module, params, [], renderer_opts)
   end
 
   @doc """
   Handles an HTTP POST carrying a batch of client writes.
 
-  Checks the CSRF token and the instance cross-check exactly as a command request does, applies the
-  batch on behalf of the session, and answers with what became of it as JSON.
+  Checks the CSRF token and the instance cross-check exactly as a command request does, checks that
+  the batch's replica id is one the session presenting it was given, applies the batch on behalf of
+  the session, and answers with what became of it as JSON.
 
   ## Parameters
 
@@ -485,6 +502,9 @@ defmodule Hologram.Controller do
 
       not caller_owns_instance_id?(conn, conn.body_params["instance_id"]) ->
         forbid(conn, "instance_id cross-check failed")
+
+      not replica_identity_verified?(conn) ->
+        forbid(conn, "replica identity check failed")
 
       true ->
         send_mutation_response(conn)
@@ -685,6 +705,23 @@ defmodule Hologram.Controller do
       end
     end)
     |> Enum.unzip()
+  end
+
+  # The statement proves that the session presenting this replica id is the one it was minted for -
+  # a stranger who learned an id cannot spend its sequence numbers. It never decides the actor:
+  # that is still the session's user.
+  defp replica_identity_verified?(conn) do
+    raw = conn.body_params
+    token = raw["replica_token"]
+    replica_id = raw["replica_id"]
+
+    is_binary(token) and is_binary(replica_id) and
+      ReplicaIdentity.verify(
+        token,
+        replica_id,
+        Session.get_session_id(conn),
+        Session.get_user_id(conn)
+      ) == :ok
   end
 
   defp apply_subscription_deltas(%Server{__meta__: %{subscription_ops: ops}}) when ops == %{},

@@ -148,7 +148,14 @@ defmodule HologramClusterTests.Cluster do
         args: [~c"-setcookie", Atom.to_charlist(@cookie)],
         env: [
           {~c"HOLOGRAM_ENV", String.to_charlist(hologram_env)},
-          {~c"HOLOGRAM_START", ~c"1"}
+          {~c"HOLOGRAM_START", ~c"1"},
+          # A production instance resolves its secret key base from the environment and nowhere
+          # else - the dev/test fallback to the Phoenix endpoint's config does not apply - and
+          # every initial page render needs it, to sign the replica identity it hands the page.
+          # A peer booted with hologram_env: "prod" is such an instance, so it carries the var
+          # exactly as a real deployment does.
+          {~c"SECRET_KEY_BASE",
+           ~c"test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"}
         ]
       })
 

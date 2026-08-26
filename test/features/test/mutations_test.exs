@@ -9,6 +9,7 @@ defmodule HologramFeatureTests.MutationsTest do
   alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.Runtime.ReplicaIdentity
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.MutationsPage
@@ -55,11 +56,6 @@ defmodule HologramFeatureTests.MutationsTest do
     }
   end
 
-  # What the page sends as its client_id, and so what the record is keyed by.
-  defp instance_id(session) do
-    script_result(session, "return globalThis.Hologram.instanceId;")
-  end
-
   defp log_in(session) do
     session
     |> visit(MutationsPage)
@@ -77,6 +73,16 @@ defmodule HologramFeatureTests.MutationsTest do
     assert_script_result(session, "return globalThis.__thisPageLoad;", "held")
   end
 
+  # What the page sends as its replica_id, and so what the record is keyed by.
+  defp page_replica_id(session) do
+    script_result(session, "return globalThis.Hologram.replicaId;")
+  end
+
+  # The signed statement the page was given beside its replica id.
+  defp page_replica_token(session) do
+    script_result(session, "return globalThis.Hologram.replicaToken;")
+  end
+
   defp pin_note_write(id) do
     %{
       "op" => "update",
@@ -92,11 +98,21 @@ defmodule HologramFeatureTests.MutationsTest do
   # The batch is built and sent IN THE BROWSER, from the identity and the model hash the runtime
   # already holds - so what this exercises is the endpoint a client will really reach, headers
   # included, rather than a request assembled in the test process.
-  defp post_batch(session, seq, writes) do
+  defp post_batch(session, seq, writes, identity \\ nil) do
+    {replica_id_js, replica_token_js} =
+      case identity do
+        nil ->
+          {"globalThis.Hologram.replicaId", "globalThis.Hologram.replicaToken"}
+
+        %{replica_id: replica_id, replica_token: replica_token} ->
+          {Jason.encode!(replica_id), Jason.encode!(replica_token)}
+      end
+
     script = """
     const payload = {
       instance_id: globalThis.Hologram.instanceId,
-      client_id: globalThis.Hologram.instanceId,
+      replica_id: #{replica_id_js},
+      replica_token: #{replica_token_js},
       seq: #{seq},
       model_hash: globalThis.Hologram.sync.modelHash,
       writes: #{Jason.encode!(writes)}
@@ -110,7 +126,7 @@ defmodule HologramFeatureTests.MutationsTest do
       },
       body: JSON.stringify(payload)
     })
-      .then((response) => response.json())
+      .then((response) => response.ok ? response.json() : {status: response.status})
       .then((json) => { globalThis.__mutationResponse = json; });
     """
 
@@ -119,13 +135,13 @@ defmodule HologramFeatureTests.MutationsTest do
 
   # What the server kept of this browser's batches, scoped to the browser that sent them - the
   # record is a shared table, and each of these features asks only about its own page's batches.
-  defp record_rows(client_id) do
+  defp record_rows(replica_id) do
     statement = """
     SELECT "actor_id", "result", "envelope" FROM "hologram_system"."mutation"
-    WHERE "client_id" = $1 ORDER BY "seq"
+    WHERE "replica_id" = $1 ORDER BY "seq"
     """
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [client_id])
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [replica_id])
 
     Enum.map(rows, fn [actor_id, result, envelope] ->
       %{actor_id: Codec.decode(actor_id, :uuid), envelope: envelope, result: result}
@@ -216,7 +232,7 @@ defmodule HologramFeatureTests.MutationsTest do
     session: session
   } do
     session = log_in(session)
-    client_id = instance_id(session)
+    replica_id = page_replica_id(session)
 
     other_author =
       User
@@ -231,13 +247,13 @@ defmodule HologramFeatureTests.MutationsTest do
 
     assert response["status"] == "rejected"
 
-    assert [row] = record_rows(client_id)
+    assert [row] = record_rows(replica_id)
     assert row.actor_id == session_user().id
 
     # What the browser was told is what the table holds.
     assert row.result == response
 
-    assert row.envelope["client_id"] == client_id
+    assert row.envelope["replica_id"] == replica_id
     assert row.envelope["seq"] == 1
     assert row.envelope["writes"] == writes
 
@@ -246,7 +262,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
   feature "answers a refused batch posted again from its record", %{session: session} do
     session = log_in(session)
-    client_id = instance_id(session)
+    replica_id = page_replica_id(session)
     id = Entity.generate_id()
 
     post_batch(session, 1, [pin_note_write(id)])
@@ -269,12 +285,12 @@ defmodule HologramFeatureTests.MutationsTest do
     assert await_response(session) == first
 
     assert [%Note{pinned: false}] = DB.read(Note)
-    assert length(record_rows(client_id)) == 1
+    assert length(record_rows(replica_id)) == 1
   end
 
   feature "keeps nothing of a batch refused before anyone is logged in", %{session: session} do
     session = visit(session, MutationsPage)
-    client_id = instance_id(session)
+    replica_id = page_replica_id(session)
 
     author =
       User
@@ -285,7 +301,42 @@ defmodule HologramFeatureTests.MutationsTest do
 
     assert await_response(session)["status"] == "rejected"
 
-    assert record_rows(client_id) == []
+    assert record_rows(replica_id) == []
+    assert DB.read(Note) == []
+  end
+
+  feature "refuses a batch whose identity token was tampered with", %{session: session} do
+    session = log_in(session)
+
+    identity = %{
+      replica_id: page_replica_id(session),
+      replica_token: page_replica_token(session) <> "x"
+    }
+
+    post_batch(session, 1, [create_note_write(session_user().id, "tampered")], identity)
+
+    assert await_response(session) == %{"status" => 403}
+
+    assert DB.read(Note) == []
+  end
+
+  feature "refuses a batch sent under another replica's identity", %{session: session} do
+    session = log_in(session)
+
+    victim_id = Entity.generate_id()
+
+    # Minted from the test process with the framework's own key, bound to a session this browser
+    # does not have - what a stranger would hold after learning an id and forging the rest.
+    identity = %{
+      replica_id: victim_id,
+      replica_token: ReplicaIdentity.issue(victim_id, "another-session", nil)
+    }
+
+    post_batch(session, 1, [create_note_write(session_user().id, "stolen")], identity)
+
+    assert await_response(session) == %{"status" => 403}
+
+    assert record_rows(victim_id) == []
     assert DB.read(Note) == []
   end
 end

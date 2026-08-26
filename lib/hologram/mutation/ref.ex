@@ -13,7 +13,7 @@ defmodule Hologram.Mutation.Ref do
   @doc """
   Returns the batch the calling process is applying, or nil when it is applying none.
   """
-  @spec get() :: %{client_id: String.t(), seq: non_neg_integer} | nil
+  @spec get() :: %{replica_id: String.t(), seq: non_neg_integer} | nil
   def get do
     Process.get(@key)
   end
@@ -22,7 +22,7 @@ defmodule Hologram.Mutation.Ref do
   Runs the given function with the given batch set as the calling process' one and returns its result.
   The batch set before the call is restored afterwards, raised exceptions included, so nested calls compose.
   """
-  @spec with_ref(%{client_id: String.t(), seq: non_neg_integer}, (-> any)) :: any
+  @spec with_ref(%{replica_id: String.t(), seq: non_neg_integer}, (-> any)) :: any
   def with_ref(ref, fun) do
     previous_ref = Process.get(@key)
     Process.put(@key, ref)

@@ -7,6 +7,8 @@ defmodule Hologram.UI.Runtime do
   prop :instance_id, :string, from_context: {Hologram, :instance_id}
   prop :page_digest, :string, from_context: {Hologram, :page_digest}
   prop :page_mounted?, :boolean, from_context: {Hologram, :page_mounted?}
+  prop :replica_id, :string, from_context: {Hologram, :replica_id}
+  prop :replica_token, :string, from_context: {Hologram, :replica_token}
 
   @impl Component
   def template do
@@ -18,6 +20,8 @@ defmodule Hologram.UI.Runtime do
         globalThis.Hologram.assetManifest = $ASSET_MANIFEST_JS_PLACEHOLDER;
         globalThis.Hologram.csrfToken = "{@csrf_token}";
         globalThis.Hologram.instanceId = "{@instance_id}";
+        globalThis.Hologram.replicaId = "{@replica_id}";
+        globalThis.Hologram.replicaToken = "{@replica_token}";
 
         globalThis.Hologram.dispatchAction = function(actionName, target, params) \{
           globalThis.Hologram._pendingJsInteropActions.push([actionName, target, params]);

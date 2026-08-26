@@ -51,7 +51,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
   defp raw(writes) do
     %{
       "instance_id" => "i1",
-      "client_id" => "c1",
+      "replica_id" => "c1",
       "model_hash" => "h",
       "seq" => 1,
       "writes" => writes
@@ -75,9 +75,9 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert parse(raw([])) ==
                {:ok,
                 %Envelope{
-                  client_id: "c1",
                   instance_id: "i1",
                   model_hash: "h",
+                  replica_id: "c1",
                   seq: 1,
                   writes: []
                 }}
@@ -219,8 +219,8 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert parse(%{raw([]) | "instance_id" => 1}) == {:error, "instance_id must be a string"}
     end
 
-    test "refuses a client id that is not a string" do
-      assert parse(%{raw([]) | "client_id" => nil}) == {:error, "client_id must be a string"}
+    test "refuses a replica id that is not a string" do
+      assert parse(%{raw([]) | "replica_id" => nil}) == {:error, "replica_id must be a string"}
     end
 
     test "refuses a sequence number that is not a non-negative integer" do
