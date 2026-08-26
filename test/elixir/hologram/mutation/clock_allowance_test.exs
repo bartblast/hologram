@@ -14,7 +14,7 @@ defmodule Hologram.Mutation.ClockAllowanceTest do
   defp envelope(stamp) do
     %{
       "instance_id" => "i1",
-      "client_id" => Entity.generate_id(),
+      "replica_id" => Entity.generate_id(),
       "model_hash" => Model.hash(),
       "seq" => 1,
       "writes" => [

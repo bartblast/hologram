@@ -76,7 +76,7 @@ defmodule Hologram.Mutation do
   defp answer_from_race(envelope, actor_id) do
     case recorded_answer(envelope, actor_id) do
       nil ->
-        raise "batch #{envelope.client_id}/#{envelope.seq} lost its claim to an arrival that left no answer"
+        raise "batch #{envelope.replica_id}/#{envelope.seq} lost its claim to an arrival that left no answer"
 
       answer ->
         answer
@@ -116,7 +116,7 @@ defmodule Hologram.Mutation do
   defp apply_in_transaction(envelope, server_struct) do
     Connection.transaction(fn ->
       Record.claim!(
-        envelope.client_id,
+        envelope.replica_id,
         envelope.seq,
         server_struct.user_id,
         envelope.model_hash
@@ -124,14 +124,14 @@ defmodule Hologram.Mutation do
 
       result = apply_writes(envelope.writes)
 
-      Record.complete!(envelope.client_id, envelope.seq, result)
+      Record.complete!(envelope.replica_id, envelope.seq, result)
 
       result
     end)
   end
 
   defp apply_new_batch(envelope, raw, server_struct) do
-    ref = %{client_id: envelope.client_id, seq: envelope.seq}
+    ref = %{replica_id: envelope.replica_id, seq: envelope.seq}
 
     result =
       Context.with_actor(server_struct.user_id, fn ->
@@ -274,7 +274,14 @@ defmodule Hologram.Mutation do
     answer = rejection(index, reason)
 
     if actor_id do
-      Record.refuse!(envelope.client_id, envelope.seq, actor_id, envelope.model_hash, raw, answer)
+      Record.refuse!(
+        envelope.replica_id,
+        envelope.seq,
+        actor_id,
+        envelope.model_hash,
+        raw,
+        answer
+      )
     end
 
     {:ok, answer}
@@ -307,7 +314,7 @@ defmodule Hologram.Mutation do
     end
   end
 
-  # An answer is replayed only to the session that earned it. Anyone can present anyone's client id
+  # An answer is replayed only to the session that earned it. Anyone can present anyone's replica id
   # and sequence number, and a stored answer is revealing - a denial names a row, a violation map
   # shows what was written - so a record belonging to another session is refused rather than read
   # back. An anonymous session's record has no actor and matches only another anonymous one, which
@@ -323,7 +330,7 @@ defmodule Hologram.Mutation do
   end
 
   defp recorded_answer(envelope, actor_id) do
-    case Record.find(envelope.client_id, envelope.seq) do
+    case Record.find(envelope.replica_id, envelope.seq) do
       nil -> nil
       %{actor_id: ^actor_id, result: nil} -> nil
       %{actor_id: ^actor_id, result: result} -> {:ok, result}

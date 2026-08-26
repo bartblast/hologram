@@ -65,7 +65,7 @@ defmodule Hologram.ControllerMutationTest do
   defp envelope(writes, opts \\ []) do
     %{
       "instance_id" => @instance_id,
-      "client_id" => Keyword.get(opts, :client_id, Entity.generate_id()),
+      "replica_id" => Keyword.get(opts, :replica_id, Entity.generate_id()),
       "model_hash" => Keyword.get(opts, :model_hash, Model.hash()),
       "seq" => 1,
       "writes" => writes
@@ -74,15 +74,15 @@ defmodule Hologram.ControllerMutationTest do
 
   # Scoped to the batch by its own mutation_ref rather than reading the whole table: the outbox is
   # shared, and what this file asks about is the effects of ONE batch.
-  defp outbox_actor_ids(client_id) do
+  defp outbox_actor_ids(replica_id) do
     statement = """
     SELECT "actor_id"
     FROM "hologram_system"."outbox"
-    WHERE "mutation_ref"->>'client_id' = $1
+    WHERE "mutation_ref"->>'replica_id' = $1
     ORDER BY "seq"
     """
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [client_id])
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [replica_id])
 
     Enum.map(rows, fn [actor_id] -> Codec.decode(actor_id, :uuid) end)
   end
@@ -129,15 +129,15 @@ defmodule Hologram.ControllerMutationTest do
 
     test "applies the batch under the session's user" do
       user = create_user("publisher@example.com")
-      client_id = Entity.generate_id()
+      replica_id = Entity.generate_id()
 
-      raw = envelope([publish_write(Entity.generate_id())], client_id: client_id)
+      raw = envelope([publish_write(Entity.generate_id())], replica_id: replica_id)
 
       conn = post_batch(raw, session_of(user.id))
 
       assert conn.status == 200
 
-      assert outbox_actor_ids(client_id) == [user.id]
+      assert outbox_actor_ids(replica_id) == [user.id]
     end
 
     test "answers a refused batch with the write and the reason" do
@@ -163,9 +163,9 @@ defmodule Hologram.ControllerMutationTest do
 
     test "answers a refused batch posted again with what its first arrival got" do
       user = create_user("resender@example.com")
-      client_id = Entity.generate_id()
+      replica_id = Entity.generate_id()
       id = Entity.generate_id()
-      raw = envelope([archive_write(id)], client_id: client_id)
+      raw = envelope([archive_write(id)], replica_id: replica_id)
 
       first = post_batch(raw, session_of(user.id))
 

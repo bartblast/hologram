@@ -259,15 +259,15 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       assert rows == [
                ["actor_id", "uuid", false],
                ["answered_at", "timestamp with time zone", true],
-               ["client_id", "text", true],
                ["envelope", "jsonb", false],
                ["model_hash", "text", true],
+               ["replica_id", "text", true],
                ["result", "jsonb", false],
                ["seq", "bigint", true]
              ]
     end
 
-    test "keys the mutation table by the client and its sequence number" do
+    test "keys the mutation table by the replica and its sequence number" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
 
@@ -288,7 +288,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       # The key IS the dedup: the second arrival of a batch cannot insert its own row, so it
       # blocks on the first and then answers from what the first recorded.
       assert rows == [
-               ["mutation_pkey", "btree", "client_id"],
+               ["mutation_pkey", "btree", "replica_id"],
                ["mutation_pkey", "btree", "seq"]
              ]
     end

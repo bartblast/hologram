@@ -27,12 +27,12 @@ defmodule Hologram.Mutation.DedupTest do
     timestamp: ~U[2026-08-13 09:15:22.000000Z]
   }
 
-  defp claim_holder(client_id, test_pid) do
-    fn -> Connection.transaction(fn -> hold_claim(client_id, test_pid) end) end
+  defp claim_holder(replica_id, test_pid) do
+    fn -> Connection.transaction(fn -> hold_claim(replica_id, test_pid) end) end
   end
 
-  defp hold_claim(client_id, test_pid) do
-    Record.claim!(client_id, 1, nil, Model.hash())
+  defp hold_claim(replica_id, test_pid) do
+    Record.claim!(replica_id, 1, nil, Model.hash())
 
     send(test_pid, :claimed)
 
@@ -40,7 +40,7 @@ defmodule Hologram.Mutation.DedupTest do
       :go -> :ok
     end
 
-    Record.complete!(client_id, 1, %{"status" => "confirmed", "dropped" => %{}})
+    Record.complete!(replica_id, 1, %{"status" => "confirmed", "dropped" => %{}})
   end
 
   defp on_own_session(scratch_opts, fun) do
@@ -58,16 +58,16 @@ defmodule Hologram.Mutation.DedupTest do
 
   # The first arrival, holding its claim open until the test lets it finish - so the second really
   # does meet a claim in flight rather than one already committed.
-  defp start_first_arrival(client_id, scratch_opts, test_pid) do
-    Task.async(fn -> on_own_session(scratch_opts, claim_holder(client_id, test_pid)) end)
+  defp start_first_arrival(replica_id, scratch_opts, test_pid) do
+    Task.async(fn -> on_own_session(scratch_opts, claim_holder(replica_id, test_pid)) end)
   end
 
   # A batch of no writes: nothing here needs an entity table, and what is under test is the claim
   # rather than anything the writes do.
-  defp start_second_arrival(client_id, scratch_opts) do
+  defp start_second_arrival(replica_id, scratch_opts) do
     envelope = %{
       "instance_id" => "i1",
-      "client_id" => client_id,
+      "replica_id" => replica_id,
       "model_hash" => Model.hash(),
       "seq" => 1,
       "writes" => []
@@ -111,12 +111,12 @@ defmodule Hologram.Mutation.DedupTest do
       Connection.transaction(fn -> SchemaReconciler.ensure_managed!(@context) end)
     end)
 
-    client_id = Entity.generate_id()
+    replica_id = Entity.generate_id()
 
-    first = start_first_arrival(client_id, scratch_opts, self())
+    first = start_first_arrival(replica_id, scratch_opts, self())
     assert_receive :claimed, 5_000
 
-    second = start_second_arrival(client_id, scratch_opts)
+    second = start_second_arrival(replica_id, scratch_opts)
 
     wait_for_blocked_claim(scratch_opts)
 
@@ -125,7 +125,7 @@ defmodule Hologram.Mutation.DedupTest do
     assert Task.await(first) == {:ok, :ok}
     assert Task.await(second) == {:ok, %{"status" => "confirmed", "dropped" => %{}}}
 
-    assert route(scratch, fn -> Record.find(client_id, 1) end) == %{
+    assert route(scratch, fn -> Record.find(replica_id, 1) end) == %{
              actor_id: nil,
              result: %{"status" => "confirmed", "dropped" => %{}}
            }

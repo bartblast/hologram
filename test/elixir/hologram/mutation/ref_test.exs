@@ -3,7 +3,7 @@ defmodule Hologram.Mutation.RefTest do
 
   import Hologram.Mutation.Ref
 
-  @ref %{client_id: "018f4c1e-0000-7000-8000-000000000001", seq: 7}
+  @ref %{replica_id: "018f4c1e-0000-7000-8000-000000000001", seq: 7}
 
   describe "get/0" do
     test "answers nil when the calling process is applying no batch" do
@@ -27,7 +27,7 @@ defmodule Hologram.Mutation.RefTest do
     end
 
     test "restores the enclosing batch afterwards" do
-      inner_ref = %{client_id: "018f4c1e-0000-7000-8000-000000000002", seq: 1}
+      inner_ref = %{replica_id: "018f4c1e-0000-7000-8000-000000000002", seq: 1}
 
       held =
         with_ref(@ref, fn ->
