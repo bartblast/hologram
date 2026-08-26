@@ -11,10 +11,13 @@ defmodule Hologram.MutationTest do
   alias Hologram.Entity.Model
   alias Hologram.Mutation.Record
   alias Hologram.Server
+  alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module16
+  alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
@@ -134,6 +137,13 @@ defmodule Hologram.MutationTest do
     claim_opts = Keyword.merge([claim: ["authorize", "publish"]], opts)
 
     create_write(PolicyModule2, id, %{"public" => true}, claim_opts)
+  end
+
+  # The fixtures declaring constraints, unique values and references grant no WRITE operation, so
+  # these writes claim :read - a bare `allow :read` grants it to anyone, and what is under test is
+  # the value the write carries rather than the claim it makes.
+  defp readable_write(entity_type, id, data) do
+    create_write(entity_type, id, data, claim: ["authorize", "read"])
   end
 
   defp server(user_id \\ nil), do: %Server{user_id: user_id}
@@ -355,13 +365,83 @@ defmodule Hologram.MutationTest do
 
     # A client is never the trusted tier: with nobody signed in the write is evaluated under the
     # anonymous semantics rather than written raw, and Module1 grants :create to nobody.
-    # TODO: D3 turns this raise into {:rejected, 0, %AccessDeniedError{}} - rewrite it there.
     test "evaluates an unclaimed create under an anonymous session" do
       write = create_write(PolicyModule1, Entity.generate_id(), %{"public" => false})
 
-      assert_error Hologram.AccessDeniedError,
-                   ~r/^not allowed to create Hologram\.Test\.Fixtures\.Policy\.Module1 /,
-                   fn -> run(envelope([write]), server()) end
+      assert {:rejected, 0, %Hologram.AccessDeniedError{message: message}} =
+               run(envelope([write]), server())
+
+      assert message =~ ~r/^not allowed to create Hologram\.Test\.Fixtures\.Policy\.Module1 /
+    end
+
+    test "refuses a denied claim and names the write it refused" do
+      landing_id = Entity.generate_id()
+
+      writes = [
+        publish_write(landing_id),
+        create_write(PolicyModule1, Entity.generate_id(), %{"public" => false})
+      ]
+
+      assert {:rejected, 1, %Hologram.AccessDeniedError{}} = run(envelope(writes), server())
+
+      # The whole batch rolled back, including the write that had already landed.
+      assert EntityOperations.get(PolicyModule2, landing_id) == nil
+    end
+
+    test "refuses a value the declarations refuse" do
+      write = readable_write(Module19, Entity.generate_id(), %{"code" => "c"})
+
+      assert run(envelope([write]), server()) == {:rejected, 0, %{slug: [:required]}}
+    end
+
+    test "refuses a duplicate of a unique value" do
+      Module19
+      |> Entity.new(slug: "taken")
+      |> DB.create!()
+
+      write = readable_write(Module19, Entity.generate_id(), %{"slug" => "taken"})
+
+      assert run(envelope([write]), server()) == {:rejected, 0, %{slug: [:unique]}}
+    end
+
+    test "refuses a reference naming no row" do
+      write =
+        readable_write(Module3, Entity.generate_id(), %{"c_id" => Entity.generate_id()})
+
+      assert run(envelope([write]), server()) == {:rejected, 0, %{c_id: [:not_found]}}
+    end
+
+    test "refuses a delete the row's references block" do
+      required_target =
+        Module1
+        |> Entity.new()
+        |> DB.create!()
+
+      referenced =
+        Module2
+        |> Entity.new(a: true, c: "x")
+        |> DB.create!()
+
+      Module3
+      |> Entity.new(b_id: referenced.id, c_id: required_target.id)
+      |> DB.create!()
+
+      write = delete_write(Module2, referenced.id, claim: ["authorize", "read"])
+
+      assert run(envelope([write]), server()) ==
+               {:rejected, 0, %{referenced_by: Module3, relationship: :b}}
+    end
+
+    test "leaves no record and no effect of a refused batch" do
+      client_id = Entity.generate_id()
+      write = readable_write(Module19, Entity.generate_id(), %{"code" => "c"})
+
+      assert {:rejected, 0, _reason} =
+               run(envelope([write], client_id: client_id), server())
+
+      assert Record.result(client_id, 1) == nil
+      assert mutation_row_count() == 0
+      assert outbox_rows() == []
     end
 
     test "refuses a batch built against another model" do

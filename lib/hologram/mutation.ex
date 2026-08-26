@@ -162,6 +162,12 @@ defmodule Hologram.Mutation do
       lost when lost == %{} -> dropped
       lost -> Map.put(dropped, Integer.to_string(index), lost)
     end
+  rescue
+    # A denial is the one refusal the executor RAISES rather than returns, because on the server it
+    # is a programming error to write what the acting user may not. Here it is an ordinary answer:
+    # a client asking for something it may not have is the system working. Anything else raised
+    # propagates - the transaction rolls back and re-raises it, which is what a bug should do.
+    error in Hologram.AccessDeniedError -> Connection.rollback({:rejected, index, error})
   end
 
   # Asked only about fields an envelope already admitted, so unlike the parser's own map this one
