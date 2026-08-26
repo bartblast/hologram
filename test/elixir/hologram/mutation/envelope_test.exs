@@ -6,6 +6,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
   alias Hologram.Mutation.Envelope
   alias Hologram.Mutation.Write
   alias Hologram.Test.Fixtures.Entity.Module15
+  alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -13,6 +14,17 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
   @id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+
+  defp edge(op, entity_type, relationship, opts \\ []) do
+    %{
+      "op" => op,
+      "type" => inspect(entity_type),
+      "id" => Keyword.get(opts, :id, @id),
+      "relationship" => relationship,
+      "target_id" => Keyword.get(opts, :target_id, @target_id),
+      "claim" => Keyword.get(opts, :claim)
+    }
+  end
 
   defp create(entity_type, data, opts \\ []) do
     %{
@@ -138,6 +150,34 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
 
       assert write.based_on == %{c_id: 3}
+    end
+
+    test "parses an added edge into a write" do
+      entry = edge("add_relationship", Module16, "secrets")
+
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
+
+      assert write == %Write{
+               based_on: %{},
+               claim: nil,
+               data: %{},
+               entity_type: Module16,
+               id: @id,
+               op: :add_relationship,
+               relationship: :secrets,
+               stamp: nil,
+               target_id: @target_id
+             }
+    end
+
+    test "parses a deleted edge into a write" do
+      entry = edge("delete_relationship", Module16, "secrets")
+
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
+
+      assert write.op == :delete_relationship
+      assert write.relationship == :secrets
+      assert write.target_id == @target_id
     end
 
     test "parses every write of a batch, in the order they were sent" do
@@ -322,6 +362,43 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
       assert parse(raw([update(Module2, %{"c" => "x"}, based_on: %{"c" => "3"})])) ==
                {:error, ~s(write 0: based_on."c" must be a positive integer)}
+    end
+
+    test "refuses a relationship that is not a string" do
+      entry = %{edge("add_relationship", Module16, "secrets") | "relationship" => 1}
+
+      assert parse(raw([entry])) == {:error, "write 0: relationship must be a string"}
+    end
+
+    test "refuses a relationship the entity type does not declare" do
+      entry = edge("add_relationship", Module16, "nope")
+
+      assert parse(raw([entry])) ==
+               {:error,
+                ~s[write 0: "nope" is not a to-many relationship of Hologram.Test.Fixtures.Entity.Module16]}
+    end
+
+    test "refuses a to-one relationship as an edge" do
+      entry = edge("add_relationship", Module3, "c")
+
+      assert parse(raw([entry])) ==
+               {:error,
+                ~s[write 0: "c" is not a to-many relationship of Hologram.Test.Fixtures.Entity.Module3]}
+    end
+
+    test "refuses a target id that is not an entity id" do
+      entry = edge("add_relationship", Module16, "secrets", target_id: "nope")
+
+      assert parse(raw([entry])) == {:error, "write 0: target_id must be an entity id"}
+    end
+
+    test "refuses a stamp on an edge" do
+      entry =
+        "add_relationship"
+        |> edge(Module16, "secrets")
+        |> Map.put("stamp", 5)
+
+      assert parse(raw([entry])) == {:error, "write 0: an edge carries no stamp"}
     end
 
     test "refuses the server's authority as a claim" do

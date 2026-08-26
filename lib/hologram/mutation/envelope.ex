@@ -177,6 +177,15 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
+  # An edge is a fact in a join table rather than a column of a row, so there is nothing for a
+  # revision to be kept against - adding and removing the same pair commute, whoever wrote them.
+  defp no_stamp(entry) do
+    case Map.get(entry, "stamp") do
+      nil -> :ok
+      _other -> {:error, "an edge carries no stamp"}
+    end
+  end
+
   defp non_negative_integer(raw, key) do
     case Map.get(raw, key) do
       value when is_integer(value) and value >= 0 -> {:ok, value}
@@ -242,10 +251,31 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
+  defp parse_edge(entry, op) do
+    with {:ok, entity_type} <- entity_type(entry),
+         {:ok, id} <- id(entry),
+         {:ok, relationship} <- relationship(entry, entity_type),
+         {:ok, target_id} <- target_id(entry),
+         :ok <- no_stamp(entry),
+         {:ok, claim} <- claim(entry) do
+      {:ok,
+       %Write{
+         claim: claim,
+         entity_type: entity_type,
+         id: id,
+         op: op,
+         relationship: relationship,
+         target_id: target_id
+       }}
+    end
+  end
+
   defp parse_write(entry) when is_map(entry) do
     case Map.get(entry, "op") do
+      "add_relationship" -> parse_edge(entry, :add_relationship)
       "create" -> parse_create(entry)
       "delete" -> parse_delete(entry)
+      "delete_relationship" -> parse_edge(entry, :delete_relationship)
       "update" -> parse_update(entry)
       _other -> {:error, "op must be one of #{@ops}"}
     end
@@ -272,6 +302,13 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
+  defp relationship(entry, entity_type) do
+    case Map.get(entry, "relationship") do
+      name when is_binary(name) -> resolve_relationship(name, entity_type)
+      _other -> {:error, "relationship must be a string"}
+    end
+  end
+
   defp resolve_entity_type(label) do
     entity_type = String.to_existing_atom("Elixir." <> label)
 
@@ -290,6 +327,23 @@ defmodule Hologram.Mutation.Envelope do
   defp some_data(data) when data == %{}, do: {:error, "an update must change at least one field"}
 
   defp some_data(_data), do: :ok
+
+  # A to-ONE is not an edge: it is set through its reference field like any other value, so naming
+  # one here is refused the same way naming no relationship at all is.
+  defp resolve_relationship(name, entity_type) do
+    to_many =
+      entity_type.__relationships__()
+      |> Enum.filter(fn {_name, type, _opts} -> is_list(type) end)
+      |> Enum.map(fn {relationship_name, _type, _opts} -> relationship_name end)
+
+    case Enum.find(to_many, &(Atom.to_string(&1) == name)) do
+      nil ->
+        {:error, ~s("#{name}" is not a to-many relationship of #{inspect(entity_type)})}
+
+      relationship ->
+        {:ok, relationship}
+    end
+  end
 
   # The fields a client may write: the declared attributes minus the server-only ones, which a
   # client is never told exist, and the to-one references under their id spelling.
@@ -326,6 +380,16 @@ defmodule Hologram.Mutation.Envelope do
     case Map.get(raw, key) do
       value when is_binary(value) and value != "" -> {:ok, value}
       _other -> {:error, "#{key} must be a string"}
+    end
+  end
+
+  defp target_id(entry) do
+    value = Map.get(entry, "target_id")
+
+    if is_binary(value) and Validator.attribute_value_valid?(value, :uuid) do
+      {:ok, value}
+    else
+      {:error, "target_id must be an entity id"}
     end
   end
 
