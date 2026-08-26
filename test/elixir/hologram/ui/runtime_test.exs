@@ -21,7 +21,9 @@ defmodule Hologram.UI.RuntimeTest do
         {Hologram, :initial_page?} => false,
         {Hologram, :instance_id} => "test-instance-id-abcde",
         {Hologram, :page_digest} => "102790adb6c3b1956db310be523a7693",
-        {Hologram, :page_mounted?} => false
+        {Hologram, :page_mounted?} => false,
+        {Hologram, :replica_id} => "test-replica-id-abcde",
+        {Hologram, :replica_token} => "test-replica-token-12345"
       }
     ]
   end
@@ -40,6 +42,8 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")
     refute String.contains?(markup, "globalThis.Hologram.pageMountData")
+    refute String.contains?(markup, "globalThis.Hologram.replicaId")
+    refute String.contains?(markup, "globalThis.Hologram.replicaToken")
     refute String.contains?(markup, "hologram/runtime")
     refute String.contains?(markup, "hologram/page")
   end
@@ -54,6 +58,8 @@ defmodule Hologram.UI.RuntimeTest do
     assert String.contains?(markup, "globalThis.Hologram.dispatchAction")
     assert String.contains?(markup, "globalThis.Hologram.instanceId")
     assert String.contains?(markup, "globalThis.Hologram.pageMountData")
+    assert String.contains?(markup, "globalThis.Hologram.replicaId")
+    assert String.contains?(markup, "globalThis.Hologram.replicaToken")
     assert String.contains?(markup, "hologram/runtime")
     assert String.contains?(markup, "hologram/page")
   end
@@ -63,6 +69,8 @@ defmodule Hologram.UI.RuntimeTest do
       initial_context
       |> Map.delete({Hologram, :csrf_token})
       |> Map.delete({Hologram, :instance_id})
+      |> Map.delete({Hologram, :replica_id})
+      |> Map.delete({Hologram, :replica_token})
       |> Map.put({Hologram, :page_mounted?}, true)
 
     markup = render_component(Runtime, %{}, context)
@@ -73,6 +81,8 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")
     refute String.contains?(markup, "globalThis.Hologram.pageMountData")
+    refute String.contains?(markup, "globalThis.Hologram.replicaId")
+    refute String.contains?(markup, "globalThis.Hologram.replicaToken")
     refute String.contains?(markup, "hologram/runtime")
     refute String.contains?(markup, "hologram/page")
   end
@@ -85,6 +95,8 @@ defmodule Hologram.UI.RuntimeTest do
       initial_context
       |> Map.delete({Hologram, :csrf_token})
       |> Map.delete({Hologram, :instance_id})
+      |> Map.delete({Hologram, :replica_id})
+      |> Map.delete({Hologram, :replica_token})
 
     markup = render_component(Runtime, %{}, context)
 
@@ -94,6 +106,8 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
     refute String.contains?(markup, "globalThis.Hologram.instanceId")
     refute String.contains?(markup, "globalThis.Hologram.pageMountData")
+    refute String.contains?(markup, "globalThis.Hologram.replicaId")
+    refute String.contains?(markup, "globalThis.Hologram.replicaToken")
     refute String.contains?(markup, "hologram/runtime")
     assert String.contains?(markup, "hologram/page")
   end
@@ -121,6 +135,26 @@ defmodule Hologram.UI.RuntimeTest do
     assert String.contains?(
              markup,
              ~s'<script async src="/hologram/page-102790adb6c3b1956db310be523a7693.js">'
+           )
+  end
+
+  test "replica_id prop", %{context: initial_context} do
+    context = Map.put(initial_context, {Hologram, :initial_page?}, true)
+    markup = render_component(Runtime, %{}, context)
+
+    assert String.contains?(
+             markup,
+             ~s'globalThis.Hologram.replicaId = "test-replica-id-abcde";'
+           )
+  end
+
+  test "replica_token prop", %{context: initial_context} do
+    context = Map.put(initial_context, {Hologram, :initial_page?}, true)
+    markup = render_component(Runtime, %{}, context)
+
+    assert String.contains?(
+             markup,
+             ~s'globalThis.Hologram.replicaToken = "test-replica-token-12345";'
            )
   end
 end

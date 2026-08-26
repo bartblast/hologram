@@ -18,6 +18,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Router.SearchTree
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
+  alias Hologram.Runtime.ReplicaIdentity
   alias Hologram.Runtime.Session
   alias Hologram.Server
   alias Hologram.Template.Renderer
@@ -127,6 +128,16 @@ defmodule Hologram.ControllerTest do
       Regex.run(~r/globalThis\.Hologram\.instanceId = "([^"]+)";/, resp_body)
 
     instance_id
+  end
+
+  defp extract_replica_identity(resp_body) do
+    [_full, replica_id] =
+      Regex.run(~r/globalThis\.Hologram\.replicaId = "([^"]+)";/, resp_body)
+
+    [_full, replica_token] =
+      Regex.run(~r/globalThis\.Hologram\.replicaToken = "([^"]+)";/, resp_body)
+
+    {replica_id, replica_token}
   end
 
   defp handshake_request_body(instance_id, receipts) do
@@ -1965,6 +1976,61 @@ defmodule Hologram.ControllerTest do
         |> handle_initial_page_request(Module5)
 
       assert extract_instance_id(conn_1.resp_body) != extract_instance_id(conn_2.resp_body)
+    end
+
+    test "mints a replica identity bound to the session that rendered the page" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module5)
+
+      {replica_id, replica_token} = extract_replica_identity(conn.resp_body)
+
+      # Read from the RESPONSE conn: the request carried no session, so this is the id
+      # Session.init/1 minted while the page was being rendered.
+      session_id = Plug.Conn.get_session(conn, :hologram_session_id)
+
+      assert ReplicaIdentity.verify(replica_token, replica_id, session_id, nil) == :ok
+    end
+
+    test "mints a replica identity bound to the signed-in user" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{
+          hologram_session_id: @hologram_session_id,
+          hologram_user_id: "test-user-id"
+        })
+        |> handle_initial_page_request(Module5)
+
+      {replica_id, replica_token} = extract_replica_identity(conn.resp_body)
+
+      assert ReplicaIdentity.verify(replica_token, replica_id, "another-session", "test-user-id") ==
+               :ok
+    end
+
+    test "mints a fresh replica id on each initial page request" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn_1 =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module5)
+
+      conn_2 =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module5)
+
+      assert extract_replica_identity(conn_1.resp_body) !=
+               extract_replica_identity(conn_2.resp_body)
     end
 
     test "updates Plug.Conn session" do
