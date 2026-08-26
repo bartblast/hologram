@@ -7,6 +7,7 @@ defmodule Hologram.Controller do
   alias Hologram.Auth.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.Mutation
   alias Hologram.Page
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
@@ -29,6 +30,12 @@ defmodule Hologram.Controller do
   The body_params should contain %{"_json" => [version, data]} directly.
   """
   @type command_conn :: %Plug.Conn{body_params: map}
+
+  @typedoc """
+  A connection with a parsed JSON body carrying a batch of client writes.
+  A JSON object's keys land in body_params directly, so unlike a command there is no "_json" here.
+  """
+  @type mutation_conn :: %Plug.Conn{body_params: map}
 
   @doc """
   Applies a map of cookie operations to the given Plug.Conn struct.
@@ -451,6 +458,39 @@ defmodule Hologram.Controller do
     handle_page_request(conn_with_csrf_token, page_module, params, [], renderer_opts)
   end
 
+  @doc """
+  Handles an HTTP POST carrying a batch of client writes.
+
+  Checks the CSRF token and the instance cross-check exactly as a command request does, applies the
+  batch on behalf of the session, and answers with what became of it as JSON.
+
+  ## Parameters
+
+    * `initial_conn` - The Plug.Conn struct representing the HTTP request with parsed JSON body_params
+
+  ## Returns
+
+  The updated and halted Plug.Conn struct with the JSON response.
+  """
+  @spec handle_mutation_request(mutation_conn()) :: Plug.Conn.t()
+  def handle_mutation_request(initial_conn) do
+    conn =
+      initial_conn
+      |> PlugConnUtils.init_conn()
+      |> Session.init()
+
+    cond do
+      not validate_csrf_token(conn) ->
+        forbid(conn, "CSRF token validation failed")
+
+      not caller_owns_instance_id?(conn, conn.body_params["instance_id"]) ->
+        forbid(conn, "instance_id cross-check failed")
+
+      true ->
+        send_mutation_response(conn)
+    end
+  end
+
   # Public for tests so they can drive a page render with a known instance_id
   # without going through the auto-generating `handle_initial_page_request/2`.
   @doc false
@@ -697,6 +737,15 @@ defmodule Hologram.Controller do
     {instance_id, client_claimed_sub_keys}
   end
 
+  defp forbid(conn, log_message) do
+    Logger.warning(log_message)
+
+    conn
+    |> Plug.Conn.put_status(403)
+    |> Controller.text("Forbidden")
+    |> Plug.Conn.halt()
+  end
+
   defp get_csrf_token_from_header(conn) do
     case Plug.Conn.get_req_header(conn, "x-csrf-token") do
       [token] when is_binary(token) and token != "" -> {:ok, token}
@@ -741,6 +790,31 @@ defmodule Hologram.Controller do
 
   defp maybe_persist_user_id(conn, _pre_server, %Server{user_id: user_id}) do
     Session.put_user_id(conn, user_id)
+  end
+
+  # Transport only: what a batch becomes is Hologram.Mutation's, the encoding of a refusal's reason
+  # included - so that a repeated batch is answered with byte for byte what its first arrival
+  # produced.
+  defp send_mutation_response(conn) do
+    response =
+      case Mutation.run(conn.body_params, Server.from(conn)) do
+        {:ok, answer} ->
+          Controller.json(conn, answer)
+
+        {:rejected, index, reason} ->
+          Controller.json(conn, %{
+            reason: Encoder.encode_client_term!(reason),
+            status: "rejected",
+            write: index
+          })
+
+        {:invalid, message} ->
+          conn
+          |> Plug.Conn.put_status(400)
+          |> Controller.text(message)
+      end
+
+    Plug.Conn.halt(response)
   end
 
   defp process_command_result(command_result, server_struct, default_target) do
