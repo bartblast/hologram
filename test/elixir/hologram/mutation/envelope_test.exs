@@ -400,6 +400,25 @@ defmodule Hologram.Mutation.EnvelopeTest do
                {:error, ~s[write 0: deltas."count" must be a non-zero integer]}
     end
 
+    test "refuses a delta out of range for an integer attribute" do
+      expected_msg = ~s[write 0: deltas."count" is out of range for an integer attribute]
+
+      assert parse(raw([update(Module10, nil, deltas: %{"count" => 9_223_372_036_854_775_808})])) ==
+               {:error, expected_msg}
+
+      assert parse(raw([update(Module10, nil, deltas: %{"count" => -9_223_372_036_854_775_809})])) ==
+               {:error, expected_msg}
+    end
+
+    test "admits a delta at the edge of an integer attribute's range" do
+      assert {:ok, %Envelope{writes: [write]}} =
+               parse(
+                 raw([update(Module10, nil, deltas: %{"count" => -9_223_372_036_854_775_808})])
+               )
+
+      assert write.deltas == %{count: -9_223_372_036_854_775_808}
+    end
+
     test "refuses a field both set and moved by one write" do
       entry = update(Module10, %{"count" => 7}, deltas: %{"count" => 1})
 

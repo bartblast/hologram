@@ -16,6 +16,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module20
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
@@ -1353,6 +1354,20 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert updated_entity.bio == nil
       assert updated_entity.count == 1
       assert [%{op: "put_entity"}] = outbox_effects()
+    end
+
+    test "refuses a move past what the column can hold" do
+      max_int = 9_223_372_036_854_775_807
+
+      {:ok, created_entity} =
+        Module20
+        |> Entity.new(count: max_int)
+        |> create()
+
+      assert update(Module20, created_entity.id, %{}, deltas: %{count: 1}) ==
+               {:error, %{count: [{:type, :integer}]}}
+
+      assert get(Module20, created_entity.id).count == max_int
     end
 
     test "raises when a delta names anything but a required integer attribute" do

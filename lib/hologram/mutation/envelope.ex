@@ -109,7 +109,14 @@ defmodule Hologram.Mutation.Envelope do
   defp decode_delta(name, amount, fields, entity_type) do
     case Map.fetch(fields, name) do
       {:ok, {field, _type}} when is_integer(amount) and amount != 0 ->
-        {:ok, {field, amount}}
+        # Bounded here because nothing downstream can: the column is judged on the value the
+        # statement leaves, and an amount the column cannot hold fails the statement's own
+        # parameters instead - the same range a put's value is judged against.
+        if Validator.attribute_value_valid?(amount, :integer) do
+          {:ok, {field, amount}}
+        else
+          {:error, ~s(deltas."#{name}" is out of range for an integer attribute)}
+        end
 
       {:ok, _field} ->
         {:error, ~s(deltas."#{name}" must be a non-zero integer)}

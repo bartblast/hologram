@@ -330,7 +330,8 @@ defmodule Hologram.DB.EntityOperations do
         :ok
 
       {:error, refusal} ->
-        violations = write_violations!(entity_type, refusal)
+        violations =
+          overflow_violations(deltas_map, refusal) || write_violations!(entity_type, refusal)
 
         {:error, advisory_violations(entity_type, changes_map, id, violations)}
     end
@@ -413,6 +414,19 @@ defmodule Hologram.DB.EntityOperations do
 
     "#{quoted} = #{quoted} + $#{index}"
   end
+
+  # A counter moved past what its column can hold aborts the statement before the value it would
+  # have left can be judged, and PostgreSQL names no column in that error - so the write is
+  # refused for every counter it moved, with the reason a value the column cannot hold already
+  # answers on the way in.
+  defp overflow_violations(deltas_map, %Postgrex.Error{
+         postgres: %{code: :numeric_value_out_of_range}
+       })
+       when deltas_map != %{} do
+    Map.new(deltas_map, fn {name, _amount} -> {name, [{:type, :integer}]} end)
+  end
+
+  defp overflow_violations(_deltas_map, _refusal), do: nil
 
   # The one place a column name is spliced into SQL as a LITERAL rather than as a quoted
   # identifier. Every name here comes from the mapping and never from a caller - the escape is

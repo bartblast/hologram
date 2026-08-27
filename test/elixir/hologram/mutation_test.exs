@@ -461,6 +461,22 @@ defmodule Hologram.MutationTest do
       assert reloaded.count == 2
     end
 
+    test "refuses a move past what the column can hold" do
+      row = create_counter(9_223_372_036_854_775_807)
+
+      write =
+        update_write(Module20, row.id, nil,
+          claim: ["authorize", "update"],
+          deltas: %{"count" => 1},
+          stamp: stamp_above(row)
+        )
+
+      assert run(envelope([write]), server()) ==
+               rejected(0, %{count: [{:type, :integer}]})
+
+      assert EntityOperations.get(Module20, row.id).count == 9_223_372_036_854_775_807
+    end
+
     test "applies a delete the writer is based on" do
       user = create_user("remover@example.com")
       row = create_archivable(user, priority: 5)
