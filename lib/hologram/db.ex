@@ -52,6 +52,7 @@ defmodule Hologram.DB do
 
       alias Hologram.DB
       alias Hologram.Entity
+      alias Hologram.Job
     end
   end
 
@@ -79,10 +80,12 @@ defmodule Hologram.DB do
   semantics. The returned entity carries no claim and no recorded changes.
 
   Misuse raises rather than returning - a role grant, which is written only through
-  grant_role/revoke_role - as does a constraint violation the mapping does not explain.
+  grant_role/revoke_role, and a job, which is created through Job.create/2 - as does a
+  constraint violation the mapping does not explain.
   """
   @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
   def create(entity) do
+    validate_not_job!(entity.__struct__)
     Validator.validate_writable!(entity.__struct__)
 
     Writer.create(entity)
@@ -596,6 +599,19 @@ defmodule Hologram.DB do
       raise ArgumentError,
         message:
           "#{inspect(query)} is not an entity type module - a by-id read takes the entity type, a query term is read with read/1"
+    end
+
+    :ok
+  end
+
+  # A job's create means more than storing a row - it schedules work to run after the transaction
+  # commits - so it has one spelling, the way a role grant has one. The message gives the reason
+  # rather than the redirect, since the two verbs are now the same word in different modules.
+  defp validate_not_job!(entity_type) do
+    if Reflection.job?(entity_type) do
+      raise ArgumentError,
+        message:
+          "#{inspect(entity_type)} is a job type - create it through Job.create/2, which records who enqueued it so the worker can run it as them after the transaction commits"
     end
 
     :ok
