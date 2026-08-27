@@ -1499,4 +1499,43 @@ defmodule Hologram.Query do
     do: Enum.flat_map(values, &value_placeholder_names/1)
 
   defp value_placeholder_names(_value), do: []
+
+  # Rendered as the struct with the fields at their default left out - a fresh term shows its
+  # entity type alone, and an include shows as the nested struct it holds. Still the literal that
+  # rebuilds the term exactly (an omitted field takes its default, and entity is never omitted),
+  # and the spelling the tests assert with, so what inspect prints is what a reader writes. Bare,
+  # five of the eight fields are at their default on every term and every sub-term, and the
+  # signal drowns.
+  defimpl Inspect do
+    import Inspect.Algebra
+
+    @impl Inspect
+    def inspect(term, opts) do
+      defaults =
+        Hologram.Query
+        |> struct()
+        |> Map.from_struct()
+
+      fields =
+        Enum.reject(
+          [
+            cardinality: term.cardinality,
+            entity: term.entity,
+            filter: term.filter,
+            include: term.include,
+            limit: term.limit,
+            offset: term.offset,
+            order_by: term.order_by,
+            trust: term.trust
+          ],
+          fn {name, value} -> value == Map.fetch!(defaults, name) end
+        )
+
+      container_doc("%Hologram.Query{", fields, "}", opts, &field_doc/2, separator: ",")
+    end
+
+    defp field_doc({name, value}, opts) do
+      concat([Atom.to_string(name), ": ", to_doc(value, opts)])
+    end
+  end
 end
