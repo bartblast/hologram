@@ -62,6 +62,15 @@ defmodule Hologram.Job do
 
       @before_compile Hologram.Job
 
+      # The three attributes every job carries and only the framework sets, declared as ordinary
+      # attributes so that storage, the mapping, migrations, revisions, the wire and policies
+      # treat them as they treat any attribute - and guarded from being set by anything else:
+      # Entity.new/2 refuses them, the wire refuses them from a client, and the enqueue stamps
+      # the actor from the ambient context.
+      attribute :actor_id, :uuid, optional: true
+      attribute :error, :string, optional: true, server_only: true
+      attribute :status, :enum, values: [:queued, :running, :done, :failed], default: :queued
+
       @doc """
       Returns true to indicate that the callee module is a job type module (has "use Hologram.Job" directive).
 
@@ -86,4 +95,10 @@ defmodule Hologram.Job do
           "#{inspect(env.module)} uses Hologram.Job but defines no run/1 - run/1 is the work a job does, run once after its row commits"
     end
   end
+
+  @doc """
+  Returns the names of the attributes every job type carries and only the framework sets, sorted: the acting user at the enqueue, the failure record, and the status.
+  """
+  @spec framework_attribute_names() :: list(atom)
+  def framework_attribute_names, do: [:actor_id, :error, :status]
 end

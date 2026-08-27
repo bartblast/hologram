@@ -295,6 +295,12 @@ defmodule Hologram.DB.IntrospectionTest do
                  "viewer"
                ],
                "test_fixtures_entity_module17_priority_$enum" => ["low", "medium", "high"],
+               "test_fixtures_job_module1_status_$enum" => [
+                 "queued",
+                 "running",
+                 "done",
+                 "failed"
+               ],
                "test_fixtures_entity_module4_c_$enum" => ["x", "y"]
              }
     end

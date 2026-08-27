@@ -1,6 +1,9 @@
 defmodule Hologram.JobTest do
   use Hologram.Test.BasicCase, async: true
 
+  import Hologram.Job
+
+  alias Hologram.Entity
   alias Hologram.Test.Fixtures.Job.Module1
 
   describe "__using__/1" do
@@ -12,9 +15,40 @@ defmodule Hologram.JobTest do
       assert Module1.__is_hologram_entity__() == true
     end
 
-    test "declares nothing of its own" do
-      assert Module1.__attributes__() == []
+    test "declares the attributes the framework owns" do
+      assert Module1.__attributes__() == [
+               {:actor_id, :uuid, [optional: true]},
+               {:error, :string, [optional: true, server_only: true]},
+               {:status, :enum, [values: [:queued, :running, :done, :failed], default: :queued]}
+             ]
+
       assert Module1.__relationships__() == []
+    end
+
+    test "builds a job queued, with nothing recorded of a run" do
+      job = Entity.new(Module1)
+
+      assert job.status == :queued
+      assert job.actor_id == nil
+      assert job.error == nil
+    end
+
+    test "raises when a framework attribute is redeclared" do
+      expected_msg =
+        "duplicate name :status used for attribute in Hologram.Test.Fixtures.Job.RedeclaringJob - attribute and relationship names share one namespace and must be unique"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Job.RedeclaringJob do
+          use Hologram.Job
+
+          attribute :status, :string
+
+          @impl Hologram.Job
+          def run(_job), do: :ok
+        end
+        """)
+      end
     end
 
     test "raises when the module defines no run/1" do
@@ -60,6 +94,12 @@ defmodule Hologram.JobTest do
         end
         """)
       end
+    end
+  end
+
+  describe "framework_attribute_names/0" do
+    test "names the attributes only the framework sets" do
+      assert framework_attribute_names() == [:actor_id, :error, :status]
     end
   end
 end
