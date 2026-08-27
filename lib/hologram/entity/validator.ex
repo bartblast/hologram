@@ -1267,13 +1267,18 @@ defmodule Hologram.Entity.Validator do
     "  * #{inspect(name)} is not a declared attribute or to-one reference"
   end
 
+  # A field the data does not hold has no received value to show - a moved attribute is judged on
+  # the value the statement left, which the caller never held.
   defp violation_line(reference_names, data, {name, reason}) do
-    received = inspect(Map.get(data, name))
+    cond do
+      name in reference_names ->
+        "  * reference #{inspect(name)} must be a valid entity id, got: #{inspect(Map.get(data, name))}"
 
-    if name in reference_names do
-      "  * reference #{inspect(name)} must be a valid entity id, got: #{received}"
-    else
-      "  * attribute #{inspect(name)} #{requirement_description(reason)}, got: #{received}"
+      Map.has_key?(data, name) ->
+        "  * attribute #{inspect(name)} #{requirement_description(reason)}, got: #{inspect(data[name])}"
+
+      true ->
+        "  * attribute #{inspect(name)} #{requirement_description(reason)}"
     end
   end
 end
