@@ -1,6 +1,8 @@
 defmodule Hologram.Query.Window do
   @moduledoc false
 
+  alias Hologram.Query
+
   # What a query downloads, as opposed to what it answers. A client holds the rows its queries
   # could need rather than the ones they select right now, so changing a value re-runs the query
   # over what is already there instead of asking for more.
@@ -31,17 +33,12 @@ defmodule Hologram.Query.Window do
   query itself - a relative bound the compiler can read and the server evaluates per run - which
   the filter surface does not offer yet.
   """
-  @spec derive(%{atom => any}) :: %{atom => any}
+  @spec derive(Query.t()) :: Query.t()
   def derive(term) do
-    %{
-      cardinality: :set,
+    %Query{
       entity: term.entity,
       filter: Enum.reject(term.filter, &placeholder_bound?/1),
-      include: Map.new(term.include, fn {name, sub_term} -> {name, derive(sub_term)} end),
-      limit: nil,
-      offset: nil,
-      order_by: [],
-      trust: false
+      include: Map.new(term.include, fn {name, sub_term} -> {name, derive(sub_term)} end)
     }
   end
 
