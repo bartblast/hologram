@@ -5,6 +5,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
   alias Hologram.Mutation.Envelope
   alias Hologram.Mutation.Write
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -59,15 +60,21 @@ defmodule Hologram.Mutation.EnvelopeTest do
   end
 
   defp update(entity_type, data, opts \\ []) do
-    %{
+    base = %{
       "op" => "update",
       "type" => inspect(entity_type),
       "id" => Keyword.get(opts, :id, @id),
-      "data" => data,
       "based_on" => Keyword.get(opts, :based_on),
       "claim" => Keyword.get(opts, :claim),
       "stamp" => Keyword.get(opts, :stamp, 5)
     }
+
+    with_data = if data, do: Map.put(base, "data", data), else: base
+
+    case Keyword.get(opts, :deltas) do
+      nil -> with_data
+      deltas -> Map.put(with_data, "deltas", deltas)
+    end
   end
 
   describe "parse/1" do
@@ -150,6 +157,30 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
 
       assert write.based_on == %{c_id: 3}
+    end
+
+    test "parses an update's deltas into a write" do
+      entry = update(Module10, %{"bio" => "x"}, deltas: %{"count" => 2})
+
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
+
+      assert write.data == %{bio: "x"}
+      assert write.deltas == %{count: 2}
+    end
+
+    test "reads a missing deltas as none" do
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([update(Module2, %{"c" => "x"})]))
+
+      assert write.deltas == %{}
+    end
+
+    test "parses an update carrying deltas alone" do
+      entry = update(Module10, nil, deltas: %{"count" => -1})
+
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
+
+      assert write.data == %{}
+      assert write.deltas == %{count: -1}
     end
 
     test "parses an added edge into a write" do
@@ -331,6 +362,76 @@ defmodule Hologram.Mutation.EnvelopeTest do
     test "refuses an update changing nothing" do
       assert parse(raw([update(Module2, %{})])) ==
                {:error, "write 0: an update must change at least one field"}
+
+      assert parse(raw([update(Module2, %{}, deltas: %{})])) ==
+               {:error, "write 0: an update must change at least one field"}
+
+      assert parse(raw([update(Module2, nil)])) ==
+               {:error, "write 0: an update must change at least one field"}
+    end
+
+    test "refuses deltas that are not an object" do
+      assert parse(raw([update(Module10, nil, deltas: [1])])) ==
+               {:error, "write 0: deltas must be an object"}
+    end
+
+    # Module2's :c is required and a string - the one shape that separates "not an integer" from
+    # "optional", since every non-integer attribute Module10 declares is optional as well.
+    test "refuses a delta naming a field that is not an integer attribute" do
+      expected_msg =
+        ~s[write 0: "c" is not a counter of Hologram.Test.Fixtures.Entity.Module2 a client can move - a counter is a required integer attribute]
+
+      assert parse(raw([update(Module2, nil, deltas: %{"c" => 1})])) == {:error, expected_msg}
+    end
+
+    test "refuses a delta naming an optional integer attribute" do
+      expected_msg =
+        ~s[write 0: "priority" is not a counter of Hologram.Test.Fixtures.Entity.Module10 a client can move - a counter is a required integer attribute]
+
+      assert parse(raw([update(Module10, nil, deltas: %{"priority" => 1})])) ==
+               {:error, expected_msg}
+    end
+
+    test "refuses a delta that is not a non-zero integer" do
+      assert parse(raw([update(Module10, nil, deltas: %{"count" => 0})])) ==
+               {:error, ~s[write 0: deltas."count" must be a non-zero integer]}
+
+      assert parse(raw([update(Module10, nil, deltas: %{"count" => "1"})])) ==
+               {:error, ~s[write 0: deltas."count" must be a non-zero integer]}
+    end
+
+    test "refuses a field both set and moved by one write" do
+      entry = update(Module10, %{"count" => 7}, deltas: %{"count" => 1})
+
+      assert parse(raw([entry])) ==
+               {:error, ~s[write 0: "count" is both set and moved by one write]}
+    end
+
+    test "refuses deltas on a create" do
+      entry =
+        Module10
+        |> create(%{"count" => 5})
+        |> Map.put("deltas", %{"count" => 1})
+
+      assert parse(raw([entry])) == {:error, "write 0: only an update carries deltas"}
+    end
+
+    test "refuses deltas on a delete" do
+      entry =
+        Module10
+        |> delete()
+        |> Map.put("deltas", %{"count" => 1})
+
+      assert parse(raw([entry])) == {:error, "write 0: only an update carries deltas"}
+    end
+
+    test "refuses deltas on an edge" do
+      entry =
+        "add_relationship"
+        |> edge(Module16, "secrets")
+        |> Map.put("deltas", %{"count" => 1})
+
+      assert parse(raw([entry])) == {:error, "write 0: only an update carries deltas"}
     end
 
     test "refuses a delete carrying data" do
