@@ -127,4 +127,46 @@ defmodule Hologram.Job.RunnerTest do
       assert [%Entity2{c: "by job"}] = DB.read(Entity2)
     end
   end
+
+  describe "process/2" do
+    test "runs a queued job to done" do
+      job = job(:ok)
+
+      assert process(Module3, job.id) == :done
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :done
+      assert row.error == nil
+    end
+
+    test "runs a queued job to failed, with the error on its row" do
+      job = job(:raise)
+
+      assert process(Module3, job.id) == :failed
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :failed
+      assert row.error =~ "** (RuntimeError) boom"
+    end
+
+    test "skips a job another worker has claimed" do
+      job = job(:ok)
+
+      assert {:claimed, _job} = claim(Module3, job.id)
+      assert process(Module3, job.id) == :taken
+      assert EntityOperations.get(Module3, job.id).status == :running
+    end
+
+    test "records the outcome outside the creating user's authority" do
+      user = create_user("recorder@example.com")
+      job = job(:ok, user)
+
+      # Module3 grants nobody an update, so an outcome written as the creating user would be
+      # denied - which is what makes this an assertion about whose write it is.
+      assert as_user(user, fn -> process(Module3, job.id) end) == :done
+      assert EntityOperations.get(Module3, job.id).status == :done
+    end
+  end
 end
