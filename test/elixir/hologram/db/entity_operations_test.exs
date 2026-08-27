@@ -1370,6 +1370,23 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert get(Module20, created_entity.id).count == max_int
     end
 
+    test "names only the counter that moved past what its column can hold" do
+      max_int = 9_223_372_036_854_775_807
+
+      {:ok, created_entity} =
+        Module20
+        |> Entity.new(count: 1, views: max_int)
+        |> create()
+
+      assert update(Module20, created_entity.id, %{}, deltas: %{count: 1, views: 1}) ==
+               {:error, %{views: [{:type, :integer}]}}
+
+      reloaded = get(Module20, created_entity.id)
+
+      assert reloaded.count == 1
+      assert reloaded.views == max_int
+    end
+
     test "raises when a delta names anything but a required integer attribute" do
       {:ok, created_entity} =
         Module10

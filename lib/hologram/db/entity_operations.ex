@@ -331,7 +331,8 @@ defmodule Hologram.DB.EntityOperations do
 
       {:error, refusal} ->
         violations =
-          overflow_violations(deltas_map, refusal) || write_violations!(entity_type, refusal)
+          overflow_violations(entity_type, id, deltas_map, refusal) ||
+            write_violations!(entity_type, refusal)
 
         {:error, advisory_violations(entity_type, changes_map, id, violations)}
     end
@@ -416,17 +417,36 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   # A counter moved past what its column can hold aborts the statement before the value it would
-  # have left can be judged, and PostgreSQL names no column in that error - so the write is
-  # refused for every counter it moved, with the reason a value the column cannot hold already
-  # answers on the way in.
-  defp overflow_violations(deltas_map, %Postgrex.Error{
+  # have left can be judged, and the error names no column - it comes from int8 arithmetic rather
+  # than from a constraint - so the row is asked which one. The write has rolled back by now, so
+  # each counter holds what it held before it, and the move that does not fit is the one to name.
+  # Advisory in the same sense the uniqueness questions below are: it describes the moment it was
+  # asked. Through the struct verb the row is still locked, so there is nothing to move meanwhile.
+  # A row that is gone answers nothing, and the write is refused for every counter it moved -
+  # which is all that is known then.
+  defp overflow_violations(entity_type, id, deltas_map, %Postgrex.Error{
          postgres: %{code: :numeric_value_out_of_range}
        })
        when deltas_map != %{} do
-    Map.new(deltas_map, fn {name, _amount} -> {name, [{:type, :integer}]} end)
+    case overflowing_names(entity_type, id, deltas_map) do
+      [] -> Map.new(deltas_map, fn {name, _amount} -> {name, [{:type, :integer}]} end)
+      names -> Map.new(names, &{&1, [{:type, :integer}]})
+    end
   end
 
-  defp overflow_violations(_deltas_map, _refusal), do: nil
+  defp overflow_violations(_entity_type, _id, _deltas_map, _refusal), do: nil
+
+  defp overflowing_names(entity_type, id, deltas_map) do
+    case get(entity_type, id) do
+      nil ->
+        []
+
+      row ->
+        for {name, amount} <- deltas_map,
+            not Validator.attribute_value_valid?(Map.fetch!(row, name) + amount, :integer),
+            do: name
+    end
+  end
 
   # The one place a column name is spliced into SQL as a LITERAL rather than as a quoted
   # identifier. Every name here comes from the mapping and never from a caller - the escape is
