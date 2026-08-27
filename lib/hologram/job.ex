@@ -30,7 +30,7 @@ defmodule Hologram.Job do
   The job is enqueued wherever the write it belongs to happens - in an action, a command, a
   seed - and rides in that write's transaction:
 
-      Job.enqueue!(MyApp.Jobs.NotifyMembers, project_id: project.id, reason: :archived)
+      Job.create!(MyApp.Jobs.NotifyMembers, project_id: project.id, reason: :archived)
 
   Refuse the transaction and the job never existed, so nothing runs. Let it commit and the job
   runs once, as the user who enqueued it.
@@ -105,7 +105,7 @@ defmodule Hologram.Job do
   end
 
   @doc """
-  Enqueues a job of the given job type, built from the given values (a map or a keyword list).
+  Creates a job of the given job type from the given values (a map or a keyword list), enqueuing it.
 
   The job is written as a row of its type, in whatever transaction the caller is already in, with
   its status queued and its actor the acting user - nobody, on the trusted tier. It runs once,
@@ -124,24 +124,24 @@ defmodule Hologram.Job do
 
   Raises ArgumentError for a module that is not a job type, for an unknown option, and for a value
   of an attribute the framework sets. Raises Hologram.AccessDeniedError when a user is acting and
-  the job type declares no allow lines, since no rule can then grant the enqueue.
+  the job type declares no allow lines, since no rule can then grant the write.
   """
-  @spec enqueue(module, %{optional(atom) => any} | keyword, keyword) ::
+  @spec create(module, %{optional(atom) => any} | keyword, keyword) ::
           {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
-  def enqueue(job_type, values \\ %{}, opts \\ []) do
+  def create(job_type, values \\ %{}, opts \\ []) do
     job_type
     |> build(values, opts)
     |> Writer.create()
   end
 
   @doc """
-  Like enqueue/3, returning the written job directly and raising Hologram.WriteError instead of returning {:error, ...}.
+  Like create/3, returning the written job directly and raising Hologram.WriteError instead of returning {:error, ...}.
 
   The spelling for a call site where a refused job is a reason to stop rather than something to
   answer.
   """
-  @spec enqueue!(module, %{optional(atom) => any} | keyword, keyword) :: struct
-  def enqueue!(job_type, values \\ %{}, opts \\ []) do
+  @spec create!(module, %{optional(atom) => any} | keyword, keyword) :: struct
+  def create!(job_type, values \\ %{}, opts \\ []) do
     job = build(job_type, values, opts)
 
     case Writer.create(job) do
@@ -151,7 +151,7 @@ defmodule Hologram.Job do
       {:error, violations} ->
         raise WriteError,
           message:
-            "cannot enqueue #{inspect(job_type)}:\n" <>
+            "cannot create #{inspect(job_type)}:\n" <>
               DB.refusal_lines(job_type, violations, Map.from_struct(job)),
           reason: violations
     end
@@ -177,7 +177,7 @@ defmodule Hologram.Job do
 
     claim = parse_claim!(opts)
 
-    validate_enqueueable!(job_type, claim)
+    validate_creatable!(job_type, claim)
 
     job_type
     |> Entity.new(values)
@@ -195,19 +195,19 @@ defmodule Hologram.Job do
 
   defp parse_claim!(opts) do
     raise ArgumentError,
-      message: "enqueue takes authorize: operation or trust: true, got: #{inspect(opts)}"
+      message: "Job.create takes authorize: operation or trust: true, got: #{inspect(opts)}"
   end
 
   # A job type declaring nothing is server-side work: no rule grants its create, so a user acting
   # cannot enqueue it and would otherwise be told they lack a permission, when the state is that
   # no permission exists. Claiming the server's authority is how one is enqueued under an actor,
   # so a trust claim skips the check rather than meeting it.
-  defp validate_enqueueable!(job_type, claim) do
+  defp validate_creatable!(job_type, claim) do
     if claim != :trust and Context.actor_user_id() != nil and
          Policy.dead_entity_types([job_type]) != [] do
       raise Hologram.AccessDeniedError,
         message:
-          "cannot enqueue #{inspect(job_type)} as a user - it declares no allow lines, so no user may enqueue it. Add \"allow :create, ...\" to enqueue it from an action, or enqueue it from server code, where there is no acting user."
+          "cannot create #{inspect(job_type)} as a user - it declares no allow lines, so no rule can grant the create. Add \"allow :create, ...\" to enqueue it from an action, or create it from server code, where there is no acting user."
     end
 
     :ok
@@ -217,7 +217,7 @@ defmodule Hologram.Job do
     if not Reflection.job?(job_type) do
       raise ArgumentError,
         message:
-          "#{inspect(job_type)} is not a job type - enqueue takes a module defined with use Hologram.Job"
+          "#{inspect(job_type)} is not a job type - Job.create takes a module defined with use Hologram.Job"
     end
 
     :ok

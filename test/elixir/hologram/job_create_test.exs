@@ -1,7 +1,7 @@
-defmodule Hologram.JobEnqueueTest do
+defmodule Hologram.JobCreateTest do
   use Hologram.Test.DatabaseCase, async: true
 
-  import Hologram.Job, only: [enqueue: 1, enqueue: 2, enqueue: 3, enqueue!: 1, enqueue!: 3]
+  import Hologram.Job, only: [create: 1, create: 2, create: 3, create!: 1, create!: 3]
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.AccessDeniedError
@@ -26,9 +26,9 @@ defmodule Hologram.JobEnqueueTest do
     |> DB.create!()
   end
 
-  describe "enqueue/3" do
+  describe "create/3" do
     test "writes the job queued" do
-      assert {:ok, job} = enqueue(Module1)
+      assert {:ok, job} = create(Module1)
 
       assert job.status == :queued
       assert job.error == nil
@@ -38,12 +38,12 @@ defmodule Hologram.JobEnqueueTest do
     test "stamps the acting user" do
       user = create_user("enqueuer@example.com")
 
-      assert {:ok, job} = as_user(user, fn -> enqueue(Module1) end)
+      assert {:ok, job} = as_user(user, fn -> create(Module1) end)
       assert job.actor_id == user.id
     end
 
     test "stamps no actor without an acting user" do
-      assert {:ok, job} = enqueue(Module1)
+      assert {:ok, job} = create(Module1)
       assert job.actor_id == nil
     end
 
@@ -53,7 +53,7 @@ defmodule Hologram.JobEnqueueTest do
       expected_msg = ~r/^not allowed to archive Hologram.Test.Fixtures.Job.Module1 "/
 
       assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn -> enqueue(Module1, %{}, authorize: :archive) end)
+        as_user(user, fn -> create(Module1, %{}, authorize: :archive) end)
       end
 
       assert DB.read(Module1) == []
@@ -62,44 +62,44 @@ defmodule Hologram.JobEnqueueTest do
     test "claims the server's authority with the trust option" do
       user = create_user("truster@example.com")
 
-      assert {:ok, job} = as_user(user, fn -> enqueue(Module2, %{}, trust: true) end)
+      assert {:ok, job} = as_user(user, fn -> create(Module2, %{}, trust: true) end)
       assert job.actor_id == user.id
       assert DB.read(Module2, job.id) != nil
     end
 
-    test "enqueues a job type that declares no allow lines without an acting user" do
-      assert {:ok, job} = enqueue(Module2)
+    test "creates a job type that declares no allow lines without an acting user" do
+      assert {:ok, job} = create(Module2)
       assert DB.read(Module2, job.id) != nil
     end
 
     test "raises on a module that is not a job type" do
       expected_msg =
-        "Hologram.Test.Fixtures.Entity.Module14 is not a job type - enqueue takes a module defined with use Hologram.Job"
+        "Hologram.Test.Fixtures.Entity.Module14 is not a job type - Job.create takes a module defined with use Hologram.Job"
 
-      assert_error ArgumentError, expected_msg, fn -> enqueue(Module14) end
+      assert_error ArgumentError, expected_msg, fn -> create(Module14) end
     end
 
     test "raises on a value of an attribute the framework sets" do
       expected_msg =
         ":status of Hologram.Test.Fixtures.Job.Module1 is set by the framework - a job is enqueued as queued, and the worker records the rest"
 
-      assert_error ArgumentError, expected_msg, fn -> enqueue(Module1, status: :done) end
+      assert_error ArgumentError, expected_msg, fn -> create(Module1, status: :done) end
     end
 
     test "raises on an unknown option" do
-      expected_msg = "enqueue takes authorize: operation or trust: true, got: [retry: true]"
+      expected_msg = "Job.create takes authorize: operation or trust: true, got: [retry: true]"
 
       assert_error ArgumentError, expected_msg, fn ->
-        enqueue(Module1, %{}, computed_opts(retry: true))
+        create(Module1, %{}, computed_opts(retry: true))
       end
     end
 
     test "raises on claiming both authorities" do
       expected_msg =
-        "enqueue takes authorize: operation or trust: true, got: [authorize: :archive, trust: true]"
+        "Job.create takes authorize: operation or trust: true, got: [authorize: :archive, trust: true]"
 
       assert_error ArgumentError, expected_msg, fn ->
-        enqueue(Module1, %{}, computed_opts(authorize: :archive, trust: true))
+        create(Module1, %{}, computed_opts(authorize: :archive, trust: true))
       end
     end
 
@@ -107,19 +107,19 @@ defmodule Hologram.JobEnqueueTest do
       user = create_user("blocked@example.com")
 
       expected_msg =
-        "cannot enqueue Hologram.Test.Fixtures.Job.Module2 as a user - it declares no allow lines, so no user may enqueue it. Add \"allow :create, ...\" to enqueue it from an action, or enqueue it from server code, where there is no acting user."
+        "cannot create Hologram.Test.Fixtures.Job.Module2 as a user - it declares no allow lines, so no rule can grant the create. Add \"allow :create, ...\" to enqueue it from an action, or create it from server code, where there is no acting user."
 
       assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn -> enqueue(Module2) end)
+        as_user(user, fn -> create(Module2) end)
       end
 
       assert DB.read(Module2) == []
     end
   end
 
-  describe "enqueue!/3" do
+  describe "create!/3" do
     test "returns the written job" do
-      job = enqueue!(Module1)
+      job = create!(Module1)
 
       assert job.status == :queued
       assert DB.read(Module1, job.id) != nil
@@ -131,7 +131,7 @@ defmodule Hologram.JobEnqueueTest do
       expected_msg = ~r/^not allowed to archive Hologram.Test.Fixtures.Job.Module1 "/
 
       assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn -> enqueue!(Module1, %{}, authorize: :archive) end)
+        as_user(user, fn -> create!(Module1, %{}, authorize: :archive) end)
       end
     end
   end
