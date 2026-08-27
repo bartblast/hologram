@@ -831,10 +831,10 @@ defmodule Hologram.DBTest do
       {:ok, entity} = create(Entity.new(Module1))
 
       expected_msg =
-        "update takes recorded changes - put values with put_attribute and edges with " <>
-          "add_relationship or delete_relationship. A field set directly on the struct is " <>
-          "not recorded: writing the whole struct would overwrite concurrent changes to " <>
-          "fields you didn't touch."
+        "update takes recorded changes - put values with put_attribute, move counters with " <>
+          "increment or decrement, and edges with add_relationship or delete_relationship. " <>
+          "A field set directly on the struct is not recorded: writing the whole struct " <>
+          "would overwrite concurrent changes to fields you didn't touch."
 
       assert_error ArgumentError, expected_msg, fn -> update(entity) end
     end

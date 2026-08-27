@@ -4,7 +4,15 @@ defmodule Hologram.DB.WriterTest do
   import Hologram.DB.Writer
 
   import Hologram.Query,
-    only: [add_relationship: 3, authorize: 2, delete_relationship: 3, put_attribute: 3, trust: 1]
+    only: [
+      add_relationship: 3,
+      authorize: 2,
+      decrement: 3,
+      delete_relationship: 3,
+      increment: 3,
+      put_attribute: 3,
+      trust: 1
+    ]
 
   import Hologram.Test, only: [as_user: 2]
 
@@ -16,6 +24,7 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module16
@@ -588,6 +597,65 @@ defmodule Hologram.DB.WriterTest do
       assert revisions.public == entity.__meta__.revisions.public
     end
 
+    test "moves the recorded deltas" do
+      entity =
+        Module10
+        |> Entity.new(count: 5)
+        |> DB.create!()
+
+      assert entity
+             |> put_attribute(:bio, "moved")
+             |> increment(:count, 2)
+             |> update() == :ok
+
+      updated_entity = EntityOperations.get(Module10, entity.id)
+
+      assert updated_entity.bio == "moved"
+      assert updated_entity.count == 7
+    end
+
+    test "moves a recorded delta alone" do
+      entity =
+        Module10
+        |> Entity.new(count: 5)
+        |> DB.create!()
+
+      assert entity
+             |> decrement(:count, 1)
+             |> update() == :ok
+
+      assert EntityOperations.get(Module10, entity.id).count == 4
+    end
+
+    test "stores the stamp the struct carries on a moved column" do
+      entity =
+        Module10
+        |> Entity.new(count: 5)
+        |> DB.create!()
+
+      stamp = entity.__meta__.revisions.count + 1_000_000
+
+      assert entity
+             |> increment(:count, 1)
+             |> Map.update!(:__meta__, &%{&1 | stamp: stamp})
+             |> update() == :ok
+
+      assert EntityOperations.get(Module10, entity.id).__meta__.revisions.count == stamp
+    end
+
+    test "returns the violation a moved value's declaration refuses" do
+      entity =
+        Module10
+        |> Entity.new(count: 1)
+        |> DB.create!()
+
+      assert entity
+             |> decrement(:count, 1)
+             |> update() == {:error, %{count: [{:min, 1}]}}
+
+      assert EntityOperations.get(Module10, entity.id).count == 1
+    end
+
     test "raises when nothing is recorded" do
       entity =
         Module1
@@ -595,10 +663,10 @@ defmodule Hologram.DB.WriterTest do
         |> DB.create!()
 
       expected_msg =
-        "update takes recorded changes - put values with put_attribute and edges with " <>
-          "add_relationship or delete_relationship. A field set directly on the struct is " <>
-          "not recorded: writing the whole struct would overwrite concurrent changes to " <>
-          "fields you didn't touch."
+        "update takes recorded changes - put values with put_attribute, move counters with " <>
+          "increment or decrement, and edges with add_relationship or delete_relationship. " <>
+          "A field set directly on the struct is not recorded: writing the whole struct " <>
+          "would overwrite concurrent changes to fields you didn't touch."
 
       assert_error ArgumentError, expected_msg, fn -> update(%{entity | public: true}) end
     end
