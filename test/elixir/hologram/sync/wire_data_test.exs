@@ -235,7 +235,7 @@ defmodule Hologram.Sync.WireDataTest do
       entity = %{
         module_2()
         | __meta__: %Metadata{
-            attribute_changes: %{c: "changed"},
+            attribute_ops: %{c: {:put, "changed"}},
             claim: :trust,
             revisions: %{a: 3}
           }

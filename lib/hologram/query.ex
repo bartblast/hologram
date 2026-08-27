@@ -304,22 +304,26 @@ defmodule Hologram.Query do
   a counter - a declared attribute of type :integer that is not optional, so it always holds a
   number - and the amount any integer: a negative one moves the attribute down, which is how a
   computed amount passes through with its sign, and decrement/3 is the readable spelling for a
-  literal move down. The amount is recorded in the struct's metadata as a delta under the
-  attribute's name, and several increments and decrements of one attribute add up, so a sum
-  that reaches zero leaves nothing recorded. The struct's own field is left as it was read: what
-  the attribute ends up holding is the row's to compute at the write, from whatever value it
-  holds then - which is what lets two writers moving one attribute add up instead of one
-  overwriting the other. The attribute's constraints are judged on that result at the write, so
-  a move that would cross a declared minimum, maximum or range is reported by DB.update/1.
+  literal move down. The amount is recorded in the struct's metadata as an increment op under
+  the attribute's name (decrement/3 records a negative one), and several increments and
+  decrements of one attribute add up, so a sum that reaches zero leaves nothing recorded. The struct's own field moves with it, so a caller
+  reads back the value it asked for - a preview: what the attribute ends up holding is the
+  row's to compute at the write, from whatever value it holds then, which is what lets two
+  writers moving one attribute add up instead of one overwriting the other. Only the recorded
+  amount is written, never the field. The attribute's constraints are judged on that result at
+  the write, so a move that would cross a declared minimum, maximum or range is reported by
+  DB.update/1.
 
-  Stages apply in order and the struct holds the net: moving an attribute the struct already
-  carries a put value for folds the amount into that value (put 10 then increment 1 records a
-  put of 11), and putting an attribute the struct carries a delta for replaces the delta.
+  Stages apply in order and the struct holds one op per attribute: moving an attribute the
+  struct already carries a put value for folds the amount into that value (put 10 then
+  increment 1 records a put of 11), and putting an attribute the struct carries an increment for
+  replaces the increment.
 
   Raises ArgumentError when the entity is not an entity struct, when the amount is not an
   integer, when the name is an optional integer attribute, a non-integer attribute, a
-  relationship, a system attribute, or unknown, or when the put value the amount would fold
-  into is not an integer.
+  relationship, a system attribute, or unknown, when the put value the amount would fold into
+  is not an integer, or when the struct's field holds nil - a counter always holds a number,
+  and a struct that has none has nothing to move.
   """
   @spec increment(struct, atom, integer) :: struct
   def increment(entity, name, amount) do
@@ -521,9 +525,9 @@ defmodule Hologram.Query do
   are a keyword list or a map keyed by declared attribute names and to-one reference fields
   (`<relationship name>_id`) - what DB.update/3 takes as changes. Each value is set on the
   struct's field and recorded under the same name in the struct's metadata, so a later put of
-  the same name replaces the earlier one, and replaces a delta recorded for it by increment/3 or
-  decrement/3 - stages apply in order, and the struct holds the net. Values are judged at the
-  write, not here - a value
+  the same name replaces the earlier one, and replaces an increment recorded for it by
+  increment/3 or decrement/3 - stages apply in order, and the struct holds one op per attribute.
+  Values are judged at the write, not here - a value
   the declarations refuse is reported by DB.update/1, and a struct holding one reads like any
   other until then.
 
@@ -548,22 +552,18 @@ defmodule Hologram.Query do
 
     Enum.each(values_map, fn {name, _value} -> validate_put_name!(name, entity_type) end)
 
-    %Metadata{attribute_changes: recorded_changes, attribute_deltas: recorded_deltas} =
-      metadata = entity.__meta__
+    %Metadata{attribute_ops: recorded_ops} = metadata = entity.__meta__
 
-    changes = Map.merge(recorded_changes, values_map)
-
-    # Stages apply in order: a put after a delta replaces it, the way a later put replaces an
-    # earlier one.
-    deltas = Map.drop(recorded_deltas, Map.keys(values_map))
+    # Stages apply in order: a put replaces whatever op the attribute carried - an earlier put or an
+    # increment alike.
+    ops =
+      Enum.reduce(values_map, recorded_ops, fn {name, value}, acc ->
+        Map.put(acc, name, {:put, value})
+      end)
 
     entity
     |> Map.merge(values_map)
-    |> Map.put(:__meta__, %Metadata{
-      metadata
-      | attribute_changes: changes,
-        attribute_deltas: deltas
-    })
+    |> Map.put(:__meta__, %Metadata{metadata | attribute_ops: ops})
   end
 
   def put_attribute(_entity, values) do
@@ -986,26 +986,42 @@ defmodule Hologram.Query do
     validate_delta_name!(name, entity_type, stage)
     validate_amount!(amount, stage)
 
-    %Metadata{attribute_changes: changes, attribute_deltas: deltas} = metadata = entity.__meta__
+    %Metadata{attribute_ops: ops} = metadata = entity.__meta__
 
-    case Map.fetch(changes, name) do
-      # Stages apply in order: a delta after a put folds into the value, so the struct holds the
-      # net of both and never carries a put and a delta for one attribute.
-      {:ok, value} when is_integer(value) ->
+    case Map.get(ops, name) do
+      # Stages apply in order: an increment after a put folds into the value, so the attribute
+      # keeps one op.
+      {:put, value} when is_integer(value) ->
         put_attribute(entity, name, value + sign * amount)
 
-      {:ok, value} ->
+      {:put, value} ->
         raise ArgumentError,
           message:
             "#{inspect(name)} in #{inspect(entity_type)} carries a put value that is not an integer (#{inspect(value)}) - #{stage} cannot move it"
 
-      :error ->
-        delta = Map.get(deltas, name, 0) + sign * amount
+      recorded ->
+        delta = recorded_increment(recorded) + sign * amount
 
-        recorded_deltas =
-          if delta == 0, do: Map.delete(deltas, name), else: Map.put(deltas, name, delta)
+        recorded_ops =
+          if delta == 0, do: Map.delete(ops, name), else: Map.put(ops, name, {:increment, delta})
 
-        Map.put(entity, :__meta__, %Metadata{metadata | attribute_deltas: recorded_deltas})
+        # The field previews the result the way a put value does - only the recorded amount is
+        # written, so the row still computes the value from whatever it holds at the write.
+        entity
+        |> Map.put(name, moved_value(entity, name, entity_type, sign * amount, stage))
+        |> Map.put(:__meta__, %Metadata{metadata | attribute_ops: recorded_ops})
+    end
+  end
+
+  defp moved_value(entity, name, entity_type, delta, stage) do
+    case Map.fetch!(entity, name) do
+      value when is_integer(value) ->
+        value + delta
+
+      nil ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} in #{inspect(entity_type)} holds nil - a counter always holds a number, so there is nothing for #{stage} to move - read the row first, or give the attribute a default"
     end
   end
 
@@ -1026,6 +1042,10 @@ defmodule Hologram.Query do
 
     Map.put(entity, :__meta__, %Metadata{metadata | relationship_ops: recorded_ops})
   end
+
+  defp recorded_increment(nil), do: 0
+
+  defp recorded_increment({:increment, amount}), do: amount
 
   defp raise_unknown_operator!(operator, name) do
     raise ArgumentError,

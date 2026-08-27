@@ -34,7 +34,7 @@ defmodule Hologram.Mutation.WriteTest do
              }
     end
 
-    test "records an update's changes on the struct and on its metadata" do
+    test "records an update's changes as put ops on the struct and on its metadata" do
       write = %Write{
         based_on: %{c: 3},
         data: %{c: "x"},
@@ -46,7 +46,7 @@ defmodule Hologram.Mutation.WriteTest do
 
       assert to_entity(write) == %Module2{
                __meta__: %Metadata{
-                 attribute_changes: %{c: "x"},
+                 attribute_ops: %{c: {:put, "x"}},
                  claim: {:authorize, :update},
                  revisions: %{c: 3},
                  stamp: 5
@@ -60,13 +60,13 @@ defmodule Hologram.Mutation.WriteTest do
              }
     end
 
-    test "records an update's deltas on its metadata alone" do
+    test "records an update's deltas as increment ops on its metadata alone" do
       write = %Write{deltas: %{count: 2}, entity_type: Module10, id: @id, op: :update, stamp: 5}
 
       entity = to_entity(write)
 
       assert entity.__meta__ == %Metadata{
-               attribute_deltas: %{count: 2},
+               attribute_ops: %{count: {:increment, 2}},
                claim: {:authorize, :update},
                stamp: 5
              }

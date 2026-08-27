@@ -63,14 +63,10 @@ defmodule Hologram.DB.Writer do
   @doc false
   @spec update(struct) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity) do
-    %Metadata{
-      attribute_changes: attribute_changes,
-      attribute_deltas: attribute_deltas,
-      relationship_ops: relationship_ops,
-      stamp: stamp
-    } = entity.__meta__
+    %Metadata{attribute_ops: attribute_ops, relationship_ops: relationship_ops, stamp: stamp} =
+      entity.__meta__
 
-    if attribute_changes == %{} and attribute_deltas == %{} and relationship_ops == %{} do
+    if attribute_ops == %{} and relationship_ops == %{} do
       raise ArgumentError,
         message:
           "update takes recorded changes - put values with put_attribute, move counters with " <>
@@ -80,6 +76,7 @@ defmodule Hologram.DB.Writer do
     end
 
     entity_type = entity.__struct__
+    {attribute_changes, attribute_deltas} = split_attribute_ops(attribute_ops)
 
     {:ok, applied} =
       Connection.transaction(fn ->
@@ -197,6 +194,14 @@ defmodule Hologram.DB.Writer do
       row ->
         row
     end
+  end
+
+  # The executor takes values and amounts apart: a put sets its column, an increment moves it.
+  defp split_attribute_ops(attribute_ops) do
+    Enum.reduce(attribute_ops, {%{}, %{}}, fn
+      {name, {:put, value}}, {changes, deltas} -> {Map.put(changes, name, value), deltas}
+      {name, {:increment, amount}}, {changes, deltas} -> {changes, Map.put(deltas, name, amount)}
+    end)
   end
 
   defp update_attributes(_entity_type, _id, attribute_changes, attribute_deltas, _stamp)

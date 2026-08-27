@@ -28,13 +28,13 @@ defmodule Hologram.QueryTest do
 
   describe "add_relationship/3" do
     test "keeps the rest of the metadata" do
-      metadata = %Metadata{attribute_changes: %{c_id: "x"}, claim: :trust}
+      metadata = %Metadata{attribute_ops: %{c_id: {:put, "x"}}, claim: :trust}
       entity = %{Entity.new(Module3) | __meta__: metadata}
       target_id = Entity.generate_id()
 
       result = add_relationship(entity, :a, target_id)
 
-      assert result.__meta__.attribute_changes == %{c_id: "x"}
+      assert result.__meta__.attribute_ops == %{c_id: {:put, "x"}}
       assert result.__meta__.claim == :trust
       assert result.__meta__.relationship_ops == %{{:a, target_id} => :add}
     end
@@ -144,7 +144,7 @@ defmodule Hologram.QueryTest do
         |> add_relationship(:a, target_id)
         |> authorize(:archive)
 
-      assert result.__meta__.attribute_changes == %{c_id: target_id}
+      assert result.__meta__.attribute_ops == %{c_id: {:put, target_id}}
       assert result.__meta__.relationship_ops == %{{:a, target_id} => :add}
       assert result.__meta__.claim == {:authorize, :archive}
     end
@@ -239,7 +239,7 @@ defmodule Hologram.QueryTest do
 
       result = decrement(entity, :count, 2)
 
-      assert result.__meta__ == %Metadata{attribute_deltas: %{count: -2}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:increment, -2}}}
     end
 
     test "subtracts from a recorded increment" do
@@ -249,7 +249,7 @@ defmodule Hologram.QueryTest do
         |> increment(:count, 5)
         |> decrement(:count, 2)
 
-      assert result.__meta__ == %Metadata{attribute_deltas: %{count: 3}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:increment, 3}}}
     end
 
     test "drops a delta that nets to zero" do
@@ -292,13 +292,13 @@ defmodule Hologram.QueryTest do
 
   describe "delete_relationship/3" do
     test "keeps the rest of the metadata" do
-      metadata = %Metadata{attribute_changes: %{c_id: "x"}, claim: :trust}
+      metadata = %Metadata{attribute_ops: %{c_id: {:put, "x"}}, claim: :trust}
       entity = %{Entity.new(Module3) | __meta__: metadata}
       target_id = Entity.generate_id()
 
       result = delete_relationship(entity, :a, target_id)
 
-      assert result.__meta__.attribute_changes == %{c_id: "x"}
+      assert result.__meta__.attribute_ops == %{c_id: {:put, "x"}}
       assert result.__meta__.claim == :trust
       assert result.__meta__.relationship_ops == %{{:a, target_id} => :delete}
     end
@@ -1051,15 +1051,25 @@ defmodule Hologram.QueryTest do
 
       result = increment(entity, :count, 2)
 
-      assert result.__meta__ == %Metadata{attribute_deltas: %{count: 2}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:increment, 2}}}
     end
 
-    test "leaves the struct's field as read" do
+    test "previews the result on the struct's field" do
       entity = Entity.new(Module10, count: 5)
 
       result = increment(entity, :count, 2)
 
-      assert result.count == 5
+      assert result.count == 7
+    end
+
+    test "previews a second move on top of the first" do
+      result =
+        Module10
+        |> Entity.new(count: 5)
+        |> increment(:count, 2)
+        |> decrement(:count, 1)
+
+      assert result.count == 6
     end
 
     test "moves down by a negative amount" do
@@ -1067,7 +1077,7 @@ defmodule Hologram.QueryTest do
 
       result = increment(entity, :count, -2)
 
-      assert result.__meta__ == %Metadata{attribute_deltas: %{count: -2}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:increment, -2}}}
     end
 
     test "records nothing for a zero amount" do
@@ -1085,7 +1095,7 @@ defmodule Hologram.QueryTest do
         |> increment(:count, 2)
         |> increment(:count, 3)
 
-      assert result.__meta__ == %Metadata{attribute_deltas: %{count: 5}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:increment, 5}}}
     end
 
     test "keeps the rest of the metadata" do
@@ -1095,8 +1105,7 @@ defmodule Hologram.QueryTest do
         |> put_attribute(bio: "x")
         |> increment(:count, 1)
 
-      assert result.__meta__.attribute_changes == %{bio: "x"}
-      assert result.__meta__.attribute_deltas == %{count: 1}
+      assert result.__meta__.attribute_ops == %{bio: {:put, "x"}, count: {:increment, 1}}
     end
 
     test "folds into a put value recorded before it" do
@@ -1106,7 +1115,7 @@ defmodule Hologram.QueryTest do
         |> put_attribute(count: 10)
         |> increment(:count, 1)
 
-      assert result.__meta__ == %Metadata{attribute_changes: %{count: 11}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:put, 11}}}
       assert result.count == 11
     end
 
@@ -1180,6 +1189,17 @@ defmodule Hologram.QueryTest do
     test "raises when the entity is not an entity struct" do
       assert_error ArgumentError, ~s(increment takes an entity struct, got: "x"), fn ->
         increment(wrap_term("x"), :count, 1)
+      end
+    end
+
+    test "raises when the struct's field holds nil" do
+      entity = Entity.new(Module10)
+
+      expected_msg =
+        ":count in Hologram.Test.Fixtures.Entity.Module10 holds nil - a counter always holds a number, so there is nothing for increment to move - read the row first, or give the attribute a default"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        increment(entity, :count, 1)
       end
     end
 
@@ -1708,7 +1728,7 @@ defmodule Hologram.QueryTest do
       result = put_attribute(entity, %{b: 7})
 
       assert result.b == 7
-      assert result.__meta__ == %Metadata{attribute_changes: %{b: 7}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{b: {:put, 7}}}
     end
 
     test "keeps the rest of the metadata" do
@@ -1729,7 +1749,7 @@ defmodule Hologram.QueryTest do
         |> put_attribute(c: "z")
 
       assert result.c == "z"
-      assert result.__meta__ == %Metadata{attribute_changes: %{a: true, c: "z"}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{a: {:put, true}, c: {:put, "z"}}}
     end
 
     test "sets a to-one reference field" do
@@ -1739,7 +1759,7 @@ defmodule Hologram.QueryTest do
       result = put_attribute(entity, b_id: target_id)
 
       assert result.b_id == target_id
-      assert result.__meta__ == %Metadata{attribute_changes: %{b_id: target_id}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{b_id: {:put, target_id}}}
     end
 
     test "sets the values on the struct and records them as changes" do
@@ -1749,7 +1769,7 @@ defmodule Hologram.QueryTest do
 
       assert result.a == true
       assert result.c == "y"
-      assert result.__meta__ == %Metadata{attribute_changes: %{a: true, c: "y"}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{a: {:put, true}, c: {:put, "y"}}}
     end
 
     test "replaces a delta recorded before it" do
@@ -1759,7 +1779,7 @@ defmodule Hologram.QueryTest do
         |> increment(:count, 1)
         |> put_attribute(count: 10)
 
-      assert result.__meta__ == %Metadata{attribute_changes: %{count: 10}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{count: {:put, 10}}}
     end
 
     test "raises on a system attribute name" do
@@ -1836,7 +1856,7 @@ defmodule Hologram.QueryTest do
       result = put_attribute(entity, :a, true)
 
       assert result.a == true
-      assert result.__meta__ == %Metadata{attribute_changes: %{a: true}}
+      assert result.__meta__ == %Metadata{attribute_ops: %{a: {:put, true}}}
     end
 
     test "raises on an unknown name" do
@@ -1859,7 +1879,7 @@ defmodule Hologram.QueryTest do
         |> put_attribute(a: true)
         |> trust()
 
-      assert result.__meta__.attribute_changes == %{a: true}
+      assert result.__meta__.attribute_ops == %{a: {:put, true}}
       assert result.__meta__.claim == :trust
     end
 

@@ -340,7 +340,7 @@ defmodule Hologram.DB do
         raise WriteError,
           message:
             "cannot update #{inspect(entity_type)} #{inspect(entity.id)}:\n" <>
-              refusal_lines(entity_type, violations, entity.__meta__.attribute_changes),
+              refusal_lines(entity_type, violations, put_values(entity.__meta__.attribute_ops)),
           reason: violations
     end
   end
@@ -531,6 +531,12 @@ defmodule Hologram.DB do
   # only one that reads the same whether the map holds one entry or several. A taken value is
   # described here because the validator never reports uniqueness: it is state, not a value.
   # A missing reference target is described here for the same reason - existence is state too.
+  # The values the struct was asked to write - an increment has none, and its line names no
+  # received value.
+  defp put_values(attribute_ops) do
+    for {name, {:put, value}} <- attribute_ops, into: %{}, do: {name, value}
+  end
+
   defp refusal_lines(entity_type, violations, values) do
     violations
     |> Enum.flat_map(fn {field, reasons} -> Enum.map(reasons, &{field, &1}) end)

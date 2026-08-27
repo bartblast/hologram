@@ -58,8 +58,7 @@ defmodule Hologram.Mutation.Write do
 
   def to_entity(%__MODULE__{op: :update} = write) do
     metadata = %Metadata{
-      attribute_changes: write.data,
-      attribute_deltas: write.deltas,
+      attribute_ops: attribute_ops(write),
       claim: claim(write),
       revisions: write.based_on,
       stamp: write.stamp
@@ -84,6 +83,14 @@ defmodule Hologram.Mutation.Write do
     metadata = %Metadata{claim: claim(write), relationship_ops: relationship_ops}
 
     struct!(write.entity_type, id: write.id, __meta__: metadata)
+  end
+
+  # The values become puts and the amounts increments - what the stages would have recorded.
+  defp attribute_ops(write) do
+    puts = Map.new(write.data, fn {name, value} -> {name, {:put, value}} end)
+    increments = Map.new(write.deltas, fn {name, amount} -> {name, {:increment, amount}} end)
+
+    Map.merge(puts, increments)
   end
 
   defp claim(%__MODULE__{claim: nil, op: op}), do: {:authorize, default_operation(op)}
