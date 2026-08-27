@@ -16,7 +16,9 @@ defmodule Hologram.Mutation.Envelope do
   alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.Entity.Validator
+  alias Hologram.Job
   alias Hologram.Mutation.Write
+  alias Hologram.Reflection
 
   @ops "create, update, delete, add_relationship, delete_relationship"
 
@@ -199,6 +201,13 @@ defmodule Hologram.Mutation.Envelope do
       label when is_binary(label) -> resolve_entity_type(label)
       _other -> {:error, "type must be a string"}
     end
+  end
+
+  # A job's status, its failure record and its actor are the framework's to write - the create
+  # stamps the actor, the worker records the rest - so a client is refused them by name, the way it
+  # is refused a server-only attribute.
+  defp framework_owned(entity_type) do
+    if Reflection.job?(entity_type), do: Job.framework_attribute_names(), else: []
   end
 
   defp id(entry) do
@@ -441,11 +450,11 @@ defmodule Hologram.Mutation.Envelope do
   # The fields a client may write: the declared attributes minus the server-only ones, which a
   # client is never told exist, and the to-one references under their id spelling.
   defp settable_fields(entity_type) do
-    server_only = Entity.server_only_attribute_names(entity_type)
+    withheld = Entity.server_only_attribute_names(entity_type) ++ framework_owned(entity_type)
 
     attributes =
       entity_type.__attributes__()
-      |> Enum.reject(fn {name, _type, _opts} -> name in server_only end)
+      |> Enum.reject(fn {name, _type, _opts} -> name in withheld end)
       |> Map.new(fn {name, type, _opts} -> {Atom.to_string(name), {name, type}} end)
 
     # The reference field's atom already exists - the entity macro puts it on the struct - so this

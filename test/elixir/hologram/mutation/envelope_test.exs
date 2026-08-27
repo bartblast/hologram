@@ -11,6 +11,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
   @id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
@@ -337,6 +338,30 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert parse(raw([entry])) ==
                {:error,
                 ~s[write 0: "token" is not a field of Hologram.Test.Fixtures.Entity.Module15 a client can write]}
+    end
+
+    test "refuses a job's status as a field" do
+      entry = create(JobModule1, %{"status" => "done"})
+
+      assert parse(raw([entry])) ==
+               {:error,
+                ~s[write 0: "status" is not a field of Hologram.Test.Fixtures.Job.Module1 a client can write]}
+    end
+
+    test "refuses a job's actor as a field" do
+      entry = create(JobModule1, %{"actor_id" => @id})
+
+      assert parse(raw([entry])) ==
+               {:error,
+                ~s[write 0: "actor_id" is not a field of Hologram.Test.Fixtures.Job.Module1 a client can write]}
+    end
+
+    test "refuses a job's error as a field" do
+      entry = create(JobModule1, %{"error" => "boom"})
+
+      assert parse(raw([entry])) ==
+               {:error,
+                ~s[write 0: "error" is not a field of Hologram.Test.Fixtures.Job.Module1 a client can write]}
     end
 
     test "refuses a value that is not the field's spelling" do
