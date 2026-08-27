@@ -28,7 +28,7 @@ defmodule Hologram.Auth do
   subscribe to it) and the query cache (which resolves the id back to a term) name one window
   and not two.
   """
-  @spec grants_window() :: %{atom => any}
+  @spec grants_window() :: Query.t()
   def grants_window do
     RoleGrant
     |> Query.normalize()

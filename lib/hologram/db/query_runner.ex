@@ -8,6 +8,7 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
   alias Hologram.Policy
+  alias Hologram.Query
 
   @doc """
   Runs the given normalized query term against the database and returns its decoded
@@ -30,7 +31,7 @@ defmodule Hologram.DB.QueryRunner do
   when a placeholder value or list element is nil - a sometimes-nil variable branches into
   an explicit nil predicate instead.
   """
-  @spec run(%{atom => any}, %{module => %{atom => any}}, %{atom => any}) ::
+  @spec run(Query.t(), %{module => %{atom => any}}, %{atom => any}) ::
           list(struct) | struct | integer | nil
   def run(term, mapping, bindings \\ %{}) do
     validate_bindings!(term, bindings)
@@ -45,7 +46,7 @@ defmodule Hologram.DB.QueryRunner do
   end
 
   @doc false
-  @spec run_policied(%{atom => any}, %{module => %{atom => any}}, String.t() | nil, %{atom => any}) ::
+  @spec run_policied(Query.t(), %{module => %{atom => any}}, String.t() | nil, %{atom => any}) ::
           list(struct) | struct | integer | nil
   def run_policied(term, mapping, actor_user_id, bindings \\ %{}) do
     validate_bindings!(term, bindings)

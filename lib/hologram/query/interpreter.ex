@@ -13,6 +13,7 @@ defmodule Hologram.Query.Interpreter do
   # running it: it reads plain Elixir terms, where the browser holds the wire's own values.
 
   alias Hologram.DB.SortKey
+  alias Hologram.Query
 
   @doc """
   Runs the given normalized query term over the given rows and returns what the database would
@@ -31,7 +32,7 @@ defmodule Hologram.Query.Interpreter do
 
   Raises ArgumentError on a missing or nil binding.
   """
-  @spec run(%{atom => any}, %{atom => any}, keyword) :: list(struct) | struct | integer | nil
+  @spec run(Query.t(), %{atom => any}, keyword) :: list(struct) | struct | integer | nil
   def run(term, database, opts \\ []) do
     ranks = predicate_ranks(term)
 

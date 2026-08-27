@@ -193,7 +193,7 @@ defmodule Hologram.DB do
   A query marked with trust/1 is read raw whether or not a user is acting - the server's own
   authority, the spelling for a read that must see past the acting user's policies.
   """
-  @spec read(module | %{atom => any}) :: list(struct) | struct | integer | nil
+  @spec read(module | Query.t()) :: list(struct) | struct | integer | nil
   def read(query) do
     term = Query.normalize(query)
 

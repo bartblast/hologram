@@ -19,6 +19,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Policy
+  alias Hologram.Query
   alias Hologram.Query.Registry
   alias Hologram.Query.Window
   alias Hologram.Reflection
@@ -321,7 +322,7 @@ defmodule Hologram.Compiler do
   @spec build_queries(list(module), list(module)) :: %{
           entries: %{String.t() => %{atom => any}},
           prop_params: %{{module, atom} => list(atom | nil)},
-          windows: %{String.t() => %{atom => any}}
+          windows: %{String.t() => Query.t()}
         }
   def build_queries(component_modules, entity_types) do
     module_queries =

@@ -5,6 +5,7 @@ defmodule Hologram.DB.QueryCache do
 
   alias Hologram.Commons.SerializationUtils
   alias Hologram.DB
+  alias Hologram.Query
   alias Hologram.Reflection
 
   @doc """
@@ -62,7 +63,7 @@ defmodule Hologram.DB.QueryCache do
   Windows are shared: several queries choosing among the same rows name one window between them,
   and this is what the sync layer runs for all of them.
   """
-  @spec window(String.t()) :: %{atom => any} | nil
+  @spec window(String.t()) :: Query.t() | nil
   def window(window_id) do
     :persistent_term.get(impl().persistent_term_key()).windows[window_id]
   end

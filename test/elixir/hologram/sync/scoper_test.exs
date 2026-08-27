@@ -5,6 +5,7 @@ defmodule Hologram.Sync.ScoperTest do
 
   alias Hologram.Auth.RoleGrant
   alias Hologram.Policy.Edges
+  alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -19,7 +20,7 @@ defmodule Hologram.Sync.ScoperTest do
   end
 
   defp term(entity_type, include \\ %{}) do
-    %{entity: entity_type, filter: [], include: include, order_by: []}
+    %Query{entity: entity_type, include: include}
   end
 
   describe "affected/3" do
