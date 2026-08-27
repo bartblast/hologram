@@ -6,7 +6,10 @@ defmodule Hologram.Job.Runner do
   # must not hold a connection while it does, and because the claim has to be visible to every
   # other node before the work starts - which is what stops two nodes running one job.
 
+  import Hologram.Query, only: [filter: 2, order_by: 2]
+
   alias Hologram.Auth.Context
+  alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
 
@@ -51,6 +54,21 @@ defmodule Hologram.Job.Runner do
   @spec invoke(struct) :: :done | {:failed, String.t()}
   def invoke(job) do
     Context.with_actor(job.actor_id, fn -> attempt(job) end)
+  end
+
+  @doc """
+  Runs every queued job of the given job types - oldest first within a type, the types in the order
+  given - and returns how many jobs this worker ran, which does not count the ones another worker
+  had already taken.
+
+  A job created while the pass runs is left for the next one: what it reads is the queue as it
+  stood when it asked.
+  """
+  @spec pass(list(module)) :: non_neg_integer
+  def pass(job_types) do
+    Enum.reduce(job_types, 0, fn job_type, count ->
+      count + ran_count(job_type)
+    end)
   end
 
   @doc """
@@ -103,6 +121,17 @@ defmodule Hologram.Job.Runner do
   # The framework's own write, like the claim: a job type grants nobody an update, and the outcome
   # is not the creating user's to authorize. Reached only after invoke/1 has put the actor back, so
   # nothing of the run is still in scope.
+  # Read raw, because a worker has no acting user - which is also why the queue is read through the
+  # ordinary verb rather than a statement of its own: with nobody acting there is nothing to filter,
+  # and the rows come back as the structs run/1 is handed.
+  defp ran_count(job_type) do
+    job_type
+    |> filter(status: :queued)
+    |> order_by(:created_at)
+    |> DB.read()
+    |> Enum.count(&(process(job_type, &1.id) != :taken))
+  end
+
   defp record_outcome(job_type, id, :done) do
     :ok = EntityOperations.update(job_type, id, %{status: :done})
   end

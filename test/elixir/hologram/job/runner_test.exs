@@ -128,6 +128,52 @@ defmodule Hologram.Job.RunnerTest do
     end
   end
 
+  describe "pass/1" do
+    test "runs every queued job of a type, oldest first" do
+      first = job(:ok)
+      second = job(:ok)
+
+      assert pass([Module3]) == 2
+
+      first_row = EntityOperations.get(Module3, first.id)
+      second_row = EntityOperations.get(Module3, second.id)
+
+      assert first_row.status == :done
+      assert second_row.status == :done
+
+      # The outcome write stamps updated_at, so which row carries the earlier one says which job
+      # this pass reached first.
+      assert DateTime.compare(first_row.updated_at, second_row.updated_at) == :lt
+    end
+
+    test "runs the types in the order it was given" do
+      first = Job.create!(Module1)
+      second = job(:ok)
+
+      assert pass([Module3, Module1]) == 2
+
+      assert DateTime.compare(
+               EntityOperations.get(Module3, second.id).updated_at,
+               EntityOperations.get(Module1, first.id).updated_at
+             ) == :lt
+    end
+
+    test "runs nothing when nothing is queued" do
+      assert pass([Module1, Module3]) == 0
+    end
+
+    test "leaves a job another worker has claimed, and does not count it" do
+      claimed = job(:ok)
+      queued = job(:ok)
+
+      assert {:claimed, _job} = claim(Module3, claimed.id)
+      assert pass([Module3]) == 1
+
+      assert EntityOperations.get(Module3, claimed.id).status == :running
+      assert EntityOperations.get(Module3, queued.id).status == :done
+    end
+  end
+
   describe "process/2" do
     test "runs a queued job to done" do
       job = job(:ok)
