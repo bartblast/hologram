@@ -97,7 +97,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/query_extractor/extract_module_queries_2/README.md
   """
-  @spec extract_module_queries(module, list(module)) :: list(%{atom => any})
+  @spec extract_module_queries(module, list(module)) :: list(Query.t())
   def extract_module_queries(module, entity_types \\ Reflection.list_entities()) do
     if Reflection.has_function?(module, :__props__, 0) do
       Enum.flat_map(module.__props__(), &prop_queries!(module, &1, entity_types))
@@ -142,7 +142,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   Extracts the registered query terms declared by the given modules - the
   concatenated extract_module_queries/2 results in module order.
   """
-  @spec extract_queries(list(module), list(module)) :: list(%{atom => any})
+  @spec extract_queries(list(module), list(module)) :: list(Query.t())
   def extract_queries(modules, entity_types \\ Reflection.list_entities()) do
     Enum.flat_map(modules, &extract_module_queries(&1, entity_types))
   end
@@ -236,7 +236,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     {apply_authored_stage!(function, arg_values, context), state}
   end
 
-  defp relationship_names(%{entity: entity_type}), do: relationship_names(entity_type)
+  defp relationship_names(%Query{entity: entity_type}), do: relationship_names(entity_type)
 
   defp relationship_names(entity_type) when is_atom(entity_type) do
     Enum.map(entity_type.__relationships__(), fn {name, _target, _opts} -> name end)
@@ -854,7 +854,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp include_placeholder_line(_stage), do: nil
 
-  defp entity_type(%{entity: entity_type}), do: entity_type
+  defp entity_type(%Query{entity: entity_type}), do: entity_type
 
   defp entity_type(entity_type) when is_atom(entity_type), do: entity_type
 

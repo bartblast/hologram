@@ -39,6 +39,46 @@ defmodule Hologram.Query do
   @orderable_types [:date, :datetime, :enum, :float, :integer, :string]
   @ordering_operators [:<, :<=, :>, :>=]
 
+  # A query term - what the stages build and the executors run. Each field is named for the stage
+  # that sets it, with one exception: one/1 and count/1 set cardinality, since a term cannot be
+  # both. A term records fields, not the order the stages were called in - filter appends,
+  # order_by replaces, include adds a key - so two pipes reaching the same fields are one query,
+  # which is what Hologram.Query.Registry.id/1 relies on. A term is always about one entity type,
+  # so a struct written without one is refused at the literal.
+  @enforce_keys [:entity]
+
+  defstruct cardinality: :set,
+            entity: nil,
+            filter: [],
+            include: %{},
+            limit: nil,
+            offset: nil,
+            order_by: [],
+            trust: false
+
+  @type bound :: non_neg_integer | placeholder | nil
+
+  @type cardinality :: :count | :one | :set
+
+  @type operator :: :!= | :< | :<= | :== | :> | :>= | :in | :not_in
+
+  @type ordering :: {atom | placeholder, :asc | :desc | placeholder}
+
+  @type placeholder :: {:placeholder, atom}
+
+  @type predicate :: {atom | placeholder, operator, any}
+
+  @type t :: %__MODULE__{
+          cardinality: cardinality,
+          entity: module,
+          filter: list(predicate),
+          include: %{atom => t},
+          limit: bound,
+          offset: bound,
+          order_by: list(ordering),
+          trust: boolean
+        }
+
   @doc """
   Records on the given entity struct that the given to-many relationship gains an edge to the
   entity with the given target id, and returns the struct - the edge is added when DB.update/1
@@ -95,7 +135,7 @@ defmodule Hologram.Query do
   Raises ArgumentError when the query is neither an entity type module nor a query
   term, or when a cardinality is already marked.
   """
-  @spec count(module | %{atom => any}) :: %{atom => any}
+  @spec count(module | t) :: t
   def count(query) do
     term = to_term(query)
 
@@ -147,8 +187,8 @@ defmodule Hologram.Query do
   tuples applying all of them to the attribute (an AND conjunction, e.g.
   `[{:>=, monday}, {:<, next_monday}]`). Lists mixing plain values and operator tuples
   are invalid. Each predicate becomes one or more `{attribute, operator, value}`
-  triples, appended in the given order. A query term is a plain-data description of a
-  query - building it never executes anything.
+  triples, appended in the given order. A query term is a Hologram.Query struct - a
+  plain-data description of a query, so building it never executes anything.
 
   Ordering comparisons require an orderable attribute - every type but boolean and uuid -
   and a non-nil operand - SQL comparisons with NULL never match, so a nil operand would
@@ -198,7 +238,7 @@ defmodule Hologram.Query do
   an unknown attribute, or when a predicate value is invalid (unknown operator, invalid
   membership list, list or tuple operand for an equality operator).
   """
-  @spec filter(module | %{atom => any}, keyword) :: %{atom => any}
+  @spec filter(module | t, keyword) :: t
   def filter(query, predicates) do
     term = to_term(query)
 
@@ -240,11 +280,7 @@ defmodule Hologram.Query do
   function or does not return a query term for the related entity type, when a to-one
   include carries clauses, or when the include depth exceeds 2 levels.
   """
-  @spec include(
-          module | %{atom => any},
-          atom | list,
-          (%{atom => any} -> %{atom => any}) | nil
-        ) :: %{atom => any}
+  @spec include(module | t, atom | list, (t -> t) | nil) :: t
   def include(query, spec, sub_builder \\ nil)
 
   def include(query, name, nil) when is_atom(name) do
@@ -341,7 +377,7 @@ defmodule Hologram.Query do
   Raises ArgumentError when the query is neither an entity type module nor a query
   term, or when the limit is not a non-negative integer.
   """
-  @spec limit(module | %{atom => any}, non_neg_integer) :: %{atom => any}
+  @spec limit(module | t, non_neg_integer) :: t
   def limit(query, value) do
     set_view_bound!(query, :limit, value)
   end
@@ -355,7 +391,7 @@ defmodule Hologram.Query do
   # included), and normalizes included sub-terms recursively - to-one includes embed
   # a single entity and carry no ordering. Idempotent.
   @doc false
-  @spec normalize(module | %{atom => any}) :: %{atom => any}
+  @spec normalize(module | t) :: t
   def normalize(query) do
     query
     |> to_term()
@@ -373,7 +409,7 @@ defmodule Hologram.Query do
   Raises ArgumentError when the query is neither an entity type module nor a query
   term, or when the offset is not a non-negative integer.
   """
-  @spec offset(module | %{atom => any}, non_neg_integer) :: %{atom => any}
+  @spec offset(module | t, non_neg_integer) :: t
   def offset(query, value) do
     set_view_bound!(query, :offset, value)
   end
@@ -389,7 +425,7 @@ defmodule Hologram.Query do
   Raises ArgumentError when the query is neither an entity type module nor a query
   term, or when a cardinality is already marked.
   """
-  @spec one(module | %{atom => any}) :: %{atom => any}
+  @spec one(module | t) :: t
   def one(query) do
     term = to_term(query)
 
@@ -421,7 +457,7 @@ defmodule Hologram.Query do
   term, when the spec is neither an attribute name nor a list, when an entry names a
   relationship or an unknown attribute, or when a direction is neither :asc nor :desc.
   """
-  @spec order_by(module | %{atom => any}, atom | list) :: %{atom => any}
+  @spec order_by(module | t, atom | list) :: t
   def order_by(query, spec) do
     term = to_term(query)
 
@@ -446,7 +482,7 @@ defmodule Hologram.Query do
   term, when the options are not a keyword list holding exactly :page and :size, or when
   either option is not a positive integer.
   """
-  @spec paginate(module | %{atom => any}, keyword) :: %{atom => any}
+  @spec paginate(module | t, keyword) :: t
   def paginate(query, opts) do
     if not Keyword.keyword?(opts) do
       raise ArgumentError,
@@ -474,30 +510,22 @@ defmodule Hologram.Query do
   values, view bounds, ordering keys and directions, and include sub-terms included - an
   empty list for a term with concrete values only.
   """
-  @spec placeholder_names(%{atom => any}) :: list(atom)
+  @spec placeholder_names(t) :: list(atom)
   def placeholder_names(term) do
     filter_names =
-      term
-      |> Map.get(:filter, [])
-      |> Enum.flat_map(fn {name, _operator, value} ->
+      Enum.flat_map(term.filter, fn {name, _operator, value} ->
         value_placeholder_names(name) ++ value_placeholder_names(value)
       end)
 
-    bound_names =
-      [:limit, :offset]
-      |> Enum.map(&Map.get(term, &1))
-      |> Enum.flat_map(&value_placeholder_names/1)
+    bound_names = Enum.flat_map([term.limit, term.offset], &value_placeholder_names/1)
 
     order_names =
-      term
-      |> Map.get(:order_by, [])
-      |> Enum.flat_map(fn {key, direction} ->
+      Enum.flat_map(term.order_by, fn {key, direction} ->
         value_placeholder_names(key) ++ value_placeholder_names(direction)
       end)
 
     include_names =
-      term
-      |> Map.get(:include, %{})
+      term.include
       |> Map.values()
       |> Enum.flat_map(&placeholder_names/1)
 
@@ -603,15 +631,17 @@ defmodule Hologram.Query do
   Raises ArgumentError when the subject is neither an entity struct, an entity type module nor
   a query term, or when a struct already carries a claim.
   """
-  @spec trust(struct | module | %{atom => any}) :: struct | %{atom => any}
-  def trust(%{__struct__: _entity_type} = entity) do
+  @spec trust(struct | module | t) :: struct | t
+  # A query term is a struct too, so the entity-struct clause has to say which struct it means -
+  # every other stage takes one or the other, and this one takes both.
+  def trust(%{__struct__: entity_type} = entity) when entity_type != __MODULE__ do
     put_claim(entity, :trust, "trust")
   end
 
   def trust(query) do
-    query
-    |> to_term()
-    |> Map.put(:trust, true)
+    term = to_term(query)
+
+    %{term | trust: true}
   end
 
   defp attribute_names(entity_type) do
@@ -1072,7 +1102,7 @@ defmodule Hologram.Query do
   defp set_view_bound!(query, field, %Placeholder{name: placeholder_name}) do
     term = to_term(query)
 
-    Map.put(term, field, {:placeholder, placeholder_name})
+    Map.replace!(term, field, {:placeholder, placeholder_name})
   end
 
   defp set_view_bound!(query, field, value) do
@@ -1083,7 +1113,7 @@ defmodule Hologram.Query do
         message: "#{field} must be a non-negative integer, got: #{inspect(value)}"
     end
 
-    Map.put(term, field, value)
+    Map.replace!(term, field, value)
   end
 
   defp settable_names(entity_type) do
@@ -1113,19 +1143,11 @@ defmodule Hologram.Query do
     |> Enum.map(fn {name, _type, _opts} -> name end)
   end
 
-  defp to_term(%{entity: _entity_type} = term), do: term
+  defp to_term(%__MODULE__{} = term), do: term
 
   defp to_term(query) do
     if Reflection.entity?(query) do
-      %{
-        cardinality: :set,
-        entity: query,
-        filter: [],
-        include: %{},
-        limit: nil,
-        offset: nil,
-        order_by: []
-      }
+      %__MODULE__{entity: query}
     else
       raise ArgumentError,
         message:
@@ -1439,7 +1461,7 @@ defmodule Hologram.Query do
           "include sub-terms take no cardinality marker - the relationship declaration governs cardinality"
     end
 
-    if sub_term[:trust] == true do
+    if sub_term.trust do
       raise ArgumentError,
         message:
           "include sub-terms take no trust mark - trust/1 goes on the query root and reads the whole query, includes and all, on the server's authority"
@@ -1457,9 +1479,9 @@ defmodule Hologram.Query do
     end
   end
 
-  defp validate_sub_term_entity!(%{entity: target}, _name, target), do: :ok
+  defp validate_sub_term_entity!(%__MODULE__{entity: target}, _name, target), do: :ok
 
-  defp validate_sub_term_entity!(%{entity: other_entity_type}, name, target) do
+  defp validate_sub_term_entity!(%__MODULE__{entity: other_entity_type}, name, target) do
     raise ArgumentError,
       message:
         "include sub-builder for relationship #{inspect(name)} must return a query term for #{inspect(target)} - got a query term for #{inspect(other_entity_type)}"
@@ -1477,4 +1499,43 @@ defmodule Hologram.Query do
     do: Enum.flat_map(values, &value_placeholder_names/1)
 
   defp value_placeholder_names(_value), do: []
+
+  # Rendered as the struct with the fields at their default left out - a fresh term shows its
+  # entity type alone, and an include shows as the nested struct it holds. Still the literal that
+  # rebuilds the term exactly (an omitted field takes its default, and entity is never omitted),
+  # and the spelling the tests assert with, so what inspect prints is what a reader writes. Bare,
+  # five of the eight fields are at their default on every term and every sub-term, and the
+  # signal drowns.
+  defimpl Inspect do
+    import Inspect.Algebra
+
+    @impl Inspect
+    def inspect(term, opts) do
+      defaults =
+        Hologram.Query
+        |> struct()
+        |> Map.from_struct()
+
+      fields =
+        Enum.reject(
+          [
+            cardinality: term.cardinality,
+            entity: term.entity,
+            filter: term.filter,
+            include: term.include,
+            limit: term.limit,
+            offset: term.offset,
+            order_by: term.order_by,
+            trust: term.trust
+          ],
+          fn {name, value} -> value == Map.fetch!(defaults, name) end
+        )
+
+      container_doc("%Hologram.Query{", fields, "}", opts, &field_doc/2, separator: ",")
+    end
+
+    defp field_doc({name, value}, opts) do
+      concat([Atom.to_string(name), ": ", to_doc(value, opts)])
+    end
+  end
 end

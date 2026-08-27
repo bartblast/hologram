@@ -78,15 +78,7 @@ defmodule Hologram.Query.WindowTest do
         |> offset(40)
         |> Query.normalize()
 
-      assert derive(term) == %{
-               cardinality: :set,
-               entity: Module2,
-               filter: [{:a, :==, true}],
-               include: %{},
-               limit: nil,
-               offset: nil,
-               order_by: []
-             }
+      assert derive(term) == %Query{entity: Module2, filter: [{:a, :==, true}]}
     end
 
     # A window is not a description of a query, it IS one, and it gets run - so it has to be a
@@ -116,15 +108,7 @@ defmodule Hologram.Query.WindowTest do
 
       term = %{base_term | include: %{a: sub_term}}
 
-      assert derive(term).include.a == %{
-               cardinality: :set,
-               entity: Module2,
-               filter: [{:a, :==, true}],
-               include: %{},
-               limit: nil,
-               offset: nil,
-               order_by: []
-             }
+      assert derive(term).include.a == %Query{entity: Module2, filter: [{:a, :==, true}]}
     end
 
     test "gives two queries choosing different values one window" do

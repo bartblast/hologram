@@ -6,6 +6,7 @@ defmodule Hologram.DB.QueryCompiler do
   alias Hologram.DB.Mapper
   alias Hologram.DB.SortKey
   alias Hologram.Policy
+  alias Hologram.Query
 
   @data_schema "hologram_data"
 
@@ -62,7 +63,7 @@ defmodule Hologram.DB.QueryCompiler do
   bind nil at runtime - a sometimes-nil variable branches into an explicit nil
   predicate in code.
   """
-  @spec compile(%{atom => any}, %{module => %{atom => any}}, %{atom => any} | nil) ::
+  @spec compile(Query.t(), %{module => %{atom => any}}, %{atom => any} | nil) ::
           %{atom => any}
   def compile(term, mapping, policy \\ nil) do
     entity_mapping = Map.fetch!(mapping, term.entity)

@@ -7,6 +7,7 @@ defmodule Hologram.Sync.Scoper do
   # every rule here errs towards including.
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Query
   alias Hologram.Query.Registry
 
   @grant_edges [:global_grants, :own_grants, :relationship_grants, :resource_grants, :type_grants]
@@ -30,7 +31,7 @@ defmodule Hologram.Sync.Scoper do
   says either of those happened. A session learns of the first from its own identity changing,
   and of the second from the model hash it was greeted with.
   """
-  @spec affected(list({non_neg_integer, list(map)}), list({any, map}), %{
+  @spec affected(list({non_neg_integer, list(map)}), list({any, Query.t()}), %{
           {module, atom} => list(tuple)
         }) :: list(any)
   def affected(transactions, windows, edges) do

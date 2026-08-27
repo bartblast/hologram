@@ -1,6 +1,7 @@
 defmodule Hologram.Query.Registry do
   @moduledoc false
 
+  alias Hologram.Query
   alias Hologram.Query.Window
 
   @id_bytes 16
@@ -16,7 +17,7 @@ defmodule Hologram.Query.Registry do
   queries downloading the same rows name one window between them. Structurally equal
   terms collapse into one entry.
   """
-  @spec build(list(%{atom => any})) :: %{String.t() => %{atom => any}}
+  @spec build(list(Query.t())) :: %{String.t() => %{atom => any}}
   def build(terms) do
     Map.new(terms, fn term ->
       window = Window.derive(term)
@@ -39,7 +40,7 @@ defmodule Hologram.Query.Registry do
   Structurally equal terms share an id, across builds and machines - any change to
   the term changes it.
   """
-  @spec id(%{atom => any}) :: String.t()
+  @spec id(Query.t()) :: String.t()
   def id(term) do
     term
     |> :erlang.term_to_binary([:deterministic])
@@ -52,7 +53,7 @@ defmodule Hologram.Query.Registry do
   Returns the set of entity types the given normalized query term reads - its own
   and every one it includes, walked recursively.
   """
-  @spec entity_types(%{atom => any}) :: MapSet.t(module)
+  @spec entity_types(Query.t()) :: MapSet.t(module)
   def entity_types(term) do
     collect_entity_types(term, MapSet.new())
   end
@@ -69,7 +70,7 @@ defmodule Hologram.Query.Registry do
 
   Raises Hologram.CompileError when one placeholder name meets conflicting types.
   """
-  @spec placeholder_shape(%{atom => any}) :: %{atom => atom | {:list, atom}}
+  @spec placeholder_shape(Query.t()) :: %{atom => atom | {:list, atom}}
   def placeholder_shape(term) do
     collect_params(term, %{})
   end
