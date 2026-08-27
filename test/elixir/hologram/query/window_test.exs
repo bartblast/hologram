@@ -85,7 +85,8 @@ defmodule Hologram.Query.WindowTest do
                include: %{},
                limit: nil,
                offset: nil,
-               order_by: []
+               order_by: [],
+               trust: false
              }
     end
 
@@ -123,7 +124,8 @@ defmodule Hologram.Query.WindowTest do
                include: %{},
                limit: nil,
                offset: nil,
-               order_by: []
+               order_by: [],
+               trust: false
              }
     end
 

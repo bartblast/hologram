@@ -201,7 +201,7 @@ defmodule Hologram.DB do
 
     actor_user_id = Context.actor_user_id()
 
-    if term[:trust] == true or is_nil(actor_user_id) do
+    if term.trust or is_nil(actor_user_id) do
       QueryRunner.run(term, mapping())
     else
       QueryRunner.run_policied(term, mapping(), actor_user_id)

@@ -22,7 +22,8 @@ defmodule Hologram.QueryTest do
       include: %{},
       limit: nil,
       offset: nil,
-      order_by: []
+      order_by: [],
+      trust: false
     }
   end
 
@@ -218,7 +219,8 @@ defmodule Hologram.QueryTest do
                include: %{},
                limit: nil,
                offset: nil,
-               order_by: []
+               order_by: [],
+               trust: false
              }
     end
 
@@ -476,7 +478,8 @@ defmodule Hologram.QueryTest do
                include: %{},
                limit: nil,
                offset: nil,
-               order_by: []
+               order_by: [],
+               trust: false
              }
     end
 
@@ -582,7 +585,8 @@ defmodule Hologram.QueryTest do
                include: %{},
                limit: nil,
                offset: nil,
-               order_by: []
+               order_by: [],
+               trust: false
              }
     end
 
@@ -850,7 +854,8 @@ defmodule Hologram.QueryTest do
                include: %{a: base_term(Module2)},
                limit: nil,
                offset: nil,
-               order_by: []
+               order_by: [],
+               trust: false
              }
     end
 
@@ -1257,7 +1262,8 @@ defmodule Hologram.QueryTest do
                include: %{},
                limit: 50,
                offset: nil,
-               order_by: []
+               order_by: [],
+               trust: false
              }
     end
 
@@ -1305,7 +1311,8 @@ defmodule Hologram.QueryTest do
                include: %{},
                limit: nil,
                offset: nil,
-               order_by: [{:id, :asc}]
+               order_by: [{:id, :asc}],
+               trust: false
              }
     end
 
@@ -1413,7 +1420,8 @@ defmodule Hologram.QueryTest do
                include: %{},
                limit: nil,
                offset: 20,
-               order_by: []
+               order_by: [],
+               trust: false
              }
     end
 
@@ -1445,7 +1453,8 @@ defmodule Hologram.QueryTest do
                include: %{},
                limit: nil,
                offset: nil,
-               order_by: []
+               order_by: [],
+               trust: false
              }
     end
 
@@ -1518,7 +1527,8 @@ defmodule Hologram.QueryTest do
                include: %{},
                limit: nil,
                offset: nil,
-               order_by: [{:c, :asc}]
+               order_by: [{:c, :asc}],
+               trust: false
              }
     end
 
@@ -1644,7 +1654,8 @@ defmodule Hologram.QueryTest do
                include: %{},
                limit: 20,
                offset: 20,
-               order_by: []
+               order_by: [],
+               trust: false
              }
     end
 
@@ -1902,10 +1913,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "marks an entity type's query as trusted" do
-      expected_term =
-        Module2
-        |> base_term()
-        |> Map.put(:trust, true)
+      expected_term = %{base_term(Module2) | trust: true}
 
       assert trust(Module2) == expected_term
     end

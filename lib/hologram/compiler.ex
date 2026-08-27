@@ -2066,7 +2066,7 @@ defmodule Hologram.Compiler do
   # honored would hand the client rows it may not hold.
   defp validate_untrusted_queries!({module, module_terms}) do
     Enum.each(module_terms, fn term ->
-      if term[:trust] == true do
+      if term.trust do
         raise Hologram.CompileError, message: trusted_query_message(module)
       end
     end)

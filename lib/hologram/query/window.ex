@@ -40,7 +40,8 @@ defmodule Hologram.Query.Window do
       include: Map.new(term.include, fn {name, sub_term} -> {name, derive(sub_term)} end),
       limit: nil,
       offset: nil,
-      order_by: []
+      order_by: [],
+      trust: false
     }
   end
 

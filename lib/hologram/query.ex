@@ -609,9 +609,9 @@ defmodule Hologram.Query do
   end
 
   def trust(query) do
-    query
-    |> to_term()
-    |> Map.put(:trust, true)
+    term = to_term(query)
+
+    %{term | trust: true}
   end
 
   defp attribute_names(entity_type) do
@@ -1124,7 +1124,8 @@ defmodule Hologram.Query do
         include: %{},
         limit: nil,
         offset: nil,
-        order_by: []
+        order_by: [],
+        trust: false
       }
     else
       raise ArgumentError,
@@ -1439,7 +1440,7 @@ defmodule Hologram.Query do
           "include sub-terms take no cardinality marker - the relationship declaration governs cardinality"
     end
 
-    if sub_term[:trust] == true do
+    if sub_term.trust do
       raise ArgumentError,
         message:
           "include sub-terms take no trust mark - trust/1 goes on the query root and reads the whole query, includes and all, on the server's authority"
