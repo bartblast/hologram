@@ -18,6 +18,7 @@ Hologram is a full-stack isomorphic Elixir web framework that runs on top of Pho
 - Client-side state: state management happens in the browser for snappy user interfaces
 - Automatic code distribution: Hologram automatically handles the separation and conversion of client/server code
 - Seamless communication: client-server interaction happens automatically through HTTP/2 persistent connections - no manual setup needed, with the speed of WebSockets and better scalability
+- Server-side rendering (SSR): every page is fully rendered to HTML on the server on first load - SEO-friendly and fast to first paint - then becomes interactive on the client
 
 #### Framework Philosophy
 
@@ -135,6 +136,20 @@ defp elixirc_paths(_env), do: ["app", "lib"]
 ```
 
 This allows you to organize your code like `app/pages/`, `app/components/`, etc., which many developers find cleaner than keeping everything in `lib/`.
+
+#### Running the App
+
+Start your app with the `mix holo` task. It runs your Phoenix server with the Hologram compiler and client-side runtime enabled:
+
+```
+$ mix holo
+```
+
+In the `dev` and `test` environments, Hologram does not start with a plain `mix phx.server` - set the `HOLOGRAM_START=1` environment variable to enable it (which is exactly what `mix holo` does). This keeps the Hologram compiler out of your workflow until you need it, so unrelated tasks and tests stay fast. Production builds always compile Hologram, so this applies only to dev and test.
+
+#### Editor Support
+
+The official Hologram extension adds syntax highlighting for `.holo` templates and `~HOLO` sigils. Install it from the Visual Studio Marketplace (https://marketplace.visualstudio.com/items?itemName=bartblast.hologram) for VS Code, or the Open VSX Registry (https://open-vsx.org/extension/bartblast/hologram) for Cursor, VSCodium and other compatible editors.
 
 #### Umbrella Projects
 
@@ -381,17 +396,17 @@ Code execution is organized into two types of operations:
 
 Both can be triggered by user interactions, and they can trigger each other.
 
-#### HTTP/2 Communication
+#### Client-Server Communication
 
-Client-server communication happens automatically through HTTP/2 persistent connections:
+Communication is wired up automatically - no manual HTTP configuration and no boilerplate code - over two complementary transports:
 
-- No manual HTTP configuration needed
-- No boilerplate code required
-- Handles all action-command interactions
-- Practically as fast as WebSockets for real-time updates
-- Lower server resource consumption - no continuous connection overhead per user
-- Easier debugging with standard HTTP tools and browser DevTools
-- Works seamlessly through corporate proxies and firewalls
+- HTTP/2 request/response handles all action-command round-trips, practically as fast as WebSockets for real-time updates
+- A Server-Sent Events (SSE) stream carries server-pushed updates - this is how broadcast actions reach every subscribed client without the client polling for changes
+
+Both legs are plain HTTP, which keeps the whole system:
+
+- Easy to debug with standard HTTP tools and browser DevTools
+- Seamless through corporate proxies and firewalls
 
 #### Runtime Behavior
 
@@ -882,6 +897,10 @@ end
 
 Both `init/3` and `init/2` functions are optional. If you don't need to initialize state or perform any preparation, you can omit them entirely - Hologram provides default implementations that simply return the `Component` and `Server` structs unchanged.
 
+###### Props and State Name Collisions
+
+Give props and state entries different names. Templates merge the two with state taking precedence, so a state entry sharing a prop's name shadows it entirely. Copying a prop into a same-named state entry during `init` is the usual way to hit this: initialization runs only once, so the copy never refreshes, and the template keeps reading the copy rather than the prop. New values from the parent arrive on every render, none of them reach the screen, and nothing warns you. When a prop supplies a starting value that the component goes on to own, separate names - an `:initial_count` prop feeding a `:count` state entry - keep the prop reachable and make the snapshot obvious.
+
 #### Slots
 
 Slots allow components to accept and render child content. They are defined using the `<slot />` tag in the component's template:
@@ -975,6 +994,12 @@ While pages are built on top of components, they have some unique characteristic
 - They are always stateful
 - They are always initialized on the server-side using `init/3`, unlike regular components which can be initialized on either client or server
 - Their `init/3` function receives URL parameters (`params`) instead of component props (`props`)
+
+#### Server-Side Rendering (SSR)
+
+Every page is fully rendered to HTML on the server on first load, then becomes interactive on the client. Because the browser (and any crawler) receives complete, server-rendered markup, Hologram pages are SEO-friendly and fast to first paint out of the box, with no extra configuration.
+
+This is why a page's `init/3` always runs on the server: it produces the state used to render the initial HTML. Once the page is mounted in the browser, client-side state takes over and subsequent interactions happen without full page reloads (see Navigation for how transitions between pages work).
 
 #### Basic Example
 
